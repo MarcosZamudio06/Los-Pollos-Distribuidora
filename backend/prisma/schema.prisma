@@ -1,0 +1,1000 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+enum OperationalLocationType {
+  BRANCH
+  WAREHOUSE
+  MIXED
+  EXTERNAL_POINT_OF_SALE
+  ROUTE_STOCK
+}
+
+enum ProductPresentationType {
+  KG
+  WHOLE
+  CUT
+}
+
+enum ProductUnit {
+  KG
+  PIECE
+  KG_AND_PIECE
+}
+
+enum EquivalentStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum CustomerType {
+  RETAIL
+  WHOLESALE
+  INSTITUTIONAL
+}
+
+enum CreditStatus {
+  ACTIVE
+  BLOCKED
+  SUSPENDED
+}
+
+enum SaleChannel {
+  COUNTER
+  EXTERNAL_POINT_OF_SALE
+  ROUTE
+  INSTITUTIONAL
+  WHOLESALE
+}
+
+enum SaleDocumentType {
+  SCALE_TICKET
+  SIMPLE_NOTE
+  LARGE_NOTE
+  INTERNAL_RECEIPT
+}
+
+enum CollectionStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum SalePaymentType {
+  CASH_SALE
+  CREDIT_SALE
+}
+
+enum SaleStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum SaleDocumentStatus {
+  DRAFT
+  ISSUED
+  COLLECTED
+  CANCELLED
+}
+
+enum PurchaseStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  SALE
+  PURCHASE
+  CANCEL_SALE
+  CANCEL_PURCHASE
+  TRANSFER_OUT
+  TRANSFER_IN
+  SHRINKAGE
+  RETURN
+}
+
+enum InventoryTransferStatus {
+  DRAFT
+  REQUESTED
+  IN_TRANSIT
+  CONFIRMED
+  CANCELLED
+}
+
+enum AgingStatus {
+  CURRENT
+  DUE_SOON
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  DEPOSIT
+  CARD
+  VOUCHER
+  OTHER
+}
+
+enum PaymentStatus {
+  REGISTERED
+  APPLIED
+  CANCELLED
+}
+
+enum BillingRequestStatus {
+  REQUESTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum DeliveryRouteStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryOrderStatus {
+  PENDING
+  IN_ROUTE
+  DELIVERED
+  NOT_DELIVERED
+  CANCELLED
+  PARTIALLY_REJECTED
+  RETURNED
+}
+
+enum DeliveryEvidenceType {
+  PHOTO
+  SIGNATURE
+  GEOLOCATION
+  NOTE
+}
+
+enum RouteSettlementStatus {
+  OPEN
+  CLOSED
+  REVIEW_REQUIRED
+}
+
+enum PointOfSaleDailyCloseStatus {
+  DRAFT
+  REVIEWED
+  CLOSED
+  CANCELLED
+}
+
+enum PointOfSaleDailyCloseLineSection {
+  INPUT
+  OUTPUT
+  INCOME
+  PROFIT
+}
+
+enum PointOfSaleDailyCloseLineConcept {
+  PRODUCT_RECEIVED
+  SALE_NOTE
+  SALE_SCALE_TICKET
+  REMAINING_STOCK
+  SHORTAGE
+  SURPLUS
+  OTHER_OUTPUT
+  CASH_INCOME
+  CARD_VOUCHER_INCOME
+  TRANSFER_INCOME
+  EXPENSE
+  PURCHASE_COST
+  GROSS_PROFIT
+  NET_PROFIT
+}
+
+enum CashMovementType {
+  EXPENSE
+  CASH_IN
+  CASH_OUT
+  ADJUSTMENT
+}
+
+enum MovementChannel {
+  CASH
+  CARD_VOUCHER
+  TRANSFER
+  DEPOSIT
+  OTHER
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+}
+
+model User {
+  id                          String                  @id @default(cuid())
+  name                        String
+  email                       String                  @unique
+  passwordHash                String
+  roleId                      String
+  isActive                    Boolean                 @default(true)
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+  role                        Role                    @relation(fields: [roleId], references: [id])
+  sales                       Sale[]                  @relation("SaleCreatedBy")
+  deliveredSales              Sale[]                  @relation("SaleDeliveredBy")
+  collectedSales              Sale[]                  @relation("SaleCollectedBy")
+  cancelledSales              Sale[]                  @relation("SaleCancelledBy")
+  deliveredSaleDocuments      SaleDocument[]          @relation("SaleDocumentDeliveredBy")
+  collectedSaleDocuments      SaleDocument[]          @relation("SaleDocumentCollectedBy")
+  purchases                   Purchase[]
+  inventoryMovements          InventoryMovement[]
+  inventoryTransfers          InventoryTransfer[]     @relation("InventoryTransferCreatedBy")
+  cancelledInventoryTransfers InventoryTransfer[]     @relation("InventoryTransferCancelledBy")
+  approvedEquivalents         ProductUnitEquivalent[] @relation("EquivalentApprovedBy")
+  createdEquivalents          ProductUnitEquivalent[] @relation("EquivalentCreatedBy")
+  payments                    Payment[]               @relation("PaymentRegisteredBy")
+  collectedPayments           Payment[]               @relation("PaymentCollectedBy")
+  createdCommercialPolicies   CommercialPolicy[]      @relation("CommercialPolicyCreatedBy")
+  updatedCommercialPolicies   CommercialPolicy[]      @relation("CommercialPolicyUpdatedBy")
+  createdOperationalConfigs   OperationalConfig[]     @relation("OperationalConfigCreatedBy")
+  updatedOperationalConfigs   OperationalConfig[]     @relation("OperationalConfigUpdatedBy")
+  deliveryRoutes              DeliveryRoute[]         @relation("DeliveryRouteDriver")
+  deliveredOrders             DeliveryOrder[]         @relation("DeliveryOrderDeliveredBy")
+  collectedOrders             DeliveryOrder[]         @relation("DeliveryOrderCollectedBy")
+  requestedBillingRequests    BillingRequest[]        @relation("BillingRequestRequestedBy")
+  reviewedBillingRequests     BillingRequest[]        @relation("BillingRequestReviewedBy")
+  collectedReceivables        AccountReceivable[]     @relation("AccountReceivableCollector")
+  routeSettlements            RouteSettlement[]       @relation("RouteSettlementDriver")
+  reopenedRouteSettlements    RouteSettlement[]       @relation("RouteSettlementReopenedBy")
+  openedDailyCloses            PointOfSaleDailyClose[] @relation("DailyCloseOpenedBy")
+  reviewedDailyCloses          PointOfSaleDailyClose[] @relation("DailyCloseReviewedBy")
+  closedDailyCloses            PointOfSaleDailyClose[] @relation("DailyCloseClosedBy")
+  cancelledDailyCloses         PointOfSaleDailyClose[] @relation("DailyCloseCancelledBy")
+  reopenedDailyCloses          PointOfSaleDailyClose[] @relation("DailyCloseReopenedBy")
+  createdDailyCloseLines       PointOfSaleDailyCloseLine[]
+  cashMovements                CashMovement[]
+  capturedScaleTickets         ScaleTicketReference[]
+}
+
+model OperationalLocation {
+  id                    String                     @id @default(cuid())
+  name                  String
+  code                  String?                    @unique
+  type                  OperationalLocationType
+  parentId              String?
+  address               String?
+  isActive              Boolean                    @default(true)
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  parent                OperationalLocation?       @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children              OperationalLocation[]      @relation("LocationHierarchy")
+  inventoryBalances     InventoryBalance[]
+  sales                 Sale[]
+  purchases             Purchase[]
+  inventoryMovements    InventoryMovement[]
+  outboundTransfers     InventoryTransfer[]        @relation("TransferOrigin")
+  inboundTransfers      InventoryTransfer[]        @relation("TransferDestination")
+  operationalConfigs    OperationalConfig[]
+  originRoutes          DeliveryRoute[]            @relation("RouteOriginLocation")
+  routeStockFor         DeliveryRoute?             @relation("RouteStockLocation")
+  payments              Payment[]
+  saleDocuments         SaleDocument[]
+  dailyCloses           PointOfSaleDailyClose[]
+  dailyCloseLines       PointOfSaleDailyCloseLine[]
+  cashMovements         CashMovement[]
+  scaleTicketReferences ScaleTicketReference[]
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Product {
+  id                     String                      @id @default(cuid())
+  name                   String
+  sku                    String?                     @unique
+  description            String?
+  categoryId             String?
+  presentationType       ProductPresentationType
+  salePrice              Decimal                     @db.Decimal(14, 2)
+  purchaseCost           Decimal                     @db.Decimal(14, 2)
+  minStock               Decimal                     @default(0) @db.Decimal(14, 3)
+  unit                   ProductUnit
+  pieceWeightEquivalent  Decimal?                    @db.Decimal(14, 3)
+  equivalentPolicyStatus EquivalentStatus?
+  isActive               Boolean                     @default(true)
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  category               Category?                   @relation(fields: [categoryId], references: [id])
+  unitEquivalents        ProductUnitEquivalent[]
+  inventoryBalances      InventoryBalance[]
+  saleItems              SaleItem[]
+  purchaseItems          PurchaseItem[]
+  inventoryMovements     InventoryMovement[]
+  transferItems          InventoryTransferItem[]
+  dailyCloseLines        PointOfSaleDailyCloseLine[]
+  scaleTicketReferences  ScaleTicketReference[]
+}
+
+model ProductUnitEquivalent {
+  id                      String           @id @default(cuid())
+  productId               String
+  unitFrom                ProductUnit
+  unitTo                  ProductUnit
+  factor                  Decimal          @db.Decimal(18, 6)
+  roundingMode            String?
+  effectiveFrom           DateTime?
+  effectiveTo             DateTime?
+  status                  EquivalentStatus @default(DRAFT)
+  approvedByUserId        String?
+  createdByUserId         String
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  product                 Product          @relation(fields: [productId], references: [id])
+  approvedBy              User?            @relation("EquivalentApprovedBy", fields: [approvedByUserId], references: [id])
+  createdBy               User             @relation("EquivalentCreatedBy", fields: [createdByUserId], references: [id])
+  saleItems               SaleItem[]
+  purchaseItems           PurchaseItem[]
+
+  @@index([productId, unitFrom, unitTo, status])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+model InventoryBalance {
+  id                String              @id @default(cuid())
+  productId         String
+  locationId        String
+  quantityKg        Decimal             @default(0) @db.Decimal(14, 3)
+  quantityPieces    Int                 @default(0)
+  minQuantityKg     Decimal             @default(0) @db.Decimal(14, 3)
+  minQuantityPieces Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  product           Product             @relation(fields: [productId], references: [id])
+  location          OperationalLocation @relation(fields: [locationId], references: [id])
+
+  @@unique([productId, locationId])
+}
+
+model Customer {
+  id                  String              @id @default(cuid())
+  customerNumber      String?             @unique
+  name                String
+  commercialName      String?
+  phone               String?             @unique
+  email               String?
+  billingEmail        String?
+  address             String?
+  customerType        CustomerType
+  priceListId         String?
+  creditLimit         Decimal?            @db.Decimal(14, 2)
+  creditDays          Int?
+  creditStatus        CreditStatus        @default(ACTIVE)
+  requiresBilling     Boolean             @default(false)
+  fiscalName          String?
+  taxId               String?
+  fiscalAddress       String?
+  deliveryAddress     String?
+  assignedRouteId     String?
+  commercialPolicyId  String?
+  notes               String?
+  isActive            Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  assignedRoute       DeliveryRoute?      @relation(fields: [assignedRouteId], references: [id])
+  commercialPolicy    CommercialPolicy?   @relation(fields: [commercialPolicyId], references: [id])
+  sales               Sale[]
+  accountReceivables  AccountReceivable[]
+  payments            Payment[]
+  billingRequests     BillingRequest[]
+}
+
+model Supplier {
+  id            String     @id @default(cuid())
+  name          String
+  phone         String?
+  email         String?
+  address       String?
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  purchases     Purchase[]
+}
+
+model Sale {
+  id                            String                     @id @default(cuid())
+  saleNumber                    String                     @unique
+  customerId                    String?
+  userId                        String
+  locationId                    String
+  saleChannel                   SaleChannel
+  documentType                  SaleDocumentType
+  physicalFolio                 String?
+  requiresAdministrativeInvoice Boolean                    @default(false)
+  deliveredByUserId             String?
+  collectedByUserId             String?
+  routeId                       String?
+  commercialPolicyId            String?
+  pointOfSaleDailyCloseId        String?
+  collectionStatus              CollectionStatus           @default(UNPAID)
+  subtotal                      Decimal                    @db.Decimal(14, 2)
+  discount                      Decimal                    @default(0) @db.Decimal(14, 2)
+  tax                           Decimal                    @default(0) @db.Decimal(14, 2)
+  total                         Decimal                    @db.Decimal(14, 2)
+  paymentType                   SalePaymentType
+  status                        SaleStatus                 @default(DRAFT)
+  cancelledAt                   DateTime?
+  cancelledByUserId             String?
+  cancellationReason            String?
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
+  customer                      Customer?                  @relation(fields: [customerId], references: [id])
+  user                          User                       @relation("SaleCreatedBy", fields: [userId], references: [id])
+  location                      OperationalLocation        @relation(fields: [locationId], references: [id])
+  deliveredBy                   User?                      @relation("SaleDeliveredBy", fields: [deliveredByUserId], references: [id])
+  collectedBy                   User?                      @relation("SaleCollectedBy", fields: [collectedByUserId], references: [id])
+  cancelledBy                   User?                      @relation("SaleCancelledBy", fields: [cancelledByUserId], references: [id])
+  route                         DeliveryRoute?             @relation(fields: [routeId], references: [id])
+  commercialPolicy              CommercialPolicy?          @relation(fields: [commercialPolicyId], references: [id])
+  pointOfSaleDailyClose          PointOfSaleDailyClose?     @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  items                         SaleItem[]
+  documents                     SaleDocument[]
+  payments                      Payment[]
+  accountReceivable             AccountReceivable?         @relation("AccountReceivableSale")
+  originatedReceivables         AccountReceivable[]        @relation("AccountReceivableOriginalSale")
+  billingRequest                BillingRequest?
+  deliveryOrder                 DeliveryOrder?
+  inventoryMovements            InventoryMovement[]
+  scaleTicketReferences         ScaleTicketReference[]
+  dailyCloseLines               PointOfSaleDailyCloseLine[]
+
+  @@index([locationId, createdAt])
+  @@index([customerId, collectionStatus])
+}
+
+model SaleItem {
+  id                      String                 @id @default(cuid())
+  saleId                  String
+  productId               String
+  quantity                Decimal?               @db.Decimal(14, 3)
+  quantityKg              Decimal?               @db.Decimal(14, 3)
+  quantityPieces          Int?
+  unit                    ProductUnit
+  unitPrice               Decimal                @db.Decimal(14, 2)
+  unitEquivalentId        String?
+  appliedEquivalentFactor Decimal?               @db.Decimal(18, 6)
+  roundingMode            String?
+  productNameSnapshot     String
+  productSkuSnapshot      String?
+  unitPriceSnapshot       Decimal                @db.Decimal(14, 2)
+  quantitySnapshot        Decimal                @db.Decimal(14, 3)
+  subtotal                Decimal                @db.Decimal(14, 2)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  sale                    Sale                   @relation(fields: [saleId], references: [id])
+  product                 Product                @relation(fields: [productId], references: [id])
+  unitEquivalent          ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id])
+}
+
+model SaleDocument {
+  id                            String             @id @default(cuid())
+  saleId                        String
+  documentType                  SaleDocumentType
+  operationalLocationId         String?
+  pointOfSaleDailyCloseId       String?
+  physicalFolio                 String?
+  status                        SaleDocumentStatus @default(DRAFT)
+  requiresAdministrativeInvoice Boolean            @default(false)
+  deliveredByUserId             String?
+  collectedByUserId             String?
+  routeId                       String?
+  customerSnapshot              Json?
+  productSnapshot               Json?
+  priceSnapshot                 Json?
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
+  sale                          Sale               @relation(fields: [saleId], references: [id])
+  operationalLocation           OperationalLocation? @relation(fields: [operationalLocationId], references: [id])
+  pointOfSaleDailyClose         PointOfSaleDailyClose? @relation("DailyCloseDocuments", fields: [pointOfSaleDailyCloseId], references: [id])
+  deliveredBy                   User?              @relation("SaleDocumentDeliveredBy", fields: [deliveredByUserId], references: [id])
+  collectedBy                   User?              @relation("SaleDocumentCollectedBy", fields: [collectedByUserId], references: [id])
+  route                         DeliveryRoute?     @relation(fields: [routeId], references: [id])
+
+  @@index([operationalLocationId, physicalFolio])
+}
+
+model Purchase {
+  id             String              @id @default(cuid())
+  purchaseNumber String              @unique
+  supplierId     String
+  userId         String
+  locationId     String
+  subtotal       Decimal             @db.Decimal(14, 2)
+  total          Decimal             @db.Decimal(14, 2)
+  status         PurchaseStatus      @default(DRAFT)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  supplier       Supplier            @relation(fields: [supplierId], references: [id])
+  user           User                @relation(fields: [userId], references: [id])
+  location       OperationalLocation @relation(fields: [locationId], references: [id])
+  items          PurchaseItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([locationId, createdAt])
+}
+
+model PurchaseItem {
+  id                      String                 @id @default(cuid())
+  purchaseId              String
+  productId               String
+  quantity                Decimal?               @db.Decimal(14, 3)
+  quantityKg              Decimal?               @db.Decimal(14, 3)
+  quantityPieces          Int?
+  unit                    ProductUnit
+  unitCost                Decimal                @db.Decimal(14, 2)
+  unitEquivalentId        String?
+  appliedEquivalentFactor Decimal?               @db.Decimal(18, 6)
+  subtotal                Decimal                @db.Decimal(14, 2)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  purchase                Purchase               @relation(fields: [purchaseId], references: [id])
+  product                 Product                @relation(fields: [productId], references: [id])
+  unitEquivalent          ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id])
+}
+
+model InventoryMovement {
+  id                       String                     @id @default(cuid())
+  productId                String
+  locationId               String
+  userId                   String
+  type                     InventoryMovementType
+  quantity                 Decimal?                   @db.Decimal(14, 3)
+  quantityKg               Decimal?                   @db.Decimal(14, 3)
+  quantityPieces           Int?
+  previousStock            Decimal?                   @db.Decimal(14, 3)
+  newStock                 Decimal?                   @db.Decimal(14, 3)
+  previousQuantityKg       Decimal?                   @db.Decimal(14, 3)
+  newQuantityKg            Decimal?                   @db.Decimal(14, 3)
+  previousQuantityPieces   Int?
+  newQuantityPieces        Int?
+  reason                   String?
+  referenceType            String?
+  referenceId              String?
+  transferId               String?
+  saleId                   String?
+  purchaseId               String?
+  routeSettlementId        String?
+  pointOfSaleDailyCloseId  String?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  product                  Product                    @relation(fields: [productId], references: [id])
+  location                 OperationalLocation        @relation(fields: [locationId], references: [id])
+  user                     User                       @relation(fields: [userId], references: [id])
+  transfer                 InventoryTransfer?         @relation(fields: [transferId], references: [id])
+  sale                     Sale?                      @relation(fields: [saleId], references: [id])
+  purchase                 Purchase?                  @relation(fields: [purchaseId], references: [id])
+  routeSettlement          RouteSettlement?           @relation(fields: [routeSettlementId], references: [id])
+  pointOfSaleDailyClose     PointOfSaleDailyClose?     @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  dailyCloseLines          PointOfSaleDailyCloseLine[]
+
+  @@index([productId, locationId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model InventoryTransfer {
+  id                    String                  @id @default(cuid())
+  transferNumber        String                  @unique
+  originLocationId      String
+  destinationLocationId String
+  userId                String
+  status                InventoryTransferStatus @default(DRAFT)
+  notes                 String?
+  requestedAt           DateTime?
+  confirmedAt           DateTime?
+  cancelledAt           DateTime?
+  cancelledByUserId     String?
+  cancellationReason    String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  originLocation        OperationalLocation     @relation("TransferOrigin", fields: [originLocationId], references: [id])
+  destinationLocation   OperationalLocation     @relation("TransferDestination", fields: [destinationLocationId], references: [id])
+  user                  User                    @relation("InventoryTransferCreatedBy", fields: [userId], references: [id])
+  cancelledBy           User?                   @relation("InventoryTransferCancelledBy", fields: [cancelledByUserId], references: [id])
+  items                 InventoryTransferItem[]
+  inventoryMovements    InventoryMovement[]
+
+  @@index([originLocationId, status])
+  @@index([destinationLocationId, status])
+}
+
+model InventoryTransferItem {
+  id             String            @id @default(cuid())
+  transferId     String
+  productId      String
+  quantityKg     Decimal?          @db.Decimal(14, 3)
+  quantityPieces Int?
+  unit           ProductUnit
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  transfer       InventoryTransfer @relation(fields: [transferId], references: [id])
+  product        Product           @relation(fields: [productId], references: [id])
+}
+
+model AccountReceivable {
+  id                      String           @id @default(cuid())
+  customerId              String
+  saleId                  String           @unique
+  billingRequestId        String?          @unique
+  originalSaleId          String
+  originalAmount          Decimal          @db.Decimal(14, 2)
+  outstandingAmount       Decimal          @db.Decimal(14, 2)
+  saleDate                DateTime
+  dueDate                 DateTime
+  paymentTermsDays        Int
+  lastPaymentDate         DateTime?
+  daysOverdue             Int              @default(0)
+  paidAt                  DateTime?
+  cancelledAt             DateTime?
+  agingStatus             AgingStatus      @default(CURRENT)
+  physicalDocumentFolio   String?
+  collectorUserId         String?
+  commercialPolicyId      String?
+  status                  CollectionStatus @default(UNPAID)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  customer                Customer         @relation(fields: [customerId], references: [id])
+  sale                    Sale             @relation("AccountReceivableSale", fields: [saleId], references: [id])
+  billingRequest          BillingRequest?  @relation(fields: [billingRequestId], references: [id])
+  originalSale            Sale             @relation("AccountReceivableOriginalSale", fields: [originalSaleId], references: [id])
+  collector               User?            @relation("AccountReceivableCollector", fields: [collectorUserId], references: [id])
+  commercialPolicy        CommercialPolicy? @relation(fields: [commercialPolicyId], references: [id])
+  payments                Payment[]
+  deliveryOrders          DeliveryOrder[]
+
+  @@index([customerId, status, dueDate])
+}
+
+model Payment {
+  id                        String                     @id @default(cuid())
+  accountReceivableId       String?
+  saleId                    String?
+  customerId                String?
+  userId                    String
+  collectedByUserId         String?
+  collectionPass            Int?
+  amount                    Decimal                    @db.Decimal(14, 2)
+  paymentMethod             PaymentMethod
+  bankName                  String?
+  referenceNumber           String?
+  appliedDocumentId         String?
+  appliedDocumentType       String?
+  operationalLocationId     String?
+  routeId                   String?
+  routeSettlementId         String?
+  pointOfSaleDailyCloseId   String?
+  status                    PaymentStatus              @default(REGISTERED)
+  paidAt                    DateTime                   @default(now())
+  cancelledAt               DateTime?
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  accountReceivable         AccountReceivable?         @relation(fields: [accountReceivableId], references: [id])
+  sale                      Sale?                      @relation(fields: [saleId], references: [id])
+  customer                  Customer?                  @relation(fields: [customerId], references: [id])
+  user                      User                       @relation("PaymentRegisteredBy", fields: [userId], references: [id])
+  collectedBy               User?                      @relation("PaymentCollectedBy", fields: [collectedByUserId], references: [id])
+  operationalLocation       OperationalLocation?       @relation(fields: [operationalLocationId], references: [id])
+  route                     DeliveryRoute?             @relation(fields: [routeId], references: [id])
+  routeSettlement           RouteSettlement?           @relation(fields: [routeSettlementId], references: [id])
+  pointOfSaleDailyClose     PointOfSaleDailyClose?     @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+
+  @@index([accountReceivableId, paidAt])
+  @@index([saleId, paidAt])
+  @@index([operationalLocationId, paidAt])
+}
+
+model BillingRequest {
+  id                  String               @id @default(cuid())
+  saleId              String               @unique
+  customerId          String
+  requestedByUserId   String
+  status              BillingRequestStatus @default(REQUESTED)
+  requestedAt         DateTime             @default(now())
+  reviewedAt          DateTime?
+  reviewedByUserId    String?
+  reason              String?
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  sale                Sale                 @relation(fields: [saleId], references: [id])
+  customer            Customer             @relation(fields: [customerId], references: [id])
+  requestedBy         User                 @relation("BillingRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  reviewedBy          User?                @relation("BillingRequestReviewedBy", fields: [reviewedByUserId], references: [id])
+  accountReceivable   AccountReceivable?
+}
+
+model CommercialPolicy {
+  id                       String             @id @default(cuid())
+  name                     String
+  description              String?
+  customerType             CustomerType?
+  priceListId              String?
+  defaultCreditLimit       Decimal?           @db.Decimal(14, 2)
+  defaultCreditDays        Int?
+  overdueBlockingMode      String?
+  creditLimitBlockingMode  String?
+  allowAdministrativeOverride Boolean         @default(false)
+  isActive                 Boolean            @default(true)
+  effectiveFrom            DateTime?
+  effectiveTo              DateTime?
+  createdByUserId          String
+  updatedByUserId          String
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  createdBy                User               @relation("CommercialPolicyCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy                User               @relation("CommercialPolicyUpdatedBy", fields: [updatedByUserId], references: [id])
+  customers                Customer[]
+  sales                    Sale[]
+  accountReceivables       AccountReceivable[]
+}
+
+model OperationalConfig {
+  id              String               @id @default(cuid())
+  key             String
+  value           String
+  valueType       String
+  scope           String
+  locationId      String?
+  description     String?
+  effectiveFrom   DateTime?
+  effectiveTo     DateTime?
+  isActive        Boolean              @default(true)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  location        OperationalLocation? @relation(fields: [locationId], references: [id])
+  createdBy       User                 @relation("OperationalConfigCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy       User                 @relation("OperationalConfigUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@index([key, scope, locationId, isActive])
+}
+
+model DeliveryRoute {
+  id                   String                 @id @default(cuid())
+  name                 String
+  driverId             String
+  status               DeliveryRouteStatus    @default(PENDING)
+  scheduledDate        DateTime
+  originLocationId     String?
+  routeStockLocationId String                 @unique
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  driver               User                   @relation("DeliveryRouteDriver", fields: [driverId], references: [id])
+  originLocation       OperationalLocation?   @relation("RouteOriginLocation", fields: [originLocationId], references: [id])
+  routeStockLocation   OperationalLocation    @relation("RouteStockLocation", fields: [routeStockLocationId], references: [id])
+  assignedCustomers    Customer[]
+  sales                Sale[]
+  saleDocuments        SaleDocument[]
+  payments             Payment[]
+  deliveryOrders       DeliveryOrder[]
+  settlement           RouteSettlement?
+
+  @@index([driverId, scheduledDate, status])
+}
+
+model DeliveryOrder {
+  id                    String              @id @default(cuid())
+  routeId               String
+  saleId                String              @unique
+  accountReceivableId   String?
+  status                DeliveryOrderStatus @default(PENDING)
+  deliveryAddress       String
+  deliveredAt           DateTime?
+  notes                 String?
+  collectedByUserId     String?
+  deliveredByUserId     String?
+  collectionPass        Int?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  route                 DeliveryRoute       @relation(fields: [routeId], references: [id])
+  sale                  Sale                @relation(fields: [saleId], references: [id])
+  accountReceivable     AccountReceivable?  @relation(fields: [accountReceivableId], references: [id])
+  collectedBy           User?               @relation("DeliveryOrderCollectedBy", fields: [collectedByUserId], references: [id])
+  deliveredBy           User?               @relation("DeliveryOrderDeliveredBy", fields: [deliveredByUserId], references: [id])
+  evidence              DeliveryEvidence[]
+}
+
+model DeliveryEvidence {
+  id              String               @id @default(cuid())
+  deliveryOrderId String
+  type            DeliveryEvidenceType
+  value           String
+  capturedAt      DateTime
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deliveryOrder   DeliveryOrder        @relation(fields: [deliveryOrderId], references: [id])
+}
+
+model RouteSettlement {
+  id                          String                @id @default(cuid())
+  routeId                     String                @unique
+  driverId                    String
+  status                      RouteSettlementStatus @default(OPEN)
+  version                     Int                   @default(1)
+  expectedCashAmount          Decimal               @default(0) @db.Decimal(14, 2)
+  expectedTransferAmount      Decimal               @default(0) @db.Decimal(14, 2)
+  differenceAmount            Decimal               @default(0) @db.Decimal(14, 2)
+  notes                       String?
+  closedAt                    DateTime?
+  reopenedAt                  DateTime?
+  reopenedByUserId            String?
+  reopenedReason              String?
+  routeCollectionsSummary     Json?
+  paidAtDeliveryAmount        Decimal               @default(0) @db.Decimal(14, 2)
+  overdueAmount               Decimal               @default(0) @db.Decimal(14, 2)
+  secondPassCollectionsAmount Decimal               @default(0) @db.Decimal(14, 2)
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  route                       DeliveryRoute         @relation(fields: [routeId], references: [id])
+  driver                      User                  @relation("RouteSettlementDriver", fields: [driverId], references: [id])
+  reopenedBy                  User?                 @relation("RouteSettlementReopenedBy", fields: [reopenedByUserId], references: [id])
+  payments                    Payment[]
+  inventoryMovements          InventoryMovement[]
+}
+
+model PointOfSaleDailyClose {
+  id                       String                       @id @default(cuid())
+  operationalLocationId    String
+  businessDate             DateTime                     @db.Date
+  status                   PointOfSaleDailyCloseStatus  @default(DRAFT)
+  version                  Int                          @default(1)
+  lastValidatedAt          DateTime?
+  validatedSourceVersion   Int?
+  openedByUserId           String
+  reviewedByUserId         String?
+  closedByUserId           String?
+  cancelledByUserId        String?
+  reopenedByUserId         String?
+  totalInputKg             Decimal                      @default(0) @db.Decimal(14, 3)
+  totalSoldKg              Decimal                      @default(0) @db.Decimal(14, 3)
+  totalRemainingKg         Decimal                      @default(0) @db.Decimal(14, 3)
+  totalShortageKg          Decimal                      @default(0) @db.Decimal(14, 3)
+  totalSurplusKg           Decimal                      @default(0) @db.Decimal(14, 3)
+  scaleReportedKg          Decimal                      @default(0) @db.Decimal(14, 3)
+  scaleDifferenceKg        Decimal                      @default(0) @db.Decimal(14, 3)
+  cashTotal                Decimal                      @default(0) @db.Decimal(14, 2)
+  cardVoucherTotal         Decimal                      @default(0) @db.Decimal(14, 2)
+  transferTotal            Decimal                      @default(0) @db.Decimal(14, 2)
+  expenseTotal             Decimal                      @default(0) @db.Decimal(14, 2)
+  grossSalesTotal          Decimal                      @default(0) @db.Decimal(14, 2)
+  netCashExpected          Decimal                      @default(0) @db.Decimal(14, 2)
+  cashDifferenceTotal      Decimal                      @default(0) @db.Decimal(14, 2)
+  purchaseCostTotal        Decimal                      @default(0) @db.Decimal(14, 2)
+  grossProfitTotal         Decimal                      @default(0) @db.Decimal(14, 2)
+  netProfitTotal           Decimal                      @default(0) @db.Decimal(14, 2)
+  notes                    String?
+  reviewedAt               DateTime?
+  closedAt                 DateTime?
+  cancelledAt              DateTime?
+  reopenedAt               DateTime?
+  reopenedReason           String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  operationalLocation      OperationalLocation          @relation(fields: [operationalLocationId], references: [id])
+  openedBy                 User                         @relation("DailyCloseOpenedBy", fields: [openedByUserId], references: [id])
+  reviewedBy               User?                        @relation("DailyCloseReviewedBy", fields: [reviewedByUserId], references: [id])
+  closedBy                 User?                        @relation("DailyCloseClosedBy", fields: [closedByUserId], references: [id])
+  cancelledBy              User?                        @relation("DailyCloseCancelledBy", fields: [cancelledByUserId], references: [id])
+  reopenedBy               User?                        @relation("DailyCloseReopenedBy", fields: [reopenedByUserId], references: [id])
+  sales                    Sale[]
+  saleDocuments            SaleDocument[]               @relation("DailyCloseDocuments")
+  payments                 Payment[]
+  inventoryMovements       InventoryMovement[]
+  lines                    PointOfSaleDailyCloseLine[]
+  cashMovements            CashMovement[]
+  scaleTicketReferences    ScaleTicketReference[]
+
+  @@index([operationalLocationId, businessDate, status])
+  @@unique([id, operationalLocationId])
+}
+
+model PointOfSaleDailyCloseLine {
+  id                       String                            @id @default(cuid())
+  pointOfSaleDailyCloseId  String
+  operationalLocationId    String
+  section                  PointOfSaleDailyCloseLineSection
+  conceptType              PointOfSaleDailyCloseLineConcept
+  productId                String?
+  saleId                   String?
+  inventoryMovementId      String?
+  scaleTicketReferenceId   String?
+  quantityKg               Decimal?                         @db.Decimal(14, 3)
+  quantityPieces           Int?
+  amount                   Decimal?                         @db.Decimal(14, 2)
+  notes                    String?
+  createdByUserId          String
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @updatedAt
+  pointOfSaleDailyClose    PointOfSaleDailyClose            @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  operationalLocation      OperationalLocation              @relation(fields: [operationalLocationId], references: [id])
+  product                  Product?                         @relation(fields: [productId], references: [id])
+  sale                     Sale?                            @relation(fields: [saleId], references: [id])
+  inventoryMovement       InventoryMovement?               @relation(fields: [inventoryMovementId], references: [id])
+  scaleTicketReference     ScaleTicketReference?            @relation(fields: [scaleTicketReferenceId], references: [id])
+  createdBy                User                             @relation(fields: [createdByUserId], references: [id])
+
+  @@index([pointOfSaleDailyCloseId, operationalLocationId])
+}
+
+model CashMovement {
+  id                       String                     @id @default(cuid())
+  operationalLocationId    String
+  pointOfSaleDailyCloseId  String?
+  type                     CashMovementType
+  movementChannel          MovementChannel
+  amount                   Decimal                    @db.Decimal(14, 2)
+  reason                   String
+  reference                String?
+  occurredAt               DateTime
+  userId                   String
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  operationalLocation      OperationalLocation        @relation(fields: [operationalLocationId], references: [id])
+  pointOfSaleDailyClose     PointOfSaleDailyClose?     @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  user                     User                       @relation(fields: [userId], references: [id])
+
+  @@index([operationalLocationId, occurredAt])
+}
+
+model ScaleTicketReference {
+  id                       String                      @id @default(cuid())
+  operationalLocationId    String
+  pointOfSaleDailyCloseId  String?
+  saleId                   String?
+  physicalFolio            String
+  capturedDate             DateTime                    @db.Date
+  productId                String?
+  weightKg                 Decimal?                    @db.Decimal(14, 3)
+  pieceCount               Int?
+  unitPrice                Decimal?                    @db.Decimal(14, 2)
+  amount                   Decimal?                    @db.Decimal(14, 2)
+  capturedByUserId         String
+  capturedAt               DateTime
+  notes                    String?
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+  operationalLocation      OperationalLocation         @relation(fields: [operationalLocationId], references: [id])
+  pointOfSaleDailyClose     PointOfSaleDailyClose?      @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  sale                     Sale?                       @relation(fields: [saleId], references: [id])
+  product                  Product?                    @relation(fields: [productId], references: [id])
+  capturedBy               User                        @relation(fields: [capturedByUserId], references: [id])
+  dailyCloseLines          PointOfSaleDailyCloseLine[]
+
+  @@index([operationalLocationId, capturedAt])
+  @@unique([operationalLocationId, capturedDate, physicalFolio])
+}

@@ -1,0 +1,93 @@
+schema: spec-driven
+
+context: |
+  TypeScript monorepo with separate `frontend/` and `backend/` workspaces.
+  Frontend uses React 19, React Router 7, TanStack Query 5, Vite 8, Tailwind CSS 4, and TypeScript 6.
+  Backend uses NestJS 11, Prisma schema + migrations, PostgreSQL, Swagger dependencies, and TypeScript 5.
+  Implemented code is still bootstrap-level, but Prisma domain schema is already substantial and business-spec-driven.
+  Canonical requirements live in `specs/`; `AGENTS.md` requires reading architecture/workflow/module specs before coding.
+  Docker Compose provisions postgres, backend, and frontend for local stack startup.
+
+strict_tdd: true
+
+testing:
+  detected: 2026-06-25
+  strict_tdd: true
+  runner:
+    available: true
+    framework: Jest
+    command: npm --prefix backend test
+  layers:
+    unit:
+      available: true
+      tool: Jest
+    integration:
+      available: false
+      tool: "—"
+    e2e:
+      available: true
+      tool: Jest + Supertest
+  coverage:
+    available: true
+    command: npm --prefix backend run test:cov
+  quality:
+    linter:
+      available: true
+      command: npm --prefix frontend run lint && npm --prefix backend run lint
+    type_checker:
+      available: true
+      command: npm --prefix frontend run build && npm --prefix backend run build
+    formatter:
+      available: true
+      command: npm --prefix backend run format
+  notes:
+    - Strict TDD is explicitly enabled by `openspec/config.yaml` and reinforced by an available backend Jest runner.
+    - Backend test files currently cover unit/contract and e2e paths; no dedicated integration suite is present yet.
+    - Frontend has no configured test runner yet, even though the approved stack expects future frontend testing.
+    - Root `npm test` delegates to backend Jest, but SDD verification should keep using explicit workspace commands.
+    - Prisma schema and SQL migrations already exist, so persistence planning should assume PostgreSQL + Prisma is real, not aspirational.
+
+workflow:
+  execution_mode: interactive
+  artifact_store: openspec
+  chained_pr_strategy: ask-always
+  review_budget_lines: 400
+
+rules:
+  proposal:
+    constraints:
+      - Read the relevant project specs before proposing changes.
+      - Emphasize `specs/.specs/01-architecture/ai-rules.md` when establishing scope.
+      - Stop and report conflicts between requested work and existing specs.
+  specs:
+    constraints:
+      - Read relevant specs first and preserve existing contracts, entities, permissions, and business rules.
+      - Use Given/When/Then scenarios and RFC 2119 keywords.
+      - Do not define behavior that contradicts `specs/`.
+  design:
+    constraints:
+      - Derive design decisions from the existing specs and implemented stack, not aspirational architecture.
+      - Call out any gap between repository specs and current code before implementation begins.
+  tasks:
+    constraints:
+      - Group tasks by phase and keep each task completable in one session.
+      - Include spec-reading and conflict checks before coding tasks.
+  apply:
+    constraints:
+      - Read relevant specs before writing code.
+      - Emphasize `specs/.specs/01-architecture/ai-rules.md` during implementation review.
+      - Identify contracts, entities, permissions, and rules before coding.
+      - Implement only what is explicitly defined.
+      - Do not contradict existing specs.
+      - If a conflict is found, stop and report it.
+      - Follow existing code patterns in each workspace.
+    tdd: true
+    test_command: npm --prefix backend test
+  verify:
+    test_command: npm --prefix backend test && npm --prefix backend run test:e2e
+    build_command: npm --prefix frontend run build && npm --prefix backend run build
+    coverage_threshold: 0
+  archive:
+    constraints:
+      - Warn before merging destructive deltas.
+      - Preserve the audit trail in `openspec/changes/archive/`.

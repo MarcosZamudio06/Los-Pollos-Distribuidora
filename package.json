@@ -1,0 +1,27 @@
+{
+  "name": "pollos-distribuidor",
+  "version": "1.0.0",
+  "description": "TypeScript monorepo foundation for the chicken distributor system.",
+  "private": true,
+  "scripts": {
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "frontend:preview": "npm --prefix frontend run preview",
+    "backend:build": "npm --prefix backend run build",
+    "backend:format": "npm --prefix backend run format",
+    "backend:start": "npm --prefix backend run start",
+    "backend:start:dev": "npm --prefix backend run start:dev",
+    "backend:lint": "npm --prefix backend run lint",
+    "backend:test": "npm --prefix backend test",
+    "backend:test:e2e": "npm --prefix backend run test:e2e",
+    "test": "npm run backend:test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "prisma": "^7.8.0"
+  }
+}

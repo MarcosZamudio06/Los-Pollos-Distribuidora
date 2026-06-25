@@ -1,0 +1,29 @@
+# Version control and local metadata
+.git
+.git/**
+**/.DS_Store
+.idea
+.vscode
+.codex
+.atl
+
+# Installed dependencies and generated output
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/.cache
+**/*.log
+
+# Real environment files; keep the safe template in the build context
+.env
+.env.*
+!.env.example
+
+# Files unrelated to the application image builds
+AGENTS.md
+README*
+docs
+openspec
+specs
+opencode.json
