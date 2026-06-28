@@ -7,9 +7,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AllowPasswordChangeRequired } from '../../common/decorators/allow-password-change-required.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './auth.types';
+import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
@@ -45,6 +47,21 @@ export class AuthController {
       success: true,
       message: 'Sesión cerrada correctamente',
       data: this.authService.logout(),
+    };
+  }
+
+  @Post('change-password')
+  @HttpCode(200)
+  @AllowPasswordChangeRequired()
+  @UseGuards(JwtAuthGuard)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: ChangeOwnPasswordDto,
+  ) {
+    return {
+      success: true,
+      message: 'Contraseña actualizada correctamente',
+      data: await this.authService.changeOwnPassword(user.id, body),
     };
   }
 

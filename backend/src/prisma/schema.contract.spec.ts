@@ -6,6 +6,10 @@ const migrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260623120000_task010_constraints/migration.sql',
 );
+const userAccessMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260626120000_add_user_access_fields/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -83,6 +87,31 @@ describe('Prisma schema contract', () => {
     expect(scaleTicket).toContain(
       '@@unique([operationalLocationId, capturedDate, physicalFolio])',
     );
+  });
+
+  it('persists user access status fields with safe defaults and nullable deactivation audit', () => {
+    const user = getModelBlock('User');
+    const migrationSql = readFileSync(userAccessMigrationSqlPath, 'utf8');
+
+    expect(user).toMatch(/mustChangePassword\s+Boolean\s+@default\(false\)/);
+    expect(user).toMatch(/deactivatedAt\s+DateTime\?/);
+    expect(user).toMatch(/deactivatedByUserId\s+String\?/);
+    expect(user).toMatch(/deactivationReason\s+String\?/);
+    expect(user).toContain(
+      'deactivatedBy                User?                   @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id])',
+    );
+    expect(user).toContain(
+      'deactivatedUsers             User[]                  @relation("UserDeactivatedBy")',
+    );
+    expect(user).toContain('@@index([deactivatedByUserId])');
+    expect(migrationSql).toContain(
+      'ADD COLUMN     "mustChangePassword" BOOLEAN NOT NULL DEFAULT false',
+    );
+    expect(migrationSql).toContain(
+      'ADD COLUMN     "deactivatedAt" TIMESTAMP(3)',
+    );
+    expect(migrationSql).toContain('ADD COLUMN     "deactivatedByUserId" TEXT');
+    expect(migrationSql).toContain('ADD COLUMN     "deactivationReason" TEXT');
   });
 
   it('binds closing associations to the same location', () => {

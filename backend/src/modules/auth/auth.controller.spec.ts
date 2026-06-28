@@ -14,12 +14,16 @@ const authenticatedUser = {
   name: 'Development Admin',
   email: 'dev.admin@pollos.local',
   role: 'ADMIN',
+  mustChangePassword: false,
 };
 
 describe('AuthController API', () => {
   let app: INestApplication<App>;
   let authService: jest.Mocked<
-    Pick<AuthService, 'login' | 'refresh' | 'logout' | 'verifyAccessToken'>
+    Pick<
+      AuthService,
+      'login' | 'refresh' | 'logout' | 'verifyAccessToken' | 'changeOwnPassword'
+    >
   >;
 
   beforeEach(async () => {
@@ -36,6 +40,10 @@ describe('AuthController API', () => {
       }),
       logout: jest.fn().mockReturnValue({ success: true }),
       verifyAccessToken: jest.fn().mockResolvedValue(authenticatedUser),
+      changeOwnPassword: jest.fn().mockResolvedValue({
+        ...authenticatedUser,
+        mustChangePassword: false,
+      }),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -151,6 +159,50 @@ describe('AuthController API', () => {
           data: { success: true },
         });
       });
+  });
+
+  it('allows a pending-password user to change their own password with a bearer token', async () => {
+    authService.verifyAccessToken.mockResolvedValue({
+      ...authenticatedUser,
+      mustChangePassword: true,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/change-password')
+      .set('Authorization', 'Bearer access-token')
+      .send({
+        currentPassword: 'temporary-123',
+        newPassword: 'new-secure-123',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          success: true,
+          message: 'Contraseña actualizada correctamente',
+          data: {
+            ...authenticatedUser,
+            mustChangePassword: false,
+          },
+        });
+        expect(JSON.stringify(body)).not.toContain('passwordHash');
+      });
+
+    expect(authService.changeOwnPassword).toHaveBeenCalledWith('user-1', {
+      currentPassword: 'temporary-123',
+      newPassword: 'new-secure-123',
+    });
+  });
+
+  it('rejects own password change without a bearer token', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/change-password')
+      .send({
+        currentPassword: 'temporary-123',
+        newPassword: 'new-secure-123',
+      })
+      .expect(401);
+
+    expect(authService.changeOwnPassword).not.toHaveBeenCalled();
   });
 
   it('maps invalid bearer tokens to 401 at API level', async () => {

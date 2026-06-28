@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -7,8 +8,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../../database/prisma.service';
+import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthenticatedUser, LoginResult, TokenPayload } from './auth.types';
+
+const PASSWORD_HASH_ROUNDS = 12;
+const MIN_PASSWORD_LENGTH = 10;
 
 type UserRecord = {
   id: string;
@@ -16,6 +21,7 @@ type UserRecord = {
   email: string;
   passwordHash: string;
   isActive: boolean;
+  mustChangePassword: boolean;
   role: { name: string };
 };
 
@@ -87,8 +93,52 @@ export class AuthService {
     return this.toAuthenticatedUser(user);
   }
 
+  async changeOwnPassword(
+    userId: string,
+    dto: ChangeOwnPasswordDto,
+  ): Promise<AuthenticatedUser> {
+    this.assertPasswordPolicy(dto.newPassword);
+
+    const user = await this.findUserById(userId);
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const currentPasswordMatches = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+
+    if (!currentPasswordMatches) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordHash = await bcrypt.hash(
+      dto.newPassword,
+      PASSWORD_HASH_ROUNDS,
+    );
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
+      include: { role: true },
+    });
+
+    return this.toAuthenticatedUser(updatedUser);
+  }
+
   logout(): { success: true } {
     return { success: true };
+  }
+
+  private async findUserById(id: string): Promise<UserRecord | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
   }
 
   private async findUserByEmail(email: string): Promise<UserRecord | null> {
@@ -98,12 +148,21 @@ export class AuthService {
     });
   }
 
+  private assertPasswordPolicy(password: string): void {
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      throw new BadRequestException(
+        'Password must be at least 10 characters long',
+      );
+    }
+  }
+
   private toAuthenticatedUser(user: UserRecord): AuthenticatedUser {
     return {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role.name,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 

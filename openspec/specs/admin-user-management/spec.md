@@ -6,6 +6,17 @@ Define la administración backend de usuarios internos. Todos los endpoints de U
 
 ## Requisitos
 
+### Requisito: Persistencia de estado administrativo del usuario
+
+El modelo `User` DEBE persistir `mustChangePassword` booleano, `deactivatedAt` timestamp nullable, `deactivatedByUserId` referencia nullable al actor y `deactivationReason` texto opcional/nullable.
+
+#### Escenario: Valores iniciales tras actualización
+
+- DADO usuarios existentes sin esos campos históricos
+- CUANDO el sistema opera después de la actualización
+- ENTONCES DEBEN tratarse como `mustChangePassword=false`
+- Y DEBEN tener campos de desactivación en `null`
+
 ### Requisito: Acceso administrativo exclusivo
 
 El sistema DEBE restringir `GET /api/users`, `GET /api/users/:id`, `POST /api/users`, `PATCH /api/users/:id`, `PATCH /api/users/:id/password` y `DELETE /api/users/:id` a usuarios ADMIN activos.
@@ -51,7 +62,7 @@ El sistema DEBE devolver usuarios por `GET /api/users/:id` sin incluir `password
 
 ### Requisito: Creación con email único y contraseña temporal segura
 
-El sistema DEBE crear usuarios con email único, contraseña temporal segura, contraseña almacenada como hash y `mustChangePassword=true`.
+El sistema DEBE crear usuarios con email único, contraseña temporal segura, contraseña almacenada como hash y `mustChangePassword=true` persistido.
 
 #### Escenario: Usuario creado correctamente
 
@@ -101,13 +112,20 @@ El sistema DEBE permitir a ADMIN establecer contraseña temporal con política m
 
 ### Requisito: Baja lógica sin eliminación física
 
-El sistema DEBE ejecutar `DELETE /api/users/:id` como baja lógica con `isActive=false`, `deactivatedAt`, `deactivatedByUserId` y razón cuando sea soportada. El sistema NO DEBE eliminar físicamente usuarios.
+El sistema DEBE ejecutar `DELETE /api/users/:id` como baja lógica con `isActive=false`, `deactivatedAt`, `deactivatedByUserId` y `deactivationReason` opcional/nullable. El sistema NO DEBE eliminar físicamente usuarios.
 
 #### Escenario: Usuario desactivado
 
 - DADO un usuario activo que no es el último ADMIN activo
 - CUANDO ADMIN solicita la baja
-- ENTONCES el usuario DEBE quedar inactivo con datos de desactivación
+- ENTONCES el usuario DEBE quedar inactivo con `deactivatedAt` y `deactivatedByUserId`
+- Y DEBE guardar `deactivationReason` si fue proporcionada
+
+#### Escenario: Baja lógica sin razón
+
+- DADO un usuario activo permitido para baja
+- CUANDO ADMIN lo desactiva sin razón
+- ENTONCES el usuario DEBE quedar inactivo con `deactivationReason=null`
 
 #### Escenario: Baja del último ADMIN bloqueada
 

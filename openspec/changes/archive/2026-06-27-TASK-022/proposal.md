@@ -8,7 +8,7 @@ Habilitar administración backend de usuarios internos solo para ADMIN, con segu
 
 ### In Scope
 - Endpoints ADMIN: `GET /api/users`, `GET /api/users/:id`, `POST /api/users`, `PATCH /api/users/:id`, `PATCH /api/users/:id/password`, `DELETE /api/users/:id`.
-- Baja lógica con `isActive=false`, `deactivatedAt`, `deactivatedByUserId` y razón si el modelo la soporta; sin borrado físico.
+- Baja lógica con `isActive=false`, `deactivatedAt`, `deactivatedByUserId` y `deactivationReason` opcional; sin borrado físico.
 - Listado de usuarios activos por defecto; inactivos solo con filtro explícito `status=inactive|all` o `includeInactive=true`.
 - Cambio de `roleId` solo por ADMIN, prohibiendo dejar al sistema sin al menos un ADMIN activo y bloqueando auto-democión del último ADMIN.
 - Password temporal creada por ADMIN con política mínima (recomendado: 10+ caracteres), hash obligatorio y `mustChangePassword=true` con cambio forzado en primer login.

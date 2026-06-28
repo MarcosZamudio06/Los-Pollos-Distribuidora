@@ -5,6 +5,7 @@ import { databaseConfig } from './config/database.config';
 import { validateEnvironment } from './config/env.validation';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AuthModule } from './modules/auth/auth.module';
     }),
     PrismaModule,
     AuthModule,
+    UsersModule,
   ],
   controllers: [],
   providers: [],

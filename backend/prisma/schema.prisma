@@ -234,9 +234,15 @@ model User {
   passwordHash                String
   roleId                      String
   isActive                    Boolean                 @default(true)
+  mustChangePassword          Boolean                 @default(false)
+  deactivatedAt               DateTime?
+  deactivatedByUserId         String?
+  deactivationReason          String?
   createdAt                   DateTime                @default(now())
   updatedAt                   DateTime                @updatedAt
   role                        Role                    @relation(fields: [roleId], references: [id])
+  deactivatedBy                User?                   @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id])
+  deactivatedUsers             User[]                  @relation("UserDeactivatedBy")
   sales                       Sale[]                  @relation("SaleCreatedBy")
   deliveredSales              Sale[]                  @relation("SaleDeliveredBy")
   collectedSales              Sale[]                  @relation("SaleCollectedBy")
@@ -271,6 +277,8 @@ model User {
   createdDailyCloseLines       PointOfSaleDailyCloseLine[]
   cashMovements                CashMovement[]
   capturedScaleTickets         ScaleTicketReference[]
+
+  @@index([deactivatedByUserId])
 }
 
 model OperationalLocation {

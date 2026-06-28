@@ -24,7 +24,9 @@ El sistema DEBE impedir de forma inmediata que usuarios con `isActive=false` ini
 
 ### Requisito: Cambio obligatorio de contraseña temporal
 
-El sistema DEBE exigir cambio de contraseña cuando `mustChangePassword=true` antes de permitir uso normal del sistema, salvo rutas estrictamente necesarias para completar dicho cambio.
+El sistema DEBE exigir cambio de contraseña cuando `mustChangePassword=true` persistido antes de permitir uso normal del sistema.
+
+La única excepción de acceso protegido permitida para un usuario con `mustChangePassword=true` DEBE ser una ruta explícitamente marcada para completar el cambio de contraseña propia. Esa excepción DEBE requerir JWT válido, DEBE validar la contraseña actual, DEBE guardar la nueva contraseña como hash, DEBE persistir `mustChangePassword=false` al completarse y NO DEBE exponer `passwordHash`.
 
 #### Escenario: Usuario con cambio pendiente inicia sesión
 
@@ -37,6 +39,28 @@ El sistema DEBE exigir cambio de contraseña cuando `mustChangePassword=true` an
 - DADO un usuario activo autenticado con `mustChangePassword=true`
 - CUANDO intenta acceder a un recurso protegido no necesario para cambiar contraseña
 - ENTONCES el sistema DEBE rechazar o limitar el acceso hasta completar el cambio
+
+#### Escenario: Cambio de contraseña propia permitido como excepción explícita
+
+- DADO un usuario activo autenticado con JWT válido y `mustChangePassword=true`
+- CUANDO solicita `POST /api/auth/change-password` con contraseña actual válida y nueva contraseña válida
+- ENTONCES el sistema DEBE actualizar la contraseña de forma segura
+- Y DEBE persistir `mustChangePassword=false`
+- Y DEBE permitir el acceso normal posterior según rol y estado activo
+- Y NO DEBE devolver `passwordHash`
+
+#### Escenario: Excepción rechazada sin JWT o contraseña actual válida
+
+- DADO un usuario activo con `mustChangePassword=true`
+- CUANDO solicita el cambio de contraseña propia sin JWT válido o con contraseña actual incorrecta
+- ENTONCES el sistema DEBE rechazar la operación
+- Y NO DEBE modificar la credencial
+
+#### Escenario: Usuario existente sin cambio pendiente
+
+- DADO un usuario existente migrado con `mustChangePassword=false`
+- CUANDO inicia sesión con credenciales válidas
+- ENTONCES el sistema DEBE permitir el flujo normal según su rol y estado activo
 
 ### Requisito: Estado de acceso consistente
 
