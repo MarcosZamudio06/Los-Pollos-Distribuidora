@@ -31,7 +31,9 @@ type RequestOptions<TBody> = {
 }
 
 function getDefaultApiBaseUrl() {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+  const baseUrl = (
+    import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL
+  )?.trim()
 
   return baseUrl && baseUrl.length > 0 ? baseUrl : '/api'
 }

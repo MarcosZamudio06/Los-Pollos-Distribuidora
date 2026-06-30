@@ -6,6 +6,10 @@ import { validateEnvironment } from './config/env.validation';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { ProductsModule } from './modules/products/products.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { LocationsModule } from './modules/locations/locations.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 
 @Module({
   imports: [
@@ -18,6 +22,10 @@ import { UsersModule } from './modules/users/users.module';
     PrismaModule,
     AuthModule,
     UsersModule,
+    ProductsModule,
+    CategoriesModule,
+    LocationsModule,
+    InventoryModule,
   ],
   controllers: [],
   providers: [],

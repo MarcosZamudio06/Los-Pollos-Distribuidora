@@ -26,6 +26,7 @@ exports.initialAdminUser = {
     name: 'Development Admin',
     email: 'dev.admin@pollos.local',
     isActive: true,
+    mustChangePassword: false,
 };
 exports.initialSeedLocation = {
     name: 'Development Main Location',
@@ -116,6 +117,7 @@ async function seedInitialAdmin(prisma) {
             name: exports.initialAdminUser.name,
             passwordHash,
             isActive: exports.initialAdminUser.isActive,
+            mustChangePassword: exports.initialAdminUser.mustChangePassword,
             role: { connect: { name: 'ADMIN' } },
         },
         create: {

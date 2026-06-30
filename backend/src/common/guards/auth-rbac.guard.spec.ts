@@ -3,37 +3,40 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthService } from '../../modules/auth/auth.service';
+import type { AuthenticatedUser } from '../../modules/auth/auth.types';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 
-const adminUser = {
+const adminUser: AuthenticatedUser = {
   id: 'user-1',
   name: 'Development Admin',
   email: 'dev.admin@pollos.local',
   role: 'ADMIN',
+  mustChangePassword: false,
 };
 
-const cashierUser = {
+const cashierUser: AuthenticatedUser = {
   id: 'user-2',
   name: 'Development Cashier',
   email: 'dev.cashier@pollos.local',
   role: 'CASHIER',
+  mustChangePassword: false,
 };
 
 @Controller('guard-test')
 class GuardTestController {
   @Get('protected')
   @UseGuards(JwtAuthGuard)
-  protected(@CurrentUser() user: typeof adminUser) {
+  protected(@CurrentUser() user: AuthenticatedUser) {
     return { user };
   }
 
   @Get('admin')
   @Roles('ADMIN')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  adminOnly(@CurrentUser() user: typeof adminUser) {
+  adminOnly(@CurrentUser() user: AuthenticatedUser) {
     return { user };
   }
 }
@@ -44,17 +47,19 @@ describe('Common auth and RBAC guards', () => {
 
   beforeEach(async () => {
     authService = {
-      verifyAccessToken: jest.fn((token: string) => {
-        if (token === 'admin-token') {
-          return Promise.resolve(adminUser);
-        }
+      verifyAccessToken: jest.fn<Promise<AuthenticatedUser>, [string]>(
+        (token) => {
+          if (token === 'admin-token') {
+            return Promise.resolve(adminUser);
+          }
 
-        if (token === 'cashier-token') {
-          return Promise.resolve(cashierUser);
-        }
+          if (token === 'cashier-token') {
+            return Promise.resolve(cashierUser);
+          }
 
-        return Promise.reject(new Error('Invalid token'));
-      }),
+          return Promise.reject(new Error('Invalid token'));
+        },
+      ),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({

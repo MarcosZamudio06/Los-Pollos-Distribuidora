@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 export declare const DEVELOPMENT_ADMIN_PASSWORD = "DevOnly-ChangeMe-2026!";
 export declare const initialRoles: readonly [{
     readonly name: "ADMIN";
@@ -20,6 +20,7 @@ export declare const initialAdminUser: {
     readonly name: "Development Admin";
     readonly email: "dev.admin@pollos.local";
     readonly isActive: true;
+    readonly mustChangePassword: false;
 };
 export declare const initialSeedLocation: {
     readonly name: "Development Main Location";
@@ -79,6 +80,23 @@ type PasswordResolution = {
     password: string;
     source: 'env' | 'development-only';
 };
+export type SeedPrismaClient = {
+    role: {
+        upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
+    };
+    user: {
+        upsert: (args: Prisma.UserUpsertArgs) => Promise<unknown>;
+    };
+    operationalLocation: {
+        upsert: (args: Prisma.OperationalLocationUpsertArgs) => Promise<unknown>;
+    };
+    category: {
+        upsert: (args: Prisma.CategoryUpsertArgs) => Promise<unknown>;
+    };
+    product: {
+        upsert: (args: Prisma.ProductUpsertArgs) => Promise<unknown>;
+    };
+};
 export declare function getInitialAdminPassword({ env, nodeEnv, }: PasswordResolutionInput): PasswordResolution;
-export declare function seed(prisma: PrismaClient): Promise<void>;
+export declare function seed(prisma: SeedPrismaClient): Promise<void>;
 export {};

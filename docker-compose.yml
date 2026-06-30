@@ -33,7 +33,9 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local_refresh_change_me}
       NODE_ENV: production
       PORT: ${PORT:-4000}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
+    command: npm run start:docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,7 +65,9 @@ services:
       context: .
       dockerfile: docker/frontend/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:4000/api}
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    environment:
+      VITE_DEV_API_PROXY_TARGET: http://backend:4000
     depends_on:
       backend:
         condition: service_healthy

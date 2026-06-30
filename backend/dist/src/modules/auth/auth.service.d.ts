@@ -1,5 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../database/prisma.service';
+import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthenticatedUser, LoginResult } from './auth.types';
 export declare class AuthService {
@@ -9,12 +10,16 @@ export declare class AuthService {
     login(credentials: LoginDto): Promise<LoginResult>;
     refresh(refreshToken: string): Promise<LoginResult>;
     verifyAccessToken(token: string): Promise<AuthenticatedUser>;
+    changeOwnPassword(userId: string, dto: ChangeOwnPasswordDto): Promise<AuthenticatedUser>;
     logout(): {
         success: true;
     };
+    private findUserById;
     private findUserByEmail;
+    private assertPasswordPolicy;
     private toAuthenticatedUser;
     private signToken;
     private verifyToken;
     private getSecret;
+    private getExpiresIn;
 }

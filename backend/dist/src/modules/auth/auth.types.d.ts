@@ -3,6 +3,7 @@ export type AuthenticatedUser = {
     email: string;
     name: string;
     role: string;
+    mustChangePassword: boolean;
 };
 export type TokenPayload = {
     sub: string;

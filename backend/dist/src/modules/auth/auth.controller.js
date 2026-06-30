@@ -15,8 +15,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
+const allow_password_change_required_decorator_1 = require("../../common/decorators/allow-password-change-required.decorator");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const auth_service_1 = require("./auth.service");
+const change_own_password_dto_1 = require("./dto/change-own-password.dto");
 const login_dto_1 = require("./dto/login.dto");
 const refresh_token_dto_1 = require("./dto/refresh-token.dto");
 let AuthController = class AuthController {
@@ -43,6 +45,13 @@ let AuthController = class AuthController {
             success: true,
             message: 'Sesión cerrada correctamente',
             data: this.authService.logout(),
+        };
+    }
+    async changePassword(user, body) {
+        return {
+            success: true,
+            message: 'Contraseña actualizada correctamente',
+            data: await this.authService.changeOwnPassword(user.id, body),
         };
     }
     me(user) {
@@ -78,6 +87,17 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "logout", null);
+__decorate([
+    (0, common_1.Post)('change-password'),
+    (0, common_1.HttpCode)(200),
+    (0, allow_password_change_required_decorator_1.AllowPasswordChangeRequired)(),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, change_own_password_dto_1.ChangeOwnPasswordDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "changePassword", null);
 __decorate([
     (0, common_1.Get)('me'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

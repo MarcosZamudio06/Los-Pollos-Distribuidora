@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 export const DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
@@ -21,6 +21,7 @@ export const initialAdminUser = {
   name: 'Development Admin',
   email: 'dev.admin@pollos.local',
   isActive: true,
+  mustChangePassword: false,
 } as const;
 
 export const initialSeedLocation = {
@@ -34,7 +35,8 @@ export const initialSeedLocation = {
 export const initialCategories = [
   {
     name: 'Base chicken products',
-    description: 'Development/example seed data for base poultry catalog items.',
+    description:
+      'Development/example seed data for base poultry catalog items.',
   },
   {
     name: 'Cuts',
@@ -92,6 +94,24 @@ type PasswordResolution = {
   source: 'env' | 'development-only';
 };
 
+export type SeedPrismaClient = {
+  role: {
+    upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
+  };
+  user: {
+    upsert: (args: Prisma.UserUpsertArgs) => Promise<unknown>;
+  };
+  operationalLocation: {
+    upsert: (args: Prisma.OperationalLocationUpsertArgs) => Promise<unknown>;
+  };
+  category: {
+    upsert: (args: Prisma.CategoryUpsertArgs) => Promise<unknown>;
+  };
+  product: {
+    upsert: (args: Prisma.ProductUpsertArgs) => Promise<unknown>;
+  };
+};
+
 export function getInitialAdminPassword({
   env,
   nodeEnv,
@@ -110,7 +130,7 @@ export function getInitialAdminPassword({
   };
 }
 
-async function seedRoles(prisma: PrismaClient): Promise<void> {
+async function seedRoles(prisma: SeedPrismaClient): Promise<void> {
   for (const role of initialRoles) {
     await prisma.role.upsert({
       where: { name: role.name },
@@ -120,7 +140,7 @@ async function seedRoles(prisma: PrismaClient): Promise<void> {
   }
 }
 
-async function seedInitialAdmin(prisma: PrismaClient): Promise<void> {
+async function seedInitialAdmin(prisma: SeedPrismaClient): Promise<void> {
   const passwordResolution = getInitialAdminPassword({
     env: process.env,
     nodeEnv: process.env.NODE_ENV,
@@ -133,6 +153,7 @@ async function seedInitialAdmin(prisma: PrismaClient): Promise<void> {
       name: initialAdminUser.name,
       passwordHash,
       isActive: initialAdminUser.isActive,
+      mustChangePassword: initialAdminUser.mustChangePassword,
       role: { connect: { name: 'ADMIN' } },
     },
     create: {
@@ -149,7 +170,7 @@ async function seedInitialAdmin(prisma: PrismaClient): Promise<void> {
   }
 }
 
-async function seedInitialLocation(prisma: PrismaClient): Promise<void> {
+async function seedInitialLocation(prisma: SeedPrismaClient): Promise<void> {
   await prisma.operationalLocation.upsert({
     where: { code: initialSeedLocation.code },
     update: initialSeedLocation,
@@ -157,7 +178,7 @@ async function seedInitialLocation(prisma: PrismaClient): Promise<void> {
   });
 }
 
-async function seedCategories(prisma: PrismaClient): Promise<void> {
+async function seedCategories(prisma: SeedPrismaClient): Promise<void> {
   for (const category of initialCategories) {
     await prisma.category.upsert({
       where: { name: category.name },
@@ -167,7 +188,7 @@ async function seedCategories(prisma: PrismaClient): Promise<void> {
   }
 }
 
-async function seedExampleProducts(prisma: PrismaClient): Promise<void> {
+async function seedExampleProducts(prisma: SeedPrismaClient): Promise<void> {
   for (const product of initialProducts) {
     const { categoryName, ...productData } = product;
 
@@ -187,7 +208,7 @@ async function seedExampleProducts(prisma: PrismaClient): Promise<void> {
   }
 }
 
-export async function seed(prisma: PrismaClient): Promise<void> {
+export async function seed(prisma: SeedPrismaClient): Promise<void> {
   await seedRoles(prisma);
   await seedInitialAdmin(prisma);
   await seedInitialLocation(prisma);

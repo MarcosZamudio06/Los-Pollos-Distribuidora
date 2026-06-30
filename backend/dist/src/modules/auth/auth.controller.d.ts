@@ -1,5 +1,6 @@
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './auth.types';
+import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 export declare class AuthController {
@@ -22,6 +23,11 @@ export declare class AuthController {
             success: true;
         };
     };
+    changePassword(user: AuthenticatedUser, body: ChangeOwnPasswordDto): Promise<{
+        success: boolean;
+        message: string;
+        data: AuthenticatedUser;
+    }>;
     me(user: AuthenticatedUser): {
         success: boolean;
         message: string;

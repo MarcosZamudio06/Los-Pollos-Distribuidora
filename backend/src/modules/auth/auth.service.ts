@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
+import type { StringValue } from 'ms';
 import { PrismaService } from '../../database/prisma.service';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -14,6 +15,8 @@ import { AuthenticatedUser, LoginResult, TokenPayload } from './auth.types';
 
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 10;
+const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
+const DEFAULT_REFRESH_TOKEN_EXPIRES_IN = '7d';
 
 type UserRecord = {
   id: string;
@@ -180,7 +183,7 @@ export class AuthService {
         type,
       },
       {
-        expiresIn: type === 'access' ? '15m' : '7d',
+        expiresIn: this.getExpiresIn(type),
         secret,
       },
     );
@@ -219,5 +222,19 @@ export class AuthService {
     }
 
     return secret;
+  }
+
+  private getExpiresIn(type: TokenPayload['type']): StringValue {
+    const envKey =
+      type === 'access' ? 'JWT_ACCESS_EXPIRES_IN' : 'JWT_REFRESH_EXPIRES_IN';
+    const configuredValue = process.env[envKey]?.trim();
+
+    if (configuredValue) {
+      return configuredValue as StringValue;
+    }
+
+    return type === 'access'
+      ? DEFAULT_ACCESS_TOKEN_EXPIRES_IN
+      : DEFAULT_REFRESH_TOKEN_EXPIRES_IN;
   }
 }

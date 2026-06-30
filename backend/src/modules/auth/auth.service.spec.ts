@@ -19,7 +19,6 @@ type UserWithRole = {
   role: { name: string };
 };
 
-type SignOptions = { expiresIn?: string };
 type UserUpdateArgs = {
   where: { id: string };
   data: {
@@ -76,12 +75,10 @@ function createService(user: UserWithRole | null): {
     },
   };
   const jwtService = {
-    signAsync: jest
-      .fn()
-      .mockImplementation((payload: TokenPayload, options: SignOptions) => {
-        const tokenType = options?.expiresIn === '7d' ? 'refresh' : 'access';
-        return Promise.resolve(`${tokenType}.${payload.sub}.${payload.role}`);
-      }),
+    signAsync: jest.fn().mockImplementation((payload: TokenPayload) => {
+      const tokenType = payload.type;
+      return Promise.resolve(`${tokenType}.${payload.sub}.${payload.role}`);
+    }),
     verifyAsync: jest.fn(),
   };
 
@@ -116,6 +113,52 @@ describe('AuthService', () => {
       },
     });
     expect(result.user).not.toHaveProperty('passwordHash');
+  });
+
+  it('uses configured token expiration windows when present in the environment', async () => {
+    const previousAccessExpires = process.env.JWT_ACCESS_EXPIRES_IN;
+    const previousRefreshExpires = process.env.JWT_REFRESH_EXPIRES_IN;
+
+    process.env.JWT_ACCESS_EXPIRES_IN = '30m';
+    process.env.JWT_REFRESH_EXPIRES_IN = '14d';
+
+    try {
+      const { service, jwtService } = createService(createUser());
+
+      await service.login({
+        email: 'dev.admin@pollos.local',
+        password: 'valid-password',
+      });
+
+      expect(jwtService.signAsync).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ type: 'access' }),
+        expect.objectContaining({
+          expiresIn: '30m',
+          secret: 'test-access-secret',
+        }),
+      );
+      expect(jwtService.signAsync).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ type: 'refresh' }),
+        expect.objectContaining({
+          expiresIn: '14d',
+          secret: 'test-refresh-secret',
+        }),
+      );
+    } finally {
+      if (previousAccessExpires === undefined) {
+        delete process.env.JWT_ACCESS_EXPIRES_IN;
+      } else {
+        process.env.JWT_ACCESS_EXPIRES_IN = previousAccessExpires;
+      }
+
+      if (previousRefreshExpires === undefined) {
+        delete process.env.JWT_REFRESH_EXPIRES_IN;
+      } else {
+        process.env.JWT_REFRESH_EXPIRES_IN = previousRefreshExpires;
+      }
+    }
   });
 
   it('rejects login with an incorrect password', async () => {

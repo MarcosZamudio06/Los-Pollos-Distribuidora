@@ -17,6 +17,10 @@ const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_service_1 = require("../../database/prisma.service");
+const PASSWORD_HASH_ROUNDS = 12;
+const MIN_PASSWORD_LENGTH = 10;
+const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
+const DEFAULT_REFRESH_TOKEN_EXPIRES_IN = '7d';
 let AuthService = class AuthService {
     prisma;
     jwtService;
@@ -67,8 +71,35 @@ let AuthService = class AuthService {
         }
         return this.toAuthenticatedUser(user);
     }
+    async changeOwnPassword(userId, dto) {
+        this.assertPasswordPolicy(dto.newPassword);
+        const user = await this.findUserById(userId);
+        if (!user || !user.isActive) {
+            throw new common_1.UnauthorizedException('Invalid token');
+        }
+        const currentPasswordMatches = await bcryptjs_1.default.compare(dto.currentPassword, user.passwordHash);
+        if (!currentPasswordMatches) {
+            throw new common_1.UnauthorizedException('Invalid credentials');
+        }
+        const passwordHash = await bcryptjs_1.default.hash(dto.newPassword, PASSWORD_HASH_ROUNDS);
+        const updatedUser = await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                passwordHash,
+                mustChangePassword: false,
+            },
+            include: { role: true },
+        });
+        return this.toAuthenticatedUser(updatedUser);
+    }
     logout() {
         return { success: true };
+    }
+    async findUserById(id) {
+        return this.prisma.user.findUnique({
+            where: { id },
+            include: { role: true },
+        });
     }
     async findUserByEmail(email) {
         return this.prisma.user.findUnique({
@@ -76,12 +107,18 @@ let AuthService = class AuthService {
             include: { role: true },
         });
     }
+    assertPasswordPolicy(password) {
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            throw new common_1.BadRequestException('Password must be at least 10 characters long');
+        }
+    }
     toAuthenticatedUser(user) {
         return {
             id: user.id,
             name: user.name,
             email: user.email,
             role: user.role.name,
+            mustChangePassword: user.mustChangePassword,
         };
     }
     async signToken(user, type) {
@@ -92,7 +129,7 @@ let AuthService = class AuthService {
             role: user.role,
             type,
         }, {
-            expiresIn: type === 'access' ? '15m' : '7d',
+            expiresIn: this.getExpiresIn(type),
             secret,
         });
     }
@@ -120,6 +157,16 @@ let AuthService = class AuthService {
             throw new common_1.InternalServerErrorException(`${envKey} is required`);
         }
         return secret;
+    }
+    getExpiresIn(type) {
+        const envKey = type === 'access' ? 'JWT_ACCESS_EXPIRES_IN' : 'JWT_REFRESH_EXPIRES_IN';
+        const configuredValue = process.env[envKey]?.trim();
+        if (configuredValue) {
+            return configuredValue;
+        }
+        return type === 'access'
+            ? DEFAULT_ACCESS_TOKEN_EXPIRES_IN
+            : DEFAULT_REFRESH_TOKEN_EXPIRES_IN;
     }
 };
 exports.AuthService = AuthService;

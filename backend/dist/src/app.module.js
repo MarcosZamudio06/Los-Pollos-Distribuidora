@@ -14,6 +14,11 @@ const database_config_1 = require("./config/database.config");
 const env_validation_1 = require("./config/env.validation");
 const prisma_module_1 = require("./database/prisma.module");
 const auth_module_1 = require("./modules/auth/auth.module");
+const users_module_1 = require("./modules/users/users.module");
+const products_module_1 = require("./modules/products/products.module");
+const categories_module_1 = require("./modules/categories/categories.module");
+const locations_module_1 = require("./modules/locations/locations.module");
+const inventory_module_1 = require("./modules/inventory/inventory.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -28,6 +33,11 @@ exports.AppModule = AppModule = __decorate([
             }),
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
+            users_module_1.UsersModule,
+            products_module_1.ProductsModule,
+            categories_module_1.CategoriesModule,
+            locations_module_1.LocationsModule,
+            inventory_module_1.InventoryModule,
         ],
         controllers: [],
         providers: [],

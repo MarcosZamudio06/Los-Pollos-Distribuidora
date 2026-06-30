@@ -1,0 +1,52 @@
+import type { InventoryMovementType, ProductUnit } from '@prisma/client';
+import { PrismaService } from '../../database/prisma.service';
+import { CreateInventoryAdjustmentDto, ListInventoryMovementsQueryDto } from './dto';
+type MovementResponse = {
+    id: string;
+    productId: string;
+    productName?: string;
+    locationId: string;
+    locationName?: string;
+    type: InventoryMovementType;
+    unit: ProductUnit;
+    quantityKg: number;
+    quantityPieces: number;
+    previousQuantityKg: number;
+    newQuantityKg: number;
+    previousQuantityPieces: number;
+    newQuantityPieces: number;
+    reason: string | null;
+    referenceType: string | null;
+    referenceId: string | null;
+    transferId: string | null;
+    saleId: string | null;
+    purchaseId: string | null;
+    routeSettlementId: string | null;
+    pointOfSaleDailyCloseId: string | null;
+    userId: string;
+    createdAt: Date;
+};
+type MovementListResponse = {
+    items: MovementResponse[];
+};
+export declare class InventoryService {
+    private readonly prisma;
+    constructor(prisma: PrismaService);
+    createAdjustment(dto: CreateInventoryAdjustmentDto, userId: string): Promise<MovementResponse>;
+    findMovements(query: ListInventoryMovementsQueryDto): Promise<MovementListResponse>;
+    private normalizeRequiredReason;
+    private assertProductAvailable;
+    private assertLocationAvailable;
+    private normalizeQuantities;
+    private assertUnitMatchesProduct;
+    private getMovementDirection;
+    private assertNonNegativeBalance;
+    private applyAtomicBalanceChange;
+    private buildMovementWhere;
+    private buildCreatedAtFilter;
+    private buildPagination;
+    private toMovementResponse;
+    private resolveMovementUnit;
+    private toNumber;
+}
+export {};

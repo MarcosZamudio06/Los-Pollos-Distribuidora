@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import {
   DEVELOPMENT_ADMIN_PASSWORD,
@@ -10,59 +11,42 @@ import {
   initialRoles,
   initialSeedLocation,
   seed,
+  SeedPrismaClient,
 } from '../../prisma/seed';
 
 const packageJsonPath = resolve(__dirname, '../../package.json');
-type AdminUserUpsertPayload = {
-  where: { email: string };
-  update: {
-    name: string;
-    passwordHash: string;
-    isActive: boolean;
-    role: { connect: { name: string } };
-  };
-  create: {
-    email: string;
-    name: string;
-    passwordHash: string;
-    isActive: boolean;
-    role: { connect: { name: string } };
-  };
-};
-type UpsertMock = jest.MockedFunction<(args: unknown) => Promise<void>>;
+type UpsertMock<TArgs> = jest.MockedFunction<(args: TArgs) => Promise<unknown>>;
 type PrismaSeedMockClient = {
-  role: { upsert: UpsertMock };
+  role: { upsert: UpsertMock<Prisma.RoleUpsertArgs> };
   user: {
-    upsert: jest.MockedFunction<
-      (args: AdminUserUpsertPayload) => Promise<void>
-    >;
+    upsert: UpsertMock<Prisma.UserUpsertArgs>;
   };
-  operationalLocation: { upsert: UpsertMock };
-  category: { upsert: UpsertMock };
-  product: { upsert: UpsertMock };
+  operationalLocation: {
+    upsert: UpsertMock<Prisma.OperationalLocationUpsertArgs>;
+  };
+  category: { upsert: UpsertMock<Prisma.CategoryUpsertArgs> };
+  product: { upsert: UpsertMock<Prisma.ProductUpsertArgs> };
 };
 
-function createUpsertMock(): UpsertMock {
-  return jest
-    .fn<(args: unknown) => Promise<void>>()
-    .mockResolvedValue(undefined);
+function createUpsertMock<TArgs>(): UpsertMock<TArgs> {
+  return jest.fn<Promise<unknown>, [TArgs]>().mockResolvedValue(undefined);
 }
 
 function createPrismaSeedMock(): {
-  prisma: PrismaSeedMockClient;
-  userUpsertMock: jest.MockedFunction<
-    (args: AdminUserUpsertPayload) => Promise<void>
-  >;
+  prisma: SeedPrismaClient;
+  userUpsertMock: UpsertMock<Prisma.UserUpsertArgs>;
 } {
   const userUpsertMock = jest
-    .fn<(args: AdminUserUpsertPayload) => Promise<void>>()
+    .fn<Promise<unknown>, [Prisma.UserUpsertArgs]>()
     .mockResolvedValue(undefined);
-  const prisma = {
-    role: { upsert: createUpsertMock() },
+  const prisma: PrismaSeedMockClient = {
+    role: { upsert: createUpsertMock<Prisma.RoleUpsertArgs>() },
     user: { upsert: userUpsertMock },
-    operationalLocation: { upsert: createUpsertMock() },
-    category: { upsert: createUpsertMock() },
-    product: { upsert: createUpsertMock() },
+    operationalLocation: {
+      upsert: createUpsertMock<Prisma.OperationalLocationUpsertArgs>(),
+    },
+    category: { upsert: createUpsertMock<Prisma.CategoryUpsertArgs>() },
+    product: { upsert: createUpsertMock<Prisma.ProductUpsertArgs>() },
   };
 
   return { prisma, userUpsertMock };
@@ -126,12 +110,14 @@ describe('Prisma seed contract', () => {
       update: {
         name: initialAdminUser.name,
         isActive: true,
+        mustChangePassword: false,
         role: { connect: { name: 'ADMIN' } },
       },
       create: {
         email: initialAdminUser.email,
         name: initialAdminUser.name,
         isActive: true,
+        mustChangePassword: false,
         role: { connect: { name: 'ADMIN' } },
       },
     });
@@ -139,19 +125,20 @@ describe('Prisma seed contract', () => {
     const createPasswordHash = userUpsert?.create.passwordHash;
     const updatePasswordHash = userUpsert?.update.passwordHash;
 
+    if (
+      typeof createPasswordHash !== 'string' ||
+      typeof updatePasswordHash !== 'string'
+    ) {
+      throw new Error('Seed admin password hash must be a string');
+    }
+
     expect(createPasswordHash).not.toBe('contract-admin-password-source');
     expect(updatePasswordHash).not.toBe('contract-admin-password-source');
     await expect(
-      bcrypt.compare(
-        'contract-admin-password-source',
-        createPasswordHash ?? '',
-      ),
+      bcrypt.compare('contract-admin-password-source', createPasswordHash),
     ).resolves.toBe(true);
     await expect(
-      bcrypt.compare(
-        'contract-admin-password-source',
-        updatePasswordHash ?? '',
-      ),
+      bcrypt.compare('contract-admin-password-source', updatePasswordHash),
     ).resolves.toBe(true);
   });
 
