@@ -4,13 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type {
-  InventoryMovementType,
-  ProductUnit,
-} from '@prisma/client';
+import type { InventoryMovementType, ProductUnit } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
   CreateInventoryAdjustmentDto,
+  ListInventoryBalancesQueryDto,
   ListInventoryMovementsQueryDto,
 } from './dto';
 
@@ -37,6 +35,12 @@ type InventoryBalanceRecord = {
   quantityPieces: number;
   minQuantityKg?: DecimalLike;
   minQuantityPieces?: number;
+  product?: {
+    name: string;
+    sku: string | null;
+    unit: ProductUnit;
+  } | null;
+  location?: { name: string } | null;
 };
 
 type InventoryMovementRecord = {
@@ -95,6 +99,22 @@ type MovementResponse = {
 
 type MovementListResponse = { items: MovementResponse[] };
 
+type BalanceResponse = {
+  productId: string;
+  productName?: string;
+  sku?: string | null;
+  unit?: ProductUnit;
+  locationId: string;
+  locationName?: string;
+  quantityKg: number;
+  quantityPieces: number;
+  minQuantityKg: number;
+  minQuantityPieces: number;
+  isLowStock: boolean;
+};
+
+type BalanceListResponse = { items: BalanceResponse[] };
+
 type NormalizedQuantities = {
   quantityKg: number;
   quantityPieces: number;
@@ -109,16 +129,36 @@ type AppliedBalanceChange = {
 };
 
 const DECREASE_MOVEMENT_TYPES = new Set<InventoryMovementType>([
-  'OUT' as InventoryMovementType,
-  'SALE' as InventoryMovementType,
-  'CANCEL_PURCHASE' as InventoryMovementType,
-  'TRANSFER_OUT' as InventoryMovementType,
-  'SHRINKAGE' as InventoryMovementType,
+  'OUT',
+  'SALE',
+  'CANCEL_PURCHASE',
+  'TRANSFER_OUT',
+  'SHRINKAGE',
 ]);
 
 @Injectable()
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async findBalances(
+    query: ListInventoryBalancesQueryDto,
+  ): Promise<BalanceListResponse> {
+    const balances = await this.prisma.inventoryBalance.findMany({
+      where: this.buildBalanceWhere(query),
+      include: { product: true, location: true },
+      orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
+      ...this.buildPagination(query),
+    });
+
+    const items = balances.map((balance) => this.toBalanceResponse(balance));
+
+    return {
+      items:
+        query.lowStock === true
+          ? items.filter((item) => item.isLowStock === true)
+          : items,
+    };
+  }
 
   async createAdjustment(
     dto: CreateInventoryAdjustmentDto,
@@ -128,16 +168,16 @@ export class InventoryService {
 
     return this.prisma.$transaction(
       async (tx) => {
-        const product = (await tx.product.findUnique({
+        const product = await tx.product.findUnique({
           where: { id: dto.productId },
           select: { id: true, name: true, unit: true, isActive: true },
-        })) as ProductRecord | null;
+        });
         this.assertProductAvailable(product);
 
-        const location = (await tx.operationalLocation.findUnique({
+        const location = await tx.operationalLocation.findUnique({
           where: { id: dto.locationId },
           select: { id: true, name: true, isActive: true },
-        })) as LocationRecord | null;
+        });
         this.assertLocationAvailable(location);
 
         const quantities = this.normalizeQuantities(dto, product.unit);
@@ -440,6 +480,29 @@ export class InventoryService {
     };
   }
 
+  private buildBalanceWhere(
+    query: ListInventoryBalancesQueryDto,
+  ): Prisma.InventoryBalanceWhereInput {
+    const search = query.search?.trim();
+
+    return {
+      ...(query.productId ? { productId: query.productId } : {}),
+      ...(query.locationId ? { locationId: query.locationId } : {}),
+      product: {
+        isActive: true,
+        ...(search
+          ? {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { sku: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      location: { isActive: true },
+    };
+  }
+
   private buildCreatedAtFilter(
     dateFrom?: string,
     dateTo?: string,
@@ -454,7 +517,7 @@ export class InventoryService {
     };
   }
 
-  private buildPagination(query: ListInventoryMovementsQueryDto): {
+  private buildPagination(query: { page?: number; limit?: number }): {
     skip?: number;
     take?: number;
   } {
@@ -465,6 +528,30 @@ export class InventoryService {
     return {
       skip: ((query.page ?? 1) - 1) * query.limit,
       take: query.limit,
+    };
+  }
+
+  private toBalanceResponse(balance: InventoryBalanceRecord): BalanceResponse {
+    const quantityKg = this.toNumber(balance.quantityKg);
+    const quantityPieces = balance.quantityPieces;
+    const minQuantityKg = this.toNumber(balance.minQuantityKg);
+    const minQuantityPieces = balance.minQuantityPieces ?? 0;
+
+    this.assertNonNegativeBalance(quantityKg, quantityPieces);
+
+    return {
+      productId: balance.productId,
+      productName: balance.product?.name,
+      sku: balance.product?.sku,
+      unit: balance.product?.unit,
+      locationId: balance.locationId,
+      locationName: balance.location?.name,
+      quantityKg,
+      quantityPieces,
+      minQuantityKg,
+      minQuantityPieces,
+      isLowStock:
+        quantityKg < minQuantityKg || quantityPieces < minQuantityPieces,
     };
   }
 
@@ -506,14 +593,14 @@ export class InventoryService {
     quantityPieces: number,
   ): ProductUnit {
     if (quantityKg > 0 && quantityPieces > 0) {
-      return 'KG_AND_PIECE' as ProductUnit;
+      return 'KG_AND_PIECE';
     }
 
     if (quantityPieces > 0) {
-      return 'PIECE' as ProductUnit;
+      return 'PIECE';
     }
 
-    return 'KG' as ProductUnit;
+    return 'KG';
   }
 
   private toNumber(value: DecimalLike): number {

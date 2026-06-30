@@ -10,6 +10,7 @@ type MockPrisma = {
   operationalLocation: { findUnique: jest.Mock };
   inventoryBalance: {
     findUnique: jest.Mock;
+    findMany: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
     updateMany: jest.Mock;
@@ -31,6 +32,7 @@ function createPrisma(): MockPrisma {
     operationalLocation: { findUnique: jest.fn() },
     inventoryBalance: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
@@ -540,6 +542,78 @@ describe('InventoryService', () => {
         locationName: 'Matriz',
         previousQuantityKg: 7.5,
         newQuantityKg: 10,
+      }),
+    ]);
+  });
+
+  it('lists inventory balances by product and operational location without global consolidation', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryBalance.findMany.mockResolvedValue([
+      {
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal(8),
+        quantityPieces: 0,
+        minQuantityKg: decimal(10),
+        minQuantityPieces: 0,
+        product: {
+          name: 'Pechuga',
+          sku: 'PECH-001',
+          unit: ProductUnit.KG,
+        },
+        location: { name: 'Matriz' },
+      },
+      {
+        id: 'balance-2',
+        productId: 'product-1',
+        locationId: 'location-2',
+        quantityKg: decimal(20),
+        quantityPieces: 0,
+        minQuantityKg: decimal(10),
+        minQuantityPieces: 0,
+        product: {
+          name: 'Pechuga',
+          sku: 'PECH-001',
+          unit: ProductUnit.KG,
+        },
+        location: { name: 'Sucursal Norte' },
+      },
+    ]);
+
+    const result = await service.findBalances({
+      productId: 'product-1',
+      search: 'pech',
+    });
+
+    expect(prisma.inventoryBalance.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          productId: 'product-1',
+          product: expect.objectContaining({
+            OR: expect.arrayContaining([
+              { name: { contains: 'pech', mode: 'insensitive' } },
+              { sku: { contains: 'pech', mode: 'insensitive' } },
+            ]),
+          }),
+        }),
+        include: { product: true, location: true },
+        orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
+      }),
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: 8,
+        minQuantityKg: 10,
+        isLowStock: true,
+      }),
+      expect.objectContaining({
+        productId: 'product-1',
+        locationId: 'location-2',
+        quantityKg: 20,
+        isLowStock: false,
       }),
     ]);
   });

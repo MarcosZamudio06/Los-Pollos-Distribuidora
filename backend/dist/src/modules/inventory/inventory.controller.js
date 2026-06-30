@@ -25,6 +25,13 @@ let InventoryController = class InventoryController {
     constructor(inventoryService) {
         this.inventoryService = inventoryService;
     }
+    async findBalances(query) {
+        return {
+            success: true,
+            message: 'Inventory balances retrieved successfully',
+            data: await this.inventoryService.findBalances(query),
+        };
+    }
     async createAdjustment(body, user) {
         return {
             success: true,
@@ -41,6 +48,14 @@ let InventoryController = class InventoryController {
     }
 };
 exports.InventoryController = InventoryController;
+__decorate([
+    (0, common_1.Get)('balances'),
+    (0, roles_decorator_1.Roles)('ADMIN', 'WAREHOUSE', 'SELLER'),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [dto_1.ListInventoryBalancesQueryDto]),
+    __metadata("design:returntype", Promise)
+], InventoryController.prototype, "findBalances", null);
 __decorate([
     (0, common_1.Post)('adjustments'),
     (0, roles_decorator_1.Roles)('ADMIN', 'WAREHOUSE'),

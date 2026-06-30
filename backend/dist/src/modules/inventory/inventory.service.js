@@ -25,18 +25,32 @@ let InventoryService = class InventoryService {
     constructor(prisma) {
         this.prisma = prisma;
     }
+    async findBalances(query) {
+        const balances = await this.prisma.inventoryBalance.findMany({
+            where: this.buildBalanceWhere(query),
+            include: { product: true, location: true },
+            orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
+            ...this.buildPagination(query),
+        });
+        const items = balances.map((balance) => this.toBalanceResponse(balance));
+        return {
+            items: query.lowStock === true
+                ? items.filter((item) => item.isLowStock === true)
+                : items,
+        };
+    }
     async createAdjustment(dto, userId) {
         const reason = this.normalizeRequiredReason(dto.reason);
         return this.prisma.$transaction(async (tx) => {
-            const product = (await tx.product.findUnique({
+            const product = await tx.product.findUnique({
                 where: { id: dto.productId },
                 select: { id: true, name: true, unit: true, isActive: true },
-            }));
+            });
             this.assertProductAvailable(product);
-            const location = (await tx.operationalLocation.findUnique({
+            const location = await tx.operationalLocation.findUnique({
                 where: { id: dto.locationId },
                 select: { id: true, name: true, isActive: true },
-            }));
+            });
             this.assertLocationAvailable(location);
             const quantities = this.normalizeQuantities(dto, product.unit);
             const direction = this.getMovementDirection(dto.type);
@@ -228,6 +242,25 @@ let InventoryService = class InventoryService {
             ...(createdAt ? { createdAt } : {}),
         };
     }
+    buildBalanceWhere(query) {
+        const search = query.search?.trim();
+        return {
+            ...(query.productId ? { productId: query.productId } : {}),
+            ...(query.locationId ? { locationId: query.locationId } : {}),
+            product: {
+                isActive: true,
+                ...(search
+                    ? {
+                        OR: [
+                            { name: { contains: search, mode: 'insensitive' } },
+                            { sku: { contains: search, mode: 'insensitive' } },
+                        ],
+                    }
+                    : {}),
+            },
+            location: { isActive: true },
+        };
+    }
     buildCreatedAtFilter(dateFrom, dateTo) {
         if (!dateFrom && !dateTo) {
             return undefined;
@@ -244,6 +277,26 @@ let InventoryService = class InventoryService {
         return {
             skip: ((query.page ?? 1) - 1) * query.limit,
             take: query.limit,
+        };
+    }
+    toBalanceResponse(balance) {
+        const quantityKg = this.toNumber(balance.quantityKg);
+        const quantityPieces = balance.quantityPieces;
+        const minQuantityKg = this.toNumber(balance.minQuantityKg);
+        const minQuantityPieces = balance.minQuantityPieces ?? 0;
+        this.assertNonNegativeBalance(quantityKg, quantityPieces);
+        return {
+            productId: balance.productId,
+            productName: balance.product?.name,
+            sku: balance.product?.sku,
+            unit: balance.product?.unit,
+            locationId: balance.locationId,
+            locationName: balance.location?.name,
+            quantityKg,
+            quantityPieces,
+            minQuantityKg,
+            minQuantityPieces,
+            isLowStock: quantityKg < minQuantityKg || quantityPieces < minQuantityPieces,
         };
     }
     toMovementResponse(movement) {

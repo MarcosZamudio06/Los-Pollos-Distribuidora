@@ -6,6 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateInventoryAdjustmentDto,
+  ListInventoryBalancesQueryDto,
   ListInventoryMovementsQueryDto,
 } from './dto';
 import { InventoryService } from './inventory.service';
@@ -14,6 +15,16 @@ import { InventoryService } from './inventory.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
+
+  @Get('balances')
+  @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
+  async findBalances(@Query() query: ListInventoryBalancesQueryDto) {
+    return {
+      success: true,
+      message: 'Inventory balances retrieved successfully',
+      data: await this.inventoryService.findBalances(query),
+    };
+  }
 
   @Post('adjustments')
   @Roles('ADMIN', 'WAREHOUSE')

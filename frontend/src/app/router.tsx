@@ -7,6 +7,7 @@ import {
   RoleRoute,
   useAuth,
 } from '../features/auth'
+import { ProductListPage } from '../features/inventario'
 
 function OperationsHomePage() {
   const { user } = useAuth()
@@ -57,9 +58,14 @@ function OperationsHomePage() {
             <p className="mt-3 text-sm leading-6 text-[#68645c]">
               La ruta de administración valida rol y manda a 403 cuando no corresponde.
             </p>
-            <Link className="mt-5 inline-flex font-bold text-[#9d2d24]" to="/admin">
-              Probar ruta ADMIN
-            </Link>
+            <div className="mt-5 flex flex-wrap gap-4">
+              <Link className="inline-flex font-bold text-[#9d2d24]" to="/admin">
+                Probar ruta ADMIN
+              </Link>
+              <Link className="inline-flex font-bold text-[#39798b]" to="/inventory">
+                Abrir inventario
+              </Link>
+            </div>
           </article>
           <article className="rounded-[1.75rem] border border-[#20211f]/10 bg-white p-6">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#9d2d24]">Sesión</p>
@@ -101,6 +107,16 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <ForbiddenPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'WAREHOUSE', 'SELLER']}>
+              <ProductListPage />
+            </RoleRoute>
           </ProtectedRoute>
         }
       />

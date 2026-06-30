@@ -10,6 +10,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
     CategoriesModule,
     LocationsModule,
     InventoryModule,
+    CustomersModule,
   ],
   controllers: [],
   providers: [],

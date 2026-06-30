@@ -57,11 +57,28 @@ const movementResponse = {
   createdAt: new Date('2026-06-29T12:00:00.000Z'),
 };
 
+const balanceResponse = {
+  productId: 'product-1',
+  productName: 'Pechuga',
+  sku: 'PECH-001',
+  unit: ProductUnit.KG,
+  locationId: 'location-1',
+  locationName: 'Matriz',
+  quantityKg: 8,
+  quantityPieces: 0,
+  minQuantityKg: 10,
+  minQuantityPieces: 0,
+  isLowStock: true,
+};
+
 describe('InventoryController API', () => {
   let app: INestApplication<App>;
   let authService: jest.Mocked<Pick<AuthService, 'verifyAccessToken'>>;
   let inventoryService: jest.Mocked<
-    Pick<InventoryService, 'createAdjustment' | 'findMovements'>
+    Pick<
+      InventoryService,
+      'createAdjustment' | 'findBalances' | 'findMovements'
+    >
   >;
 
   beforeEach(async () => {
@@ -75,6 +92,7 @@ describe('InventoryController API', () => {
     };
     inventoryService = {
       createAdjustment: jest.fn().mockResolvedValue(movementResponse),
+      findBalances: jest.fn().mockResolvedValue({ items: [balanceResponse] }),
       findMovements: jest.fn().mockResolvedValue({ items: [movementResponse] }),
     };
 
@@ -169,6 +187,34 @@ describe('InventoryController API', () => {
         locationId: 'location-1',
         type: InventoryMovementType.ADJUSTMENT,
         referenceType: 'MANUAL',
+      }),
+    );
+  });
+
+  it('lists inventory balances for ADMIN, WAREHOUSE, and SELLER without consolidating global stock', async () => {
+    for (const token of ['admin-token', 'warehouse-token', 'seller-token']) {
+      await request(app.getHttpServer())
+        .get(
+          '/api/inventory/balances?locationId=location-1&search=pech&lowStock=true',
+        )
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual({
+            success: true,
+            message: 'Inventory balances retrieved successfully',
+            data: {
+              items: [balanceResponse],
+            },
+          });
+        });
+    }
+
+    expect(inventoryService.findBalances).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationId: 'location-1',
+        search: 'pech',
+        lowStock: true,
       }),
     );
   });
