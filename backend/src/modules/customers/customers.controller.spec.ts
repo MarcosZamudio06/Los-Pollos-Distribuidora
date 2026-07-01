@@ -66,7 +66,7 @@ const customerResponse = {
 describe('CustomersController API', () => {
   let app: INestApplication<App>;
   let customersService: jest.Mocked<
-    Pick<CustomersService, 'findAll' | 'findOne' | 'create' | 'update' | 'deactivate'>
+    Pick<CustomersService, 'findAll' | 'findOne' | 'getCreditSummary' | 'findSales' | 'findPayments' | 'create' | 'update' | 'deactivate'>
   >;
 
   beforeEach(async () => {
@@ -83,6 +83,9 @@ describe('CustomersController API', () => {
     customersService = {
       findAll: jest.fn().mockResolvedValue({ items: [customerResponse] }),
       findOne: jest.fn().mockResolvedValue(customerResponse),
+      getCreditSummary: jest.fn().mockResolvedValue({ customerId: 'customer-1', globalBalance: '0' }),
+      findSales: jest.fn().mockResolvedValue({ items: [{ id: 'sale-1', accountReceivableId: 'ar-1', billingRequestId: 'billing-1' }] }),
+      findPayments: jest.fn().mockResolvedValue({ items: [{ id: 'payment-1', accountReceivableId: 'ar-1', saleId: 'sale-1' }] }),
       create: jest.fn().mockResolvedValue(customerResponse),
       update: jest.fn().mockResolvedValue(customerResponse),
       deactivate: jest.fn().mockResolvedValue({ ...customerResponse, isActive: false }),
@@ -114,7 +117,7 @@ describe('CustomersController API', () => {
 
   it('allows documented roles to list and get customers with filters', async () => {
     await request(app.getHttpServer())
-      .get('/api/customers?page=1&limit=10&search=centro&customerType=INSTITUTIONAL&creditStatus=ACTIVE&commercialPolicyId=policy-1&assignedRouteId=route-1&isActive=true')
+      .get('/api/customers?page=1&limit=10&search=centro&customerType=INSTITUTIONAL&creditStatus=ACTIVE&commercialPolicyId=policy-1&assignedRouteId=route-1&agingStatus=OVERDUE&cartera=OVERDUE&isActive=true')
       .set('Authorization', 'Bearer collections-token')
       .expect(200)
       .expect(({ body }) => {
@@ -134,6 +137,8 @@ describe('CustomersController API', () => {
         creditStatus: 'ACTIVE',
         commercialPolicyId: 'policy-1',
         assignedRouteId: 'route-1',
+        agingStatus: 'OVERDUE',
+        cartera: 'OVERDUE',
         isActive: true,
       }),
     );
@@ -146,6 +151,54 @@ describe('CustomersController API', () => {
         expect(body.data).toEqual(customerResponse);
       });
     expect(customersService.findOne).toHaveBeenCalledWith('customer-1');
+  });
+
+
+  it('exposes customer credit summary, sales history, and payment history endpoints', async () => {
+    await request(app.getHttpServer())
+      .get('/api/customers/customer-1/credit-summary')
+      .set('Authorization', 'Bearer seller-token')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          success: true,
+          message: 'Customer credit summary retrieved successfully',
+          data: { customerId: 'customer-1', globalBalance: '0' },
+        });
+      });
+    expect(customersService.getCreditSummary).toHaveBeenCalledWith('customer-1');
+
+    await request(app.getHttpServer())
+      .get('/api/customers/customer-1/sales?page=1&limit=10&paymentType=CREDIT_SALE&status=CONFIRMED')
+      .set('Authorization', 'Bearer collections-token')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.data.items[0]).toEqual({
+          id: 'sale-1',
+          accountReceivableId: 'ar-1',
+          billingRequestId: 'billing-1',
+        });
+      });
+    expect(customersService.findSales).toHaveBeenCalledWith(
+      'customer-1',
+      expect.objectContaining({ page: 1, limit: 10, paymentType: 'CREDIT_SALE', status: 'CONFIRMED' }),
+    );
+
+    await request(app.getHttpServer())
+      .get('/api/customers/customer-1/payments?page=1&limit=10&paymentMethod=TRANSFER&status=APPLIED')
+      .set('Authorization', 'Bearer collections-token')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.data.items[0]).toEqual({
+          id: 'payment-1',
+          accountReceivableId: 'ar-1',
+          saleId: 'sale-1',
+        });
+      });
+    expect(customersService.findPayments).toHaveBeenCalledWith(
+      'customer-1',
+      expect.objectContaining({ page: 1, limit: 10, paymentMethod: 'TRANSFER', status: 'APPLIED' }),
+    );
   });
 
   it('validates customer creation body and sends current user for commercial authorization', async () => {

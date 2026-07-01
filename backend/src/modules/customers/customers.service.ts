@@ -5,11 +5,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CreditStatus, type Prisma } from '@prisma/client';
+import {
+  AgingStatus,
+  CollectionStatus,
+  CreditStatus,
+  type Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateCustomerDto,
+  ListCustomerPaymentsQueryDto,
+  ListCustomerSalesQueryDto,
   ListCustomersQueryDto,
   UpdateCustomerDto,
 } from './dto';
@@ -17,12 +24,20 @@ import {
 type CustomerRecord = Prisma.CustomerGetPayload<{
   include: {
     commercialPolicy: true;
-    accountReceivables: true;
+    accountReceivables: { include: { payments: true } };
     payments: true;
     billingRequests: true;
   };
 }>;
 type CustomerListRecord = Prisma.CustomerGetPayload<Record<string, never>>;
+type CustomerSaleRecord = Prisma.SaleGetPayload<{
+  include: {
+    payments: true;
+    accountReceivable: { select: { id: true } };
+    billingRequest: { select: { id: true } };
+  };
+}>;
+type CustomerPaymentRecord = Prisma.PaymentGetPayload<Record<string, never>>;
 type CustomerMutationDto = CreateCustomerDto | UpdateCustomerDto;
 
 type CreditCompletenessSource = {
@@ -66,9 +81,15 @@ export class CustomersService {
   ): Promise<CustomerListResponse> {
     const customers = (await this.prisma.customer.findMany({
       where: this.buildListWhere(query),
+      include: {
+        commercialPolicy: true,
+        accountReceivables: { include: { payments: true } },
+        payments: true,
+        billingRequests: true,
+      },
       orderBy: { name: 'asc' },
       ...this.buildPagination(query),
-    })) as CustomerListRecord[];
+    })) as CustomerRecord[];
 
     return {
       items: customers.map((customer) => this.toCustomerResponse(customer)),
@@ -76,21 +97,57 @@ export class CustomersService {
   }
 
   async findOne(id: string): Promise<CustomerResponse> {
-    const customer = (await this.prisma.customer.findFirst({
-      where: { id, isActive: true },
-      include: {
-        commercialPolicy: true,
-        accountReceivables: true,
-        payments: true,
-        billingRequests: true,
+    return this.toCustomerResponse(await this.findCustomerDetail(id));
+  }
+
+  async getCreditSummary(id: string) {
+    const customer = await this.findCustomerDetail(id);
+    return this.buildCreditSummaryResponse(customer);
+  }
+
+  async findSales(id: string, query: ListCustomerSalesQueryDto = {}) {
+    await this.assertCustomerExists(id);
+    const sales = (await this.prisma.sale.findMany({
+      where: {
+        customerId: id,
+        ...(query.paymentType ? { paymentType: query.paymentType } : {}),
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.collectionStatus
+          ? { collectionStatus: query.collectionStatus }
+          : {}),
+        ...this.buildDateRangeWhere('createdAt', query.dateFrom, query.dateTo),
       },
-    })) as CustomerRecord | null;
+      include: {
+        payments: true,
+        accountReceivable: { select: { id: true } },
+        billingRequest: { select: { id: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      ...this.buildPagination(query),
+    })) as CustomerSaleRecord[];
 
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
+    return { items: sales.map((sale) => this.toSaleHistoryItem(sale)) };
+  }
 
-    return this.toCustomerResponse(customer);
+  async findPayments(id: string, query: ListCustomerPaymentsQueryDto = {}) {
+    await this.assertCustomerExists(id);
+    const payments = (await this.prisma.payment.findMany({
+      where: {
+        OR: [
+          { customerId: id },
+          { sale: { customerId: id } },
+          { accountReceivable: { customerId: id } },
+        ],
+        ...(query.paymentMethod ? { paymentMethod: query.paymentMethod } : {}),
+        ...(query.bankName ? { bankName: { contains: query.bankName, mode: 'insensitive' } } : {}),
+        ...(query.status ? { status: query.status } : {}),
+        ...this.buildDateRangeWhere('paidAt', query.dateFrom, query.dateTo),
+      },
+      orderBy: { paidAt: 'desc' },
+      ...this.buildPagination(query),
+    })) as CustomerPaymentRecord[];
+
+    return { items: payments.map((payment) => this.toPaymentHistoryItem(payment)) };
   }
 
   async create(
@@ -162,8 +219,11 @@ export class CustomersService {
   ): Prisma.CustomerWhereInput {
     const search = query.search?.trim();
 
+    const agingStatus = query.agingStatus ?? query.cartera;
+
     return {
       isActive: query.isActive ?? true,
+      ...this.buildAgingWhere(agingStatus),
       ...(query.customerType ? { customerType: query.customerType } : {}),
       ...(query.creditStatus ? { creditStatus: query.creditStatus } : {}),
       ...(query.commercialPolicyId
@@ -186,7 +246,52 @@ export class CustomersService {
     };
   }
 
-  private buildPagination(query: ListCustomersQueryDto): {
+  private buildAgingWhere(
+    agingStatus?: ListCustomersQueryDto['agingStatus'],
+  ): Prisma.CustomerWhereInput {
+    if (!agingStatus) {
+      return {};
+    }
+
+    if (agingStatus === 'LATE') {
+      return {
+      accountReceivables: {
+        some: {
+          daysOverdue: { gt: 0 },
+          status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+        },
+      },
+    };
+    }
+
+    return {
+      accountReceivables: {
+        some: {
+          agingStatus,
+          status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+        },
+      },
+    };
+  }
+
+  private buildDateRangeWhere<TField extends string>(
+    field: TField,
+    dateFrom?: string,
+    dateTo?: string,
+  ): Record<TField, { gte?: Date; lte?: Date }> | Record<string, never> {
+    if (!dateFrom && !dateTo) {
+      return {};
+    }
+
+    return {
+      [field]: {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      },
+    } as Record<TField, { gte?: Date; lte?: Date }>;
+  }
+
+  private buildPagination(query: { page?: number; limit?: number }): {
     skip?: number;
     take?: number;
   } {
@@ -198,6 +303,35 @@ export class CustomersService {
       skip: ((query.page ?? 1) - 1) * query.limit,
       take: query.limit,
     };
+  }
+
+  private async findCustomerDetail(id: string): Promise<CustomerRecord> {
+    const customer = (await this.prisma.customer.findFirst({
+      where: { id },
+      include: {
+        commercialPolicy: true,
+        accountReceivables: { include: { payments: true } },
+        payments: true,
+        billingRequests: true,
+      },
+    })) as CustomerRecord | null;
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return customer;
+  }
+
+  private async assertCustomerExists(id: string): Promise<void> {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
   }
 
   private async findActiveCustomerForMutation(
@@ -397,19 +531,25 @@ export class CustomersService {
   }
 
   private buildCreditSummary(customer: CustomerRecord): CustomerResponse['creditSummary'] {
-    const outstandingAmount = customer.accountReceivables.reduce(
+    return this.buildCreditSummaryResponse(customer);
+  }
+
+  private buildCreditSummaryResponse(customer: CustomerRecord) {
+    const receivables = this.activeReceivables(customer);
+    const outstandingAmount = receivables.reduce(
       (total, accountReceivable) =>
         total + Number(accountReceivable.outstandingAmount),
       0,
     );
-    const overdueAmount = customer.accountReceivables
+    const overdueAmount = receivables
       .filter((accountReceivable) => accountReceivable.daysOverdue > 0)
       .reduce(
         (total, accountReceivable) =>
           total + Number(accountReceivable.outstandingAmount),
         0,
       );
-    const lastPaymentDate = customer.payments.reduce<Date | null>(
+    const payments = this.customerPayments(customer);
+    const lastPaymentDate = payments.reduce<Date | null>(
       (latestDate, payment) =>
         latestDate === null || payment.paidAt > latestDate
           ? payment.paidAt
@@ -417,40 +557,215 @@ export class CustomersService {
       null,
     );
     const creditLimit = customer.creditLimit === null ? null : Number(customer.creditLimit);
+    const availableCredit =
+      creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0);
+    const daysOverdue = Math.max(
+      0,
+      ...receivables.map(
+        (accountReceivable) => accountReceivable.daysOverdue,
+      ),
+    );
+    const hasOverdueBalance = overdueAmount > 0;
+    const isLimitExceeded = creditLimit !== null && outstandingAmount > creditLimit;
+    const isBlocked =
+      customer.creditStatus !== CreditStatus.ACTIVE ||
+      hasOverdueBalance ||
+      isLimitExceeded;
 
     return {
+      customerId: customer.id,
+      creditStatus: customer.creditStatus,
+      creditLimit: customer.creditLimit?.toString() ?? null,
+      creditDays: customer.creditDays,
+      paymentTermsDays: customer.creditDays,
+      agingStatus: this.resolveAgingStatus(customer),
+      collectionStatus: this.resolveCollectionStatus(customer),
       globalBalance: outstandingAmount.toString(),
       outstandingAmount: outstandingAmount.toString(),
       overdueAmount: overdueAmount.toString(),
-      availableCredit:
-        creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0).toString(),
-      creditLimit: customer.creditLimit?.toString() ?? null,
-      creditDays: customer.creditDays,
-      daysOverdue: Math.max(
-        0,
-        ...customer.accountReceivables.map(
-          (accountReceivable) => accountReceivable.daysOverdue,
-        ),
+      availableCredit: availableCredit === null ? null : availableCredit.toString(),
+      hasOverdueBalance,
+      isBlocked,
+      isBlockedForCredit: isBlocked,
+      blockingReason: this.resolveBlockingReason(
+        customer,
+        hasOverdueBalance,
+        isLimitExceeded,
       ),
+      daysOverdue,
       lastPaymentDate,
-      creditStatus: customer.creditStatus,
-      isBlockedForCredit: customer.creditStatus !== CreditStatus.ACTIVE,
+      commercialPolicyId: customer.commercialPolicyId,
+      commercialPolicyApplied:
+        typeof customer.commercialPolicy === 'object' &&
+        customer.commercialPolicy !== null &&
+        'name' in customer.commercialPolicy
+          ? String(customer.commercialPolicy.name)
+          : customer.commercialPolicyId,
+      billingSummary: this.buildBillingSummary(customer),
+      billedAmount: this.buildBillingSummary(customer)?.billedAmount,
+      paidAmount: this.buildBillingSummary(customer)?.paidAmount,
+      finalBalance: this.buildBillingSummary(customer)?.finalBalance,
+    };
+  }
+
+  private resolveAgingStatus(customer: CustomerRecord): AgingStatus {
+    if (
+      this.activeReceivables(customer).some(
+        (accountReceivable) => accountReceivable.agingStatus === AgingStatus.OVERDUE,
+      )
+    ) {
+      return AgingStatus.OVERDUE;
+    }
+
+    if (
+      this.activeReceivables(customer).some(
+        (accountReceivable) => accountReceivable.agingStatus === AgingStatus.DUE_SOON,
+      )
+    ) {
+      return AgingStatus.DUE_SOON;
+    }
+
+    return AgingStatus.CURRENT;
+  }
+
+  private resolveCollectionStatus(customer: CustomerRecord): CollectionStatus {
+    if (
+      this.activeReceivables(customer).some(
+        (accountReceivable) => accountReceivable.status === CollectionStatus.UNPAID,
+      )
+    ) {
+      return CollectionStatus.UNPAID;
+    }
+
+    if (
+      this.activeReceivables(customer).some(
+        (accountReceivable) =>
+          accountReceivable.status === CollectionStatus.PARTIALLY_PAID,
+      )
+    ) {
+      return CollectionStatus.PARTIALLY_PAID;
+    }
+
+    return CollectionStatus.PAID;
+  }
+
+  private activeReceivables(customer: CustomerRecord) {
+    return customer.accountReceivables.filter(
+      (accountReceivable) =>
+        accountReceivable.status !== CollectionStatus.CANCELLED &&
+        accountReceivable.status !== CollectionStatus.PAID,
+    );
+  }
+
+  private customerPayments(customer: CustomerRecord) {
+    const paymentsById = new Map<string, CustomerRecord['payments'][number]>();
+    const anonymousPayments: Array<CustomerRecord['payments'][number]> = [];
+
+    for (const payment of customer.payments) {
+      if ('id' in payment && payment.id) {
+        paymentsById.set(payment.id, payment);
+      } else {
+        anonymousPayments.push(payment);
+      }
+    }
+
+    for (const accountReceivable of customer.accountReceivables) {
+      const payments = (accountReceivable as typeof accountReceivable & { payments?: CustomerRecord['payments'] }).payments ?? [];
+      for (const payment of payments) {
+        if ('id' in payment && payment.id) {
+          paymentsById.set(payment.id, payment);
+        } else {
+          anonymousPayments.push(payment);
+        }
+      }
+    }
+
+    return [...paymentsById.values(), ...anonymousPayments];
+  }
+
+  private resolveBlockingReason(
+    customer: CustomerRecord,
+    hasOverdueBalance: boolean,
+    isLimitExceeded: boolean,
+  ): string | null {
+    if (customer.creditStatus !== CreditStatus.ACTIVE) {
+      return 'CUSTOMER_CREDIT_STATUS';
+    }
+
+    if (hasOverdueBalance) {
+      return 'OVERDUE_BALANCE';
+    }
+
+    if (isLimitExceeded) {
+      return 'CREDIT_LIMIT_EXCEEDED';
+    }
+
+    return null;
+  }
+
+  private toSaleHistoryItem(sale: CustomerSaleRecord) {
+    const totalPaid = sale.payments.reduce(
+      (total, payment) => total + Number(payment.amount),
+      0,
+    );
+    const lastPaidAt = sale.payments.reduce<Date | null>(
+      (latestDate, payment) =>
+        latestDate === null || payment.paidAt > latestDate
+          ? payment.paidAt
+          : latestDate,
+      null,
+    );
+    const methods = Array.from(
+      new Set(sale.payments.map((payment) => payment.paymentMethod)),
+    );
+
+    return {
+      id: sale.id,
+      saleNumber: sale.saleNumber,
+      createdAt: sale.createdAt,
+      total: sale.total.toString(),
+      paymentType: sale.paymentType,
+      collectionStatus: sale.collectionStatus,
+      status: sale.status,
+      locationId: sale.locationId,
+      paymentsSummary: { totalPaid: totalPaid.toString(), lastPaidAt, methods },
+      accountReceivableId: sale.accountReceivable?.id ?? null,
+      billingRequestId: sale.billingRequest?.id ?? null,
+    };
+  }
+
+  private toPaymentHistoryItem(payment: CustomerPaymentRecord) {
+    return {
+      id: payment.id,
+      accountReceivableId: payment.accountReceivableId,
+      saleId: payment.saleId,
+      amount: payment.amount.toString(),
+      paymentMethod: payment.paymentMethod,
+      bankName: payment.bankName,
+      referenceNumber: payment.referenceNumber,
+      appliedDocumentId: payment.appliedDocumentId,
+      appliedDocumentType: payment.appliedDocumentType,
+      routeId: payment.routeId,
+      routeSettlementId: payment.routeSettlementId,
+      status: payment.status,
+      paidAt: payment.paidAt,
     };
   }
 
   private buildBillingSummary(
     customer: CustomerRecord,
   ): CustomerResponse['billingSummary'] {
-    const billedAmount = customer.accountReceivables.reduce(
+    const receivables = this.activeReceivables(customer);
+    const billedAmount = receivables.reduce(
       (total, accountReceivable) => total + Number(accountReceivable.originalAmount),
       0,
     );
-    const outstandingAmount = customer.accountReceivables.reduce(
+    const outstandingAmount = receivables.reduce(
       (total, accountReceivable) =>
         total + Number(accountReceivable.outstandingAmount),
       0,
     );
-    const paidAmount = customer.payments.reduce(
+    const paidAmount = this.customerPayments(customer).reduce(
       (total, payment) => total + Number(payment.amount),
       0,
     );

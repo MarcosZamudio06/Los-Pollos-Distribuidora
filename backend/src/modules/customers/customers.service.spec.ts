@@ -4,7 +4,16 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { CreditStatus, CustomerType } from '@prisma/client';
+import {
+  AgingStatus,
+  CollectionStatus,
+  CreditStatus,
+  CustomerType,
+  PaymentMethod,
+  PaymentStatus,
+  SalePaymentType,
+  SaleStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CustomersService } from './customers.service';
@@ -37,6 +46,8 @@ type CustomerRecord = {
     outstandingAmount: { toString(): string };
     daysOverdue: number;
     lastPaymentDate: Date | null;
+    agingStatus?: AgingStatus;
+    status?: CollectionStatus;
   }>;
   payments?: Array<{ amount: { toString(): string }; paidAt: Date }>;
   billingRequests?: Array<{ status: string }>;
@@ -67,6 +78,8 @@ type MockPrisma = {
     update: jest.Mock;
     delete: jest.Mock;
   };
+  sale: { findMany: jest.Mock };
+  payment: { findMany: jest.Mock };
 };
 
 function money(value: string) {
@@ -114,6 +127,8 @@ function createPrisma(): MockPrisma {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    sale: { findMany: jest.fn() },
+    payment: { findMany: jest.fn() },
   };
 }
 
@@ -175,7 +190,13 @@ describe('CustomersService', () => {
       ],
     });
 
-    expect(prisma.customer.findMany).toHaveBeenCalledWith({
+    expect(prisma.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: {
+        commercialPolicy: true,
+        accountReceivables: { include: { payments: true } },
+        payments: true,
+        billingRequests: true,
+      },
       where: expect.objectContaining({
         isActive: true,
         customerType: CustomerType.INSTITUTIONAL,
@@ -190,10 +211,10 @@ describe('CustomersService', () => {
       orderBy: { name: 'asc' },
       skip: 10,
       take: 10,
-    });
+    }));
   });
 
-  it('gets an active customer by id with optional fiscal fields treated as commercial data only', async () => {
+  it('gets customer detail by id with optional fiscal fields treated as commercial data only', async () => {
     const { service, prisma } = createService();
     prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
 
@@ -219,10 +240,10 @@ describe('CustomersService', () => {
     );
 
     expect(prisma.customer.findFirst).toHaveBeenCalledWith({
-      where: { id: 'customer-1', isActive: true },
+      where: { id: 'customer-1' },
       include: {
         commercialPolicy: true,
-        accountReceivables: true,
+        accountReceivables: { include: { payments: true } },
         payments: true,
         billingRequests: true,
       },
@@ -421,6 +442,164 @@ describe('CustomersService', () => {
     await expect(
       service.update('customer-1', { creditStatus: CreditStatus.ACTIVE }, adminUser),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+
+  it('filters customer list by aging status and cartera alias', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findMany.mockResolvedValue([createCustomer()]);
+
+    await service.findAll({ agingStatus: AgingStatus.OVERDUE });
+    expect(prisma.customer.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          accountReceivables: {
+            some: {
+              agingStatus: AgingStatus.OVERDUE,
+              status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+            },
+          },
+        }),
+      }),
+    );
+
+    await service.findAll({ cartera: 'LATE' });
+    expect(prisma.customer.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          accountReceivables: {
+            some: {
+              daysOverdue: { gt: 0 },
+              status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('returns dedicated credit summary with aging, blocking, and billing summary', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce(
+      createCustomer({
+        creditLimit: money('1000'),
+        accountReceivables: [
+          {
+            originalAmount: money('1200'),
+            outstandingAmount: money('1100'),
+            daysOverdue: 3,
+            lastPaymentDate: null,
+            agingStatus: AgingStatus.OVERDUE,
+            status: CollectionStatus.PARTIALLY_PAID,
+          },
+        ],
+        payments: [{ amount: money('100'), paidAt: new Date('2026-06-29T10:00:00.000Z') }],
+      }),
+    );
+
+    await expect(service.getCreditSummary('customer-1')).resolves.toEqual(
+      expect.objectContaining({
+        customerId: 'customer-1',
+        creditStatus: CreditStatus.ACTIVE,
+        creditLimit: '1000',
+        paymentTermsDays: 15,
+        agingStatus: AgingStatus.OVERDUE,
+        collectionStatus: CollectionStatus.PARTIALLY_PAID,
+        globalBalance: '1100',
+        overdueAmount: '1100',
+        availableCredit: '0',
+        hasOverdueBalance: true,
+        isBlocked: true,
+        blockingReason: 'OVERDUE_BALANCE',
+        daysOverdue: 3,
+        billingSummary: expect.objectContaining({ finalBalance: '1100' }),
+      }),
+    );
+  });
+
+  it('returns customer sales history with payment summary and traceability ids', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce({ id: 'customer-1' });
+    prisma.sale.findMany.mockResolvedValueOnce([
+      {
+        id: 'sale-1',
+        saleNumber: 'S-1',
+        createdAt: new Date('2026-06-30T12:00:00.000Z'),
+        total: money('250'),
+        paymentType: SalePaymentType.CREDIT_SALE,
+        collectionStatus: CollectionStatus.PARTIALLY_PAID,
+        status: SaleStatus.CONFIRMED,
+        locationId: 'location-1',
+        payments: [
+          { amount: money('50'), paidAt: new Date('2026-06-30T13:00:00.000Z'), paymentMethod: PaymentMethod.CASH },
+        ],
+        accountReceivable: { id: 'ar-1' },
+        billingRequest: { id: 'billing-1' },
+      },
+    ]);
+
+    await expect(
+      service.findSales('customer-1', { paymentType: SalePaymentType.CREDIT_SALE }),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: 'sale-1',
+          accountReceivableId: 'ar-1',
+          billingRequestId: 'billing-1',
+          paymentsSummary: expect.objectContaining({ totalPaid: '50', methods: [PaymentMethod.CASH] }),
+        }),
+      ],
+    });
+    expect(prisma.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ customerId: 'customer-1' }) }),
+    );
+  });
+
+  it('returns customer payment history through direct or account receivable relation', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce({ id: 'customer-1' });
+    prisma.payment.findMany.mockResolvedValueOnce([
+      {
+        id: 'payment-1',
+        accountReceivableId: 'ar-1',
+        saleId: 'sale-1',
+        amount: money('75'),
+        paymentMethod: PaymentMethod.TRANSFER,
+        bankName: 'Bank',
+        referenceNumber: 'REF-1',
+        appliedDocumentId: 'doc-1',
+        appliedDocumentType: 'ACCOUNT_RECEIVABLE',
+        routeId: 'route-1',
+        routeSettlementId: 'settlement-1',
+        status: PaymentStatus.APPLIED,
+        paidAt: new Date('2026-06-30T14:00:00.000Z'),
+      },
+    ]);
+
+    await expect(
+      service.findPayments('customer-1', { paymentMethod: PaymentMethod.TRANSFER }),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: 'payment-1',
+          accountReceivableId: 'ar-1',
+          saleId: 'sale-1',
+          routeId: 'route-1',
+          routeSettlementId: 'settlement-1',
+        }),
+      ],
+    });
+    expect(prisma.payment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { customerId: 'customer-1' },
+            { sale: { customerId: 'customer-1' } },
+            { accountReceivable: { customerId: 'customer-1' } },
+          ],
+        }),
+      }),
+    );
   });
 
 });

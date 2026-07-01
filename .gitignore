@@ -1,11 +1,10 @@
 .atl
 act
 docs
-
+.tokensave
 skills
-
 node_modules
-
+.venv
 # Local environment files
 .env
 .env.*.local

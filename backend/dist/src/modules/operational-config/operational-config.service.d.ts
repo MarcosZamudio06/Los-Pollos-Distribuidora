@@ -1,0 +1,82 @@
+import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
+import { CreateOperationalConfigDto, ListOperationalConfigQueryDto, UpdateOperationalConfigDto } from './dto';
+export declare class OperationalConfigService {
+    private prisma;
+    constructor(prisma: PrismaService);
+    findAll(query?: ListOperationalConfigQueryDto): Promise<{
+        items: {
+            id: string;
+            key: string;
+            value: string;
+            valueType: string;
+            scope: string;
+            locationId: string | null;
+            description: string | null;
+            effectiveFrom: Date | null;
+            effectiveTo: Date | null;
+            isActive: boolean;
+            createdByUserId: string;
+            updatedByUserId: string;
+            createdAt: Date;
+            updatedAt: Date;
+        }[];
+    }>;
+    create(dto: CreateOperationalConfigDto, currentUser: AuthenticatedUser): Promise<{
+        id: string;
+        key: string;
+        value: string;
+        valueType: string;
+        scope: string;
+        locationId: string | null;
+        description: string | null;
+        effectiveFrom: Date | null;
+        effectiveTo: Date | null;
+        isActive: boolean;
+        createdByUserId: string;
+        updatedByUserId: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+    update(id: string, dto: UpdateOperationalConfigDto, currentUser: AuthenticatedUser): Promise<{
+        id: string;
+        key: string;
+        value: string;
+        valueType: string;
+        scope: string;
+        locationId: string | null;
+        description: string | null;
+        effectiveFrom: Date | null;
+        effectiveTo: Date | null;
+        isActive: boolean;
+        createdByUserId: string;
+        updatedByUserId: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+    deactivate(id: string, currentUser: AuthenticatedUser): Promise<{
+        id: string;
+        key: string;
+        value: string;
+        valueType: string;
+        scope: string;
+        locationId: string | null;
+        description: string | null;
+        effectiveFrom: Date | null;
+        effectiveTo: Date | null;
+        isActive: boolean;
+        createdByUserId: string;
+        updatedByUserId: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+    private buildListWhere;
+    private buildPagination;
+    private normalizeMutationData;
+    private validateConfig;
+    private assertActiveLocation;
+    private findActiveConfig;
+    private parseDate;
+    private toMutationSnapshot;
+    private toResponse;
+}

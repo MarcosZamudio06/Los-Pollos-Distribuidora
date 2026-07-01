@@ -20,6 +20,8 @@ const categories_module_1 = require("./modules/categories/categories.module");
 const locations_module_1 = require("./modules/locations/locations.module");
 const inventory_module_1 = require("./modules/inventory/inventory.module");
 const customers_module_1 = require("./modules/customers/customers.module");
+const commercial_policies_module_1 = require("./modules/commercial-policies/commercial-policies.module");
+const operational_config_module_1 = require("./modules/operational-config/operational-config.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -40,6 +42,8 @@ exports.AppModule = AppModule = __decorate([
             locations_module_1.LocationsModule,
             inventory_module_1.InventoryModule,
             customers_module_1.CustomersModule,
+            commercial_policies_module_1.CommercialPoliciesModule,
+            operational_config_module_1.OperationalConfigModule,
         ],
         controllers: [],
         providers: [],

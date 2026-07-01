@@ -11,6 +11,8 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { CommercialPoliciesModule } from './modules/commercial-policies/commercial-policies.module';
+import { OperationalConfigModule } from './modules/operational-config/operational-config.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { CustomersModule } from './modules/customers/customers.module';
     LocationsModule,
     InventoryModule,
     CustomersModule,
+    CommercialPoliciesModule,
+    OperationalConfigModule,
   ],
   controllers: [],
   providers: [],

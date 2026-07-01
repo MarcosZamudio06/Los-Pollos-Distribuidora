@@ -7,6 +7,7 @@ import {
   RoleRoute,
   useAuth,
 } from '../features/auth'
+import { CustomersPage } from '../features/clientes'
 import { ProductListPage } from '../features/inventario'
 
 function OperationsHomePage() {
@@ -68,11 +69,14 @@ function OperationsHomePage() {
             </div>
           </article>
           <article className="rounded-[1.75rem] border border-[#20211f]/10 bg-white p-6">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#9d2d24]">Sesión</p>
-            <h2 className="mt-4 text-2xl font-black tracking-[-0.04em]">Token activo</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#9d2d24]">Clientes</p>
+            <h2 className="mt-4 text-2xl font-black tracking-[-0.04em]">Cartera controlada</h2>
             <p className="mt-3 text-sm leading-6 text-[#68645c]">
-              La sesión se conserva en el navegador y se limpia al cerrar sesión.
+              Consulta clientes, crédito y perfil administrativo sin mezclarlo con CFDI.
             </p>
+            <Link className="mt-5 inline-flex font-bold text-[#9d2d24]" to="/customers">
+              Abrir clientes
+            </Link>
           </article>
         </div>
       </section>
@@ -107,6 +111,16 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <ForbiddenPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/customers"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
+              <CustomersPage />
+            </RoleRoute>
           </ProtectedRoute>
         }
       />

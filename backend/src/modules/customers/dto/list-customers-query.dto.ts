@@ -1,6 +1,10 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import { CreditStatus, CustomerType } from '@prisma/client';
+import { IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { AgingStatus, CreditStatus, CustomerType } from '@prisma/client';
+
+export type CustomerAgingFilter = AgingStatus | 'LATE';
+
+const customerAgingFilters = [AgingStatus.CURRENT, AgingStatus.DUE_SOON, AgingStatus.OVERDUE, 'LATE'] as const;
 
 function toOptionalBoolean({ value }: TransformFnParams): unknown {
   if (value === true || value === false) return value;
@@ -41,6 +45,14 @@ export class ListCustomersQueryDto {
   @IsOptional()
   @IsString()
   assignedRouteId?: string;
+
+  @IsOptional()
+  @IsIn(customerAgingFilters)
+  agingStatus?: CustomerAgingFilter;
+
+  @IsOptional()
+  @IsIn(customerAgingFilters)
+  cartera?: CustomerAgingFilter;
 
   @IsOptional()
   @Transform(toOptionalBoolean)
