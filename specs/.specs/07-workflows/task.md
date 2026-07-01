@@ -705,7 +705,7 @@ Validación:
 
 ### TASK-022 — Implementar Users backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -737,7 +737,7 @@ Reglas:
 
 ### TASK-023 — Implementar Auth frontend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -772,7 +772,7 @@ Debe incluir:
 
 ### TASK-030 — Implementar productos backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -808,7 +808,7 @@ Reglas:
 
 ### TASK-031 — Implementar categorías backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -831,7 +831,7 @@ Reglas:
 
 ### TASK-032 — Implementar movimientos y ajustes de inventario backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -856,7 +856,7 @@ Reglas:
 
 ### TASK-033 — Implementar UI de inventario
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -897,7 +897,7 @@ Validaciones UI:
 
 ### TASK-034 — Implementar ubicaciones operativas backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -930,7 +930,7 @@ Reglas:
 
 ### TASK-035 — Implementar traspasos de inventario backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -967,7 +967,7 @@ Reglas:
 
 ### TASK-036 — Implementar equivalencias kilo-pieza backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -1002,7 +1002,7 @@ Reglas:
 
 ### TASK-040 — Implementar clientes backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -1037,7 +1037,7 @@ Reglas:
 
 ### TASK-041 — Implementar UI de clientes
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 
@@ -1065,7 +1065,7 @@ Entregables:
 
 ### TASK-042 — Implementar políticas comerciales y configuración operativa backend
 
-Estado inicial: `PENDING`
+Estado inicial: `COMPLETED`
 
 Depende de:
 

@@ -21,6 +21,12 @@ let CustomersService = class CustomersService {
     async findAll(query = {}) {
         const customers = (await this.prisma.customer.findMany({
             where: this.buildListWhere(query),
+            include: {
+                commercialPolicy: true,
+                accountReceivables: { include: { payments: true } },
+                payments: true,
+                billingRequests: true,
+            },
             orderBy: { name: 'asc' },
             ...this.buildPagination(query),
         }));
@@ -29,19 +35,52 @@ let CustomersService = class CustomersService {
         };
     }
     async findOne(id) {
-        const customer = (await this.prisma.customer.findFirst({
-            where: { id, isActive: true },
-            include: {
-                commercialPolicy: true,
-                accountReceivables: true,
-                payments: true,
-                billingRequests: true,
+        return this.toCustomerResponse(await this.findCustomerDetail(id));
+    }
+    async getCreditSummary(id) {
+        const customer = await this.findCustomerDetail(id);
+        return this.buildCreditSummaryResponse(customer);
+    }
+    async findSales(id, query = {}) {
+        await this.assertCustomerExists(id);
+        const sales = (await this.prisma.sale.findMany({
+            where: {
+                customerId: id,
+                ...(query.paymentType ? { paymentType: query.paymentType } : {}),
+                ...(query.status ? { status: query.status } : {}),
+                ...(query.collectionStatus
+                    ? { collectionStatus: query.collectionStatus }
+                    : {}),
+                ...this.buildDateRangeWhere('createdAt', query.dateFrom, query.dateTo),
             },
+            include: {
+                payments: true,
+                accountReceivable: { select: { id: true } },
+                billingRequest: { select: { id: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+            ...this.buildPagination(query),
         }));
-        if (!customer) {
-            throw new common_1.NotFoundException('Customer not found');
-        }
-        return this.toCustomerResponse(customer);
+        return { items: sales.map((sale) => this.toSaleHistoryItem(sale)) };
+    }
+    async findPayments(id, query = {}) {
+        await this.assertCustomerExists(id);
+        const payments = (await this.prisma.payment.findMany({
+            where: {
+                OR: [
+                    { customerId: id },
+                    { sale: { customerId: id } },
+                    { accountReceivable: { customerId: id } },
+                ],
+                ...(query.paymentMethod ? { paymentMethod: query.paymentMethod } : {}),
+                ...(query.bankName ? { bankName: { contains: query.bankName, mode: 'insensitive' } } : {}),
+                ...(query.status ? { status: query.status } : {}),
+                ...this.buildDateRangeWhere('paidAt', query.dateFrom, query.dateTo),
+            },
+            orderBy: { paidAt: 'desc' },
+            ...this.buildPagination(query),
+        }));
+        return { items: payments.map((payment) => this.toPaymentHistoryItem(payment)) };
     }
     async create(dto, currentUser) {
         this.assertCanMutateCommercialTerms(dto, currentUser);
@@ -84,8 +123,10 @@ let CustomersService = class CustomersService {
     }
     buildListWhere(query) {
         const search = query.search?.trim();
+        const agingStatus = query.agingStatus ?? query.cartera;
         return {
             isActive: query.isActive ?? true,
+            ...this.buildAgingWhere(agingStatus),
             ...(query.customerType ? { customerType: query.customerType } : {}),
             ...(query.creditStatus ? { creditStatus: query.creditStatus } : {}),
             ...(query.commercialPolicyId
@@ -107,6 +148,40 @@ let CustomersService = class CustomersService {
                 : {}),
         };
     }
+    buildAgingWhere(agingStatus) {
+        if (!agingStatus) {
+            return {};
+        }
+        if (agingStatus === 'LATE') {
+            return {
+                accountReceivables: {
+                    some: {
+                        daysOverdue: { gt: 0 },
+                        status: { in: [client_1.CollectionStatus.UNPAID, client_1.CollectionStatus.PARTIALLY_PAID] },
+                    },
+                },
+            };
+        }
+        return {
+            accountReceivables: {
+                some: {
+                    agingStatus,
+                    status: { in: [client_1.CollectionStatus.UNPAID, client_1.CollectionStatus.PARTIALLY_PAID] },
+                },
+            },
+        };
+    }
+    buildDateRangeWhere(field, dateFrom, dateTo) {
+        if (!dateFrom && !dateTo) {
+            return {};
+        }
+        return {
+            [field]: {
+                ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+                ...(dateTo ? { lte: new Date(dateTo) } : {}),
+            },
+        };
+    }
     buildPagination(query) {
         if (!query.limit) {
             return {};
@@ -115,6 +190,30 @@ let CustomersService = class CustomersService {
             skip: ((query.page ?? 1) - 1) * query.limit,
             take: query.limit,
         };
+    }
+    async findCustomerDetail(id) {
+        const customer = (await this.prisma.customer.findFirst({
+            where: { id },
+            include: {
+                commercialPolicy: true,
+                accountReceivables: { include: { payments: true } },
+                payments: true,
+                billingRequests: true,
+            },
+        }));
+        if (!customer) {
+            throw new common_1.NotFoundException('Customer not found');
+        }
+        return customer;
+    }
+    async assertCustomerExists(id) {
+        const customer = await this.prisma.customer.findFirst({
+            where: { id },
+            select: { id: true },
+        });
+        if (!customer) {
+            throw new common_1.NotFoundException('Customer not found');
+        }
     }
     async findActiveCustomerForMutation(id) {
         const customer = (await this.prisma.customer.findFirst({
@@ -262,31 +361,156 @@ let CustomersService = class CustomersService {
         return 'accountReceivables' in customer && 'payments' in customer;
     }
     buildCreditSummary(customer) {
-        const outstandingAmount = customer.accountReceivables.reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
-        const overdueAmount = customer.accountReceivables
+        return this.buildCreditSummaryResponse(customer);
+    }
+    buildCreditSummaryResponse(customer) {
+        const receivables = this.activeReceivables(customer);
+        const outstandingAmount = receivables.reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
+        const overdueAmount = receivables
             .filter((accountReceivable) => accountReceivable.daysOverdue > 0)
             .reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
-        const lastPaymentDate = customer.payments.reduce((latestDate, payment) => latestDate === null || payment.paidAt > latestDate
+        const payments = this.customerPayments(customer);
+        const lastPaymentDate = payments.reduce((latestDate, payment) => latestDate === null || payment.paidAt > latestDate
             ? payment.paidAt
             : latestDate, null);
         const creditLimit = customer.creditLimit === null ? null : Number(customer.creditLimit);
+        const availableCredit = creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0);
+        const daysOverdue = Math.max(0, ...receivables.map((accountReceivable) => accountReceivable.daysOverdue));
+        const hasOverdueBalance = overdueAmount > 0;
+        const isLimitExceeded = creditLimit !== null && outstandingAmount > creditLimit;
+        const isBlocked = customer.creditStatus !== client_1.CreditStatus.ACTIVE ||
+            hasOverdueBalance ||
+            isLimitExceeded;
         return {
+            customerId: customer.id,
+            creditStatus: customer.creditStatus,
+            creditLimit: customer.creditLimit?.toString() ?? null,
+            creditDays: customer.creditDays,
+            paymentTermsDays: customer.creditDays,
+            agingStatus: this.resolveAgingStatus(customer),
+            collectionStatus: this.resolveCollectionStatus(customer),
             globalBalance: outstandingAmount.toString(),
             outstandingAmount: outstandingAmount.toString(),
             overdueAmount: overdueAmount.toString(),
-            availableCredit: creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0).toString(),
-            creditLimit: customer.creditLimit?.toString() ?? null,
-            creditDays: customer.creditDays,
-            daysOverdue: Math.max(0, ...customer.accountReceivables.map((accountReceivable) => accountReceivable.daysOverdue)),
+            availableCredit: availableCredit === null ? null : availableCredit.toString(),
+            hasOverdueBalance,
+            isBlocked,
+            isBlockedForCredit: isBlocked,
+            blockingReason: this.resolveBlockingReason(customer, hasOverdueBalance, isLimitExceeded),
+            daysOverdue,
             lastPaymentDate,
-            creditStatus: customer.creditStatus,
-            isBlockedForCredit: customer.creditStatus !== client_1.CreditStatus.ACTIVE,
+            commercialPolicyId: customer.commercialPolicyId,
+            commercialPolicyApplied: typeof customer.commercialPolicy === 'object' &&
+                customer.commercialPolicy !== null &&
+                'name' in customer.commercialPolicy
+                ? String(customer.commercialPolicy.name)
+                : customer.commercialPolicyId,
+            billingSummary: this.buildBillingSummary(customer),
+            billedAmount: this.buildBillingSummary(customer)?.billedAmount,
+            paidAmount: this.buildBillingSummary(customer)?.paidAmount,
+            finalBalance: this.buildBillingSummary(customer)?.finalBalance,
+        };
+    }
+    resolveAgingStatus(customer) {
+        if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.agingStatus === client_1.AgingStatus.OVERDUE)) {
+            return client_1.AgingStatus.OVERDUE;
+        }
+        if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.agingStatus === client_1.AgingStatus.DUE_SOON)) {
+            return client_1.AgingStatus.DUE_SOON;
+        }
+        return client_1.AgingStatus.CURRENT;
+    }
+    resolveCollectionStatus(customer) {
+        if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.status === client_1.CollectionStatus.UNPAID)) {
+            return client_1.CollectionStatus.UNPAID;
+        }
+        if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.status === client_1.CollectionStatus.PARTIALLY_PAID)) {
+            return client_1.CollectionStatus.PARTIALLY_PAID;
+        }
+        return client_1.CollectionStatus.PAID;
+    }
+    activeReceivables(customer) {
+        return customer.accountReceivables.filter((accountReceivable) => accountReceivable.status !== client_1.CollectionStatus.CANCELLED &&
+            accountReceivable.status !== client_1.CollectionStatus.PAID);
+    }
+    customerPayments(customer) {
+        const paymentsById = new Map();
+        const anonymousPayments = [];
+        for (const payment of customer.payments) {
+            if ('id' in payment && payment.id) {
+                paymentsById.set(payment.id, payment);
+            }
+            else {
+                anonymousPayments.push(payment);
+            }
+        }
+        for (const accountReceivable of customer.accountReceivables) {
+            const payments = accountReceivable.payments ?? [];
+            for (const payment of payments) {
+                if ('id' in payment && payment.id) {
+                    paymentsById.set(payment.id, payment);
+                }
+                else {
+                    anonymousPayments.push(payment);
+                }
+            }
+        }
+        return [...paymentsById.values(), ...anonymousPayments];
+    }
+    resolveBlockingReason(customer, hasOverdueBalance, isLimitExceeded) {
+        if (customer.creditStatus !== client_1.CreditStatus.ACTIVE) {
+            return 'CUSTOMER_CREDIT_STATUS';
+        }
+        if (hasOverdueBalance) {
+            return 'OVERDUE_BALANCE';
+        }
+        if (isLimitExceeded) {
+            return 'CREDIT_LIMIT_EXCEEDED';
+        }
+        return null;
+    }
+    toSaleHistoryItem(sale) {
+        const totalPaid = sale.payments.reduce((total, payment) => total + Number(payment.amount), 0);
+        const lastPaidAt = sale.payments.reduce((latestDate, payment) => latestDate === null || payment.paidAt > latestDate
+            ? payment.paidAt
+            : latestDate, null);
+        const methods = Array.from(new Set(sale.payments.map((payment) => payment.paymentMethod)));
+        return {
+            id: sale.id,
+            saleNumber: sale.saleNumber,
+            createdAt: sale.createdAt,
+            total: sale.total.toString(),
+            paymentType: sale.paymentType,
+            collectionStatus: sale.collectionStatus,
+            status: sale.status,
+            locationId: sale.locationId,
+            paymentsSummary: { totalPaid: totalPaid.toString(), lastPaidAt, methods },
+            accountReceivableId: sale.accountReceivable?.id ?? null,
+            billingRequestId: sale.billingRequest?.id ?? null,
+        };
+    }
+    toPaymentHistoryItem(payment) {
+        return {
+            id: payment.id,
+            accountReceivableId: payment.accountReceivableId,
+            saleId: payment.saleId,
+            amount: payment.amount.toString(),
+            paymentMethod: payment.paymentMethod,
+            bankName: payment.bankName,
+            referenceNumber: payment.referenceNumber,
+            appliedDocumentId: payment.appliedDocumentId,
+            appliedDocumentType: payment.appliedDocumentType,
+            routeId: payment.routeId,
+            routeSettlementId: payment.routeSettlementId,
+            status: payment.status,
+            paidAt: payment.paidAt,
         };
     }
     buildBillingSummary(customer) {
-        const billedAmount = customer.accountReceivables.reduce((total, accountReceivable) => total + Number(accountReceivable.originalAmount), 0);
-        const outstandingAmount = customer.accountReceivables.reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
-        const paidAmount = customer.payments.reduce((total, payment) => total + Number(payment.amount), 0);
+        const receivables = this.activeReceivables(customer);
+        const billedAmount = receivables.reduce((total, accountReceivable) => total + Number(accountReceivable.originalAmount), 0);
+        const outstandingAmount = receivables.reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
+        const paidAmount = this.customerPayments(customer).reduce((total, payment) => total + Number(payment.amount), 0);
         return {
             billedAmount: billedAmount.toString(),
             paidAmount: paidAmount.toString(),

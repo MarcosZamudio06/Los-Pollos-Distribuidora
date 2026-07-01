@@ -32,6 +32,27 @@ let CustomersController = class CustomersController {
             data: await this.customersService.findAll(query),
         };
     }
+    async getCreditSummary(id) {
+        return {
+            success: true,
+            message: 'Customer credit summary retrieved successfully',
+            data: await this.customersService.getCreditSummary(id),
+        };
+    }
+    async findSales(id, query) {
+        return {
+            success: true,
+            message: 'Customer sales retrieved successfully',
+            data: await this.customersService.findSales(id, query),
+        };
+    }
+    async findPayments(id, query) {
+        return {
+            success: true,
+            message: 'Customer payments retrieved successfully',
+            data: await this.customersService.findPayments(id, query),
+        };
+    }
     async findOne(id) {
         return {
             success: true,
@@ -70,6 +91,32 @@ __decorate([
     __metadata("design:paramtypes", [dto_1.ListCustomersQueryDto]),
     __metadata("design:returntype", Promise)
 ], CustomersController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)(':id/credit-summary'),
+    (0, roles_decorator_1.Roles)('ADMIN', 'SELLER', 'COLLECTIONS'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], CustomersController.prototype, "getCreditSummary", null);
+__decorate([
+    (0, common_1.Get)(':id/sales'),
+    (0, roles_decorator_1.Roles)('ADMIN', 'SELLER', 'COLLECTIONS'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, dto_1.ListCustomerSalesQueryDto]),
+    __metadata("design:returntype", Promise)
+], CustomersController.prototype, "findSales", null);
+__decorate([
+    (0, common_1.Get)(':id/payments'),
+    (0, roles_decorator_1.Roles)('ADMIN', 'COLLECTIONS'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, dto_1.ListCustomerPaymentsQueryDto]),
+    __metadata("design:returntype", Promise)
+], CustomersController.prototype, "findPayments", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)('ADMIN', 'SELLER', 'COLLECTIONS'),

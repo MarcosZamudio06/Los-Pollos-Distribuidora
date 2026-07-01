@@ -1,11 +1,41 @@
-.atl
-act
-docs
-.tokensave
-skills
-node_modules
-.venv
-# Local environment files
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+**/dist/
+**/build/
+**/coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
 .env
-.env.*.local
-.env.local
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+._*
+__MACOSX/
+.idea/
+.vscode/
+
+# Agent / local runtime
+.codex/sessions/
+.codex/logs/
+.atl/
+.engram/
+
+
+.venv
+.tokensave
+act

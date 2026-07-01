@@ -13,6 +13,7 @@ exports.ListCustomersQueryDto = void 0;
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
+const customerAgingFilters = [client_1.AgingStatus.CURRENT, client_1.AgingStatus.DUE_SOON, client_1.AgingStatus.OVERDUE, 'LATE'];
 function toOptionalBoolean({ value }) {
     if (value === true || value === false)
         return value;
@@ -30,6 +31,8 @@ class ListCustomersQueryDto {
     creditStatus;
     commercialPolicyId;
     assignedRouteId;
+    agingStatus;
+    cartera;
     isActive;
 }
 exports.ListCustomersQueryDto = ListCustomersQueryDto;
@@ -72,6 +75,16 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], ListCustomersQueryDto.prototype, "assignedRouteId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(customerAgingFilters),
+    __metadata("design:type", String)
+], ListCustomersQueryDto.prototype, "agingStatus", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(customerAgingFilters),
+    __metadata("design:type", String)
+], ListCustomersQueryDto.prototype, "cartera", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(toOptionalBoolean),

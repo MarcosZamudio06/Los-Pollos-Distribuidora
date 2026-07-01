@@ -257,6 +257,7 @@ model User {
   createdEquivalents          ProductUnitEquivalent[] @relation("EquivalentCreatedBy")
   payments                    Payment[]               @relation("PaymentRegisteredBy")
   collectedPayments           Payment[]               @relation("PaymentCollectedBy")
+  cancelledPayments           Payment[]               @relation("PaymentCancelledBy")
   createdCommercialPolicies   CommercialPolicy[]      @relation("CommercialPolicyCreatedBy")
   updatedCommercialPolicies   CommercialPolicy[]      @relation("CommercialPolicyUpdatedBy")
   createdOperationalConfigs   OperationalConfig[]     @relation("OperationalConfigCreatedBy")
@@ -706,6 +707,13 @@ model Payment {
   status                    PaymentStatus              @default(REGISTERED)
   paidAt                    DateTime                   @default(now())
   cancelledAt               DateTime?
+  cancelledByUserId         String?
+  cancellationReason        String?
+  idempotencyKey            String?                    @unique
+  idempotencyPayloadHash    String?
+  cancellationIdempotencyKey String?                   @unique
+  cancellationPayloadHash   String?
+  version                   Int                        @default(1)
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime                   @updatedAt
   accountReceivable         AccountReceivable?         @relation(fields: [accountReceivableId], references: [id])
@@ -713,6 +721,7 @@ model Payment {
   customer                  Customer?                  @relation(fields: [customerId], references: [id])
   user                      User                       @relation("PaymentRegisteredBy", fields: [userId], references: [id])
   collectedBy               User?                      @relation("PaymentCollectedBy", fields: [collectedByUserId], references: [id])
+  cancelledBy               User?                      @relation("PaymentCancelledBy", fields: [cancelledByUserId], references: [id])
   operationalLocation       OperationalLocation?       @relation(fields: [operationalLocationId], references: [id])
   route                     DeliveryRoute?             @relation(fields: [routeId], references: [id])
   routeSettlement           RouteSettlement?           @relation(fields: [routeSettlementId], references: [id])
@@ -721,6 +730,7 @@ model Payment {
   @@index([accountReceivableId, paidAt])
   @@index([saleId, paidAt])
   @@index([operationalLocationId, paidAt])
+  @@index([cancelledByUserId])
 }
 
 model BillingRequest {

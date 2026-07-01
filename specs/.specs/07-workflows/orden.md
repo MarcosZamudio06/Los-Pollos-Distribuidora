@@ -20,7 +20,7 @@ TASK-036 listo
 TASK-033 listo
 TASK-040 listo 
 TASK-041 listo
-TASK-042 
+TASK-042 listo
 TASK-043
 TASK-044
 TASK-050

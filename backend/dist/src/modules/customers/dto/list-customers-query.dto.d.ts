@@ -1,4 +1,5 @@
-import { CreditStatus, CustomerType } from '@prisma/client';
+import { AgingStatus, CreditStatus, CustomerType } from '@prisma/client';
+export type CustomerAgingFilter = AgingStatus | 'LATE';
 export declare class ListCustomersQueryDto {
     page?: number;
     limit?: number;
@@ -7,5 +8,7 @@ export declare class ListCustomersQueryDto {
     creditStatus?: CreditStatus;
     commercialPolicyId?: string;
     assignedRouteId?: string;
+    agingStatus?: CustomerAgingFilter;
+    cartera?: CustomerAgingFilter;
     isActive?: boolean;
 }

@@ -13,6 +13,8 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { CommercialPoliciesModule } from './modules/commercial-policies/commercial-policies.module';
 import { OperationalConfigModule } from './modules/operational-config/operational-config.module';
+import { AccountsReceivableModule } from './modules/accounts-receivable/accounts-receivable.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { OperationalConfigModule } from './modules/operational-config/operationa
     CustomersModule,
     CommercialPoliciesModule,
     OperationalConfigModule,
+    AccountsReceivableModule,
+    PaymentsModule,
   ],
   controllers: [],
   providers: [],
