@@ -458,6 +458,13 @@ model Sale {
   cancelledAt                   DateTime?
   cancelledByUserId             String?
   cancellationReason            String?
+  cancellationIdempotencyKey     String?                    @unique
+  cancellationPayloadHash        String?
+  idempotencyKey                String?                    @unique
+  idempotencyPayloadHash        String?
+  administrativeOverrideReason  String?
+  administrativeOverrideApprovedByUserId String?
+  version                       Int                        @default(1)
   createdAt                     DateTime                   @default(now())
   updatedAt                     DateTime                   @updatedAt
   customer                      Customer?                  @relation(fields: [customerId], references: [id])

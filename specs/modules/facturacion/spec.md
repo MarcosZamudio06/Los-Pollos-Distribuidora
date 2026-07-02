@@ -1,20 +1,29 @@
 # Deprecated Module Alias — Facturación
 
-Este archivo queda **deprecated**.
+Este archivo existe únicamente por compatibilidad documental.
 
-Specs canónicos:
+No usar como spec de implementación.
 
-- `/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/specs/modules/sales-documents/spec.md`
-- `/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/specs/modules/billing-requests/spec.md`
+---
 
-Motivo:
+## Specs canónicos
 
-- El dominio antes llamado `facturacion` mezclaba comprobantes operativos de venta con solicitudes administrativas.
-- El canon vigente separa `SaleDocument` para ticket, nota sencilla, nota grande y comprobante interno operativo.
-- `BillingRequest` queda como relación administrativa independiente y no agrega un valor nuevo al documento de `Sale`.
+```text
+specs/modules/sales-documents/spec.md
+specs/modules/billing-requests/spec.md
+```
 
-Regla:
+---
 
-- No planear ni implementar nuevas tareas usando este alias.
-- Toda referencia futura a ticket, comprobante interno o libreta documental debe apuntar a `modules/sales-documents/spec.md`.
-- Toda referencia futura a solicitud administrativa de factura debe apuntar a `modules/billing-requests/spec.md`.
+## Uso correcto
+
+- Para tickets, notas, recibos internos o documentos operativos de venta, usar `specs/modules/sales-documents/spec.md`.
+- Para solicitudes administrativas de factura, usar `specs/modules/billing-requests/spec.md`.
+
+---
+
+## Regla para agentes
+
+Si una TASK apunta a este alias, resolver el spec canónico correspondiente antes de implementar.
+
+No cargar este archivo cuando la TASK ya apunta a `sales-documents` o `billing-requests`.

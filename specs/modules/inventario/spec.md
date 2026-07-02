@@ -1,16 +1,31 @@
 # Deprecated Module Alias — Inventario
 
-Este archivo queda **deprecated**.
+Este archivo existe únicamente por compatibilidad documental.
 
-Spec canónico:
+No usar como spec de implementación.
 
-- `/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/specs/modules/inventory/spec.md`
+---
 
-Motivo:
+## Spec canónico
 
-- El gobierno documental del proyecto adopta nombres canónicos de módulo en inglés para evitar duplicidad y drift entre roadmap, índice, arquitectura y prompts.
+```text
+specs/modules/inventory/spec.md
+```
 
-Regla:
+---
 
-- No planear ni implementar nuevas tareas usando este alias.
-- Toda referencia futura debe apuntar al spec canónico `modules/inventory/spec.md`.
+## Uso correcto
+
+Toda referencia futura de inventario debe apuntar a:
+
+```text
+specs/modules/inventory/spec.md
+```
+
+---
+
+## Regla para agentes
+
+Si una TASK apunta a este alias, resolver `specs/modules/inventory/spec.md` antes de implementar.
+
+No cargar este archivo cuando la TASK ya apunta a `inventory`.

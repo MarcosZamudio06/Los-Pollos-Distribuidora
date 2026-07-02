@@ -1,0 +1,973 @@
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  CollectionStatus,
+  CreditStatus,
+  EquivalentStatus,
+  InventoryMovementType,
+  OperationalLocationType,
+  PaymentStatus,
+  PointOfSaleDailyCloseStatus,
+  Prisma,
+  ProductUnit,
+  RouteSettlementStatus,
+  SaleChannel,
+  SaleDocumentType,
+  SalePaymentType,
+  SaleStatus,
+} from '@prisma/client';
+import { createHash } from 'crypto';
+import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
+import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, ListSalesQueryDto } from './dto';
+
+type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type DecimalLike = Prisma.Decimal | number | string | null | undefined;
+
+type SaleProduct = {
+  id: string;
+  name: string;
+  sku?: string | null;
+  unit: ProductUnit;
+  salePrice: DecimalLike;
+  isActive: boolean;
+  unitEquivalents?: Array<{
+    id: string;
+    factor: DecimalLike;
+    roundingMode?: string | null;
+    status: EquivalentStatus;
+  }>;
+};
+
+type CustomerCredit = {
+  id: string;
+  isActive: boolean;
+  creditStatus: CreditStatus;
+  creditLimit?: DecimalLike;
+  creditDays?: number | null;
+  commercialPolicyId?: string | null;
+};
+
+type PreparedItem = {
+  dto: CreateSaleItemDto;
+  product: SaleProduct;
+  quantityKg: number;
+  quantityPieces: number;
+  unitPrice: number;
+  subtotal: number;
+  equivalentFactor: number | null;
+  roundingMode: string | null;
+};
+
+type CreatedPayment = Awaited<ReturnType<Prisma.TransactionClient['payment']['create']>>;
+type CreatedReceivable = Awaited<ReturnType<Prisma.TransactionClient['accountReceivable']['create']>>;
+type CreatedMovement = Awaited<ReturnType<Prisma.TransactionClient['inventoryMovement']['create']>>;
+type UpdatedSale = Awaited<ReturnType<Prisma.TransactionClient['sale']['update']>>;
+type MovementResponseInput = Record<string, unknown> & {
+  quantity?: DecimalLike;
+  quantityKg?: DecimalLike;
+  previousStock?: DecimalLike;
+  newStock?: DecimalLike;
+  previousQuantityKg?: DecimalLike;
+  newQuantityKg?: DecimalLike;
+};
+
+type SalePaymentSummaryInput = {
+  amount: DecimalLike;
+  paymentMethod: string;
+  paidAt?: Date | string | null;
+  status?: PaymentStatus | string;
+};
+
+type SaleListRecord = Record<string, unknown> & {
+  customer?: { id: string; name: string } | null;
+  accountReceivable?: { id: string } | null;
+  billingRequest?: { id: string } | null;
+  payments?: SalePaymentSummaryInput[];
+};
+
+type SaleDetailRecord = SaleListRecord & {
+  items?: Array<Record<string, unknown> & { productNameSnapshot?: string | null }>;
+  commercialPolicy?: Record<string, unknown> | null;
+  documents?: Record<string, unknown>[];
+  inventoryMovements?: Record<string, unknown>[];
+};
+
+type SaleCancellationRecord = Record<string, unknown> & {
+  id: string;
+  userId: string;
+  locationId: string;
+  status: SaleStatus;
+  version: number;
+  cancellationIdempotencyKey?: string | null;
+  cancellationPayloadHash?: string | null;
+  collectionStatus?: CollectionStatus;
+  paymentType: SalePaymentType;
+  pointOfSaleDailyClose?: { status: PointOfSaleDailyCloseStatus } | null;
+  payments?: Array<{ id: string; status: PaymentStatus; accountReceivableId?: string | null; saleId?: string | null }>;
+  route?: { settlement?: { status: RouteSettlementStatus } | null } | null;
+  inventoryMovements?: Array<Record<string, unknown>>;
+  accountReceivable?: (Record<string, unknown> & {
+    id: string;
+    originalAmount: DecimalLike;
+    outstandingAmount: DecimalLike;
+    status: CollectionStatus;
+    payments?: Array<{ id: string; status: PaymentStatus; accountReceivableId?: string | null }>;
+  }) | null;
+  items?: Array<{
+    id: string;
+    productId: string;
+    quantity?: DecimalLike;
+    quantityKg?: DecimalLike;
+    quantityPieces?: number | null;
+  }>;
+};
+
+@Injectable()
+export class SalesService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findAll(query: ListSalesQueryDto = {}, currentUser: Actor) {
+    const sales = (await this.prisma.sale.findMany({
+      where: this.buildVisibleSalesWhere(query, currentUser),
+      include: {
+        customer: { select: { id: true, name: true } },
+        accountReceivable: { select: { id: true } },
+        billingRequest: { select: { id: true } },
+        payments: {
+          where: { status: PaymentStatus.APPLIED },
+          orderBy: { paidAt: 'desc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      ...this.buildPagination(query),
+    } as Prisma.SaleFindManyArgs)) as SaleListRecord[];
+
+    return { items: sales.map((sale) => this.toSaleListItem(sale)) };
+  }
+
+  async findOne(id: string, currentUser: Actor) {
+    const sale = (await this.prisma.sale.findFirst({
+      where: this.buildVisibleSaleDetailWhere(id, currentUser),
+      include: {
+        customer: true,
+        commercialPolicy: true,
+        accountReceivable: true,
+        billingRequest: true,
+        documents: { orderBy: { createdAt: 'desc' } },
+        inventoryMovements: { orderBy: { createdAt: 'asc' } },
+        payments: {
+          where: { status: PaymentStatus.APPLIED },
+          orderBy: { paidAt: 'desc' },
+        },
+        items: true,
+      },
+    } as Prisma.SaleFindFirstArgs)) as SaleDetailRecord | null;
+
+    if (!sale) {
+      throw new NotFoundException('Sale not found');
+    }
+
+    return this.toSaleDetail(sale);
+  }
+
+  async create(dto: CreateSaleDto, currentUser: Actor, idempotencyKey: string) {
+    if (!dto.items?.length) {
+      throw new BadRequestException('Sale must contain at least one item');
+    }
+
+    const payloadHash = this.hashPayload(dto);
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const existingSale = await tx.sale.findUnique({
+          where: { idempotencyKey },
+          include: { items: true, payments: true, accountReceivable: true, inventoryMovements: true },
+        });
+
+        if (existingSale) {
+          if (existingSale.idempotencyPayloadHash !== payloadHash) {
+            throw new ConflictException('Idempotency-Key was already used for a different sale payload');
+          }
+
+          return {
+            sale: this.toSaleResponse(existingSale),
+            payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
+            accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
+            billingRequest: null,
+            inventoryMovements: existingSale.inventoryMovements.map((movement) => this.toMovementResponse(movement)),
+            documents: [],
+          };
+        }
+        const location = await tx.operationalLocation.findUnique({ where: { id: dto.locationId } });
+        if (!location?.isActive) {
+          throw new NotFoundException('Operational location not found');
+        }
+
+        this.assertLocationMatchesSaleChannel(dto, location.type);
+
+        const customer = dto.customerId
+          ? ((await tx.customer.findUnique({ where: { id: dto.customerId } })) as CustomerCredit | null)
+          : null;
+
+        if (dto.customerId && !customer?.isActive) {
+          throw new NotFoundException('Customer not found');
+        }
+
+        const preparedItems = await this.prepareItems(tx, dto.items);
+        const subtotal = this.roundMoney(preparedItems.reduce((sum, item) => sum + item.subtotal, 0));
+        const discount = this.roundMoney(dto.discount ?? 0);
+        if (discount > subtotal) {
+          throw new BadRequestException('Discount cannot exceed subtotal');
+        }
+        const total = this.roundMoney(subtotal - discount);
+        const initialPaymentAmount = this.roundMoney(dto.initialPayment?.amount ?? 0);
+
+        this.assertPaymentRules(dto, customer, total, initialPaymentAmount);
+
+        const outstandingAmount = this.roundMoney(total - initialPaymentAmount);
+        if (outstandingAmount > 0 && !customer) {
+          throw new BadRequestException('customerId is required when sale leaves an outstanding balance');
+        }
+
+        const hasAdministrativeOverride = this.hasAdministrativeOverride(dto, currentUser);
+        if (outstandingAmount > 0 && customer && dto.paymentType === SalePaymentType.CREDIT_SALE) {
+          await this.assertCreditAllowed(tx, customer, outstandingAmount, hasAdministrativeOverride);
+        }
+
+        const inventoryChanges = await this.reserveInventory(tx, preparedItems, dto.locationId);
+
+        const saleNumber = await this.nextSaleNumber(tx);
+        const sale = await tx.sale.create({
+          data: {
+            saleNumber,
+            customerId: dto.customerId ?? null,
+            userId: currentUser.id,
+            locationId: dto.locationId,
+            saleChannel: dto.saleChannel,
+            documentType: dto.documentType,
+            physicalFolio: this.normalizeOptionalText(dto.physicalFolio),
+            requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
+            commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer?.commercialPolicyId),
+            idempotencyKey,
+            idempotencyPayloadHash: payloadHash,
+            administrativeOverrideReason: hasAdministrativeOverride ? dto.administrativeOverrideReason?.trim() : null,
+            administrativeOverrideApprovedByUserId: hasAdministrativeOverride ? currentUser.id : null,
+            collectionStatus: outstandingAmount > 0 ? CollectionStatus.UNPAID : CollectionStatus.PAID,
+            subtotal,
+            discount,
+            tax: 0,
+            total,
+            paymentType: dto.paymentType,
+            status: SaleStatus.CONFIRMED,
+            items: {
+              create: preparedItems.map((item) => ({
+                productId: item.product.id,
+                quantity: item.quantityKg || item.quantityPieces,
+                quantityKg: item.quantityKg,
+                quantityPieces: item.quantityPieces,
+                unit: item.dto.unit,
+                unitPrice: item.unitPrice,
+                unitEquivalentId: this.normalizeOptionalText(item.dto.unitEquivalentId),
+                appliedEquivalentFactor: item.equivalentFactor,
+                roundingMode: item.roundingMode,
+                productNameSnapshot: item.product.name,
+                productSkuSnapshot: item.product.sku ?? null,
+                unitPriceSnapshot: item.unitPrice,
+                quantitySnapshot: item.quantityKg || item.quantityPieces,
+                subtotal: item.subtotal,
+              })),
+            },
+          },
+          include: { items: true },
+        });
+
+        const inventoryMovements = await this.recordInventoryMovements(tx, inventoryChanges, dto.locationId, sale.id, currentUser.id);
+        const payment = dto.initialPayment
+          ? await tx.payment.create({
+              data: {
+                accountReceivableId: null,
+                saleId: sale.id,
+                customerId: dto.customerId ?? null,
+                userId: currentUser.id,
+                amount: initialPaymentAmount,
+                paymentMethod: dto.initialPayment.paymentMethod,
+                operationalLocationId: dto.locationId,
+                status: PaymentStatus.APPLIED,
+                paidAt: new Date(dto.initialPayment.paidAt),
+                idempotencyKey,
+                idempotencyPayloadHash: payloadHash,
+              },
+            })
+          : null;
+
+        const accountReceivable = outstandingAmount > 0 && customer
+          ? await tx.accountReceivable.create({
+              data: {
+                customerId: customer.id,
+                saleId: sale.id,
+                originalSaleId: sale.id,
+                originalAmount: outstandingAmount,
+                outstandingAmount,
+                saleDate: new Date(),
+                dueDate: this.addDays(new Date(), customer.creditDays ?? 0),
+                paymentTermsDays: customer.creditDays ?? 0,
+                commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer.commercialPolicyId),
+                status: CollectionStatus.UNPAID,
+              },
+            })
+          : null;
+
+        return {
+          sale: this.toSaleResponse(sale),
+          payment: payment ? this.toPaymentResponse(payment) : null,
+          accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
+          billingRequest: null,
+          inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
+          documents: [],
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async cancel(id: string, dto: CancelSaleDto, currentUser: Actor, idempotencyKey: string) {
+    const reason = dto.reason?.trim();
+    if (!reason) {
+      throw new BadRequestException('reason is required');
+    }
+
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
+
+    if (dto.expectedVersion === undefined || dto.expectedVersion === null) {
+      throw new BadRequestException('expectedVersion is required');
+    }
+
+    if (currentUser.role !== 'ADMIN') {
+      throw new ForbiddenException('Only ADMIN can cancel sales');
+    }
+
+    const payloadHash = this.hashPayload({ reason, expectedVersion: dto.expectedVersion });
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const sale = (await tx.sale.findFirst({
+          where: this.buildCancellationScopeWhere(id, currentUser),
+          include: {
+            items: true,
+            payments: { where: { status: PaymentStatus.APPLIED } },
+            accountReceivable: {
+              include: {
+                payments: { where: { status: PaymentStatus.APPLIED }, take: 1 },
+              },
+            },
+            pointOfSaleDailyClose: { select: { status: true } },
+            route: { select: { settlement: { select: { status: true } } } },
+            inventoryMovements: {
+              where: { type: InventoryMovementType.CANCEL_SALE },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        } as Prisma.SaleFindFirstArgs)) as SaleCancellationRecord | null;
+
+        if (!sale) {
+          throw new NotFoundException('Sale not found');
+        }
+
+        if (sale.status === SaleStatus.CANCELLED && sale.cancellationIdempotencyKey === idempotencyKey) {
+          if (sale.cancellationPayloadHash !== payloadHash) {
+            throw new ConflictException('Idempotency-Key was already used for a different sale cancellation payload');
+          }
+
+          return {
+            sale: this.toSaleResponse(sale),
+            inventoryMovements: (sale.inventoryMovements ?? []).map((movement) => this.toMovementResponse(movement)),
+            accountReceivable: sale.accountReceivable ? this.toReceivableRecordResponse(sale.accountReceivable) : null,
+          };
+        }
+
+        if (sale.status === SaleStatus.CANCELLED) {
+          throw new BadRequestException('Sale is already cancelled');
+        }
+
+        if (sale.version !== dto.expectedVersion) {
+          throw new ConflictException('Sale version does not match expectedVersion');
+        }
+
+        this.assertSaleCanBeCancelled(sale);
+
+        const inventoryMovements = await this.restoreSaleInventory(tx, sale, currentUser.id, reason);
+        const accountReceivable = sale.accountReceivable
+          ? await this.cancelSaleReceivable(tx, sale.accountReceivable)
+          : null;
+        const updated = await tx.sale.updateMany({
+          where: { id: sale.id, status: SaleStatus.CONFIRMED, version: dto.expectedVersion },
+          data: {
+            status: SaleStatus.CANCELLED,
+            collectionStatus: CollectionStatus.CANCELLED,
+            cancelledAt: new Date(),
+            cancelledByUserId: currentUser.id,
+            cancellationReason: reason,
+            cancellationIdempotencyKey: idempotencyKey,
+            cancellationPayloadHash: payloadHash,
+            version: { increment: 1 },
+          },
+        });
+        if (updated.count !== 1) {
+          throw new ConflictException('Sale was modified before cancellation could be persisted');
+        }
+
+        const cancelledSale = await tx.sale.findUnique({
+          where: { id: sale.id },
+          include: { items: true },
+        });
+        if (!cancelledSale) {
+          throw new NotFoundException('Sale not found after cancellation');
+        }
+
+        return {
+          sale: this.toSaleResponse(cancelledSale as UpdatedSale & { items?: Array<Record<string, unknown>> }),
+          inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
+          accountReceivable: accountReceivable ? this.toReceivableRecordResponse(accountReceivable as Record<string, unknown>) : null,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  private buildCancellationScopeWhere(id: string, currentUser: Actor): Prisma.SaleWhereInput {
+    if (currentUser.role === 'ADMIN') {
+      return { id };
+    }
+
+    return { id: '__no_cancellable_sale__' };
+  }
+
+  private assertSaleCanBeCancelled(sale: SaleCancellationRecord): void {
+    if (sale.payments?.length) {
+      throw new BadRequestException('Sale has applied payments; reverse or refund payments before cancellation');
+    }
+
+    if (sale.accountReceivable?.payments?.length) {
+      throw new BadRequestException('Sale account receivable has applied payments; reverse or refund payments before cancellation');
+    }
+
+    if (sale.pointOfSaleDailyClose?.status === PointOfSaleDailyCloseStatus.CLOSED) {
+      throw new BadRequestException('Sale is associated with a closed POS daily close');
+    }
+
+    if (sale.route?.settlement?.status === RouteSettlementStatus.CLOSED) {
+      throw new BadRequestException('Sale is associated with a closed route settlement');
+    }
+  }
+
+  private async restoreSaleInventory(
+    tx: Prisma.TransactionClient,
+    sale: SaleCancellationRecord,
+    userId: string,
+    reason: string,
+  ): Promise<CreatedMovement[]> {
+    const movements: CreatedMovement[] = [];
+
+    for (const item of sale.items ?? []) {
+      const quantityKg = this.roundQuantity(this.toNumber(item.quantityKg));
+      const quantityPieces = item.quantityPieces ?? 0;
+
+      const balance = await tx.inventoryBalance.update({
+        where: { productId_locationId: { productId: item.productId, locationId: sale.locationId } },
+        data: {
+          quantityKg: { increment: quantityKg },
+          quantityPieces: { increment: quantityPieces },
+        },
+      });
+      const newQuantityKg = this.toNumber(balance.quantityKg);
+      const newQuantityPieces = balance.quantityPieces;
+      const previousQuantityKg = this.roundQuantity(newQuantityKg - quantityKg);
+      const previousQuantityPieces = newQuantityPieces - quantityPieces;
+
+      movements.push(await tx.inventoryMovement.create({
+        data: {
+          productId: item.productId,
+          locationId: sale.locationId,
+          userId,
+          type: InventoryMovementType.CANCEL_SALE,
+          quantity: quantityKg || quantityPieces,
+          quantityKg,
+          quantityPieces,
+          previousStock: previousQuantityKg,
+          newStock: newQuantityKg,
+          previousQuantityKg,
+          newQuantityKg,
+          previousQuantityPieces,
+          newQuantityPieces,
+          reason,
+          referenceType: 'Sale',
+          referenceId: sale.id,
+          saleId: sale.id,
+        },
+      }));
+    }
+
+    return movements;
+  }
+
+  private async cancelSaleReceivable(
+    tx: Prisma.TransactionClient,
+    accountReceivable: NonNullable<SaleCancellationRecord['accountReceivable']>,
+  ) {
+    return tx.accountReceivable.update({
+      where: { id: accountReceivable.id },
+      data: {
+        outstandingAmount: 0,
+        status: CollectionStatus.CANCELLED,
+        cancelledAt: new Date(),
+        paidAt: null,
+        lastPaymentDate: null,
+      },
+    });
+  }
+
+  private async prepareItems(tx: Prisma.TransactionClient, items: CreateSaleItemDto[]): Promise<PreparedItem[]> {
+    const prepared: PreparedItem[] = [];
+
+    for (const item of items) {
+      const quantityKg = this.roundQuantity(item.quantityKg ?? 0);
+      const quantityPieces = item.quantityPieces ?? 0;
+      if (quantityKg <= 0 && quantityPieces <= 0) {
+        throw new BadRequestException('Sale item quantity must be greater than 0');
+      }
+
+      const product = (await tx.product.findUnique({
+        where: { id: item.productId },
+        include: { unitEquivalents: true },
+      })) as SaleProduct | null;
+
+      if (!product?.isActive) {
+        throw new NotFoundException('Product not found');
+      }
+
+      const equivalent = item.unitEquivalentId
+        ? product.unitEquivalents?.find((candidate) => candidate.id === item.unitEquivalentId && candidate.status === EquivalentStatus.ACTIVE)
+        : undefined;
+
+      if (item.unitEquivalentId && !equivalent) {
+        throw new BadRequestException('Active unit equivalent not found for product');
+      }
+
+      const unitPrice = this.roundMoney(this.toNumber(product.salePrice));
+      prepared.push({
+        dto: item,
+        product,
+        quantityKg,
+        quantityPieces,
+        unitPrice,
+        subtotal: this.roundMoney(unitPrice * (quantityKg || quantityPieces)),
+        equivalentFactor: equivalent ? this.toNumber(equivalent.factor) : null,
+        roundingMode: equivalent?.roundingMode ?? null,
+      });
+    }
+
+    return prepared;
+  }
+
+  private async reserveInventory(
+    tx: Prisma.TransactionClient,
+    items: PreparedItem[],
+    locationId: string,
+  ): Promise<Array<PreparedItem & { previousQuantityKg: number; previousQuantityPieces: number; newQuantityKg: number; newQuantityPieces: number }>> {
+    const changes: Array<PreparedItem & { previousQuantityKg: number; previousQuantityPieces: number; newQuantityKg: number; newQuantityPieces: number }> = [];
+
+    for (const item of items) {
+      const updated = await tx.inventoryBalance.updateMany({
+        where: {
+          productId: item.product.id,
+          locationId,
+          quantityKg: { gte: item.quantityKg },
+          quantityPieces: { gte: item.quantityPieces },
+        },
+        data: {
+          quantityKg: { decrement: item.quantityKg },
+          quantityPieces: { decrement: item.quantityPieces },
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new BadRequestException('Insufficient stock at selected location');
+      }
+
+      const balance = await tx.inventoryBalance.findUnique({ where: { productId_locationId: { productId: item.product.id, locationId } } });
+      if (!balance) {
+        throw new BadRequestException('Inventory balance not found after sale stock decrement');
+      }
+
+      const newQuantityKg = this.toNumber(balance.quantityKg);
+      const newQuantityPieces = balance.quantityPieces;
+      changes.push({
+        ...item,
+        previousQuantityKg: this.roundQuantity(newQuantityKg + item.quantityKg),
+        previousQuantityPieces: newQuantityPieces + item.quantityPieces,
+        newQuantityKg,
+        newQuantityPieces,
+      });
+    }
+
+    return changes;
+  }
+
+  private async recordInventoryMovements(
+    tx: Prisma.TransactionClient,
+    items: Array<PreparedItem & { previousQuantityKg: number; previousQuantityPieces: number; newQuantityKg: number; newQuantityPieces: number }>,
+    locationId: string,
+    saleId: string,
+    userId: string,
+  ): Promise<CreatedMovement[]> {
+    const movements: CreatedMovement[] = [];
+
+    for (const item of items) {
+      movements.push(await tx.inventoryMovement.create({
+        data: {
+          productId: item.product.id,
+          locationId,
+          userId,
+          type: InventoryMovementType.SALE,
+          quantity: item.quantityKg || item.quantityPieces,
+          quantityKg: item.quantityKg,
+          quantityPieces: item.quantityPieces,
+          previousStock: item.previousQuantityKg,
+          newStock: item.newQuantityKg,
+          previousQuantityKg: item.previousQuantityKg,
+          newQuantityKg: item.newQuantityKg,
+          previousQuantityPieces: item.previousQuantityPieces,
+          newQuantityPieces: item.newQuantityPieces,
+          reason: 'Sale confirmation',
+          referenceType: 'Sale',
+          referenceId: saleId,
+          saleId,
+        },
+      }));
+    }
+
+    return movements;
+  }
+
+  private assertLocationMatchesSaleChannel(dto: CreateSaleDto, locationType: OperationalLocationType) {
+    if (dto.saleChannel === SaleChannel.ROUTE && locationType !== OperationalLocationType.ROUTE_STOCK) {
+      throw new BadRequestException('ROUTE sales require a ROUTE_STOCK location');
+    }
+
+    if (dto.saleChannel === SaleChannel.EXTERNAL_POINT_OF_SALE && locationType !== OperationalLocationType.EXTERNAL_POINT_OF_SALE) {
+      throw new BadRequestException('EXTERNAL_POINT_OF_SALE sales require an external point of sale location');
+    }
+  }
+
+  private assertPaymentRules(dto: CreateSaleDto, customer: CustomerCredit | null, total: number, initialPaymentAmount: number) {
+    if (initialPaymentAmount > total) {
+      throw new BadRequestException('Initial payment cannot exceed sale total');
+    }
+
+    if (dto.paymentType === SalePaymentType.CREDIT_SALE && !customer) {
+      throw new BadRequestException('customerId is required for credit sales');
+    }
+
+    if (dto.paymentType === SalePaymentType.CREDIT_SALE && customer?.creditStatus !== CreditStatus.ACTIVE) {
+      throw new BadRequestException('Customer credit is not active');
+    }
+  }
+
+  private hasAdministrativeOverride(dto: CreateSaleDto, currentUser: Actor): boolean {
+    const reason = dto.administrativeOverrideReason?.trim();
+    if (!reason) {
+      return false;
+    }
+
+    if (currentUser.role !== 'ADMIN') {
+      throw new BadRequestException('Administrative override requires ADMIN authorization');
+    }
+
+    return true;
+  }
+
+  private async assertCreditAllowed(
+    tx: Prisma.TransactionClient,
+    customer: CustomerCredit,
+    newOutstandingAmount: number,
+    hasAdministrativeOverride: boolean,
+  ) {
+    if (customer.creditStatus !== CreditStatus.ACTIVE) {
+      throw new BadRequestException('Customer credit is not active');
+    }
+
+    const creditLimit = this.toNumber(customer.creditLimit);
+    if (creditLimit <= 0 || hasAdministrativeOverride) {
+      return;
+    }
+
+    const aggregate = await tx.accountReceivable.aggregate({
+      where: { customerId: customer.id, status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] } },
+      _sum: { outstandingAmount: true },
+    });
+    const currentOutstanding = this.toNumber(aggregate._sum.outstandingAmount);
+
+    if (this.roundMoney(currentOutstanding + newOutstandingAmount) > creditLimit) {
+      throw new BadRequestException('Customer credit limit exceeded');
+    }
+  }
+
+  private async nextSaleNumber(tx: Prisma.TransactionClient): Promise<string> {
+    const count = await tx.sale.count();
+    return `SALE-${String(count + 1).padStart(6, '0')}`;
+  }
+
+  private toSaleResponse(sale: { [key: string]: unknown; items?: Array<Record<string, unknown>> }) {
+    return {
+      ...sale,
+      subtotal: this.decimalToString(sale.subtotal),
+      discount: this.decimalToString(sale.discount),
+      tax: this.decimalToString(sale.tax),
+      total: this.decimalToString(sale.total),
+      items: sale.items?.map((item) => ({
+        ...item,
+        quantity: this.decimalToString(item.quantity),
+        quantityKg: this.decimalToString(item.quantityKg),
+        unitPrice: this.decimalToString(item.unitPrice),
+        unitPriceSnapshot: this.decimalToString(item.unitPriceSnapshot),
+        quantitySnapshot: this.decimalToString(item.quantitySnapshot),
+        appliedEquivalentFactor: this.decimalToString(item.appliedEquivalentFactor),
+        subtotal: this.decimalToString(item.subtotal),
+      })) ?? [],
+    };
+  }
+
+  private buildVisibleSalesWhere(query: ListSalesQueryDto, currentUser: Actor): Prisma.SaleWhereInput {
+    const where = this.buildSalesFilterWhere(query);
+    return this.applyVisibilityScope(where, currentUser);
+  }
+
+  private buildVisibleSaleDetailWhere(id: string, currentUser: Actor): Prisma.SaleWhereInput {
+    return this.applyVisibilityScope({ id }, currentUser);
+  }
+
+  private applyVisibilityScope(where: Prisma.SaleWhereInput, currentUser: Actor): Prisma.SaleWhereInput {
+    if (currentUser.role === 'ADMIN') {
+      return where;
+    }
+
+    if (currentUser.role === 'SELLER') {
+      return { ...where, userId: currentUser.id };
+    }
+
+    if (currentUser.role === 'COLLECTIONS') {
+      return {
+        ...where,
+        paymentType: SalePaymentType.CREDIT_SALE,
+        accountReceivable: { isNot: null },
+      };
+    }
+
+    return { ...where, id: '__no_visible_sale__' };
+  }
+
+  private buildSalesFilterWhere(query: ListSalesQueryDto): Prisma.SaleWhereInput {
+    const where: Prisma.SaleWhereInput = {};
+
+    if (query.dateFrom || query.dateTo) {
+      where.createdAt = {
+        ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+        ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+      };
+    }
+    if (query.userId) where.userId = query.userId;
+    if (query.customerId) where.customerId = query.customerId;
+    if (query.locationId) where.locationId = query.locationId;
+    if (query.status) where.status = query.status;
+    if (query.paymentType ?? query.saleType) where.paymentType = query.paymentType ?? query.saleType;
+    if (query.collectionStatus) where.collectionStatus = query.collectionStatus;
+    if (query.saleChannel) where.saleChannel = query.saleChannel;
+    if (query.documentType) where.documentType = query.documentType;
+    if (query.physicalFolio) where.physicalFolio = query.physicalFolio;
+    if (query.pointOfSaleDailyCloseId) where.pointOfSaleDailyCloseId = query.pointOfSaleDailyCloseId;
+    if (query.paymentMethod) {
+      where.payments = { some: { paymentMethod: query.paymentMethod, status: PaymentStatus.APPLIED } };
+    }
+
+    return where;
+  }
+
+  private buildPagination(query: Pick<ListSalesQueryDto, 'page' | 'limit'>): Pick<Prisma.SaleFindManyArgs, 'skip' | 'take'> {
+    const take = query.limit;
+    const page = query.page ?? 1;
+
+    return {
+      ...(take ? { take } : {}),
+      ...(take ? { skip: (page - 1) * take } : {}),
+    };
+  }
+
+  private toSaleListItem(sale: SaleListRecord) {
+    return {
+      id: sale.id,
+      saleNumber: sale.saleNumber,
+      customerId: sale.customerId,
+      customerName: sale.customer?.name ?? null,
+      userId: sale.userId,
+      locationId: sale.locationId,
+      saleChannel: sale.saleChannel,
+      documentType: sale.documentType,
+      physicalFolio: sale.physicalFolio,
+      requiresAdministrativeInvoice: sale.requiresAdministrativeInvoice,
+      subtotal: this.decimalToString(sale.subtotal),
+      discount: this.decimalToString(sale.discount),
+      tax: this.decimalToString(sale.tax),
+      total: this.decimalToString(sale.total),
+      paymentType: sale.paymentType,
+      collectionStatus: sale.collectionStatus,
+      status: sale.status,
+      createdAt: sale.createdAt,
+      accountReceivableId: sale.accountReceivable?.id ?? null,
+      billingRequestId: sale.billingRequest?.id ?? null,
+      paymentsSummary: this.toPaymentsSummary(sale.payments ?? []),
+      deliveredByUserId: sale.deliveredByUserId ?? null,
+      collectedByUserId: sale.collectedByUserId ?? null,
+      routeId: sale.routeId ?? null,
+      pointOfSaleDailyCloseId: sale.pointOfSaleDailyCloseId ?? null,
+    };
+  }
+
+  private toSaleDetail(sale: SaleDetailRecord) {
+    return {
+      ...this.toSaleListItem(sale),
+      items: sale.items?.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.productNameSnapshot ?? null,
+        unit: item.unit,
+        quantityKg: this.decimalToString(item.quantityKg),
+        quantityPieces: item.quantityPieces ?? null,
+        unitPrice: this.decimalToString(item.unitPrice),
+        unitEquivalentId: item.unitEquivalentId ?? null,
+        appliedEquivalentFactor: this.decimalToString(item.appliedEquivalentFactor),
+        roundingMode: item.roundingMode ?? null,
+        subtotal: this.decimalToString(item.subtotal),
+      })) ?? [],
+      customer: sale.customer ?? null,
+      commercialPolicy: this.toCommercialPolicyResponse(sale.commercialPolicy ?? null),
+      accountReceivable: sale.accountReceivable ? this.toReceivableRecordResponse(sale.accountReceivable as Record<string, unknown>) : null,
+      billingRequest: sale.billingRequest ?? null,
+      ticket: this.findTicketDocument(sale.documents ?? []),
+      documents: sale.documents ?? [],
+      inventoryMovements: sale.inventoryMovements?.map((movement) => this.toMovementRecordResponse(movement)) ?? [],
+    };
+  }
+
+  private toPaymentsSummary(payments: SalePaymentSummaryInput[]) {
+    const appliedPayments = payments.filter((payment) => payment.status === undefined || payment.status === PaymentStatus.APPLIED);
+    const totalPaid = this.roundMoney(appliedPayments.reduce((sum, payment) => sum + this.toNumber(payment.amount), 0));
+    const lastPaidAt = appliedPayments
+      .map((payment) => payment.paidAt)
+      .filter((paidAt): paidAt is Date | string => paidAt !== null && paidAt !== undefined)
+      .map((paidAt) => (paidAt instanceof Date ? paidAt : new Date(paidAt)))
+      .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+    const methods = Array.from(new Set(appliedPayments.map((payment) => payment.paymentMethod)));
+
+    return {
+      totalPaid: this.decimalToString(totalPaid),
+      lastPaidAt,
+      methods,
+    };
+  }
+
+  private toCommercialPolicyResponse(policy: Record<string, unknown> | null) {
+    if (!policy) return null;
+
+    return {
+      ...policy,
+      defaultCreditLimit: this.decimalToString(policy.defaultCreditLimit),
+    };
+  }
+
+  private toReceivableRecordResponse(receivable: Record<string, unknown>) {
+    return {
+      ...receivable,
+      originalAmount: this.decimalToString(receivable.originalAmount),
+      outstandingAmount: this.decimalToString(receivable.outstandingAmount),
+    };
+  }
+
+  private toMovementRecordResponse(movement: Record<string, unknown>) {
+    return {
+      ...movement,
+      quantity: this.decimalToString(movement.quantity),
+      quantityKg: this.decimalToString(movement.quantityKg),
+      previousStock: this.decimalToString(movement.previousStock),
+      newStock: this.decimalToString(movement.newStock),
+      previousQuantityKg: this.decimalToString(movement.previousQuantityKg),
+      newQuantityKg: this.decimalToString(movement.newQuantityKg),
+    };
+  }
+
+  private findTicketDocument(documents: Record<string, unknown>[]) {
+    return documents.find((document) => document.documentType === SaleDocumentType.INTERNAL_RECEIPT) ?? null;
+  }
+
+  private toPaymentResponse(payment: CreatedPayment) {
+    return { ...payment, amount: this.decimalToString(payment.amount) };
+  }
+
+  private toReceivableResponse(receivable: CreatedReceivable) {
+    return {
+      ...receivable,
+      originalAmount: this.decimalToString(receivable.originalAmount),
+      outstandingAmount: this.decimalToString(receivable.outstandingAmount),
+    };
+  }
+
+  private toMovementResponse(movement: MovementResponseInput) {
+    return {
+      ...movement,
+      quantity: this.decimalToString(movement.quantity),
+      quantityKg: this.decimalToString(movement.quantityKg),
+      previousStock: this.decimalToString(movement.previousStock),
+      newStock: this.decimalToString(movement.newStock),
+      previousQuantityKg: this.decimalToString(movement.previousQuantityKg),
+      newQuantityKg: this.decimalToString(movement.newQuantityKg),
+    };
+  }
+
+  private decimalToString(value: unknown): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    return value instanceof Prisma.Decimal ? value.toString() : String(value);
+  }
+
+  private toNumber(value: DecimalLike): number {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    return Number(value instanceof Prisma.Decimal ? value.toString() : value);
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private roundQuantity(value: number): number {
+    return Math.round((value + Number.EPSILON) * 1000) / 1000;
+  }
+
+  private normalizeOptionalText(value?: string | null): string | null {
+    const normalized = value?.trim();
+    return normalized ? normalized : null;
+  }
+
+  private addDays(date: Date, days: number): Date {
+    const result = new Date(date);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result;
+  }
+
+  private hashPayload(payload: unknown): string {
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+}

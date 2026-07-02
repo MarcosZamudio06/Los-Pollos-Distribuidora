@@ -8,6 +8,7 @@ import {
   useAuth,
 } from '../features/auth'
 import { CustomersPage } from '../features/clientes'
+import { AccountsReceivablePage } from '../features/cobranza'
 import { ProductListPage } from '../features/inventario'
 
 function OperationsHomePage() {
@@ -74,9 +75,16 @@ function OperationsHomePage() {
             <p className="mt-3 text-sm leading-6 text-[#68645c]">
               Consulta clientes, crédito y perfil administrativo sin mezclarlo con CFDI.
             </p>
-            <Link className="mt-5 inline-flex font-bold text-[#9d2d24]" to="/customers">
-              Abrir clientes
-            </Link>
+            <div className="mt-5 flex flex-wrap gap-4">
+              <Link className="inline-flex font-bold text-[#9d2d24]" to="/customers">
+                Abrir clientes
+              </Link>
+              {(user?.role === 'ADMIN' || user?.role === 'COLLECTIONS' || user?.role === 'SELLER') && (
+                <Link className="inline-flex font-bold text-[#39798b]" to="/accounts-receivable">
+                  Abrir cobranza
+                </Link>
+              )}
+            </div>
           </article>
         </div>
       </section>
@@ -120,6 +128,16 @@ export function AppRouter() {
           <ProtectedRoute>
             <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
               <CustomersPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accounts-receivable"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'SELLER']}>
+              <AccountsReceivablePage />
             </RoleRoute>
           </ProtectedRoute>
         }

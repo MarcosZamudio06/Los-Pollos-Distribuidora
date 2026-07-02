@@ -126,18 +126,57 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return
     }
 
-    setStatus('checking')
+    let isCurrent = true
 
-    void refreshUser()
+    void authApi.getCurrentUser(accessToken)
+      .then((currentUser) => {
+        if (!isCurrent) {
+          return
+        }
+
+        setSession((currentSession) => {
+          if (!currentSession) {
+            return currentSession
+          }
+
+          const nextSession = { ...currentSession, user: currentUser }
+          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
+          return nextSession
+        })
+        setStatus('authenticated')
+        setError(null)
+      })
       .catch((caughtError) => {
+        if (!isCurrent) {
+          return
+        }
+
+        if (
+          caughtError instanceof ApiClientError &&
+          [401, 403].includes(caughtError.statusCode)
+        ) {
+          window.localStorage.removeItem(AUTH_STORAGE_KEY)
+          setSession(null)
+          setStatus('guest')
+          return
+        }
+
         setError(getErrorMessage(caughtError))
       })
       .finally(() => {
+        if (!isCurrent) {
+          return
+        }
+
         setStatus((currentStatus) =>
           currentStatus === 'guest' ? 'guest' : 'authenticated',
         )
       })
-  }, [accessToken, refreshUser])
+
+    return () => {
+      isCurrent = false
+    }
+  }, [accessToken])
 
   const value = useMemo<AuthContextValue>(
     () => ({

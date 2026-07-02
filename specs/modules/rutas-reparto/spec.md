@@ -1,16 +1,31 @@
 # Deprecated Module Alias — Rutas y Reparto
 
-Este archivo queda **deprecated**.
+Este archivo existe únicamente por compatibilidad documental.
 
-Spec canónico:
+No usar como spec de implementación.
 
-- `/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/specs/modules/routes-delivery/spec.md`
+---
 
-Motivo:
+## Spec canónico
 
-- El dominio canónico de rutas y reparto ahora se documenta como `routes-delivery` para alinear arquitectura, UI, roadmap y liquidación.
+```text
+specs/modules/routes-delivery/spec.md
+```
 
-Regla:
+---
 
-- No planear ni implementar nuevas tareas usando este alias.
-- Toda referencia futura debe apuntar al spec canónico `modules/routes-delivery/spec.md`.
+## Uso correcto
+
+Toda referencia futura de rutas, reparto y operación de entrega debe apuntar a:
+
+```text
+specs/modules/routes-delivery/spec.md
+```
+
+---
+
+## Regla para agentes
+
+Si una TASK apunta a este alias, resolver `specs/modules/routes-delivery/spec.md` antes de implementar.
+
+No cargar este archivo cuando la TASK ya apunta a `routes-delivery`.

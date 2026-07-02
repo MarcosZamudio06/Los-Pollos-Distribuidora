@@ -3,13 +3,20 @@ import {
   MODULE_METADATA,
 } from '@nestjs/common/constants';
 
-jest.mock('@prisma/client', () => ({
-  PrismaClient: class {
-    $connect = jest.fn().mockResolvedValue(undefined);
-    $disconnect = jest.fn().mockResolvedValue(undefined);
-  },
-}));
+jest.mock('@prisma/client', () => {
+  const actual =
+    jest.requireActual<typeof import('@prisma/client')>('@prisma/client');
 
+  return {
+    ...actual,
+    PrismaClient: class {
+      $connect = jest.fn().mockResolvedValue(undefined);
+      $disconnect = jest.fn().mockResolvedValue(undefined);
+    },
+  };
+});
+
+import { CustomerType } from '@prisma/client';
 import { AppModule } from '../app.module';
 import { PrismaModule } from './prisma.module';
 import { PrismaService } from './prisma.service';
@@ -37,6 +44,14 @@ describe('PrismaModule', () => {
     expect(providers).toEqual([PrismaService]);
     expect(exports).toEqual([PrismaService]);
     expect(appImports).toContain(PrismaModule);
+  });
+
+  it('preserves Prisma enum exports required by DTO decorators', () => {
+    expect(CustomerType).toEqual({
+      RETAIL: 'RETAIL',
+      WHOLESALE: 'WHOLESALE',
+      INSTITUTIONAL: 'INSTITUTIONAL',
+    });
   });
 });
 

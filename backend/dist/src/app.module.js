@@ -24,6 +24,7 @@ const commercial_policies_module_1 = require("./modules/commercial-policies/comm
 const operational_config_module_1 = require("./modules/operational-config/operational-config.module");
 const accounts_receivable_module_1 = require("./modules/accounts-receivable/accounts-receivable.module");
 const payments_module_1 = require("./modules/payments/payments.module");
+const sales_module_1 = require("./modules/sales/sales.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -48,6 +49,7 @@ exports.AppModule = AppModule = __decorate([
             operational_config_module_1.OperationalConfigModule,
             accounts_receivable_module_1.AccountsReceivableModule,
             payments_module_1.PaymentsModule,
+            sales_module_1.SalesModule,
         ],
         controllers: [],
         providers: [],

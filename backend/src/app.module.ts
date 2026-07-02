@@ -15,6 +15,7 @@ import { CommercialPoliciesModule } from './modules/commercial-policies/commerci
 import { OperationalConfigModule } from './modules/operational-config/operational-config.module';
 import { AccountsReceivableModule } from './modules/accounts-receivable/accounts-receivable.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { SalesModule } from './modules/sales/sales.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     OperationalConfigModule,
     AccountsReceivableModule,
     PaymentsModule,
+    SalesModule,
   ],
   controllers: [],
   providers: [],

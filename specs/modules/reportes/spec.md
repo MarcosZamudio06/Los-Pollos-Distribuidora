@@ -1,16 +1,31 @@
 # Deprecated Module Alias — Reportes
 
-Este archivo queda **deprecated**.
+Este archivo existe únicamente por compatibilidad documental.
 
-Spec canónico:
+No usar como spec de implementación.
 
-- `/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/specs/modules/reports/spec.md`
+---
 
-Motivo:
+## Spec canónico
 
-- El gobierno documental del proyecto adopta nombres canónicos de módulo en inglés para evitar duplicidad y drift entre roadmap, índice, arquitectura y prompts.
+```text
+specs/modules/reports/spec.md
+```
 
-Regla:
+---
 
-- No planear ni implementar nuevas tareas usando este alias.
-- Toda referencia futura debe apuntar al spec canónico `modules/reports/spec.md`.
+## Uso correcto
+
+Toda referencia futura de reportes debe apuntar a:
+
+```text
+specs/modules/reports/spec.md
+```
+
+---
+
+## Regla para agentes
+
+Si una TASK apunta a este alias, resolver `specs/modules/reports/spec.md` antes de implementar.
+
+No cargar este archivo cuando la TASK ya apunta a `reports`.
