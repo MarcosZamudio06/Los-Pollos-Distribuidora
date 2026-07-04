@@ -1,17 +1,28 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
+  CollectionStatus,
+  DeliveryEvidenceType,
   DeliveryOrderStatus,
   DeliveryRouteStatus,
+  InventoryMovementType,
   OperationalLocationType,
+  PaymentMethod,
   PaymentStatus,
   Prisma,
+  RouteSettlementStatus,
   SaleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateDeliveryRouteDto,
+  CaptureDeliveryEvidenceDto,
+  CloseRouteSettlementDto,
   ListDeliveryRoutesQueryDto,
+  RegisterDeliveryIncidentDto,
+  RegisterRouteCollectionDto,
+  ReopenRouteSettlementDto,
   UpdateDeliveryOrderStatusDto,
   UpdateDeliveryRouteStatusDto,
 } from './dto';
@@ -35,6 +46,67 @@ type DeliveryOrderRecord = Record<string, unknown> & {
   accountReceivable?: { id: string; outstandingAmount?: DecimalLike } | null;
   evidence?: Array<{ type: string }>;
   route?: DeliveryRouteRecord | null;
+};
+
+type DeliveryEvidenceRecord = {
+  id: string;
+  deliveryOrderId: string;
+  type: DeliveryEvidenceType;
+  value: string;
+  capturedAt: Date;
+};
+
+type RouteCollectionReceivable = {
+  id: string;
+  customerId: string;
+  saleId: string;
+  outstandingAmount: DecimalLike;
+  status: CollectionStatus | string;
+  dueDate?: Date;
+};
+
+type RoutePaymentRecord = {
+  id: string;
+  accountReceivableId?: string | null;
+  customerId?: string | null;
+  saleId?: string | null;
+  routeId?: string | null;
+  routeSettlementId?: string | null;
+  amount: DecimalLike;
+  paymentMethod: PaymentMethod | string;
+  status: PaymentStatus | string;
+  paidAt: Date;
+  collectedByUserId?: string | null;
+  collectionPass?: number | null;
+};
+
+type InventoryMovementRecord = {
+  id: string;
+  productId?: string;
+  locationId: string;
+  type?: InventoryMovementType | string;
+  quantityKg?: DecimalLike;
+  quantityPieces?: number | null;
+  reason?: string | null;
+};
+
+type RouteSettlementRecord = {
+  id: string;
+  routeId: string;
+  driverId: string;
+  status: RouteSettlementStatus;
+  version: number;
+  expectedCashAmount: DecimalLike;
+  expectedTransferAmount: DecimalLike;
+  differenceAmount: DecimalLike;
+  routeCollectionsSummary?: Prisma.JsonValue | null;
+  paidAtDeliveryAmount: DecimalLike;
+  overdueAmount: DecimalLike;
+  secondPassCollectionsAmount: DecimalLike;
+  closedAt?: Date | null;
+  route?: { deliveryOrders?: DeliveryOrderRecord[] } | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 type AssignableSaleRecord = {
@@ -266,6 +338,288 @@ export class DeliveryService {
     return this.toOrderResponse(updated);
   }
 
+  async captureEvidence(id: string, dto: CaptureDeliveryEvidenceDto, currentUser: Actor) {
+    const order = await this.findAccessibleOrder(id, currentUser);
+
+    const evidence = (await this.prisma.deliveryEvidence.create({
+      data: {
+        deliveryOrderId: order.id,
+        type: dto.type,
+        value: dto.value.trim(),
+        capturedAt: new Date(dto.capturedAt),
+      },
+    })) as DeliveryEvidenceRecord;
+
+    return this.toEvidenceResponse(evidence);
+  }
+
+  async registerCollection(id: string, dto: RegisterRouteCollectionDto, currentUser: Actor) {
+    if (dto.amount <= 0) {
+      throw new BadRequestException('amount must be greater than 0');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.findAccessibleOrder(id, currentUser, tx);
+      if (!order.accountReceivableId || order.accountReceivableId !== dto.accountReceivableId) {
+        throw new BadRequestException('Route collection must apply to the delivery order account receivable');
+      }
+
+      const receivable = (await tx.accountReceivable.findUnique({
+        where: { id: dto.accountReceivableId },
+      })) as RouteCollectionReceivable | null;
+
+      if (!receivable) {
+        throw new NotFoundException('Account receivable not found');
+      }
+
+      this.assertReceivableCanReceiveRoutePayment(receivable);
+      const outstandingAmount = this.toNumber(receivable.outstandingAmount);
+      if (dto.amount > outstandingAmount) {
+        throw new BadRequestException('Payment amount cannot exceed outstanding balance');
+      }
+
+      const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+      const newOutstandingAmount = this.roundMoney(outstandingAmount - dto.amount);
+      const nextStatus = newOutstandingAmount === 0 ? CollectionStatus.PAID : CollectionStatus.PARTIALLY_PAID;
+
+      const existingSettlementId = order.route?.settlement?.id ?? null;
+      const payment = (await tx.payment.create({
+        data: {
+          accountReceivableId: receivable.id,
+          customerId: receivable.customerId,
+          saleId: receivable.saleId,
+          userId: currentUser.id,
+          collectedByUserId: currentUser.id,
+          collectionPass: dto.collectionPass ?? null,
+          amount: dto.amount,
+          paymentMethod: dto.paymentMethod,
+          referenceNumber: dto.reference?.trim() || null,
+          routeId: order.routeId,
+          routeSettlementId: existingSettlementId,
+          status: PaymentStatus.APPLIED,
+          paidAt,
+        },
+      })) as RoutePaymentRecord;
+
+      await tx.accountReceivable.update({
+        where: { id: receivable.id },
+        data: {
+          outstandingAmount: newOutstandingAmount,
+          status: nextStatus,
+          lastPaymentDate: paidAt,
+          paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
+        },
+      });
+
+      await tx.sale.update({
+        where: { id: receivable.saleId },
+        data: { collectionStatus: nextStatus },
+      });
+
+      const updatedOrder = (await tx.deliveryOrder.update({
+        where: { id: order.id },
+        data: {
+          collectedByUserId: currentUser.id,
+          collectionPass: dto.collectionPass ?? order.collectionPass ?? null,
+        },
+        include: {
+          route: true,
+          sale: { select: { id: true, saleNumber: true } },
+          accountReceivable: { select: { id: true, outstandingAmount: true } },
+          evidence: { select: { type: true } },
+        },
+      } as Prisma.DeliveryOrderUpdateArgs)) as DeliveryOrderRecord;
+
+      return {
+        payment: this.toPaymentResponse(payment),
+        deliveryOrder: {
+          ...this.toOrderResponse(updatedOrder),
+          derivedCollectedAmount: this.toNumber(payment.amount),
+        },
+      };
+    });
+  }
+
+  async registerIncident(id: string, dto: RegisterDeliveryIncidentDto, currentUser: Actor) {
+    if (!INCIDENT_STATUS_REQUIRING_NOTES.has(dto.status)) {
+      throw new BadRequestException('Incident endpoint only accepts non-delivery, return, or partial rejection statuses');
+    }
+    if (!dto.reason?.trim()) {
+      throw new BadRequestException('reason is required');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.findAccessibleOrder(id, currentUser, tx);
+      if (!order.route?.routeStockLocationId) {
+        throw new BadRequestException('Route stock location is required to register delivery incidents');
+      }
+
+      const updatedOrder = (await tx.deliveryOrder.update({
+        where: { id: order.id },
+        data: {
+          status: dto.status,
+          notes: dto.reason.trim(),
+        },
+        include: {
+          route: true,
+          sale: { select: { id: true, saleNumber: true } },
+          accountReceivable: { select: { id: true, outstandingAmount: true } },
+          evidence: { select: { type: true } },
+        },
+      } as Prisma.DeliveryOrderUpdateArgs)) as DeliveryOrderRecord;
+
+      const inventoryMovements: InventoryMovementRecord[] = [];
+      for (const item of dto.returnedItems ?? []) {
+        const movement = await this.recordRouteReturnMovement(tx, {
+          order,
+          item,
+          userId: currentUser.id,
+          routeStockLocationId: order.route.routeStockLocationId,
+          reason: item.reason || dto.reason,
+        });
+        inventoryMovements.push(movement);
+      }
+
+      return {
+        deliveryOrder: this.toOrderResponse(updatedOrder),
+        inventoryMovements: inventoryMovements.map((movement) => this.toInventoryMovementResponse(movement)),
+      };
+    });
+  }
+
+  async openSettlement(routeId: string, currentUser: Actor) {
+    const route = (await this.prisma.deliveryRoute.findFirst({
+      where: this.buildRouteAccessWhere(routeId, currentUser),
+      include: {
+        settlement: { select: { id: true } },
+        payments: { where: { status: PaymentStatus.APPLIED } },
+        deliveryOrders: {
+          include: {
+            accountReceivable: { select: { id: true, outstandingAmount: true } },
+          },
+        },
+      },
+    } as Prisma.DeliveryRouteFindFirstArgs)) as DeliveryRouteRecord | null;
+
+    if (!route) {
+      throw new NotFoundException('Delivery route not found');
+    }
+
+    this.assertSettlementPermissions(currentUser);
+    this.assertRouteOrdersFinal(route);
+
+    const summary = this.buildSettlementSummary(route);
+    if (route.settlement?.id) {
+      const existingSettlement = (await this.prisma.routeSettlement.findUnique({
+        where: { id: route.settlement.id },
+      })) as RouteSettlementRecord | null;
+      if (existingSettlement) {
+        return this.toSettlementResponse(existingSettlement, summary);
+      }
+    }
+
+    const inventoryMovements = await this.prisma.inventoryMovement.findMany({
+      where: { locationId: route.routeStockLocationId },
+    });
+    const settlementStatus = summary.differenceAmount !== 0 || (inventoryMovements as unknown[]).length > 0
+      ? RouteSettlementStatus.REVIEW_REQUIRED
+      : RouteSettlementStatus.OPEN;
+
+    const settlement = (await this.prisma.routeSettlement.create({
+      data: {
+        routeId: route.id,
+        driverId: route.driverId,
+        status: settlementStatus,
+        expectedCashAmount: summary.expectedAmount,
+        expectedTransferAmount: 0,
+        differenceAmount: summary.differenceAmount,
+        paidAtDeliveryAmount: summary.collectedCashAmount,
+        overdueAmount: summary.differenceAmount > 0 ? summary.differenceAmount : 0,
+        secondPassCollectionsAmount: summary.secondPassCollectedAmount,
+        routeCollectionsSummary: summary as unknown as Prisma.InputJsonValue,
+      },
+    })) as RouteSettlementRecord;
+
+    return this.toSettlementResponse(settlement, summary);
+  }
+
+  async closeSettlement(id: string, dto: CloseRouteSettlementDto, currentUser: Actor, idempotencyKey?: string) {
+    this.assertSettlementPermissions(currentUser);
+    this.assertIdempotencyKey(idempotencyKey);
+    const payloadHash = this.hashPayload(this.buildSettlementActionPayload('close', id, currentUser.id, dto));
+
+    const settlement = (await this.prisma.routeSettlement.findUnique({
+      where: { id },
+      include: { route: { include: { deliveryOrders: true } } },
+    })) as RouteSettlementRecord | null;
+
+    if (!settlement) {
+      throw new NotFoundException('Route settlement not found');
+    }
+    if (settlement.status === RouteSettlementStatus.CLOSED && this.hasMatchingSettlementIdempotency(settlement, 'close', idempotencyKey, payloadHash)) {
+      return this.toSettlementResponse(settlement);
+    }
+    if (settlement.status === RouteSettlementStatus.CLOSED) {
+      throw new BadRequestException('Route settlement is already closed');
+    }
+    if (settlement.version !== dto.expectedVersion) {
+      throw new ConflictException('Route settlement version does not match expectedVersion');
+    }
+
+    this.assertRouteOrdersFinal({ deliveryOrders: settlement.route?.deliveryOrders ?? [] } as DeliveryRouteRecord);
+
+    const closed = await this.updateSettlementVersioned({
+      where: { id, version: dto.expectedVersion },
+      data: {
+        status: RouteSettlementStatus.CLOSED,
+        closedAt: new Date(),
+        notes: dto.notes?.trim() || null,
+        routeCollectionsSummary: this.withSettlementIdempotency(settlement.routeCollectionsSummary, 'close', idempotencyKey, payloadHash),
+        version: { increment: 1 },
+      },
+    });
+
+    return this.toSettlementResponse(closed);
+  }
+
+  async reopenSettlement(id: string, dto: ReopenRouteSettlementDto, currentUser: Actor, idempotencyKey?: string) {
+    this.assertSettlementPermissions(currentUser);
+    this.assertIdempotencyKey(idempotencyKey);
+    const payloadHash = this.hashPayload(this.buildSettlementActionPayload('reopen', id, currentUser.id, dto));
+
+    const settlement = (await this.prisma.routeSettlement.findUnique({
+      where: { id },
+    })) as RouteSettlementRecord | null;
+
+    if (!settlement) {
+      throw new NotFoundException('Route settlement not found');
+    }
+    if (settlement.status === RouteSettlementStatus.OPEN && this.hasMatchingSettlementIdempotency(settlement, 'reopen', idempotencyKey, payloadHash)) {
+      return this.toSettlementResponse(settlement);
+    }
+    if (settlement.status !== RouteSettlementStatus.CLOSED) {
+      throw new BadRequestException('Only closed route settlements can be reopened');
+    }
+    if (settlement.version !== dto.expectedVersion) {
+      throw new ConflictException('Route settlement version does not match expectedVersion');
+    }
+
+    const reopened = await this.updateSettlementVersioned({
+      where: { id, version: dto.expectedVersion },
+      data: {
+        status: RouteSettlementStatus.OPEN,
+        reopenedAt: new Date(),
+        reopenedByUserId: currentUser.id,
+        reopenedReason: dto.reason.trim(),
+        closedAt: null,
+        routeCollectionsSummary: this.withSettlementIdempotency(settlement.routeCollectionsSummary, 'reopen', idempotencyKey, payloadHash),
+        version: { increment: 1 },
+      },
+    });
+
+    return this.toSettlementResponse(reopened);
+  }
+
   private buildRouteWhere(query: ListDeliveryRoutesQueryDto, currentUser: Actor): Prisma.DeliveryRouteWhereInput {
     return {
       ...(currentUser.role === 'DRIVER' ? { driverId: currentUser.id } : query.driverId ? { driverId: query.driverId } : {}),
@@ -287,6 +641,27 @@ export class DeliveryService {
       id,
       ...(currentUser.role === 'DRIVER' ? { route: { driverId: currentUser.id } } : {}),
     };
+  }
+
+  private async findAccessibleOrder(
+    id: string,
+    currentUser: Actor,
+    tx: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const order = (await tx.deliveryOrder.findFirst({
+      where: this.buildOrderAccessWhere(id, currentUser),
+      include: {
+        route: { include: { settlement: { select: { id: true } } } },
+        sale: { select: { id: true, saleNumber: true } },
+        accountReceivable: { select: { id: true, outstandingAmount: true } },
+        evidence: { select: { type: true } },
+      },
+    } as Prisma.DeliveryOrderFindFirstArgs)) as DeliveryOrderRecord | null;
+
+    if (!order) {
+      throw new NotFoundException('Delivery order not found');
+    }
+    return order;
   }
 
   private buildPagination(query: ListDeliveryRoutesQueryDto): { skip?: number; take?: number } {
@@ -443,6 +818,45 @@ export class DeliveryService {
     };
   }
 
+  private toEvidenceResponse(evidence: DeliveryEvidenceRecord) {
+    return {
+      id: evidence.id,
+      deliveryOrderId: evidence.deliveryOrderId,
+      type: evidence.type,
+      value: evidence.value,
+      capturedAt: evidence.capturedAt.toISOString(),
+    };
+  }
+
+  private toPaymentResponse(payment: RoutePaymentRecord) {
+    return {
+      id: payment.id,
+      accountReceivableId: payment.accountReceivableId ?? null,
+      customerId: payment.customerId ?? null,
+      saleId: payment.saleId ?? null,
+      routeId: payment.routeId ?? null,
+      routeSettlementId: payment.routeSettlementId ?? null,
+      amount: this.toNumber(payment.amount),
+      paymentMethod: payment.paymentMethod,
+      status: payment.status,
+      paidAt: payment.paidAt.toISOString(),
+      collectedByUserId: payment.collectedByUserId ?? null,
+      collectionPass: payment.collectionPass ?? null,
+    };
+  }
+
+  private toInventoryMovementResponse(movement: InventoryMovementRecord) {
+    return {
+      id: movement.id,
+      productId: movement.productId,
+      locationId: movement.locationId,
+      type: movement.type,
+      quantityKg: this.toNumber(movement.quantityKg),
+      quantityPieces: movement.quantityPieces ?? 0,
+      reason: movement.reason ?? null,
+    };
+  }
+
   private buildCollectionsSummary(payments: PaymentSummaryRecord[], orders: DeliveryOrderRecord[] = []) {
     const expectedAmount = orders.reduce((total, order) => {
       return total + Number(order.accountReceivable?.outstandingAmount?.toString() ?? 0);
@@ -469,5 +883,234 @@ export class DeliveryService {
         collectedByMethod: {} as Record<string, number>,
       },
     );
+  }
+
+  private assertReceivableCanReceiveRoutePayment(receivable: RouteCollectionReceivable) {
+    if (receivable.status === CollectionStatus.CANCELLED || receivable.status === CollectionStatus.PAID) {
+      throw new BadRequestException('Account receivable cannot receive route collections');
+    }
+  }
+
+  private async recordRouteReturnMovement(
+    tx: Prisma.TransactionClient,
+    params: {
+      order: DeliveryOrderRecord;
+      item: NonNullable<RegisterDeliveryIncidentDto['returnedItems']>[number];
+      userId: string;
+      routeStockLocationId: string;
+      reason: string;
+    },
+  ) {
+    const quantityKg = this.roundQuantity(params.item.quantityKg ?? 0);
+    const quantityPieces = params.item.quantityPieces ?? 0;
+    if (quantityKg <= 0 && quantityPieces <= 0) {
+      throw new BadRequestException('Returned item quantity must be greater than 0');
+    }
+
+    const balance = await tx.inventoryBalance.upsert({
+      where: {
+        productId_locationId: {
+          productId: params.item.productId,
+          locationId: params.routeStockLocationId,
+        },
+      },
+      update: {
+        quantityKg: { increment: quantityKg },
+        quantityPieces: { increment: quantityPieces },
+      },
+      create: {
+        productId: params.item.productId,
+        locationId: params.routeStockLocationId,
+        quantityKg,
+        quantityPieces,
+      },
+    });
+
+    const newQuantityKg = this.toNumber((balance as { quantityKg?: DecimalLike }).quantityKg);
+    const newQuantityPieces = (balance as { quantityPieces?: number }).quantityPieces ?? 0;
+    const previousQuantityKg = this.roundQuantity(newQuantityKg - quantityKg);
+    const previousQuantityPieces = newQuantityPieces - quantityPieces;
+
+    return tx.inventoryMovement.create({
+      data: {
+        productId: params.item.productId,
+        locationId: params.routeStockLocationId,
+        userId: params.userId,
+        type: InventoryMovementType.RETURN,
+        quantity: quantityKg || quantityPieces,
+        quantityKg,
+        quantityPieces,
+        previousStock: previousQuantityKg,
+        newStock: newQuantityKg,
+        previousQuantityKg,
+        newQuantityKg,
+        previousQuantityPieces,
+        newQuantityPieces,
+        reason: params.reason.trim(),
+        referenceType: 'DeliveryOrder',
+        referenceId: params.order.id,
+        saleId: params.order.saleId,
+      },
+    }) as Promise<InventoryMovementRecord>;
+  }
+
+  private assertSettlementPermissions(currentUser: Actor) {
+    if (!['ADMIN', 'COLLECTIONS'].includes(currentUser.role)) {
+      throw new ForbiddenException('Only ADMIN or COLLECTIONS can manage route settlements');
+    }
+  }
+
+  private assertRouteOrdersFinal(route: DeliveryRouteRecord) {
+    const hasOpenOrders = (route.deliveryOrders ?? []).some((order) => !FINAL_ORDER_STATUSES.has(order.status));
+    if (hasOpenOrders) {
+      throw new BadRequestException('Cannot settle route with pending delivery orders');
+    }
+  }
+
+  private buildSettlementSummary(route: DeliveryRouteRecord) {
+    const expectedAmount = this.roundMoney(
+      (route.deliveryOrders ?? []).reduce(
+        (total, order) => total + this.toNumber(order.accountReceivable?.outstandingAmount),
+        0,
+      ),
+    );
+    const appliedPayments = (route.payments ?? []).filter((payment) => payment.status === PaymentStatus.APPLIED);
+    const collectedCashAmount = this.roundMoney(
+      appliedPayments
+        .filter((payment) => payment.paymentMethod === PaymentMethod.CASH)
+        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
+    );
+    const collectedTransferAmount = this.roundMoney(
+      appliedPayments
+        .filter((payment) => payment.paymentMethod === PaymentMethod.TRANSFER || payment.paymentMethod === PaymentMethod.DEPOSIT)
+        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
+    );
+    const totalCollectedAmount = this.roundMoney(
+      appliedPayments.reduce((total, payment) => total + this.toNumber(payment.amount), 0),
+    );
+    const secondPassCollectedAmount = this.roundMoney(
+      appliedPayments
+        .filter((payment) => payment.collectionPass === 2)
+        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
+    );
+
+    return {
+      expectedAmount,
+      collectedCashAmount,
+      collectedTransferAmount,
+      totalCollectedAmount,
+      secondPassCollectedAmount,
+      deliveredOrdersCount: (route.deliveryOrders ?? []).filter((order) => order.status === DeliveryOrderStatus.DELIVERED).length,
+      incidentOrdersCount: (route.deliveryOrders ?? []).filter((order) => order.status !== DeliveryOrderStatus.DELIVERED).length,
+      differenceAmount: this.roundMoney(expectedAmount - totalCollectedAmount),
+    };
+  }
+
+  private toSettlementResponse(settlement: RouteSettlementRecord, summary?: ReturnType<DeliveryService['buildSettlementSummary']>) {
+    return {
+      id: settlement.id,
+      routeId: settlement.routeId,
+      driverId: settlement.driverId,
+      status: settlement.status,
+      version: settlement.version,
+      expectedCashAmount: this.toNumber(settlement.expectedCashAmount),
+      derivedCollectedCashAmount: summary?.collectedCashAmount ?? this.toNumber(settlement.paidAtDeliveryAmount),
+      expectedTransferAmount: this.toNumber(settlement.expectedTransferAmount),
+      derivedCollectedTransferAmount: summary?.collectedTransferAmount ?? 0,
+      differenceAmount: this.toNumber(settlement.differenceAmount),
+      paidAtDeliveryAmount: this.toNumber(settlement.paidAtDeliveryAmount),
+      overdueAmount: this.toNumber(settlement.overdueAmount),
+      secondPassCollectionsAmount: this.toNumber(settlement.secondPassCollectionsAmount),
+      closedAt: settlement.closedAt?.toISOString() ?? null,
+    };
+  }
+
+  private async updateSettlementVersioned(args: Prisma.RouteSettlementUpdateArgs) {
+    try {
+      return (await this.prisma.routeSettlement.update(args)) as RouteSettlementRecord;
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2025'
+      ) {
+        throw new ConflictException('Route settlement version does not match expectedVersion');
+      }
+      throw error;
+    }
+  }
+
+  private assertIdempotencyKey(idempotencyKey?: string): asserts idempotencyKey is string {
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
+  }
+
+  private buildSettlementActionPayload(
+    action: 'close' | 'reopen',
+    settlementId: string,
+    userId: string,
+    dto: CloseRouteSettlementDto | ReopenRouteSettlementDto,
+  ) {
+    return {
+      action,
+      settlementId,
+      userId,
+      expectedVersion: dto.expectedVersion,
+      notes: 'notes' in dto ? dto.notes?.trim() ?? null : undefined,
+      reason: 'reason' in dto ? dto.reason.trim() : undefined,
+    };
+  }
+
+  private hashPayload(payload: Record<string, unknown>) {
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
+  private withSettlementIdempotency(
+    current: Prisma.JsonValue | null | undefined,
+    action: 'close' | 'reopen',
+    key: string,
+    payloadHash: string,
+  ): Prisma.InputJsonValue {
+    const base = this.jsonObject(current);
+    const idempotency = this.jsonObject(base.idempotency);
+    const next = {
+      ...base,
+      idempotency: {
+        ...idempotency,
+        [action]: { key, payloadHash },
+      },
+    };
+    return next as Prisma.InputJsonValue;
+  }
+
+  private hasMatchingSettlementIdempotency(
+    settlement: RouteSettlementRecord,
+    action: 'close' | 'reopen',
+    key: string,
+    payloadHash: string,
+  ) {
+    const summary = this.jsonObject(settlement.routeCollectionsSummary);
+    const idempotency = this.jsonObject(summary.idempotency);
+    const marker = this.jsonObject(idempotency[action]);
+    return marker.key === key && marker.payloadHash === payloadHash;
+  }
+
+  private jsonObject(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  }
+
+  private toNumber(value: DecimalLike): number {
+    if (value === null || value === undefined) return 0;
+    return Number(value.toString());
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private roundQuantity(value: number): number {
+    return Math.round((value + Number.EPSILON) * 1000) / 1000;
   }
 }

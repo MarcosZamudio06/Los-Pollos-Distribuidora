@@ -68,4 +68,17 @@ export class DeliveryController {
       data: await this.deliveryService.updateRouteStatus(id, body, currentUser),
     };
   }
+
+  @Post(':id/settlement')
+  @Roles('ADMIN', 'COLLECTIONS')
+  async openSettlement(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Route settlement calculated successfully',
+      data: await this.deliveryService.openSettlement(id, currentUser),
+    };
+  }
 }
