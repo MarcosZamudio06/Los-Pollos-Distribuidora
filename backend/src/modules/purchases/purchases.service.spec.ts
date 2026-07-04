@@ -7,9 +7,27 @@ import {
   PurchaseStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { PurchasesService } from './purchases.service';
 
 const now = new Date('2026-07-03T12:00:00.000Z');
+
+const warehouseUser: AuthenticatedUser = {
+  id: 'warehouse-1',
+  email: 'warehouse@example.com',
+  name: 'Warehouse User',
+  role: 'WAREHOUSE',
+  mustChangePassword: false,
+};
+
+const adminUser: AuthenticatedUser = {
+  id: 'admin-1',
+  email: 'admin@example.com',
+  name: 'Admin User',
+  role: 'ADMIN',
+  mustChangePassword: false,
+};
+
 
 type MockPrisma = {
   $transaction: jest.Mock;
@@ -143,7 +161,7 @@ describe('PurchasesService', () => {
     prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'movement-1', createdAt: now, product: { name: 'Pollo mixto' }, location: { name: 'Matriz' }, ...data }));
     prisma.purchase.findFirst.mockResolvedValue(createPurchase({ inventoryMovements: [{ id: 'movement-1', productId: 'product-1', locationId: 'loc-1', userId: 'warehouse-1', type: InventoryMovementType.PURCHASE, quantityKg: decimal('10.5'), quantityPieces: 4, previousQuantityKg: decimal('5'), newQuantityKg: decimal('15.5'), previousQuantityPieces: 5, newQuantityPieces: 9, reason: 'Purchase confirmation', referenceType: 'PURCHASE', referenceId: 'purchase-1', purchaseId: 'purchase-1', createdAt: now, product: { name: 'Pollo mixto' }, location: { name: 'Matriz' } }] }));
 
-    const result = await service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 10.5, quantityPieces: 4, unitCost: 80 }] }, { id: 'warehouse-1', role: 'WAREHOUSE' }, 'idem-1');
+    const result = await service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 10.5, quantityPieces: 4, unitCost: 80 }] }, warehouseUser, 'idem-1');
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.purchase.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -185,17 +203,17 @@ describe('PurchasesService', () => {
   it('rejects missing supplier, missing items, inactive receiver location, and invalid product quantities before inventory writes', async () => {
     const { service, prisma } = createService();
 
-    await expect(service.create({ supplierId: '', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1, unitCost: 10 }] }, { id: 'warehouse-1', role: 'WAREHOUSE' }, 'idem')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [] }, { id: 'warehouse-1', role: 'WAREHOUSE' }, 'idem')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create({ supplierId: '', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1, unitCost: 10 }] }, warehouseUser, 'idem')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [] }, warehouseUser, 'idem')).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.purchase.findUnique.mockResolvedValue(null);
     prisma.supplier.findUnique.mockResolvedValue({ id: 'supplier-1', isActive: true });
     prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: false });
-    await expect(service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1, unitCost: 10 }] }, { id: 'warehouse-1', role: 'WAREHOUSE' }, 'idem')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1, unitCost: 10 }] }, warehouseUser, 'idem')).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true });
     prisma.product.findUnique.mockResolvedValue({ id: 'product-1', unit: ProductUnit.KG, isActive: true, unitEquivalents: [] });
-    await expect(service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 0, quantityPieces: 1, unitCost: 10 }] }, { id: 'warehouse-1', role: 'WAREHOUSE' }, 'idem')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create({ supplierId: 'supplier-1', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 0, quantityPieces: 1, unitCost: 10 }] }, warehouseUser, 'idem')).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
   });
@@ -209,7 +227,7 @@ describe('PurchasesService', () => {
     prisma.purchase.update.mockResolvedValue(createPurchase({ status: PurchaseStatus.CANCELLED }));
     prisma.purchase.findFirst.mockResolvedValueOnce(createPurchase({ status: PurchaseStatus.CANCELLED, inventoryMovements: [{ id: 'cancel-movement-1', productId: 'product-1', locationId: 'loc-1', userId: 'admin-1', type: InventoryMovementType.CANCEL_PURCHASE, quantityKg: decimal('10.5'), quantityPieces: 4, previousQuantityKg: decimal('15.5'), newQuantityKg: decimal('5'), previousQuantityPieces: 9, newQuantityPieces: 5, reason: 'Wrong capture', referenceType: 'PURCHASE', referenceId: 'purchase-1', purchaseId: 'purchase-1', createdAt: now }] }));
 
-    const result = await service.cancel('purchase-1', { reason: ' Wrong capture ' }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-idem');
+    const result = await service.cancel('purchase-1', { reason: ' Wrong capture ' }, adminUser, 'cancel-idem');
 
     expect(prisma.inventoryBalance.updateMany).toHaveBeenCalledWith({
       where: { productId: 'product-1', locationId: 'loc-1', quantityKg: { gte: 10.5 }, quantityPieces: { gte: 4 } },
@@ -227,7 +245,7 @@ describe('PurchasesService', () => {
     prisma.purchase.findFirst.mockResolvedValue(createPurchase());
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(service.cancel('purchase-1', { reason: 'Wrong capture' }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-idem')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cancel('purchase-1', { reason: 'Wrong capture' }, adminUser, 'cancel-idem')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
     expect(prisma.purchase.update).not.toHaveBeenCalled();
   });
@@ -236,7 +254,7 @@ describe('PurchasesService', () => {
     const { service, prisma } = createService();
     prisma.purchase.findUnique.mockResolvedValue(createPurchase({ purchaseNumber: idempotentPurchaseNumber('idem-1') }));
 
-    await expect(service.create({ supplierId: 'supplier-2', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1, unitCost: 10 }] }, { id: 'warehouse-1', role: 'WAREHOUSE' }, 'idem-1')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.create({ supplierId: 'supplier-2', locationId: 'loc-1', items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1, unitCost: 10 }] }, warehouseUser, 'idem-1')).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('returns 404 for missing purchase detail', async () => {

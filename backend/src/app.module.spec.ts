@@ -8,6 +8,7 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { DeliveryModule } from './modules/delivery/delivery.module';
 
 describe('AppModule', () => {
   it('registers backend modules without starter controllers or providers', () => {
@@ -31,6 +32,7 @@ describe('AppModule', () => {
     expect(imports).toContain(InventoryModule);
     expect(imports).toContain(CustomersModule);
     expect(imports).toContain(SuppliersModule);
+    expect(imports).toContain(DeliveryModule);
     expect(controllers).toEqual([]);
     expect(providers).toEqual([]);
   });

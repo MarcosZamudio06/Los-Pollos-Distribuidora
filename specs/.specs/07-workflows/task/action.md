@@ -1,41 +1,39 @@
-### TASK-062 — Implementar UI de compras
+### TASK-071 — Implementar UI administrador de rutas
 
 Estado inicial: `PENDING`
 
 Depende de:
 
-- TASK-023
-- TASK-033
-- TASK-061
+- TASK-055
+- TASK-070
+- TASK-073
 
 Specs requeridos:
 
 ```text
-specs/.specs/04-ui/purchases.md
+specs/.specs/04-ui/routes-delivery.md
 specs/.specs/04-ui/ui-guidelines.md
-specs/modules/compras/spec.md
-specs/modules/inventory/spec.md
-specs/.specs/03-api/purchases-api.md
-specs/.specs/03-api/inventory-api.md
-specs/.specs/03-api/locations-api.md
+specs/modules/routes-delivery/spec.md
+specs/.specs/03-api/delivery-api.md
+specs/.specs/03-api/route-settlements-api.md
 ```
 
 Relación resultado esperado ↔ specs:
 
-- `purchases.md` define pantallas, formulario, detalle, proveedor, ubicación, items y cancelación.
-- `ui-guidelines.md` define estados, componentes y permisos.
-- `compras/spec.md` e `inventory/spec.md` aportan reglas de compra e inventario receptor.
-- `purchases-api.md`, `inventory-api.md` y `locations-api.md` son los contratos consumidos por la UI.
+- `routes-delivery.md` define alcance administrador: crear ruta, asignar pedidos, revisar evidencia y ver liquidación.
+- `ui-guidelines.md` define navegación, estados y acciones visibles por rol.
+- `routes-delivery/spec.md` aporta reglas de rutas, permisos, `ROUTE_STOCK`, evidencia y liquidación.
+- `delivery-api.md` y `route-settlements-api.md` son contratos para rutas, pedidos, evidencias, cobros y liquidación visible desde admin.
 
 Entregables:
 
-- PurchasesPage.
-- PurchaseFormPage.
-- SupplierSelector.
-- PurchaseLocationSelector.
-- PurchaseItemsTable.
-- PurchaseDetailPage.
-- CancelPurchaseDialog.
+- DeliveryRoutesPage.
+- CreateRouteModal.
+- AssignOrdersModal.
+- RouteDetailPage.
+- RouteEvidenceReview.
+- RouteSettlementView.
+
 ---
 - Toda UI agregada debe de ser en correcto y perfecto en español. NO en Inglés
 - Leer parcialmente estos specs, solo buscando entidades, relaciones, enums, constraints o reglas relacionadas con cuentas por cobrar y pagos:
