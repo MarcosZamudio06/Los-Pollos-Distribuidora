@@ -25,6 +25,19 @@ export class SalesController {
     };
   }
 
+  @Get(':id/ticket')
+  @Roles('ADMIN', 'SELLER', 'COLLECTIONS')
+  async getTicket(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Sale ticket retrieved successfully',
+      data: await this.salesService.getTicket(id, currentUser),
+    };
+  }
+
   @Get(':id')
   @Roles('ADMIN', 'SELLER', 'COLLECTIONS')
   async findOne(

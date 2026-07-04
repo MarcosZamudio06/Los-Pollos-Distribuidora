@@ -35,29 +35,17 @@ No debes inventar arquitectura, rutas, modelos, permisos, pantallas ni reglas de
 
 ## 3. Fuente de verdad
 
-Antes de implementar cualquier tarea, debes leer los specs relacionados.
+Antes de implementar cualquier tarea, debes leer `task.md` y únicamente los archivos listados en el bloque `Specs requeridos` de esa TASK.
 
-Specs globales obligatorios:
+La lista de specs de cada TASK es cerrada:
 
-```text
-specs/.specs/00-business/PRD.md
-specs/.specs/00-business/business-rules.md
-specs/.specs/01-architecture/architecture.md
-specs/.specs/01-architecture/folder-structure.md
-specs/.specs/01-architecture/coding-standards.md
-specs/.specs/01-architecture/ai-rules.md
-specs/.specs/02-database/database.md
-specs/.specs/05-testing/testing-strategy.md
-specs/.specs/05-testing/acceptance-criteria.md
-```
+- No agregar specs “por si acaso”.
+- No leer módulos completos si la TASK solo necesita API, UI o base de datos.
+- No leer aliases deprecated si existe spec canónico.
+- Si falta un spec requerido, la TASK queda `BLOCKED`.
+- Si un spec requerido contradice otro spec requerido de la misma TASK, la TASK queda `BLOCKED` y debe reportarse la contradicción.
 
-Cuando una tarea sea de un módulo específico, también debes leer:
-
-```text
-specs/modules/<module-name>/spec.md
-specs/.specs/03-api/<api-spec>.md
-specs/.specs/04-ui/<ui-spec>.md
-```
+Cada TASK incluye una sección `Relación resultado esperado ↔ specs` para explicar por qué cada spec es indispensable para producir el entregable esperado sin ampliar contexto innecesariamente.
 
 ## 3.1 Módulos canónicos y aliases deprecated
 
@@ -128,7 +116,7 @@ Cada tarea debe ejecutarse con este ciclo:
 
 ```text
 1. Leer task.md.
-2. Leer specs relacionados.
+2. Leer únicamente los specs del bloque `Specs requeridos` de la TASK.
 3. Confirmar dependencias.
 4. Identificar archivos a crear o modificar.
 5. Implementar únicamente el alcance de la tarea.
@@ -254,6 +242,25 @@ Ninguna tarea de implementación que contradiga estos canones está lista para i
 
 Estado inicial: `COMPLETED`
 
+Specs requeridos:
+
+```text
+specs/modules/routes-delivery/spec.md
+specs/modules/inventory/spec.md
+specs/modules/sales/spec.md
+specs/.specs/02-database/database.md
+specs/.specs/02-database/entities.md
+specs/.specs/03-api/delivery-api.md
+specs/.specs/03-api/inventory-transfers-api.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `routes-delivery/spec.md` define `DeliveryRoute` 1:1 con `ROUTE_STOCK` y las reglas de carga, devolución, incidencias y liquidación.
+- `inventory/spec.md`, `database.md` y `entities.md` fijan `OperationalLocation`, `InventoryTransfer`, movimientos y saldos por ubicación.
+- `sales/spec.md` vincula venta de canal `ROUTE` con descuento exclusivo desde `ROUTE_STOCK` y evita doble decremento.
+- `delivery-api.md` e `inventory-transfers-api.md` alinean los contratos donde la ruta crea/usa `ROUTE_STOCK` y donde se cargan o devuelven productos.
+
 Debe dejar resuelto:
 
 - `DeliveryRoute 1:1 OperationalLocation(type=ROUTE_STOCK)`.
@@ -264,6 +271,25 @@ Debe dejar resuelto:
 ### TASK-006 — Canonizar ventas, pagos, cuentas por cobrar y cancelaciones
 
 Estado inicial: `COMPLETED`
+
+Specs requeridos:
+
+```text
+specs/modules/sales/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/modules/clientes/spec.md
+specs/.specs/02-database/database.md
+specs/.specs/02-database/entities.md
+specs/.specs/03-api/sales-api.md
+specs/.specs/03-api/accounts-receivable-api.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `sales/spec.md` define contado, crédito, abono inicial, cancelación e idempotencia de ventas.
+- `accounts-receivable/spec.md` y `accounts-receivable-api.md` fijan `Payment` como fuente monetaria y pago MVP aplicado a una sola cuenta.
+- `clientes/spec.md` gobierna crédito, mora, límite y bloqueo del cliente.
+- `database.md`, `entities.md` y `sales-api.md` sostienen la separación entre venta, pago, saldo y cancelación auditable.
 
 Debe dejar resuelto:
 
@@ -276,6 +302,24 @@ Debe dejar resuelto:
 ### TASK-007 — Consolidar roadmap, módulos y gobierno documental
 
 Estado inicial: `IN_PROGRESS`
+
+Specs requeridos:
+
+```text
+specs/FILE_INDEX.md
+specs/.specs/01-architecture/folder-structure.md
+specs/.specs/01-architecture/ai-rules.md
+specs/.specs/05-testing/testing-strategy.md
+specs/.specs/07-workflows/implementation-plan.md
+specs/.specs/07-workflows/task.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `FILE_INDEX.md` identifica specs activos y aliases deprecated que deben quedar alineados.
+- `folder-structure.md` y `ai-rules.md` definen nombres canónicos, gobierno documental y prohibición de planear con aliases deprecated.
+- `testing-strategy.md` conserva pruebas transversales para los canones de inventario, dinero, documentos y rutas.
+- `implementation-plan.md` y `task.md` son los artefactos del roadmap que deben quedar coherentes antes de implementar.
 
 Debe dejar resuelto:
 
@@ -301,6 +345,8 @@ Validar que existan los specs mínimos antes de iniciar desarrollo.
 Specs requeridos:
 
 ```text
+specs/README.md
+specs/FILE_INDEX.md
 specs/.specs/00-business/PRD.md
 specs/.specs/00-business/business-rules.md
 specs/.specs/01-architecture/architecture.md
@@ -313,6 +359,12 @@ specs/.specs/04-ui/ui-guidelines.md
 specs/.specs/05-testing/testing-strategy.md
 specs/.specs/06-deployment/deployment.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `specs/README.md` y `FILE_INDEX.md` permiten comprobar el inventario documental activo.
+- Los specs de negocio, arquitectura, base de datos, API, UI, testing y despliegue son el mínimo para declarar que el corpus base existe.
+- El resultado esperado es solo reporte documental; por eso no requiere specs de módulos específicos ni modificación de código.
 
 Entregables:
 
@@ -333,6 +385,21 @@ Estado inicial: `COMPLETED`
 Depende de:
 
 - TASK-000
+
+Specs requeridos:
+
+```text
+specs/.specs/01-architecture/folder-structure.md
+specs/.specs/01-architecture/architecture.md
+specs/.specs/01-architecture/tech-stack.md
+specs/.specs/06-deployment/docker.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `folder-structure.md` define exactamente las carpetas raíz permitidas.
+- `architecture.md` y `tech-stack.md` justifican monorepo, frontend, backend, shared, docker, docs y scripts.
+- `docker.md` es necesario porque la tarea crea base de estructura Docker sin implementar servicios de negocio.
 
 Objetivo:
 
@@ -373,6 +440,21 @@ Estado inicial: `COMPLETED`
 Depende de:
 
 - TASK-001
+
+Specs requeridos:
+
+```text
+specs/.specs/01-architecture/architecture.md
+specs/.specs/01-architecture/folder-structure.md
+specs/.specs/01-architecture/tech-stack.md
+specs/.specs/01-architecture/coding-standards.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `architecture.md` y `tech-stack.md` fijan React, Vite, TypeScript, Router, Query y Tailwind.
+- `folder-structure.md` define las carpetas `frontend/src/*` permitidas.
+- `coding-standards.md` gobierna TypeScript, hooks, servicios, componentes y validación básica sin lógica crítica de negocio.
 
 Objetivo:
 
@@ -419,6 +501,22 @@ Depende de:
 
 - TASK-001
 
+Specs requeridos:
+
+```text
+specs/.specs/01-architecture/architecture.md
+specs/.specs/01-architecture/folder-structure.md
+specs/.specs/01-architecture/tech-stack.md
+specs/.specs/01-architecture/coding-standards.md
+specs/.specs/02-database/prisma-guidelines.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `architecture.md` y `tech-stack.md` fijan NestJS, TypeScript, Prisma, PostgreSQL, JWT y Swagger.
+- `folder-structure.md` define `backend/src/*`, `backend/prisma/` y `backend/test/`.
+- `coding-standards.md` y `prisma-guidelines.md` gobiernan módulos, services, DTOs y base Prisma sin modelos de negocio todavía.
+
 Objetivo:
 
 Inicializar backend con NestJS y TypeScript.
@@ -462,6 +560,22 @@ Depende de:
 
 - TASK-002
 - TASK-003
+
+Specs requeridos:
+
+```text
+specs/.specs/06-deployment/deployment.md
+specs/.specs/06-deployment/docker.md
+specs/.specs/06-deployment/env-vars.md
+specs/.specs/01-architecture/tech-stack.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `docker.md` define servicios, Dockerfiles y composición local.
+- `deployment.md` define el modo de ejecución esperado.
+- `env-vars.md` evita secretos reales y alinea `.env.example` con backend, frontend y Postgres.
+- `tech-stack.md` confirma versiones y componentes que deben levantarse en contenedores.
 
 Objetivo:
 
@@ -508,6 +622,12 @@ specs/.specs/02-database/database.md
 specs/.specs/02-database/entities.md
 specs/.specs/02-database/prisma-guidelines.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `database.md` define entidades principales, relaciones e invariantes estructurales del modelo.
+- `entities.md` detalla validaciones por entidad como stock por ubicación, pagos y documentos internos.
+- `prisma-guidelines.md` gobierna cómo expresar el modelo en Prisma y validar el schema.
 
 Objetivo:
 
@@ -566,6 +686,19 @@ Depende de:
 
 - TASK-010
 
+Specs requeridos:
+
+```text
+specs/.specs/02-database/database.md
+specs/.specs/02-database/entities.md
+specs/.specs/02-database/prisma-guidelines.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `database.md` y `entities.md` permiten verificar que la migración representa el schema canónico ya creado.
+- `prisma-guidelines.md` define el uso correcto de migraciones Prisma y validación sin alterar reglas de negocio.
+
 Objetivo:
 
 Crear primera migración de base de datos.
@@ -586,6 +719,21 @@ Estado inicial: `COMPLETED`
 Depende de:
 
 - TASK-011
+
+Specs requeridos:
+
+```text
+specs/.specs/02-database/database.md
+specs/.specs/02-database/entities.md
+specs/.specs/02-database/prisma-guidelines.md
+specs/.specs/06-deployment/env-vars.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `database.md` y `entities.md` definen roles, usuario inicial, ubicación, categorías y productos semilla válidos.
+- `prisma-guidelines.md` gobierna ejecución segura del seed con Prisma.
+- `env-vars.md` obliga a que la contraseña inicial provenga de variable o quede marcada como desarrollo.
 
 Objetivo:
 
@@ -613,6 +761,20 @@ Estado inicial: `PENDING`
 Depende de:
 
 - TASK-010
+
+Specs requeridos:
+
+```text
+specs/.specs/01-architecture/folder-structure.md
+specs/.specs/01-architecture/coding-standards.md
+specs/.specs/02-database/prisma-guidelines.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `folder-structure.md` ubica `backend/src/database/` como capa de acceso común.
+- `coding-standards.md` evita acceso directo a BD desde controllers y fija services como capa de negocio.
+- `prisma-guidelines.md` define centralización de Prisma sin múltiples instancias.
 
 Objetivo:
 
@@ -648,7 +810,16 @@ Specs requeridos:
 ```text
 specs/modules/auth/spec.md
 specs/.specs/03-api/auth-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `auth/spec.md` define login, refresh, logout, me, usuario activo y no exponer `passwordHash`.
+- `auth-api.md` fija contratos exactos de los cuatro endpoints.
+- `api-conventions.md` define formato de respuesta, errores, JWT y reglas transversales de API.
+- `entities.md` aporta las restricciones de `User` y `Role` necesarias para autenticación.
 
 Endpoints:
 
@@ -683,6 +854,22 @@ Depende de:
 
 - TASK-020
 
+Specs requeridos:
+
+```text
+specs/modules/auth/spec.md
+specs/modules/usuarios/spec.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/01-architecture/coding-standards.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `auth/spec.md` define protección JWT y validación de roles.
+- `usuarios/spec.md` define roles y restricciones de usuarios activos.
+- `api-conventions.md` exige Bearer token y RBAC en endpoints protegidos.
+- `coding-standards.md` fija guards, decorators y separación controller/service.
+
 Objetivo:
 
 Implementar protección por JWT y roles.
@@ -715,7 +902,15 @@ Specs requeridos:
 
 ```text
 specs/modules/usuarios/spec.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `usuarios/spec.md` define CRUD, cambio de password, soft delete, email único y permisos ADMIN.
+- `api-conventions.md` aporta formato de respuesta, errores y autenticación para endpoints protegidos.
+- `entities.md` aporta validaciones de `User` y `Role` como fuente del modelo persistente.
 
 Endpoints:
 
@@ -743,6 +938,22 @@ Depende de:
 
 - TASK-020
 - TASK-021
+
+Specs requeridos:
+
+```text
+specs/modules/auth/spec.md
+specs/.specs/03-api/auth-api.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/.specs/01-architecture/folder-structure.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `auth/spec.md` define login, sesión, roles, rutas protegidas y 403.
+- `auth-api.md` define los contratos que consume el cliente HTTP de autenticación.
+- `ui-guidelines.md` gobierna estados, layout y manejo visual de autorización.
+- `folder-structure.md` ubica `features/auth`, router y providers sin crear carpetas alternativas.
 
 Objetivo:
 
@@ -784,7 +995,16 @@ Specs requeridos:
 ```text
 specs/modules/inventory/spec.md
 specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory/spec.md` define producto, categoría, unidades, equivalencias y reglas de stock por ubicación.
+- `inventory-api.md` fija endpoints de productos y prohíbe `stock` global.
+- `api-conventions.md` aporta respuesta, errores, auth y paginación.
+- `entities.md` detalla validaciones de `Product` y `ProductUnitEquivalent`.
 
 Endpoints:
 
@@ -814,6 +1034,22 @@ Depende de:
 
 - TASK-030
 
+Specs requeridos:
+
+```text
+specs/modules/inventory/spec.md
+specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory/spec.md` define categoría como parte del catálogo de inventario.
+- `inventory-api.md` contiene contratos `GET/POST/PATCH/DELETE /api/categories`.
+- `api-conventions.md` fija formato, permisos y errores.
+- `entities.md` aporta reglas de catálogo y desactivación cuando aplique.
+
 Endpoints:
 
 - GET /api/categories
@@ -837,6 +1073,22 @@ Depende de:
 
 - TASK-030
 - TASK-034
+
+Specs requeridos:
+
+```text
+specs/modules/inventory/spec.md
+specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory/spec.md` define movimientos, ajustes, ubicación obligatoria y trazabilidad.
+- `inventory-api.md` fija `POST /api/inventory/adjustments`, `GET /api/inventory/movements` y saldos por ubicación.
+- `api-conventions.md` aporta contratos transversales de API y auth.
+- `entities.md` detalla `InventoryBalance` e `InventoryMovement` para validar no negativos y unidades.
 
 Endpoints:
 
@@ -872,7 +1124,20 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/inventory.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/inventory/spec.md
+specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/locations-api.md
+specs/.specs/03-api/inventory-transfers-api.md
+specs/.specs/03-api/product-equivalences-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory.md` define pantallas, componentes y validaciones de UI de inventario.
+- `ui-guidelines.md` define estados loading/error/empty, componentes base y navegación por rol.
+- `inventory/spec.md` aporta reglas de producto, saldo por ubicación y equivalencias.
+- Los specs API listados son los contratos que consumen vistas de productos, ubicaciones, traspasos, movimientos y equivalencias.
 
 Entregables:
 
@@ -907,10 +1172,17 @@ Specs requeridos:
 
 ```text
 specs/modules/inventory/spec.md
-specs/.specs/02-database/database.md
 specs/.specs/02-database/entities.md
 specs/.specs/03-api/locations-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory/spec.md` define `OperationalLocation` como base del inventario operativo.
+- `entities.md` fija tipos válidos, `ROUTE_STOCK`, `EXTERNAL_POINT_OF_SALE` e inactivación.
+- `locations-api.md` define rutas exactas para administrar ubicaciones.
+- `api-conventions.md` aporta auth, errores y respuesta estándar.
 
 Objetivo:
 
@@ -942,10 +1214,17 @@ Specs requeridos:
 
 ```text
 specs/modules/inventory/spec.md
-specs/.specs/02-database/database.md
 specs/.specs/02-database/entities.md
 specs/.specs/03-api/inventory-transfers-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory/spec.md` define traspasos como dominio propio entre ubicaciones.
+- `entities.md` fija `InventoryTransfer`, items, movimientos y saldos no negativos.
+- `inventory-transfers-api.md` define endpoints, estados, confirmación, cancelación e idempotencia.
+- `api-conventions.md` aporta contratos transversales de API.
 
 Objetivo:
 
@@ -977,10 +1256,17 @@ Specs requeridos:
 
 ```text
 specs/modules/inventory/spec.md
-specs/.specs/02-database/database.md
 specs/.specs/02-database/entities.md
 specs/.specs/03-api/product-equivalences-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `inventory/spec.md` define equivalencias kilo-pieza y trazabilidad por producto.
+- `entities.md` detalla validaciones de `ProductUnitEquivalent` y vigencia activa.
+- `product-equivalences-api.md` define contratos exactos para crear, activar y consultar equivalencias.
+- `api-conventions.md` aporta formato y validaciones transversales.
 
 Objetivo:
 
@@ -1013,7 +1299,16 @@ Specs requeridos:
 ```text
 specs/modules/clientes/spec.md
 specs/.specs/03-api/customers-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `clientes/spec.md` define cliente, mayoristas, condiciones comerciales, crédito y permisos.
+- `customers-api.md` fija contratos CRUD, historial, resumen de crédito y validaciones.
+- `api-conventions.md` aporta respuesta, errores, auth y paginación.
+- `entities.md` aporta restricciones persistentes de `Customer` y relaciones con ventas/pagos.
 
 Endpoints:
 
@@ -1048,7 +1343,17 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/customers.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/clientes/spec.md
+specs/.specs/03-api/customers-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `customers.md` define pantallas, filtros, tabla, formulario y resumen visual de crédito.
+- `ui-guidelines.md` gobierna estados, componentes base y menú por rol.
+- `clientes/spec.md` aporta reglas de cliente, mayorista, bloqueo y permisos.
+- `customers-api.md` define los contratos que consume la UI.
 
 Entregables:
 
@@ -1076,11 +1381,19 @@ Specs requeridos:
 
 ```text
 specs/modules/clientes/spec.md
-specs/.specs/02-database/database.md
 specs/.specs/02-database/entities.md
 specs/.specs/03-api/commercial-policies-api.md
 specs/.specs/03-api/operational-config-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `clientes/spec.md` define condiciones comerciales, crédito, bloqueo y prevalencia de políticas.
+- `entities.md` aporta `CommercialPolicy` y `OperationalConfig` como entidades auditables.
+- `commercial-policies-api.md` define contratos para límites, días y vigencia comercial.
+- `operational-config-api.md` define parámetros operativos sin permitir cambiar invariantes estructurales.
+- `api-conventions.md` aporta formato, auth y errores.
 
 Objetivo:
 
@@ -1112,12 +1425,22 @@ Depende de:
 Specs requeridos:
 
 ```text
+specs/modules/accounts-receivable/spec.md
 specs/modules/clientes/spec.md
 specs/modules/sales/spec.md
-specs/.specs/02-database/database.md
 specs/.specs/02-database/entities.md
 specs/.specs/03-api/accounts-receivable-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `accounts-receivable/spec.md` define cartera, pagos, estados, mora y `Payment` como fuente monetaria.
+- `clientes/spec.md` aporta bloqueo de crédito, saldos y permisos COLLECTIONS.
+- `sales/spec.md` vincula ventas a crédito, saldo pendiente y abonos iniciales.
+- `entities.md` fija validaciones de `AccountReceivable` y `Payment`.
+- `accounts-receivable-api.md` define contratos de cartera, pagos e historial.
+- `api-conventions.md` aporta respuesta, auth, errores e idempotencia transversal.
 
 Objetivo:
 
@@ -1153,7 +1476,20 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/accounts-receivable.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/accounts-receivable/spec.md
+specs/modules/clientes/spec.md
+specs/.specs/03-api/accounts-receivable-api.md
+specs/.specs/03-api/customers-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `accounts-receivable.md` define cartera, detalle, pagos, vencidas y badges de bloqueo.
+- `ui-guidelines.md` gobierna estados, componentes y permisos visibles.
+- `accounts-receivable/spec.md` aporta reglas de pago parcial/total y estados de cobranza.
+- `clientes/spec.md` aporta crédito, bloqueo y saldos por cliente.
+- `accounts-receivable-api.md` y `customers-api.md` son los contratos que consume la UI.
 
 Objetivo:
 
@@ -1196,8 +1532,22 @@ Specs requeridos:
 
 ```text
 specs/modules/sales/spec.md
+specs/modules/inventory/spec.md
+specs/modules/clientes/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/.specs/02-database/entities.md
 specs/.specs/03-api/sales-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `sales/spec.md` define creación de venta, contado, crédito, abono, canal, documento y cancelación base.
+- `inventory/spec.md` aporta stock por ubicación, movimientos y equivalencias aplicadas.
+- `clientes/spec.md` aporta crédito autorizado, bloqueo, mayoristas y condiciones comerciales.
+- `accounts-receivable/spec.md` define generación de cuenta por cobrar y `Payment` como fuente monetaria.
+- `entities.md` fija validaciones persistentes de `Sale`, `SaleItem`, `Payment` e inventario.
+- `sales-api.md` y `api-conventions.md` fijan el contrato `POST /api/sales`, auth, errores e idempotencia.
 
 Endpoint:
 
@@ -1239,6 +1589,20 @@ Depende de:
 
 - TASK-050
 
+Specs requeridos:
+
+```text
+specs/modules/sales/spec.md
+specs/.specs/03-api/sales-api.md
+specs/.specs/03-api/api-conventions.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `sales/spec.md` define permisos, tipos de venta, estados y trazabilidad requerida para consulta.
+- `sales-api.md` fija `GET /api/sales` y `GET /api/sales/:id`, filtros y forma de respuesta.
+- `api-conventions.md` aporta paginación, auth, errores y no exposición de datos sensibles.
+
 Endpoints:
 
 - GET /api/sales
@@ -1260,6 +1624,25 @@ Estado inicial: `PENDING`
 Depende de:
 
 - TASK-050
+
+Specs requeridos:
+
+```text
+specs/modules/sales/spec.md
+specs/modules/inventory/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/.specs/02-database/entities.md
+specs/.specs/03-api/sales-api.md
+specs/.specs/03-api/api-conventions.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `sales/spec.md` define cancelación de venta, restricciones con pagos y reversa auditable.
+- `inventory/spec.md` define restauración de stock en ubicación original con movimiento trazable.
+- `accounts-receivable/spec.md` define ajuste/cancelación de cuenta por cobrar y pago relacionado.
+- `entities.md` aporta validaciones de venta, pago, saldo y movimientos.
+- `sales-api.md` y `api-conventions.md` fijan `POST /api/sales/:id/cancel`, transacción, errores e idempotencia.
 
 Endpoint:
 
@@ -1290,6 +1673,20 @@ Estado inicial: `PENDING`
 Depende de:
 
 - TASK-050
+
+Specs requeridos:
+
+```text
+specs/modules/sales/spec.md
+specs/modules/sales-documents/spec.md
+specs/.specs/03-api/sales-api.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `sales/spec.md` define el contenido operativo de la venta y que el ticket no es CFDI.
+- `sales-documents/spec.md` fija comprobante interno, snapshots y separación de documentos de venta.
+- `sales-api.md` define `GET /api/sales/:id/ticket` y prohíbe campos SAT/CFDI.
 
 Endpoint:
 
@@ -1331,7 +1728,22 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/sales-pos.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/sales/spec.md
+specs/modules/inventory/spec.md
+specs/modules/clientes/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/.specs/03-api/sales-api.md
+specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/customers-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `sales-pos.md` define layout, carrito, cliente, crédito, ticket, solicitud administrativa y validaciones de POS.
+- `ui-guidelines.md` gobierna componentes, estados y experiencia por rol.
+- `sales/spec.md`, `inventory/spec.md`, `clientes/spec.md` y `accounts-receivable/spec.md` aportan reglas de venta, stock, crédito y saldo.
+- `sales-api.md`, `inventory-api.md` y `customers-api.md` son los contratos consumidos por el POS.
 
 Entregables:
 
@@ -1368,6 +1780,25 @@ Depende de:
 - TASK-052
 - TASK-053
 
+Specs requeridos:
+
+```text
+specs/.specs/04-ui/sales-pos.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/sales/spec.md
+specs/modules/sales-documents/spec.md
+specs/.specs/03-api/sales-api.md
+specs/.specs/03-api/sales-documents-api.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `sales-pos.md` cubre consulta de venta, ticket interno, documentos y cancelación desde UI.
+- `ui-guidelines.md` define tablas, dialogs, estados y permisos visibles.
+- `sales/spec.md` gobierna historial, detalle, cancelación y reimpresión según estado de venta.
+- `sales-documents/spec.md` gobierna documentos internos asociados a venta.
+- `sales-api.md` y `sales-documents-api.md` son los contratos para historial, detalle, cancelación, ticket y documentos.
+
 Objetivo:
 
 Crear pantalla de historial, detalle, cancelación y reimpresión.
@@ -1390,6 +1821,22 @@ Estado inicial: `PENDING`
 Depende de:
 
 - TASK-021
+
+Specs requeridos:
+
+```text
+specs/modules/compras/spec.md
+specs/.specs/03-api/purchases-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/02-database/entities.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `compras/spec.md` define proveedores como catálogo requerido para compras.
+- `purchases-api.md` contiene contratos de proveedores dentro del dominio de compras.
+- `api-conventions.md` aporta respuesta, auth, errores y paginación.
+- `entities.md` aporta validaciones persistentes de `Supplier` cuando aplique.
 
 Endpoints:
 
@@ -1422,8 +1869,18 @@ Specs requeridos:
 
 ```text
 specs/modules/compras/spec.md
+specs/modules/inventory/spec.md
+specs/.specs/02-database/entities.md
 specs/.specs/03-api/purchases-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `compras/spec.md` define compra, proveedor, items, confirmación, cancelación y costo.
+- `inventory/spec.md` aporta incremento/reversa de stock por ubicación y equivalencias.
+- `entities.md` fija validaciones de `Purchase`, `PurchaseItem`, `InventoryMovement` y ubicación receptora.
+- `purchases-api.md` y `api-conventions.md` fijan endpoints, transacciones, errores e idempotencia.
 
 Endpoints:
 
@@ -1459,7 +1916,20 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/purchases.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/compras/spec.md
+specs/modules/inventory/spec.md
+specs/.specs/03-api/purchases-api.md
+specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/locations-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `purchases.md` define pantallas, formulario, detalle, proveedor, ubicación, items y cancelación.
+- `ui-guidelines.md` define estados, componentes y permisos.
+- `compras/spec.md` e `inventory/spec.md` aportan reglas de compra e inventario receptor.
+- `purchases-api.md`, `inventory-api.md` y `locations-api.md` son los contratos consumidos por la UI.
 
 Entregables:
 
@@ -1489,8 +1959,22 @@ Specs requeridos:
 
 ```text
 specs/modules/routes-delivery/spec.md
+specs/modules/sales/spec.md
+specs/modules/inventory/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/.specs/02-database/entities.md
 specs/.specs/03-api/delivery-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `routes-delivery/spec.md` define rutas, pedidos, repartidor, estados, evidencia MVP y `ROUTE_STOCK`.
+- `sales/spec.md` gobierna asignación solo de ventas confirmadas y no canceladas.
+- `inventory/spec.md` aporta ubicación de ruta y no doble decremento.
+- `accounts-receivable/spec.md` aporta cobro en ruta ligado a saldo pendiente.
+- `entities.md` fija validaciones de `DeliveryRoute`, `DeliveryOrder`, `Payment` y `OperationalLocation`.
+- `delivery-api.md` y `api-conventions.md` fijan endpoints, permisos, auth y errores.
 
 Endpoints:
 
@@ -1527,7 +2011,18 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/routes-delivery.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/routes-delivery/spec.md
+specs/.specs/03-api/delivery-api.md
+specs/.specs/03-api/route-settlements-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `routes-delivery.md` define alcance administrador: crear ruta, asignar pedidos, revisar evidencia y ver liquidación.
+- `ui-guidelines.md` define navegación, estados y acciones visibles por rol.
+- `routes-delivery/spec.md` aporta reglas de rutas, permisos, `ROUTE_STOCK`, evidencia y liquidación.
+- `delivery-api.md` y `route-settlements-api.md` son contratos para rutas, pedidos, evidencias, cobros y liquidación visible desde admin.
 
 Entregables:
 
@@ -1549,6 +2044,22 @@ Depende de:
 - TASK-023
 - TASK-070
 - TASK-073
+
+Specs requeridos:
+
+```text
+specs/.specs/04-ui/routes-delivery.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/routes-delivery/spec.md
+specs/.specs/03-api/delivery-api.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `routes-delivery.md` define alcance repartidor: mis rutas, tarjetas de pedido, estados, evidencia, cobros e incidencias.
+- `ui-guidelines.md` gobierna experiencia responsive/móvil, estados y permisos visibles.
+- `routes-delivery/spec.md` aporta reglas de conductor, evidencia, no entrega, devolución y cobro autorizado.
+- `delivery-api.md` define contratos consumidos por la experiencia del repartidor.
 
 Entregables:
 
@@ -1574,9 +2085,23 @@ Specs requeridos:
 
 ```text
 specs/modules/routes-delivery/spec.md
+specs/modules/route-settlements/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/modules/inventory/spec.md
+specs/.specs/02-database/entities.md
 specs/.specs/03-api/delivery-api.md
 specs/.specs/03-api/route-settlements-api.md
+specs/.specs/03-api/accounts-receivable-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `routes-delivery/spec.md` define evidencia, cobros, incidencias, devoluciones y vínculo con ruta.
+- `route-settlements/spec.md` define apertura, cálculo, cierre, diferencias, reapertura e idempotencia de liquidación.
+- `accounts-receivable/spec.md` y `accounts-receivable-api.md` gobiernan `Payment.accountReceivableId` y saldo cobrable.
+- `inventory/spec.md` y `entities.md` gobiernan movimientos por devoluciones o diferencias que afectan stock.
+- `delivery-api.md`, `route-settlements-api.md` y `api-conventions.md` fijan endpoints, permisos, transacciones y errores.
 
 Objetivo:
 
@@ -1612,7 +2137,18 @@ Specs requeridos:
 ```text
 specs/modules/sales-documents/spec.md
 specs/modules/billing-requests/spec.md
+specs/modules/sales/spec.md
+specs/.specs/03-api/sales-documents-api.md
+specs/.specs/03-api/billing-requests-api.md
+specs/.specs/03-api/sales-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `sales-documents/spec.md` define comprobante interno, nota sencilla, nota grande y ciclo documental.
+- `billing-requests/spec.md` mantiene la solicitud administrativa separada del documento operativo.
+- `sales/spec.md` vincula documentos con venta confirmada sin implementar SAT/CFDI.
+- `sales-documents-api.md`, `billing-requests-api.md` y `sales-api.md` alinean contratos de ticket, documentos y solicitud administrativa.
 
 Objetivo:
 
@@ -1648,8 +2184,21 @@ Specs requeridos:
 
 ```text
 specs/modules/reports/spec.md
+specs/modules/sales/spec.md
+specs/modules/inventory/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/modules/routes-delivery/spec.md
+specs/modules/point-of-sale-closing/spec.md
 specs/.specs/03-api/reports-api.md
+specs/.specs/03-api/api-conventions.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `reports/spec.md` define reportes, permisos y consistencia casi en tiempo real.
+- `sales/spec.md`, `inventory/spec.md`, `accounts-receivable/spec.md`, `routes-delivery/spec.md` y `point-of-sale-closing/spec.md` aportan las fuentes de verdad que los reportes agregan.
+- `reports-api.md` define endpoints de dashboard, ventas diarias, bajo inventario y corte.
+- `api-conventions.md` aporta formato, filtros, auth y latencia esperada.
 
 Endpoints:
 
@@ -1690,7 +2239,17 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/dashboard.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/reports/spec.md
+specs/.specs/03-api/reports-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `dashboard.md` define cards, bajo stock, cobranza, reparto y gráficas.
+- `ui-guidelines.md` gobierna layout, estados y visibilidad por rol.
+- `reports/spec.md` define métricas y permisos de consulta.
+- `reports-api.md` define el contrato que alimenta el dashboard.
 
 Entregables:
 
@@ -1714,7 +2273,17 @@ Specs requeridos:
 
 ```text
 specs/.specs/04-ui/reports.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/reports/spec.md
+specs/.specs/03-api/reports-api.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `reports.md` define pantallas, filtros y reportes de ventas, caja, inventario, cobranza y reparto.
+- `ui-guidelines.md` define componentes, estados y navegación por rol.
+- `reports/spec.md` aporta reglas de permisos y fuentes de verdad.
+- `reports-api.md` define contratos consumidos por los reportes frontend.
 
 Entregables:
 
@@ -1745,6 +2314,27 @@ Depende de:
 - TASK-043
 - TASK-073
 - TASK-090
+
+Specs requeridos:
+
+```text
+specs/.specs/05-testing/testing-strategy.md
+specs/.specs/05-testing/acceptance-criteria.md
+specs/modules/auth/spec.md
+specs/modules/inventory/spec.md
+specs/modules/sales/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/modules/compras/spec.md
+specs/modules/routes-delivery/spec.md
+specs/modules/route-settlements/spec.md
+specs/modules/reports/spec.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `testing-strategy.md` define prioridades, transacción, idempotencia, concurrencia y permisos críticos backend.
+- `acceptance-criteria.md` define criterios generales de aceptación del MVP.
+- Los specs de módulos listados son indispensables porque la tarea prueba reglas críticas de auth, inventario, ventas, pagos, compras, rutas, liquidación y reportes.
 
 Objetivo:
 
@@ -1778,6 +2368,27 @@ Depende de:
 - TASK-054
 - TASK-091
 
+Specs requeridos:
+
+```text
+specs/.specs/05-testing/testing-strategy.md
+specs/.specs/05-testing/acceptance-criteria.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/.specs/04-ui/inventory.md
+specs/.specs/04-ui/sales-pos.md
+specs/.specs/04-ui/customers.md
+specs/.specs/04-ui/accounts-receivable.md
+specs/.specs/04-ui/routes-delivery.md
+specs/.specs/04-ui/dashboard.md
+specs/.specs/04-ui/reports.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `testing-strategy.md` y `acceptance-criteria.md` definen cobertura esperada y flujos críticos frontend.
+- `ui-guidelines.md` define estados, roles y componentes que deben validarse en pruebas UI.
+- Los specs UI listados corresponden directamente a los flujos prioritarios: inventario, POS, clientes, cobranza, rutas, dashboard y reportes.
+
 Objetivo:
 
 Crear pruebas de interfaz para flujos principales.
@@ -1809,6 +2420,25 @@ Depende de:
 
 - TASK-100
 
+Specs requeridos:
+
+```text
+specs/.specs/01-architecture/architecture.md
+specs/.specs/01-architecture/coding-standards.md
+specs/.specs/01-architecture/ai-rules.md
+specs/modules/auth/spec.md
+specs/.specs/03-api/auth-api.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/06-deployment/env-vars.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `architecture.md` define seguridad JWT, refresh token, RBAC, hash y validación.
+- `coding-standards.md` y `ai-rules.md` fijan no exponer secretos, no devolver hashes y usar guards/DTOs.
+- `auth/spec.md` y `auth-api.md` detallan login, refresh, logout y me.
+- `api-conventions.md` y `env-vars.md` cubren Bearer token, errores seguros, CORS/secretos y `.env` fuera de Git.
+
 Checklist:
 
 - Password hash.
@@ -1832,6 +2462,29 @@ Estado inicial: `PENDING`
 Depende de:
 
 - TASK-102
+
+Specs requeridos:
+
+```text
+specs/modules/auth/spec.md
+specs/modules/usuarios/spec.md
+specs/modules/inventory/spec.md
+specs/modules/sales/spec.md
+specs/modules/accounts-receivable/spec.md
+specs/modules/clientes/spec.md
+specs/modules/compras/spec.md
+specs/modules/routes-delivery/spec.md
+specs/modules/reports/spec.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/04-ui/ui-guidelines.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `auth/spec.md` y `usuarios/spec.md` definen roles, autenticación y administración de usuarios.
+- Los specs de módulos listados contienen los permisos por rol que deben validarse en backend y menú frontend.
+- `api-conventions.md` exige autorización en endpoints y alcance operativo.
+- `ui-guidelines.md` define menú, rutas protegidas, UnauthorizedState y visibilidad por rol.
 
 Objetivo:
 
@@ -1870,7 +2523,15 @@ Specs requeridos:
 specs/.specs/06-deployment/deployment.md
 specs/.specs/06-deployment/docker.md
 specs/.specs/06-deployment/env-vars.md
+specs/.specs/01-architecture/tech-stack.md
 ```
+
+Relación resultado esperado ↔ specs:
+
+- `deployment.md` define preparación de salida y ejecución final.
+- `docker.md` fija Dockerfiles, `docker-compose.yml` y servicios.
+- `env-vars.md` gobierna `.env.example`, secretos y variables necesarias.
+- `tech-stack.md` confirma componentes que deben empaquetarse y levantarse.
 
 Entregables:
 
@@ -1895,6 +2556,27 @@ Estado inicial: `PENDING`
 Depende de:
 
 - TASK-104
+
+Specs requeridos:
+
+```text
+specs/README.md
+specs/.specs/00-business/PRD.md
+specs/.specs/01-architecture/architecture.md
+specs/.specs/03-api/api-conventions.md
+specs/.specs/06-deployment/deployment.md
+specs/.specs/06-deployment/docker.md
+specs/.specs/06-deployment/env-vars.md
+specs/.specs/07-workflows/task.md
+```
+
+Relación resultado esperado ↔ specs:
+
+- `specs/README.md` y `PRD.md` dan contexto ejecutivo y alcance para la documentación final.
+- `architecture.md` sostiene explicación de frontend, backend, base de datos y seguridad.
+- `api-conventions.md` permite documentar contratos API sin repetir endpoints inventados.
+- `deployment.md`, `docker.md` y `env-vars.md` cubren instalación, configuración, migraciones, Docker y variables.
+- `task.md` aporta orden de implementación, estados y flujos principales ya construidos.
 
 Entregables:
 
@@ -2110,10 +2792,11 @@ Actúa como Spec Driven Development Orchestrator.
 Ejecuta únicamente la tarea: TASK-XXX.
 
 Antes de implementar:
-1. Lee los specs requeridos por la tarea.
-2. Identifica dependencias.
-3. Verifica que las dependencias estén completadas.
-4. Lista los archivos que planeas crear o modificar.
+1. Lee únicamente el bloque `Specs requeridos` de TASK-XXX.
+2. Lee solo esos specs; no agregues specs por cercanía o conveniencia.
+3. Identifica dependencias.
+4. Verifica que las dependencias estén completadas.
+5. Lista los archivos que planeas crear o modificar.
 
 Durante la implementación:
 - Respeta TypeScript.
@@ -2137,12 +2820,7 @@ Revisa la tarea: TASK-XXX.
 
 Compara la implementación contra:
 - task.md
-- spec del módulo
-- business-rules.md
-- database.md
-- api correspondiente
-- ui correspondiente si aplica
-- acceptance-criteria.md
+- únicamente los specs declarados en el bloque `Specs requeridos` de TASK-XXX
 
 Entrega:
 - Estado: APROBADA / RECHAZADA / NECESITA CAMBIOS

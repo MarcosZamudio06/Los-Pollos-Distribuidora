@@ -60,15 +60,15 @@ specs/.specs/
 specs/modules/
 ```
 
-### Fuente operativa por TASK
+<!--### Fuente operativa por TASK
 
 Para implementar una TASK concreta, la entrada operativa preferente es:
 
 ```text
 specs/.specs/07-workflows/task/action.md
 ```
-
-Si el usuario indica una TASK específica y existe un manifiesto o sección activa en `task/action.md`, el agente debe iniciar ahí.
+-->
+<!--Si el usuario indica una TASK específica y existe un manifiesto o sección activa en `task/action.md`, el agente debe iniciar ahí.-->
 
 ### Fuentes auxiliares
 
@@ -111,7 +111,6 @@ Es un mapa de lectura humana. No reemplaza specs fuente y no debe cargarse por d
 
 1. Si hay conflicto entre código y specs, prevalecen los specs.
 2. Si hay conflicto entre specs canónicos y documentos auxiliares, prevalecen los specs canónicos.
-3. Si hay conflicto entre `task/action.md` y `task.md`, usar `task/action.md` para la TASK activa y reportar la contradicción.
 4. Si hay conflicto entre roadmap, OpenSpec o archivos archivados, no implementar hasta reportar la contradicción.
 5. Si una regla de negocio no está documentada, no inventarla.
 6. Si una TASK requiere cambiar una regla de negocio, primero debe actualizarse el spec correspondiente.
@@ -124,15 +123,15 @@ Es un mapa de lectura humana. No reemplaza specs fuente y no debe cargarse por d
 
 Para una TASK concreta, leer en este orden:
 
-1. `specs/.specs/07-workflows/task/action.md`
-2. Solo los specs requeridos explícitamente por la TASK una única vez.
+1. Verificar la tarea existente en action.md.
+2. Solo los specs requeridos explícitamente por la TASK una única vez, nunca cargar `specs/.specs/07-workflows/task.md`.
 3. Solo los archivos fuente relacionados con esos specs una única vez.
 4. Solo los tests relacionados con la TASK.
 5. Documentos auxiliares únicamente si la TASK los menciona o si existe contradicción.
 
 ### No leer por defecto
 
-No cargar por defecto:
+Nunca cargar por defecto:
 
 ```text
 specs/.specs/07-workflows/task.md
@@ -154,7 +153,6 @@ Estos archivos pueden abrirse solo si:
 - el manifiesto de la TASK los exige;
 - la TASK es de arquitectura, testing, documentación o auditoría;
 - un spec requerido contiene una referencia directa;
-- una validación falla por una regla no visible en el contexto cargado;
 - existe contradicción documental.
 
 ### Lectura parcial de specs grandes

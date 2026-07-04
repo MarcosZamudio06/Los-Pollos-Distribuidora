@@ -281,6 +281,144 @@ describe('SalesService', () => {
     );
   });
 
+  it('returns an internal MVP ticket with seller, customer, location, items, totals, and payment methods from Payment records', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 'sale-1',
+      saleNumber: 'SALE-000001',
+      customerId: 'customer-1',
+      userId: 'seller-1',
+      locationId: 'loc-1',
+      saleChannel: SaleChannel.COUNTER,
+      documentType: SaleDocumentType.INTERNAL_RECEIPT,
+      physicalFolio: 'T-100',
+      requiresAdministrativeInvoice: false,
+      subtotal: decimal('250'),
+      discount: decimal('10'),
+      tax: decimal('0'),
+      total: decimal('240'),
+      paymentType: SalePaymentType.CASH_SALE,
+      collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED,
+      customer: { id: 'customer-1', name: 'Restaurant Norte' },
+      user: { id: 'seller-1', name: 'Seller One' },
+      location: { id: 'loc-1', name: 'Sucursal Centro' },
+      documents: [
+        { id: 'doc-ticket-1', documentType: SaleDocumentType.INTERNAL_RECEIPT, physicalFolio: 'T-100', createdAt: now },
+      ],
+      payments: [
+        { id: 'payment-1', amount: decimal('240'), paymentMethod: PaymentMethod.CASH, paidAt: now, saleId: 'sale-1', accountReceivableId: null, status: PaymentStatus.APPLIED },
+      ],
+      items: [
+        { id: 'item-1', productId: 'product-1', productNameSnapshot: 'Chicken breast', unit: ProductUnit.KG, quantityKg: decimal('2.500'), quantityPieces: 0, unitPrice: decimal('100'), subtotal: decimal('250') },
+      ],
+      createdAt: now,
+    });
+
+    const ticket = await service.getTicket('sale-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'sale-1', userId: 'seller-1' },
+        include: expect.objectContaining({
+          customer: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true } },
+          location: { select: { id: true, name: true } },
+          items: true,
+          payments: { where: { status: PaymentStatus.APPLIED }, orderBy: { paidAt: 'desc' } },
+          documents: { orderBy: { createdAt: 'desc' } },
+        }),
+      }),
+    );
+    expect(ticket).toEqual({
+      ticketId: 'doc-ticket-1',
+      ticketNumber: 'T-100',
+      saleNumber: 'SALE-000001',
+      createdAt: now,
+      documentType: SaleDocumentType.INTERNAL_RECEIPT,
+      physicalFolio: 'T-100',
+      requiresAdministrativeInvoice: false,
+      sellerName: 'Seller One',
+      customerName: 'Restaurant Norte',
+      locationId: 'loc-1',
+      locationName: 'Sucursal Centro',
+      items: [
+        {
+          productId: 'product-1',
+          productName: 'Chicken breast',
+          unit: ProductUnit.KG,
+          quantityKg: '2.5',
+          quantityPieces: 0,
+          unitPrice: '100',
+          subtotal: '250',
+        },
+      ],
+      subtotal: '250',
+      discount: '10',
+      tax: '0',
+      total: '240',
+      paymentType: SalePaymentType.CASH_SALE,
+      collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED,
+      payments: [
+        {
+          amount: '240',
+          paymentMethod: PaymentMethod.CASH,
+          paidAt: now,
+          saleId: 'sale-1',
+          accountReceivableId: null,
+        },
+      ],
+      legend: 'Comprobante interno sin validez fiscal',
+    });
+    expect(ticket).not.toHaveProperty('cfdiUuid');
+    expect(ticket).not.toHaveProperty('satStatus');
+    expect(ticket).not.toHaveProperty('digitalSeal');
+  });
+
+  it('returns a credit internal receipt without customer or payments when they do not exist', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 'sale-2',
+      saleNumber: 'SALE-000002',
+      customerId: null,
+      userId: 'seller-2',
+      locationId: 'loc-2',
+      documentType: SaleDocumentType.SIMPLE_NOTE,
+      physicalFolio: null,
+      requiresAdministrativeInvoice: false,
+      subtotal: decimal('120'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      total: decimal('120'),
+      paymentType: SalePaymentType.CREDIT_SALE,
+      collectionStatus: CollectionStatus.UNPAID,
+      status: SaleStatus.CONFIRMED,
+      customer: null,
+      user: { id: 'seller-2', name: 'Seller Two' },
+      location: { id: 'loc-2', name: 'Ruta 2' },
+      documents: [],
+      payments: [],
+      items: [
+        { id: 'item-2', productId: 'product-2', productNameSnapshot: 'Whole chicken', unit: ProductUnit.PIECE, quantityKg: decimal('0'), quantityPieces: 3, unitPrice: decimal('40'), subtotal: decimal('120') },
+      ],
+      createdAt: now,
+    });
+
+    const ticket = await service.getTicket('sale-2', { id: 'admin-1', role: 'ADMIN' });
+
+    expect(ticket).toEqual(expect.objectContaining({
+      ticketId: null,
+      ticketNumber: 'SALE-000002',
+      customerName: null,
+      locationId: 'loc-2',
+      locationName: 'Ruta 2',
+      paymentType: SalePaymentType.CREDIT_SALE,
+      payments: [],
+      legend: 'Comprobante interno sin validez fiscal',
+    }));
+  });
+
   it('creates a valid paid cash sale with backend pricing, sale payment, stock decrement, and no artificial account receivable', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);

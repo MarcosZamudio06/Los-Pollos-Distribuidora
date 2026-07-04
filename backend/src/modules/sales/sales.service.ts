@@ -76,6 +76,8 @@ type SalePaymentSummaryInput = {
   paymentMethod: string;
   paidAt?: Date | string | null;
   status?: PaymentStatus | string;
+  saleId?: string | null;
+  accountReceivableId?: string | null;
 };
 
 type SaleListRecord = Record<string, unknown> & {
@@ -90,6 +92,13 @@ type SaleDetailRecord = SaleListRecord & {
   commercialPolicy?: Record<string, unknown> | null;
   documents?: Record<string, unknown>[];
   inventoryMovements?: Record<string, unknown>[];
+};
+
+type SaleTicketRecord = SaleListRecord & {
+  user?: { id: string; name: string } | null;
+  location?: { id: string; name: string } | null;
+  documents?: Record<string, unknown>[];
+  items?: Array<Record<string, unknown> & { productNameSnapshot?: string | null }>;
 };
 
 type SaleCancellationRecord = Record<string, unknown> & {
@@ -168,6 +177,29 @@ export class SalesService {
     }
 
     return this.toSaleDetail(sale);
+  }
+
+  async getTicket(id: string, currentUser: Actor) {
+    const sale = (await this.prisma.sale.findFirst({
+      where: this.buildVisibleSaleDetailWhere(id, currentUser),
+      include: {
+        customer: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true } },
+        location: { select: { id: true, name: true } },
+        documents: { orderBy: { createdAt: 'desc' } },
+        payments: {
+          where: { status: PaymentStatus.APPLIED },
+          orderBy: { paidAt: 'desc' },
+        },
+        items: true,
+      },
+    } as Prisma.SaleFindFirstArgs)) as SaleTicketRecord | null;
+
+    if (!sale) {
+      throw new NotFoundException('Sale not found');
+    }
+
+    return this.toSaleTicket(sale);
   }
 
   async create(dto: CreateSaleDto, currentUser: Actor, idempotencyKey: string) {
@@ -857,6 +889,49 @@ export class SalesService {
       ticket: this.findTicketDocument(sale.documents ?? []),
       documents: sale.documents ?? [],
       inventoryMovements: sale.inventoryMovements?.map((movement) => this.toMovementRecordResponse(movement)) ?? [],
+    };
+  }
+
+  private toSaleTicket(sale: SaleTicketRecord) {
+    const ticketDocument = this.findTicketDocument(sale.documents ?? []);
+    const physicalFolio = (ticketDocument?.physicalFolio ?? sale.physicalFolio ?? null) as string | null;
+
+    return {
+      ticketId: ticketDocument?.id ?? null,
+      ticketNumber: physicalFolio ?? sale.saleNumber,
+      saleNumber: sale.saleNumber,
+      createdAt: ticketDocument?.createdAt ?? sale.createdAt,
+      documentType: sale.documentType,
+      physicalFolio: sale.physicalFolio,
+      requiresAdministrativeInvoice: sale.requiresAdministrativeInvoice,
+      sellerName: sale.user?.name ?? null,
+      customerName: sale.customer?.name ?? null,
+      locationId: sale.locationId,
+      locationName: sale.location?.name ?? null,
+      items: sale.items?.map((item) => ({
+        productId: item.productId,
+        productName: item.productNameSnapshot ?? null,
+        unit: item.unit,
+        quantityKg: this.decimalToString(item.quantityKg),
+        quantityPieces: item.quantityPieces ?? null,
+        unitPrice: this.decimalToString(item.unitPrice),
+        subtotal: this.decimalToString(item.subtotal),
+      })) ?? [],
+      subtotal: this.decimalToString(sale.subtotal),
+      discount: this.decimalToString(sale.discount),
+      tax: this.decimalToString(sale.tax),
+      total: this.decimalToString(sale.total),
+      paymentType: sale.paymentType,
+      collectionStatus: sale.collectionStatus,
+      status: sale.status,
+      payments: (sale.payments ?? []).map((payment) => ({
+        amount: this.decimalToString(payment.amount),
+        paymentMethod: payment.paymentMethod,
+        paidAt: payment.paidAt ?? null,
+        saleId: payment.saleId ?? null,
+        accountReceivableId: payment.accountReceivableId ?? null,
+      })),
+      legend: 'Comprobante interno sin validez fiscal',
     };
   }
 

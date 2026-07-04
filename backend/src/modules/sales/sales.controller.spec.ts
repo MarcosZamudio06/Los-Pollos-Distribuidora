@@ -4,6 +4,25 @@ import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 
 describe('SalesController', () => {
+  it('allows ADMIN, SELLER, and COLLECTIONS to read sale tickets', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.getTicket)).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS']);
+  });
+
+  it('passes current user to the sale ticket service', async () => {
+    const service = { getTicket: jest.fn().mockResolvedValue({ saleNumber: 'SALE-000001' }) } as unknown as jest.Mocked<SalesService>;
+    const controller = new SalesController(service);
+    const user = { id: 'seller-1', email: 'seller@example.com', name: 'Seller', role: 'SELLER', mustChangePassword: false };
+
+    const result = await controller.getTicket('sale-1', user);
+
+    expect(service.getTicket).toHaveBeenCalledWith('sale-1', user);
+    expect(result).toEqual({
+      success: true,
+      message: 'Sale ticket retrieved successfully',
+      data: { saleNumber: 'SALE-000001' },
+    });
+  });
+
   it('restricts sale cancellation to ADMIN only', () => {
     expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.cancel)).toEqual(['ADMIN']);
   });

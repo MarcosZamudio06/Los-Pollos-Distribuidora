@@ -1,72 +1,42 @@
-
-### TASK-052 — Implementar cancelación de venta backend
+### TASK-062 — Implementar UI de compras
 
 Estado inicial: `PENDING`
 
-• Specs relacionados para TASK-052:
-
-  ## Principal
-
-  - specs/.specs/03-api/sales-api.md
-      - Contiene directamente POST /api/sales/:id/cancel.
-      - Define permisos, body reason / expectedVersion, respuesta y validaciones.
-
-  ## Soporte obligatorio
-
-  - specs/modules/sales/spec.md
-      - Regla de dominio: cancelar venta y revertir efectos.
-      - Bloqueo si hay pagos aplicados, cierre POS cerrado o liquidación cerrada.
-      - Idempotencia de cancelación.
-
-  - specs/.specs/02-database/database.md
-      - Lectura parcial:
-          - Sale: estado CANCELLED, cancelledAt, cancelledByUserId, cancellationReason.
-          - InventoryMovement: tipo CANCEL_SALE.
-          - AccountReceivable: ajustar/cancelar cuenta relacionada.
-          - Payment: fuente monetaria; pagos aplicados bloquean cancelación sin reversa/reembolso.
-          - Relaciones Sale -> InventoryMovement, Sale -> AccountReceivable, Sale -> Payment.
-
-  ## Soporte condicionado
-
-  - specs/.specs/03-api/accounts-receivable-api.md
-      - Solo para entender ajuste de cuenta por cobrar y bloqueo/reversa de pagos.
-
-  - specs/modules/accounts-receivable/spec.md
-      - Solo reglas de cobranza: estado, saldo, pagos, cuenta cancelada.
-
-  ## No leer para implementar TASK-052 salvo bloqueo
-
-  - testing-strategy.md
-  - acceptance-criteria.md
-  - UI specs
-  - OpenSpec archive
-  - arquitectura completa
-  - docs auxiliares
-
 Depende de:
 
-- TASK-050
+- TASK-023
+- TASK-033
+- TASK-061
 
-Endpoint:
+Specs requeridos:
 
-- POST /api/sales/:id/cancel
+```text
+specs/.specs/04-ui/purchases.md
+specs/.specs/04-ui/ui-guidelines.md
+specs/modules/compras/spec.md
+specs/modules/inventory/spec.md
+specs/.specs/03-api/purchases-api.md
+specs/.specs/03-api/inventory-api.md
+specs/.specs/03-api/locations-api.md
+```
 
-Reglas:
+Relación resultado esperado ↔ specs:
 
-- No cancelar venta ya cancelada.
-- Restaurar inventario.
-- Restaurar inventario en la ubicación operativa original.
-- Si la venta fue a crédito, ajustar o cancelar cuenta por cobrar relacionada.
-- Registrar movimientos.
-- Ejecutar en transacción.
-- Solo ADMIN o vendedor autorizado.
+- `purchases.md` define pantallas, formulario, detalle, proveedor, ubicación, items y cancelación.
+- `ui-guidelines.md` define estados, componentes y permisos.
+- `compras/spec.md` e `inventory/spec.md` aportan reglas de compra e inventario receptor.
+- `purchases-api.md`, `inventory-api.md` y `locations-api.md` son los contratos consumidos por la UI.
 
-Pruebas obligatorias:
+Entregables:
 
-- Cancelar venta confirmada.
-- Restaurar stock.
-- Rechazar doble cancelación.
-
+- PurchasesPage.
+- PurchaseFormPage.
+- SupplierSelector.
+- PurchaseLocationSelector.
+- PurchaseItemsTable.
+- PurchaseDetailPage.
+- CancelPurchaseDialog.
 ---
+- Toda UI agregada debe de ser en correcto y perfecto en español. NO en Inglés
 - Leer parcialmente estos specs, solo buscando entidades, relaciones, enums, constraints o reglas relacionadas con cuentas por cobrar y pagos:
 - No leer roadmap, OpenSpec archive, UI completa, testing global, specs que no han sido especificados por la task, ni arquitectura completa salvo que una validación falle por información no visible en los specs requeridos.

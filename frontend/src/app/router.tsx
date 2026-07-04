@@ -9,7 +9,9 @@ import {
 } from '../features/auth'
 import { CustomersPage } from '../features/clientes'
 import { AccountsReceivablePage } from '../features/cobranza'
+import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage } from '../features/compras'
 import { ProductListPage } from '../features/inventario'
+import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 
 function OperationsHomePage() {
   const { user } = useAuth()
@@ -66,6 +68,17 @@ function OperationsHomePage() {
               </Link>
               <Link className="inline-flex font-bold text-[#39798b]" to="/inventory">
                 Abrir inventario
+              </Link>
+              <Link className="inline-flex font-bold text-[#9d2d24]" to="/sales">
+                Abrir ventas
+              </Link>
+              {(user?.role === 'ADMIN' || user?.role === 'WAREHOUSE') && (
+                <Link className="inline-flex font-bold text-[#39798b]" to="/purchases">
+                  Abrir compras
+                </Link>
+              )}
+              <Link className="inline-flex font-bold text-[#39798b]" to="/sales/history">
+                Historial de ventas
               </Link>
             </div>
           </article>
@@ -138,6 +151,66 @@ export function AppRouter() {
           <ProtectedRoute>
             <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'SELLER']}>
               <AccountsReceivablePage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales/history"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
+              <SalesHistoryPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales/:saleId"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
+              <SaleDetailPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'SELLER']}>
+              <SalesPosPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/purchases/new"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
+              <PurchaseFormPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/purchases/:purchaseId"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
+              <PurchaseDetailPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/purchases"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
+              <PurchasesPage />
             </RoleRoute>
           </ProtectedRoute>
         }
