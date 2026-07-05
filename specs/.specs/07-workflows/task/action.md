@@ -1,23 +1,21 @@
-### TASK-073 — Implementar evidencia, cobros y liquidación de ruta backend
+### TASK-071 — Implementar UI administrador de rutas
 
 Estado inicial: `PENDING`
 
 Depende de:
 
-- TASK-043
+- TASK-055
 - TASK-070
+- TASK-073
 
-Objetivo:
+Entregables:
 
-Implementar evidencia de entrega, cobros en ruta, incidencias, devoluciones y liquidación de ruta.
-
-Reglas:
-
-- Evidencia puede incluir foto, firma, geolocalización o nota; obligatoriedad exacta queda pendiente de negocio.
-- Registrar cobros en ruta solo cuando exista saldo por cobrar y la política lo permita.
-- Para MVP, cada pago de ruta aplica a una sola cuenta por cobrar mediante `Payment.accountReceivableId` requerido.
-- Liquidación compara pedidos entregados, devoluciones, incidencias y dinero cobrado.
-- Devoluciones o rechazos que afecten stock deben generar trazabilidad y movimiento de inventario cuando corresponda.
+- DeliveryRoutesPage.
+- CreateRouteModal.
+- AssignOrdersModal.
+- RouteDetailPage.
+- RouteEvidenceReview.
+- RouteSettlementView.
 
 ---
 - Toda UI agregada debe de ser en correcto y perfecto en español. NO en Inglés

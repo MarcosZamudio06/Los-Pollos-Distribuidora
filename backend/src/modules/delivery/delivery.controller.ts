@@ -4,7 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CreateDeliveryRouteDto, ListDeliveryRoutesQueryDto, UpdateDeliveryRouteStatusDto } from './dto';
+import { AssignDeliveryRouteOrdersDto, CreateDeliveryRouteDto, ListDeliveryRoutesQueryDto, UpdateDeliveryRouteStatusDto } from './dto';
 import { DeliveryService } from './delivery.service';
 
 @Controller('delivery-routes')
@@ -52,6 +52,24 @@ export class DeliveryController {
       success: true,
       message: 'Delivery route created successfully',
       data: await this.deliveryService.createRoute(body, currentUser),
+    };
+  }
+
+  @Post(':id/orders')
+  @Roles('ADMIN')
+  async assignOrders(
+    @Param('id') id: string,
+    @Body() body: AssignDeliveryRouteOrdersDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    if (!body.orders?.length) {
+      throw new BadRequestException('At least one delivery order is required');
+    }
+
+    return {
+      success: true,
+      message: 'Delivery route orders assigned successfully',
+      data: await this.deliveryService.assignOrdersToRoute(id, body, currentUser),
     };
   }
 

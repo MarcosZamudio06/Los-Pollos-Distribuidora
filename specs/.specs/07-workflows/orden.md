@@ -52,8 +52,8 @@ TASK-060 listo
 TASK-061 listo
 TASK-062 listo
 TASK-070 listo
-TASK-073 pendiente
-TASK-071 pendiente
+TASK-073 listo
+TASK-071 listo
 TASK-072 pendiente
 TASK-080 pendiente
 TASK-090 pendiente

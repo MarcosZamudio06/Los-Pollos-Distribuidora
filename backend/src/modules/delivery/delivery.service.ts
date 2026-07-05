@@ -17,6 +17,7 @@ import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateDeliveryRouteDto,
+  AssignDeliveryRouteOrdersDto,
   CaptureDeliveryEvidenceDto,
   CloseRouteSettlementDto,
   ListDeliveryRoutesQueryDto,
@@ -113,6 +114,7 @@ type AssignableSaleRecord = {
   id: string;
   status: SaleStatus;
   accountReceivable?: { id: string } | null;
+  routeId?: string | null;
 };
 
 type PaymentSummaryRecord = {
@@ -260,6 +262,72 @@ export class DeliveryService {
       });
 
       return this.toRouteDetail(route);
+    });
+  }
+
+  async assignOrdersToRoute(id: string, dto: AssignDeliveryRouteOrdersDto, currentUser: Actor) {
+    if (currentUser.role !== 'ADMIN') {
+      throw new NotFoundException('Delivery route not found');
+    }
+
+    if (!dto.orders?.length) {
+      throw new BadRequestException('At least one delivery order is required');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const route = (await tx.deliveryRoute.findFirst({
+        where: this.buildRouteAccessWhere(id, currentUser),
+        include: {
+          settlement: { select: { id: true } },
+          deliveryOrders: true,
+        },
+      } as Prisma.DeliveryRouteFindFirstArgs)) as DeliveryRouteRecord | null;
+
+      if (!route) {
+        throw new NotFoundException('Delivery route not found');
+      }
+      if (route.status === DeliveryRouteStatus.COMPLETED || route.status === DeliveryRouteStatus.CANCELLED) {
+        throw new BadRequestException('Cannot assign orders to a completed or cancelled delivery route');
+      }
+      if (route.settlement?.id) {
+        throw new BadRequestException('Cannot assign orders after route settlement has been opened');
+      }
+
+      this.assertNoDuplicateRouteSales(route, dto.orders);
+      await this.assertAssignableSales(tx, dto.orders, route.id);
+
+      const updated = (await tx.deliveryRoute.update({
+        where: { id: route.id },
+        data: {
+          deliveryOrders: {
+            create: dto.orders.map((order) => ({
+              saleId: order.saleId,
+              accountReceivableId: order.accountReceivableId ?? null,
+              deliveryAddress: order.deliveryAddress.trim(),
+            })),
+          },
+        },
+        include: {
+          driver: { select: { id: true, name: true } },
+          settlement: { select: { id: true } },
+          payments: { where: { status: PaymentStatus.APPLIED } },
+          deliveryOrders: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              sale: { select: { id: true, saleNumber: true } },
+              accountReceivable: { select: { id: true, outstandingAmount: true } },
+              evidence: { select: { type: true } },
+            },
+          },
+        },
+      } as Prisma.DeliveryRouteUpdateArgs)) as DeliveryRouteRecord;
+
+      await tx.sale.updateMany({
+        where: { id: { in: dto.orders.map((order) => order.saleId) } },
+        data: { routeId: route.id },
+      });
+
+      return this.toRouteDetail(updated);
     });
   }
 
@@ -728,7 +796,7 @@ export class DeliveryService {
     }
   }
 
-  private async assertAssignableSales(tx: Prisma.TransactionClient, orders: CreateDeliveryRouteDto['orders']) {
+  private async assertAssignableSales(tx: Prisma.TransactionClient, orders: CreateDeliveryRouteDto['orders'], routeId?: string) {
     const saleIds = orders.map((order) => order.saleId);
     const uniqueSaleIds = [...new Set(saleIds)];
     if (uniqueSaleIds.length !== saleIds.length) {
@@ -737,7 +805,7 @@ export class DeliveryService {
 
     const sales = await tx.sale.findMany({
       where: { id: { in: uniqueSaleIds } },
-      select: { id: true, status: true, accountReceivable: { select: { id: true } } },
+      select: { id: true, status: true, routeId: true, accountReceivable: { select: { id: true } } },
     }) as AssignableSaleRecord[];
     const salesById = new Map(sales.map((sale) => [sale.id, sale]));
 
@@ -749,9 +817,20 @@ export class DeliveryService {
       if (sale.status !== SaleStatus.CONFIRMED) {
         throw new BadRequestException('Only confirmed non-cancelled sales can be assigned to delivery routes');
       }
+      if (sale.routeId && sale.routeId !== routeId) {
+        throw new BadRequestException('Sale is already assigned to another delivery route');
+      }
       if (order.accountReceivableId && sale.accountReceivable?.id !== order.accountReceivableId) {
         throw new BadRequestException('Account receivable must belong to the assigned sale');
       }
+    }
+  }
+
+  private assertNoDuplicateRouteSales(route: DeliveryRouteRecord, orders: CreateDeliveryRouteDto['orders']) {
+    const existingSaleIds = new Set((route.deliveryOrders ?? []).map((order) => order.saleId));
+    const duplicateSale = orders.find((order) => existingSaleIds.has(order.saleId));
+    if (duplicateSale) {
+      throw new BadRequestException('Sale is already assigned to this delivery route');
     }
   }
 

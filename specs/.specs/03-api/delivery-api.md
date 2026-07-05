@@ -86,6 +86,41 @@ Validaciones:
 - `orders[]` puede contener ventas pagadas al entregar, ventas a crédito y ventas con cobranza posterior.
 - Las ventas de canal `ROUTE` deben usar `routeStockLocationId` como ubicación operativa de descuento.
 
+
+## POST /api/delivery-routes/:id/orders
+
+Propósito: asignar ventas confirmadas adicionales a una ruta existente antes de que tenga liquidación asociada.
+
+Permisos: `ADMIN`.
+
+Body importante:
+
+```json
+{
+  "orders": [
+    {
+      "saleId": "string",
+      "accountReceivableId": "string opcional",
+      "deliveryAddress": "Dirección de entrega"
+    }
+  ]
+}
+```
+
+Respuesta `data`: ruta actualizada con pedidos.
+
+Validaciones:
+
+- La ruta debe existir.
+- La ruta no debe estar `COMPLETED` ni `CANCELLED`.
+- La ruta no debe tener `RouteSettlement` abierta o cerrada.
+- Solo ventas confirmadas pueden asignarse.
+- No asignar ventas canceladas.
+- No asignar ventas duplicadas dentro de la misma ruta.
+- No asignar ventas que ya pertenezcan a otra ruta.
+- Si la venta tiene saldo a crédito, el pedido debe conservar `accountReceivableId`.
+- `routeSettlementId` no se acepta en el body; la liquidación se abre/calcula mediante `route-settlements-api.md`.
+
 ## PATCH /api/delivery-routes/:id/status
 
 Propósito: actualizar estado de ruta.

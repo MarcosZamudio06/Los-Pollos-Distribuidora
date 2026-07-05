@@ -20,6 +20,7 @@ describe('Delivery controllers', () => {
       'COLLECTIONS',
     ]);
     expect(Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.create)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.assignOrders)).toEqual(['ADMIN']);
     expect(Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.updateStatus)).toEqual(['ADMIN', 'DRIVER']);
     expect(Reflect.getMetadata(ROLES_KEY, DeliveryOrdersController.prototype.updateStatus)).toEqual(['ADMIN', 'DRIVER']);
     expect(Reflect.getMetadata(ROLES_KEY, DeliveryOrdersController.prototype.captureEvidence)).toEqual(['ADMIN', 'DRIVER']);
@@ -58,6 +59,22 @@ describe('Delivery controllers', () => {
     expect(service.updateOrderStatus).toHaveBeenCalledWith('order-1', { status: 'DELIVERED' }, user);
   });
 
+  it('passes route order assignment to the service with the current user', async () => {
+    const service = {
+      assignOrdersToRoute: jest.fn().mockResolvedValue({ id: 'route-1', orders: [{ id: 'order-2' }] }),
+    } as unknown as jest.Mocked<DeliveryService>;
+    const controller = new DeliveryController(service);
+    const user = { id: 'admin-1', email: 'a@example.com', name: 'Admin', role: 'ADMIN', mustChangePassword: false };
+    const body = { orders: [{ saleId: 'sale-2', accountReceivableId: 'ar-2', deliveryAddress: 'Av Norte 456' }] };
+
+    await expect(controller.assignOrders('route-1', body, user)).resolves.toEqual({
+      success: true,
+      message: 'Delivery route orders assigned successfully',
+      data: { id: 'route-1', orders: [{ id: 'order-2' }] },
+    });
+    expect(service.assignOrdersToRoute).toHaveBeenCalledWith('route-1', body, user);
+  });
+
   it('rejects route creation with no orders', async () => {
     const service = { createRoute: jest.fn() } as unknown as jest.Mocked<DeliveryService>;
     const controller = new DeliveryController(service);
@@ -67,6 +84,15 @@ describe('Delivery controllers', () => {
       controller.create({ name: 'Ruta Centro', driverId: 'driver-1', scheduledDate: '2026-06-19', orders: [] }, user),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(service.createRoute).not.toHaveBeenCalled();
+  });
+
+  it('rejects route order assignment with no orders', async () => {
+    const service = { assignOrdersToRoute: jest.fn() } as unknown as jest.Mocked<DeliveryService>;
+    const controller = new DeliveryController(service);
+    const user = { id: 'admin-1', email: 'a@example.com', name: 'Admin', role: 'ADMIN', mustChangePassword: false };
+
+    await expect(controller.assignOrders('route-1', { orders: [] }, user)).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.assignOrdersToRoute).not.toHaveBeenCalled();
   });
 
   it('passes evidence, collection, incident, and settlement commands to the service with the current user', async () => {

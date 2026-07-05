@@ -212,6 +212,65 @@ describe('DeliveryService', () => {
     expect(prisma.sale.updateMany.mock.calls[0][0].data).not.toHaveProperty('locationId');
   });
 
+  it('assigns confirmed orders to an existing route before settlement is opened', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({ deliveryOrders: [createOrder({ id: 'order-1', saleId: 'sale-1' })], settlement: null }),
+    );
+    prisma.sale.findMany.mockResolvedValue([
+      { id: 'sale-2', status: SaleStatus.CONFIRMED, routeId: null, accountReceivable: { id: 'ar-2' } },
+    ]);
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [
+          createOrder({ id: 'order-1', saleId: 'sale-1' }),
+          createOrder({ id: 'order-2', saleId: 'sale-2', accountReceivableId: 'ar-2', deliveryAddress: 'Av Norte 456' }),
+        ],
+      }),
+    );
+
+    await expect(
+      service.assignOrdersToRoute(
+        'route-1',
+        { orders: [{ saleId: 'sale-2', accountReceivableId: 'ar-2', deliveryAddress: 'Av Norte 456' }] },
+        admin,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'route-1',
+        orders: expect.arrayContaining([expect.objectContaining({ saleId: 'sale-2', accountReceivableId: 'ar-2' })]),
+      }),
+    );
+
+    expect(prisma.deliveryRoute.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'route-1' },
+        data: { deliveryOrders: { create: [expect.objectContaining({ saleId: 'sale-2' })] } },
+      }),
+    );
+    expect(prisma.sale.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['sale-2'] } },
+      data: { routeId: 'route-1' },
+    });
+  });
+
+  it('rejects assigning duplicate or settled route orders to an existing route', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({ deliveryOrders: [createOrder({ saleId: 'sale-1' })], settlement: null }),
+    );
+
+    await expect(
+      service.assignOrdersToRoute('route-1', { orders: [{ saleId: 'sale-1', deliveryAddress: 'Av Centro 123' }] }, admin),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    prisma.deliveryRoute.findFirst.mockResolvedValue(createRoute({ settlement: { id: 'settlement-1' } }));
+    await expect(
+      service.assignOrdersToRoute('route-1', { orders: [{ saleId: 'sale-2', deliveryAddress: 'Av Norte 456' }] }, admin),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
+  });
+
   it('rejects assigning a cancelled or non-confirmed sale to a route', async () => {
     const { service, prisma } = createService();
     prisma.user.findFirst.mockResolvedValue({ id: 'driver-1', role: { name: 'DRIVER' } });

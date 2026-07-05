@@ -56,7 +56,7 @@ Filtros:
 Acciones:
 
 - Crear ruta.
-- Asignar pedidos confirmados.
+- Asignar pedidos confirmados al crear una ruta o a una ruta existente elegible.
 - Ver detalle.
 - Revisar evidencias.
 - Abrir liquidación de ruta mediante `POST /api/delivery-routes/:routeId/settlement` cuando la ruta sea elegible y aún no exista liquidación asociada.
@@ -65,7 +65,7 @@ Acciones:
 
 ## Crear ruta y asignar pedidos
 
-Debe consumir `POST /api/delivery-routes`.
+Debe consumir `POST /api/delivery-routes` para crear rutas con pedidos iniciales y `POST /api/delivery-routes/:id/orders` para asignar pedidos confirmados adicionales a una ruta existente elegible.
 
 Campos:
 
@@ -86,6 +86,8 @@ Validaciones:
 - Solo ventas confirmadas.
 - No asignar ventas canceladas.
 - Conservar `accountReceivableId` cuando exista saldo a crédito.
+- Para asignación adicional, no permitir rutas completadas, canceladas o con liquidación abierta/cerrada.
+- No enviar ni editar `routeSettlementId` al asignar pedidos.
 
 ## Detalle de ruta
 

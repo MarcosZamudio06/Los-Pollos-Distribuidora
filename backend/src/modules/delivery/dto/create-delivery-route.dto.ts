@@ -40,3 +40,11 @@ export class CreateDeliveryRouteDto {
   @Type(() => CreateDeliveryRouteOrderDto)
   orders!: CreateDeliveryRouteOrderDto[];
 }
+
+
+export class AssignDeliveryRouteOrdersDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateDeliveryRouteOrderDto)
+  orders!: CreateDeliveryRouteOrderDto[];
+}

@@ -11,6 +11,7 @@ import { CustomersPage } from '../features/clientes'
 import { AccountsReceivablePage } from '../features/cobranza'
 import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage } from '../features/compras'
 import { ProductListPage } from '../features/inventario'
+import { DeliveryRoutesPage, RouteDetailPage, RouteEvidenceReview, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 
 function OperationsHomePage() {
@@ -80,6 +81,11 @@ function OperationsHomePage() {
               <Link className="inline-flex font-bold text-[#39798b]" to="/sales/history">
                 Historial de ventas
               </Link>
+              {(user?.role === 'ADMIN' || user?.role === 'COLLECTIONS' || user?.role === 'WAREHOUSE') && (
+                <Link className="inline-flex font-bold text-[#9d2d24]" to="/delivery-routes">
+                  Abrir rutas
+                </Link>
+              )}
             </div>
           </article>
           <article className="rounded-[1.75rem] border border-[#20211f]/10 bg-white p-6">
@@ -211,6 +217,47 @@ export function AppRouter() {
           <ProtectedRoute>
             <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
               <PurchasesPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/route-settlements/:settlementId"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'COLLECTIONS']}>
+              <RouteSettlementView />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/delivery-routes/:routeId/evidence"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'WAREHOUSE']}>
+              <RouteEvidenceReview />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/delivery-routes/:routeId"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'WAREHOUSE']}>
+              <RouteDetailPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/delivery-routes"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'WAREHOUSE']}>
+              <DeliveryRoutesPage />
             </RoleRoute>
           </ProtectedRoute>
         }
