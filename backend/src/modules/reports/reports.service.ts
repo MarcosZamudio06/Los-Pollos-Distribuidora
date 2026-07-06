@@ -1,16 +1,22 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
+  AgingStatus,
   CollectionStatus,
+  DeliveryOrderStatus,
   PaymentStatus,
   Prisma,
+  RouteSettlementStatus,
   SalePaymentType,
   SaleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import type {
+  AccountsReceivableReportQueryDto,
   CashClosingReportQueryDto,
   DashboardReportQueryDto,
+  DeliveryOperationsReportQueryDto,
+  InventoryByLocationReportQueryDto,
   InventoryLowStockReportQueryDto,
   SalesDailyReportQueryDto,
 } from './dto';
@@ -31,8 +37,10 @@ type PaymentRecord = {
   status?: string;
   routeId?: string | null;
   accountReceivableId?: string | null;
+  collectionPass?: number | null;
   userId?: string;
   paidAt?: Date;
+  route?: { id: string; name?: string | null; driverId?: string | null } | null;
 };
 
 type SaleRecord = {
@@ -70,15 +78,52 @@ type InventoryBalanceRecord = {
 };
 
 type ReceivableRecord = {
+  id?: string;
+  customerId?: string;
+  saleId?: string;
+  originalAmount?: DecimalLike;
   outstandingAmount: DecimalLike;
+  dueDate?: Date;
+  status?: string;
+  agingStatus?: string;
+  physicalDocumentFolio?: string | null;
   updatedAt?: Date;
+  customer?: { id: string; name: string; creditStatus?: string | null } | null;
+  sale?: { id: string; saleNumber?: string | null } | null;
+  payments?: PaymentRecord[];
 };
 
 type RouteSettlementRecord = {
+  id?: string;
+  routeId?: string;
+  driverId?: string;
+  status?: string;
   expectedCashAmount?: DecimalLike;
   expectedTransferAmount?: DecimalLike;
+  differenceAmount?: DecimalLike;
   paidAtDeliveryAmount?: DecimalLike;
   secondPassCollectionsAmount?: DecimalLike;
+  updatedAt?: Date;
+};
+
+type InventoryMovementRecord = {
+  productId: string;
+  locationId: string;
+  createdAt: Date;
+};
+
+type DeliveryEvidenceRecord = {
+  type: string;
+  capturedAt?: Date;
+};
+
+type DeliveryOrderRecord = {
+  id: string;
+  routeId: string;
+  saleId: string;
+  accountReceivableId?: string | null;
+  status: string;
+  notes?: string | null;
   updatedAt?: Date;
 };
 
@@ -199,6 +244,20 @@ export class ReportsService {
     };
   }
 
+  async getInventoryByLocation(query: InventoryByLocationReportQueryDto, _user: ReportUser) {
+    const balances = await this.findInventoryBalances(query);
+    const lastMovements = await this.findLastInventoryMovements(balances);
+    const items = balances.map((balance) => this.toInventoryByLocationItem(balance, lastMovements));
+
+    return {
+      items,
+      ...this.buildFreshnessMeta([
+        ...balances.map((balance) => balance.updatedAt),
+        ...lastMovements.values(),
+      ]),
+    };
+  }
+
   async getCashClosing(query: CashClosingReportQueryDto, user: ReportUser) {
     if (user.role === 'DRIVER' || user.role === 'WAREHOUSE' || user.role === 'COLLECTIONS') {
       throw new ForbiddenException('User cannot access cash closing report');
@@ -244,6 +303,71 @@ export class ReportsService {
     };
   }
 
+  async getAccountsReceivable(query: AccountsReceivableReportQueryDto, _user: ReportUser) {
+    const receivables = await this.findDetailedReceivables(query);
+    const activePayments = receivables.flatMap((receivable) => this.activeReceivablePayments(receivable));
+    const paginatedReceivables = this.paginateItems(receivables, query);
+
+    return {
+      summary: {
+        originalBalance: this.sumValues(receivables.map((receivable) => receivable.originalAmount)),
+        outstandingBalance: this.sumValues(receivables.map((receivable) => receivable.outstandingAmount)),
+        overdueBalance: this.sumValues(receivables
+          .filter((receivable) => receivable.agingStatus === AgingStatus.OVERDUE)
+          .map((receivable) => receivable.outstandingAmount)),
+        paymentsInPeriod: this.sumPayments(activePayments),
+        finalCustomerBalance: this.sumValues(receivables.map((receivable) => receivable.outstandingAmount)),
+        customersBlockedForCredit: await this.prisma.customer.count({ where: { creditStatus: { in: ['BLOCKED', 'SUSPENDED'] } } }),
+      },
+      byCustomer: this.groupReceivablesByCustomer(receivables),
+      items: paginatedReceivables.map((receivable) => this.toReceivableReportItem(receivable)),
+      paymentsByMethod: this.groupPayments(activePayments, 'paymentMethod'),
+      paymentsByBank: this.groupPayments(activePayments.filter((payment) => payment.bankName), 'bankName'),
+      ...this.buildFreshnessMeta([
+        ...receivables.map((receivable) => receivable.updatedAt),
+        ...activePayments.map((payment) => payment.paidAt),
+      ]),
+    };
+  }
+
+  async getDeliveryOperations(query: DeliveryOperationsReportQueryDto, user: ReportUser) {
+    const range = this.resolveOptionalDateRange(query.dateFrom, query.dateTo);
+    const routeScope = this.buildDeliveryRouteScope(query, user);
+    const deliveryWhere = {
+      ...(range ? { createdAt: range } : {}),
+      ...routeScope,
+    };
+    const paymentWhere = {
+      ...(range ? { paidAt: range } : {}),
+      status: ACTIVE_PAYMENT_STATUSES_IN,
+      routeId: { not: null },
+      ...this.buildPaymentRouteScope(query, user),
+    };
+    const settlementWhere = this.buildDeliveryRouteScope(query, user);
+
+    const [deliverySummary, evidence, routePayments, settlements, incidents] = await Promise.all([
+      this.buildDeliveryOperationsSummary(deliveryWhere),
+      this.findDeliveryEvidence(range, routeScope),
+      user.role === 'DRIVER' ? Promise.resolve([]) : this.findPaymentsWithRoute(paymentWhere),
+      this.findRouteSettlements(settlementWhere),
+      this.findDeliveryIncidents(deliveryWhere),
+    ]);
+
+    return {
+      deliverySummary,
+      evidenceSummary: this.groupEvidence(evidence),
+      collectionsSummary: user.role === 'DRIVER' ? [] : this.groupRouteCollections(routePayments),
+      settlementsSummary: this.summarizeSettlements(settlements),
+      incidents: incidents.map((incident) => this.toDeliveryIncidentItem(incident)),
+      ...this.buildFreshnessMeta([
+        ...evidence.map((item) => item.capturedAt),
+        ...routePayments.map((payment) => payment.paidAt),
+        ...settlements.map((settlement) => settlement.updatedAt),
+        ...incidents.map((incident) => incident.updatedAt),
+      ]),
+    };
+  }
+
   private findSales(where: Record<string, unknown>): Promise<SaleRecord[]> {
     return this.prisma.sale.findMany({
       where,
@@ -273,6 +397,119 @@ export class ReportsService {
     return this.prisma.routeSettlement.findMany({ where }) as Promise<RouteSettlementRecord[]>;
   }
 
+  private findPaymentsWithRoute(where: Record<string, unknown>): Promise<PaymentRecord[]> {
+    return this.prisma.payment.findMany({
+      where,
+      include: { route: { select: { id: true, name: true, driverId: true } } },
+      orderBy: { paidAt: 'asc' },
+    }) as Promise<PaymentRecord[]>;
+  }
+
+  private findDetailedReceivables(query: AccountsReceivableReportQueryDto): Promise<ReceivableRecord[]> {
+    return this.prisma.accountReceivable.findMany({
+      where: this.buildReceivableWhere(query),
+      include: {
+        customer: { select: { id: true, name: true, creditStatus: true } },
+        sale: { select: { id: true, saleNumber: true } },
+        payments: { where: { status: ACTIVE_PAYMENT_STATUSES }, orderBy: { paidAt: 'asc' } },
+      },
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+    }) as Promise<ReceivableRecord[]>;
+  }
+
+  private buildReceivableWhere(query: AccountsReceivableReportQueryDto) {
+    const dueDate = this.resolveDateRangeFilter(query.dueDateFrom, query.dueDateTo);
+    const agingStatus = query.onlyOverdue
+      ? AgingStatus.OVERDUE
+      : query.onlyDueSoon
+        ? AgingStatus.DUE_SOON
+        : query.agingStatus;
+
+    return {
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(agingStatus ? { agingStatus } : {}),
+      ...(dueDate ? { dueDate } : {}),
+    };
+  }
+
+  private async findInventoryBalances(query: InventoryByLocationReportQueryDto): Promise<InventoryBalanceRecord[]> {
+    return this.prisma.inventoryBalance.findMany({
+      where: {
+        ...(query.locationId ? { locationId: query.locationId } : {}),
+        ...(query.productId ? { productId: query.productId } : {}),
+        ...(query.categoryId || query.search ? {
+          product: {
+            ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+            ...(query.search ? {
+              OR: [
+                { name: { contains: query.search, mode: 'insensitive' } },
+                { sku: { contains: query.search, mode: 'insensitive' } },
+              ],
+            } : {}),
+          },
+        } : {}),
+      },
+      include: { product: true, location: true },
+      orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
+      ...this.buildPagination(query),
+    }) as Promise<InventoryBalanceRecord[]>;
+  }
+
+  private async findLastInventoryMovements(balances: InventoryBalanceRecord[]) {
+    const movementMap = new Map<string, Date>();
+
+    if (balances.length === 0) {
+      return movementMap;
+    }
+
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where: {
+        OR: balances.map((balance) => ({
+          productId: balance.productId,
+          locationId: balance.locationId,
+        })),
+      },
+      select: { productId: true, locationId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    }) as InventoryMovementRecord[];
+
+    for (const movement of movements) {
+      const key = this.inventoryPairKey(movement.productId, movement.locationId);
+      if (!movementMap.has(key)) {
+        movementMap.set(key, movement.createdAt);
+      }
+    }
+
+    return movementMap;
+  }
+
+  private findDeliveryEvidence(range: { gte: Date; lt: Date } | undefined, routeScope: Record<string, unknown>): Promise<DeliveryEvidenceRecord[]> {
+    return this.prisma.deliveryEvidence.findMany({
+      where: {
+        ...(range ? { capturedAt: range } : {}),
+        deliveryOrder: routeScope,
+      },
+      orderBy: { capturedAt: 'asc' },
+    }) as Promise<DeliveryEvidenceRecord[]>;
+  }
+
+  private findDeliveryIncidents(where: Record<string, unknown>): Promise<DeliveryOrderRecord[]> {
+    return this.prisma.deliveryOrder.findMany({
+      where: {
+        ...where,
+        status: {
+          in: [
+            DeliveryOrderStatus.NOT_DELIVERED,
+            DeliveryOrderStatus.PARTIALLY_REJECTED,
+            DeliveryOrderStatus.RETURNED,
+          ],
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    }) as Promise<DeliveryOrderRecord[]>;
+  }
+
   private async buildDeliverySummary(range: { gte: Date; lt: Date }, user: ReportUser) {
     const driverScope = user.role === 'DRIVER' ? { route: { driverId: user.id } } : {};
 
@@ -288,6 +525,205 @@ export class ReportsService {
 
   private emptyDeliverySummary() {
     return { pending: 0, inRoute: 0, delivered: 0, incident: 0 };
+  }
+
+  private async buildDeliveryOperationsSummary(where: Record<string, unknown>) {
+    const [pending, inRoute, delivered, incident] = await Promise.all([
+      this.prisma.deliveryOrder.count({ where: { ...where, status: DeliveryOrderStatus.PENDING } }),
+      this.prisma.deliveryOrder.count({ where: { ...where, status: DeliveryOrderStatus.IN_ROUTE } }),
+      this.prisma.deliveryOrder.count({ where: { ...where, status: DeliveryOrderStatus.DELIVERED } }),
+      this.prisma.deliveryOrder.count({
+        where: {
+          ...where,
+          status: {
+            in: [
+              DeliveryOrderStatus.NOT_DELIVERED,
+              DeliveryOrderStatus.PARTIALLY_REJECTED,
+              DeliveryOrderStatus.RETURNED,
+            ],
+          },
+        },
+      }),
+    ]);
+
+    return { pending, inRoute, delivered, incident };
+  }
+
+  private buildDeliveryRouteScope(query: DeliveryOperationsReportQueryDto, user: ReportUser) {
+    const driverId = user.role === 'DRIVER' ? user.id : query.driverId;
+    const routeFilters = {
+      ...(driverId ? { driverId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    return {
+      ...(query.routeId ? { routeId: query.routeId } : {}),
+      ...(Object.keys(routeFilters).length > 0 ? { route: routeFilters } : {}),
+    };
+  }
+
+  private buildPaymentRouteScope(query: DeliveryOperationsReportQueryDto, user: ReportUser) {
+    const driverId = user.role === 'DRIVER' ? user.id : query.driverId;
+    const routeFilters = {
+      ...(driverId ? { driverId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    return {
+      ...(query.routeId ? { routeId: query.routeId } : {}),
+      ...(Object.keys(routeFilters).length > 0 ? { route: routeFilters } : {}),
+    };
+  }
+
+  private toInventoryByLocationItem(balance: InventoryBalanceRecord, lastMovements: Map<string, Date>) {
+    const lastMovementAt = lastMovements.get(this.inventoryPairKey(balance.productId, balance.locationId));
+
+    return {
+      locationId: balance.locationId,
+      locationName: balance.location?.name,
+      productId: balance.productId,
+      productName: balance.product?.name,
+      sku: balance.product?.sku ?? null,
+      unit: balance.product?.unit,
+      quantityKg: this.toNumber(balance.quantityKg),
+      quantityPieces: balance.quantityPieces ?? 0,
+      minQuantityKg: this.toNumber(balance.minQuantityKg),
+      minQuantityPieces: balance.minQuantityPieces ?? 0,
+      isLowStock: this.isLowStock(balance),
+      lastMovementAt: lastMovementAt?.toISOString() ?? null,
+    };
+  }
+
+  private inventoryPairKey(productId: string, locationId: string) {
+    return `${productId}:${locationId}`;
+  }
+
+  private activeReceivablePayments(receivable: ReceivableRecord) {
+    return (receivable.payments ?? []).filter((payment) => payment.status !== PaymentStatus.CANCELLED && payment.accountReceivableId !== null);
+  }
+
+  private toReceivableReportItem(receivable: ReceivableRecord) {
+    return {
+      id: receivable.id,
+      customerId: receivable.customer?.id ?? receivable.customerId ?? null,
+      customerName: receivable.customer?.name ?? null,
+      saleId: receivable.sale?.id ?? receivable.saleId ?? null,
+      saleNumber: receivable.sale?.saleNumber ?? null,
+      dueDate: receivable.dueDate?.toISOString() ?? null,
+      physicalFolio: receivable.physicalDocumentFolio ?? null,
+      originalAmount: this.toNumber(receivable.originalAmount),
+      outstandingAmount: this.toNumber(receivable.outstandingAmount),
+      status: receivable.status ?? null,
+      agingStatus: receivable.agingStatus ?? null,
+    };
+  }
+
+  private groupReceivablesByCustomer(receivables: ReceivableRecord[]) {
+    const grouped = new Map<string, {
+      customerId: string | null;
+      customerName: string | null;
+      creditStatus: string | null;
+      invoicedBalance: number;
+      paidBalance: number;
+      finalBalance: number;
+      overdueBalance: number;
+      dueSoonBalance: number;
+      lastPaymentAt: string | null;
+    }>();
+
+    for (const receivable of receivables) {
+      const customerId = receivable.customer?.id ?? receivable.customerId ?? null;
+      const key = customerId ?? 'unknown';
+      const current = grouped.get(key) ?? {
+        customerId,
+        customerName: receivable.customer?.name ?? null,
+        creditStatus: receivable.customer?.creditStatus ?? null,
+        invoicedBalance: 0,
+        paidBalance: 0,
+        finalBalance: 0,
+        overdueBalance: 0,
+        dueSoonBalance: 0,
+        lastPaymentAt: null,
+      };
+      const originalAmount = this.toNumber(receivable.originalAmount);
+      const outstandingAmount = this.toNumber(receivable.outstandingAmount);
+      const paidAmount = this.sumPayments(this.activeReceivablePayments(receivable));
+      const lastPayment = this.activeReceivablePayments(receivable)
+        .map((payment) => payment.paidAt)
+        .filter((date): date is Date => date instanceof Date)
+        .sort((a, b) => b.getTime() - a.getTime())[0];
+
+      current.invoicedBalance = this.roundMoney(current.invoicedBalance + originalAmount);
+      current.paidBalance = this.roundMoney(current.paidBalance + paidAmount);
+      current.finalBalance = this.roundMoney(current.finalBalance + outstandingAmount);
+      if (receivable.agingStatus === AgingStatus.OVERDUE) {
+        current.overdueBalance = this.roundMoney(current.overdueBalance + outstandingAmount);
+      }
+      if (receivable.agingStatus === AgingStatus.DUE_SOON) {
+        current.dueSoonBalance = this.roundMoney(current.dueSoonBalance + outstandingAmount);
+      }
+      if (lastPayment && (!current.lastPaymentAt || lastPayment.toISOString() > current.lastPaymentAt)) {
+        current.lastPaymentAt = lastPayment.toISOString();
+      }
+      grouped.set(key, current);
+    }
+
+    return [...grouped.values()];
+  }
+
+  private groupEvidence(evidence: DeliveryEvidenceRecord[]) {
+    const grouped = new Map<string, { evidenceType: string; count: number }>();
+
+    for (const item of evidence) {
+      const current = grouped.get(item.type) ?? { evidenceType: item.type, count: 0 };
+      current.count += 1;
+      grouped.set(item.type, current);
+    }
+
+    return [...grouped.values()];
+  }
+
+  private groupRouteCollections(payments: PaymentRecord[]) {
+    const grouped = new Map<string, { routeId: string | null; routeName: string | null; paymentMethod: string; collectionPass: number | null; amount: number; count: number }>();
+
+    for (const payment of payments) {
+      const routeId = payment.route?.id ?? payment.routeId ?? null;
+      const collectionPass = payment.collectionPass ?? null;
+      const key = `${routeId ?? 'unknown'}:${payment.paymentMethod}:${collectionPass ?? 'none'}`;
+      const current = grouped.get(key) ?? {
+        routeId,
+        routeName: payment.route?.name ?? null,
+        paymentMethod: payment.paymentMethod,
+        collectionPass,
+        amount: 0,
+        count: 0,
+      };
+      current.amount = this.roundMoney(current.amount + this.toNumber(payment.amount));
+      current.count += 1;
+      grouped.set(key, current);
+    }
+
+    return [...grouped.values()];
+  }
+
+  private summarizeSettlements(settlements: RouteSettlementRecord[]) {
+    return {
+      open: settlements.filter((settlement) => settlement.status === RouteSettlementStatus.OPEN).length,
+      closed: settlements.filter((settlement) => settlement.status === RouteSettlementStatus.CLOSED).length,
+      reviewRequired: settlements.filter((settlement) => settlement.status === RouteSettlementStatus.REVIEW_REQUIRED).length,
+    };
+  }
+
+  private toDeliveryIncidentItem(incident: DeliveryOrderRecord) {
+    return {
+      id: incident.id,
+      routeId: incident.routeId,
+      saleId: incident.saleId,
+      accountReceivableId: incident.accountReceivableId ?? null,
+      status: incident.status,
+      notes: incident.notes ?? null,
+      updatedAt: incident.updatedAt?.toISOString() ?? null,
+    };
   }
 
   private async findLowStockBalances(query: Pick<InventoryLowStockReportQueryDto, 'locationId' | 'categoryId' | 'productId' | 'page' | 'limit'>): Promise<InventoryBalanceRecord[]> {
@@ -367,13 +803,41 @@ export class ReportsService {
     return this.resolveDateRange(date);
   }
 
+  private resolveOptionalDateRange(dateFrom?: string, dateTo?: string) {
+    if (!dateFrom && !dateTo) {
+      return undefined;
+    }
+
+    return this.resolveDateRangeFilter(dateFrom, dateTo);
+  }
+
+  private resolveDateRangeFilter(dateFrom?: string, dateTo?: string) {
+    const startSource = dateFrom ?? dateTo;
+    const endSource = dateTo ?? dateFrom;
+
+    if (!startSource || !endSource) {
+      return undefined;
+    }
+
+    const start = this.startOfUtcDay(startSource);
+    const end = this.startOfUtcDay(endSource);
+    end.setUTCDate(end.getUTCDate() + 1);
+
+    return { gte: start, lt: end };
+  }
+
   private resolveDateRange(date?: string) {
-    const source = date ? new Date(`${date}T00:00:00.000Z`) : new Date();
-    const start = new Date(Date.UTC(source.getUTCFullYear(), source.getUTCMonth(), source.getUTCDate()));
+    const source = date ? `${date}T00:00:00.000Z` : new Date().toISOString();
+    const start = this.startOfUtcDay(source);
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 1);
 
     return { gte: start, lt: end };
+  }
+
+  private startOfUtcDay(value: string) {
+    const source = new Date(value.includes('T') ? value : `${value}T00:00:00.000Z`);
+    return new Date(Date.UTC(source.getUTCFullYear(), source.getUTCMonth(), source.getUTCDate()));
   }
 
   private summarizeSalesToday(sales: SaleRecord[]) {

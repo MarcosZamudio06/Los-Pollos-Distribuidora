@@ -17,7 +17,9 @@ function createPrismaMock() {
     customer: { count: jest.fn() },
     billingRequest: { count: jest.fn() },
     inventoryBalance: { findMany: jest.fn() },
-    deliveryOrder: { count: jest.fn() },
+    inventoryMovement: { findMany: jest.fn() },
+    deliveryOrder: { count: jest.fn(), findMany: jest.fn() },
+    deliveryEvidence: { findMany: jest.fn() },
     routeSettlement: { findMany: jest.fn() },
   };
 }
@@ -225,5 +227,132 @@ describe('ReportsService', () => {
     expect(prisma.deliveryOrder.count).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ route: { driverId: 'driver-1' } }),
     }));
+  });
+
+  it('builds inventory-by-location grouped by operational location with last movement timestamp', async () => {
+    const prisma = createPrismaMock();
+    prisma.inventoryBalance.findMany.mockResolvedValue([
+      {
+        productId: 'p-1',
+        locationId: 'loc-1',
+        quantityKg: 12,
+        quantityPieces: 4,
+        minQuantityKg: 5,
+        minQuantityPieces: 2,
+        updatedAt: new Date('2026-07-05T12:00:00.000Z'),
+        product: { name: 'Pollo entero', sku: 'POL-1', unit: 'KG_AND_PIECE' },
+        location: { name: 'Pollería Centro' },
+      },
+    ]);
+    prisma.inventoryMovement.findMany.mockResolvedValue([
+      { productId: 'p-1', locationId: 'loc-1', createdAt: new Date('2026-07-05T11:59:00.000Z') },
+    ]);
+
+    const service = new ReportsService(prisma as never);
+    const result = await service.getInventoryByLocation({ locationId: 'loc-1', search: 'pollo' }, warehouse);
+
+    expect(prisma.inventoryBalance.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        locationId: 'loc-1',
+        product: expect.objectContaining({
+          OR: [{ name: { contains: 'pollo', mode: 'insensitive' } }, { sku: { contains: 'pollo', mode: 'insensitive' } }],
+        }),
+      }),
+    }));
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        locationId: 'loc-1',
+        locationName: 'Pollería Centro',
+        productId: 'p-1',
+        productName: 'Pollo entero',
+        quantityKg: 12,
+        quantityPieces: 4,
+        lastMovementAt: '2026-07-05T11:59:00.000Z',
+      }),
+    ]);
+    expect(result.freshnessSeconds).toBe(30);
+  });
+
+  it('builds accounts-receivable report without mixing status and aging dimensions', async () => {
+    const prisma = createPrismaMock();
+    prisma.accountReceivable.findMany.mockResolvedValue([
+      {
+        id: 'ar-1',
+        customerId: 'customer-1',
+        saleId: 'sale-1',
+        originalAmount: 300,
+        outstandingAmount: 125,
+        dueDate: new Date('2026-07-01T00:00:00.000Z'),
+        status: 'PARTIALLY_PAID',
+        agingStatus: 'OVERDUE',
+        physicalDocumentFolio: 'N-001',
+        updatedAt: new Date('2026-07-05T12:00:00.000Z'),
+        customer: { id: 'customer-1', name: 'Cliente Mayorista', creditStatus: 'ACTIVE' },
+        sale: { id: 'sale-1', saleNumber: 'S-1' },
+        payments: [
+          { amount: 100, paymentMethod: 'TRANSFER', bankName: 'BBVA', status: 'APPLIED', paidAt: new Date('2026-07-05T11:59:00.000Z') },
+          { amount: 75, paymentMethod: 'CASH', bankName: null, status: 'APPLIED', paidAt: new Date('2026-07-05T11:58:00.000Z') },
+        ],
+      },
+    ]);
+    prisma.customer.count.mockResolvedValue(1);
+
+    const service = new ReportsService(prisma as never);
+    const result = await service.getAccountsReceivable({ status: 'PARTIALLY_PAID', agingStatus: 'OVERDUE', onlyOverdue: true }, collectionsUser);
+
+    expect(prisma.accountReceivable.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'PARTIALLY_PAID', agingStatus: 'OVERDUE' }),
+    }));
+    expect(result.summary).toEqual(expect.objectContaining({
+      originalBalance: 300,
+      outstandingBalance: 125,
+      overdueBalance: 125,
+      paymentsInPeriod: 175,
+      finalCustomerBalance: 125,
+      customersBlockedForCredit: 1,
+    }));
+    expect(result.byCustomer).toEqual([
+      expect.objectContaining({ customerId: 'customer-1', invoicedBalance: 300, paidBalance: 175, finalBalance: 125, overdueBalance: 125 }),
+    ]);
+    expect(result.paymentsByMethod).toEqual([
+      { paymentMethod: 'TRANSFER', amount: 100, count: 1 },
+      { paymentMethod: 'CASH', amount: 75, count: 1 },
+    ]);
+  });
+
+  it('builds delivery operations report and hides collection amounts from DRIVER', async () => {
+    const prisma = createPrismaMock();
+    prisma.deliveryOrder.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(4);
+    prisma.deliveryEvidence.findMany.mockResolvedValue([
+      { type: 'PHOTO', capturedAt: new Date('2026-07-05T12:00:00.000Z') },
+      { type: 'SIGNATURE', capturedAt: new Date('2026-07-05T11:59:50.000Z') },
+    ]);
+    prisma.payment.findMany.mockResolvedValue([
+      { amount: 90, paymentMethod: 'CASH', routeId: 'route-1', accountReceivableId: 'ar-1', collectionPass: 1, paidAt: new Date('2026-07-05T11:59:55.000Z') },
+    ]);
+    prisma.routeSettlement.findMany.mockResolvedValue([
+      { id: 'settlement-1', routeId: 'route-1', driverId: 'driver-1', status: 'OPEN', differenceAmount: 5, updatedAt: new Date('2026-07-05T11:59:45.000Z') },
+    ]);
+    prisma.deliveryOrder.findMany.mockResolvedValue([
+      { id: 'order-1', status: 'NOT_DELIVERED', notes: 'Cliente cerrado', updatedAt: new Date('2026-07-05T11:59:40.000Z'), routeId: 'route-1', saleId: 'sale-1', accountReceivableId: 'ar-1' },
+    ]);
+
+    const service = new ReportsService(prisma as never);
+    const result = await service.getDeliveryOperations({ dateFrom: '2026-07-05', dateTo: '2026-07-05', driverId: 'other-driver' }, driver);
+
+    expect(prisma.deliveryOrder.count).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ route: { driverId: 'driver-1' } }),
+    }));
+    expect(result.deliverySummary).toEqual({ pending: 1, inRoute: 2, delivered: 3, incident: 4 });
+    expect(result.evidenceSummary).toEqual([{ evidenceType: 'PHOTO', count: 1 }, { evidenceType: 'SIGNATURE', count: 1 }]);
+    expect(result.collectionsSummary).toEqual([]);
+    expect(result.settlementsSummary).toEqual({ open: 1, closed: 0, reviewRequired: 0 });
+    expect(result.incidents).toEqual([
+      expect.objectContaining({ id: 'order-1', status: 'NOT_DELIVERED', routeId: 'route-1' }),
+    ]);
   });
 });

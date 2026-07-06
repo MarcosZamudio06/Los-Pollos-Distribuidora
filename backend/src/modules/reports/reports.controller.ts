@@ -5,8 +5,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
+  AccountsReceivableReportQueryDto,
   CashClosingReportQueryDto,
   DashboardReportQueryDto,
+  DeliveryOperationsReportQueryDto,
+  InventoryByLocationReportQueryDto,
   InventoryLowStockReportQueryDto,
   SalesDailyReportQueryDto,
 } from './dto';
@@ -56,6 +59,19 @@ export class ReportsController {
     };
   }
 
+  @Get('inventory-by-location')
+  @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
+  async getInventoryByLocation(
+    @Query() query: InventoryByLocationReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Inventory by location report retrieved successfully',
+      data: await this.reportsService.getInventoryByLocation(query, user),
+    };
+  }
+
   @Get('cash-closing')
   @Roles('ADMIN', 'SELLER')
   async getCashClosing(
@@ -66,6 +82,32 @@ export class ReportsController {
       success: true,
       message: 'Cash closing report retrieved successfully',
       data: await this.reportsService.getCashClosing(query, user),
+    };
+  }
+
+  @Get('accounts-receivable')
+  @Roles('ADMIN', 'COLLECTIONS')
+  async getAccountsReceivable(
+    @Query() query: AccountsReceivableReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Accounts receivable report retrieved successfully',
+      data: await this.reportsService.getAccountsReceivable(query, user),
+    };
+  }
+
+  @Get('delivery-operations')
+  @Roles('ADMIN', 'COLLECTIONS', 'DRIVER')
+  async getDeliveryOperations(
+    @Query() query: DeliveryOperationsReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Delivery operations report retrieved successfully',
+      data: await this.reportsService.getDeliveryOperations(query, user),
     };
   }
 }
