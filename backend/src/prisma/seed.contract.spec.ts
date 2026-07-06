@@ -4,9 +4,11 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import {
   DEVELOPMENT_ADMIN_PASSWORD,
+  DEVELOPMENT_ROLE_TEST_PASSWORD,
   getInitialAdminPassword,
   initialAdminUser,
   initialCategories,
+  initialRoleTestUsers,
   initialProducts,
   initialRoles,
   initialSeedLocation,
@@ -81,6 +83,84 @@ describe('Prisma seed contract', () => {
     expect(() =>
       getInitialAdminPassword({ env: {}, nodeEnv: 'production' }),
     ).toThrow('SEED_ADMIN_PASSWORD is required in production seed runs');
+  });
+
+
+  it('defines development role test users for the remaining canonical roles', () => {
+    expect(initialRoleTestUsers.map((user) => user.roleName)).toEqual([
+      'SELLER',
+      'WAREHOUSE',
+      'DRIVER',
+      'COLLECTIONS',
+    ]);
+
+    initialRoleTestUsers.forEach((user) => {
+      expect(user.email).toContain('dev.');
+      expect(user.mustChangePassword).toBe(false);
+      expect(user.isActive).toBe(true);
+    });
+  });
+
+  it('upserts development role users with the canonical test password and connected roles', async () => {
+    const { prisma, userUpsertMock } = createPrismaSeedMock();
+    const previousSeedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+    const previousNodeEnv = process.env.NODE_ENV;
+
+    process.env.SEED_ADMIN_PASSWORD = 'contract-admin-password-source';
+    process.env.NODE_ENV = 'test';
+
+    try {
+      await seed(prisma);
+    } finally {
+      if (previousSeedAdminPassword === undefined) {
+        delete process.env.SEED_ADMIN_PASSWORD;
+      } else {
+        process.env.SEED_ADMIN_PASSWORD = previousSeedAdminPassword;
+      }
+
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+
+    const roleUserUpserts = userUpsertMock.mock.calls.slice(1).map((call) => call[0]);
+
+    expect(roleUserUpserts).toHaveLength(initialRoleTestUsers.length);
+
+    for (const [index, roleUser] of initialRoleTestUsers.entries()) {
+      const upsert = roleUserUpserts[index];
+      expect(upsert).toMatchObject({
+        where: { email: roleUser.email },
+        update: {
+          name: roleUser.name,
+          isActive: true,
+          mustChangePassword: false,
+          role: { connect: { name: roleUser.roleName } },
+        },
+        create: {
+          email: roleUser.email,
+          name: roleUser.name,
+          isActive: true,
+          mustChangePassword: false,
+          role: { connect: { name: roleUser.roleName } },
+        },
+      });
+
+      const createPasswordHash = upsert?.create.passwordHash;
+      const updatePasswordHash = upsert?.update.passwordHash;
+
+      if (
+        typeof createPasswordHash !== 'string' ||
+        typeof updatePasswordHash !== 'string'
+      ) {
+        throw new Error('Seed role user password hash must be a string');
+      }
+
+      await expect(
+        bcrypt.compare(DEVELOPMENT_ROLE_TEST_PASSWORD, createPasswordHash),
+      ).resolves.toBe(true);
+      await expect(
+        bcrypt.compare(DEVELOPMENT_ROLE_TEST_PASSWORD, updatePasswordHash),
+      ).resolves.toBe(true);
+    }
   });
 
   it('upserts an active initial admin user connected to ADMIN with a hash from the resolved password source', async () => {

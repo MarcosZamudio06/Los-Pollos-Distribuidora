@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 export declare const DEVELOPMENT_ADMIN_PASSWORD = "DevOnly-ChangeMe-2026!";
+export declare const DEVELOPMENT_ROLE_TEST_PASSWORD = "DevRoleUsers-2026!";
 export declare const initialRoles: readonly [{
     readonly name: "ADMIN";
     readonly description: "System administrator with full access.";
@@ -22,6 +23,31 @@ export declare const initialAdminUser: {
     readonly isActive: true;
     readonly mustChangePassword: false;
 };
+export declare const initialRoleTestUsers: readonly [{
+    readonly roleName: "SELLER";
+    readonly name: "Development Seller";
+    readonly email: "dev.seller@pollos.local";
+    readonly isActive: true;
+    readonly mustChangePassword: false;
+}, {
+    readonly roleName: "WAREHOUSE";
+    readonly name: "Development Warehouse";
+    readonly email: "dev.warehouse@pollos.local";
+    readonly isActive: true;
+    readonly mustChangePassword: false;
+}, {
+    readonly roleName: "DRIVER";
+    readonly name: "Development Driver";
+    readonly email: "dev.driver@pollos.local";
+    readonly isActive: true;
+    readonly mustChangePassword: false;
+}, {
+    readonly roleName: "COLLECTIONS";
+    readonly name: "Development Collections";
+    readonly email: "dev.collections@pollos.local";
+    readonly isActive: true;
+    readonly mustChangePassword: false;
+}];
 export declare const initialSeedLocation: {
     readonly name: "Development Main Location";
     readonly code: "DEV-MAIN";

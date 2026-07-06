@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 export const DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
+export const DEVELOPMENT_ROLE_TEST_PASSWORD = 'DevRoleUsers-2026!';
 
 export const initialRoles = [
   { name: 'ADMIN', description: 'System administrator with full access.' },
@@ -23,6 +24,38 @@ export const initialAdminUser = {
   isActive: true,
   mustChangePassword: false,
 } as const;
+
+
+export const initialRoleTestUsers = [
+  {
+    roleName: 'SELLER',
+    name: 'Development Seller',
+    email: 'dev.seller@pollos.local',
+    isActive: true,
+    mustChangePassword: false,
+  },
+  {
+    roleName: 'WAREHOUSE',
+    name: 'Development Warehouse',
+    email: 'dev.warehouse@pollos.local',
+    isActive: true,
+    mustChangePassword: false,
+  },
+  {
+    roleName: 'DRIVER',
+    name: 'Development Driver',
+    email: 'dev.driver@pollos.local',
+    isActive: true,
+    mustChangePassword: false,
+  },
+  {
+    roleName: 'COLLECTIONS',
+    name: 'Development Collections',
+    email: 'dev.collections@pollos.local',
+    isActive: true,
+    mustChangePassword: false,
+  },
+] as const;
 
 export const initialSeedLocation = {
   name: 'Development Main Location',
@@ -178,6 +211,32 @@ async function seedInitialLocation(prisma: SeedPrismaClient): Promise<void> {
   });
 }
 
+
+async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
+  const passwordHash = await bcrypt.hash(DEVELOPMENT_ROLE_TEST_PASSWORD, 12);
+
+  for (const user of initialRoleTestUsers) {
+    await prisma.user.upsert({
+      where: { email: user.email },
+      update: {
+        name: user.name,
+        passwordHash,
+        isActive: user.isActive,
+        mustChangePassword: user.mustChangePassword,
+        role: { connect: { name: user.roleName } },
+      },
+      create: {
+        name: user.name,
+        email: user.email,
+        passwordHash,
+        isActive: user.isActive,
+        mustChangePassword: user.mustChangePassword,
+        role: { connect: { name: user.roleName } },
+      },
+    });
+  }
+}
+
 async function seedCategories(prisma: SeedPrismaClient): Promise<void> {
   for (const category of initialCategories) {
     await prisma.category.upsert({
@@ -212,6 +271,7 @@ export async function seed(prisma: SeedPrismaClient): Promise<void> {
   await seedRoles(prisma);
   await seedInitialAdmin(prisma);
   await seedInitialLocation(prisma);
+  await seedInitialRoleUsers(prisma);
   await seedCategories(prisma);
   await seedExampleProducts(prisma);
 }

@@ -55,10 +55,10 @@ TASK-070 listo
 TASK-073 listo
 TASK-071 listo
 TASK-072 listo
-TASK-080 pendiente
-TASK-090 pendiente
-TASK-091 pendiente
-TASK-092 pendiente
+TASK-080 listo
+TASK-090 listo
+TASK-091 listo
+TASK-092 listo
 TASK-100 pendiente
 TASK-101 pendiente
 TASK-102 pendiente

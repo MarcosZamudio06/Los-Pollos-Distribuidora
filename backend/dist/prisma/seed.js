@@ -3,12 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.initialProducts = exports.initialCategories = exports.initialSeedLocation = exports.initialAdminUser = exports.initialRoles = exports.DEVELOPMENT_ADMIN_PASSWORD = void 0;
+exports.initialProducts = exports.initialCategories = exports.initialSeedLocation = exports.initialRoleTestUsers = exports.initialAdminUser = exports.initialRoles = exports.DEVELOPMENT_ROLE_TEST_PASSWORD = exports.DEVELOPMENT_ADMIN_PASSWORD = void 0;
 exports.getInitialAdminPassword = getInitialAdminPassword;
 exports.seed = seed;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 exports.DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
+exports.DEVELOPMENT_ROLE_TEST_PASSWORD = 'DevRoleUsers-2026!';
 exports.initialRoles = [
     { name: 'ADMIN', description: 'System administrator with full access.' },
     { name: 'SELLER', description: 'Point-of-sale and sales operations user.' },
@@ -28,6 +29,36 @@ exports.initialAdminUser = {
     isActive: true,
     mustChangePassword: false,
 };
+exports.initialRoleTestUsers = [
+    {
+        roleName: 'SELLER',
+        name: 'Development Seller',
+        email: 'dev.seller@pollos.local',
+        isActive: true,
+        mustChangePassword: false,
+    },
+    {
+        roleName: 'WAREHOUSE',
+        name: 'Development Warehouse',
+        email: 'dev.warehouse@pollos.local',
+        isActive: true,
+        mustChangePassword: false,
+    },
+    {
+        roleName: 'DRIVER',
+        name: 'Development Driver',
+        email: 'dev.driver@pollos.local',
+        isActive: true,
+        mustChangePassword: false,
+    },
+    {
+        roleName: 'COLLECTIONS',
+        name: 'Development Collections',
+        email: 'dev.collections@pollos.local',
+        isActive: true,
+        mustChangePassword: false,
+    },
+];
 exports.initialSeedLocation = {
     name: 'Development Main Location',
     code: 'DEV-MAIN',
@@ -137,6 +168,29 @@ async function seedInitialLocation(prisma) {
         create: exports.initialSeedLocation,
     });
 }
+async function seedInitialRoleUsers(prisma) {
+    const passwordHash = await bcryptjs_1.default.hash(exports.DEVELOPMENT_ROLE_TEST_PASSWORD, 12);
+    for (const user of exports.initialRoleTestUsers) {
+        await prisma.user.upsert({
+            where: { email: user.email },
+            update: {
+                name: user.name,
+                passwordHash,
+                isActive: user.isActive,
+                mustChangePassword: user.mustChangePassword,
+                role: { connect: { name: user.roleName } },
+            },
+            create: {
+                name: user.name,
+                email: user.email,
+                passwordHash,
+                isActive: user.isActive,
+                mustChangePassword: user.mustChangePassword,
+                role: { connect: { name: user.roleName } },
+            },
+        });
+    }
+}
 async function seedCategories(prisma) {
     for (const category of exports.initialCategories) {
         await prisma.category.upsert({
@@ -168,6 +222,7 @@ async function seed(prisma) {
     await seedRoles(prisma);
     await seedInitialAdmin(prisma);
     await seedInitialLocation(prisma);
+    await seedInitialRoleUsers(prisma);
     await seedCategories(prisma);
     await seedExampleProducts(prisma);
 }

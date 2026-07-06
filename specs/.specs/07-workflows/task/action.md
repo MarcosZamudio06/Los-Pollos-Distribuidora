@@ -1,40 +1,23 @@
-
-### TASK-090 — Implementar reportes backend
+### TASK-092 — Implementar UI de reportes
 
 Estado inicial: `PENDING`
 
 Depende de:
 
-- TASK-050
-- TASK-061
-- TASK-034
-- TASK-043
-- TASK-070
-- TASK-073
+- TASK-090
 
-Endpoints:
+Entregables:
 
-- GET /api/reports/dashboard
-- GET /api/reports/sales-daily
-- GET /api/reports/inventory-low-stock
-- GET /api/reports/cash-closing
-
-Pendiente de especificación API antes de implementar:
-
-- Reportes de inventario por ubicación.
-- Reportes de cuentas por cobrar y pagos.
-- Reportes de reparto, entregas y liquidaciones.
-
-Reglas:
-
-- ADMIN ve información global.
-- SELLER ve ventas propias.
-- WAREHOUSE ve inventario.
-- COLLECTIONS ve cobranza, saldos, pagos y cobros en ruta conforme a permisos.
-- DRIVER no ve reportes financieros.
-- Reportes operativos deben reflejar operaciones confirmadas con latencia máxima de 60 segundos en condiciones normales.
-- Inventario se reporta por ubicación operativa.
-- Distinguir ventas de contado, ventas a crédito, pagos de cuentas por cobrar y cobros en ruta.
+- ReportsPage.
+- SalesDailyReport.
+- CashClosingReport.
+- LowStockReport.
+- InventoryByLocationReport.
+- AccountsReceivableReport.
+- DeliveryOperationsReport.
+- Filtros por fecha.
+- Filtros por usuario para ADMIN.
+- Filtros por ubicación, tipo de venta, estado de cobranza y ruta cuando aplique.
 
 
 ---
