@@ -11,6 +11,7 @@ import {
   ProductUnit,
   RouteSettlementStatus,
   SaleChannel,
+  SaleDocumentStatus,
   SaleDocumentType,
   SalePaymentType,
   SaleStatus,
@@ -40,6 +41,9 @@ type SaleProduct = {
 
 type CustomerCredit = {
   id: string;
+  name?: string | null;
+  customerNumber?: string | null;
+  customerType?: string | null;
   isActive: boolean;
   creditStatus: CreditStatus;
   creditLimit?: DecimalLike;
@@ -92,6 +96,25 @@ type SaleDetailRecord = SaleListRecord & {
   commercialPolicy?: Record<string, unknown> | null;
   documents?: Record<string, unknown>[];
   inventoryMovements?: Record<string, unknown>[];
+};
+
+type SaleDocumentListRecord = Record<string, unknown> & {
+  id: string;
+  saleId: string;
+  documentType: SaleDocumentType;
+  operationalLocationId?: string | null;
+  pointOfSaleDailyCloseId?: string | null;
+  physicalFolio?: string | null;
+  status: SaleDocumentStatus;
+  requiresAdministrativeInvoice: boolean;
+  deliveredByUserId?: string | null;
+  collectedByUserId?: string | null;
+  routeId?: string | null;
+  customerSnapshot?: Record<string, unknown> | null;
+  productSnapshot?: Record<string, unknown> | null;
+  priceSnapshot?: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type SaleTicketRecord = SaleListRecord & {
@@ -213,7 +236,7 @@ export class SalesService {
       async (tx) => {
         const existingSale = await tx.sale.findUnique({
           where: { idempotencyKey },
-          include: { items: true, payments: true, accountReceivable: true, inventoryMovements: true },
+          include: { items: true, payments: true, accountReceivable: true, inventoryMovements: true, documents: true },
         });
 
         if (existingSale) {
@@ -227,7 +250,7 @@ export class SalesService {
             accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
             billingRequest: null,
             inventoryMovements: existingSale.inventoryMovements.map((movement) => this.toMovementResponse(movement)),
-            documents: [],
+            documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
           };
         }
         const location = await tx.operationalLocation.findUnique({ where: { id: dto.locationId } });
@@ -312,6 +335,31 @@ export class SalesService {
           },
           include: { items: true },
         });
+        const internalReceiptDocument = await tx.saleDocument.create({
+          data: {
+            saleId: sale.id,
+            documentType: SaleDocumentType.INTERNAL_RECEIPT,
+            operationalLocationId: dto.locationId,
+            physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
+            status: SaleDocumentStatus.ISSUED,
+            requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
+            deliveredByUserId: sale.deliveredByUserId ?? null,
+            collectedByUserId: sale.collectedByUserId ?? null,
+            routeId: sale.routeId ?? null,
+            ...(customer ? { customerSnapshot: this.buildCustomerSnapshot(customer) as Prisma.InputJsonValue } : {}),
+            productSnapshot: this.buildProductSnapshot(preparedItems),
+            priceSnapshot: this.buildPriceSnapshot({
+              subtotal,
+              discount,
+              tax: 0,
+              total,
+              paymentType: dto.paymentType,
+              saleChannel: dto.saleChannel,
+              physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
+              requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
+            }),
+          },
+        });
 
         const inventoryMovements = await this.recordInventoryMovements(tx, inventoryChanges, dto.locationId, sale.id, currentUser.id);
         const payment = dto.initialPayment
@@ -355,11 +403,31 @@ export class SalesService {
           accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
           billingRequest: null,
           inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
-          documents: [],
+          documents: [this.toSaleDocumentResponse(internalReceiptDocument as SaleDocumentListRecord)],
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  async findDocuments(id: string, currentUser: Actor) {
+    const sale = await this.prisma.sale.findFirst({
+      where: this.buildVisibleSaleDetailWhere(id, currentUser),
+      select: { id: true },
+    });
+
+    if (!sale) {
+      throw new NotFoundException('Sale not found');
+    }
+
+    const documents = (await this.prisma.saleDocument.findMany({
+      where: { saleId: id },
+      orderBy: { createdAt: 'desc' },
+    } as Prisma.SaleDocumentFindManyArgs)) as SaleDocumentListRecord[];
+
+    return {
+      items: documents.map((document) => this.toSaleDocumentResponse(document)),
+    };
   }
 
   async cancel(id: string, dto: CancelSaleDto, currentUser: Actor, idempotencyKey: string) {
@@ -983,6 +1051,79 @@ export class SalesService {
 
   private findTicketDocument(documents: Record<string, unknown>[]) {
     return documents.find((document) => document.documentType === SaleDocumentType.INTERNAL_RECEIPT) ?? null;
+  }
+
+  private buildCustomerSnapshot(customer: CustomerCredit | null): Record<string, unknown> | undefined {
+    if (!customer) {
+      return undefined;
+    }
+
+    return {
+      id: customer.id,
+      name: customer.name ?? null,
+      customerNumber: customer.customerNumber ?? null,
+      customerType: customer.customerType ?? null,
+    };
+  }
+
+  private buildProductSnapshot(items: PreparedItem[]) {
+    return {
+      items: items.map((item) => ({
+        productId: item.product.id,
+        productName: item.product.name,
+        productSku: item.product.sku ?? null,
+        unit: item.dto.unit,
+        quantityKg: item.quantityKg,
+        quantityPieces: item.quantityPieces,
+        unitPrice: item.unitPrice,
+        subtotal: item.subtotal,
+        equivalentFactor: item.equivalentFactor,
+        roundingMode: item.roundingMode,
+      })),
+    };
+  }
+
+  private buildPriceSnapshot(snapshot: {
+    subtotal: number;
+    discount: number;
+    tax: number;
+    total: number;
+    paymentType: SalePaymentType;
+    saleChannel: SaleChannel;
+    physicalFolio: string | null;
+    requiresAdministrativeInvoice: boolean;
+  }) {
+    return {
+      subtotal: snapshot.subtotal,
+      discount: snapshot.discount,
+      tax: snapshot.tax,
+      total: snapshot.total,
+      paymentType: snapshot.paymentType,
+      saleChannel: snapshot.saleChannel,
+      physicalFolio: snapshot.physicalFolio,
+      requiresAdministrativeInvoice: snapshot.requiresAdministrativeInvoice,
+    };
+  }
+
+  private toSaleDocumentResponse(document: SaleDocumentListRecord) {
+    return {
+      id: document.id,
+      saleId: document.saleId,
+      documentType: document.documentType,
+      operationalLocationId: document.operationalLocationId ?? null,
+      pointOfSaleDailyCloseId: document.pointOfSaleDailyCloseId ?? null,
+      physicalFolio: document.physicalFolio ?? null,
+      status: document.status,
+      requiresAdministrativeInvoice: document.requiresAdministrativeInvoice,
+      deliveredByUserId: document.deliveredByUserId ?? null,
+      collectedByUserId: document.collectedByUserId ?? null,
+      routeId: document.routeId ?? null,
+      customerSnapshot: document.customerSnapshot ?? null,
+      productSnapshot: document.productSnapshot ?? null,
+      priceSnapshot: document.priceSnapshot ?? null,
+      createdAt: document.createdAt,
+      updatedAt: document.updatedAt,
+    };
   }
 
   private toPaymentResponse(payment: CreatedPayment) {

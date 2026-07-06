@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { deliveryService } from './deliveryService'
-import type { AssignDeliveryRouteOrdersPayload, CloseRouteSettlementPayload, CreateDeliveryRoutePayload, DeliveryRoutesFilters } from './types'
+import type { AssignDeliveryRouteOrdersPayload, CloseRouteSettlementPayload, CreateDeliveryEvidencePayload, CreateDeliveryIncidentPayload, CreateDeliveryRoutePayload, CreateRouteCollectionPayload, DeliveryRoutesFilters, UpdateDeliveryOrderStatusPayload } from './types'
 
 export function useDeliveryRoutes(filters: DeliveryRoutesFilters) {
   const { accessToken } = useAuth()
@@ -71,6 +71,60 @@ export function useCloseRouteSettlement(settlementId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['delivery-routes'] })
       void queryClient.invalidateQueries({ queryKey: ['route-settlements'] })
+    },
+  })
+}
+
+
+export function useUpdateDeliveryOrderStatus(routeId?: string) {
+  const { accessToken } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: UpdateDeliveryOrderStatusPayload }) =>
+      deliveryService.updateOrderStatus(orderId, payload, accessToken),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['delivery-routes'] })
+      if (routeId) void queryClient.invalidateQueries({ queryKey: ['delivery-routes', routeId] })
+    },
+  })
+}
+
+export function useCreateDeliveryEvidence(routeId?: string) {
+  const { accessToken } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: CreateDeliveryEvidencePayload }) =>
+      deliveryService.createOrderEvidence(orderId, payload, accessToken),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['delivery-routes'] })
+      if (routeId) void queryClient.invalidateQueries({ queryKey: ['delivery-routes', routeId] })
+    },
+  })
+}
+
+export function useCreateRouteCollection(routeId?: string) {
+  const { accessToken } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: CreateRouteCollectionPayload }) =>
+      deliveryService.createOrderCollection(orderId, payload, accessToken),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['delivery-routes'] })
+      if (routeId) void queryClient.invalidateQueries({ queryKey: ['delivery-routes', routeId] })
+      void queryClient.invalidateQueries({ queryKey: ['route-settlements'] })
+    },
+  })
+}
+
+export function useCreateDeliveryIncident(routeId?: string) {
+  const { accessToken } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: CreateDeliveryIncidentPayload }) =>
+      deliveryService.createOrderIncident(orderId, payload, accessToken),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['delivery-routes'] })
+      if (routeId) void queryClient.invalidateQueries({ queryKey: ['delivery-routes', routeId] })
     },
   })
 }

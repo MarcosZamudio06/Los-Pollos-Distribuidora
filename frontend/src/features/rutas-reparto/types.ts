@@ -11,6 +11,8 @@ export type DeliveryOrderStatus =
 export type EvidenceType = 'PHOTO' | 'SIGNATURE' | 'GEOLOCATION' | 'NOTE' | string
 export type PaymentMethod = 'CASH' | 'TRANSFER' | 'CARD' | 'DEPOSIT' | string
 export type RouteSettlementStatus = 'OPEN' | 'CLOSED' | 'REVIEW_REQUIRED' | string
+export type CollectionPass = 'FIRST' | 'SECOND' | string
+export type ReturnedItemUnit = 'KG' | 'PIECE' | 'KG_AND_PIECE' | string
 
 export type DeliveryRoutesFilters = {
   page?: number
@@ -53,7 +55,7 @@ export type DeliveryOrder = {
   deliveredByUserName?: string | null
   collectedByUserId?: string | null
   collectedByUserName?: string | null
-  collectionPass?: 'FIRST' | 'SECOND' | string | null
+  collectionPass?: CollectionPass | null
   notes?: string | null
   outstandingAmount?: number | string | null
   derivedCollectedAmount?: number | string | null
@@ -104,6 +106,58 @@ export type CreateDeliveryRoutePayload = {
 
 export type AssignDeliveryRouteOrdersPayload = {
   orders: CreateDeliveryRouteOrderPayload[]
+}
+
+export type UpdateDeliveryOrderStatusPayload = {
+  status: DeliveryOrderStatus
+  notes?: string
+  deliveredAt?: string
+}
+
+export type CreateDeliveryEvidencePayload = {
+  type: EvidenceType
+  value: string
+  capturedAt: string
+}
+
+export type CreateRouteCollectionPayload = {
+  accountReceivableId: string
+  amount: number
+  paymentMethod: PaymentMethod
+  reference?: string
+  paidAt: string
+  collectionPass?: CollectionPass
+}
+
+export type RouteCollectionPayment = {
+  id: string
+  accountReceivableId: string
+  customerId?: string | null
+  routeId?: string | null
+  routeSettlementId?: string | null
+  amount: number | string
+  paymentMethod: PaymentMethod
+  status?: string | null
+  paidAt?: string | null
+}
+
+export type RouteCollectionResponse = {
+  payment: RouteCollectionPayment
+  deliveryOrder: Pick<DeliveryOrder, 'id' | 'status' | 'derivedCollectedAmount'>
+}
+
+export type DeliveryIncidentReturnedItem = {
+  productId: string
+  unit: ReturnedItemUnit
+  quantityKg?: number
+  quantityPieces?: number
+  reason: string
+}
+
+export type CreateDeliveryIncidentPayload = {
+  status: Extract<DeliveryOrderStatus, 'NOT_DELIVERED' | 'PARTIALLY_REJECTED' | 'RETURNED'> | DeliveryOrderStatus
+  reason: string
+  returnedItems?: DeliveryIncidentReturnedItem[]
 }
 
 export type RouteSettlementListItem = {

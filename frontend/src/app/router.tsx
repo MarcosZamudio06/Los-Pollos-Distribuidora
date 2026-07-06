@@ -11,7 +11,7 @@ import { CustomersPage } from '../features/clientes'
 import { AccountsReceivablePage } from '../features/cobranza'
 import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage } from '../features/compras'
 import { ProductListPage } from '../features/inventario'
-import { DeliveryRoutesPage, RouteDetailPage, RouteEvidenceReview, RouteSettlementView } from '../features/rutas-reparto'
+import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 
 function OperationsHomePage() {
@@ -84,6 +84,11 @@ function OperationsHomePage() {
               {(user?.role === 'ADMIN' || user?.role === 'COLLECTIONS' || user?.role === 'WAREHOUSE') && (
                 <Link className="inline-flex font-bold text-[#9d2d24]" to="/delivery-routes">
                   Abrir rutas
+                </Link>
+              )}
+              {user?.role === 'DRIVER' && (
+                <Link className="inline-flex font-bold text-[#39798b]" to="/my-routes">
+                  Abrir mis rutas
                 </Link>
               )}
             </div>
@@ -222,6 +227,16 @@ export function AppRouter() {
         }
       />
 
+      <Route
+        path="/my-routes"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={['DRIVER']}>
+              <MyRoutesPage />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/route-settlements/:settlementId"
         element={

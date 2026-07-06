@@ -6,8 +6,13 @@ ENV VITE_API_BASE_URL=${VITE_API_URL}
 WORKDIR /app
 
 COPY frontend/package*.json ./
-RUN npm ci
 
+RUN npm config set registry https://registry.npmjs.org/ \
+  && npm config set fetch-retries 5 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && npm cache clean --force \
+  && npm ci --prefer-online --no-audit --no-fund --cache /tmp/npm-cache
 COPY frontend/index.html frontend/tsconfig*.json frontend/vite.config.ts ./
 COPY frontend/public ./public
 COPY frontend/src ./src

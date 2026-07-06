@@ -23,6 +23,25 @@ describe('SalesController', () => {
     });
   });
 
+  it('allows ADMIN, SELLER, and COLLECTIONS to read sale documents', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.getDocuments)).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS']);
+  });
+
+  it('passes current user to the sale document service', async () => {
+    const service = { findDocuments: jest.fn().mockResolvedValue({ items: [{ id: 'doc-1' }] }) } as unknown as jest.Mocked<SalesService>;
+    const controller = new SalesController(service);
+    const user = { id: 'seller-1', email: 'seller@example.com', name: 'Seller', role: 'SELLER', mustChangePassword: false };
+
+    const result = await controller.getDocuments('sale-1', user);
+
+    expect(service.findDocuments).toHaveBeenCalledWith('sale-1', user);
+    expect(result).toEqual({
+      success: true,
+      message: 'Sale documents retrieved successfully',
+      data: { items: [{ id: 'doc-1' }] },
+    });
+  });
+
   it('restricts sale cancellation to ADMIN only', () => {
     expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.cancel)).toEqual(['ADMIN']);
   });

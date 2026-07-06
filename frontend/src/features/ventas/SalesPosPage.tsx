@@ -81,8 +81,8 @@ function getSubmitBlocker({
   paymentType: PaymentType
   submitting: boolean
 }) {
-  if (!locationId) return 'Select an operational location.'
-  if (cart.length === 0) return 'Add at least one product.'
+  if (!locationId) return 'Selecciona una ubicación operativa.'
+  if (cart.length === 0) return 'Agrega al menos un producto.'
   const locationError = getLocationValidationError(cart, locationId)
   if (locationError) return locationError
   const invalidItem = cart.find((item) => getQuantityValidationError(item))
@@ -94,7 +94,7 @@ function getSubmitBlocker({
     locationId,
   })
     ? null
-    : getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod) ?? 'Sale cannot be confirmed yet.'
+    : getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod) ?? 'La venta todavía no puede confirmarse.'
 }
 
 function saleResponseToTicketFallback(response: TicketData | null, locationId: string): TicketData | null {
@@ -102,7 +102,7 @@ function saleResponseToTicketFallback(response: TicketData | null, locationId: s
   return {
     ...response,
     locationId: response.locationId ?? locationId,
-    legend: response.legend ?? 'Internal receipt with no fiscal validity.',
+    legend: response.legend ?? 'Comprobante interno sin validez fiscal.',
   }
 }
 
@@ -217,7 +217,7 @@ export function SalesPosPage() {
       setBillingRequestId('')
       void products.refetch()
     } catch (error) {
-      setBackendError(error instanceof ApiClientError || error instanceof Error ? error.message : 'Sale confirmation failed.')
+      setBackendError(error instanceof ApiClientError || error instanceof Error ? error.message : 'La confirmación de la venta falló.')
     }
   }
 
@@ -225,9 +225,9 @@ export function SalesPosPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f5f3ee] p-6 text-[#20211f]">
         <section className="max-w-xl rounded-[2rem] bg-white p-8">
-          <h1 className="text-3xl font-black tracking-[-0.05em]">POS access denied</h1>
-          <p className="mt-3 text-[#68645c]">Only ADMIN and SELLER roles can register sales from POS.</p>
-          <Link className="mt-6 inline-flex font-bold text-[#9d2d24]" to="/">Back to operations</Link>
+          <h1 className="text-3xl font-black tracking-[-0.05em]">Acceso al POS denegado</h1>
+          <p className="mt-3 text-[#68645c]">Solo los roles ADMIN y SELLER pueden registrar ventas desde el POS.</p>
+          <Link className="mt-6 inline-flex font-bold text-[#9d2d24]" to="/">Volver a operaciones</Link>
         </section>
       </main>
     )
@@ -239,12 +239,12 @@ export function SalesPosPage() {
         <header className="overflow-hidden rounded-[2rem] border border-[#20211f]/10 bg-[#20211f] text-white shadow-[0_24px_80px_rgba(32,33,31,0.16)]">
           <div className="grid gap-6 p-6 md:grid-cols-[1.2fr_0.8fr] md:items-end">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-[#f0b44c]">Point of sale</p>
-              <h1 className="mt-2 text-4xl font-black tracking-[-0.06em]">Fast sales with location stock</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">Register cash or credit sales without global stock, fiscal invoice promises, or collections shortcuts.</p>
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-[#f0b44c]">Punto de venta</p>
+              <h1 className="mt-2 text-4xl font-black tracking-[-0.06em]">Ventas rápidas con stock por ubicación</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">Registra ventas de contado o crédito sin stock global, sin promesas de factura fiscal ni atajos de cobranza.</p>
             </div>
             <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-4 text-sm text-white/75">
-              <p className="font-black text-white">Live preview total</p>
+              <p className="font-black text-white">Total en vivo</p>
               <p className="mt-1 text-4xl font-black tracking-[-0.06em] text-[#f0b44c]">{toMoney(total)}</p>
             </div>
           </div>
@@ -267,22 +267,22 @@ export function SalesPosPage() {
               paymentType={paymentType}
             />
             <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-              <h2 className="text-xl font-black tracking-[-0.04em]">Sale document</h2>
+              <h2 className="text-xl font-black tracking-[-0.04em]">Documento de venta</h2>
               <div className="mt-3 grid gap-3">
                 <select className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setSaleChannel(event.target.value as SaleChannel)} value={saleChannel}>
-                  <option value="COUNTER">Counter</option>
-                  <option value="EXTERNAL_POINT_OF_SALE">External point of sale</option>
-                  <option value="ROUTE">Route</option>
-                  <option value="INSTITUTIONAL">Institutional</option>
-                  <option value="WHOLESALE">Wholesale</option>
+                  <option value="COUNTER">Mostrador</option>
+                  <option value="EXTERNAL_POINT_OF_SALE">Punto externo de venta</option>
+                  <option value="ROUTE">Ruta</option>
+                  <option value="INSTITUTIONAL">Institucional</option>
+                  <option value="WHOLESALE">Mayoreo</option>
                 </select>
                 <select className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setDocumentType(event.target.value as SaleDocumentType)} value={documentType}>
-                  <option value="SCALE_TICKET">Scale ticket</option>
-                  <option value="SIMPLE_NOTE">Simple note</option>
-                  <option value="LARGE_NOTE">Large note</option>
-                  <option value="INTERNAL_RECEIPT">Internal receipt</option>
+                  <option value="SCALE_TICKET">Ticket de báscula</option>
+                  <option value="SIMPLE_NOTE">Nota sencilla</option>
+                  <option value="LARGE_NOTE">Nota grande</option>
+                  <option value="INTERNAL_RECEIPT">Comprobante interno</option>
                 </select>
-                <input className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setPhysicalFolio(event.target.value)} placeholder="Physical folio when applicable" value={physicalFolio} />
+                <input className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setPhysicalFolio(event.target.value)} placeholder="Folio físico cuando aplique" value={physicalFolio} />
               </div>
             </section>
             <BillingRequestPanel

@@ -38,6 +38,19 @@ export class SalesController {
     };
   }
 
+  @Get(':saleId/documents')
+  @Roles('ADMIN', 'SELLER', 'COLLECTIONS')
+  async getDocuments(
+    @Param('saleId') saleId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Sale documents retrieved successfully',
+      data: await this.salesService.findDocuments(saleId, currentUser),
+    };
+  }
+
   @Get(':id')
   @Roles('ADMIN', 'SELLER', 'COLLECTIONS')
   async findOne(

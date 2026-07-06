@@ -83,43 +83,43 @@ describe('POS cart calculations and validation', () => {
   })
 
   it('rejects empty, non-positive, over-stock, and fractional piece quantities per operational stock', () => {
-    expect(getQuantityValidationError({ ...kgItem, quantityKg: 0 })).toBe('Enter a quantity greater than zero.')
-    expect(getQuantityValidationError({ ...kgItem, quantityKg: 12.5 })).toBe('Quantity cannot exceed 12.25 kg available at Counter cooler.')
-    expect(getQuantityValidationError({ ...pieceItem, quantityPieces: 5.5 })).toBe('Pieces must be a whole number.')
-    expect(getQuantityValidationError({ ...pieceItem, quantityPieces: 6 })).toBe('Quantity cannot exceed 5 pieces available at Counter cooler.')
+    expect(getQuantityValidationError({ ...kgItem, quantityKg: 0 })).toBe('Ingresa una cantidad mayor que cero.')
+    expect(getQuantityValidationError({ ...kgItem, quantityKg: 12.5 })).toBe('La cantidad no puede exceder 12.25 kg disponibles en Counter cooler.')
+    expect(getQuantityValidationError({ ...pieceItem, quantityPieces: 5.5 })).toBe('Las piezas deben ser un número entero.')
+    expect(getQuantityValidationError({ ...pieceItem, quantityPieces: 6 })).toBe('La cantidad no puede exceder 5 piezas disponibles en Counter cooler.')
     expect(getQuantityValidationError(pieceItem)).toBeNull()
   })
 
   it('rejects non-positive and negative kg-and-piece quantities per dimension', () => {
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 0, quantityPieces: 3 })).toBe('Enter kg and pieces greater than zero.')
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: -1, quantityPieces: 3 })).toBe('Enter kg and pieces greater than zero.')
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: 0 })).toBe('Enter kg and pieces greater than zero.')
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: -2 })).toBe('Enter kg and pieces greater than zero.')
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 0, quantityPieces: 3 })).toBe('Ingresa kilos y piezas mayores que cero.')
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: -1, quantityPieces: 3 })).toBe('Ingresa kilos y piezas mayores que cero.')
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: 0 })).toBe('Ingresa kilos y piezas mayores que cero.')
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: -2 })).toBe('Ingresa kilos y piezas mayores que cero.')
     expect(getQuantityValidationError(kgAndPieceItem)).toBeNull()
   })
 
   it('rejects cart items whose displayed stock belongs to another operational location', () => {
-    expect(getLocationValidationError([{ ...kgItem, locationId: 'loc-old', locationName: 'Old counter' }], 'loc-new')).toBe('Cart contains stock from another operational location. Refresh the cart for this location.')
+    expect(getLocationValidationError([{ ...kgItem, locationId: 'loc-old', locationName: 'Old counter' }], 'loc-new')).toBe('El carrito contiene stock de otra ubicación operativa. Actualiza el carrito para esta ubicación.')
     expect(getLocationValidationError([kgItem], 'loc-counter')).toBeNull()
   })
 })
 
 describe('POS credit restrictions', () => {
   it('requires a registered customer for credit sales', () => {
-    expect(getCreditRestriction('CREDIT_SALE', null, 100)).toBe('Select an active customer for a credit sale.')
+    expect(getCreditRestriction('CREDIT_SALE', null, 100)).toBe('Selecciona un cliente activo para una venta a crédito.')
   })
 
   it('blocks credit when the customer is blocked or the sale exceeds available credit', () => {
-    expect(getCreditRestriction('CREDIT_SALE', { ...activeCustomer, isBlockedForCredit: true }, 100)).toBe('Customer credit is blocked.')
-    expect(getCreditRestriction('CREDIT_SALE', { ...activeCustomer, creditSummary: { ...activeCustomer.creditSummary, availableCredit: 0 } }, 1)).toBe('Sale exceeds available credit of $0.00.')
-    expect(getCreditRestriction('CREDIT_SALE', activeCustomer, 2700)).toBe('Sale exceeds available credit of $2,600.00.')
+    expect(getCreditRestriction('CREDIT_SALE', { ...activeCustomer, isBlockedForCredit: true }, 100)).toBe('El crédito del cliente está bloqueado.')
+    expect(getCreditRestriction('CREDIT_SALE', { ...activeCustomer, creditSummary: { ...activeCustomer.creditSummary, availableCredit: 0 } }, 1)).toBe('La venta excede el crédito disponible de $0.00.')
+    expect(getCreditRestriction('CREDIT_SALE', activeCustomer, 2700)).toBe('La venta excede el crédito disponible de $2,600.00.')
     expect(getCreditRestriction('CREDIT_SALE', activeCustomer, 2500)).toBeNull()
   })
 })
 
 describe('POS sale-level restrictions', () => {
   it('requires a registered customer when a cash sale is delivered without an initial payment', () => {
-    expect(getSaleRestriction('CASH_SALE', null, 100, '')).toBe('Select an active customer when no initial payment is captured.')
+    expect(getSaleRestriction('CASH_SALE', null, 100, '')).toBe('Selecciona un cliente activo cuando no se capture pago inicial.')
     expect(getSaleRestriction('CASH_SALE', activeCustomer, 100, '')).toBeNull()
     expect(getSaleRestriction('CASH_SALE', null, 100, 'CASH')).toBeNull()
   })

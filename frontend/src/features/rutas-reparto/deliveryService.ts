@@ -2,12 +2,18 @@ import { apiClient } from '../../lib/api'
 import type {
   AssignDeliveryRouteOrdersPayload,
   CloseRouteSettlementPayload,
+  CreateDeliveryEvidencePayload,
+  CreateDeliveryIncidentPayload,
   CreateDeliveryRoutePayload,
+  CreateRouteCollectionPayload,
+  DeliveryOrder,
   DeliveryRouteDetail,
   DeliveryRouteListItem,
   DeliveryRoutesFilters,
+  RouteCollectionResponse,
   RouteSettlementDetail,
   RouteSettlementListItem,
+  UpdateDeliveryOrderStatusPayload,
 } from './types'
 
 type ApiEnvelope<T> = { data?: T; message?: string; success?: boolean }
@@ -77,6 +83,35 @@ export const deliveryService = {
   async assignOrders(routeId: string, payload: AssignDeliveryRouteOrdersPayload, accessToken?: string | null) {
     const response = await apiClient.post<ItemEnvelope<DeliveryRouteDetail>, AssignDeliveryRouteOrdersPayload>(
       `/delivery-routes/${routeId}/orders`,
+      { body: payload, headers: authHeaders(accessToken, crypto.randomUUID()) },
+    )
+    return unwrapItem(response)
+  },
+
+  async updateOrderStatus(orderId: string, payload: UpdateDeliveryOrderStatusPayload, accessToken?: string | null) {
+    const response = await apiClient.patch<ItemEnvelope<DeliveryOrder>, UpdateDeliveryOrderStatusPayload>(
+      `/delivery-orders/${orderId}/status`,
+      { body: payload, headers: authHeaders(accessToken) },
+    )
+    return unwrapItem(response)
+  },
+  async createOrderEvidence(orderId: string, payload: CreateDeliveryEvidencePayload, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<unknown>, CreateDeliveryEvidencePayload>(
+      `/delivery-orders/${orderId}/evidence`,
+      { body: payload, headers: authHeaders(accessToken) },
+    )
+    return unwrapItem(response)
+  },
+  async createOrderCollection(orderId: string, payload: CreateRouteCollectionPayload, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<RouteCollectionResponse>, CreateRouteCollectionPayload>(
+      `/delivery-orders/${orderId}/collections`,
+      { body: payload, headers: authHeaders(accessToken, crypto.randomUUID()) },
+    )
+    return unwrapItem(response)
+  },
+  async createOrderIncident(orderId: string, payload: CreateDeliveryIncidentPayload, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<DeliveryOrder>, CreateDeliveryIncidentPayload>(
+      `/delivery-orders/${orderId}/incidents`,
       { body: payload, headers: authHeaders(accessToken, crypto.randomUUID()) },
     )
     return unwrapItem(response)

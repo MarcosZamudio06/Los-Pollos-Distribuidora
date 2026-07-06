@@ -10,6 +10,7 @@ import {
   RouteSettlementStatus,
   Prisma,
   ProductUnit,
+  SaleDocumentStatus,
   SaleChannel,
   SaleDocumentType,
   SalePaymentType,
@@ -27,6 +28,7 @@ type MockPrisma = {
   operationalLocation: { findUnique: jest.Mock };
   inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
   inventoryMovement: { create: jest.Mock };
+  saleDocument: { create: jest.Mock; findMany: jest.Mock };
   sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock };
   accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
@@ -48,6 +50,7 @@ function createPrisma(): MockPrisma {
     operationalLocation: { findUnique: jest.fn() },
     inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     inventoryMovement: { create: jest.fn() },
+    saleDocument: { create: jest.fn(), findMany: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn() },
     accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
@@ -120,6 +123,9 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
   prisma.sale.update.mockImplementation(({ data }) => Promise.resolve({ id: 'sale-1', ...data }));
   prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'movement-1', createdAt: now, ...data }));
   prisma.payment.create.mockImplementation(({ data }) => Promise.resolve({ id: 'payment-1', createdAt: now, updatedAt: now, ...data }));
+  prisma.saleDocument.create.mockImplementation(({ data }) =>
+    Promise.resolve({ id: 'doc-1', createdAt: now, updatedAt: now, status: SaleDocumentStatus.ISSUED, ...data }),
+  );
   prisma.accountReceivable.findFirst.mockResolvedValue(null);
   prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
   prisma.accountReceivable.create.mockImplementation(({ data }) => Promise.resolve({ id: 'ar-1', createdAt: now, updatedAt: now, ...data }));
@@ -376,6 +382,50 @@ describe('SalesService', () => {
     expect(ticket).not.toHaveProperty('digitalSeal');
   });
 
+  it('lists sale documents with the internal receipt structure and blocks out-of-scope access', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue({ id: 'sale-1' });
+    prisma.saleDocument.findMany.mockResolvedValue([
+      {
+        id: 'doc-1',
+        saleId: 'sale-1',
+        documentType: SaleDocumentType.INTERNAL_RECEIPT,
+        operationalLocationId: 'loc-1',
+        pointOfSaleDailyCloseId: null,
+        physicalFolio: 'SALE-000001',
+        status: SaleDocumentStatus.ISSUED,
+        requiresAdministrativeInvoice: false,
+        deliveredByUserId: null,
+        collectedByUserId: null,
+        routeId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await service.findDocuments('sale-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'sale-1', userId: 'seller-1' }, select: { id: true } }),
+    );
+    expect(prisma.saleDocument.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { saleId: 'sale-1' }, orderBy: { createdAt: 'desc' } }),
+    );
+    expect(result).toEqual({
+      items: [
+        expect.objectContaining({
+          id: 'doc-1',
+          saleId: 'sale-1',
+          documentType: SaleDocumentType.INTERNAL_RECEIPT,
+          physicalFolio: 'SALE-000001',
+          status: SaleDocumentStatus.ISSUED,
+          requiresAdministrativeInvoice: false,
+          operationalLocationId: 'loc-1',
+        }),
+      ],
+    });
+  });
+
   it('returns a credit internal receipt without customer or payments when they do not exist', async () => {
     const { service, prisma } = createService();
     prisma.sale.findFirst.mockResolvedValue({
@@ -480,6 +530,29 @@ describe('SalesService', () => {
         }),
       }),
     );
+    expect(prisma.saleDocument.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          saleId: 'sale-1',
+          documentType: SaleDocumentType.INTERNAL_RECEIPT,
+          operationalLocationId: 'loc-1',
+          physicalFolio: 'SALE-000001',
+          status: SaleDocumentStatus.ISSUED,
+          requiresAdministrativeInvoice: false,
+          customerSnapshot: null,
+          productSnapshot: expect.objectContaining({
+            items: [expect.objectContaining({ productId: 'product-1', productName: 'Chicken breast' })],
+          }),
+          priceSnapshot: expect.objectContaining({
+            subtotal: 250,
+            discount: 0,
+            total: 250,
+            paymentType: SalePaymentType.CASH_SALE,
+            saleChannel: SaleChannel.COUNTER,
+          }),
+        }),
+      }),
+    );
     expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
@@ -487,6 +560,7 @@ describe('SalesService', () => {
         payment: expect.objectContaining({ amount: '250', saleId: 'sale-1', accountReceivableId: null }),
         accountReceivable: null,
         inventoryMovements: [expect.objectContaining({ saleId: 'sale-1' })],
+        documents: [expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.INTERNAL_RECEIPT })],
       }),
     );
   });

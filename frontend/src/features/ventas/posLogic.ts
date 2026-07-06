@@ -36,29 +36,29 @@ export function getQuantityValidationError(item: CartItem) {
   const locationName = item.locationName ?? item.locationId
 
   if (item.unit === 'KG') {
-    if (item.quantityKg <= 0) return 'Enter a quantity greater than zero.'
+    if (item.quantityKg <= 0) return 'Ingresa una cantidad mayor que cero.'
     if (item.quantityKg > item.availableKg) {
-      return `Quantity cannot exceed ${item.availableKg} kg available at ${locationName}.`
+      return `La cantidad no puede exceder ${item.availableKg} kg disponibles en ${locationName}.`
     }
     return null
   }
 
   if (item.unit === 'PIECE') {
-    if (item.quantityPieces <= 0) return 'Enter a quantity greater than zero.'
-    if (!Number.isInteger(item.quantityPieces)) return 'Pieces must be a whole number.'
+    if (item.quantityPieces <= 0) return 'Ingresa una cantidad mayor que cero.'
+    if (!Number.isInteger(item.quantityPieces)) return 'Las piezas deben ser un número entero.'
     if (item.quantityPieces > item.availablePieces) {
-      return `Quantity cannot exceed ${item.availablePieces} pieces available at ${locationName}.`
+      return `La cantidad no puede exceder ${item.availablePieces} piezas disponibles en ${locationName}.`
     }
     return null
   }
 
-  if (item.quantityKg <= 0 || item.quantityPieces <= 0) return 'Enter kg and pieces greater than zero.'
-  if (!Number.isInteger(item.quantityPieces)) return 'Pieces must be a whole number.'
+  if (item.quantityKg <= 0 || item.quantityPieces <= 0) return 'Ingresa kilos y piezas mayores que cero.'
+  if (!Number.isInteger(item.quantityPieces)) return 'Las piezas deben ser un número entero.'
   if (item.quantityKg > item.availableKg) {
-    return `Quantity cannot exceed ${item.availableKg} kg available at ${locationName}.`
+    return `La cantidad no puede exceder ${item.availableKg} kg disponibles en ${locationName}.`
   }
   if (item.quantityPieces > item.availablePieces) {
-    return `Quantity cannot exceed ${item.availablePieces} pieces available at ${locationName}.`
+    return `La cantidad no puede exceder ${item.availablePieces} piezas disponibles en ${locationName}.`
   }
   return null
 }
@@ -71,18 +71,18 @@ function numberFrom(value: string | number | null | undefined) {
 export function getCreditRestriction(paymentType: PaymentType, customer: CustomerOption | null, total: number) {
   if (paymentType !== 'CREDIT_SALE') return null
   if (!customer || customer.isActive === false || customer.active === false) {
-    return 'Select an active customer for a credit sale.'
+    return 'Selecciona un cliente activo para una venta a crédito.'
   }
 
   const summary = customer.creditSummary
   const isBlocked = customer.isBlockedForCredit || summary?.isBlocked || summary?.isBlockedForCredit
   if (isBlocked || customer.creditStatus === 'BLOCKED' || summary?.creditStatus === 'BLOCKED') {
-    return summary?.blockingReason ?? summary?.blockReason ?? 'Customer credit is blocked.'
+    return summary?.blockingReason ?? summary?.blockReason ?? 'El crédito del cliente está bloqueado.'
   }
 
   const availableCredit = numberFrom(summary?.availableCredit ?? customer.creditLimit)
   if (availableCredit >= 0 && total > availableCredit) {
-    return `Sale exceeds available credit of ${toMoney(availableCredit)}.`
+    return `La venta excede el crédito disponible de ${toMoney(availableCredit)}.`
   }
 
   return null
@@ -92,7 +92,7 @@ export function getCreditRestriction(paymentType: PaymentType, customer: Custome
 
 export function getLocationValidationError(cart: CartItem[], locationId: string) {
   if (cart.some((item) => item.locationId !== locationId)) {
-    return 'Cart contains stock from another operational location. Refresh the cart for this location.'
+    return 'El carrito contiene stock de otra ubicación operativa. Actualiza el carrito para esta ubicación.'
   }
   return null
 }
@@ -104,7 +104,7 @@ export function getSaleRestriction(
   paymentMethod: PaymentMethod,
 ) {
   if (paymentType === 'CASH_SALE' && !paymentMethod && (!customer || customer.isActive === false || customer.active === false)) {
-    return 'Select an active customer when no initial payment is captured.'
+    return 'Selecciona un cliente activo cuando no se capture pago inicial.'
   }
 
   return getCreditRestriction(paymentType, customer, total)

@@ -19,6 +19,7 @@ import { SalesModule } from './modules/sales/sales.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { DeliveryModule } from './modules/delivery/delivery.module';
     SuppliersModule,
     PurchasesModule,
     DeliveryModule,
+    ReportsModule,
   ],
   controllers: [],
   providers: [],

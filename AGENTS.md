@@ -229,6 +229,16 @@ Estas reglas no sustituyen specs. Funcionan como guardrails para evitar regresio
 
 ---
 
+## Diseño UI
+
+- Usar Tailwind CSS para estilos.
+- No crear CSS global salvo variables de tema.
+- Preferir componentes shadcn/ui.
+- Mantener layout responsive desde el inicio.
+- Toda pantalla administrativa debe tener: título, breadcrumb opcional, filtros, tabla/lista, acciones primarias y estados vacíos.
+
+---
+
 ## Definition of Ready
 
 Una TASK está lista si:
