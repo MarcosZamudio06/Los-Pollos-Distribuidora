@@ -5,12 +5,20 @@ type LowStockBadgeProps = {
 
 export function LowStockBadge({ isLowStock, locationSelected = true }: LowStockBadgeProps) {
   if (!locationSelected) {
-    return <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">Selecciona ubicación</span>
+    return (
+      <span className="inline-flex items-center rounded-full border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+        Selecciona ubicación
+      </span>
+    )
   }
 
   return isLowStock ? (
-    <span className="rounded-full bg-[#f9d8d4] px-3 py-1 text-xs font-bold text-[#9d2d24]">Stock bajo</span>
+    <span className="inline-flex items-center rounded-full border border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.10)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--erp-danger)]">
+      Stock bajo
+    </span>
   ) : (
-    <span className="rounded-full bg-[#dbeee8] px-3 py-1 text-xs font-bold text-[#2d6b4f]">OK</span>
+    <span className="inline-flex items-center rounded-full border border-[rgba(63,123,65,0.22)] bg-[rgba(63,123,65,0.10)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--erp-success)]">
+      OK
+    </span>
   )
 }

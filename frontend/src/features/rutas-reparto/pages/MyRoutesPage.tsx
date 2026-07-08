@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ApiClientError } from '../../../lib/api'
+import { BadgeDollarSign, CheckCircle2, ClipboardList, Route, Truck } from 'lucide-react'
 import { DeliveryEvidenceCapture } from '../components/DeliveryEvidenceCapture'
 import { DeliveryIncidentDialog } from '../components/DeliveryIncidentDialog'
 import { DeliveryOrderCard } from '../components/DeliveryOrderCard'
@@ -41,9 +42,9 @@ export function MyRoutesPage() {
     <PageShell>
       <PageFrame>
         <RouteHero
-          eyebrow="Mis rutas"
+          eyebrow="Cabina del repartidor"
           title="Entregas asignadas"
-          subtitle="Consulta tus rutas, actualiza pedidos, captura evidencia, registra cobros permitidos e incidencias sin operación offline. La API ya limita DRIVER a rutas propias."
+          subtitle="Consulta tus rutas, actualiza pedidos, captura evidencia, registra cobros permitidos e incidencias con una vista enfocada en la operación del día."
         />
 
         {routes.isLoading && <StatusMessage>Cargando rutas asignadas...</StatusMessage>}
@@ -58,17 +59,17 @@ export function MyRoutesPage() {
 
         {routeItems.length > 0 && (
           <section className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
-            <Card className="p-4">
-              <div className="border-b border-[#1d2420]/10 pb-4">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-[#8b2f2a]">Rutas</p>
-                <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">Trabajo del día</h2>
+            <Card className="overflow-hidden p-0">
+              <div className="border-b border-[color:var(--erp-border)] bg-white/70 p-5">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]"><Route className="h-4 w-4" />Rutas</p>
+                <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">Trabajo del día</h2>
               </div>
-              <div className="mt-4 grid gap-3">
+              <div className="grid gap-3 p-4">
                 {routeItems.map((item) => {
                   const selected = item.id === activeRouteId
                   return (
                     <button
-                      className={`border p-4 text-left transition focus:outline-none focus:ring-4 focus:ring-[#d69b2d]/25 ${selected ? 'border-[#2f6f73] bg-[#2f6f73]/8' : 'border-[#1d2420]/10 bg-white hover:border-[#2f6f73]/40'}`}
+                      className={`rounded-2xl border p-4 text-left transition focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] ${selected ? 'border-[var(--erp-info)] bg-[rgba(47,111,115,0.08)] shadow-[var(--erp-shadow)]' : 'border-[color:var(--erp-border)] bg-white hover:border-[rgba(47,111,115,0.40)]'}`}
                       key={item.id}
                       onClick={() => { setSelectedRouteId(item.id); setLastCollection(null) }}
                       type="button"
@@ -76,13 +77,13 @@ export function MyRoutesPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-black">{item.name}</p>
-                          <p className="mt-1 text-xs font-semibold text-[#6f786f]">Programada: {date(item.scheduledDate)}</p>
+                          <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">Programada: {date(item.scheduledDate)}</p>
                         </div>
                         <RouteStatusBadge status={item.status} />
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#6f786f]">
-                        <span><strong className="text-[#1d2420]">{item.ordersCount ?? 0}</strong> pedidos</span>
-                        <span><strong className="text-[#1d2420]">{item.pendingOrdersCount ?? 0}</strong> pendientes</span>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--erp-muted-foreground)]">
+                        <span><strong className="text-[var(--erp-foreground)]">{item.ordersCount ?? 0}</strong> pedidos</span>
+                        <span><strong className="text-[var(--erp-foreground)]">{item.pendingOrdersCount ?? 0}</strong> pendientes</span>
                       </div>
                     </button>
                   )
@@ -98,17 +99,17 @@ export function MyRoutesPage() {
                   <Card className="p-5">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-[#2f6f73]">Ruta seleccionada</p>
-                        <h2 className="mt-1 text-3xl font-black tracking-[-0.055em]">{detail.name}</h2>
-                        <p className="mt-2 text-sm leading-6 text-[#6f786f]">Origen {detail.originLocationName ?? shortId(detail.originLocationId)} · ROUTE_STOCK {detail.routeStockLocationName ?? shortId(detail.routeStockLocationId)}</p>
+                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]"><Truck className="h-4 w-4" />Ruta seleccionada</p>
+                        <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">{detail.name}</h2>
+                        <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">Origen {detail.originLocationName ?? shortId(detail.originLocationId)} · ROUTE_STOCK {detail.routeStockLocationName ?? shortId(detail.routeStockLocationId)}</p>
                       </div>
                       <RouteStatusBadge status={detail.status} />
                     </div>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-4">
-                      <div className="border-l-4 border-[#d69b2d] bg-[#f7f5ef] p-3"><p className="text-xs font-black uppercase tracking-[0.16em] text-[#6f786f]">Pedidos cerrados</p><p className="mt-1 text-xl font-black">{finalOrders}/{orders.length}</p></div>
-                      <div className="border-l-4 border-[#2f6f73] bg-[#f7f5ef] p-3"><p className="text-xs font-black uppercase tracking-[0.16em] text-[#6f786f]">Esperado</p><p className="mt-1 text-xl font-black">{money(detail.collectionsSummary?.expectedAmount)}</p></div>
-                      <div className="border-l-4 border-[#1d2420] bg-[#f7f5ef] p-3"><p className="text-xs font-black uppercase tracking-[0.16em] text-[#6f786f]">Cobrado</p><p className="mt-1 text-xl font-black">{money(detail.collectionsSummary?.derivedCollectedAmount)}</p></div>
-                      <div className="border-l-4 border-[#8b2f2a] bg-[#f7f5ef] p-3"><p className="text-xs font-black uppercase tracking-[0.16em] text-[#6f786f]">Liquidación</p><p className="mt-1 text-xl font-black">{detail.routeSettlementId ? shortId(detail.routeSettlementId) : 'Sin asociar'}</p></div>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />Pedidos cerrados</p><p className="mt-2 text-xl font-black">{finalOrders}/{orders.length}</p></div>
+                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><BadgeDollarSign className="h-4 w-4 text-[var(--erp-info)]" />Esperado</p><p className="mt-2 text-xl font-black">{money(detail.collectionsSummary?.expectedAmount)}</p></div>
+                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />Cobrado</p><p className="mt-2 text-xl font-black">{money(detail.collectionsSummary?.derivedCollectedAmount)}</p></div>
+                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><ClipboardList className="h-4 w-4 text-[var(--erp-danger)]" />Liquidación</p><p className="mt-2 text-xl font-black">{detail.routeSettlementId ? shortId(detail.routeSettlementId) : 'Sin asociar'}</p></div>
                     </div>
                   </Card>
 

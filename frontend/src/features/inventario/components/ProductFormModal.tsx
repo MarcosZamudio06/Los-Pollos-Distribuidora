@@ -3,6 +3,9 @@ import { useSaveProduct } from '../hooks/useProducts'
 import type { EquivalentPolicyStatus, Product, ProductFormValues } from '../types'
 
 type Props = { product?: Product | null; onClose: () => void }
+const fieldClass =
+  'rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3 py-2.5 text-sm text-[var(--erp-foreground)] shadow-sm outline-none transition placeholder:text-[var(--erp-muted-foreground)] focus:border-[var(--erp-brand-gold)] focus:ring-4 focus:ring-[rgba(214,155,45,0.16)]'
+const labelClass = 'grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]'
 
 function equivalentPolicyStatus(product?: Product | null): EquivalentPolicyStatus | null {
   const value = product?.equivalentPolicyStatus ?? product?.equivalencePolicyStatus ?? 'DRAFT'
@@ -62,32 +65,32 @@ export function ProductFormModal({ product, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-20 overflow-y-auto bg-[#20211f]/50 px-4 py-8">
-      <form onSubmit={handleSubmit} className="mx-auto grid max-w-3xl gap-4 rounded-[2rem] bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[rgba(16,24,32,0.56)] px-4 py-8 backdrop-blur-sm">
+      <form onSubmit={handleSubmit} className="mx-auto grid max-w-3xl gap-4 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-6 shadow-[0_30px_90px_rgba(16,24,32,0.22)]">
         <header className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#9d2d24]">Catálogo de productos</p>
-            <h2 className="text-3xl font-black tracking-[-0.05em]">{product ? 'Editar producto' : 'Nuevo producto'}</h2>
-            <p className="mt-2 text-sm text-[#68645c]">Solo campos de catálogo. El stock se controla mediante movimientos por ubicación.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--erp-danger)]">Catálogo de productos</p>
+            <h2 className="text-3xl font-bold tracking-[-0.04em] text-[var(--erp-foreground)]">{product ? 'Editar producto' : 'Nuevo producto'}</h2>
+            <p className="mt-2 text-sm text-[var(--erp-muted-foreground)]">Solo campos de catálogo. El stock se controla mediante movimientos por ubicación.</p>
           </div>
-          <button type="button" onClick={onClose} className="font-bold text-[#68645c]">Cerrar</button>
+          <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-sm font-semibold text-[var(--erp-muted-foreground)] transition hover:bg-[var(--erp-surface-muted)]">Cerrar</button>
         </header>
-        {error && <p role="alert" className="rounded-2xl bg-[#d43f2f]/10 p-3 text-sm font-bold text-[#9d2d24]">{error}</p>}
-        <label className="grid gap-1 text-sm font-bold">Nombre<input className="rounded-xl border p-3" value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required /></label>
+        {error && <p role="alert" className="rounded-xl border border-[rgba(157,45,36,0.25)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-semibold text-[var(--erp-danger)]">{error}</p>}
+        <label className={labelClass}>Nombre<input className={fieldClass} value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required /></label>
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-1 text-sm font-bold">SKU<input className="rounded-xl border p-3" value={values.sku} onChange={(event) => setValues({ ...values, sku: event.target.value })} /></label>
-          <label className="grid gap-1 text-sm font-bold">ID de categoría<input className="rounded-xl border p-3" value={values.categoryId} onChange={(event) => setValues({ ...values, categoryId: event.target.value })} /></label>
-          <label className="grid gap-1 text-sm font-bold">Precio de venta<input className="rounded-xl border p-3" min="0.01" step="0.01" type="number" value={values.salePrice} onChange={(event) => setValues({ ...values, salePrice: Number(event.target.value) })} required /></label>
-          <label className="grid gap-1 text-sm font-bold">Costo de compra<input className="rounded-xl border p-3" min="0" step="0.01" type="number" value={values.purchaseCost} onChange={(event) => setValues({ ...values, purchaseCost: Number(event.target.value) })} /></label>
-          <label className="grid gap-1 text-sm font-bold">Presentación<select className="rounded-xl border p-3" value={values.presentationType} onChange={(event) => setValues({ ...values, presentationType: event.target.value as ProductFormValues['presentationType'] })}><option value="KG">Kilo</option><option value="WHOLE">Unidad entera</option><option value="CUT">Corte</option></select></label>
-          <label className="grid gap-1 text-sm font-bold">Unidad operativa<select className="rounded-xl border p-3" value={values.unit} onChange={(event) => setValues({ ...values, unit: event.target.value as ProductFormValues['unit'] })}><option value="KG">Kilo</option><option value="PIECE">Pieza</option><option value="KG_AND_PIECE">Kilo y pieza</option></select></label>
-          <label className="grid gap-1 text-sm font-bold">Mínimo comercial<input className="rounded-xl border p-3" min="0" step="0.01" type="number" value={values.minStock} onChange={(event) => setValues({ ...values, minStock: Number(event.target.value) })} /></label>
-          <label className="grid gap-1 text-sm font-bold">Equivalencia kg por pieza<input className="rounded-xl border p-3" min="0" step="0.001" type="number" value={values.pieceWeightEquivalent ?? ''} onChange={(event) => setValues({ ...values, pieceWeightEquivalent: event.target.value ? Number(event.target.value) : null })} /></label>
-          <label className="grid gap-1 text-sm font-bold">Política de equivalencia<select className="rounded-xl border p-3" value={values.equivalentPolicyStatus ?? 'DRAFT'} onChange={(event) => setValues({ ...values, equivalentPolicyStatus: event.target.value as ProductFormValues['equivalentPolicyStatus'] })}><option value="DRAFT">Borrador</option><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></label>
+          <label className={labelClass}>SKU<input className={fieldClass} value={values.sku} onChange={(event) => setValues({ ...values, sku: event.target.value })} /></label>
+          <label className={labelClass}>ID de categoría<input className={fieldClass} value={values.categoryId} onChange={(event) => setValues({ ...values, categoryId: event.target.value })} /></label>
+          <label className={labelClass}>Precio de venta<input className={fieldClass} min="0.01" step="0.01" type="number" value={values.salePrice} onChange={(event) => setValues({ ...values, salePrice: Number(event.target.value) })} required /></label>
+          <label className={labelClass}>Costo de compra<input className={fieldClass} min="0" step="0.01" type="number" value={values.purchaseCost} onChange={(event) => setValues({ ...values, purchaseCost: Number(event.target.value) })} /></label>
+          <label className={labelClass}>Presentación<select className={fieldClass} value={values.presentationType} onChange={(event) => setValues({ ...values, presentationType: event.target.value as ProductFormValues['presentationType'] })}><option value="KG">Kilo</option><option value="WHOLE">Unidad entera</option><option value="CUT">Corte</option></select></label>
+          <label className={labelClass}>Unidad operativa<select className={fieldClass} value={values.unit} onChange={(event) => setValues({ ...values, unit: event.target.value as ProductFormValues['unit'] })}><option value="KG">Kilo</option><option value="PIECE">Pieza</option><option value="KG_AND_PIECE">Kilo y pieza</option></select></label>
+          <label className={labelClass}>Mínimo comercial<input className={fieldClass} min="0" step="0.01" type="number" value={values.minStock} onChange={(event) => setValues({ ...values, minStock: Number(event.target.value) })} /></label>
+          <label className={labelClass}>Equivalencia kg por pieza<input className={fieldClass} min="0" step="0.001" type="number" value={values.pieceWeightEquivalent ?? ''} onChange={(event) => setValues({ ...values, pieceWeightEquivalent: event.target.value ? Number(event.target.value) : null })} /></label>
+          <label className={labelClass}>Política de equivalencia<select className={fieldClass} value={values.equivalentPolicyStatus ?? 'DRAFT'} onChange={(event) => setValues({ ...values, equivalentPolicyStatus: event.target.value as ProductFormValues['equivalentPolicyStatus'] })}><option value="DRAFT">Borrador</option><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></label>
         </div>
-        {values.unit === 'KG_AND_PIECE' && <p className="rounded-2xl bg-[#f0b44c]/20 p-3 text-sm text-[#6b4a10]">La equivalencia oficial se gestiona en el flujo autorizado de equivalencias; este formulario no modifica saldos operativos.</p>}
-        <label className="grid gap-1 text-sm font-bold">Descripción<textarea className="rounded-xl border p-3" value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} /></label>
-        <button disabled={saveProduct.isPending} className="rounded-2xl bg-[#20211f] px-5 py-3 font-black text-white disabled:opacity-60">Guardar producto</button>
+        {values.unit === 'KG_AND_PIECE' && <p className="rounded-xl border border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] p-3 text-sm text-[var(--erp-brand-gold-deep)]">La equivalencia oficial se gestiona en el flujo autorizado de equivalencias; este formulario no modifica saldos operativos.</p>}
+        <label className={labelClass}>Descripción<textarea className={`${fieldClass} min-h-24`} value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} /></label>
+        <button disabled={saveProduct.isPending} className="inline-flex h-11 items-center justify-center rounded-xl border border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] px-5 text-sm font-semibold text-[var(--erp-on-brand)] shadow-[0_14px_32px_rgba(157,45,36,0.18)] transition hover:bg-[var(--erp-brand-red-strong)] disabled:opacity-60">Guardar producto</button>
       </form>
     </div>
   )
