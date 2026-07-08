@@ -1,5 +1,24 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  Banknote,
+  BarChart3,
+  Boxes,
+  CircleDollarSign,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  Filter,
+  LineChart,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  Sparkles,
+  Truck,
+  WalletCards,
+} from 'lucide-react'
 import { ApiClientError } from '../../lib/api'
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Skeleton, Table, Td, Th } from '../../components/ui'
 import { useAuth } from '../auth'
@@ -44,6 +63,20 @@ const reportTabs: Array<{ key: ReportKey; label: string; roles: string[] }> = [
   { key: 'receivables', label: 'Cobranza', roles: ['ADMIN', 'COLLECTIONS'] },
   { key: 'delivery', label: 'Reparto', roles: ['ADMIN', 'COLLECTIONS', 'DRIVER'] },
 ]
+
+const filterLabelClass = 'grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]'
+const tableShellClass = 'mt-4 overflow-x-auto rounded-[1.2rem] border border-[color:var(--erp-border)] bg-white/70'
+const tableRowClass = 'transition hover:bg-[var(--erp-surface)]'
+const numericCellClass = 'text-right font-semibold tabular-nums'
+
+const reportTabIcons: Record<ReportKey, ReactNode> = {
+  sales: <BadgeDollarSign className="h-4 w-4" />,
+  cash: <Banknote className="h-4 w-4" />,
+  'low-stock': <AlertTriangle className="h-4 w-4" />,
+  inventory: <Boxes className="h-4 w-4" />,
+  receivables: <WalletCards className="h-4 w-4" />,
+  delivery: <Truck className="h-4 w-4" />,
+}
 
 const paymentTypes = [
   { label: 'Todos', value: '' },
@@ -122,10 +155,10 @@ function NativeSelect({ className = '', label, onChange, options, value }: {
   value?: string
 }) {
   return (
-    <label className={`flex flex-col gap-1 text-xs font-black uppercase tracking-[0.14em] text-[#68645c] ${className}`}>
+    <label className={`${filterLabelClass} ${className}`}>
       {label}
       <select
-        className="rounded-xl border border-[#20211f]/15 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-[#20211f] transition focus:border-[#39798b] focus:outline-none focus:ring-4 focus:ring-[#39798b]/15"
+        className="h-10 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3.5 text-sm font-semibold normal-case tracking-normal text-[var(--erp-foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition focus:border-[rgba(47,111,115,0.42)] focus:outline-none focus:ring-4 focus:ring-[rgba(47,111,115,0.12)]"
         onChange={(event) => onChange(event.target.value)}
         value={value ?? ''}
       >
@@ -144,7 +177,7 @@ function TextFilter({ label, onChange, placeholder, value }: {
   value?: string
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-black uppercase tracking-[0.14em] text-[#68645c]">
+    <label className={filterLabelClass}>
       {label}
       <Input
         className="normal-case tracking-normal"
@@ -158,7 +191,7 @@ function TextFilter({ label, onChange, placeholder, value }: {
 
 function DateFilter({ label, onChange, value }: { label: string; onChange: (value: string) => void; value?: string }) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-black uppercase tracking-[0.14em] text-[#68645c]">
+    <label className={filterLabelClass}>
       {label}
       <Input className="normal-case tracking-normal" onChange={(event) => onChange(event.target.value)} type="date" value={value ?? ''} />
     </label>
@@ -176,9 +209,9 @@ function FreshnessNotice({ data }: { data?: ReportFreshness }) {
 
   return (
     <Alert tone={isStale ? 'warning' : 'info'}>
-      <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
-        <p className="font-bold">Generado: {formatDateTime(data.generatedAt)}</p>
-        <p className="text-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <p className="flex items-center gap-2 font-bold"><RefreshCw className="h-4 w-4" />Generado: {formatDateTime(data.generatedAt)}</p>
+        <p className="text-sm leading-6">
           Datos al: {formatDateTime(data.dataAsOf)} · Frescura: {formatNumber(data.freshnessSeconds)}s {isStale ? '· Datos fuera del objetivo de 60s' : '· Dentro del objetivo de 60s'}
         </p>
       </div>
@@ -188,12 +221,13 @@ function FreshnessNotice({ data }: { data?: ReportFreshness }) {
 
 function LoadingReport() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: 6 }, (_, index) => (
-        <Card className="p-5" key={index}>
+        <Card className="overflow-hidden p-5" key={index}>
           <Skeleton className="h-4 w-28" />
           <Skeleton className="mt-4 h-8 w-36" />
           <Skeleton className="mt-4 h-4 w-full" />
+          <Skeleton className="mt-3 h-4 w-2/3" />
         </Card>
       ))}
     </div>
@@ -203,10 +237,13 @@ function LoadingReport() {
 function UnauthorizedState() {
   return (
     <Card className="p-8 text-center">
-      <Badge tone="red">Sin autorización</Badge>
-      <h2 className="mt-4 text-3xl font-black tracking-[-0.05em] text-[#20211f]">No tienes permisos para este reporte</h2>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#68645c]">Revisa tu rol o vuelve a iniciar sesión si el acceso cambió.</p>
-      <Link className="mt-6 inline-flex font-bold text-[#9d2d24]" to="/logout">Cerrar sesión</Link>
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] text-[var(--erp-danger)]">
+        <ShieldAlert className="h-6 w-6" />
+      </div>
+      <Badge className="mt-5" tone="red">Sin autorización</Badge>
+      <h2 className="mx-auto mt-4 max-w-2xl text-2xl font-black tracking-[-0.05em] text-[var(--erp-foreground)] sm:text-3xl">No tienes permisos para este reporte</h2>
+      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Revisa tu rol o vuelve a iniciar sesión si el acceso cambió.</p>
+      <Link className="mt-6 inline-flex font-bold text-[var(--erp-danger)]" to="/logout">Cerrar sesión</Link>
     </Card>
   )
 }
@@ -228,19 +265,32 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 function EmptyState({ children }: { children: ReactNode }) {
   return (
     <Card className="p-8 text-center">
-      <Badge tone="amber">Sin resultados</Badge>
-      <h2 className="mt-4 text-3xl font-black tracking-[-0.05em] text-[#20211f]">No hay datos para estos filtros</h2>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#68645c]">{children}</p>
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[rgba(214,155,45,0.24)] bg-[rgba(214,155,45,0.10)] text-[var(--erp-brand-gold-deep)]">
+        <Search className="h-6 w-6" />
+      </div>
+      <Badge className="mt-5" tone="amber">Sin resultados</Badge>
+      <h2 className="mx-auto mt-4 max-w-2xl text-2xl font-black tracking-[-0.05em] text-[var(--erp-foreground)] sm:text-3xl">No hay datos para estos filtros</h2>
+      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--erp-muted-foreground)]">{children}</p>
     </Card>
   )
 }
 
-function StatCard({ detail, label, value }: { detail: string; label: string; value: string }) {
+function StatCard({ detail, icon, label, tone = 'info', value }: { detail: string; icon?: ReactNode; label: string; tone?: 'danger' | 'gold' | 'info' | 'success'; value: string }) {
+  const toneClass = {
+    danger: 'text-[var(--erp-danger)] bg-[rgba(157,45,36,0.08)] border-[rgba(157,45,36,0.18)]',
+    gold: 'text-[var(--erp-brand-gold-deep)] bg-[rgba(214,155,45,0.10)] border-[rgba(214,155,45,0.22)]',
+    info: 'text-[var(--erp-info)] bg-[rgba(47,111,115,0.08)] border-[rgba(47,111,115,0.20)]',
+    success: 'text-[var(--erp-success)] bg-[rgba(63,123,65,0.08)] border-[rgba(63,123,65,0.20)]',
+  }[tone]
+
   return (
-    <Card className="p-5">
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#68645c]">{label}</p>
-      <p className="mt-3 text-3xl font-black tracking-[-0.06em] text-[#20211f]">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-[#68645c]">{detail}</p>
+    <Card className="p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--erp-shadow-elevated)]">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">{label}</p>
+        {icon && <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>{icon}</span>}
+      </div>
+      <p className="mt-4 break-words text-2xl font-black tracking-[-0.06em] text-[var(--erp-foreground)] sm:text-3xl">{value}</p>
+      <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">{detail}</p>
     </Card>
   )
 }
@@ -252,23 +302,23 @@ function MoneyGroupsTable({ emptyLabel, groups, title }: { emptyLabel: string; g
         <CardTitle>{title}</CardTitle>
         <CardDescription>{emptyLabel}</CardDescription>
       </CardHeader>
-      <CardContent className="mt-4 overflow-x-auto rounded-2xl border border-[#20211f]/10">
-        <Table>
-          <thead className="bg-[#f5f3ee]">
+      <CardContent className={tableShellClass}>
+        <Table className="min-w-[520px]">
+          <thead>
             <tr>
               <Th>Clasificación</Th>
-              <Th>Conteo</Th>
-              <Th>Monto</Th>
+              <Th className="text-right">Conteo</Th>
+              <Th className="text-right">Monto</Th>
             </tr>
           </thead>
           <tbody>
             {(groups ?? []).length === 0 ? (
               <tr><Td colSpan={3}>Sin movimientos registrados.</Td></tr>
             ) : groups?.map((group, index) => (
-              <tr key={`${group.paymentMethod ?? group.method ?? group.bankName ?? 'grupo'}-${index}`}>
-                <Td>{group.paymentMethod ?? group.method ?? group.bankName ?? 'Sin clasificar'}</Td>
-                <Td>{formatNumber(group.count)}</Td>
-                <Td>{formatMoney(group.amount)}</Td>
+              <tr className={tableRowClass} key={`${group.paymentMethod ?? group.method ?? group.bankName ?? 'grupo'}-${index}`}>
+                <Td className="font-bold">{group.paymentMethod ?? group.method ?? group.bankName ?? 'Sin clasificar'}</Td>
+                <Td className={numericCellClass}>{formatNumber(group.count)}</Td>
+                <Td className={numericCellClass}>{formatMoney(group.amount)}</Td>
               </tr>
             ))}
           </tbody>
@@ -319,11 +369,11 @@ function SalesDailyReport({ isAdmin }: { isAdmin: boolean }) {
       <ReportSection<SalesDailyReport> emptyMessage="Cambia la fecha, ubicación o vendedor para consultar operaciones confirmadas." query={query}>
         {(data) => (
           <>
-            <div className="grid gap-4 md:grid-cols-4">
-              <StatCard detail="Ventas confirmadas" label="Total" value={formatMoney(data.summary?.total)} />
-              <StatCard detail="Solo ventas de contado" label="Contado" value={formatMoney(data.summary?.cash)} />
-              <StatCard detail="No se trata como efectivo" label="Crédito" value={formatMoney(data.summary?.credit)} />
-              <StatCard detail="Notas separadas" label="Cancelado" value={formatMoney(data.summary?.canceled)} />
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard detail="Ventas confirmadas" icon={<LineChart className="h-5 w-5" />} label="Total" tone="gold" value={formatMoney(data.summary?.total)} />
+              <StatCard detail="Solo ventas de contado" icon={<Banknote className="h-5 w-5" />} label="Contado" tone="success" value={formatMoney(data.summary?.cash)} />
+              <StatCard detail="No se trata como efectivo" icon={<CreditCard className="h-5 w-5" />} label="Crédito" value={formatMoney(data.summary?.credit)} />
+              <StatCard detail="Notas separadas" icon={<FileText className="h-5 w-5" />} label="Cancelado" tone="danger" value={formatMoney(data.summary?.canceled)} />
             </div>
             <MoneyGroupsTable emptyLabel="Importes derivados de pagos no cancelados." groups={data.byPaymentMethod} title="Métodos de pago" />
             <Card className="overflow-hidden p-5">
@@ -331,20 +381,20 @@ function SalesDailyReport({ isAdmin }: { isAdmin: boolean }) {
                 <CardTitle>Ventas</CardTitle>
                 <CardDescription>Cliente, vendedor, ubicación, documento, método y total.</CardDescription>
               </CardHeader>
-              <CardContent className="mt-4 overflow-x-auto rounded-2xl border border-[#20211f]/10">
-                <Table>
-                  <thead className="bg-[#f5f3ee]"><tr><Th>Venta</Th><Th>Cliente</Th><Th>Vendedor</Th><Th>Ubicación</Th><Th>Tipo</Th><Th>Documento</Th><Th>Métodos</Th><Th>Total</Th></tr></thead>
+              <CardContent className={tableShellClass}>
+                <Table className="min-w-[1080px]">
+                  <thead><tr><Th>Venta</Th><Th>Cliente</Th><Th>Vendedor</Th><Th>Ubicación</Th><Th>Tipo</Th><Th>Documento</Th><Th>Métodos</Th><Th className="text-right">Total</Th></tr></thead>
                   <tbody>
                     {(data.items ?? []).map((item, index) => (
-                      <tr key={item.saleId ?? item.saleNumber ?? index}>
-                        <Td>{item.saleNumber ?? 'Sin folio'}</Td>
+                      <tr className={tableRowClass} key={item.saleId ?? item.saleNumber ?? index}>
+                        <Td className="font-black">{item.saleNumber ?? 'Sin folio'}</Td>
                         <Td>{item.customerName ?? item.clientName ?? 'Público general'}</Td>
                         <Td>{item.sellerName ?? 'Sin vendedor'}</Td>
                         <Td>{item.locationName ?? 'Sin ubicación'}</Td>
                         <Td><Badge tone={item.paymentType === 'CREDIT_SALE' ? 'amber' : 'green'}>{item.paymentType === 'CREDIT_SALE' ? 'Crédito' : 'Contado'}</Badge></Td>
                         <Td>{item.documentType ?? item.documentNumber ?? 'Sin documento'}</Td>
                         <Td>{item.paymentMethods?.length ? item.paymentMethods.join(', ') : 'Sin pagos'}</Td>
-                        <Td>{formatMoney(item.total)}</Td>
+                        <Td className={numericCellClass}>{formatMoney(item.total)}</Td>
                       </tr>
                     ))}
                   </tbody>
@@ -435,19 +485,19 @@ function InventoryPanel({ filters, onChange, query, showSearch = false, subtitle
         {(data) => (
           <Card className="overflow-hidden p-5">
             <CardHeader><CardTitle>{title}</CardTitle><CardDescription>Kilos, piezas, mínimos y último movimiento.</CardDescription></CardHeader>
-            <CardContent className="mt-4 overflow-x-auto rounded-2xl border border-[#20211f]/10">
-              <Table>
-                <thead className="bg-[#f5f3ee]"><tr><Th>Ubicación</Th><Th>Producto</Th><Th>Unidad</Th><Th>Kilos</Th><Th>Piezas</Th><Th>Mínimo kg</Th><Th>Mínimo piezas</Th><Th>Estado</Th><Th>Último movimiento</Th></tr></thead>
+            <CardContent className={tableShellClass}>
+              <Table className="min-w-[1080px]">
+                <thead><tr><Th>Ubicación</Th><Th>Producto</Th><Th>Unidad</Th><Th className="text-right">Kilos</Th><Th className="text-right">Piezas</Th><Th className="text-right">Mínimo kg</Th><Th className="text-right">Mínimo piezas</Th><Th>Estado</Th><Th>Último movimiento</Th></tr></thead>
                 <tbody>
                   {(data.items ?? []).map((item) => (
-                    <tr key={`${item.locationId}-${item.productId}`}>
+                    <tr className={tableRowClass} key={`${item.locationId}-${item.productId}`}>
                       <Td>{item.locationName ?? item.locationId}</Td>
-                      <Td><span className="font-bold">{item.productName ?? item.productId}</span>{item.sku && <span className="block text-xs text-[#68645c]">SKU {item.sku}</span>}</Td>
+                      <Td><span className="font-bold">{item.productName ?? item.productId}</span>{item.sku && <span className="block text-xs text-[var(--erp-muted-foreground)]">SKU {item.sku}</span>}</Td>
                       <Td>{item.unit ?? 'Sin unidad'}</Td>
-                      <Td>{formatNumber(item.quantityKg)}</Td>
-                      <Td>{formatNumber(item.quantityPieces)}</Td>
-                      <Td>{formatNumber(item.minQuantityKg)}</Td>
-                      <Td>{formatNumber(item.minQuantityPieces)}</Td>
+                      <Td className={numericCellClass}>{formatNumber(item.quantityKg)}</Td>
+                      <Td className={numericCellClass}>{formatNumber(item.quantityPieces)}</Td>
+                      <Td className={numericCellClass}>{formatNumber(item.minQuantityKg)}</Td>
+                      <Td className={numericCellClass}>{formatNumber(item.minQuantityPieces)}</Td>
                       <Td><Badge tone={item.isLowStock ? 'red' : 'green'}>{item.isLowStock ? 'Bajo stock' : 'Suficiente'}</Badge></Td>
                       <Td>{formatDateTime(item.lastMovementAt)}</Td>
                     </tr>
@@ -475,18 +525,18 @@ function AccountsReceivableReport() {
       <ReportSection<AccountsReceivableReport> emptyMessage="No hay cuentas por cobrar para los filtros seleccionados." query={query}>
         {(data) => (
           <>
-            <div className="grid gap-4 md:grid-cols-4">
-              <StatCard detail="Saldo de origen" label="Original" value={formatMoney(data.summary?.originalBalance)} />
-              <StatCard detail="Pendiente por cobrar" label="Pendiente" value={formatMoney(data.summary?.pendingBalance)} />
-              <StatCard detail="Crédito atrasado" label="Vencido" value={formatMoney(data.summary?.overdueBalance)} />
-              <StatCard detail="Pagos del periodo" label="Pagado" value={formatMoney(data.summary?.paymentsInPeriod)} />
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard detail="Saldo de origen" icon={<ClipboardList className="h-5 w-5" />} label="Original" value={formatMoney(data.summary?.originalBalance)} />
+              <StatCard detail="Pendiente por cobrar" icon={<CircleDollarSign className="h-5 w-5" />} label="Pendiente" tone="gold" value={formatMoney(data.summary?.pendingBalance)} />
+              <StatCard detail="Crédito atrasado" icon={<AlertTriangle className="h-5 w-5" />} label="Vencido" tone="danger" value={formatMoney(data.summary?.overdueBalance)} />
+              <StatCard detail="Pagos del periodo" icon={<WalletCards className="h-5 w-5" />} label="Pagado" tone="success" value={formatMoney(data.summary?.paymentsInPeriod)} />
             </div>
             <Card className="overflow-hidden p-5">
               <CardHeader><CardTitle>Cuentas por cobrar</CardTitle><CardDescription>Cliente, venta, vencimiento, folio físico, saldo y estado.</CardDescription></CardHeader>
-              <CardContent className="mt-4 overflow-x-auto rounded-2xl border border-[#20211f]/10">
-                <Table>
-                  <thead className="bg-[#f5f3ee]"><tr><Th>Cliente</Th><Th>Venta</Th><Th>Vencimiento</Th><Th>Folio físico</Th><Th>Saldo</Th><Th>Estado</Th><Th>Antigüedad</Th></tr></thead>
-                  <tbody>{(data.items ?? []).map((item, index) => (<tr key={item.accountReceivableId ?? index}><Td>{item.customerName ?? item.clientName ?? 'Sin cliente'}</Td><Td>{item.saleNumber ?? item.saleId ?? 'Sin venta'}</Td><Td>{formatDateTime(item.dueDate)}</Td><Td>{item.physicalFolio ?? 'Sin folio'}</Td><Td>{formatMoney(item.balance)}</Td><Td>{item.status ?? 'Sin estado'}</Td><Td>{item.agingStatus ?? 'Sin antigüedad'}</Td></tr>))}</tbody>
+              <CardContent className={tableShellClass}>
+                <Table className="min-w-[960px]">
+                  <thead><tr><Th>Cliente</Th><Th>Venta</Th><Th>Vencimiento</Th><Th>Folio físico</Th><Th className="text-right">Saldo</Th><Th>Estado</Th><Th>Antigüedad</Th></tr></thead>
+                  <tbody>{(data.items ?? []).map((item, index) => (<tr className={tableRowClass} key={item.accountReceivableId ?? index}><Td className="font-bold">{item.customerName ?? item.clientName ?? 'Sin cliente'}</Td><Td>{item.saleNumber ?? item.saleId ?? 'Sin venta'}</Td><Td>{formatDateTime(item.dueDate)}</Td><Td>{item.physicalFolio ?? 'Sin folio'}</Td><Td className={numericCellClass}>{formatMoney(item.balance)}</Td><Td>{item.status ?? 'Sin estado'}</Td><Td>{item.agingStatus ?? 'Sin antigüedad'}</Td></tr>))}</tbody>
                 </Table>
               </CardContent>
             </Card>
@@ -519,10 +569,10 @@ function DeliveryOperationsReport() {
             </div>
             <Card className="overflow-hidden p-5">
               <CardHeader><CardTitle>Incidencias</CardTitle><CardDescription>Devoluciones, rechazos parciales, no entregas y créditos atrasados.</CardDescription></CardHeader>
-              <CardContent className="mt-4 overflow-x-auto rounded-2xl border border-[#20211f]/10">
-                <Table>
-                  <thead className="bg-[#f5f3ee]"><tr><Th>Ruta</Th><Th>Tipo</Th><Th>Estado</Th><Th>Severidad</Th><Th>Descripción</Th></tr></thead>
-                  <tbody>{(data.incidents ?? []).map((incident, index) => (<tr key={`${incident.type ?? 'incidencia'}-${index}`}><Td>{incident.routeName ?? 'Sin ruta'}</Td><Td>{incident.type ?? 'Sin tipo'}</Td><Td>{incident.status ?? 'Sin estado'}</Td><Td>{incident.severity ?? 'Sin severidad'}</Td><Td>{incident.description ?? 'Sin descripción'}</Td></tr>))}</tbody>
+              <CardContent className={tableShellClass}>
+                <Table className="min-w-[760px]">
+                  <thead><tr><Th>Ruta</Th><Th>Tipo</Th><Th>Estado</Th><Th>Severidad</Th><Th>Descripción</Th></tr></thead>
+                  <tbody>{(data.incidents ?? []).map((incident, index) => (<tr className={tableRowClass} key={`${incident.type ?? 'incidencia'}-${index}`}><Td className="font-bold">{incident.routeName ?? 'Sin ruta'}</Td><Td>{incident.type ?? 'Sin tipo'}</Td><Td>{incident.status ?? 'Sin estado'}</Td><Td>{incident.severity ?? 'Sin severidad'}</Td><Td>{incident.description ?? 'Sin descripción'}</Td></tr>))}</tbody>
                 </Table>
               </CardContent>
             </Card>
@@ -536,13 +586,13 @@ function DeliveryOperationsReport() {
 function SummaryMapCard({ entries, title }: { entries?: Record<string, number>; title: string }) {
   const rows = Object.entries(entries ?? {})
   return (
-    <Card className="p-5">
+    <Card className="overflow-hidden p-5">
       <CardHeader><CardTitle>{title}</CardTitle><CardDescription>Conteo operativo confirmado.</CardDescription></CardHeader>
       <CardContent className="mt-4 space-y-3">
-        {rows.length === 0 ? <p className="rounded-2xl bg-[#f5f3ee] p-4 text-sm text-[#68645c]">Sin datos registrados.</p> : rows.map(([label, value]) => (
-          <div className="flex items-center justify-between rounded-2xl bg-[#f5f3ee] px-4 py-3" key={label}>
-            <span className="font-bold text-[#20211f]">{label}</span>
-            <span className="text-2xl font-black tracking-[-0.05em] text-[#39798b]">{formatNumber(value)}</span>
+        {rows.length === 0 ? <p className="rounded-2xl bg-[var(--erp-surface)] p-4 text-sm text-[var(--erp-muted-foreground)]">Sin datos registrados.</p> : rows.map(([label, value]) => (
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3" key={label}>
+            <span className="font-bold text-[var(--erp-foreground)]">{label}</span>
+            <span className="text-2xl font-black tracking-[-0.05em] text-[var(--erp-info)] tabular-nums">{formatNumber(value)}</span>
           </div>
         ))}
       </CardContent>
@@ -553,12 +603,18 @@ function SummaryMapCard({ entries, title }: { entries?: Record<string, number>; 
 function ReportPanel({ children, filters, subtitle, title }: { children: ReactNode; filters: ReactNode; subtitle: string; title: string }) {
   return (
     <section className="space-y-5">
-      <Card className="p-5">
-        <CardHeader>
-          <CardTitle className="text-2xl">{title}</CardTitle>
-          <CardDescription>{subtitle}</CardDescription>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-[color:var(--erp-border)] bg-white/70 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]"><Filter className="h-4 w-4" />Filtros del reporte</p>
+              <CardTitle className="mt-2 text-2xl">{title}</CardTitle>
+              <CardDescription className="mt-1">{subtitle}</CardDescription>
+            </div>
+            <Badge tone="blue">Consulta actual</Badge>
+          </div>
         </CardHeader>
-        <CardContent className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{filters}</CardContent>
+        <CardContent className="grid gap-3 p-5 sm:p-6 md:grid-cols-2 xl:grid-cols-4">{filters}</CardContent>
       </Card>
       {children}
     </section>
@@ -574,35 +630,50 @@ export function ReportsPage() {
   const selectedReport = visibleTabs.some((tab) => tab.key === activeReport) ? activeReport : visibleTabs[0]?.key
 
   return (
-    <main className="min-h-screen bg-[#f5f3ee] px-4 py-6 text-[#20211f] sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <section className="mx-auto max-w-7xl space-y-6">
-        <div className="overflow-hidden rounded-[2rem] border border-[#20211f]/10 bg-[#20211f] text-white shadow-[0_30px_100px_rgba(32,33,31,0.18)]">
-          <div className="grid gap-6 p-6 lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-[#f0b44c]">TASK-092 · Reportes operativos</p>
-              <h1 className="mt-4 max-w-3xl text-4xl font-black tracking-[-0.07em] sm:text-5xl">Mesa de control para vender, cobrar, surtir y repartir sin perder trazabilidad.</h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">Reportes casi en tiempo real basados en operaciones confirmadas. El diseño separa caja, crédito, inventario y reparto para que nadie confunda ingreso recibido con saldo por cobrar.</p>
+        <div className="relative overflow-hidden rounded-[2rem] border border-black/10 bg-[var(--erp-charcoal)] text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)]">
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(214,155,45,0.28),transparent_36%),linear-gradient(135deg,transparent,rgba(255,255,255,0.08))] lg:block" />
+          <div className="relative grid gap-6 p-6 lg:grid-cols-[1.2fr_0.8fr] lg:p-8">
+            <div className="max-w-4xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
+                <BarChart3 className="h-4 w-4" />FASE UI-011 · Reportes ejecutivos
+              </div>
+              <h1 className="mt-4 max-w-3xl text-3xl font-black tracking-[-0.07em] sm:text-5xl">Mesa ejecutiva para ventas, caja, inventario, cobranza y reparto.</h1>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">Reportes casi en tiempo real basados en operaciones confirmadas. La vista separa caja, crédito, inventario y reparto sin cambiar cálculos ni permisos existentes.</p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Badge className="border-white/10 bg-white/8 text-white" tone="slate">RBAC conservado</Badge>
+                <Badge className="border-white/10 bg-white/8 text-white" tone="slate">Sin datos simulados</Badge>
+                <Badge className="border-white/10 bg-white/8 text-white" tone="slate">Responsive</Badge>
+              </div>
             </div>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-5">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/55">Frescura operativa</p>
-              <p className="mt-3 text-5xl font-black tracking-[-0.08em] text-[#f0b44c]">60s</p>
-              <p className="mt-3 text-sm leading-6 text-white/70">Cada reporte muestra generación, datos incluidos y advertencia cuando el dato está viejo.</p>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-5 backdrop-blur">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/55"><RefreshCw className="h-4 w-4" />Frescura operativa</p>
+                <p className="mt-3 text-4xl font-black tracking-[-0.08em] text-[var(--erp-brand-gold-soft)] sm:text-5xl">60s</p>
+                <p className="mt-2 text-sm leading-6 text-white/70">Cada reporte conserva su indicador de generación y datos incluidos.</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-5 backdrop-blur sm:col-span-2 lg:col-span-1">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/55"><Sparkles className="h-4 w-4" />Panel visible</p>
+                <p className="mt-3 text-xl font-black tracking-[-0.04em] text-white">{visibleTabs.length} reporte(s) autorizados</p>
+                <p className="mt-2 text-sm leading-6 text-white/70">La navegación se deriva del mismo filtro de roles existente.</p>
+              </div>
             </div>
           </div>
         </div>
 
         {visibleTabs.length === 0 ? <UnauthorizedState /> : (
           <>
-            <nav aria-label="Reportes disponibles" className="flex gap-2 overflow-x-auto rounded-[1.35rem] border border-[#20211f]/10 bg-white p-2 shadow-sm">
+            <nav aria-label="Reportes disponibles" className="flex gap-2 overflow-x-auto rounded-[1.35rem] border border-[color:var(--erp-border)] bg-white/85 p-2 shadow-[var(--erp-shadow)] backdrop-blur">
               {visibleTabs.map((tab) => (
                 <Button
                   aria-pressed={selectedReport === tab.key}
-                  className={selectedReport === tab.key ? '' : 'whitespace-nowrap'}
+                  className="shrink-0 whitespace-nowrap"
                   key={tab.key}
                   onClick={() => setActiveReport(tab.key)}
                   variant={selectedReport === tab.key ? 'primary' : 'ghost'}
                 >
-                  {tab.label}
+                  {reportTabIcons[tab.key]}{tab.label}
                 </Button>
               ))}
             </nav>

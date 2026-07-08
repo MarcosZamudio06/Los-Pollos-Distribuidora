@@ -1,6 +1,6 @@
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
-import { LogOut, X } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { Avatar, AvatarFallback, Badge, ScrollArea, Separator } from '../ui'
 import { useAuth } from '../../features/auth'
 import { cn } from '../../lib/utils'
@@ -8,7 +8,6 @@ import { getActiveSidebarItemKey, getRoleLabel, getSidebarNavForRole, type Navig
 
 type SidebarProps = {
   collapsed?: boolean
-  onClose?: () => void
   onNavigate?: () => void
   variant?: 'desktop' | 'mobile'
 }
@@ -47,7 +46,7 @@ function getGroupedNavigation(items: NavigationItem[]) {
   }, [])
 }
 
-export function Sidebar({ collapsed = false, onClose, onNavigate, variant = 'desktop' }: SidebarProps) {
+export function Sidebar({ collapsed = false, onNavigate, variant = 'desktop' }: SidebarProps) {
   const { user } = useAuth()
   const location = useLocation()
   const shouldReduceMotion = useReducedMotion()
@@ -92,17 +91,6 @@ export function Sidebar({ collapsed = false, onClose, onNavigate, variant = 'des
               Pollos Distribuidora
             </p>
           </div>
-        )}
-
-        {expanded && onClose && (
-          <button
-            aria-label="Cerrar menú lateral"
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/8 text-white/78 transition hover:bg-white/14 hover:text-white focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" className="h-5 w-5" />
-          </button>
         )}
       </div>
 

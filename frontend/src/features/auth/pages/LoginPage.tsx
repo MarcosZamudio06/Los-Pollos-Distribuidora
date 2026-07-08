@@ -1,5 +1,14 @@
 import { useState, type FormEvent } from 'react'
+import {
+  AlertCircle,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  Truck,
+  Warehouse,
+} from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Alert, Button, Card, CardContent, Input } from '@/components/ui'
 import { useAuth } from '../useAuth'
 
 type LocationState = {
@@ -38,90 +47,144 @@ export function LoginPage() {
     }
   }
 
+  const activeError = formError ?? error
+
   return (
-    <main className="min-h-screen bg-[#f5f3ee] text-[#20211f]">
-      <section className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="relative hidden overflow-hidden bg-[#20211f] p-10 text-[#f5f3ee] lg:block">
-          <div className="absolute inset-y-0 right-0 w-24 bg-[repeating-linear-gradient(90deg,#d43f2f_0_10px,#f0b44c_10px_16px,#20211f_16px_30px)] opacity-90" />
+    <main className="min-h-screen overflow-hidden bg-[var(--erp-background)] text-[var(--erp-foreground)]">
+      <section className="relative grid min-h-screen lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_12%,rgba(214,155,45,0.20),transparent_26rem),radial-gradient(circle_at_92%_16%,rgba(182,42,34,0.12),transparent_24rem)]" />
+
+        <div className="relative hidden overflow-hidden bg-[var(--erp-charcoal)] p-10 text-white lg:block">
+          <div className="absolute inset-y-0 right-0 w-28 bg-[repeating-linear-gradient(90deg,rgba(182,42,34,0.92)_0_10px,rgba(214,155,45,0.92)_10px_16px,rgba(17,24,21,0.88)_16px_30px)] opacity-80" />
+          <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-[rgba(214,155,45,0.16)] blur-3xl" />
           <div className="relative flex h-full max-w-xl flex-col justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#f0b44c]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
+                <ShieldCheck className="h-4 w-4" />
                 Acceso operativo
+              </div>
+              <h1 className="mt-8 max-w-lg text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white">
+                Control diario para una operación sin puntos ciegos.
+              </h1>
+              <p className="mt-5 max-w-md text-base leading-7 text-white/68">
+                Ventas, inventario, cobranza y reparto bajo una sesión segura del ERP.
               </p>
             </div>
-            <div className="rounded-[2rem] border border-[#f5f3ee]/15 bg-[#f5f3ee]/8 p-6 backdrop-blur">
-              <p className="mt-3 text-2xl font-semibold leading-tight">
-                Bienvenido a El Pollo de los pollos
-              </p>
+
+            <div className="grid gap-3">
+              {[
+                { icon: Warehouse, label: 'Inventario por ubicación' },
+                { icon: Truck, label: 'Rutas y cobranza en campo' },
+                { icon: LockKeyhole, label: 'Permisos validados por sesión' },
+              ].map(({ icon: Icon, label }) => (
+                <div
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.07] p-4 text-sm font-bold text-white/82 backdrop-blur"
+                  key={label}
+                >
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-[rgba(214,155,45,0.16)] text-[var(--erp-brand-gold-soft)]">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  {label}
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-center px-6 py-12 sm:px-10">
-          <div className="w-full max-w-md">
-            <div className="mb-10 lg:hidden">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#9d2d24]">
-                Pollos Distribuidor
+        <div className="relative flex items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
+          <div className="w-full max-w-[28rem]">
+            <div className="mb-8 lg:hidden">
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--erp-danger)]">
+                Pollos Distribuidora
               </p>
-              <h1 className="mt-3 text-4xl font-black leading-none tracking-[-0.06em]">
+              <h1 className="mt-3 text-4xl font-black leading-none tracking-[-0.06em] text-[var(--erp-foreground)]">
                 Acceso operativo
               </h1>
             </div>
 
-            <form
-              className="rounded-[2rem] border border-[#20211f]/10 bg-white p-7 shadow-[0_24px_80px_rgba(32,33,31,0.12)] sm:p-8"
-              onSubmit={handleSubmit}
-            >
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9d2d24]">
-                Iniciar sesión
-              </p>
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#20211f]">
-                Identifica tu turno
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-[#68645c]">
-                Usa tu correo interno. El sistema validará tu estado activo y permisos.
-              </p>
+            <Card className="relative overflow-hidden border-[color:var(--erp-border)] bg-white/92 p-0 shadow-[var(--erp-shadow-elevated)] backdrop-blur">
+              <div className="h-1.5 bg-[linear-gradient(90deg,var(--erp-brand-red),var(--erp-brand-gold),var(--erp-charcoal))]" />
+              <CardContent className="p-6 sm:p-8">
+                <form onSubmit={handleSubmit}>
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[rgba(182,42,34,0.10)] text-[var(--erp-danger)]">
+                    <LockKeyhole className="h-6 w-6" />
+                  </div>
+                  <p className="mt-6 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]">
+                    Iniciar sesión
+                  </p>
+                  <h2 className="mt-3 text-3xl font-black tracking-[-0.055em] text-[var(--erp-foreground)]">
+                    Identifica tu turno
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-[var(--erp-muted-foreground)]">
+                    Usa tu correo interno. El sistema validará tu estado activo y permisos.
+                  </p>
 
-              <label className="mt-8 block text-sm font-semibold text-[#20211f]" htmlFor="email">
-                Correo
-              </label>
-              <input
-                autoComplete="email"
-                className="mt-2 w-full rounded-2xl border border-[#d7d1c5] bg-[#fbfaf7] px-4 py-3 text-base outline-none transition focus:border-[#9d2d24] focus:ring-4 focus:ring-[#d43f2f]/15"
-                id="email"
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                type="email"
-                value={email}
-              />
+                  <div className="mt-8 grid gap-5">
+                    <label
+                      className="grid gap-2 text-sm font-bold text-[var(--erp-foreground)]"
+                      htmlFor="email"
+                    >
+                      Correo
+                      <div className="relative">
+                        <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--erp-muted-foreground)]" />
+                        <Input
+                          aria-describedby={activeError ? 'login-error' : undefined}
+                          aria-invalid={Boolean(activeError)}
+                          autoComplete="email"
+                          className="h-12 rounded-2xl bg-[var(--erp-surface)] pl-10 text-base"
+                          id="email"
+                          onChange={(event) => setEmail(event.target.value)}
+                          required
+                          type="email"
+                          value={email}
+                        />
+                      </div>
+                    </label>
 
-              <label className="mt-5 block text-sm font-semibold text-[#20211f]" htmlFor="password">
-                Contraseña
-              </label>
-              <input
-                autoComplete="current-password"
-                className="mt-2 w-full rounded-2xl border border-[#d7d1c5] bg-[#fbfaf7] px-4 py-3 text-base outline-none transition focus:border-[#9d2d24] focus:ring-4 focus:ring-[#d43f2f]/15"
-                id="password"
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                type="password"
-                value={password}
-              />
+                    <label
+                      className="grid gap-2 text-sm font-bold text-[var(--erp-foreground)]"
+                      htmlFor="password"
+                    >
+                      Contraseña
+                      <div className="relative">
+                        <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--erp-muted-foreground)]" />
+                        <Input
+                          aria-describedby={activeError ? 'login-error' : undefined}
+                          aria-invalid={Boolean(activeError)}
+                          autoComplete="current-password"
+                          className="h-12 rounded-2xl bg-[var(--erp-surface)] pl-10 text-base"
+                          id="password"
+                          onChange={(event) => setPassword(event.target.value)}
+                          required
+                          type="password"
+                          value={password}
+                        />
+                      </div>
+                    </label>
+                  </div>
 
-              {(formError || error) && (
-                <p className="mt-5 rounded-2xl border border-[#d43f2f]/25 bg-[#d43f2f]/8 px-4 py-3 text-sm font-medium text-[#9d2d24]">
-                  {formError ?? error}
-                </p>
-              )}
+                  {activeError && (
+                    <Alert
+                      className="mt-5 flex gap-3 text-sm font-semibold"
+                      id="login-error"
+                      role="alert"
+                      tone="error"
+                    >
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{activeError}</span>
+                    </Alert>
+                  )}
 
-              <button
-                className="mt-7 w-full rounded-2xl bg-[#20211f] px-5 py-3.5 text-sm font-bold uppercase tracking-[0.16em] text-white transition hover:bg-[#9d2d24] focus:outline-none focus:ring-4 focus:ring-[#f0b44c]/40 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isSubmitting}
-                type="submit"
-              >
-                {isSubmitting ? 'Validando acceso' : 'Entrar al sistema'}
-              </button>
-            </form>
+                  <Button
+                    className="mt-7 h-12 w-full rounded-2xl text-sm font-black uppercase tracking-[0.14em]"
+                    disabled={isSubmitting}
+                    type="submit"
+                  >
+                    {isSubmitting ? 'Validando acceso' : 'Entrar al sistema'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>

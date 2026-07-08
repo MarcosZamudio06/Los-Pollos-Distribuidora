@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { cn } from '../../lib/utils'
@@ -24,6 +24,7 @@ function readStoredSidebarState() {
 
 export function AppShell() {
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(readStoredSidebarState)
+  const desktopSidebarRef = useRef<HTMLDivElement | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(DESKTOP_MEDIA_QUERY).matches,
@@ -44,6 +45,25 @@ export function AppShell() {
   }, [])
 
   useEffect(() => {
+    if (!desktopSidebarOpen) {
+      return undefined
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const sidebarElement = desktopSidebarRef.current
+
+      if (!sidebarElement || sidebarElement.contains(event.target as Node)) {
+        return
+      }
+
+      setDesktopSidebarOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [desktopSidebarOpen])
+
+  useEffect(() => {
     if (!mobileSidebarOpen) {
       return undefined
     }
@@ -61,8 +81,13 @@ export function AppShell() {
   return (
     <div className="erp-shell-bg min-h-screen text-[var(--erp-foreground)]">
       <div className="flex min-h-screen">
-        <div className="hidden md:block">
-          <Sidebar collapsed={!desktopSidebarOpen} onClose={() => setDesktopSidebarOpen(false)} />
+        <div
+          className="sticky top-0 z-30 hidden h-dvh self-start md:block"
+          onMouseEnter={() => setDesktopSidebarOpen(true)}
+          onMouseLeave={() => setDesktopSidebarOpen(false)}
+          ref={desktopSidebarRef}
+        >
+          <Sidebar collapsed={!desktopSidebarOpen} />
         </div>
 
         <AnimatePresence>
@@ -90,11 +115,7 @@ export function AppShell() {
                 role="dialog"
                 transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: 'easeOut' }}
               >
-                <Sidebar
-                  onClose={() => setMobileSidebarOpen(false)}
-                  onNavigate={() => setMobileSidebarOpen(false)}
-                  variant="mobile"
-                />
+                <Sidebar onNavigate={() => setMobileSidebarOpen(false)} variant="mobile" />
               </motion.div>
             </motion.div>
           )}

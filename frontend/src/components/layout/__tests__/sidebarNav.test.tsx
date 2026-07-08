@@ -88,17 +88,17 @@ describe('role navigation', () => {
     expect(getActiveSidebarItemKey('/route-settlements/settlement-1')).toBe('delivery-routes')
   })
 
-  it('renderiza cerrar sesión abajo y la X dentro del sidebar expandido', () => {
+  it('renderiza cerrar sesión abajo sin botón interno de cerrar', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/sales/history']}>
-        <Sidebar onClose={() => undefined} />
+        <Sidebar />
       </MemoryRouter>,
     )
 
     expect(html).toContain('El Pollo')
     expect(html).toContain('Pollos Distribuidora')
     expect(html).toContain('Cerrar sesión')
-    expect(html).toContain('Cerrar menú lateral')
+    expect(html).not.toContain('Cerrar menú lateral')
     expect(html).toContain('aria-current="page"')
     expect(html.lastIndexOf('Cerrar sesión')).toBeGreaterThan(html.lastIndexOf('Reportes'))
   })
