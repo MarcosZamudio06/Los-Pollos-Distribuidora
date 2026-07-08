@@ -57,13 +57,29 @@ export const initialRoleTestUsers = [
   },
 ] as const;
 
-export const initialSeedLocation = {
-  name: 'Development Main Location',
-  code: 'DEV-MAIN',
-  type: 'MIXED',
-  address: 'Development-only operational location',
-  isActive: true,
-} as const;
+export const initialSeedLocations = [
+  {
+    name: 'Veracruz',
+    code: 'VER',
+    type: 'BRANCH',
+    address: 'Sucursal Veracruz',
+    isActive: true,
+  },
+  {
+    name: 'Boca del Río',
+    code: 'BDR',
+    type: 'BRANCH',
+    address: 'Sucursal Boca del Río',
+    isActive: true,
+  },
+  {
+    name: 'Alvarado',
+    code: 'ALV',
+    type: 'BRANCH',
+    address: 'Sucursal Alvarado',
+    isActive: true,
+  },
+] as const;
 
 export const initialCategories = [
   {
@@ -204,11 +220,13 @@ async function seedInitialAdmin(prisma: SeedPrismaClient): Promise<void> {
 }
 
 async function seedInitialLocation(prisma: SeedPrismaClient): Promise<void> {
-  await prisma.operationalLocation.upsert({
-    where: { code: initialSeedLocation.code },
-    update: initialSeedLocation,
-    create: initialSeedLocation,
-  });
+  for (const location of initialSeedLocations) {
+    await prisma.operationalLocation.upsert({
+      where: { code: location.code },
+      update: location,
+      create: location,
+    });
+  }
 }
 
 

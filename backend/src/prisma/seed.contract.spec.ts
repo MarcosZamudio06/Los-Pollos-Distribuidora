@@ -11,7 +11,7 @@ import {
   initialRoleTestUsers,
   initialProducts,
   initialRoles,
-  initialSeedLocation,
+  initialSeedLocations,
   seed,
   SeedPrismaClient,
 } from '../../prisma/seed';
@@ -222,12 +222,30 @@ describe('Prisma seed contract', () => {
     ).resolves.toBe(true);
   });
 
-  it('defines development-only location, base categories, and example products without global stock', () => {
-    expect(initialSeedLocation).toMatchObject({
-      code: 'DEV-MAIN',
-      type: 'MIXED',
-      isActive: true,
-    });
+  it('defines the three requested branches, base categories, and example products without global stock', () => {
+    expect(initialSeedLocations).toHaveLength(3);
+    expect(initialSeedLocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Veracruz',
+          code: 'VER',
+          type: 'BRANCH',
+          isActive: true,
+        }),
+        expect.objectContaining({
+          name: 'Boca del Río',
+          code: 'BDR',
+          type: 'BRANCH',
+          isActive: true,
+        }),
+        expect.objectContaining({
+          name: 'Alvarado',
+          code: 'ALV',
+          type: 'BRANCH',
+          isActive: true,
+        }),
+      ]),
+    );
 
     expect(initialCategories.map((category) => category.name)).toEqual([
       'Base chicken products',

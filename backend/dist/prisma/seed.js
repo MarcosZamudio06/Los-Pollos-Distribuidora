@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.initialProducts = exports.initialCategories = exports.initialSeedLocation = exports.initialRoleTestUsers = exports.initialAdminUser = exports.initialRoles = exports.DEVELOPMENT_ROLE_TEST_PASSWORD = exports.DEVELOPMENT_ADMIN_PASSWORD = void 0;
+exports.initialProducts = exports.initialCategories = exports.initialSeedLocations = exports.initialRoleTestUsers = exports.initialAdminUser = exports.initialRoles = exports.DEVELOPMENT_ROLE_TEST_PASSWORD = exports.DEVELOPMENT_ADMIN_PASSWORD = void 0;
 exports.getInitialAdminPassword = getInitialAdminPassword;
 exports.seed = seed;
 const client_1 = require("@prisma/client");
@@ -59,13 +59,29 @@ exports.initialRoleTestUsers = [
         mustChangePassword: false,
     },
 ];
-exports.initialSeedLocation = {
-    name: 'Development Main Location',
-    code: 'DEV-MAIN',
-    type: 'MIXED',
-    address: 'Development-only operational location',
-    isActive: true,
-};
+exports.initialSeedLocations = [
+    {
+        name: 'Veracruz',
+        code: 'VER',
+        type: 'BRANCH',
+        address: 'Sucursal Veracruz',
+        isActive: true,
+    },
+    {
+        name: 'Boca del Río',
+        code: 'BDR',
+        type: 'BRANCH',
+        address: 'Sucursal Boca del Río',
+        isActive: true,
+    },
+    {
+        name: 'Alvarado',
+        code: 'ALV',
+        type: 'BRANCH',
+        address: 'Sucursal Alvarado',
+        isActive: true,
+    },
+];
 exports.initialCategories = [
     {
         name: 'Base chicken products',
@@ -162,11 +178,13 @@ async function seedInitialAdmin(prisma) {
     }
 }
 async function seedInitialLocation(prisma) {
-    await prisma.operationalLocation.upsert({
-        where: { code: exports.initialSeedLocation.code },
-        update: exports.initialSeedLocation,
-        create: exports.initialSeedLocation,
-    });
+    for (const location of exports.initialSeedLocations) {
+        await prisma.operationalLocation.upsert({
+            where: { code: location.code },
+            update: location,
+            create: location,
+        });
+    }
 }
 async function seedInitialRoleUsers(prisma) {
     const passwordHash = await bcryptjs_1.default.hash(exports.DEVELOPMENT_ROLE_TEST_PASSWORD, 12);

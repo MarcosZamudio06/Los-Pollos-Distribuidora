@@ -48,13 +48,25 @@ export declare const initialRoleTestUsers: readonly [{
     readonly isActive: true;
     readonly mustChangePassword: false;
 }];
-export declare const initialSeedLocation: {
-    readonly name: "Development Main Location";
-    readonly code: "DEV-MAIN";
-    readonly type: "MIXED";
-    readonly address: "Development-only operational location";
+export declare const initialSeedLocations: readonly [{
+    readonly name: "Veracruz";
+    readonly code: "VER";
+    readonly type: "BRANCH";
+    readonly address: "Sucursal Veracruz";
     readonly isActive: true;
-};
+}, {
+    readonly name: "Boca del Río";
+    readonly code: "BDR";
+    readonly type: "BRANCH";
+    readonly address: "Sucursal Boca del Río";
+    readonly isActive: true;
+}, {
+    readonly name: "Alvarado";
+    readonly code: "ALV";
+    readonly type: "BRANCH";
+    readonly address: "Sucursal Alvarado";
+    readonly isActive: true;
+}];
 export declare const initialCategories: readonly [{
     readonly name: "Base chicken products";
     readonly description: "Development/example seed data for base poultry catalog items.";
