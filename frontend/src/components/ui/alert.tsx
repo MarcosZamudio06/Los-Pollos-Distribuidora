@@ -1,13 +1,28 @@
-import type { ComponentPropsWithoutRef } from 'react'
+import type { HTMLAttributes } from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from '@/lib/utils'
 
-type AlertTone = 'info' | 'error' | 'warning'
+const alertVariants = cva('rounded-2xl border p-4', {
+  defaultVariants: {
+    tone: 'info',
+  },
+  variants: {
+    tone: {
+      info: 'border-[rgba(47,111,115,0.18)] bg-[rgba(47,111,115,0.08)] text-[var(--erp-info)]',
+      warning:
+        'border-[rgba(180,122,16,0.2)] bg-[rgba(180,122,16,0.10)] text-[var(--erp-warning)]',
+      error:
+        'border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.08)] text-[var(--erp-danger)]',
+      success:
+        'border-[rgba(63,123,65,0.18)] bg-[rgba(63,123,65,0.08)] text-[var(--erp-success)]',
+    },
+  },
+})
 
-const toneClasses: Record<AlertTone, string> = {
-  error: 'border-[#d43f2f]/30 bg-[#fff0ee] text-[#7f231b]',
-  info: 'border-[#39798b]/25 bg-[#e9f5f7] text-[#275969]',
-  warning: 'border-[#f0b44c]/40 bg-[#fff6df] text-[#815512]',
-}
+export type AlertTone = VariantProps<typeof alertVariants>['tone']
 
-export function Alert({ className = '', tone = 'info', ...props }: ComponentPropsWithoutRef<'aside'> & { tone?: AlertTone }) {
-  return <aside className={`rounded-2xl border p-4 ${toneClasses[tone]} ${className}`} {...props} />
+export type AlertProps = HTMLAttributes<HTMLElement> & VariantProps<typeof alertVariants>
+
+export function Alert({ className, tone, ...props }: AlertProps) {
+  return <aside className={cn(alertVariants({ tone }), className)} {...props} />
 }

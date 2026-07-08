@@ -1,7 +1,30 @@
 @import 'tailwindcss';
 
+@theme {
+  --color-background: var(--erp-background);
+  --color-foreground: var(--erp-foreground);
+  --color-card: var(--erp-surface);
+  --color-card-foreground: var(--erp-foreground);
+  --color-popover: var(--erp-surface-elevated);
+  --color-popover-foreground: var(--erp-foreground);
+  --color-primary: var(--erp-brand-red);
+  --color-primary-foreground: var(--erp-on-brand);
+  --color-secondary: var(--erp-surface-muted);
+  --color-secondary-foreground: var(--erp-foreground);
+  --color-muted: var(--erp-surface-muted);
+  --color-muted-foreground: var(--erp-muted-foreground);
+  --color-accent: var(--erp-brand-gold-soft);
+  --color-accent-foreground: var(--erp-foreground);
+  --color-destructive: var(--erp-danger);
+  --color-destructive-foreground: var(--erp-on-brand);
+  --color-border: var(--erp-border);
+  --color-input: var(--erp-border);
+  --color-ring: var(--erp-brand-gold);
+}
+
 @layer base {
   :root {
+    color-scheme: light;
     font-family:
       Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
       'Segoe UI', sans-serif;
@@ -9,6 +32,29 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+
+    --erp-charcoal: #111815;
+    --erp-graphite: #1c2420;
+    --erp-surface: #fbf8f2;
+    --erp-surface-elevated: #ffffff;
+    --erp-surface-muted: #f1ebdf;
+    --erp-background: #f7f2ea;
+    --erp-foreground: #1d2420;
+    --erp-muted-foreground: #6d675f;
+    --erp-border: #d8d0c3;
+    --erp-on-brand: #ffffff;
+    --erp-brand-red: #b62a22;
+    --erp-brand-red-strong: #8f201b;
+    --erp-brand-gold: #d69b2d;
+    --erp-brand-gold-soft: #f1cb79;
+    --erp-brand-gold-deep: #7a5718;
+    --erp-success: #3f7b41;
+    --erp-warning: #b47a10;
+    --erp-danger: #9d2d24;
+    --erp-info: #2f6f73;
+    --erp-shadow: 0 24px 80px rgba(17, 24, 21, 0.08);
+    --erp-shadow-elevated: 0 18px 60px rgba(17, 24, 21, 0.11);
+    --erp-ring: rgba(214, 155, 45, 0.34);
   }
 
   * {
@@ -17,15 +63,20 @@
 
   html {
     min-height: 100%;
+    background: var(--erp-background);
   }
 
   body {
     margin: 0;
     min-height: 100vh;
-    background: #f8fafc;
-    color: #0f172a;
+    color: var(--erp-foreground);
+    background:
+      radial-gradient(circle at top left, rgba(214, 155, 45, 0.16), transparent 26rem),
+      radial-gradient(circle at top right, rgba(182, 42, 34, 0.08), transparent 22rem),
+      linear-gradient(180deg, #fcfaf6 0%, #f8f4ed 42%, #f0eadf 100%);
   }
 
+  body,
   button,
   input,
   textarea,
@@ -33,7 +84,84 @@
     font: inherit;
   }
 
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0;
+    color: var(--erp-foreground);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  ::selection {
+    background: rgba(182, 42, 34, 0.18);
+    color: var(--erp-foreground);
+  }
+
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--erp-brand-gold);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--erp-ring);
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background: rgba(29, 36, 32, 0.22);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(29, 36, 32, 0.34);
+    background-clip: padding-box;
+  }
+
   #root {
     min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .erp-shell-bg {
+    background:
+      radial-gradient(circle at top left, rgba(214, 155, 45, 0.12), transparent 20rem),
+      linear-gradient(180deg, rgba(251, 248, 242, 0.95), rgba(242, 236, 226, 0.98));
+  }
+
+  .erp-panel {
+    background: var(--erp-surface-elevated);
+    box-shadow: var(--erp-shadow);
+    border: 1px solid color-mix(in srgb, var(--erp-border) 84%, transparent);
+  }
+
+  .erp-panel-muted {
+    background: var(--erp-surface);
+    border: 1px solid color-mix(in srgb, var(--erp-border) 82%, transparent);
+  }
+
+  .erp-topbar {
+    background: color-mix(in srgb, var(--erp-surface) 85%, white 15%);
+    backdrop-filter: blur(18px);
   }
 }

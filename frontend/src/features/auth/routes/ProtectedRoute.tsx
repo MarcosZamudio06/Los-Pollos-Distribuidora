@@ -1,12 +1,10 @@
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Button } from '../../../components/ui'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../useAuth'
 import type { PropsWithChildren } from 'react'
 
 export function ProtectedRoute({ children }: PropsWithChildren) {
   const { isAuthenticated, status } = useAuth()
   const location = useLocation()
-  const navigate = useNavigate()
 
   if (status === 'checking') {
     return (
@@ -22,19 +20,5 @@ export function ProtectedRoute({ children }: PropsWithChildren) {
     return <Navigate replace state={{ from: location }} to="/login" />
   }
 
-  return (
-    <>
-      <div className="fixed right-4 top-4 z-50 sm:right-6 sm:top-6">
-        <Button
-          aria-label="Cerrar sesión"
-          className="shadow-[0_14px_40px_rgba(32,33,31,0.18)]"
-          onClick={() => navigate('/logout')}
-          variant="secondary"
-        >
-          Cerrar sesión
-        </Button>
-      </div>
-      {children}
-    </>
-  )
+  return children
 }

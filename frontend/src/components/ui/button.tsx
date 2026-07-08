@@ -1,17 +1,52 @@
-import type { ComponentPropsWithoutRef } from 'react'
+import type { ButtonHTMLAttributes } from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from '@/lib/utils'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost'
+const buttonVariants = cva(
+  'inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition duration-200 focus-visible:ring-4 disabled:pointer-events-none disabled:opacity-60',
+  {
+    defaultVariants: {
+      variant: 'primary',
+      size: 'md',
+    },
+    variants: {
+      size: {
+        md: 'h-10',
+        sm: 'h-9 px-3 text-xs',
+        lg: 'h-11 px-5 text-sm',
+      },
+      variant: {
+        primary:
+          'border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] text-[var(--erp-on-brand)] shadow-[0_10px_28px_rgba(182,42,34,0.16)] hover:bg-[var(--erp-brand-red-strong)] focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]',
+        secondary:
+          'border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] text-[var(--erp-foreground)] hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]',
+        outline:
+          'border-[color:var(--erp-border)] bg-transparent text-[var(--erp-foreground)] hover:border-[var(--erp-brand-gold)] hover:bg-[var(--erp-surface-muted)] focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]',
+        ghost:
+          'border-transparent bg-transparent text-[var(--erp-muted-foreground)] hover:bg-[var(--erp-surface-muted)] hover:text-[var(--erp-foreground)] focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]',
+        destructive:
+          'border-[var(--erp-danger)] bg-[var(--erp-danger)] text-[var(--erp-on-brand)] shadow-[0_10px_28px_rgba(157,45,36,0.16)] hover:bg-[var(--erp-brand-red-strong)] focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]',
+      },
+    },
+  },
+)
 
-const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'border-[#9d2d24] bg-[#9d2d24] text-white hover:bg-[#84251e]',
-  secondary: 'border-[#20211f]/15 bg-white text-[#20211f] hover:border-[#9d2d24] hover:text-[#9d2d24]',
-  ghost: 'border-transparent bg-transparent text-[#39798b] hover:bg-[#39798b]/10',
-}
+export type ButtonVariant = VariantProps<typeof buttonVariants>['variant']
+export type ButtonSize = VariantProps<typeof buttonVariants>['size']
 
-export function Button({ className = '', type = 'button', variant = 'primary', ...props }: ComponentPropsWithoutRef<'button'> & { variant?: ButtonVariant }) {
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants>
+
+export function Button({
+  className,
+  size,
+  type = 'button',
+  variant,
+  ...props
+}: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-sm font-bold transition focus:outline-none focus:ring-4 focus:ring-[#f0b44c]/40 disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses[variant]} ${className}`}
+      className={cn(buttonVariants({ size, variant }), className)}
       type={type}
       {...props}
     />

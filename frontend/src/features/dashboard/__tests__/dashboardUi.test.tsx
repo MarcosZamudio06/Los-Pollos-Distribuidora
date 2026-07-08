@@ -41,7 +41,7 @@ vi.mock('../../reportes', async (importOriginal) => {
   }
 })
 
-describe('TASK-091 dashboard UI', () => {
+describe('UI-004 role-aware executive dashboard', () => {
   beforeEach(() => {
     mockState.auth = { user: { id: 'admin-1', name: 'Admin', role: 'ADMIN' } }
     mockState.dashboard = { data: dashboardData, error: null, isLoading: false, refetch: vi.fn() }
@@ -50,13 +50,12 @@ describe('TASK-091 dashboard UI', () => {
   it('renderiza cards principales, bajo stock por ubicación y gráficas en español', () => {
     const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
 
-    expect(html).toContain('Tablero operativo')
+    expect(html).toContain('Dashboard Ejecutivo')
     expect(html).toContain('Ventas del día')
-    expect(html).toContain('Caja por ventas')
-    expect(html).toContain('Bajo stock por ubicación')
+    expect(html).toContain('Inventario crítico')
     expect(html).toContain('Sucursal Norte')
     expect(html).toContain('Pierna')
-    expect(html).toContain('Contado contra crédito')
+    expect(html).toContain('Ventas por canal')
     expect(html).toContain('Top productos')
     expect(html).not.toContain('global stock')
   })
@@ -66,10 +65,39 @@ describe('TASK-091 dashboard UI', () => {
 
     const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
 
-    expect(html).toContain('Estado operativo de rutas')
-    expect(html).toContain('Rutas activas')
+    expect(html).toContain('Próxima ruta y entregas')
+    expect(html).toContain('Rutas asignadas')
     expect(html).not.toContain('Caja por ventas')
     expect(html).not.toContain('Saldo vencido')
+    expect(html).not.toContain('/sales')
+    expect(html).not.toContain('/accounts-receivable')
+    expect(html).not.toContain('/inventory')
+  })
+
+
+  it('filtra acciones rápidas y métricas para vendedor', () => {
+    mockState.auth = { user: { id: 'seller-1', name: 'Vendedor', role: 'SELLER' } }
+
+    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+
+    expect(html).toContain('Ventas del día')
+    expect(html).toContain('Clientes')
+    expect(html).toContain('Inventario consultable')
+    expect(html).not.toContain('Nueva compra')
+    expect(html).not.toContain('/purchases')
+    expect(html).not.toContain('Cobranza próxima')
+  })
+
+  it('filtra dashboard de almacén sin ventas globales ni cobranza', () => {
+    mockState.auth = { user: { id: 'warehouse-1', name: 'Almacén', role: 'WAREHOUSE' } }
+
+    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+
+    expect(html).toContain('Inventario crítico')
+    expect(html).toContain('Compras')
+    expect(html).not.toContain('Ventas del día')
+    expect(html).not.toContain('Cobranza próxima')
+    expect(html).not.toContain('/accounts-receivable')
   })
 
   it('muestra estado vacío cuando no hay métricas para los filtros', () => {

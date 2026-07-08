@@ -8,6 +8,7 @@ import { CancelSaleDialog } from '../CancelSaleDialog'
 import { TicketModal } from '../components'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
+import { SalesPosPage } from '../SalesPosPage'
 import type { SaleDetail, TicketData } from '../types'
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -16,6 +17,9 @@ const mockState = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } },
   cancelSale: { isPending: false, mutateAsync: vi.fn() },
   documents: { data: { items: [] as Array<{ createdAt?: string; documentType?: string; id?: string; physicalFolio?: string; status?: string }> }, error: null, isLoading: false },
+  createSale: { isPending: false, mutateAsync: vi.fn() },
+  customers: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false },
+  products: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false, refetch: vi.fn() },
   sale: { data: null as SaleDetail | null, error: null, isLoading: false },
   sales: { data: { items: [] as SaleDetail[] }, error: null, isLoading: false },
   ticket: { data: undefined as TicketData | undefined, error: null, isLoading: false },
@@ -23,6 +27,7 @@ const mockState = vi.hoisted(() => ({
 
 vi.mock('../hooks', () => ({
   useCancelSale: () => mockState.cancelSale,
+  useCreateSale: () => mockState.createSale,
   useSale: () => mockState.sale,
   useSaleDocuments: () => mockState.documents,
   useSales: () => mockState.sales,
@@ -31,6 +36,14 @@ vi.mock('../hooks', () => ({
 
 vi.mock('../../auth', () => ({
   useAuth: () => mockState.auth,
+}))
+
+vi.mock('../../inventario/hooks/useProducts', () => ({
+  useProducts: () => mockState.products,
+}))
+
+vi.mock('../../clientes/hooks/useCustomers', () => ({
+  useCustomers: () => mockState.customers,
 }))
 
 function renderWithRouter(element: React.ReactElement, initialEntry = '/sales/history') {
@@ -76,10 +89,50 @@ describe('TASK-055 sales UI behavior', () => {
   beforeEach(() => {
     mockState.auth = { user: { role: 'ADMIN' } }
     mockState.cancelSale = { isPending: false, mutateAsync: vi.fn() }
+    mockState.createSale = { isPending: false, mutateAsync: vi.fn() }
+    mockState.customers = { data: [], error: null, isLoading: false }
     mockState.documents = { data: { items: [] }, error: null, isLoading: false }
+    mockState.products = { data: [], error: null, isLoading: false, refetch: vi.fn() }
     mockState.sale = { data: null, error: null, isLoading: false }
     mockState.sales = { data: { items: [] }, error: null, isLoading: false }
     mockState.ticket = { data: undefined, error: null, isLoading: false }
+  })
+
+
+  it('renderiza POS empresarial para ADMIN y mantiene estados operativos visibles', () => {
+    mockState.auth = { user: { role: 'ADMIN' } }
+    mockState.products = {
+      data: [
+        { id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } },
+        { id: 'prod-2', name: 'Pechuga', sku: 'PECH', presentationType: 'CUT', unit: 'KG', salePrice: 120, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 0 } },
+      ],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+
+    const html = renderWithRouter(<SalesPosPage />, '/sales')
+
+    expect(html).toContain('Punto de venta empresarial')
+    expect(html).toContain('Total en vivo')
+    expect(html).toContain('Ubicación operativa')
+    expect(html).toContain('Buscador de productos')
+    expect(html).toContain('Carrito')
+    expect(html).toContain('Cliente')
+    expect(html).toContain('Tipo de venta y pago')
+    expect(html).toContain('Documento de venta')
+    expect(html).toContain('Resumen sticky')
+    expect(html).toContain('Selecciona una ubicación operativa')
+    expect(html).toContain('Confirmar venta')
+  })
+
+  it('mantiene bloqueo local del POS para roles no autorizados', () => {
+    mockState.auth = { user: { role: 'DRIVER' } }
+
+    const html = renderWithRouter(<SalesPosPage />, '/sales')
+
+    expect(html).toContain('Acceso al POS denegado')
+    expect(html).toContain('Solo los roles ADMIN y SELLER')
   })
 
   it('muestra historial con filtros y datos operativos en español', () => {

@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, PackageSearch, Search, ShoppingCart } from 'lucide-react'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
 import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney } from './posLogic'
 import { documentTypeLabel, operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
@@ -18,6 +19,9 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+const panelClass = 'rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[var(--erp-shadow)]'
+const inputClass = 'rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-3 text-[var(--erp-foreground)] outline-none transition focus:border-[var(--erp-info)] focus:ring-2 focus:ring-[rgba(47,111,115,0.16)]'
+
 export function ProductSearch({
   error,
   isLoading,
@@ -29,65 +33,78 @@ export function ProductSearch({
   search,
 }: ProductSearchProps) {
   return (
-    <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5 shadow-[0_20px_60px_rgba(32,33,31,0.07)]">
+    <section className={panelClass}>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">Ubicación y productos</p>
+          <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">Buscador de productos</h2>
+        </div>
+        <PackageSearch className="h-6 w-6 text-[var(--erp-muted-foreground)]" />
+      </div>
       <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
-        <label className="grid gap-2 text-sm font-bold text-[#68645c]">
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           Ubicación operativa
           <input
-            className="rounded-2xl border border-[#20211f]/15 px-4 py-3 text-[#20211f]"
+            className={inputClass}
             onChange={(event) => onLocationChange(event.target.value)}
             placeholder="ID de la ubicación para descontar inventario"
             value={locationId}
           />
         </label>
-        <label className="grid gap-2 text-sm font-bold text-[#68645c]">
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           Búsqueda de productos
-          <input
-            className="rounded-2xl border border-[#20211f]/15 px-4 py-3 text-[#20211f]"
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Busca por nombre o SKU"
-            value={search}
-          />
+          <span className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--erp-muted-foreground)]" />
+            <input
+              className={`${inputClass} w-full pl-10`}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Busca por nombre o SKU"
+              value={search}
+            />
+          </span>
         </label>
       </div>
 
       {!locationId && (
-        <p className="mt-4 rounded-2xl border border-[#f0b44c]/40 bg-[#f0b44c]/15 p-3 text-sm font-bold text-[#7a4a00]">
+        <p className="mt-4 rounded-2xl border border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] p-3 text-sm font-bold text-[var(--erp-brand-gold-deep)]">
           Selecciona una ubicación operativa antes de agregar productos. El inventario del POS nunca es global.
         </p>
       )}
-      {isLoading && <p className="mt-4 rounded-2xl bg-[#f5f3ee] p-3 text-sm font-bold text-[#39798b]">Cargando productos...</p>}
-      {Boolean(error) && <p role="alert" className="mt-4 rounded-2xl bg-[#d43f2f]/10 p-3 text-sm font-bold text-[#9d2d24]">{errorMessage(error, 'La búsqueda de productos falló.')}</p>}
+      {isLoading && <p className="mt-4 rounded-2xl bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">Cargando productos...</p>}
+      {Boolean(error) && <p role="alert" className="mt-4 rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-bold text-[var(--erp-danger)]">{errorMessage(error, 'La búsqueda de productos falló.')}</p>}
       {locationId && !isLoading && !error && products.length === 0 && (
-        <p className="mt-4 rounded-2xl border border-dashed border-[#20211f]/20 p-4 text-sm text-[#68645c]">No se encontraron productos para esta ubicación y búsqueda.</p>
+        <p className="mt-4 rounded-2xl border border-dashed border-[color:var(--erp-border)] p-4 text-sm text-[var(--erp-muted-foreground)]">No se encontraron productos para esta ubicación y búsqueda.</p>
       )}
       <div className="mt-5 grid gap-3">
-        {products.map((product) => (
-          <article className="rounded-[1.5rem] border border-[#20211f]/10 bg-[#f5f3ee] p-4" key={product.id}>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#9d2d24]">{product.presentationType} · {product.unit}</p>
-                <h3 className="mt-1 text-xl font-black tracking-[-0.04em]">{product.name}</h3>
-                <p className="text-sm text-[#68645c]">SKU {product.sku ?? '—'} · Precio {toMoney(product.salePrice)}</p>
-                <p className="mt-2 text-sm font-bold text-[#20211f]">
-                  {product.locationName ?? product.locationId}: {product.availableKg} kg · {product.availablePieces} piezas
-                </p>
-                <p className="text-xs font-bold text-[#68645c]">Equivalencia: {String(product.equivalentPolicyStatus ?? 'No requerida')}</p>
+        {products.map((product) => {
+          const hasNoStock = product.availableKg <= 0 && product.availablePieces <= 0
+          return (
+            <article className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] p-4 transition hover:border-[rgba(47,111,115,0.35)]" key={product.id}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]">{product.presentationType} · {product.unit}</p>
+                  <h3 className="mt-1 text-xl font-black tracking-[-0.04em]">{product.name}</h3>
+                  <p className="text-sm text-[var(--erp-muted-foreground)]">SKU {product.sku ?? '—'} · Precio {toMoney(product.salePrice)}</p>
+                  <p className="mt-2 text-sm font-bold text-[var(--erp-foreground)]">
+                    {product.locationName ?? product.locationId}: {product.availableKg} kg · {product.availablePieces} piezas
+                  </p>
+                  <p className="text-xs font-bold text-[var(--erp-muted-foreground)]">Equivalencia: {String(product.equivalentPolicyStatus ?? 'No requerida')}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {hasNoStock ? <span className="rounded-full border border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.08)] px-3 py-1 text-xs font-black text-[var(--erp-danger)]">Sin stock</span> : product.isLowStock && <span className="rounded-full border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.14)] px-3 py-1 text-xs font-black text-[var(--erp-brand-gold-deep)]">Bajo stock</span>}
+                  <button
+                    className="rounded-xl bg-[var(--erp-foreground)] px-4 py-3 text-sm font-black text-white transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:bg-[rgba(107,101,90,0.40)] disabled:hover:translate-y-0"
+                    disabled={!locationId || product.locationId !== locationId || hasNoStock}
+                    onClick={() => onAdd(product)}
+                    type="button"
+                  >
+                    Agregar
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                {product.isLowStock && <span className="rounded-full bg-[#f0b44c]/25 px-3 py-1 text-xs font-black text-[#7a4a00]">Bajo stock</span>}
-                <button
-                  className="rounded-2xl bg-[#20211f] px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-[#68645c]/40"
-                  disabled={!locationId || product.locationId !== locationId || (product.availableKg <= 0 && product.availablePieces <= 0)}
-                  onClick={() => onAdd(product)}
-                  type="button"
-                >
-                  Agregar
-                </button>
-              </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          )
+        })}
       </div>
     </section>
   )
@@ -101,42 +118,42 @@ type CartProps = {
 
 export function Cart({ items, onQuantityChange, onRemove }: CartProps) {
   return (
-    <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-      <h2 className="text-2xl font-black tracking-[-0.05em]">Carrito</h2>
+    <section className={panelClass}>
+      <div className="flex items-center justify-between gap-4"><h2 className="text-2xl font-black tracking-[-0.05em]">Carrito</h2><ShoppingCart className="h-5 w-5 text-[var(--erp-muted-foreground)]" /></div>
       {items.length === 0 ? (
-        <p className="mt-4 rounded-2xl border border-dashed border-[#20211f]/20 p-4 text-sm text-[#68645c]">Agrega productos para iniciar una venta. Los carritos vacíos no se pueden confirmar.</p>
+        <p className="mt-4 rounded-2xl border border-dashed border-[color:var(--erp-border)] p-4 text-sm text-[var(--erp-muted-foreground)]">Agrega productos para iniciar una venta. Los carritos vacíos no se pueden confirmar.</p>
       ) : (
         <div className="mt-4 grid gap-3">
           {items.map((item) => {
             const validation = getQuantityValidationError(item)
             return (
-              <article className="rounded-[1.5rem] border border-[#20211f]/10 bg-[#f5f3ee] p-4" key={item.productId}>
+              <article className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] p-4" key={item.productId}>
                 <div className="flex justify-between gap-3">
                   <div>
                     <p className="font-black">{item.name}</p>
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#68645c]">{item.unit} · {item.locationName ?? item.locationId}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">{item.unit} · {item.locationName ?? item.locationId}</p>
                   </div>
-                  <button className="text-sm font-black text-[#9d2d24]" onClick={() => onRemove(item.productId)} type="button">Eliminar</button>
+                  <button className="text-sm font-black text-[var(--erp-danger)]" onClick={() => onRemove(item.productId)} type="button">Eliminar</button>
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {(item.unit === 'KG' || item.unit === 'KG_AND_PIECE') && (
-                    <label className="grid gap-1 text-sm font-bold text-[#68645c]">
+                    <label className="grid gap-1 text-sm font-bold text-[var(--erp-muted-foreground)]">
                       Kilos capturados
-                      <input className="rounded-xl border px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, Number(event.target.value), item.quantityPieces)} step="0.01" type="number" value={item.quantityKg} />
+                      <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, Number(event.target.value), item.quantityPieces)} step="0.01" type="number" value={item.quantityKg} />
                     </label>
                   )}
                   {(item.unit === 'PIECE' || item.unit === 'KG_AND_PIECE') && (
-                    <label className="grid gap-1 text-sm font-bold text-[#68645c]">
+                    <label className="grid gap-1 text-sm font-bold text-[var(--erp-muted-foreground)]">
                       Piezas capturadas
-                      <input className="rounded-xl border px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, item.quantityKg, Number(event.target.value))} step="1" type="number" value={item.quantityPieces} />
+                      <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, item.quantityKg, Number(event.target.value))} step="1" type="number" value={item.quantityPieces} />
                     </label>
                   )}
                 </div>
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><dt className="text-[#68645c]">Stock</dt><dd className="font-bold">{item.availableKg} kg · {item.availablePieces} piezas</dd></div>
-                  <div><dt className="text-[#68645c]">Vista previa del subtotal</dt><dd className="font-bold">{toMoney(calculateItemSubtotal(item))}</dd></div>
+                  <div><dt className="text-[var(--erp-muted-foreground)]">Stock</dt><dd className="font-bold">{item.availableKg} kg · {item.availablePieces} piezas</dd></div>
+                  <div><dt className="text-[var(--erp-muted-foreground)]">Vista previa del subtotal</dt><dd className="font-bold">{toMoney(calculateItemSubtotal(item))}</dd></div>
                 </dl>
-                {validation && <p role="alert" className="mt-3 rounded-xl bg-[#d43f2f]/10 p-3 text-sm font-bold text-[#9d2d24]">{validation}</p>}
+                {validation && <p role="alert" className="mt-3 rounded-xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-bold text-[var(--erp-danger)]">{validation}</p>}
               </article>
             )
           })}
@@ -158,23 +175,23 @@ type CustomerSelectorProps = {
 
 export function CustomerSelector({ customers, error, isLoading, onSearchChange, onSelect, search, selectedCustomer }: CustomerSelectorProps) {
   return (
-    <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-      <h2 className="text-xl font-black tracking-[-0.04em]">Cliente</h2>
-      <input className="mt-3 w-full rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => onSearchChange(event.target.value)} placeholder="Buscar cliente registrado" value={search} />
-      {isLoading && <p className="mt-3 text-sm font-bold text-[#39798b]">Cargando clientes...</p>}
-      {Boolean(error) && <p role="alert" className="mt-3 text-sm font-bold text-[#9d2d24]">{errorMessage(error, 'La búsqueda de clientes falló.')}</p>}
+    <section className={panelClass}>
+      <h2 className="text-lg font-black tracking-[-0.04em]">Cliente</h2>
+      <input className={`${inputClass} mt-3 w-full`} onChange={(event) => onSearchChange(event.target.value)} placeholder="Buscar cliente registrado" value={search} />
+      {isLoading && <p className="mt-3 text-sm font-bold text-[var(--erp-info)]">Cargando clientes...</p>}
+      {Boolean(error) && <p role="alert" className="mt-3 text-sm font-bold text-[var(--erp-danger)]">{errorMessage(error, 'La búsqueda de clientes falló.')}</p>}
       {selectedCustomer && (
-        <article className="mt-3 rounded-2xl bg-[#20211f] p-4 text-white">
+        <article className="mt-3 rounded-2xl bg-[var(--erp-foreground)] p-4 text-white">
           <p className="font-black">{selectedCustomer.name}</p>
           <p className="text-sm text-white/70">{selectedCustomer.customerType} · Crédito {selectedCustomer.creditStatus ?? '—'}</p>
-          <button className="mt-3 text-sm font-black text-[#f0b44c]" onClick={() => onSelect(null)} type="button">Limpiar cliente</button>
+          <button className="mt-3 text-sm font-black text-[var(--erp-brand-gold)]" onClick={() => onSelect(null)} type="button">Limpiar cliente</button>
         </article>
       )}
       <div className="mt-3 grid max-h-72 gap-2 overflow-auto">
         {customers.map((customer) => (
-          <button className="rounded-2xl border border-[#20211f]/10 p-3 text-left hover:border-[#39798b] disabled:opacity-50" disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
+          <button className="rounded-xl border border-[color:var(--erp-border)] bg-white p-3 text-left transition hover:border-[var(--erp-info)] disabled:opacity-50" disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
             <span className="block font-black">{customer.name}</span>
-            <span className="text-sm text-[#68645c]">{customer.customerType} · {customer.creditSummary?.availableCredit !== undefined ? `Disponible ${toMoney(customer.creditSummary.availableCredit)}` : customer.creditLimit !== undefined && customer.creditLimit !== null ? `Límite ${toMoney(customer.creditLimit)}` : 'Límite —'}</span>
+            <span className="text-sm text-[var(--erp-muted-foreground)]">{customer.customerType} · {customer.creditSummary?.availableCredit !== undefined ? `Disponible ${toMoney(customer.creditSummary.availableCredit)}` : customer.creditLimit !== undefined && customer.creditLimit !== null ? `Límite ${toMoney(customer.creditLimit)}` : 'Límite —'}</span>
           </button>
         ))}
       </div>
@@ -200,15 +217,15 @@ export function PaymentMethodSelector({
   paymentType,
 }: PaymentMethodSelectorProps) {
   return (
-    <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-      <h2 className="text-xl font-black tracking-[-0.04em]">Tipo de venta y pago</h2>
+    <section className={panelClass}>
+      <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black tracking-[-0.04em]">Tipo de venta y pago</h2><AlertTriangle className="h-5 w-5 text-[var(--erp-brand-gold-deep)]" /></div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <button className={`rounded-2xl px-4 py-3 font-black ${paymentType === 'CASH_SALE' ? 'bg-[#20211f] text-white' : 'bg-[#f5f3ee] text-[#68645c]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
-        <button className={`rounded-2xl px-4 py-3 font-black ${paymentType === 'CREDIT_SALE' ? 'bg-[#20211f] text-white' : 'bg-[#f5f3ee] text-[#68645c]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
+        <button className={`rounded-xl px-4 py-3 font-black ${paymentType === 'CASH_SALE' ? 'bg-[var(--erp-foreground)] text-white' : 'bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
+        <button className={`rounded-xl px-4 py-3 font-black ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--erp-foreground)] text-white' : 'bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
       </div>
-      <label className="mt-4 grid gap-2 text-sm font-bold text-[#68645c]">
+      <label className="mt-4 grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
         Método del pago inicial
-        <select className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => onPaymentMethodChange(event.target.value as PaymentMethod)} value={paymentMethod}>
+        <select className={inputClass} onChange={(event) => onPaymentMethodChange(event.target.value as PaymentMethod)} value={paymentMethod}>
           <option value="">No se recibe dinero ahora</option>
           <option value="CASH">Efectivo</option>
           <option value="CARD">Tarjeta</option>
@@ -217,10 +234,10 @@ export function PaymentMethodSelector({
         </select>
       </label>
       {paymentType === 'CREDIT_SALE' && (
-        <label className="mt-4 grid gap-2 text-sm font-bold text-[#68645c]">
+        <label className="mt-4 grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           Monto del pago inicial
           <input
-            className="rounded-2xl border border-[#20211f]/15 px-4 py-3"
+            className={inputClass}
             min="0"
             onChange={(event) => onInitialPaymentAmountChange(Number(event.target.value))}
             step="0.01"
@@ -229,7 +246,7 @@ export function PaymentMethodSelector({
           />
         </label>
       )}
-      {paymentType === 'CREDIT_SALE' && <p className="mt-3 text-sm text-[#68645c]">Las ventas a crédito generan cuentas por cobrar. La cobranza se mantiene en su propio flujo.</p>}
+      {paymentType === 'CREDIT_SALE' && <p className="mt-3 text-sm text-[var(--erp-muted-foreground)]">Las ventas a crédito generan cuentas por cobrar. La cobranza se mantiene en su propio flujo.</p>}
     </section>
   )
 }
@@ -248,23 +265,23 @@ export function BillingRequestPanel({
   requiresAdministrativeInvoice,
 }: BillingRequestPanelProps) {
   return (
-    <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-      <h2 className="text-xl font-black tracking-[-0.04em]">Solicitud administrativa de facturación</h2>
+    <section className={panelClass}>
+      <h2 className="text-lg font-black tracking-[-0.04em]">Documento administrativo</h2>
       <div className="mt-3 grid gap-3">
-        <label className="flex items-start gap-3 rounded-2xl bg-[#f5f3ee] p-3 text-sm font-bold text-[#68645c]">
+        <label className="flex items-start gap-3 rounded-2xl bg-[var(--erp-surface-muted)] p-3 text-sm font-bold text-[var(--erp-muted-foreground)]">
           <input checked={requiresAdministrativeInvoice} onChange={(event) => onRequiresAdministrativeInvoiceChange(event.target.checked)} type="checkbox" />
           Vincula esta venta con una solicitud administrativa interna.
         </label>
-        <label className="grid gap-2 text-sm font-bold text-[#68645c]">
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           ID de la solicitud administrativa
           <input
-            className="rounded-2xl border border-[#20211f]/15 px-4 py-3"
+            className={inputClass}
             onChange={(event) => onBillingRequestIdChange(event.target.value)}
             placeholder="billingRequestId"
             value={billingRequestId}
           />
         </label>
-        <p className="rounded-2xl border border-[#39798b]/20 bg-[#39798b]/10 p-3 text-sm font-bold text-[#39798b]">
+        <p className="rounded-2xl border border-[rgba(47,111,115,0.20)] bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">
           Solo relación administrativa interna. Esto no emite CFDI, UUID SAT, timbrado ni ninguna factura fiscal.
         </p>
       </div>
@@ -282,8 +299,8 @@ export function SaleSummary({ cart, customer, paymentType }: SaleSummaryProps) {
   const total = calculateCartTotal(cart)
   const creditRestriction = getCreditRestriction(paymentType, customer, total)
   return (
-    <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-      <h2 className="text-xl font-black tracking-[-0.04em]">Resumen de la venta</h2>
+    <section className={panelClass}>
+      <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black tracking-[-0.04em]">Resumen de la venta</h2><CheckCircle2 className="h-5 w-5 text-[var(--erp-success)]" /></div>
       <dl className="mt-4 grid gap-3 text-sm">
         <div className="flex justify-between"><dt>Partidas</dt><dd className="font-black">{cart.length}</dd></div>
         <div className="flex justify-between"><dt>Subtotal previo</dt><dd className="font-black">{toMoney(total)}</dd></div>
@@ -292,8 +309,8 @@ export function SaleSummary({ cart, customer, paymentType }: SaleSummaryProps) {
         <div className="flex justify-between"><dt>Crédito disponible</dt><dd className="font-black">{customer?.creditSummary?.availableCredit !== undefined ? toMoney(customer.creditSummary.availableCredit) : '—'}</dd></div>
         <div className="flex justify-between"><dt>Saldo pendiente</dt><dd className="font-black">{customer?.creditSummary?.outstandingAmount !== undefined ? toMoney(customer.creditSummary.outstandingAmount) : '—'}</dd></div>
       </dl>
-      {creditRestriction && <p role="alert" className="mt-4 rounded-2xl bg-[#d43f2f]/10 p-3 text-sm font-bold text-[#9d2d24]">{creditRestriction}</p>}
-      {paymentType === 'CREDIT_SALE' && !creditRestriction && <p className="mt-4 rounded-2xl bg-[#39798b]/10 p-3 text-sm font-bold text-[#39798b]">Esta venta generará una cuenta por cobrar por el saldo pendiente.</p>}
+      {creditRestriction && <p role="alert" className="mt-4 rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-bold text-[var(--erp-danger)]">{creditRestriction}</p>}
+      {paymentType === 'CREDIT_SALE' && !creditRestriction && <p className="mt-4 rounded-2xl border border-[rgba(47,111,115,0.20)] bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">Esta venta generará una cuenta por cobrar por el saldo pendiente.</p>}
     </section>
   )
 }
@@ -307,10 +324,10 @@ type ConfirmSaleButtonProps = {
 export function ConfirmSaleButton({ disabledReason, isSubmitting, onConfirm }: ConfirmSaleButtonProps) {
   return (
     <div className="grid gap-2">
-      <button className="rounded-[1.5rem] bg-[#9d2d24] px-5 py-4 text-lg font-black text-white disabled:cursor-not-allowed disabled:bg-[#68645c]/40" disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} type="button">
+      <button className="rounded-[1.25rem] bg-[var(--erp-danger)] px-5 py-4 text-lg font-black text-white shadow-[0_18px_45px_rgba(157,45,36,0.22)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:bg-[rgba(107,101,90,0.40)] disabled:shadow-none disabled:hover:translate-y-0" disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} type="button">
         {isSubmitting ? 'Confirmando venta...' : 'Confirmar venta'}
       </button>
-      {disabledReason && <p className="text-sm font-bold text-[#9d2d24]">{disabledReason}</p>}
+      {disabledReason && <p className="text-sm font-bold text-[var(--erp-danger)]">{disabledReason}</p>}
     </div>
   )
 }

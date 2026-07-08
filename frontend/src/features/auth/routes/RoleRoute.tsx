@@ -4,7 +4,7 @@ import type { PropsWithChildren } from 'react'
 import type { UserRole } from '../types'
 
 type RoleRouteProps = PropsWithChildren<{
-  roles: UserRole[]
+  roles: readonly UserRole[]
 }>
 
 export function RoleRoute({ children, roles }: RoleRouteProps) {

@@ -48,16 +48,10 @@ export function LoginPage() {
               <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#f0b44c]">
                 Acceso operativo
               </p>
-              <h1 className="mt-8 text-6xl font-black leading-[0.9] tracking-[-0.07em]">
-                Control de turno antes de abrir caja.
-              </h1>
             </div>
             <div className="rounded-[2rem] border border-[#f5f3ee]/15 bg-[#f5f3ee]/8 p-6 backdrop-blur">
-              <p className="text-sm uppercase tracking-[0.24em] text-[#f0b44c]">
-                Señal de piso
-              </p>
               <p className="mt-3 text-2xl font-semibold leading-tight">
-                Entra, confirma rol y trabaja solo con rutas protegidas.
+                Bienvenido a El Pollo de los pollos
               </p>
             </div>
           </div>
@@ -85,7 +79,7 @@ export function LoginPage() {
                 Identifica tu turno
               </h2>
               <p className="mt-3 text-sm leading-6 text-[#68645c]">
-                Usa tu correo interno. El sistema validará tu estado activo y permisos antes de abrir módulos.
+                Usa tu correo interno. El sistema validará tu estado activo y permisos.
               </p>
 
               <label className="mt-8 block text-sm font-semibold text-[#20211f]" htmlFor="email">

@@ -1,4 +1,6 @@
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { AppShell } from '../components/layout/AppShell'
+import { ROUTE_ACCESS_ROLES } from '../components/layout/routeAccess'
 import {
   ForbiddenPage,
   LoginPage,
@@ -17,8 +19,8 @@ import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/vent
 
 function AdminOnlyPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f5f3ee] px-6 py-10 text-[#20211f]">
-      <section className="w-full max-w-xl rounded-[2rem] border border-[#20211f]/10 bg-white p-8 shadow-[0_24px_80px_rgba(32,33,31,0.10)]">
+    <section className="flex min-h-full items-center justify-center px-6 py-10 text-[#20211f]">
+      <div className="w-full max-w-xl rounded-[2rem] border border-[#20211f]/10 bg-white p-8 shadow-[0_24px_80px_rgba(32,33,31,0.10)]">
         <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#39798b]">ADMIN</p>
         <h1 className="mt-4 text-4xl font-black tracking-[-0.06em]">Ruta administrativa protegida</h1>
         <p className="mt-4 leading-7 text-[#68645c]">
@@ -27,8 +29,8 @@ function AdminOnlyPage() {
         <Link className="mt-8 inline-flex font-bold text-[#9d2d24]" to="/">
           Volver al centro operativo
         </Link>
-      </section>
-    </main>
+      </div>
+    </section>
   )
 }
 
@@ -38,183 +40,144 @@ export function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/logout" element={<LogoutPage />} />
       <Route
-        path="/403"
         element={
           <ProtectedRoute>
-            <ForbiddenPage />
+            <AppShell />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/customers"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
+      >
+        <Route path="/403" element={<ForbiddenPage />} />
+        <Route
+          path="/customers"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.customers}>
               <CustomersPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/accounts-receivable"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'SELLER']}>
+          }
+        />
+        <Route
+          path="/accounts-receivable"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.accountsReceivable}>
               <AccountsReceivablePage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/sales/history"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
+          }
+        />
+        <Route
+          path="/sales/history"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.salesHistory}>
               <SalesHistoryPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/sales/:saleId"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'SELLER', 'COLLECTIONS']}>
+          }
+        />
+        <Route
+          path="/sales/:saleId"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.saleDetail}>
               <SaleDetailPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/sales"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'SELLER']}>
+          }
+        />
+        <Route
+          path="/sales"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.salesPos}>
               <SalesPosPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/purchases/new"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
+          }
+        />
+        <Route
+          path="/purchases/new"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.purchaseNew}>
               <PurchaseFormPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/purchases/:purchaseId"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
+          }
+        />
+        <Route
+          path="/purchases/:purchaseId"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.purchaseDetail}>
               <PurchaseDetailPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/purchases"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'WAREHOUSE']}>
+          }
+        />
+        <Route
+          path="/purchases"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.purchases}>
               <PurchasesPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/my-routes"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['DRIVER']}>
+          }
+        />
+        <Route
+          path="/my-routes"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.myRoutes}>
               <MyRoutesPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/route-settlements/:settlementId"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'COLLECTIONS']}>
+          }
+        />
+        <Route
+          path="/route-settlements/:settlementId"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.routeSettlement}>
               <RouteSettlementView />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/delivery-routes/:routeId/evidence"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'WAREHOUSE']}>
+          }
+        />
+        <Route
+          path="/delivery-routes/:routeId/evidence"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRouteEvidence}>
               <RouteEvidenceReview />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/delivery-routes/:routeId"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'WAREHOUSE']}>
+          }
+        />
+        <Route
+          path="/delivery-routes/:routeId"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRouteDetail}>
               <RouteDetailPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/delivery-routes"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'COLLECTIONS', 'WAREHOUSE']}>
+          }
+        />
+        <Route
+          path="/delivery-routes"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutes}>
               <DeliveryRoutesPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/reports"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS', 'DRIVER']}>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.reports}>
               <ReportsPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/inventory"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN', 'WAREHOUSE', 'SELLER']}>
+          }
+        />
+        <Route
+          path="/inventory"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.inventory}>
               <ProductListPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute>
-            <RoleRoute roles={['ADMIN']}>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
               <AdminOnlyPage />
             </RoleRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="*" element={<Navigate replace to="/" />} />
+          }
+        />
+        <Route index element={<DashboardPage />} />
+        <Route path="*" element={<Navigate replace to="/" />} />
+      </Route>
     </Routes>
   )
 }

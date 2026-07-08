@@ -22,8 +22,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "headroom-ai": "^0.22.4",
-    "prisma": "^7.8.0"
+    "lucide-react": "^1.23.0",
+    "motion": "^12.42.2",
+    "prisma": "^7.8.0",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "shadcn": "^4.13.0"

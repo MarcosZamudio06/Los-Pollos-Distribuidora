@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { BadgeDollarSign, MapPin, ReceiptText, ShieldCheck } from 'lucide-react'
+import { PageHeader } from '../../components/layout/PageHeader'
 import { ApiClientError } from '../../lib/api'
 import { useAuth } from '../auth'
 import { useCustomers } from '../clientes/hooks/useCustomers'
@@ -223,8 +225,8 @@ export function SalesPosPage() {
 
   if (!canAccessPos(user?.role)) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f5f3ee] p-6 text-[#20211f]">
-        <section className="max-w-xl rounded-[2rem] bg-white p-8">
+      <main className="flex min-h-screen items-center justify-center bg-[var(--erp-surface)] p-6 text-[var(--erp-foreground)]">
+        <section className="max-w-xl rounded-[2rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-8 shadow-[var(--erp-shadow)]">
           <h1 className="text-3xl font-black tracking-[-0.05em]">Acceso al POS denegado</h1>
           <p className="mt-3 text-[#68645c]">Solo los roles ADMIN y SELLER pueden registrar ventas desde el POS.</p>
           <Link className="mt-6 inline-flex font-bold text-[#9d2d24]" to="/">Volver a operaciones</Link>
@@ -234,29 +236,52 @@ export function SalesPosPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f3ee] px-6 py-8 text-[#20211f] sm:px-10">
-      <section className="mx-auto grid max-w-7xl gap-8">
-        <header className="overflow-hidden rounded-[2rem] border border-[#20211f]/10 bg-[#20211f] text-white shadow-[0_24px_80px_rgba(32,33,31,0.16)]">
-          <div className="grid gap-6 p-6 md:grid-cols-[1.2fr_0.8fr] md:items-end">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-[#f0b44c]">Punto de venta</p>
-              <h1 className="mt-2 text-4xl font-black tracking-[-0.06em]">Ventas rápidas con stock por ubicación</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">Registra ventas de contado o crédito sin stock global, sin promesas de factura fiscal ni atajos de cobranza.</p>
+    <main className="min-h-screen bg-[var(--erp-surface)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
+      <section className="mx-auto grid max-w-[1500px] gap-6">
+        <PageHeader
+          eyebrow="Ventas POS"
+          title="Punto de venta empresarial"
+          description="Registra ventas con inventario por ubicación, cliente, documento interno y pago sin modificar reglas de stock, crédito ni contratos de venta."
+          actions={
+            <div className="grid min-w-[240px] gap-1 rounded-[1.25rem] border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.12)] px-4 py-3 text-right">
+              <span className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">Total en vivo</span>
+              <span className="text-3xl font-black tracking-[-0.06em] text-[var(--erp-foreground)]">{toMoney(total)}</span>
             </div>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-4 text-sm text-white/75">
-              <p className="font-black text-white">Total en vivo</p>
-              <p className="mt-1 text-4xl font-black tracking-[-0.06em] text-[#f0b44c]">{toMoney(total)}</p>
-            </div>
-          </div>
-        </header>
+          }
+        />
 
-        <div className="grid gap-8 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="grid gap-6">
+        <section className="grid gap-3 md:grid-cols-3" aria-label="Contexto operativo del POS">
+          <div className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[var(--erp-shadow)]">
+            <div className="flex items-center gap-3"><MapPin className="h-5 w-5 text-[var(--erp-info)]" /><p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Ubicación operativa</p></div>
+            <p className="mt-2 truncate text-lg font-black">{locationId || 'No seleccionada'}</p>
+          </div>
+          <div className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[var(--erp-shadow)]">
+            <div className="flex items-center gap-3"><BadgeDollarSign className="h-5 w-5 text-[var(--erp-success)]" /><p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Partidas</p></div>
+            <p className="mt-2 text-lg font-black">{cart.length} en carrito</p>
+          </div>
+          <div className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[var(--erp-shadow)]">
+            <div className="flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-[var(--erp-danger)]" /><p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Acceso</p></div>
+            <p className="mt-2 text-lg font-black">ADMIN / SELLER</p>
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+          <div className="grid content-start gap-6">
             <ProductSearch error={products.error} isLoading={products.isLoading} locationId={locationId} onAdd={handleAddProduct} onLocationChange={handleLocationChange} onSearchChange={setProductSearch} products={productOptions} search={productSearch} />
             <Cart items={cart} onQuantityChange={handleQuantityChange} onRemove={(productId) => setCart((items) => items.filter((item) => item.productId !== productId))} />
           </div>
 
-          <aside className="grid content-start gap-6">
+          <aside className="grid content-start gap-5 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto xl:pr-1" aria-label="Carrito y confirmación de venta">
+            <section className="rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-foreground)] p-5 text-white shadow-[0_22px_70px_rgba(17,24,21,0.18)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold)]">Resumen sticky</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">{toMoney(total)}</h2>
+                  <p className="mt-1 text-sm text-white/65">{cart.length} partidas · {paymentType === 'CREDIT_SALE' ? 'Venta a crédito' : 'Venta de contado'}</p>
+                </div>
+                <ReceiptText className="h-6 w-6 text-[var(--erp-brand-gold)]" />
+              </div>
+            </section>
             <CustomerSelector customers={customerOptions} error={customers.error} isLoading={customers.isLoading} onSearchChange={setCustomerSearch} onSelect={setSelectedCustomer} search={customerSearch} selectedCustomer={selectedCustomer} />
             <PaymentMethodSelector
               initialPaymentAmount={initialPaymentAmount}
@@ -266,23 +291,24 @@ export function SalesPosPage() {
               paymentMethod={paymentMethod}
               paymentType={paymentType}
             />
-            <section className="rounded-[2rem] border border-[#20211f]/10 bg-white p-5">
-              <h2 className="text-xl font-black tracking-[-0.04em]">Documento de venta</h2>
-              <div className="mt-3 grid gap-3">
-                <select className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setSaleChannel(event.target.value as SaleChannel)} value={saleChannel}>
+            <section className="rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[var(--erp-shadow)]">
+              <h2 className="text-lg font-black tracking-[-0.04em]">Documento de venta</h2>
+              <p className="mt-1 text-sm leading-6 text-[var(--erp-muted-foreground)]">Control interno de comprobante, canal y folio físico cuando aplique.</p>
+              <div className="mt-4 grid gap-3">
+                <select className="rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-3 text-sm font-semibold" onChange={(event) => setSaleChannel(event.target.value as SaleChannel)} value={saleChannel}>
                   <option value="COUNTER">Mostrador</option>
                   <option value="EXTERNAL_POINT_OF_SALE">Punto externo de venta</option>
                   <option value="ROUTE">Ruta</option>
                   <option value="INSTITUTIONAL">Institucional</option>
                   <option value="WHOLESALE">Mayoreo</option>
                 </select>
-                <select className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setDocumentType(event.target.value as SaleDocumentType)} value={documentType}>
+                <select className="rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-3 text-sm font-semibold" onChange={(event) => setDocumentType(event.target.value as SaleDocumentType)} value={documentType}>
                   <option value="SCALE_TICKET">Ticket de báscula</option>
                   <option value="SIMPLE_NOTE">Nota sencilla</option>
                   <option value="LARGE_NOTE">Nota grande</option>
                   <option value="INTERNAL_RECEIPT">Comprobante interno</option>
                 </select>
-                <input className="rounded-2xl border border-[#20211f]/15 px-4 py-3" onChange={(event) => setPhysicalFolio(event.target.value)} placeholder="Folio físico cuando aplique" value={physicalFolio} />
+                <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-3 text-sm font-semibold" onChange={(event) => setPhysicalFolio(event.target.value)} placeholder="Folio físico cuando aplique" value={physicalFolio} />
               </div>
             </section>
             <BillingRequestPanel
@@ -292,7 +318,7 @@ export function SalesPosPage() {
               requiresAdministrativeInvoice={requiresAdministrativeInvoice}
             />
             <SaleSummary cart={cart} customer={selectedCustomer} paymentType={paymentType} />
-            {backendError && <p role="alert" className="rounded-2xl bg-[#d43f2f]/10 p-4 text-sm font-bold text-[#9d2d24]">{backendError}</p>}
+            {backendError && <p role="alert" className="rounded-2xl border border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.08)] p-4 text-sm font-bold text-[var(--erp-danger)]">{backendError}</p>}
             <ConfirmSaleButton disabledReason={submitBlocker} isSubmitting={createSale.isPending} onConfirm={handleConfirmSale} />
           </aside>
         </div>
