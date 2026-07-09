@@ -6,6 +6,8 @@ import { ApiClientError } from '../../lib/api'
 import { useAuth } from '../auth'
 import { useCustomers } from '../clientes/hooks/useCustomers'
 import type { Customer } from '../clientes/types'
+import { usePurchaseLocations } from '../compras/hooks'
+import type { OperationalLocation } from '../compras/types'
 import { useProducts } from '../inventario/hooks/useProducts'
 import type { Product } from '../inventario/types'
 import {
@@ -66,6 +68,11 @@ function customerToOption(customer: Customer): CustomerOption {
     commercialPolicyId: customer.commercialPolicyId,
     creditSummary: customer.creditSummary,
   }
+}
+
+function locationLabel(location?: OperationalLocation | null) {
+  if (!location) return 'No seleccionada'
+  return location.code ? `${location.name} · ${location.code}` : location.name
 }
 
 function getSubmitBlocker({
@@ -129,6 +136,7 @@ export function SalesPosPage() {
 
   const products = useProducts({ isActive: 'true', locationId, search: productSearch })
   const customers = useCustomers({ isActive: 'true', search: customerSearch })
+  const locations = usePurchaseLocations('')
   const createSale = useCreateSale()
   const ticket = useSaleTicket(confirmedSaleId)
 
@@ -137,6 +145,8 @@ export function SalesPosPage() {
     [locationId, products.data],
   )
   const customerOptions = useMemo(() => (customers.data ?? []).map(customerToOption), [customers.data])
+  const locationOptions = useMemo(() => locations.data ?? [], [locations.data])
+  const selectedLocation = useMemo(() => locationOptions.find((location) => location.id === locationId) ?? null, [locationId, locationOptions])
   const total = calculateCartTotal(cart)
   const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending })
 
@@ -253,7 +263,7 @@ export function SalesPosPage() {
         <section className="grid gap-3 md:grid-cols-3" aria-label="Contexto operativo del POS">
           <div className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[var(--erp-shadow)]">
             <div className="flex items-center gap-3"><MapPin className="h-5 w-5 text-[var(--erp-info)]" /><p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Ubicación operativa</p></div>
-            <p className="mt-2 truncate text-lg font-black">{locationId || 'No seleccionada'}</p>
+            <p className="mt-2 truncate text-lg font-black">{locationLabel(selectedLocation)}</p>
           </div>
           <div className="rounded-[1.25rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[var(--erp-shadow)]">
             <div className="flex items-center gap-3"><BadgeDollarSign className="h-5 w-5 text-[var(--erp-success)]" /><p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Partidas</p></div>
@@ -267,7 +277,7 @@ export function SalesPosPage() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
           <div className="grid content-start gap-6">
-            <ProductSearch error={products.error} isLoading={products.isLoading} locationId={locationId} onAdd={handleAddProduct} onLocationChange={handleLocationChange} onSearchChange={setProductSearch} products={productOptions} search={productSearch} />
+            <ProductSearch error={products.error} isLoading={products.isLoading} locations={locationOptions} locationsError={locations.error} locationsLoading={locations.isLoading} locationId={locationId} onAdd={handleAddProduct} onLocationChange={handleLocationChange} onSearchChange={setProductSearch} products={productOptions} search={productSearch} />
             <Cart items={cart} onQuantityChange={handleQuantityChange} onRemove={(productId) => setCart((items) => items.filter((item) => item.productId !== productId))} />
           </div>
 

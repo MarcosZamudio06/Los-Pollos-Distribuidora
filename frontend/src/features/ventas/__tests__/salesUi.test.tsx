@@ -19,6 +19,7 @@ const mockState = vi.hoisted(() => ({
   documents: { data: { items: [] as Array<{ createdAt?: string; documentType?: string; id?: string; physicalFolio?: string; status?: string }> }, error: null, isLoading: false },
   createSale: { isPending: false, mutateAsync: vi.fn() },
   customers: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false },
+  locations: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false },
   products: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false, refetch: vi.fn() },
   sale: { data: null as SaleDetail | null, error: null, isLoading: false },
   sales: { data: { items: [] as SaleDetail[] }, error: null, isLoading: false },
@@ -40,6 +41,10 @@ vi.mock('../../auth', () => ({
 
 vi.mock('../../inventario/hooks/useProducts', () => ({
   useProducts: () => mockState.products,
+}))
+
+vi.mock('../../compras/hooks', () => ({
+  usePurchaseLocations: () => mockState.locations,
 }))
 
 vi.mock('../../clientes/hooks/useCustomers', () => ({
@@ -92,6 +97,7 @@ describe('TASK-055 sales UI behavior', () => {
     mockState.createSale = { isPending: false, mutateAsync: vi.fn() }
     mockState.customers = { data: [], error: null, isLoading: false }
     mockState.documents = { data: { items: [] }, error: null, isLoading: false }
+    mockState.locations = { data: [], error: null, isLoading: false }
     mockState.products = { data: [], error: null, isLoading: false, refetch: vi.fn() }
     mockState.sale = { data: null, error: null, isLoading: false }
     mockState.sales = { data: { items: [] }, error: null, isLoading: false }
@@ -110,6 +116,14 @@ describe('TASK-055 sales UI behavior', () => {
       isLoading: false,
       refetch: vi.fn(),
     }
+    mockState.locations = {
+      data: [
+        { id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' },
+        { id: 'loc-ext', name: 'Punto externo', code: 'EXT', type: 'EXTERNAL_POINT_OF_SALE' },
+      ],
+      error: null,
+      isLoading: false,
+    }
 
     const html = renderWithRouter(<SalesPosPage />, '/sales')
 
@@ -123,6 +137,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Documento de venta')
     expect(html).toContain('Resumen sticky')
     expect(html).toContain('Selecciona una ubicación operativa')
+    expect(html).toContain('Mostrador · MOST')
     expect(html).toContain('Confirmar venta')
   })
 

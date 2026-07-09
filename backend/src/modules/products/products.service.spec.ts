@@ -154,6 +154,38 @@ describe('ProductsService', () => {
     expect(result).not.toHaveProperty('stock');
   });
 
+  it('normalizes blank optional category and description fields before inserting', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findUnique.mockResolvedValue(null);
+    prisma.product.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(createProduct(data as Partial<ProductRecord>)),
+    );
+
+    await expect(
+      service.create({
+        name: 'Producto sin categoría',
+        sku: '',
+        description: '   ',
+        categoryId: '   ',
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 0,
+        unit: ProductUnit.KG,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ categoryId: null }));
+
+    expect(prisma.category.findFirst).not.toHaveBeenCalled();
+    expect(prisma.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sku: null,
+        description: null,
+        categoryId: null,
+      }),
+      include: expect.any(Object),
+    });
+  });
+
   it('rejects invalid money and kilo/piece products without equivalent factor or policy status', async () => {
     const { service, prisma } = createService();
 

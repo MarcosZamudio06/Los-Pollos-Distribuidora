@@ -39,6 +39,27 @@ type CustomerSaleRecord = Prisma.SaleGetPayload<{
 }>;
 type CustomerPaymentRecord = Prisma.PaymentGetPayload<Record<string, never>>;
 type CustomerMutationDto = CreateCustomerDto | UpdateCustomerDto;
+type CustomerMutationData = {
+  customerNumber?: string | null;
+  name?: string;
+  commercialName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  billingEmail?: string | null;
+  address?: string | null;
+  customerType?: CreateCustomerDto['customerType'];
+  priceListId?: string | null;
+  creditLimit?: number;
+  creditDays?: number;
+  creditStatus?: CreditStatus;
+  requiresBilling?: boolean;
+  fiscalName?: string | null;
+  taxId?: string | null;
+  fiscalAddress?: string | null;
+  deliveryAddress?: string | null;
+  assignedRouteId?: string | null;
+  commercialPolicyId?: string | null;
+};
 
 type CreditCompletenessSource = {
   creditLimit?: unknown;
@@ -160,14 +181,17 @@ export class CustomersService {
     const data = this.normalizeMutationData(
       dto,
       true,
-    ) as Prisma.CustomerCreateInput;
+    ) as CustomerMutationData;
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone);
     }
+    await this.assertReferencedRelationsAvailable(data);
 
     const customer = (await this.prisma.customer
-      .create({ data: { ...data, isActive: true } })
+      .create({
+        data: { ...data, isActive: true } as Prisma.CustomerUncheckedCreateInput,
+      })
       .catch((error: unknown) => {
         this.throwUniqueConflict(error);
         throw error;
@@ -188,14 +212,18 @@ export class CustomersService {
     const data = this.normalizeMutationData(
       dto,
       false,
-    ) as Prisma.CustomerUpdateInput;
+    ) as CustomerMutationData;
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone, currentCustomer.id);
     }
+    await this.assertReferencedRelationsAvailable(data);
 
     const customer = (await this.prisma.customer
-      .update({ where: { id: currentCustomer.id }, data })
+      .update({
+        where: { id: currentCustomer.id },
+        data: data as Prisma.CustomerUncheckedUpdateInput,
+      })
       .catch((error: unknown) => {
         this.throwUniqueConflict(error);
         throw error;
@@ -362,6 +390,32 @@ export class CustomersService {
     }
   }
 
+  private async assertReferencedRelationsAvailable(
+    data: { assignedRouteId?: unknown; commercialPolicyId?: unknown },
+  ): Promise<void> {
+    if (typeof data.assignedRouteId === 'string') {
+      const route = await this.prisma.deliveryRoute.findFirst({
+        where: { id: data.assignedRouteId },
+        select: { id: true },
+      });
+
+      if (!route) {
+        throw new BadRequestException('Assigned route does not exist');
+      }
+    }
+
+    if (typeof data.commercialPolicyId === 'string') {
+      const commercialPolicy = await this.prisma.commercialPolicy.findFirst({
+        where: { id: data.commercialPolicyId, isActive: true },
+        select: { id: true },
+      });
+
+      if (!commercialPolicy) {
+        throw new BadRequestException('Commercial policy does not exist');
+      }
+    }
+  }
+
   private assertCanMutateCommercialTerms(
     dto: CustomerMutationDto,
     currentUser?: AuthenticatedUser,
@@ -431,7 +485,7 @@ export class CustomersService {
   private normalizeMutationData(
     dto: CustomerMutationDto,
     requireCustomerType: boolean,
-  ): Partial<Prisma.CustomerCreateInput & Prisma.CustomerUpdateInput> {
+  ): CustomerMutationData {
     const name = dto.name !== undefined ? dto.name.trim() : undefined;
 
     if (name !== undefined && name.length === 0) {

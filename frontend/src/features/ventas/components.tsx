@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, PackageSearch, Search, ShoppingCart } from 'lucide-react'
+import type { OperationalLocation } from '../compras/types'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
 import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney } from './posLogic'
 import { documentTypeLabel, operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
@@ -6,6 +7,9 @@ import { documentTypeLabel, operationalUnitLabel, paymentMethodLabel, paymentTyp
 type ProductSearchProps = {
   error: unknown
   isLoading: boolean
+  locations: OperationalLocation[]
+  locationsError: unknown
+  locationsLoading: boolean
   locationId: string
   onAdd: (product: ProductOption) => void
   onLocationChange: (locationId: string) => void
@@ -25,6 +29,9 @@ const inputClass = 'rounded-xl border border-[color:var(--erp-border)] bg-white 
 export function ProductSearch({
   error,
   isLoading,
+  locations,
+  locationsError,
+  locationsLoading,
   locationId,
   onAdd,
   onLocationChange,
@@ -44,12 +51,14 @@ export function ProductSearch({
       <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
         <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           Ubicación operativa
-          <input
+          <select
             className={inputClass}
             onChange={(event) => onLocationChange(event.target.value)}
-            placeholder="ID de la ubicación para descontar inventario"
             value={locationId}
-          />
+          >
+            <option value="">Selecciona ubicación operativa</option>
+            {locations.map((location) => <option key={location.id} value={location.id}>{location.name}{location.code ? ` · ${location.code}` : ''}</option>)}
+          </select>
         </label>
         <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           Búsqueda de productos
@@ -70,6 +79,8 @@ export function ProductSearch({
           Selecciona una ubicación operativa antes de agregar productos. El inventario del POS nunca es global.
         </p>
       )}
+      {locationsLoading && <p className="mt-4 rounded-2xl bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">Cargando ubicaciones operativas...</p>}
+      {Boolean(locationsError) && <p role="alert" className="mt-4 rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-bold text-[var(--erp-danger)]">{errorMessage(locationsError, 'No se pudieron cargar las ubicaciones operativas.')}</p>}
       {isLoading && <p className="mt-4 rounded-2xl bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">Cargando productos...</p>}
       {Boolean(error) && <p role="alert" className="mt-4 rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-bold text-[var(--erp-danger)]">{errorMessage(error, 'La búsqueda de productos falló.')}</p>}
       {locationId && !isLoading && !error && products.length === 0 && (

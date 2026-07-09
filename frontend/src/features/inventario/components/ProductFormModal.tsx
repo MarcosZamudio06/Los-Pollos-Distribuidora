@@ -79,7 +79,7 @@ export function ProductFormModal({ product, onClose }: Props) {
         <label className={labelClass}>Nombre<input className={fieldClass} value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required /></label>
         <div className="grid gap-4 md:grid-cols-2">
           <label className={labelClass}>SKU<input className={fieldClass} value={values.sku} onChange={(event) => setValues({ ...values, sku: event.target.value })} /></label>
-          <label className={labelClass}>ID de categoría<input className={fieldClass} value={values.categoryId} onChange={(event) => setValues({ ...values, categoryId: event.target.value })} /></label>
+          {product ? <label className={labelClass}>ID de categoría<input className={fieldClass} value={values.categoryId} onChange={(event) => setValues({ ...values, categoryId: event.target.value })} /></label> : null}
           <label className={labelClass}>Precio de venta<input className={fieldClass} min="0.01" step="0.01" type="number" value={values.salePrice} onChange={(event) => setValues({ ...values, salePrice: Number(event.target.value) })} required /></label>
           <label className={labelClass}>Costo de compra<input className={fieldClass} min="0" step="0.01" type="number" value={values.purchaseCost} onChange={(event) => setValues({ ...values, purchaseCost: Number(event.target.value) })} /></label>
           <label className={labelClass}>Presentación<select className={fieldClass} value={values.presentationType} onChange={(event) => setValues({ ...values, presentationType: event.target.value as ProductFormValues['presentationType'] })}><option value="KG">Kilo</option><option value="WHOLE">Unidad entera</option><option value="CUT">Corte</option></select></label>

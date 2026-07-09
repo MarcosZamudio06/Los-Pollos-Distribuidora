@@ -78,6 +78,8 @@ type MockPrisma = {
     update: jest.Mock;
     delete: jest.Mock;
   };
+  commercialPolicy: { findFirst: jest.Mock };
+  deliveryRoute: { findFirst: jest.Mock };
   sale: { findMany: jest.Mock };
   payment: { findMany: jest.Mock };
 };
@@ -127,6 +129,8 @@ function createPrisma(): MockPrisma {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    commercialPolicy: { findFirst: jest.fn() },
+    deliveryRoute: { findFirst: jest.fn() },
     sale: { findMany: jest.fn() },
     payment: { findMany: jest.fn() },
   };
@@ -258,6 +262,8 @@ describe('CustomersService', () => {
   it('creates wholesale and institutional customers while enforcing required names and unique phones', async () => {
     const { service, prisma } = createService();
     prisma.customer.findUnique.mockResolvedValueOnce(null);
+    prisma.deliveryRoute.findFirst.mockResolvedValueOnce({ id: 'route-1' });
+    prisma.commercialPolicy.findFirst.mockResolvedValueOnce({ id: 'policy-1' });
     prisma.customer.create.mockImplementation(({ data }: { data: unknown }) =>
       Promise.resolve(createCustomer(data as Partial<CustomerRecord>)),
     );
@@ -308,6 +314,41 @@ describe('CustomersService', () => {
     await expect(
       service.create({ name: 'Otro Cliente', phone: '2290000000', customerType: CustomerType.RETAIL }, adminUser),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects missing route or commercial policy references before inserting customers', async () => {
+    const { service, prisma } = createService();
+
+    prisma.deliveryRoute.findFirst.mockResolvedValueOnce(null);
+    await expect(
+      service.create(
+        {
+          name: 'Cliente con ruta inválida',
+          customerType: CustomerType.RETAIL,
+          assignedRouteId: 'missing-route',
+        },
+        adminUser,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    prisma.deliveryRoute.findFirst.mockResolvedValueOnce({ id: 'route-1' });
+    prisma.commercialPolicy.findFirst.mockResolvedValueOnce(null);
+    await expect(
+      service.create(
+        {
+          name: 'Cliente con política inválida',
+          customerType: CustomerType.WHOLESALE,
+          assignedRouteId: 'route-1',
+          commercialPolicyId: 'missing-policy',
+          creditLimit: 50000,
+          creditDays: 15,
+          creditStatus: CreditStatus.ACTIVE,
+        },
+        adminUser,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.customer.create).not.toHaveBeenCalled();
   });
 
   it('updates active customers, maps unique phone races, and soft-deactivates without physical delete', async () => {
@@ -367,6 +408,7 @@ describe('CustomersService', () => {
   it('allows SELLER to maintain basic and delivery customer fields', async () => {
     const { service, prisma } = createService();
     prisma.customer.findUnique.mockResolvedValueOnce(null);
+    prisma.deliveryRoute.findFirst.mockResolvedValueOnce({ id: 'route-2' });
     prisma.customer.create.mockImplementation(({ data }: { data: unknown }) =>
       Promise.resolve(createCustomer(data as Partial<CustomerRecord>)),
     );
