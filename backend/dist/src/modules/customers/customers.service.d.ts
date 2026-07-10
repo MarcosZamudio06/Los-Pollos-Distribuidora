@@ -111,6 +111,7 @@ export declare class CustomersService {
     private assertCustomerExists;
     private findActiveCustomerForMutation;
     private assertPhoneAvailable;
+    private assertReferencedRelationsAvailable;
     private assertCanMutateCommercialTerms;
     private hasRestrictedCommercialTerms;
     private assertCoherentCreditTerms;

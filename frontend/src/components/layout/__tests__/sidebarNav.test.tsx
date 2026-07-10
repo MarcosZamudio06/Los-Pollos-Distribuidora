@@ -43,6 +43,7 @@ describe('role navigation', () => {
       '/accounts-receivable',
       '/inventory',
       '/purchases',
+      '/purchases/suppliers',
       '/purchases/new',
       '/delivery-routes',
       '/reports',
@@ -65,6 +66,7 @@ describe('role navigation', () => {
       '/',
       '/inventory',
       '/purchases',
+      '/purchases/suppliers',
       '/purchases/new',
       '/delivery-routes',
       '/reports',
@@ -84,6 +86,7 @@ describe('role navigation', () => {
   it('marca rutas de detalle en el acceso principal correcto', () => {
     expect(getActiveSidebarItemKey('/sales/sale-1')).toBe('sales-history')
     expect(getActiveSidebarItemKey('/purchases/purchase-1')).toBe('purchases')
+    expect(getActiveSidebarItemKey('/purchases/suppliers')).toBe('purchase-suppliers')
     expect(getActiveSidebarItemKey('/delivery-routes/route-1/evidence')).toBe('delivery-routes')
     expect(getActiveSidebarItemKey('/route-settlements/settlement-1')).toBe('delivery-routes')
   })

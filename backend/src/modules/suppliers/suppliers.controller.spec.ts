@@ -106,6 +106,13 @@ describe('SuppliersController API', () => {
     await app.close();
   });
 
+  const validSupplierBody = {
+    address: 'Central de abasto',
+    email: 'norte@example.com',
+    name: 'Proveedor Norte',
+    phone: '555-0101',
+  };
+
   it.each([
     ['GET', '/api/suppliers'],
     ['GET', '/api/suppliers/supplier-1'],
@@ -115,7 +122,7 @@ describe('SuppliersController API', () => {
     await request(app.getHttpServer())
       [method.toLowerCase() as 'get' | 'post' | 'patch'](path)
       .set('Authorization', 'Bearer warehouse-token')
-      .send(method === 'GET' ? undefined : { name: 'Proveedor Norte' })
+      .send(method === 'GET' ? undefined : validSupplierBody)
       .expect(method === 'POST' ? 201 : 200);
   });
 

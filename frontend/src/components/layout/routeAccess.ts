@@ -16,6 +16,7 @@ export const ROUTE_ACCESS_ROLES = {
   myRoutes: ['DRIVER'],
   purchaseDetail: ['ADMIN', 'WAREHOUSE'],
   purchaseNew: ['ADMIN', 'WAREHOUSE'],
+  purchaseSuppliers: ['ADMIN', 'WAREHOUSE'],
   purchases: ['ADMIN', 'WAREHOUSE'],
   reports: ALL_ROLES,
   routeSettlement: ['ADMIN', 'COLLECTIONS'],

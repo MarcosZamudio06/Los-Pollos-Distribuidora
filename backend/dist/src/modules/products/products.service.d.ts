@@ -56,6 +56,7 @@ export declare class ProductsService {
     private assertCategoryExists;
     private assertSkuAvailable;
     private normalizeSku;
+    private normalizeOptionalText;
     private toProductResponse;
     private toInventoryBalanceResponse;
     private toNullableNumber;

@@ -8,27 +8,34 @@ import { PurchaseFormPage } from '../PurchaseFormPage'
 import { PurchaseItemsTable } from '../PurchaseItemsTable'
 import { PurchaseLocationSelector } from '../PurchaseLocationSelector'
 import { PurchasesPage } from '../PurchasesPage'
+import { SuppliersPage } from '../SuppliersPage'
 import { SupplierSelector } from '../SupplierSelector'
-import type { PurchaseDetail } from '../types'
+import type { PurchaseDetail, Supplier } from '../types'
 
 const mockState = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } },
   cancelPurchase: { isPending: false, mutateAsync: vi.fn() },
   createPurchase: { isPending: false, mutateAsync: vi.fn() },
+  createSupplier: { isPending: false, mutateAsync: vi.fn() },
+  deactivateSupplier: { isPending: false, mutateAsync: vi.fn() },
   locations: { data: [{ id: 'loc-1', name: 'Almacén Principal', type: 'WAREHOUSE', isActive: true }, { id: 'route-1', name: 'Ruta 1', type: 'ROUTE_STOCK', isActive: true }], error: null, isLoading: false },
   products: { data: [{ activeEquivalences: [{ factor: 2.4, id: 'eq-1', unitFrom: 'PIECE', unitTo: 'KG' }], id: 'prod-1', name: 'Pollo entero', presentationType: 'WHOLE', purchaseCost: 80, unit: 'KG_AND_PIECE' }], error: null, isLoading: false },
   purchase: { data: null as PurchaseDetail | null, error: null, isLoading: false },
   purchases: { data: { items: [] as PurchaseDetail[] }, error: null, isLoading: false },
-  suppliers: { data: [{ id: 'sup-1', name: 'Granja Norte', isActive: true }], error: null, isLoading: false },
+  suppliers: { data: [{ id: 'sup-1', name: 'Granja Norte', isActive: true }] as Supplier[], error: null as Error | null, isLoading: false },
+  updateSupplier: { isPending: false, mutateAsync: vi.fn() },
 }))
 
 vi.mock('../hooks', () => ({
   useCancelPurchase: () => mockState.cancelPurchase,
   useCreatePurchase: () => mockState.createPurchase,
+  useCreateSupplier: () => mockState.createSupplier,
+  useDeactivateSupplier: () => mockState.deactivateSupplier,
   usePurchase: () => mockState.purchase,
   usePurchaseLocations: () => mockState.locations,
   usePurchases: () => mockState.purchases,
   useSuppliers: () => mockState.suppliers,
+  useUpdateSupplier: () => mockState.updateSupplier,
 }))
 
 vi.mock('../../inventario', () => ({
@@ -59,8 +66,12 @@ describe('TASK-062 purchase UI behavior', () => {
     mockState.auth = { user: { role: 'ADMIN' } }
     mockState.cancelPurchase = { isPending: false, mutateAsync: vi.fn() }
     mockState.createPurchase = { isPending: false, mutateAsync: vi.fn() }
+    mockState.createSupplier = { isPending: false, mutateAsync: vi.fn() }
+    mockState.deactivateSupplier = { isPending: false, mutateAsync: vi.fn() }
     mockState.purchase = { data: null, error: null, isLoading: false }
     mockState.purchases = { data: { items: [] }, error: null, isLoading: false }
+    mockState.suppliers = { data: [{ address: 'Carretera Norte', email: 'ventas@granja.mx', id: 'sup-1', isActive: true, name: 'Granja Norte', phone: '2291234567' }], error: null, isLoading: false }
+    mockState.updateSupplier = { isPending: false, mutateAsync: vi.fn() }
   })
 
   it('muestra listado de compras con filtros y columnas requeridas', () => {
@@ -68,7 +79,7 @@ describe('TASK-062 purchase UI behavior', () => {
 
     const html = renderToStaticMarkup(<MemoryRouter><PurchasesPage /></MemoryRouter>)
 
-    expect(html).toContain('Entradas de mercancía por ubicación')
+    expect(html).toContain('Recepción de mercancía por ubicación')
     expect(html).toContain('Proveedor')
     expect(html).toContain('Ubicación receptora')
     expect(html).toContain('Granja Norte')
@@ -128,7 +139,7 @@ describe('TASK-062 purchase UI behavior', () => {
 
     expect(html).toContain('Detalle de compra')
     expect(html).toContain('Items comprados')
-    expect(html).toContain('Movimientos de inventario relacionados')
+    expect(html).toContain('Movimientos relacionados')
     expect(html).toContain('Cancelar compra')
     expect(html).toContain('Pollo entero')
   })
@@ -140,5 +151,38 @@ describe('TASK-062 purchase UI behavior', () => {
     expect(html).toContain('inventario negativo')
     expect(html).toContain('Confirmar cancelación')
     expect(html).toContain('disabled=""')
+  })
+
+  it('renderiza página de proveedores con búsqueda, estado y tabla compacta', () => {
+    const html = renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)
+
+    expect(html).toContain('Proveedores')
+    expect(html).toContain('Alta y mantenimiento de proveedores')
+    expect(html).toContain('Buscar proveedor')
+    expect(html).toContain('Activo/inactivo')
+    expect(html).toContain('Granja Norte')
+    expect(html).toContain('ventas@granja.mx')
+    expect(html).toContain('Nuevo proveedor')
+  })
+
+  it('muestra acción de desactivación solo para ADMIN', () => {
+    mockState.auth = { user: { role: 'ADMIN' } }
+    const adminHtml = renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)
+    expect(adminHtml).toContain('Desactivar')
+
+    mockState.auth = { user: { role: 'WAREHOUSE' } }
+    const warehouseHtml = renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)
+    expect(warehouseHtml).not.toContain('Desactivar')
+  })
+
+  it('muestra estados vacío, carga y error para proveedores', () => {
+    mockState.suppliers = { data: [], error: null, isLoading: false }
+    expect(renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)).toContain('No hay proveedores para estos filtros.')
+
+    mockState.suppliers = { data: [], error: null, isLoading: true }
+    expect(renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)).toContain('Cargando proveedores...')
+
+    mockState.suppliers = { data: [], error: new Error('Boom'), isLoading: false }
+    expect(renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)).toContain('No se pudieron cargar los proveedores.')
   })
 })

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../auth'
+import { commercialPoliciesService } from '../services/commercialPoliciesService'
 import { customerService } from '../services/customerService'
 import type { CustomerFilters, CustomerFormValues } from '../types'
 
@@ -68,5 +69,13 @@ export function useDeactivateCustomer() {
   return useMutation({
     mutationFn: (id: string) => customerService.deactivateCustomer(id, accessToken),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+  })
+}
+
+export function useCommercialPolicies() {
+  const { accessToken } = useAuth()
+  return useQuery({
+    queryKey: ['commercial-policies', 'customer-form'],
+    queryFn: () => commercialPoliciesService.listCommercialPolicies(accessToken),
   })
 }

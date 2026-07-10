@@ -10,6 +10,24 @@ export type Supplier = {
   email?: string | null
   address?: string | null
   isActive?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type CreateSupplierPayload = {
+  name: string
+  phone: string
+  email: string
+  address: string
+}
+
+export type UpdateSupplierPayload = Partial<CreateSupplierPayload>
+
+export type SupplierListFilters = {
+  search?: string
+  isActive?: boolean | string
+  page?: number
+  limit?: number
 }
 
 export type OperationalLocation = {

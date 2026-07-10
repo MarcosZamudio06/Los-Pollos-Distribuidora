@@ -89,8 +89,11 @@ let CustomersService = class CustomersService {
         if (typeof data.phone === 'string') {
             await this.assertPhoneAvailable(data.phone);
         }
+        await this.assertReferencedRelationsAvailable(data);
         const customer = (await this.prisma.customer
-            .create({ data: { ...data, isActive: true } })
+            .create({
+            data: { ...data, isActive: true },
+        })
             .catch((error) => {
             this.throwUniqueConflict(error);
             throw error;
@@ -105,8 +108,12 @@ let CustomersService = class CustomersService {
         if (typeof data.phone === 'string') {
             await this.assertPhoneAvailable(data.phone, currentCustomer.id);
         }
+        await this.assertReferencedRelationsAvailable(data);
         const customer = (await this.prisma.customer
-            .update({ where: { id: currentCustomer.id }, data })
+            .update({
+            where: { id: currentCustomer.id },
+            data: data,
+        })
             .catch((error) => {
             this.throwUniqueConflict(error);
             throw error;
@@ -231,6 +238,26 @@ let CustomersService = class CustomersService {
         });
         if (existingCustomer && existingCustomer.id !== currentCustomerId) {
             throw new common_1.ConflictException('Customer phone is already registered');
+        }
+    }
+    async assertReferencedRelationsAvailable(data) {
+        if (typeof data.assignedRouteId === 'string') {
+            const route = await this.prisma.deliveryRoute.findFirst({
+                where: { id: data.assignedRouteId },
+                select: { id: true },
+            });
+            if (!route) {
+                throw new common_1.BadRequestException('Assigned route does not exist');
+            }
+        }
+        if (typeof data.commercialPolicyId === 'string') {
+            const commercialPolicy = await this.prisma.commercialPolicy.findFirst({
+                where: { id: data.commercialPolicyId, isActive: true },
+                select: { id: true },
+            });
+            if (!commercialPolicy) {
+                throw new common_1.BadRequestException('Commercial policy does not exist');
+            }
         }
     }
     assertCanMutateCommercialTerms(dto, currentUser) {

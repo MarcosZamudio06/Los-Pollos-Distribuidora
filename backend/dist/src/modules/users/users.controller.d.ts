@@ -8,17 +8,17 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            email: string;
             id: string;
             name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            email: string;
             roleId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -32,17 +32,17 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            email: string;
             id: string;
             name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            email: string;
             roleId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -56,17 +56,17 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            email: string;
             id: string;
             name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            email: string;
             roleId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -80,17 +80,17 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            email: string;
             id: string;
             name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            email: string;
             roleId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -104,17 +104,17 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            email: string;
             id: string;
             name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            email: string;
             roleId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -128,17 +128,17 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            email: string;
             id: string;
             name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            email: string;
             roleId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
             role: {
                 id: string;
                 name: string;

@@ -26,13 +26,27 @@ Permisos: `ADMIN`, `WAREHOUSE` conforme a política.
 
 Body importante: `name`, `phone`, `email`, `address`.
 
-Validaciones: `name` requerido; `email` válido si existe.
+Validaciones:
+
+- `name`, `phone`, `email` y `address` requeridos y no vacíos.
+- `email` debe ser un correo válido.
+- Los campos se normalizan (trim y lower para `email`).
 
 ## PATCH /api/suppliers/:id
 
 Propósito: actualizar proveedor.
 
 Permisos: `ADMIN`, `WAREHOUSE` conforme a política.
+
+Body: parcial (`name`, `phone`, `email`, `address`).
+
+Validaciones:
+
+- El body puede ser parcial.
+- Tras fusionar el body con el proveedor existente, el proveedor efectivo debe mantener `name`, `phone`, `email` válido y `address` no vacíos.
+- Si la fusión deja un campo requerido en blanco, se rechaza con 400.
+- `email` proporcionado debe ser un correo válido.
+- No se permite mutar proveedores inactivos.
 
 ## DELETE /api/suppliers/:id
 

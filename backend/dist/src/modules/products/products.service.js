@@ -66,15 +66,17 @@ let ProductsService = class ProductsService {
     async create(dto) {
         this.assertValidCommercialData(dto);
         const sku = this.normalizeSku(dto.sku);
+        const description = this.normalizeOptionalText(dto.description);
+        const categoryId = this.normalizeOptionalText(dto.categoryId);
         await this.assertSkuAvailable(sku);
-        await this.assertCategoryExists(dto.categoryId);
+        await this.assertCategoryExists(categoryId);
         const product = (await this.prisma.product
             .create({
             data: {
                 name: dto.name,
                 sku,
-                description: dto.description ?? null,
-                categoryId: dto.categoryId ?? null,
+                description: description ?? null,
+                categoryId: categoryId ?? null,
                 presentationType: dto.presentationType,
                 salePrice: dto.salePrice,
                 purchaseCost: dto.purchaseCost,
@@ -96,10 +98,12 @@ let ProductsService = class ProductsService {
         const currentProduct = await this.findActiveProductForMutation(id);
         this.assertValidCommercialData(dto);
         const sku = this.normalizeSku(dto.sku);
+        const description = this.normalizeOptionalText(dto.description);
+        const categoryId = this.normalizeOptionalText(dto.categoryId);
         if (sku !== undefined) {
             await this.assertSkuAvailable(sku, id);
         }
-        await this.assertCategoryExists(dto.categoryId);
+        await this.assertCategoryExists(categoryId);
         const product = (await this.prisma.product
             .update({
             where: { id: currentProduct.id },
@@ -107,10 +111,10 @@ let ProductsService = class ProductsService {
                 ...(dto.name !== undefined ? { name: dto.name } : {}),
                 ...(dto.sku !== undefined ? { sku } : {}),
                 ...(dto.description !== undefined
-                    ? { description: dto.description ?? null }
+                    ? { description: description ?? null }
                     : {}),
                 ...(dto.categoryId !== undefined
-                    ? { categoryId: dto.categoryId ?? null }
+                    ? { categoryId: categoryId ?? null }
                     : {}),
                 ...(dto.presentationType !== undefined
                     ? { presentationType: dto.presentationType }
@@ -259,6 +263,16 @@ let ProductsService = class ProductsService {
         }
         const normalizedSku = sku.trim().toUpperCase();
         return normalizedSku.length > 0 ? normalizedSku : null;
+    }
+    normalizeOptionalText(value) {
+        if (value === undefined) {
+            return undefined;
+        }
+        if (value === null) {
+            return null;
+        }
+        const normalizedValue = value.trim();
+        return normalizedValue.length > 0 ? normalizedValue : null;
     }
     toProductResponse(product, options = {}) {
         const response = {

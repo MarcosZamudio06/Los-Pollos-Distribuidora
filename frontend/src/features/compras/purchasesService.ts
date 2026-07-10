@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api'
-import type { CancelPurchasePayload, CreatePurchasePayload, ListPurchasesFilters, OperationalLocation, PurchaseDetail, PurchaseListItem, Supplier } from './types'
+import type { CancelPurchasePayload, CreatePurchasePayload, CreateSupplierPayload, ListPurchasesFilters, OperationalLocation, PurchaseDetail, PurchaseListItem, Supplier, SupplierListFilters, UpdateSupplierPayload } from './types'
 
 type ApiEnvelope<T> = { success?: boolean; message?: string; data?: T }
 type ListEnvelope<T> = ApiEnvelope<T[] | { items?: T[] }> | { items?: T[] } | T[]
@@ -70,11 +70,31 @@ export const purchasesService = {
     })
     return unwrapItem(response)
   },
-  async listSuppliers(filters: { search?: string; isActive?: boolean | string; page?: number; limit?: number }, accessToken?: string | null) {
+  async listSuppliers(filters: SupplierListFilters, accessToken?: string | null) {
     const response = await apiClient.get<ListEnvelope<Supplier>>(withParams('/suppliers', filters), {
       headers: authHeaders(accessToken),
     })
     return unwrapList(response).items
+  },
+  async createSupplier(payload: CreateSupplierPayload, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<Supplier>, CreateSupplierPayload>('/suppliers', {
+      body: payload,
+      headers: authHeaders(accessToken, crypto.randomUUID()),
+    })
+    return unwrapItem(response)
+  },
+  async updateSupplier(id: string, payload: UpdateSupplierPayload, accessToken?: string | null) {
+    const response = await apiClient.patch<ItemEnvelope<Supplier>, UpdateSupplierPayload>(`/suppliers/${id}`, {
+      body: payload,
+      headers: authHeaders(accessToken, crypto.randomUUID()),
+    })
+    return unwrapItem(response)
+  },
+  async deactivateSupplier(id: string, accessToken?: string | null) {
+    const response = await apiClient.delete<ItemEnvelope<Supplier>>(`/suppliers/${id}`, {
+      headers: authHeaders(accessToken, crypto.randomUUID()),
+    })
+    return unwrapItem(response)
   },
   async listLocations(filters: { search?: string; isActive?: boolean | string; page?: number; limit?: number }, accessToken?: string | null) {
     const response = await apiClient.get<ListEnvelope<OperationalLocation>>(withParams('/locations', filters), {

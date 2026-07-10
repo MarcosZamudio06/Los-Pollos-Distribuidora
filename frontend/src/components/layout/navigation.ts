@@ -9,6 +9,7 @@ import {
   Settings,
   ShoppingBasket,
   ShoppingCart,
+  Store,
   Truck,
   Users,
   type LucideIcon,
@@ -23,6 +24,7 @@ export type NavigationItemKey =
   | 'accounts-receivable'
   | 'inventory'
   | 'purchases'
+  | 'purchase-suppliers'
   | 'purchases-new'
   | 'my-routes'
   | 'delivery-routes'
@@ -119,6 +121,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Compras',
     section: 'operations',
     to: '/purchases',
+  },
+  {
+    activePaths: ['/purchases/suppliers'],
+    allowedRoles: ROUTE_ACCESS_ROLES.purchaseSuppliers,
+    routeAccessKey: 'purchaseSuppliers',
+    description: 'Alta de proveedores',
+    icon: Store,
+    key: 'purchase-suppliers',
+    label: 'Proveedores',
+    section: 'operations',
+    to: '/purchases/suppliers',
   },
   {
     activePaths: ['/purchases/new'],

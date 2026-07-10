@@ -140,7 +140,7 @@ describe('SuppliersService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('creates suppliers with trimmed fields and rejects blank names before writing', async () => {
+  it('creates suppliers with required name, phone, valid email, and address trimmed before writing', async () => {
     const { service, prisma } = createService();
     prisma.supplier.create.mockImplementation(({ data }: { data: unknown }) =>
       Promise.resolve(createSupplier(data as Partial<SupplierRecord>)),
@@ -176,23 +176,77 @@ describe('SuppliersService', () => {
     await expect(service.create({ name: '   ' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    await expect(
+      service.create({
+        name: 'Proveedor Sur',
+        phone: '555-0202',
+        address: 'Av. Principal',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create({
+        name: 'Proveedor Sur',
+        phone: '555-0202',
+        email: 'sur@example.com',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create({
+        name: 'Proveedor Sur',
+        email: 'sur@example.com',
+        address: 'Av. Principal',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create({
+        name: 'Proveedor Sur',
+        phone: '   ',
+        email: 'sur@example.com',
+        address: 'Av. Principal',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create({
+        name: 'Proveedor Sur',
+        phone: '555-0202',
+        email: '   ',
+        address: 'Av. Principal',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create({
+        name: 'Proveedor Sur',
+        phone: '555-0202',
+        email: 'not-an-email',
+        address: 'Av. Principal',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.supplier.create).toHaveBeenCalledTimes(1);
   });
 
   it('updates active suppliers and soft-deactivates without physical delete', async () => {
     const { service, prisma } = createService();
     prisma.supplier.findFirst.mockResolvedValueOnce(createSupplier());
-    prisma.supplier.update.mockResolvedValueOnce(
-      createSupplier({ phone: null }),
-    );
 
     await expect(
       service.update('supplier-1', { phone: '   ' }),
-    ).resolves.toEqual(expect.objectContaining({ phone: null }));
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.supplier.update).not.toHaveBeenCalled();
 
-    expect(prisma.supplier.update).toHaveBeenCalledWith({
+    prisma.supplier.findFirst.mockResolvedValueOnce(createSupplier());
+    prisma.supplier.update.mockResolvedValueOnce(
+      createSupplier({ name: 'Proveedor Norte Actualizado' }),
+    );
+
+    await expect(
+      service.update('supplier-1', { name: 'Proveedor Norte Actualizado' }),
+    ).resolves.toEqual(
+      expect.objectContaining({ name: 'Proveedor Norte Actualizado' }),
+    );
+
+    expect(prisma.supplier.update).toHaveBeenLastCalledWith({
       where: { id: 'supplier-1' },
-      data: { phone: null },
+      data: { name: 'Proveedor Norte Actualizado' },
     });
 
     prisma.supplier.findFirst.mockResolvedValueOnce(createSupplier());
@@ -208,5 +262,85 @@ describe('SuppliersService', () => {
       data: { isActive: false },
     });
     expect(prisma.supplier.delete).not.toHaveBeenCalled();
+  });
+
+  it('PATCH merges with existing supplier on partial body before checking required fields', async () => {
+    const { service, prisma } = createService();
+
+    prisma.supplier.findFirst.mockResolvedValueOnce(createSupplier());
+    prisma.supplier.update.mockResolvedValueOnce(
+      createSupplier({ name: 'Proveedor Norte Actualizado' }),
+    );
+
+    await expect(
+      service.update('supplier-1', { name: 'Proveedor Norte Actualizado' }),
+    ).resolves.toEqual(
+      expect.objectContaining({ name: 'Proveedor Norte Actualizado' }),
+    );
+    expect(prisma.supplier.update).toHaveBeenLastCalledWith({
+      where: { id: 'supplier-1' },
+      data: { name: 'Proveedor Norte Actualizado' },
+    });
+
+    prisma.supplier.findFirst.mockResolvedValueOnce(createSupplier());
+    prisma.supplier.update.mockResolvedValueOnce(
+      createSupplier({
+        address: 'Nueva dirección',
+        email: 'nuevo@example.com',
+        name: 'Proveedor Norte',
+        phone: '555-0303',
+      }),
+    );
+
+    await expect(
+      service.update('supplier-1', {
+        address: 'Nueva dirección',
+        email: 'nuevo@example.com',
+        phone: '555-0303',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        address: 'Nueva dirección',
+        email: 'nuevo@example.com',
+        phone: '555-0303',
+      }),
+    );
+
+    const supplierMissingPhone = createSupplier({ phone: null });
+    prisma.supplier.findFirst.mockResolvedValueOnce(supplierMissingPhone);
+
+    await expect(
+      service.update('supplier-1', { name: 'Nuevo Nombre' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const supplierMissingAddress = createSupplier({ address: null });
+    prisma.supplier.findFirst.mockResolvedValueOnce(supplierMissingAddress);
+
+    await expect(
+      service.update('supplier-1', { email: 'nuevo@example.com' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const supplierMissingEmail = createSupplier({ email: null });
+    prisma.supplier.findFirst.mockResolvedValueOnce(supplierMissingEmail);
+
+    await expect(
+      service.update('supplier-1', { phone: '555-0303' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    prisma.supplier.findFirst.mockResolvedValueOnce(createSupplier());
+
+    await expect(
+      service.update('supplier-1', { email: 'invalido' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    prisma.supplier.findFirst.mockResolvedValueOnce(
+      createSupplier({ name: null }),
+    );
+
+    await expect(
+      service.update('supplier-1', { phone: '555-0303' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.supplier.update).toHaveBeenCalledTimes(2);
   });
 });

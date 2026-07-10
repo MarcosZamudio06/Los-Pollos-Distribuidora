@@ -8,6 +8,8 @@ Registrar entradas de mercancía desde proveedores, actualizar inventario por ub
 
 - Crear proveedor.
 - Listar proveedores.
+- Actualizar proveedor.
+- Desactivar proveedor sin eliminar trazabilidad histórica.
 - Registrar compra.
 - Agregar productos a compra.
 - Capturar cantidades por kilo, pieza o ambas unidades según el producto.
@@ -64,6 +66,8 @@ Rutas ya referenciadas por el roadmap actual:
 - POST /api/purchases/:id/cancel
 - GET /api/suppliers
 - POST /api/suppliers
+- PATCH /api/suppliers/:id
+- DELETE /api/suppliers/:id
 
 Pendiente de especificación API antes de implementar:
 
@@ -76,6 +80,7 @@ Pendiente de especificación API antes de implementar:
 - Tabla de compras.
 - Formulario de nueva compra.
 - Selector de proveedor.
+- Página de proveedores con búsqueda, filtro por estado, alta, edición y desactivación visible solo para ADMIN.
 - Selector de ubicación operativa receptora.
 - Tabla de productos con unidad, kilos, piezas y costo.
 - Total.

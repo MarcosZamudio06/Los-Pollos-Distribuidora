@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import {
   AlertCircle,
+  Eye,
+  EyeOff,
   LockKeyhole,
   Mail,
   ShieldCheck,
@@ -23,6 +25,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const state = location.state as LocationState | null
@@ -152,13 +155,25 @@ export function LoginPage() {
                           aria-describedby={activeError ? 'login-error' : undefined}
                           aria-invalid={Boolean(activeError)}
                           autoComplete="current-password"
-                          className="h-12 rounded-2xl bg-[var(--erp-surface)] pl-10 text-base"
+                          className="h-12 rounded-2xl bg-[var(--erp-surface)] pl-10 pr-11 text-base"
                           id="password"
                           onChange={(event) => setPassword(event.target.value)}
                           required
-                          type="password"
+                          type={showPassword ? 'text' : 'password'}
                           value={password}
                         />
+                        <button
+                          aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                          className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-[var(--erp-muted-foreground)] transition hover:bg-[var(--erp-surface-muted)] hover:text-[var(--erp-foreground)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
+                          onClick={() => setShowPassword((value) => !value)}
+                          type="button"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
                       </div>
                     </label>
                   </div>

@@ -10,7 +10,7 @@ import {
 } from '../features/auth'
 import { CustomersPage } from '../features/clientes'
 import { AccountsReceivablePage } from '../features/cobranza'
-import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage } from '../features/compras'
+import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage, SuppliersPage } from '../features/compras'
 import { DashboardPage } from '../features/dashboard'
 import { ReportsPage } from '../features/reportes'
 import { ProductListPage } from '../features/inventario'
@@ -84,6 +84,14 @@ export function AppRouter() {
           element={
             <RoleRoute roles={ROUTE_ACCESS_ROLES.salesPos}>
               <SalesPosPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/purchases/suppliers"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.purchaseSuppliers}>
+              <SuppliersPage />
             </RoleRoute>
           }
         />

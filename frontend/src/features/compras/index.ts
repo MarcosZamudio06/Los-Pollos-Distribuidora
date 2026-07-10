@@ -1,6 +1,8 @@
 export { PurchasesPage } from './PurchasesPage'
 export { PurchaseFormPage } from './PurchaseFormPage'
 export { PurchaseDetailPage } from './PurchaseDetailPage'
+export { SuppliersPage } from './SuppliersPage'
+export { SupplierFormPanel } from './SupplierFormPanel'
 export { SupplierSelector } from './SupplierSelector'
 export { PurchaseLocationSelector } from './PurchaseLocationSelector'
 export { PurchaseItemsTable } from './PurchaseItemsTable'
