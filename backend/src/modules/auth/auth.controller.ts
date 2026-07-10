@@ -66,6 +66,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowPasswordChangeRequired()
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: AuthenticatedUser) {
     return {

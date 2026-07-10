@@ -16,4 +16,64 @@ describe('validateEnvironment', () => {
       }),
     );
   });
+
+  it('rejects a production environment without an explicit database URL', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: 'a'.repeat(32),
+        JWT_REFRESH_SECRET: 'b'.repeat(32),
+      }),
+    ).toThrow('DATABASE_URL is required when NODE_ENV=production');
+  });
+
+  it('rejects missing, known, short, or repeated production JWT secrets', () => {
+    const baseEnvironment = {
+      DATABASE_URL: 'postgresql://user:password@database:5432/app',
+      NODE_ENV: 'production',
+    };
+
+    expect(() => validateEnvironment(baseEnvironment)).toThrow(
+      'JWT_ACCESS_SECRET is required when NODE_ENV=production',
+    );
+    expect(() =>
+      validateEnvironment({
+        ...baseEnvironment,
+        JWT_ACCESS_SECRET: 'local_access_change_me',
+        JWT_REFRESH_SECRET: 'b'.repeat(32),
+      }),
+    ).toThrow('JWT_ACCESS_SECRET must be an unpredictable value');
+    expect(() =>
+      validateEnvironment({
+        ...baseEnvironment,
+        JWT_ACCESS_SECRET: 'a'.repeat(32),
+        JWT_REFRESH_SECRET: 'too-short',
+      }),
+    ).toThrow('JWT_REFRESH_SECRET must be an unpredictable value');
+    expect(() =>
+      validateEnvironment({
+        ...baseEnvironment,
+        JWT_ACCESS_SECRET: 'a'.repeat(32),
+        JWT_REFRESH_SECRET: 'a'.repeat(32),
+      }),
+    ).toThrow('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different');
+  });
+
+  it('accepts independent production secrets with sufficient entropy space', () => {
+    expect(
+      validateEnvironment({
+        DATABASE_URL: 'postgresql://user:password@database:5432/app',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+        PORT: '4000',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+      }),
+    );
+  });
 });

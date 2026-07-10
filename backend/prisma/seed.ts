@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { assertSeedEnvironment } from './seed-guard';
 
 export const DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
 export const DEVELOPMENT_ROLE_TEST_PASSWORD = 'DevRoleUsers-2026!';
@@ -286,6 +287,7 @@ async function seedExampleProducts(prisma: SeedPrismaClient): Promise<void> {
 }
 
 export async function seed(prisma: SeedPrismaClient): Promise<void> {
+  assertSeedEnvironment();
   await seedRoles(prisma);
   await seedInitialAdmin(prisma);
   await seedInitialLocation(prisma);

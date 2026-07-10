@@ -141,6 +141,23 @@ describe('AuthController API', () => {
       });
   });
 
+  it('allows a pending-password user to read /me so the client can route the required flow', async () => {
+    const pendingUser = { ...authenticatedUser, mustChangePassword: true };
+    authService.verifyAccessToken.mockResolvedValue(pendingUser);
+
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', 'Bearer access-token')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          success: true,
+          message: 'Usuario autenticado',
+          data: { user: pendingUser },
+        });
+      });
+  });
+
   it('rejects logout when no bearer token is provided', async () => {
     await request(app.getHttpServer()).post('/api/auth/logout').expect(401);
 

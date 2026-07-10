@@ -25,6 +25,7 @@ import {
   SaleStatus,
   type ProductUnit,
 } from '@prisma/client'
+import { assertSeedEnvironment } from './seed-guard';
 import {
   addDays,
   calculateDaysOverdue,
@@ -1474,6 +1475,7 @@ async function seedDailyCloses(prisma: PrismaClient, ctx: SeedContext, dailyClos
 }
 
 async function runOperationalSeed(prisma: PrismaClient) {
+  assertSeedEnvironment();
   const ctx = await loadSeedContext(prisma)
   const baseDate = addDays(new Date(), -29)
 

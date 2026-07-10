@@ -3,6 +3,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { ROUTE_ACCESS_ROLES } from '../components/layout/routeAccess'
 import {
   ForbiddenPage,
+  ChangePasswordPage,
   LoginPage,
   LogoutPage,
   ProtectedRoute,
@@ -39,6 +40,14 @@ export function AppRouter() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/logout" element={<LogoutPage />} />
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePasswordPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         element={
           <ProtectedRoute>

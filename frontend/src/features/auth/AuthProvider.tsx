@@ -8,7 +8,7 @@ import {
 import { ApiClientError } from '../../lib/api'
 import * as authApi from './authApi'
 import { AuthContext, type AuthContextValue } from './authContext'
-import type { AuthSession, LoginCredentials } from './types'
+import type { AuthSession, ChangePasswordValues, LoginCredentials } from './types'
 
 const AUTH_STORAGE_KEY = 'pollos.auth.session'
 
@@ -121,6 +121,32 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [accessToken, clearSession])
 
+  const handleChangePassword = useCallback(
+    async (values: ChangePasswordValues) => {
+      if (!accessToken) {
+        clearSession()
+        throw new Error('La sesión ya no está disponible.')
+      }
+
+      setError(null)
+
+      try {
+        const updatedUser = await authApi.changePassword(accessToken, values)
+        setSession((currentSession) => {
+          if (!currentSession) return currentSession
+
+          const nextSession = { ...currentSession, user: updatedUser }
+          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
+          return nextSession
+        })
+      } catch (caughtError) {
+        setError(getErrorMessage(caughtError))
+        throw caughtError
+      }
+    },
+    [accessToken, clearSession],
+  )
+
   useEffect(() => {
     if (!accessToken) {
       return
@@ -181,6 +207,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthContextValue>(
     () => ({
       accessToken,
+      changePassword: handleChangePassword,
       error,
       isAuthenticated: Boolean(session),
       login: handleLogin,
@@ -189,7 +216,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       status,
       user,
     }),
-    [accessToken, error, handleLogin, handleLogout, refreshUser, session, status, user],
+    [accessToken, error, handleChangePassword, handleLogin, handleLogout, refreshUser, session, status, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

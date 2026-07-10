@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api'
-import type { ApiEnvelope, AuthUser, LoginCredentials, LoginResult } from './types'
+import type { ApiEnvelope, AuthUser, ChangePasswordValues, LoginCredentials, LoginResult } from './types'
 
 export async function login(credentials: LoginCredentials) {
   const response = await apiClient.post<ApiEnvelope<LoginResult>, LoginCredentials>(
@@ -22,4 +22,16 @@ export async function getCurrentUser(accessToken: string) {
   })
 
   return response.data.user
+}
+
+export async function changePassword(accessToken: string, values: ChangePasswordValues) {
+  const response = await apiClient.post<ApiEnvelope<AuthUser>, ChangePasswordValues>(
+    '/auth/change-password',
+    {
+      body: values,
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  )
+
+  return response.data
 }

@@ -1,10 +1,11 @@
 import { createContext } from 'react'
-import type { AuthUser, LoginCredentials } from './types'
+import type { AuthUser, ChangePasswordValues, LoginCredentials } from './types'
 
 type AuthStatus = 'authenticated' | 'checking' | 'guest'
 
 export type AuthContextValue = {
   accessToken: string | null
+  changePassword: (values: ChangePasswordValues) => Promise<void>
   error: string | null
   isAuthenticated: boolean
   login: (credentials: LoginCredentials) => Promise<void>

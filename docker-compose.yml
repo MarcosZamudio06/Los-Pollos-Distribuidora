@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pollo_distribucion}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -26,14 +26,13 @@ services:
       BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-10}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       DATABASE_SSL: ${DATABASE_SSL:-false}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local_access_change_me}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local_refresh_change_me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       NODE_ENV: production
       PORT: ${PORT:-4000}
-      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
     command: npm run start:docker
     depends_on:

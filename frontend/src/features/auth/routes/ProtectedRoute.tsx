@@ -4,7 +4,7 @@ import { useAuth } from '../useAuth'
 import type { PropsWithChildren } from 'react'
 
 export function ProtectedRoute({ children }: PropsWithChildren) {
-  const { isAuthenticated, status } = useAuth()
+  const { isAuthenticated, status, user } = useAuth()
   const location = useLocation()
 
   if (status === 'checking') {
@@ -36,6 +36,10 @@ export function ProtectedRoute({ children }: PropsWithChildren) {
 
   if (!isAuthenticated) {
     return <Navigate replace state={{ from: location }} to="/login" />
+  }
+
+  if (user?.mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate replace state={{ from: location }} to="/change-password" />
   }
 
   return children

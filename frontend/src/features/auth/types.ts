@@ -13,6 +13,11 @@ export type LoginCredentials = {
   password: string
 }
 
+export type ChangePasswordValues = {
+  currentPassword: string
+  newPassword: string
+}
+
 export type LoginResult = {
   accessToken: string
   refreshToken: string

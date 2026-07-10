@@ -85,6 +85,31 @@ describe('Prisma seed contract', () => {
     ).toThrow('SEED_ADMIN_PASSWORD is required in production seed runs');
   });
 
+  it('refuses the complete development seed in production even when an admin password exists', async () => {
+    const { prisma, userUpsertMock } = createPrismaSeedMock();
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousSeedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+    process.env.NODE_ENV = 'production';
+    process.env.SEED_ADMIN_PASSWORD = 'not-enough-to-enable-a-production-seed';
+
+    try {
+      await expect(seed(prisma)).rejects.toThrow(
+        'Development and operational seeds are disabled when NODE_ENV=production',
+      );
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+
+      if (previousSeedAdminPassword === undefined) {
+        delete process.env.SEED_ADMIN_PASSWORD;
+      } else {
+        process.env.SEED_ADMIN_PASSWORD = previousSeedAdminPassword;
+      }
+    }
+
+    expect(userUpsertMock).not.toHaveBeenCalled();
+  });
+
 
   it('defines development role test users for the remaining canonical roles', () => {
     expect(initialRoleTestUsers.map((user) => user.roleName)).toEqual([
@@ -270,8 +295,13 @@ describe('Prisma seed contract', () => {
   it('registers the Prisma seed command minimally', () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       prisma?: { seed?: string };
+      scripts?: { 'start:docker'?: string };
     };
 
     expect(packageJson.prisma?.seed).toBe('ts-node prisma/seed.ts');
+    expect(packageJson.scripts?.['start:docker']).toBe(
+      'prisma migrate deploy && npm run start:prod',
+    );
+    expect(packageJson.scripts?.['start:docker']).not.toContain('seed');
   });
 });
