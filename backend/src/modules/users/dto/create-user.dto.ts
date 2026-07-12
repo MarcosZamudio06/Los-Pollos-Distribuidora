@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Matches } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -13,6 +13,10 @@ export class CreateUserDto {
   roleId!: string;
 
   @IsString()
-  @MinLength(10)
-  temporaryPassword!: string;
+  @IsNotEmpty()
+  operationalLocationId!: string;
+
+  @IsString()
+  @Matches(/^\+?[0-9][0-9\s-]{6,19}$/)
+  phone!: string;
 }

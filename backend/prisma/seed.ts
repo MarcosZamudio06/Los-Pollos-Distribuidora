@@ -24,6 +24,8 @@ export const initialAdminUser = {
   email: 'dev.admin@pollos.local',
   isActive: true,
   mustChangePassword: false,
+  controlNumber: 'EPDP-000001',
+  phone: '+520000000001',
 } as const;
 
 
@@ -34,6 +36,7 @@ export const initialRoleTestUsers = [
     email: 'dev.seller@pollos.local',
     isActive: true,
     mustChangePassword: false,
+    controlNumber: 'EPDP-000002', phone: '+520000000002',
   },
   {
     roleName: 'WAREHOUSE',
@@ -41,6 +44,7 @@ export const initialRoleTestUsers = [
     email: 'dev.warehouse@pollos.local',
     isActive: true,
     mustChangePassword: false,
+    controlNumber: 'EPDP-000003', phone: '+520000000003',
   },
   {
     roleName: 'DRIVER',
@@ -48,6 +52,7 @@ export const initialRoleTestUsers = [
     email: 'dev.driver@pollos.local',
     isActive: true,
     mustChangePassword: false,
+    controlNumber: 'EPDP-000004', phone: '+520000000004',
   },
   {
     roleName: 'COLLECTIONS',
@@ -55,6 +60,7 @@ export const initialRoleTestUsers = [
     email: 'dev.collections@pollos.local',
     isActive: true,
     mustChangePassword: false,
+    controlNumber: 'EPDP-000005', phone: '+520000000005',
   },
 ] as const;
 
@@ -145,6 +151,7 @@ type PasswordResolution = {
 };
 
 export type SeedPrismaClient = {
+  $executeRawUnsafe?: (query: string) => Promise<unknown>;
   role: {
     upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
   };
@@ -205,11 +212,13 @@ async function seedInitialAdmin(prisma: SeedPrismaClient): Promise<void> {
       isActive: initialAdminUser.isActive,
       mustChangePassword: initialAdminUser.mustChangePassword,
       role: { connect: { name: 'ADMIN' } },
+      operationalLocation: { connect: { code: 'VER' } },
     },
     create: {
       ...initialAdminUser,
       passwordHash,
       role: { connect: { name: 'ADMIN' } },
+      operationalLocation: { connect: { code: 'VER' } },
     },
   });
 
@@ -243,17 +252,24 @@ async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
         isActive: user.isActive,
         mustChangePassword: user.mustChangePassword,
         role: { connect: { name: user.roleName } },
+        operationalLocation: { connect: { code: 'VER' } },
       },
       create: {
         name: user.name,
         email: user.email,
+        controlNumber: user.controlNumber,
+        phone: user.phone,
         passwordHash,
         isActive: user.isActive,
         mustChangePassword: user.mustChangePassword,
         role: { connect: { name: user.roleName } },
+        operationalLocation: { connect: { code: 'VER' } },
       },
     });
   }
+  await prisma.$executeRawUnsafe?.(
+    "SELECT setval('\"User_controlNumber_seq\"', GREATEST((SELECT COALESCE(MAX(SUBSTRING(\"controlNumber\" FROM 6)::bigint), 1) FROM \"User\"), 1), true)",
+  );
 }
 
 async function seedCategories(prisma: SeedPrismaClient): Promise<void> {
@@ -289,8 +305,8 @@ async function seedExampleProducts(prisma: SeedPrismaClient): Promise<void> {
 export async function seed(prisma: SeedPrismaClient): Promise<void> {
   assertSeedEnvironment();
   await seedRoles(prisma);
-  await seedInitialAdmin(prisma);
   await seedInitialLocation(prisma);
+  await seedInitialAdmin(prisma);
   await seedInitialRoleUsers(prisma);
   await seedCategories(prisma);
   await seedExampleProducts(prisma);

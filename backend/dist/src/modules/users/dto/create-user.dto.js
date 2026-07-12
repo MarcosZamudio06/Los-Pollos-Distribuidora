@@ -15,7 +15,8 @@ class CreateUserDto {
     name;
     email;
     roleId;
-    temporaryPassword;
+    operationalLocationId;
+    phone;
 }
 exports.CreateUserDto = CreateUserDto;
 __decorate([
@@ -34,7 +35,12 @@ __decorate([
 ], CreateUserDto.prototype, "roleId", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MinLength)(10),
+    (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
-], CreateUserDto.prototype, "temporaryPassword", void 0);
+], CreateUserDto.prototype, "operationalLocationId", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^\+?[0-9][0-9\s-]{6,19}$/),
+    __metadata("design:type", String)
+], CreateUserDto.prototype, "phone", void 0);
 //# sourceMappingURL=create-user.dto.js.map

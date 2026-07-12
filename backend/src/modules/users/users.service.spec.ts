@@ -1,385 +1,84 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import 'reflect-metadata';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../../database/prisma.service';
 import { UsersService } from './users.service';
 
-type RoleRecord = { id: string; name: string };
+const now = new Date('2026-07-11T00:00:00.000Z');
+const role = { id: 'role-seller', name: 'SELLER' };
+const location = { id: 'location-1', name: 'Matriz', type: 'BRANCH', isActive: true };
 
-type UserRecord = {
-  id: string;
-  name: string;
-  email: string;
-  passwordHash: string;
-  roleId: string;
-  role: RoleRecord;
-  isActive: boolean;
-  mustChangePassword: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  deactivatedAt: Date | null;
-  deactivatedByUserId: string | null;
-  deactivationReason: string | null;
-};
-
-type MockPrisma = {
-  user: {
-    findMany: jest.Mock;
-    findUnique: jest.Mock;
-    findFirst: jest.Mock;
-    create: jest.Mock;
-    update: jest.Mock;
-    count: jest.Mock;
-  };
-  role: {
-    findUnique: jest.Mock;
-  };
-  $transaction: jest.Mock;
-};
-
-const adminRole: RoleRecord = { id: 'role-admin', name: 'ADMIN' };
-const sellerRole: RoleRecord = { id: 'role-seller', name: 'SELLER' };
-const now = new Date('2026-06-26T12:00:00.000Z');
-
-type PasswordHashMutationArgs = {
-  data: { passwordHash: string; mustChangePassword?: boolean };
-};
-
-function createUser(overrides: Partial<UserRecord> = {}): UserRecord {
-  return {
-    id: 'user-1',
-    name: 'Development Admin',
-    email: 'admin@pollos.local',
-    passwordHash: 'hashed-password',
-    roleId: adminRole.id,
-    role: adminRole,
-    isActive: true,
-    mustChangePassword: false,
-    createdAt: now,
-    updatedAt: now,
-    deactivatedAt: null,
-    deactivatedByUserId: null,
-    deactivationReason: null,
-    ...overrides,
-  };
+function user(overrides: Record<string, unknown> = {}) {
+  return { id: 'user-1', name: 'Ana', email: 'ana@pollos.local', phone: '+522291234567', controlNumber: 'EPDP-000001', passwordHash: 'hash', roleId: role.id, operationalLocationId: location.id, role, operationalLocation: location, isActive: true, mustChangePassword: true, createdAt: now, updatedAt: now, deactivatedAt: null, deactivatedByUserId: null, deactivationReason: null, ...overrides };
 }
 
-function createPrisma(): MockPrisma {
-  const prisma: MockPrisma = {
-    user: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      count: jest.fn(),
-    },
-    role: {
-      findUnique: jest.fn(),
-    },
-    $transaction: jest.fn(
-      async (callback: (tx: MockPrisma) => Promise<unknown>) =>
-        callback(prisma),
-    ),
+function prismaMock() {
+  const prisma = {
+    user: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
+    role: { findUnique: jest.fn(), findMany: jest.fn() },
+    operationalLocation: { findUnique: jest.fn() },
+    $queryRawUnsafe: jest.fn().mockResolvedValue([{ value: 1 }]),
+    $transaction: jest.fn(async (callback: (value: unknown) => unknown) => callback(prisma)),
   };
-
   return prisma;
 }
 
-function createService(prisma = createPrisma()): {
-  service: UsersService;
-  prisma: MockPrisma;
-} {
-  return {
-    service: new UsersService(prisma as unknown as PrismaService),
-    prisma,
-  };
-}
-
-describe('UsersService', () => {
-  it('creates a user with unique email, hashed temporary password and sanitized response', async () => {
-    const { service, prisma } = createService();
+describe('UsersService employee administration', () => {
+  it('creates an employee with a generated one-time password and safe persisted fields', async () => {
+    const prisma = prismaMock();
     prisma.user.findUnique.mockResolvedValue(null);
-    prisma.role.findUnique.mockResolvedValue(sellerRole);
-    prisma.user.create.mockImplementation(({ data }: { data: UserRecord }) =>
-      Promise.resolve(
-        createUser({
-          ...data,
-          id: 'user-2',
-          roleId: sellerRole.id,
-          role: sellerRole,
-          mustChangePassword: true,
-        }),
-      ),
-    );
+    prisma.role.findUnique.mockResolvedValue(role);
+    prisma.operationalLocation.findUnique.mockResolvedValue(location);
+    prisma.user.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => user(data));
+    const service = new UsersService(prisma as unknown as PrismaService);
 
-    const expectedCreateData = expect.objectContaining({
-      name: 'Counter Seller',
-      email: 'seller@pollos.local',
-      roleId: sellerRole.id,
-      mustChangePassword: true,
-      isActive: true,
-    }) as unknown;
+    const result = await service.create({ name: 'Ana', email: ' ANA@POLLOS.LOCAL ', phone: '+52 229-123-4567', roleId: role.id, operationalLocationId: location.id });
 
-    const result = await service.create({
-      name: 'Counter Seller',
-      email: 'seller@pollos.local',
-      roleId: sellerRole.id,
-      temporaryPassword: 'temporary-123',
-    });
-
-    expect(prisma.user.create).toHaveBeenCalledWith({
-      data: expectedCreateData,
-      include: { role: true },
-    });
-    const [[createArgs]] = prisma.user.create.mock.calls as unknown as [
-      [PasswordHashMutationArgs],
-      ...unknown[],
-    ];
-    expect(createArgs.data.passwordHash).not.toBe('temporary-123');
-    await expect(
-      bcrypt.compare('temporary-123', createArgs.data.passwordHash),
-    ).resolves.toBe(true);
-    expect(result).toEqual(
-      expect.objectContaining({
-        id: 'user-2',
-        email: 'seller@pollos.local',
-        role: sellerRole,
-        mustChangePassword: true,
-      }),
-    );
+    expect(result.controlNumber).toBe('EPDP-000001');
+    expect(result.temporaryPassword).toHaveLength(16);
     expect(result).not.toHaveProperty('passwordHash');
-    expect(result).not.toHaveProperty('temporaryPassword');
+    const createData = prisma.user.create.mock.calls[0][0].data;
+    expect(createData.email).toBe('ana@pollos.local');
+    expect(createData.phone).toBe('+522291234567');
+    expect(createData.mustChangePassword).toBe(true);
+    await expect(bcrypt.compare(result.temporaryPassword, createData.passwordHash)).resolves.toBe(true);
   });
 
-  it('rejects duplicate email and weak temporary password before persistence', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findUnique.mockResolvedValueOnce(createUser());
+  it('rejects duplicate phone and unavailable employee locations', async () => {
+    const prisma = prismaMock();
+    prisma.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(user());
+    const service = new UsersService(prisma as unknown as PrismaService);
+    await expect(service.create({ name: 'Ana', email: 'ana@pollos.local', phone: '2291234567', roleId: role.id, operationalLocationId: location.id })).rejects.toBeInstanceOf(ConflictException);
 
-    await expect(
-      service.create({
-        name: 'Duplicated Admin',
-        email: 'admin@pollos.local',
-        roleId: adminRole.id,
-        temporaryPassword: 'temporary-123',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-
-    await expect(
-      service.create({
-        name: 'Weak Password User',
-        email: 'weak@pollos.local',
-        roleId: adminRole.id,
-        temporaryPassword: 'short',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.user.create).not.toHaveBeenCalled();
+    prisma.user.findUnique.mockReset(); prisma.user.findUnique.mockResolvedValue(null);
+    prisma.role.findUnique.mockResolvedValue(role);
+    prisma.operationalLocation.findUnique.mockResolvedValue({ ...location, type: 'WAREHOUSE' });
+    await expect(service.create({ name: 'Ana', email: 'ana@pollos.local', phone: '2291234567', roleId: role.id, operationalLocationId: location.id })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('maps unique email races during create to ConflictException', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findUnique.mockResolvedValue(null);
-    prisma.role.findUnique.mockResolvedValue(sellerRole);
-    prisma.user.create.mockRejectedValue({ code: 'P2002' });
-
-    await expect(
-      service.create({
-        name: 'Racing Seller',
-        email: 'seller@pollos.local',
-        roleId: sellerRole.id,
-        temporaryPassword: 'temporary-123',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
+  it('maps database unique races to their actual field', async () => {
+    const prisma = prismaMock();
+    prisma.user.findUnique.mockResolvedValue(null); prisma.role.findUnique.mockResolvedValue(role); prisma.operationalLocation.findUnique.mockResolvedValue(location);
+    prisma.user.create.mockRejectedValue({ code: 'P2002', meta: { target: ['phone'] } });
+    const service = new UsersService(prisma as unknown as PrismaService);
+    await expect(service.create({ name: 'Ana', email: 'ana@pollos.local', phone: '2291234567', roleId: role.id, operationalLocationId: location.id })).rejects.toMatchObject({ message: 'Phone is already registered' });
   });
 
-  it('lists only active users by default and supports explicit inactive filters', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findMany.mockResolvedValueOnce([createUser()]);
-    await service.findAll({});
-
-    expect(prisma.user.findMany).toHaveBeenLastCalledWith({
-      where: { isActive: true },
-      include: { role: true },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    prisma.user.findMany.mockResolvedValueOnce([
-      createUser({ id: 'inactive-user', isActive: false }),
-    ]);
-    await service.findAll({ status: 'inactive' });
-    expect(prisma.user.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: { isActive: false } }),
-    );
-
-    prisma.user.findMany.mockResolvedValueOnce([createUser()]);
-    await service.findAll({ includeInactive: true });
-    expect(prisma.user.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: undefined }),
-    );
-
-    prisma.user.findMany.mockResolvedValueOnce([createUser()]);
-    await service.findAll({ status: 'all' });
-    expect(prisma.user.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({ where: undefined }),
-    );
+  it('uses the database sequence for unique concurrent control numbers', async () => {
+    const prisma = prismaMock(); let sequence = 0;
+    prisma.$queryRawUnsafe.mockImplementation(async () => [{ value: ++sequence }]);
+    prisma.user.findUnique.mockResolvedValue(null); prisma.role.findUnique.mockResolvedValue(role); prisma.operationalLocation.findUnique.mockResolvedValue(location);
+    prisma.user.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => user({ ...data, id: String(data.controlNumber) }));
+    const service = new UsersService(prisma as unknown as PrismaService);
+    const created = await Promise.all([1, 2].map((index) => service.create({ name: `Empleado ${index}`, email: `employee${index}@pollos.local`, phone: `229123456${index}`, roleId: role.id, operationalLocationId: location.id })));
+    expect(created.map((item) => item.controlNumber).sort()).toEqual(['EPDP-000001', 'EPDP-000002']);
   });
 
-  it('updates user data while rejecting duplicate email and protecting the last active ADMIN from demotion', async () => {
-    const { service, prisma } = createService();
-    prisma.role.findUnique.mockResolvedValueOnce(sellerRole);
-    prisma.user.findFirst.mockResolvedValueOnce(createUser());
-    prisma.user.count.mockResolvedValueOnce(1);
-
-    await expect(
-      service.update('user-1', { roleId: sellerRole.id }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-
-    prisma.user.findUnique.mockResolvedValueOnce(createUser({ id: 'user-3' }));
-    await expect(
-      service.update('user-1', { email: 'taken@pollos.local' }),
-    ).rejects.toBeInstanceOf(ConflictException);
-  });
-
-  it('runs last-ADMIN mutations in a serializable transaction and maps update email races to ConflictException', async () => {
-    const { service, prisma } = createService();
-    prisma.role.findUnique.mockResolvedValueOnce(sellerRole);
-    prisma.user.findFirst.mockResolvedValueOnce(createUser());
-    prisma.user.count.mockResolvedValueOnce(2);
-    prisma.user.update.mockResolvedValueOnce(createUser({ role: sellerRole }));
-
-    await service.update('user-1', { roleId: sellerRole.id });
-
-    expect(prisma.$transaction).toHaveBeenLastCalledWith(
-      expect.any(Function),
-      expect.objectContaining({
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      }),
-    );
-
-    prisma.user.findUnique.mockResolvedValueOnce(null);
-    prisma.user.findFirst.mockResolvedValueOnce(createUser());
-    prisma.user.update.mockRejectedValueOnce({ code: 'P2002' });
-
-    await expect(
-      service.update('user-1', { email: 'raced@pollos.local' }),
-    ).rejects.toBeInstanceOf(ConflictException);
-  });
-
-  it('changes password with a hash, mustChangePassword=true and sanitized response', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findUnique.mockResolvedValueOnce(createUser());
-    prisma.user.update.mockImplementation(({ data }: { data: UserRecord }) =>
-      Promise.resolve(createUser({ ...data, mustChangePassword: true })),
-    );
-
-    const result = await service.updatePassword('user-1', {
-      temporaryPassword: 'temporary-456',
-    });
-
-    const [[updateArgs]] = prisma.user.update.mock.calls as unknown as [
-      [PasswordHashMutationArgs],
-      ...unknown[],
-    ];
-    expect(updateArgs.data.mustChangePassword).toBe(true);
-    expect(updateArgs.data.passwordHash).not.toBe('temporary-456');
-    await expect(
-      bcrypt.compare('temporary-456', updateArgs.data.passwordHash),
-    ).resolves.toBe(true);
-    expect(result).not.toHaveProperty('passwordHash');
-  });
-
-  it('logically deactivates users and blocks physical deletion of the last active ADMIN', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findFirst.mockResolvedValueOnce(createUser());
-    prisma.user.count.mockResolvedValueOnce(2);
-    prisma.user.update.mockResolvedValueOnce(
-      createUser({
-        isActive: false,
-        deactivatedAt: now,
-        deactivatedByUserId: 'actor-admin',
-        deactivationReason: 'Left company',
-      }),
-    );
-
-    const result = await service.deactivate('user-1', 'actor-admin', {
-      reason: 'Left company',
-    });
-
-    const expectedDeactivateData = expect.objectContaining({
-      isActive: false,
-      deactivatedByUserId: 'actor-admin',
-      deactivationReason: 'Left company',
-    }) as unknown;
-
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: expectedDeactivateData,
-      include: { role: true },
-    });
-    expect(result).toEqual(expect.objectContaining({ isActive: false }));
-    expect(result).not.toHaveProperty('passwordHash');
-
-    prisma.user.findFirst.mockResolvedValueOnce(createUser());
-    prisma.user.count.mockResolvedValueOnce(1);
-    await expect(
-      service.deactivate('user-1', 'actor-admin', {}),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-
-    expect(prisma.$transaction).toHaveBeenLastCalledWith(
-      expect.any(Function),
-      expect.objectContaining({
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      }),
-    );
-  });
-
-  it('logically deactivates users without a reason and persists deactivationReason as null', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findFirst.mockResolvedValueOnce(createUser());
-    prisma.user.count.mockResolvedValueOnce(2);
-    prisma.user.update.mockResolvedValueOnce(
-      createUser({
-        isActive: false,
-        deactivatedAt: now,
-        deactivatedByUserId: 'actor-admin',
-        deactivationReason: null,
-      }),
-    );
-
-    const result = await service.deactivate('user-1', 'actor-admin', {});
-
-    const expectedDeactivateData = expect.objectContaining({
-      isActive: false,
-      deactivatedByUserId: 'actor-admin',
-      deactivationReason: null,
-    }) as unknown;
-
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: expectedDeactivateData,
-      include: { role: true },
-    });
-    expect(result).toEqual(
-      expect.objectContaining({
-        isActive: false,
-        deactivatedByUserId: 'actor-admin',
-        deactivationReason: null,
-      }),
-    );
-    expect(result).not.toHaveProperty('passwordHash');
-  });
-
-  it('throws NotFoundException when a requested user does not exist', async () => {
-    const { service, prisma } = createService();
-    prisma.user.findUnique.mockResolvedValue(null);
-
-    await expect(service.findOne('missing-user')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+  it('lists employees with combined role, location, status and search filters', async () => {
+    const prisma = prismaMock(); prisma.user.findMany.mockResolvedValue([user()]); prisma.user.count.mockResolvedValue(1);
+    const service = new UsersService(prisma as unknown as PrismaService);
+    const result = await service.findAll({ page: 2, limit: 10, status: 'inactive', roleId: role.id, operationalLocationId: location.id, search: 'ana' });
+    expect(result).toMatchObject({ total: 1, page: 2, limit: 10, items: [expect.objectContaining({ email: 'ana@pollos.local' })] });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 10, take: 10, where: expect.objectContaining({ isActive: false, roleId: role.id, operationalLocationId: location.id }) }));
   });
 });

@@ -12,9 +12,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ListUsersQueryDto = void 0;
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
+const class_transformer_2 = require("class-transformer");
 class ListUsersQueryDto {
     status;
     includeInactive;
+    search;
+    roleId;
+    operationalLocationId;
+    page;
+    limit;
 }
 exports.ListUsersQueryDto = ListUsersQueryDto;
 __decorate([
@@ -40,4 +46,34 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], ListUsersQueryDto.prototype, "includeInactive", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ListUsersQueryDto.prototype, "search", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ListUsersQueryDto.prototype, "roleId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ListUsersQueryDto.prototype, "operationalLocationId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_2.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], ListUsersQueryDto.prototype, "page", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_2.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(100),
+    __metadata("design:type", Number)
+], ListUsersQueryDto.prototype, "limit", void 0);
 //# sourceMappingURL=list-users-query.dto.js.map

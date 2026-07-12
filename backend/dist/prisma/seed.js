@@ -8,6 +8,7 @@ exports.getInitialAdminPassword = getInitialAdminPassword;
 exports.seed = seed;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const seed_guard_1 = require("./seed-guard");
 exports.DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
 exports.DEVELOPMENT_ROLE_TEST_PASSWORD = 'DevRoleUsers-2026!';
 exports.initialRoles = [
@@ -28,6 +29,8 @@ exports.initialAdminUser = {
     email: 'dev.admin@pollos.local',
     isActive: true,
     mustChangePassword: false,
+    controlNumber: 'EPDP-000001',
+    phone: '+520000000001',
 };
 exports.initialRoleTestUsers = [
     {
@@ -36,6 +39,7 @@ exports.initialRoleTestUsers = [
         email: 'dev.seller@pollos.local',
         isActive: true,
         mustChangePassword: false,
+        controlNumber: 'EPDP-000002', phone: '+520000000002',
     },
     {
         roleName: 'WAREHOUSE',
@@ -43,6 +47,7 @@ exports.initialRoleTestUsers = [
         email: 'dev.warehouse@pollos.local',
         isActive: true,
         mustChangePassword: false,
+        controlNumber: 'EPDP-000003', phone: '+520000000003',
     },
     {
         roleName: 'DRIVER',
@@ -50,6 +55,7 @@ exports.initialRoleTestUsers = [
         email: 'dev.driver@pollos.local',
         isActive: true,
         mustChangePassword: false,
+        controlNumber: 'EPDP-000004', phone: '+520000000004',
     },
     {
         roleName: 'COLLECTIONS',
@@ -57,6 +63,7 @@ exports.initialRoleTestUsers = [
         email: 'dev.collections@pollos.local',
         isActive: true,
         mustChangePassword: false,
+        controlNumber: 'EPDP-000005', phone: '+520000000005',
     },
 ];
 exports.initialSeedLocations = [
@@ -166,11 +173,13 @@ async function seedInitialAdmin(prisma) {
             isActive: exports.initialAdminUser.isActive,
             mustChangePassword: exports.initialAdminUser.mustChangePassword,
             role: { connect: { name: 'ADMIN' } },
+            operationalLocation: { connect: { code: 'VER' } },
         },
         create: {
             ...exports.initialAdminUser,
             passwordHash,
             role: { connect: { name: 'ADMIN' } },
+            operationalLocation: { connect: { code: 'VER' } },
         },
     });
     if (passwordResolution.source === 'development-only') {
@@ -197,17 +206,22 @@ async function seedInitialRoleUsers(prisma) {
                 isActive: user.isActive,
                 mustChangePassword: user.mustChangePassword,
                 role: { connect: { name: user.roleName } },
+                operationalLocation: { connect: { code: 'VER' } },
             },
             create: {
                 name: user.name,
                 email: user.email,
+                controlNumber: user.controlNumber,
+                phone: user.phone,
                 passwordHash,
                 isActive: user.isActive,
                 mustChangePassword: user.mustChangePassword,
                 role: { connect: { name: user.roleName } },
+                operationalLocation: { connect: { code: 'VER' } },
             },
         });
     }
+    await prisma.$executeRawUnsafe?.("SELECT setval('\"User_controlNumber_seq\"', GREATEST((SELECT COALESCE(MAX(SUBSTRING(\"controlNumber\" FROM 6)::bigint), 1) FROM \"User\"), 1), true)");
 }
 async function seedCategories(prisma) {
     for (const category of exports.initialCategories) {
@@ -237,9 +251,10 @@ async function seedExampleProducts(prisma) {
     }
 }
 async function seed(prisma) {
+    (0, seed_guard_1.assertSeedEnvironment)();
     await seedRoles(prisma);
-    await seedInitialAdmin(prisma);
     await seedInitialLocation(prisma);
+    await seedInitialAdmin(prisma);
     await seedInitialRoleUsers(prisma);
     await seedCategories(prisma);
     await seedExampleProducts(prisma);

@@ -22,6 +22,7 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     environment:
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
       API_PREFIX: ${API_PREFIX:-api}
       BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-10}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}

@@ -29,7 +29,7 @@ export type NavigationItemKey =
   | 'my-routes'
   | 'delivery-routes'
   | 'reports'
-  | 'settings'
+  | 'employees'
 
 export type NavigationItem = {
   key: NavigationItemKey
@@ -178,15 +178,15 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     to: '/reports',
   },
   {
-    activePaths: ['/admin'],
+    activePaths: ['/admin/employees'],
     allowedRoles: ROUTE_ACCESS_ROLES.admin,
     routeAccessKey: 'admin',
     description: 'Configuración del ERP',
     icon: Settings,
-    key: 'settings',
-    label: 'Configuración',
+    key: 'employees',
+    label: 'Empleados',
     section: 'admin',
-    to: '/admin',
+    to: '/admin/employees',
   },
 ]
 

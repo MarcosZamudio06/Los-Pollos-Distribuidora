@@ -1,4 +1,4 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { ROUTE_ACCESS_ROLES } from '../components/layout/routeAccess'
 import {
@@ -15,25 +15,9 @@ import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage, SuppliersPage } fr
 import { DashboardPage } from '../features/dashboard'
 import { ReportsPage } from '../features/reportes'
 import { ProductListPage } from '../features/inventario'
+import { EmployeesPage } from '../features/employees'
 import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
-
-function AdminOnlyPage() {
-  return (
-    <section className="flex min-h-full items-center justify-center px-6 py-10 text-[#20211f]">
-      <div className="w-full max-w-xl rounded-[2rem] border border-[#20211f]/10 bg-white p-8 shadow-[0_24px_80px_rgba(32,33,31,0.10)]">
-        <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#39798b]">ADMIN</p>
-        <h1 className="mt-4 text-4xl font-black tracking-[-0.06em]">Ruta administrativa protegida</h1>
-        <p className="mt-4 leading-7 text-[#68645c]">
-          Esta pantalla existe para validar RoleRoute antes de construir módulos administrativos reales.
-        </p>
-        <Link className="mt-8 inline-flex font-bold text-[#9d2d24]" to="/">
-          Volver al centro operativo
-        </Link>
-      </div>
-    </section>
-  )
-}
 
 export function AppRouter() {
   return (
@@ -185,10 +169,10 @@ export function AppRouter() {
           }
         />
         <Route
-          path="/admin"
+          path="/admin/employees"
           element={
             <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
-              <AdminOnlyPage />
+              <EmployeesPage />
             </RoleRoute>
           }
         />

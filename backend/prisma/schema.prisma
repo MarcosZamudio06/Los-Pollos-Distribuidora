@@ -231,8 +231,11 @@ model User {
   id                          String                  @id @default(cuid())
   name                        String
   email                       String                  @unique
+  controlNumber               String                  @unique
+  phone                       String                  @unique
   passwordHash                String
   roleId                      String
+  operationalLocationId       String
   isActive                    Boolean                 @default(true)
   mustChangePassword          Boolean                 @default(false)
   deactivatedAt               DateTime?
@@ -241,6 +244,7 @@ model User {
   createdAt                   DateTime                @default(now())
   updatedAt                   DateTime                @updatedAt
   role                        Role                    @relation(fields: [roleId], references: [id])
+  operationalLocation         OperationalLocation     @relation(fields: [operationalLocationId], references: [id])
   deactivatedBy                User?                   @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id])
   deactivatedUsers             User[]                  @relation("UserDeactivatedBy")
   sales                       Sale[]                  @relation("SaleCreatedBy")
@@ -280,6 +284,7 @@ model User {
   capturedScaleTickets         ScaleTicketReference[]
 
   @@index([deactivatedByUserId])
+  @@index([operationalLocationId])
 }
 
 model OperationalLocation {
@@ -294,6 +299,7 @@ model OperationalLocation {
   updatedAt             DateTime                   @updatedAt
   parent                OperationalLocation?       @relation("LocationHierarchy", fields: [parentId], references: [id])
   children              OperationalLocation[]      @relation("LocationHierarchy")
+  users                 User[]
   inventoryBalances     InventoryBalance[]
   sales                 Sale[]
   purchases             Purchase[]

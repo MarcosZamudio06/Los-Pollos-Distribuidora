@@ -8,10 +8,50 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
+            items: {
+                email: string;
+                id: string;
+                controlNumber: string;
+                phone: string;
+                name: string;
+                roleId: string;
+                operationalLocationId: string;
+                isActive: boolean;
+                mustChangePassword: boolean;
+                deactivatedAt: Date | null;
+                deactivatedByUserId: string | null;
+                deactivationReason: string | null;
+                createdAt: Date;
+                updatedAt: Date;
+                role: {
+                    id: string;
+                    name: string;
+                    description?: string | null;
+                    createdAt?: Date;
+                    updatedAt?: Date;
+                };
+                operationalLocation: {
+                    id: string;
+                    name: string;
+                    type: string;
+                };
+            }[];
+            total: number;
+            page: number;
+            limit: number;
+        };
+    }>;
+    findOne(id: string): Promise<{
+        success: boolean;
+        message: string;
+        data: {
             email: string;
             id: string;
+            controlNumber: string;
+            phone: string;
             name: string;
             roleId: string;
+            operationalLocationId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
@@ -26,29 +66,10 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
-        }[];
-    }>;
-    findOne(id: string): Promise<{
-        success: boolean;
-        message: string;
-        data: {
-            email: string;
-            id: string;
-            name: string;
-            roleId: string;
-            isActive: boolean;
-            mustChangePassword: boolean;
-            deactivatedAt: Date | null;
-            deactivatedByUserId: string | null;
-            deactivationReason: string | null;
-            createdAt: Date;
-            updatedAt: Date;
-            role: {
+            operationalLocation: {
                 id: string;
                 name: string;
-                description?: string | null;
-                createdAt?: Date;
-                updatedAt?: Date;
+                type: string;
             };
         };
     }>;
@@ -58,8 +79,11 @@ export declare class UsersController {
         data: {
             email: string;
             id: string;
+            controlNumber: string;
+            phone: string;
             name: string;
             roleId: string;
+            operationalLocationId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
@@ -74,6 +98,13 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            operationalLocation: {
+                id: string;
+                name: string;
+                type: string;
+            };
+        } & {
+            temporaryPassword: string;
         };
     }>;
     update(id: string, body: UpdateUserDto): Promise<{
@@ -82,8 +113,11 @@ export declare class UsersController {
         data: {
             email: string;
             id: string;
+            controlNumber: string;
+            phone: string;
             name: string;
             roleId: string;
+            operationalLocationId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
@@ -97,6 +131,11 @@ export declare class UsersController {
                 description?: string | null;
                 createdAt?: Date;
                 updatedAt?: Date;
+            };
+            operationalLocation: {
+                id: string;
+                name: string;
+                type: string;
             };
         };
     }>;
@@ -106,8 +145,11 @@ export declare class UsersController {
         data: {
             email: string;
             id: string;
+            controlNumber: string;
+            phone: string;
             name: string;
             roleId: string;
+            operationalLocationId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
@@ -122,6 +164,11 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            operationalLocation: {
+                id: string;
+                name: string;
+                type: string;
+            };
         };
     }>;
     deactivate(id: string, currentUser: AuthenticatedUser, body: DeactivateUserDto): Promise<{
@@ -130,8 +177,11 @@ export declare class UsersController {
         data: {
             email: string;
             id: string;
+            controlNumber: string;
+            phone: string;
             name: string;
             roleId: string;
+            operationalLocationId: string;
             isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
@@ -145,6 +195,11 @@ export declare class UsersController {
                 description?: string | null;
                 createdAt?: Date;
                 updatedAt?: Date;
+            };
+            operationalLocation: {
+                id: string;
+                name: string;
+                type: string;
             };
         };
     }>;

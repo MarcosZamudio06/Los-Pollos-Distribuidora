@@ -22,6 +22,8 @@ export declare const initialAdminUser: {
     readonly email: "dev.admin@pollos.local";
     readonly isActive: true;
     readonly mustChangePassword: false;
+    readonly controlNumber: "EPDP-000001";
+    readonly phone: "+520000000001";
 };
 export declare const initialRoleTestUsers: readonly [{
     readonly roleName: "SELLER";
@@ -29,24 +31,32 @@ export declare const initialRoleTestUsers: readonly [{
     readonly email: "dev.seller@pollos.local";
     readonly isActive: true;
     readonly mustChangePassword: false;
+    readonly controlNumber: "EPDP-000002";
+    readonly phone: "+520000000002";
 }, {
     readonly roleName: "WAREHOUSE";
     readonly name: "Development Warehouse";
     readonly email: "dev.warehouse@pollos.local";
     readonly isActive: true;
     readonly mustChangePassword: false;
+    readonly controlNumber: "EPDP-000003";
+    readonly phone: "+520000000003";
 }, {
     readonly roleName: "DRIVER";
     readonly name: "Development Driver";
     readonly email: "dev.driver@pollos.local";
     readonly isActive: true;
     readonly mustChangePassword: false;
+    readonly controlNumber: "EPDP-000004";
+    readonly phone: "+520000000004";
 }, {
     readonly roleName: "COLLECTIONS";
     readonly name: "Development Collections";
     readonly email: "dev.collections@pollos.local";
     readonly isActive: true;
     readonly mustChangePassword: false;
+    readonly controlNumber: "EPDP-000005";
+    readonly phone: "+520000000005";
 }];
 export declare const initialSeedLocations: readonly [{
     readonly name: "Veracruz";
@@ -119,6 +129,7 @@ type PasswordResolution = {
     source: 'env' | 'development-only';
 };
 export type SeedPrismaClient = {
+    $executeRawUnsafe?: (query: string) => Promise<unknown>;
     role: {
         upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
     };
