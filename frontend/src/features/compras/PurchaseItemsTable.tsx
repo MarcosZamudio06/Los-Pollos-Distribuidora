@@ -93,9 +93,9 @@ export function PurchaseItemsTable({ errors = [], items, onAddItem, onRemoveItem
                       <Badge tone="slate">{unitLabel(item.unit)}</Badge>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Kilos<Input aria-label={`Kilos de ${item.productName}`} disabled={item.unit === 'PIECE'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityKg: toNumberInput(event.target.value) })} step="0.001" type="number" value={item.quantityKg} /></label>
-                      <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Piezas<Input aria-label={`Piezas de ${item.productName}`} disabled={item.unit === 'KG'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityPieces: Math.trunc(toNumberInput(event.target.value)) })} step="1" type="number" value={item.quantityPieces} /></label>
-                      <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Costo unitario<Input aria-label={`Costo de ${item.productName}`} min="0" onChange={(event) => onUpdateItem(item.productId, { unitCost: toNumberInput(event.target.value) })} step="0.01" type="number" value={item.unitCost} /></label>
+                      <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Kilos<Input aria-label={`Kilos de ${item.productName}`} disabled={item.unit === 'PIECE'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityKg: toNumberInput(event.target.value) })} step="0.001" type="number" value={item.quantityKg || ''} /></label>
+                      <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Piezas<Input aria-label={`Piezas de ${item.productName}`} disabled={item.unit === 'KG'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityPieces: Math.trunc(toNumberInput(event.target.value)) })} step="1" type="number" value={item.quantityPieces || ''} /></label>
+                      <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Costo unitario<Input aria-label={`Costo de ${item.productName}`} min="0" onChange={(event) => onUpdateItem(item.productId, { unitCost: toNumberInput(event.target.value) })} step="0.01" type="number" value={item.unitCost || ''} /></label>
                       <div className="rounded-xl bg-[var(--erp-surface)] p-3"><span className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Subtotal</span><strong className="mt-1 block text-lg tabular-nums">{money(subtotal)}</strong></div>
                     </div>
                     {item.unit === 'KG_AND_PIECE' && item.availableEquivalences && item.availableEquivalences.length > 0 ? (
@@ -120,8 +120,8 @@ export function PurchaseItemsTable({ errors = [], items, onAddItem, onRemoveItem
                         <Td className="font-black">{item.productName}</Td>
                         <Td>{presentationLabel(item.presentationType)}</Td>
                         <Td><Badge tone="slate">{unitLabel(item.unit)}</Badge></Td>
-                        <Td><Input aria-label={`Kilos de ${item.productName}`} className="ml-auto w-28 text-right" disabled={item.unit === 'PIECE'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityKg: toNumberInput(event.target.value) })} step="0.001" type="number" value={item.quantityKg} /></Td>
-                        <Td><Input aria-label={`Piezas de ${item.productName}`} className="ml-auto w-28 text-right" disabled={item.unit === 'KG'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityPieces: Math.trunc(toNumberInput(event.target.value)) })} step="1" type="number" value={item.quantityPieces} /></Td>
+                        <Td><Input aria-label={`Kilos de ${item.productName}`} className="ml-auto w-28 text-right" disabled={item.unit === 'PIECE'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityKg: toNumberInput(event.target.value) })} step="0.001" type="number" value={item.quantityKg || ''} /></Td>
+                        <Td><Input aria-label={`Piezas de ${item.productName}`} className="ml-auto w-28 text-right" disabled={item.unit === 'KG'} min="0" onChange={(event) => onUpdateItem(item.productId, { quantityPieces: Math.trunc(toNumberInput(event.target.value)) })} step="1" type="number" value={item.quantityPieces || ''} /></Td>
                         <Td className="text-[var(--erp-muted-foreground)]">
                           {item.unit === 'KG_AND_PIECE' && item.availableEquivalences && item.availableEquivalences.length > 0 ? (
                             <Select aria-label={`Equivalencia de ${item.productName}`} className="min-w-44" onChange={(event) => { const equivalent = item.availableEquivalences?.find((candidate) => candidate.id === event.target.value); onUpdateItem(item.productId, { appliedEquivalentFactor: equivalent?.factor ?? null, unitEquivalentId: equivalent?.id }) }} value={item.unitEquivalentId ?? ''}>
@@ -130,7 +130,7 @@ export function PurchaseItemsTable({ errors = [], items, onAddItem, onRemoveItem
                             </Select>
                           ) : item.appliedEquivalentFactor ? `${decimal(item.appliedEquivalentFactor)} kg/pza` : 'Sin equivalencia aplicada'}
                         </Td>
-                        <Td><Input aria-label={`Costo de ${item.productName}`} className="ml-auto w-32 text-right" min="0" onChange={(event) => onUpdateItem(item.productId, { unitCost: toNumberInput(event.target.value) })} step="0.01" type="number" value={item.unitCost} /></Td>
+                        <Td><Input aria-label={`Costo de ${item.productName}`} className="ml-auto w-32 text-right" min="0" onChange={(event) => onUpdateItem(item.productId, { unitCost: toNumberInput(event.target.value) })} step="0.01" type="number" value={item.unitCost || ''} /></Td>
                         <Td className="text-right font-black tabular-nums">{money(subtotal)}</Td>
                         <Td className="text-right"><Button onClick={() => onRemoveItem(item.productId)} size="sm" variant="ghost"><Trash2 className="h-4 w-4" />Quitar</Button></Td>
                       </tr>

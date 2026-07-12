@@ -150,13 +150,13 @@ export function Cart({ items, onQuantityChange, onRemove }: CartProps) {
                   {(item.unit === 'KG' || item.unit === 'KG_AND_PIECE') && (
                     <label className="grid gap-1 text-sm font-bold text-[var(--erp-muted-foreground)]">
                       Kilos capturados
-                      <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, Number(event.target.value), item.quantityPieces)} step="0.01" type="number" value={item.quantityKg} />
+                      <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, Number(event.target.value), item.quantityPieces)} step="0.01" type="number" value={item.quantityKg || ''} />
                     </label>
                   )}
                   {(item.unit === 'PIECE' || item.unit === 'KG_AND_PIECE') && (
                     <label className="grid gap-1 text-sm font-bold text-[var(--erp-muted-foreground)]">
                       Piezas capturadas
-                      <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, item.quantityKg, Number(event.target.value))} step="1" type="number" value={item.quantityPieces} />
+                      <input className="rounded-xl border border-[color:var(--erp-border)] bg-white px-3 py-2" min="0" onChange={(event) => onQuantityChange(item.productId, item.quantityKg, Number(event.target.value))} step="1" type="number" value={item.quantityPieces || ''} />
                     </label>
                   )}
                 </div>

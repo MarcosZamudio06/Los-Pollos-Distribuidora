@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancelSaleDialog } from '../CancelSaleDialog'
-import { TicketModal } from '../components'
+import { Cart, TicketModal } from '../components'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
 import { SalesPosPage } from '../SalesPosPage'
@@ -139,6 +139,13 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Selecciona una ubicación operativa')
     expect(html).toContain('Mostrador · MOST')
     expect(html).toContain('Confirmar venta')
+  })
+
+  it('deja vacíos kilos y piezas del carrito cuando su valor es cero', () => {
+    const html = renderToStaticMarkup(<Cart items={[{ availableKg: 10, availablePieces: 10, id: 'prod-1', locationId: 'loc-counter', name: 'Pollo mixto', presentationType: 'WHOLE', productId: 'prod-1', quantityKg: 0, quantityPieces: 0, salePrice: 100, unit: 'KG_AND_PIECE', unitPrice: 100 }]} onQuantityChange={() => undefined} onRemove={() => undefined} />)
+
+    expect(html.match(/value="0"/g)).toBeNull()
+    expect(html).toContain('value=""')
   })
 
   it('mantiene bloqueo local del POS para roles no autorizados', () => {

@@ -125,6 +125,14 @@ describe('TASK-062 purchase UI behavior', () => {
     expect(html).not.toContain('KG_AND_PIECE')
   })
 
+  it('deja vacíos los inputs numéricos cuyo valor inicial es cero', () => {
+    const html = renderToStaticMarkup(<PurchaseItemsTable items={[{ productId: 'prod-1', productName: 'Pollo entero', presentationType: 'WHOLE', quantityKg: 0, quantityPieces: 0, unit: 'KG', unitCost: 0 }]} onAddItem={() => undefined} onRemoveItem={() => undefined} onUpdateItem={() => undefined} products={[]} />)
+
+    expect(html.match(/value="0"/g)).toBeNull()
+    expect(html).toContain('aria-label="Piezas de Pollo entero" value=""')
+    expect(html).toContain('aria-label="Costo de Pollo entero" value=""')
+  })
+
   it('obliga selección explícita de equivalencia para kilo y pieza mixto', () => {
     const html = renderToStaticMarkup(<PurchaseItemsTable items={[{ availableEquivalences: [{ factor: 2.4, id: 'eq-1', unitFrom: 'PIECE', unitTo: 'KG' }], appliedEquivalentFactor: null, productId: 'prod-1', productName: 'Pollo entero', presentationType: 'WHOLE', quantityKg: 10, quantityPieces: 4, unit: 'KG_AND_PIECE', unitCost: 80 }]} onAddItem={() => undefined} onRemoveItem={() => undefined} onUpdateItem={() => undefined} products={[]} />)
 
