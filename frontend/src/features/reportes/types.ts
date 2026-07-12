@@ -170,7 +170,7 @@ export type CashClosingReport = ReportFreshness & {
   accountsReceivablePayments?: MoneyGroup[]
   bankTransfersAndDeposits?: MoneyGroup[]
   cashSales?: MoneyGroup[]
-  creditSales?: MoneyGroup[]
+  creditSales?: CountAmountSummary
   paymentsByBank?: MoneyGroup[]
   routeCollections?: MoneyGroup[]
   sellerSummary?: CountAmountSummary[]

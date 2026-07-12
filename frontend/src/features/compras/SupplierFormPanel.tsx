@@ -50,7 +50,7 @@ export function SupplierFormPanel({ isSaving = false, onClose, onCreate, onUpdat
   }
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-30 w-full overflow-y-auto border-l border-[color:var(--erp-border)] bg-[var(--erp-background)] p-5 shadow-2xl md:w-[32rem] md:p-6">
+    <aside className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto border-l border-[color:var(--erp-border)] bg-[var(--erp-background)] p-5 shadow-2xl md:w-[32rem] md:p-6">
       <Card className="p-0">
         <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-[color:var(--erp-border)] p-5">
           <div>

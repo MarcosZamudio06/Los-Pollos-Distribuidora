@@ -33,6 +33,7 @@ import {
 import type {
   AccountsReceivableReport,
   CashClosingReport,
+  CountAmountSummary,
   DeliveryOperationsReport,
   InventoryReport,
   MoneyGroup,
@@ -295,6 +296,30 @@ function StatCard({ detail, icon, label, tone = 'info', value }: { detail: strin
   )
 }
 
+export function CreditSalesSummary({ creditSales }: { creditSales?: CountAmountSummary }) {
+  return (
+    <StatCard
+      detail={`${formatNumber(creditSales?.count)} venta(s) a crédito; no representa efectivo recibido.`}
+      icon={<CreditCard className="h-5 w-5" />}
+      label="Ventas a crédito"
+      value={formatMoney(creditSales?.amount)}
+    />
+  )
+}
+
+export function CashClosingSummary({ data }: { data: CashClosingReport }) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-2">
+      <MoneyGroupsTable emptyLabel="Ventas de contado por método." groups={data.cashSales} title="Ventas de contado" />
+      <CreditSalesSummary creditSales={data.creditSales} />
+      <MoneyGroupsTable emptyLabel="Pagos directos de cuentas por cobrar." groups={data.accountsReceivablePayments} title="Cobranza en caja" />
+      <MoneyGroupsTable emptyLabel="Cobros pendientes o liquidados de rutas." groups={data.routeCollections} title="Cobros en ruta" />
+      <MoneyGroupsTable emptyLabel="Transferencias y depósitos confirmados." groups={data.bankTransfersAndDeposits} title="Transferencias y depósitos" />
+      <MoneyGroupsTable emptyLabel="Resumen agrupado por banco." groups={data.paymentsByBank} title="Pagos por banco" />
+    </div>
+  )
+}
+
 function MoneyGroupsTable({ emptyLabel, groups, title }: { emptyLabel: string; groups?: MoneyGroup[]; title: string }) {
   return (
     <Card className="overflow-hidden p-5">
@@ -419,16 +444,7 @@ function CashClosingReport({ isAdmin }: { isAdmin: boolean }) {
       title="Corte operativo de caja"
     >
       <ReportSection<CashClosingReport> emptyMessage="No hay ventas, pagos o cobros de ruta para los filtros seleccionados." query={query}>
-        {(data) => (
-          <div className="grid gap-5 xl:grid-cols-2">
-            <MoneyGroupsTable emptyLabel="Ventas de contado por método." groups={data.cashSales} title="Ventas de contado" />
-            <MoneyGroupsTable emptyLabel="Crédito separado de efectivo recibido." groups={data.creditSales} title="Ventas a crédito" />
-            <MoneyGroupsTable emptyLabel="Pagos directos de cuentas por cobrar." groups={data.accountsReceivablePayments} title="Cobranza en caja" />
-            <MoneyGroupsTable emptyLabel="Cobros pendientes o liquidados de rutas." groups={data.routeCollections} title="Cobros en ruta" />
-            <MoneyGroupsTable emptyLabel="Transferencias y depósitos confirmados." groups={data.bankTransfersAndDeposits} title="Transferencias y depósitos" />
-            <MoneyGroupsTable emptyLabel="Resumen agrupado por banco." groups={data.paymentsByBank} title="Pagos por banco" />
-          </div>
-        )}
+        {(data) => <CashClosingSummary data={data} />}
       </ReportSection>
     </ReportPanel>
   )

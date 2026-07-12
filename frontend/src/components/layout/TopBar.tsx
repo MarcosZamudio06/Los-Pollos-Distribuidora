@@ -1,8 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Bell, Circle, Menu, Search } from 'lucide-react'
+import { Circle, Menu, Search } from 'lucide-react'
 import { Badge } from '../ui'
 import { useAuth } from '../../features/auth'
-import { cn } from '../../lib/utils'
 import { getActiveNavigationItem, getQuickActionsForRole } from './roleNavigation'
 
 type TopBarProps = {
@@ -63,17 +62,6 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
           type="button"
         >
           <Search aria-hidden="true" className="h-4 w-4" />
-        </button>
-
-        <button
-          aria-label="Notificaciones operativas"
-          className={cn(
-            'relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] text-[var(--erp-muted-foreground)] transition hover:border-[var(--erp-brand-gold)] hover:text-[var(--erp-foreground)] focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]',
-          )}
-          type="button"
-        >
-          <Bell aria-hidden="true" className="h-4 w-4" />
-          <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[var(--erp-brand-red)]" />
         </button>
       </div>
     </header>

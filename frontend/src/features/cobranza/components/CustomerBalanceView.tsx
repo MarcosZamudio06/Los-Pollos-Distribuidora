@@ -18,7 +18,7 @@ export function CustomerBalanceView({ accountId, fallbackAccount, onClose }: Cus
   const account = detail.data ?? fallbackAccount
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-30 w-full overflow-y-auto border-l border-[color:var(--erp-border)] bg-[var(--erp-background)] p-5 shadow-2xl md:w-[38rem] md:p-6">
+    <aside className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto border-l border-[color:var(--erp-border)] bg-[var(--erp-background)] p-5 shadow-2xl md:w-[38rem] md:p-6">
       <div className="sticky top-0 z-10 -mx-5 -mt-5 border-b border-[color:var(--erp-border)] bg-[color-mix(in_srgb,var(--erp-background)_92%,white)]/95 px-5 py-4 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
         <button className={softButtonClass} onClick={onClose} type="button"><X className="h-4 w-4" /> Cerrar detalle</button>
       </div>

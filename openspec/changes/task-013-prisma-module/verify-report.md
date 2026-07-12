@@ -87,7 +87,7 @@ None.
 ### WARNING
 
 - Historical pre-recovery safety-net execution was blocked by TS5103, so the pre-fix RED/failed state is documented in `apply-progress.md` rather than independently reproducible now.
-- Prisma CLI warns that `package.json#prisma` config is deprecated and should migrate to `prisma.config.ts` before Prisma 7.
+- Prisma CLI warns that `package.json#prisma` config is deprecated and should migrate to `.ts` before Prisma 7.
 
 ### SUGGESTION
 

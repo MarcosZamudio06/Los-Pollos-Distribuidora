@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:docker": "prisma migrate deploy && npm run start:prod",
     "start:prod": "node dist/src/main",
+    "bootstrap:production": "ts-node prisma/bootstrap-production.ts",
     "seed:development": "prisma db seed",
     "seed:operational": "ts-node prisma/seed.operational.ts",
     "lint": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --fix",
