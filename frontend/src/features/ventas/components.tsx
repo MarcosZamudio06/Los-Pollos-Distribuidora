@@ -1,4 +1,6 @@
 import { AlertTriangle, CheckCircle2, PackageSearch, Search, ShoppingCart } from 'lucide-react'
+import { useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
 import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney } from './posLogic'
@@ -351,11 +353,12 @@ type TicketModalProps = {
 }
 
 export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModalProps) {
+  const portalReady = useSyncExternalStore(() => () => undefined, () => true, () => false)
   const data = ticket ?? fallback
   if (!data) return null
-  return (
-    <aside className="fixed inset-0 z-40 grid place-items-center bg-[#20211f]/60 p-4">
-      <section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-6 text-[#20211f] shadow-2xl">
+  const modal = (
+    <aside className="ticket-print-root fixed inset-0 z-40 grid place-items-center bg-[#20211f]/60 p-4">
+      <section className="ticket-print-content max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-6 text-[#20211f] shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-[#9d2d24]">Ticket interno</p>
@@ -387,4 +390,6 @@ export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModa
       </section>
     </aside>
   )
+
+  return portalReady ? createPortal(modal, document.body) : modal
 }

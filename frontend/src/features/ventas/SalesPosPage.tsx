@@ -23,6 +23,8 @@ import {
 import { useCreateSale, useSaleTicket } from './hooks'
 import { buildCreateSalePayload, calculateCartTotal, canConfirmSale, getLocationValidationError, getQuantityValidationError, getSaleRestriction, toMoney } from './posLogic'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, SaleChannel, SaleDocumentType, TicketData } from './types'
+import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
+import { toast } from 'sonner'
 
 function canAccessPos(role?: string | null) {
   return role === 'ADMIN' || role === 'SELLER'
@@ -133,6 +135,7 @@ export function SalesPosPage() {
   const [backendError, setBackendError] = useState<string | null>(null)
   const [confirmedSaleId, setConfirmedSaleId] = useState<string>()
   const [ticketFallback, setTicketFallback] = useState<TicketData | null>(null)
+  const [pendingSale, setPendingSale] = useState<{ payload: ReturnType<typeof buildCreateSalePayload>; customerName: string; locationName: string; paymentMethod: PaymentMethod; paymentType: PaymentType; documentType: SaleDocumentType; physicalFolio: string; requiresAdministrativeInvoice: boolean; locationId: string; total: number } | null>(null)
 
   const products = useProducts({ isActive: 'true', locationId, search: productSearch })
   const customers = useCustomers({ isActive: 'true', search: customerSearch })
@@ -175,28 +178,27 @@ export function SalesPosPage() {
     setCart((currentCart) => currentCart.map((item) => (item.productId === productId ? { ...item, quantityKg, quantityPieces } : item)))
   }
 
-  async function handleConfirmSale() {
+  function handleConfirmSale() {
     const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending })
     if (blocker) return
     setBackendError(null)
+    setPendingSale({
+      payload: buildCreateSalePayload({
+        billingRequestId, cart, customer: selectedCustomer, documentType,
+        initialPaymentAmount: paymentType === 'CREDIT_SALE' ? initialPaymentAmount : undefined,
+        locationId, paymentMethod, paymentType, physicalFolio,
+        requiresAdministrativeInvoice, saleChannel, total,
+      }),
+      customerName: selectedCustomer?.name ?? 'Público general',
+      locationName: locationLabel(selectedLocation), paymentMethod, paymentType, documentType,
+      physicalFolio, requiresAdministrativeInvoice, locationId, total,
+    })
+  }
 
+  async function confirmRegistration() {
+    if (!pendingSale || createSale.isPending) return
     try {
-      const response = await createSale.mutateAsync(
-        buildCreateSalePayload({
-          billingRequestId,
-          cart,
-          customer: selectedCustomer,
-          documentType,
-          initialPaymentAmount: paymentType === 'CREDIT_SALE' ? initialPaymentAmount : undefined,
-          locationId,
-          paymentMethod,
-          paymentType,
-          physicalFolio,
-          requiresAdministrativeInvoice,
-          saleChannel,
-          total,
-        }),
-      )
+      const response = await createSale.mutateAsync(pendingSale.payload)
       const sale = response.sale
       const saleId = sale?.id
       setConfirmedSaleId(saleId)
@@ -205,28 +207,31 @@ export function SalesPosPage() {
           {
             ticketId: response.ticketId ?? saleId,
             saleNumber: sale?.saleNumber,
-            documentType,
-            physicalFolio: physicalFolio.trim() || undefined,
-            requiresAdministrativeInvoice,
-            customerName: selectedCustomer?.name,
-            locationId,
+            documentType: pendingSale.documentType,
+            physicalFolio: pendingSale.physicalFolio.trim() || undefined,
+            requiresAdministrativeInvoice: pendingSale.requiresAdministrativeInvoice,
+            customerName: pendingSale.customerName,
+            locationId: pendingSale.locationId,
             items: sale?.items,
-            total: sale?.total ?? total,
-            paymentType,
+            total: sale?.total ?? pendingSale.total,
+            paymentType: pendingSale.paymentType,
             collectionStatus: sale?.collectionStatus,
             status: sale?.status,
             payments: response.payment ? [{ amount: response.payment.amount, paymentMethod: response.payment.paymentMethod }] : [],
           },
-          locationId,
+          pendingSale.locationId,
         ),
       )
       setCart([])
+      setSelectedCustomer(null)
       setPaymentType('CASH_SALE')
       setPaymentMethod('CASH')
       setInitialPaymentAmount(0)
       setPhysicalFolio('')
       setRequiresAdministrativeInvoice(false)
       setBillingRequestId('')
+      setPendingSale(null)
+      toast.success('Venta registrada correctamente.')
       void products.refetch()
     } catch (error) {
       setBackendError(error instanceof ApiClientError || error instanceof Error ? error.message : 'La confirmación de la venta falló.')
@@ -334,6 +339,10 @@ export function SalesPosPage() {
         </div>
       </section>
       {(ticketFallback || ticket.data) && <TicketModal fallback={ticketFallback} isLoading={ticket.isLoading} onClose={() => { setConfirmedSaleId(undefined); setTicketFallback(null) }} ticket={ticket.data} />}
+      <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique la venta antes de descontar inventario y registrar el cobro." isLoading={createSale.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingSale(null) }} open={Boolean(pendingSale)} title="Confirmar venta">
+        <p><strong>Cliente:</strong> {pendingSale?.customerName}</p><p><strong>Sucursal:</strong> {pendingSale?.locationName}</p><p><strong>Total:</strong> {toMoney(pendingSale?.total ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingSale?.paymentMethod}</p>
+        {backendError && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{backendError}</p>}
+      </ConfirmationDialog>
     </main>
   )
 }

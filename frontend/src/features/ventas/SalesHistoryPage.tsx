@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { CalendarDays, FileText, FilterX, History, MapPin, ReceiptText, Search, SlidersHorizontal } from 'lucide-react'
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Table, Td, Th } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { TablePagination, useTablePagination } from '@/components/shared/table-pagination'
+import { usePurchaseLocations } from '../compras/hooks'
 import { useSales } from './hooks'
 import { collectionStatusLabel, dateTime, documentTypeLabel, money, paymentTypeLabel, saleChannelLabel, saleStatusLabel } from './saleLabels'
 import type { BadgeTone } from '@/components/ui'
@@ -36,8 +38,10 @@ export function SalesHistoryPage() {
     status: '' as SaleStatus | '',
   })
   const queryFilters = useMemo(() => ({ ...filters, limit: 50, page: 1 }), [filters])
+  const locations = usePurchaseLocations('')
   const sales = useSales(queryFilters)
   const items = sales.data?.items ?? []
+  const pagination = useTablePagination(items)
   const hasFilters = Object.values(filters).some(Boolean)
 
   return (
@@ -84,7 +88,7 @@ export function SalesHistoryPage() {
           <CardContent className="mt-5 grid gap-3 md:grid-cols-4">
             <label className={filterLabelClass}>Desde<Input onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })} type="date" value={filters.dateFrom} /></label>
             <label className={filterLabelClass}>Hasta<Input onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })} type="date" value={filters.dateTo} /></label>
-            <label className={filterLabelClass}>Ubicación operativa<Input onChange={(event) => setFilters({ ...filters, locationId: event.target.value })} placeholder="ID de ubicación" value={filters.locationId} /></label>
+            <label className={filterLabelClass}>Ubicación operativa<Select disabled={locations.isLoading || Boolean(locations.error)} onChange={(event) => setFilters({ ...filters, locationId: event.target.value })} value={filters.locationId}><option value="">{locations.isLoading ? 'Cargando ubicaciones...' : locations.error ? 'No se pudieron cargar' : 'Todas las ubicaciones'}</option>{(locations.data ?? []).map((location) => <option key={location.id} value={location.id}>{location.name}{location.code ? ` · ${location.code}` : ''}</option>)}</Select></label>
             <label className={filterLabelClass}>Folio físico<Input onChange={(event) => setFilters({ ...filters, physicalFolio: event.target.value })} placeholder="Ej. A-1024" value={filters.physicalFolio} /></label>
             <label className={filterLabelClass}>Estado<Select onChange={(event) => setFilters({ ...filters, status: event.target.value as SaleStatus | '' })} value={filters.status}><option value="">Todos</option><option value="DRAFT">Borrador</option><option value="CONFIRMED">Confirmada</option><option value="CANCELLED">Cancelada</option></Select></label>
             <label className={filterLabelClass}>Cobranza<Select onChange={(event) => setFilters({ ...filters, collectionStatus: event.target.value as CollectionStatus | '' })} value={filters.collectionStatus}><option value="">Todas</option><option value="UNPAID">Pendiente</option><option value="PARTIALLY_PAID">Parcialmente pagada</option><option value="PAID">Pagada</option><option value="CANCELLED">Cancelada</option></Select></label>
@@ -115,7 +119,7 @@ export function SalesHistoryPage() {
                     <tr><Th>Venta</Th><Th>Cliente</Th><Th>Documento</Th><Th className="text-right">Total</Th><Th>Estado</Th><Th>Cobranza</Th><Th>Fecha</Th><Th className="text-right">Acciones</Th></tr>
                   </thead>
                   <tbody>
-                    {items.map((sale) => (
+                    {pagination.pageItems.map((sale) => (
                       <tr className="transition hover:bg-[var(--erp-surface)]" key={sale.id}>
                         <Td><div className="flex items-start gap-3"><span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--erp-surface-muted)] text-[var(--erp-info)]"><ReceiptText className="h-4 w-4" /></span><div><p className="font-black">{sale.saleNumber ?? sale.id}</p><p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">{saleChannelLabel(sale.saleChannel)} · {paymentTypeLabel(sale.paymentType)}</p></div></div></Td>
                         <Td><p className="font-semibold">{sale.customerName ?? 'Público general'}</p><p className="mt-1 flex items-center gap-1 text-xs text-[var(--erp-muted-foreground)]"><MapPin className="h-3.5 w-3.5" />{sale.locationId ?? 'Sin ubicación'}</p></Td>
@@ -131,6 +135,7 @@ export function SalesHistoryPage() {
                 </Table>
               </div>
             )}
+            <TablePagination {...pagination} total={items.length} onPageChange={pagination.setPage} />
           </div>
         </Card>
       </section>

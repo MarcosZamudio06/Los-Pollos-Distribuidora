@@ -429,11 +429,8 @@ export function DashboardPage() {
             <div>
               <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--erp-brand-gold-soft)]">Dashboard Ejecutivo</p>
               <h1 className="mt-3 max-w-3xl text-4xl font-black tracking-[-0.07em] text-white sm:text-5xl">
-                {isDriver ? 'Operación diaria de reparto' : 'Pulso ejecutivo del ERP'}
+                {isDriver ? 'Operación diaria de reparto' : 'El Pollo de los Pollos'}
               </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/74">
-                Vista profesional sensible al rol autenticado. KPIs, acciones y enlaces respetan permisos reales de rutas protegidas.
-              </p>
             </div>
             <div className="rounded-[1.35rem] border border-white/15 bg-white/8 p-4 backdrop-blur">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">Sesión</p>

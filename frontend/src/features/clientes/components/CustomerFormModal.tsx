@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 import { useCommercialPolicies, useSaveCustomer } from '../hooks/useCustomers'
 import { useDeliveryRoutes } from '../../rutas-reparto/hooks'
 import type { Customer, CustomerType, CreditStatus } from '../types'
+import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
+import { toast } from 'sonner'
 import {
   cleanCustomerNumber,
   cleanEmail,
@@ -88,6 +90,7 @@ export function CustomerFormModal({ canManageCommercialTerms, customer, onClose 
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [creditLimitFocused, setCreditLimitFocused] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [pendingCustomer, setPendingCustomer] = useState<ReturnType<typeof toCustomerFormValues> | null>(null)
 
   const saveCustomer = useSaveCustomer(customer?.id, canManageCommercialTerms)
   const routes = useDeliveryRoutes({ limit: 100, page: 1 })
@@ -176,8 +179,26 @@ export function CustomerFormModal({ canManageCommercialTerms, customer, onClose 
       return
     }
 
+    const payload = toCustomerFormValues(nextDraft)
+    if (!customer) {
+      setPendingCustomer(payload)
+      return
+    }
     try {
-      await saveCustomer.mutateAsync(toCustomerFormValues(nextDraft))
+      await saveCustomer.mutateAsync(payload)
+      toast.success('Cliente actualizado correctamente.')
+      onClose()
+    } catch (caughtError) {
+      setSubmitError(caughtError instanceof Error ? caughtError.message : 'No se pudo guardar el cliente.')
+    }
+  }
+
+  async function confirmRegistration() {
+    if (!pendingCustomer || saveCustomer.isPending) return
+    try {
+      await saveCustomer.mutateAsync(pendingCustomer)
+      toast.success('Cliente registrado correctamente.')
+      setPendingCustomer(null)
       onClose()
     } catch (caughtError) {
       setSubmitError(caughtError instanceof Error ? caughtError.message : 'No se pudo guardar el cliente.')
@@ -573,6 +594,10 @@ export function CustomerFormModal({ canManageCommercialTerms, customer, onClose 
           </button>
         </div>
       </form>
+      <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique que la información del cliente sea correcta antes de guardarla." isLoading={saveCustomer.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingCustomer(null) }} open={Boolean(pendingCustomer)} title="Confirmar registro">
+        <p><strong>Cliente:</strong> {pendingCustomer?.name}</p><p><strong>Tipo:</strong> {pendingCustomer?.customerType}</p><p><strong>Teléfono:</strong> {pendingCustomer?.phone || '—'}</p>
+        {submitError && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{submitError}</p>}
+      </ConfirmationDialog>
     </div>
   )
 }

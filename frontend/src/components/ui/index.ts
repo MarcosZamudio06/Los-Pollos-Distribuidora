@@ -13,3 +13,5 @@ export * from './tooltip'
 
 export * from './separator'
 export * from './scroll-area'
+export * from './alert-dialog'
+export * from './sonner'

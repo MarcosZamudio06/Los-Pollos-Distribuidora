@@ -1,5 +1,45 @@
 @import 'tailwindcss';
 
+@media print {
+  @page {
+    size: auto;
+    margin: 4mm;
+  }
+
+  body > :not(.ticket-print-root) {
+    display: none !important;
+  }
+
+  .ticket-print-root {
+    position: static !important;
+    display: block !important;
+    width: 72mm !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  .ticket-print-content {
+    width: 72mm !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .ticket-print-content button {
+    display: none !important;
+  }
+
+  .ticket-print-content article,
+  .ticket-print-content dl,
+  .ticket-print-content p {
+    break-inside: avoid;
+  }
+}
+
 @theme {
   --color-background: var(--erp-background);
   --color-foreground: var(--erp-foreground);

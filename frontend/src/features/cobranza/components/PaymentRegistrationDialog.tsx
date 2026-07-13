@@ -3,6 +3,8 @@ import { CircleDollarSign, X } from 'lucide-react'
 import { useRegisterReceivablePayment } from '../hooks/useAccountsReceivable'
 import { formatMoney, toNumber } from './formatters'
 import type { AccountReceivable, PaymentMethod } from '../types'
+import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
+import { toast } from 'sonner'
 
 type PaymentRegistrationDialogProps = {
   account: AccountReceivable
@@ -14,6 +16,7 @@ const fieldClass = 'h-11 rounded-xl border border-[color:var(--erp-border)] bg-w
 
 export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrationDialogProps) {
   const outstandingAmount = toNumber(account.outstandingAmount)
+  const registerPayment = useRegisterReceivablePayment(account.id)
   const [amount, setAmount] = useState(String(outstandingAmount))
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH')
   const [bankName, setBankName] = useState('')
@@ -21,7 +24,7 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
   const [appliedDocumentId, setAppliedDocumentId] = useState('')
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10))
   const [collectionPass, setCollectionPass] = useState('')
-  const registerPayment = useRegisterReceivablePayment(account.id)
+  const [pendingPayment, setPendingPayment] = useState<Parameters<typeof registerPayment.mutateAsync>[0] | null>(null)
   const numericAmount = Number(amount)
   const amountError = !Number.isFinite(numericAmount) || numericAmount <= 0
     ? 'El monto debe ser mayor a cero.'
@@ -30,10 +33,10 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
       : null
   const cannotPay = account.status === 'PAID' || account.status === 'CANCELLED'
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (amountError || cannotPay) return
-    await registerPayment.mutateAsync({
+    setPendingPayment({
       accountReceivableId: account.id,
       amount: numericAmount,
       paymentMethod,
@@ -44,7 +47,18 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
       collectionPass: collectionPass ? Number(collectionPass) : undefined,
       paidAt: paidAt ? new Date(`${paidAt}T00:00:00`).toISOString() : undefined,
     })
-    onClose()
+  }
+
+  async function confirmRegistration() {
+    if (!pendingPayment || registerPayment.isPending) return
+    try {
+      await registerPayment.mutateAsync(pendingPayment)
+      toast.success('Pago registrado correctamente.')
+      setPendingPayment(null)
+      onClose()
+    } catch {
+      // TanStack Query expone el error existente; el modal y la captura permanecen abiertos.
+    }
   }
 
   return (
@@ -79,6 +93,10 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
           </div>
         </div>
       </form>
+      <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique el pago antes de aplicarlo a la cuenta por cobrar." isLoading={registerPayment.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingPayment(null) }} open={Boolean(pendingPayment)} title="Confirmar registro de pago">
+        <p><strong>Cliente:</strong> {account.customerName ?? account.customerId}</p><p><strong>Monto:</strong> {formatMoney(pendingPayment?.amount ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}</p><p><strong>Fecha:</strong> {pendingPayment?.paidAt ? new Date(pendingPayment.paidAt).toLocaleDateString('es-MX') : '—'}</p>
+        {registerPayment.error && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{registerPayment.error instanceof Error ? registerPayment.error.message : 'No se pudo registrar el pago.'}</p>}
+      </ConfirmationDialog>
     </div>
   )
 }

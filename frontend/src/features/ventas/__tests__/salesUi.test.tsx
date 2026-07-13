@@ -61,6 +61,13 @@ function getButtonByText(container: HTMLElement, text: string): HTMLButtonElemen
   return button
 }
 
+function getSelectByLabelText(container: HTMLElement, text: string): HTMLSelectElement {
+  const label = Array.from(container.querySelectorAll('label')).find((candidate) => candidate.textContent?.includes(text))
+  const select = label?.querySelector('select')
+  if (!(select instanceof HTMLSelectElement)) throw new Error(`Select not found for label: ${text}`)
+  return select
+}
+
 async function renderDom(element: React.ReactElement): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -148,6 +155,95 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('value=""')
   })
 
+  it('limpia el cliente del resumen y conserva la ubicación después de registrar una venta', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    mockState.customers = {
+      data: [{ id: 'customer-1', name: 'Restaurante Norte', customerType: 'WHOLESALE', creditLimit: 5000, creditSummary: { availableCredit: 3200, creditLimit: 5000, outstandingAmount: 1800 }, isActive: true }],
+      error: null,
+      isLoading: false,
+    }
+    mockState.createSale.mutateAsync.mockResolvedValue({
+      sale: { id: 'sale-1', saleNumber: 'V-1001', items: [], total: 92, paymentType: 'CASH_SALE', status: 'CONFIRMED', collectionStatus: 'PAID' },
+      payment: { amount: 92, paymentMethod: 'CASH' },
+      ticketId: 'ticket-1',
+    })
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+      await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
+
+      expect(container.textContent).toContain('$5,000.00')
+      expect(container.textContent).toContain('$3,200.00')
+
+      await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
+      await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
+
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
+      expect(container.textContent).toContain('0 partidas')
+      expect(container.textContent).not.toContain('$5,000.00')
+      expect(container.textContent).not.toContain('$3,200.00')
+      expect(container.textContent).not.toContain('Limpiar cliente')
+      expect(getSelectByLabelText(container, 'Ubicación operativa').value).toBe('loc-counter')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('conserva carrito, cliente y resumen cuando el registro de venta falla', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    mockState.customers = {
+      data: [{ id: 'customer-1', name: 'Restaurante Norte', customerType: 'WHOLESALE', creditLimit: 5000, creditSummary: { availableCredit: 3200, creditLimit: 5000, outstandingAmount: 1800 }, isActive: true }],
+      error: null,
+      isLoading: false,
+    }
+    mockState.createSale.mutateAsync.mockRejectedValue(new Error('No se pudo registrar la venta'))
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+      await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
+      await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
+      await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
+
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
+      expect(container.textContent).toContain('1 en carrito')
+      expect(container.textContent).toContain('$5,000.00')
+      expect(container.textContent).toContain('$3,200.00')
+      expect(container.textContent).toContain('Limpiar cliente')
+      expect(document.body.textContent).toContain('No se pudo registrar la venta')
+      expect(locationSelect.value).toBe('loc-counter')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('mantiene bloqueo local del POS para roles no autorizados', () => {
     mockState.auth = { user: { role: 'DRIVER' } }
 
@@ -158,6 +254,7 @@ describe('TASK-055 sales UI behavior', () => {
   })
 
   it('muestra historial con filtros y datos operativos en español', () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.sales = {
       data: { items: [confirmedSale] },
       error: null,
@@ -168,6 +265,9 @@ describe('TASK-055 sales UI behavior', () => {
 
     expect(html).toContain('Historial de ventas')
     expect(html).toContain('Ubicación operativa')
+    expect(html).toContain('Todas las ubicaciones')
+    expect(html).toContain('Mostrador · MOST')
+    expect(html).not.toContain('ID de ubicación')
     expect(html).toContain('Folio físico')
     expect(html).toContain('Restaurante Norte')
     expect(html).toContain('Nota sencilla')
@@ -267,5 +367,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Kilo y pieza')
     expect(html).toContain('Kilo')
     expect(html).not.toContain('KG_AND_PIECE')
+    expect(html).toContain('ticket-print-root')
+    expect(html).toContain('ticket-print-content')
   })
 })

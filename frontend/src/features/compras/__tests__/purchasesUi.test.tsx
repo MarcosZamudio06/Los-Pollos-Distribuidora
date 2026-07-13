@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -181,6 +183,34 @@ describe('TASK-062 purchase UI behavior', () => {
     mockState.auth = { user: { role: 'WAREHOUSE' } }
     const warehouseHtml = renderToStaticMarkup(<MemoryRouter><SuppliersPage /></MemoryRouter>)
     expect(warehouseHtml).not.toContain('Desactivar')
+  })
+
+  it('solicita confirmación antes de desactivar un proveedor', async () => {
+    mockState.deactivateSupplier.mutateAsync.mockResolvedValue({ id: 'sup-1', isActive: false, name: 'Granja Norte' })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    try {
+      await act(async () => root.render(<MemoryRouter><SuppliersPage /></MemoryRouter>))
+      const deactivateButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Desactivar'))
+      if (!deactivateButton) throw new Error('Deactivate supplier button not found')
+
+      await act(async () => deactivateButton.click())
+      expect(mockState.deactivateSupplier.mutateAsync).not.toHaveBeenCalled()
+      expect(document.body.textContent).toContain('Desactivar proveedor')
+      expect(document.body.textContent).toContain('Su historial permanecerá intacto.')
+
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('Confirmar desactivación'))
+      if (!confirmButton) throw new Error('Confirm deactivation button not found')
+      await act(async () => confirmButton.click())
+
+      expect(mockState.deactivateSupplier.mutateAsync).toHaveBeenCalledTimes(1)
+      expect(mockState.deactivateSupplier.mutateAsync).toHaveBeenCalledWith('sup-1')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
   })
 
   it('muestra estados vacío, carga y error para proveedores', () => {

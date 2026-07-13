@@ -9,6 +9,8 @@ import { PurchaseLocationSelector } from './PurchaseLocationSelector'
 import { SupplierSelector } from './SupplierSelector'
 import { useCreatePurchase } from './hooks'
 import type { CreatePurchasePayload, OperationalLocation, PurchaseFormItem, Supplier } from './types'
+import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
+import { toast } from 'sonner'
 
 function validateForm(supplierId: string, locationId: string, items: PurchaseFormItem[]) {
   const errors: string[] = []
@@ -50,17 +52,25 @@ export function PurchaseFormPage() {
   const [allowCostUpdate, setAllowCostUpdate] = useState(false)
   const [items, setItems] = useState<PurchaseFormItem[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [pendingPurchase, setPendingPurchase] = useState<{ payload: CreatePurchasePayload; supplierName: string; locationName: string } | null>(null)
   const products = useProducts({ isActive: 'true' })
   const createPurchase = useCreatePurchase()
   const errors = useMemo(() => validateForm(supplier?.id ?? '', location?.id ?? '', items), [items, location?.id, supplier?.id])
   const isAdmin = user?.role === 'ADMIN'
 
-  async function submit() {
+  function submit() {
     setSubmitError(null)
     const validationErrors = validateForm(supplier?.id ?? '', location?.id ?? '', items)
     if (validationErrors.length > 0 || !supplier || !location) return
+    setPendingPurchase({ payload: buildPayload(supplier.id, location.id, allowCostUpdate && isAdmin, items), supplierName: supplier.name, locationName: location.name })
+  }
+
+  async function confirmRegistration() {
+    if (!pendingPurchase || createPurchase.isPending) return
     try {
-      const purchase = await createPurchase.mutateAsync(buildPayload(supplier.id, location.id, allowCostUpdate && isAdmin, items))
+      const purchase = await createPurchase.mutateAsync(pendingPurchase.payload)
+      toast.success('Compra registrada correctamente.')
+      setPendingPurchase(null)
       navigate(`/purchases/${purchase.id}`)
     } catch (caught) {
       setSubmitError(caught instanceof Error ? caught.message : 'No se pudo registrar la compra.')
@@ -116,6 +126,12 @@ export function PurchaseFormPage() {
           <Button className="h-11" disabled={createPurchase.isPending || errors.length > 0} onClick={submit} type="button">Registrar compra</Button>
         </div>
       </section>
+      <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique que la información sea correcta antes de guardarla." isLoading={createPurchase.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingPurchase(null) }} open={Boolean(pendingPurchase)} title="Confirmar registro">
+        <p><strong>Proveedor:</strong> {pendingPurchase?.supplierName ?? '—'}</p>
+        <p><strong>Ubicación:</strong> {pendingPurchase?.locationName ?? '—'}</p>
+        <p><strong>Partidas:</strong> {pendingPurchase?.payload.items.length ?? 0}</p>
+        {submitError && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{submitError}</p>}
+      </ConfirmationDialog>
     </main>
   )
 }

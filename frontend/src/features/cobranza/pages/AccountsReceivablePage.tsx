@@ -9,6 +9,7 @@ import { PaymentRegistrationDialog } from '../components/PaymentRegistrationDial
 import { formatDate, formatMoney } from '../components/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import type { AccountReceivable, AccountsReceivableFilters, AgingStatus, CollectionStatus } from '../types'
+import { TablePagination, useTablePagination } from '../../../components/shared/table-pagination'
 
 function canAccessReceivables(role?: string | null) { return role === 'ADMIN' || role === 'COLLECTIONS' || role === 'SELLER' }
 function canRegisterPayment(role?: string | null) { return role === 'ADMIN' || role === 'COLLECTIONS' }
@@ -36,6 +37,7 @@ function StatusBadge({ value }: { value?: string | null }) {
 }
 
 function ReceivableTable({ accounts, canPay, onRegisterPayment, onViewDetail }: { accounts: AccountReceivable[]; canPay: boolean; onRegisterPayment: (account: AccountReceivable) => void; onViewDetail: (account: AccountReceivable) => void }) {
+  const pagination = useTablePagination(accounts)
   return (
     <section className="overflow-hidden rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white shadow-[var(--erp-shadow)]">
       <div className="flex flex-col gap-2 border-b border-[color:var(--erp-border)] bg-[color-mix(in_srgb,var(--erp-surface)_70%,white)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -48,7 +50,7 @@ function ReceivableTable({ accounts, canPay, onRegisterPayment, onViewDetail }: 
             <tr><th className={headerCell}>Cliente</th><th className={headerCell}>Venta</th><th className={headerCell}>Solicitud administrativa</th><th className={`${headerCell} text-right`}>Monto original</th><th className={`${headerCell} text-right`}>Saldo pendiente</th><th className={`${headerCell} text-right`}>Saldo final</th><th className={headerCell}>Fechas</th><th className={headerCell}>Días</th><th className={headerCell}>Folio</th><th className={headerCell}>Política</th><th className={headerCell}>Envejecimiento</th><th className={headerCell}>Cobranza</th><th className={headerCell}>Acciones</th></tr>
           </thead>
           <tbody>
-            {accounts.map((account) => {
+            {pagination.pageItems.map((account) => {
               const paymentDisabled = !canPay || account.status === 'PAID' || account.status === 'CANCELLED'
               return <tr className="align-top transition hover:bg-[var(--erp-surface)]/70" key={account.id}>
                 <td className={`${bodyCell} font-black`}>{account.customerName ?? account.customerId}</td>
@@ -69,6 +71,7 @@ function ReceivableTable({ accounts, canPay, onRegisterPayment, onViewDetail }: 
           </tbody>
         </table>
       </div>
+      <TablePagination {...pagination} total={accounts.length} onPageChange={pagination.setPage} />
     </section>
   )
 }

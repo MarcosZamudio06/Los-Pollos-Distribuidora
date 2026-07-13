@@ -6,6 +6,7 @@ import type { BadgeTone } from '@/components/ui'
 import { usePurchaseLocations, usePurchases, useSuppliers } from './hooks'
 import { dateTime, money, purchaseStatusLabel } from './purchaseLabels'
 import type { PurchaseStatus } from './types'
+import { TablePagination, useTablePagination } from '@/components/shared/table-pagination'
 
 const filterLabelClass = 'grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]'
 
@@ -22,6 +23,7 @@ export function PurchasesPage() {
   const suppliers = useSuppliers('')
   const locations = usePurchaseLocations('')
   const items = purchases.data?.items ?? []
+  const pagination = useTablePagination(items)
   const supplierNameById = useMemo(() => new Map((suppliers.data ?? []).map((supplier) => [supplier.id, supplier.name])), [suppliers.data])
   const locationNameById = useMemo(() => new Map((locations.data ?? []).map((location) => [location.id, location.name])), [locations.data])
   const hasFilters = Object.values(filters).some(Boolean)
@@ -119,7 +121,7 @@ export function PurchasesPage() {
             {items.length > 0 && (
               <>
                 <div className="grid gap-3 md:hidden">
-                  {items.map((purchase) => (
+                  {pagination.pageItems.map((purchase) => (
                     <Link className="rounded-2xl border border-[color:var(--erp-border)] bg-white p-4 transition hover:border-[var(--erp-brand-gold)]" key={purchase.id} to={`/purchases/${purchase.id}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -142,11 +144,12 @@ export function PurchasesPage() {
                     <thead>
                       <tr><Th>Número</Th><Th>Proveedor</Th><Th>Ubicación receptora</Th><Th>Fecha</Th><Th className="text-right">Total</Th><Th>Estado</Th><Th>Usuario</Th><Th className="text-right">Acciones</Th></tr>
                     </thead>
-                    <tbody>{items.map((purchase) => <tr className="transition hover:bg-[var(--erp-surface)]" key={purchase.id}><Td><p className="font-black">{purchase.purchaseNumber ?? purchase.id}</p></Td><Td>{purchase.supplierName ?? supplierNameById.get(purchase.supplierId) ?? purchase.supplierId}</Td><Td>{purchase.locationName ?? locationNameById.get(purchase.locationId) ?? purchase.locationId}</Td><Td className="text-[var(--erp-muted-foreground)]">{dateTime(purchase.createdAt)}</Td><Td className="text-right text-base font-black tabular-nums">{money(purchase.total)}</Td><Td><Badge tone={purchaseStatusTone(purchase.status)}>{purchaseStatusLabel(purchase.status)}</Badge></Td><Td>{purchase.userName ?? purchase.userId ?? 'Sin usuario'}</Td><Td className="text-right"><Link className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-white px-3 text-sm font-black text-[var(--erp-danger)] transition hover:border-[var(--erp-danger)] hover:bg-[rgba(157,45,36,0.06)]" to={`/purchases/${purchase.id}`}><Search className="h-4 w-4" />Ver detalle</Link></Td></tr>)}</tbody>
+                    <tbody>{pagination.pageItems.map((purchase) => <tr className="transition hover:bg-[var(--erp-surface)]" key={purchase.id}><Td><p className="font-black">{purchase.purchaseNumber ?? purchase.id}</p></Td><Td>{purchase.supplierName ?? supplierNameById.get(purchase.supplierId) ?? purchase.supplierId}</Td><Td>{purchase.locationName ?? locationNameById.get(purchase.locationId) ?? purchase.locationId}</Td><Td className="text-[var(--erp-muted-foreground)]">{dateTime(purchase.createdAt)}</Td><Td className="text-right text-base font-black tabular-nums">{money(purchase.total)}</Td><Td><Badge tone={purchaseStatusTone(purchase.status)}>{purchaseStatusLabel(purchase.status)}</Badge></Td><Td>{purchase.userName ?? purchase.userId ?? 'Sin usuario'}</Td><Td className="text-right"><Link className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-white px-3 text-sm font-black text-[var(--erp-danger)] transition hover:border-[var(--erp-danger)] hover:bg-[rgba(157,45,36,0.06)]" to={`/purchases/${purchase.id}`}><Search className="h-4 w-4" />Ver detalle</Link></Td></tr>)}</tbody>
                   </Table>
                 </div>
               </>
             )}
+            <TablePagination {...pagination} total={items.length} onPageChange={pagination.setPage} />
           </div>
         </Card>
       </section>

@@ -1,5 +1,6 @@
 import { Eye, Pencil, Power, Route, ShieldCheck, UserRound } from 'lucide-react'
 import type { Customer } from '../types'
+import { TablePagination, useTablePagination } from '../../../components/shared/table-pagination'
 
 function text(value: unknown) { return typeof value === 'string' && value.trim() ? value : '—' }
 function money(value: unknown) { return value === undefined || value === null ? '—' : Number(value).toLocaleString('es-MX', { currency: 'MXN', style: 'currency' }) }
@@ -20,6 +21,7 @@ function CustomerBadge({ customer }: { customer: Customer }) {
 }
 
 export function CustomerTable({ canDeactivate, canManage, customers, onDeactivate, onEdit, onSelect }: { canDeactivate: boolean; canManage: boolean; customers: Customer[]; onDeactivate: (customer: Customer) => void; onEdit: (customer: Customer) => void; onSelect: (customer: Customer) => void }) {
+  const pagination = useTablePagination(customers)
   return (
     <section className="overflow-hidden rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white shadow-[var(--erp-shadow)]">
       <div className="flex flex-col gap-2 border-b border-[color:var(--erp-border)] bg-[color-mix(in_srgb,var(--erp-surface)_70%,white)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -35,7 +37,7 @@ export function CustomerTable({ canDeactivate, canManage, customers, onDeactivat
             <tr><th className={headerCell}>Número</th><th className={headerCell}>Cliente</th><th className={headerCell}>Contacto</th><th className={headerCell}>Tipo</th><th className={headerCell}>Crédito</th><th className={`${headerCell} text-right`}>Saldo global</th><th className={`${headerCell} text-right`}>Vencido</th><th className={`${headerCell} text-right`}>Disponible</th><th className={headerCell}>Política</th><th className={headerCell}>Ruta</th><th className={headerCell}>Estado</th><th className={headerCell}>Acciones</th></tr>
           </thead>
           <tbody>
-            {customers.map((customer) => (
+            {pagination.pageItems.map((customer) => (
               <tr key={customer.id} className="border-t border-[color:var(--erp-border)] align-top transition hover:bg-[var(--erp-surface)]/70">
                 <td className={`${bodyCell} font-semibold`}>{text(customer.customerNumber)}</td>
                 <td className={bodyCell}><div className="flex min-w-56 gap-3"><span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]"><UserRound className="h-4 w-4" /></span><div><p className="font-black tracking-[-0.02em]">{customer.name}</p><p className={`mt-1 ${muted}`}>{text(customer.commercialName)}</p></div></div></td>
@@ -54,6 +56,7 @@ export function CustomerTable({ canDeactivate, canManage, customers, onDeactivat
           </tbody>
         </table>
       </div>
+      <TablePagination {...pagination} total={customers.length} onPageChange={pagination.setPage} />
     </section>
   )
 }

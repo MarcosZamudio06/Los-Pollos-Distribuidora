@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { AsyncState } from './AsyncState'
 import { useCancelInventoryTransfer, useConfirmInventoryTransfer, useCreateInventoryTransfer, useInventoryTransferDetail, useInventoryTransfers } from '../hooks/useProducts'
 import type { InventoryTransfer, InventoryTransferValues } from '../types'
+import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
+import { toast } from 'sonner'
 
 type InventoryTransferViewProps = {
   canManage: boolean
@@ -25,6 +27,7 @@ export function InventoryTransferView({ canManage }: InventoryTransferViewProps)
   const [values, setValues] = useState<InventoryTransferValues>(emptyTransfer)
   const [error, setError] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState('')
+  const [pendingTransfer, setPendingTransfer] = useState<InventoryTransferValues | null>(null)
   const transfers = useInventoryTransfers()
   const detail = useInventoryTransferDetail(selectedId)
   const createTransfer = useCreateInventoryTransfer()
@@ -40,13 +43,21 @@ export function InventoryTransferView({ canManage }: InventoryTransferViewProps)
     return null
   }
 
-  async function submitTransfer(event: FormEvent<HTMLFormElement>) {
+  function submitTransfer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const validationError = validate()
     if (validationError) return setError(validationError)
+    setError(null)
+    setPendingTransfer(structuredClone(values))
+  }
+
+  async function confirmRegistration() {
+    if (!pendingTransfer || createTransfer.isPending) return
     try {
-      await createTransfer.mutateAsync(values)
+      await createTransfer.mutateAsync(pendingTransfer)
+      toast.success('Traspaso registrado correctamente.')
       setValues(emptyTransfer)
+      setPendingTransfer(null)
       setError(null)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'No se pudo crear el traspaso.')
@@ -84,6 +95,10 @@ export function InventoryTransferView({ canManage }: InventoryTransferViewProps)
           <aside className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5"><h3 className="text-lg font-bold text-[var(--erp-foreground)]">Detalle del traspaso</h3>{detail.isLoading && <p className="mt-3 text-sm text-[var(--erp-muted-foreground)]">Cargando detalle...</p>}{detail.error && <p role="alert" className="mt-3 text-sm font-semibold text-[var(--erp-danger)]">{detail.error instanceof Error ? detail.error.message : 'No se pudo cargar el detalle.'}</p>}{detail.data ? <div className="mt-4 grid gap-3 text-sm text-[var(--erp-foreground)]"><p><strong>Estado:</strong> {detail.data.status}</p><p><strong>Creado:</strong> {new Date(detail.data.createdAt).toLocaleString()}</p><p><strong>Confirmado:</strong> {detail.data.confirmedAt ? new Date(detail.data.confirmedAt).toLocaleString() : 'Pendiente'}</p><div className="grid gap-2">{detail.data.items?.map((item, index) => <p className="rounded-xl bg-[var(--erp-surface-muted)] px-3 py-2" key={index}>{item.productName ?? item.productId}: {item.quantityKg ?? 0} kg / {item.quantityPieces ?? 0} piezas</p>)}</div>{detail.data.movements?.length ? <div className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] p-3"><p className="font-semibold">Movimientos del traspaso</p>{detail.data.movements.map((movement) => <p key={movement.id}>{movement.type}: {movement.quantityKg ?? 0} kg / {movement.quantityPieces ?? 0} piezas</p>)}</div> : null}{canManage && <div className="grid gap-3"><textarea className={`${fieldClass} min-h-24 py-3`} disabled={!canCancelTransfer(detail.data)} placeholder="Motivo de cancelación" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /><div className="flex flex-wrap gap-3"><button className="rounded-xl border border-[var(--erp-success)] bg-[var(--erp-success)] px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" disabled={!canConfirmTransfer(detail.data) || confirmTransfer.isPending} onClick={() => void confirmTransfer.mutateAsync(detail.data.id)} type="button">Confirmar</button><button className="rounded-xl border border-[var(--erp-danger)] bg-[var(--erp-danger)] px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" disabled={!canCancelTransfer(detail.data) || cancelTransfer.isPending} onClick={() => void handleCancel(detail.data.id)} type="button">Cancelar</button></div></div>}</div> : <p className="mt-4 text-sm text-[var(--erp-muted-foreground)]">Selecciona un traspaso para consultar su detalle en la API.</p>}</aside>
         </div>
       </AsyncState>
+      <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique el movimiento antes de afectar el flujo de inventario." isLoading={createTransfer.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingTransfer(null) }} open={Boolean(pendingTransfer)} title="Confirmar traspaso">
+        <p><strong>Origen:</strong> {pendingTransfer?.originLocationId}</p><p><strong>Destino:</strong> {pendingTransfer?.destinationLocationId}</p><p><strong>Productos:</strong> {pendingTransfer?.items.length ?? 0}</p>
+        {error && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{error}</p>}
+      </ConfirmationDialog>
     </section>
   )
 }

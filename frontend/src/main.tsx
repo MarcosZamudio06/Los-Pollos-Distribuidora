@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './app/App.tsx'
 import { AppProviders } from './app/providers.tsx'
 import './styles/index.css'
+import { Toaster } from './components/ui/sonner.tsx'
 
 const rootElement = document.getElementById('root')
 
@@ -14,6 +15,7 @@ createRoot(rootElement).render(
   <StrictMode>
     <AppProviders>
       <App />
+      <Toaster />
     </AppProviders>
   </StrictMode>,
 )
