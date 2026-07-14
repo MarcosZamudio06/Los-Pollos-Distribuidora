@@ -11,7 +11,7 @@ Deprecated aliases:
 
 ## Objective
 
-Control route assignment, delivery, evidence, route collections, incidents, returns, and operational settlement for orders assigned to drivers.
+Control route planning, geographic optimization, assignment, delivery, evidence, route collections, incidents, returns, and operational settlement for orders assigned to drivers.
 
 ## Capabilities
 
@@ -20,6 +20,9 @@ Control route assignment, delivery, evidence, route collections, incidents, retu
 - Associate route with origin operational location when applicable.
 - Create or associate `ROUTE_STOCK` per route.
 - Assign confirmed orders or sales.
+- Geocode the origin and delivery stops without replacing the business address silently.
+- Optimize one driver's stop sequence by travel time.
+- Persist the approved round trip, distance, duration, and ordered stops.
 - Update route status.
 - Update delivery-order status.
 - Register delivery.
@@ -32,6 +35,7 @@ Control route assignment, delivery, evidence, route collections, incidents, retu
 ## Entities
 
 - DeliveryRoute.
+- DeliveryRoutePlanDraft.
 - DeliveryOrder.
 - DeliveryEvidence.
 - RouteSettlement.
@@ -42,10 +46,30 @@ Control route assignment, delivery, evidence, route collections, incidents, retu
 - InventoryMovement.
 - User.
 
+## Geospatial planning
+
+- A planned stop always represents one confirmed sale; free-form operational stops are outside the first version.
+- A geospatial route uses one active `DRIVER`, one origin `OperationalLocation`, and one or more eligible sales.
+- The route starts and ends at the same operational origin.
+- Photon is the self-hosted forward and reverse geocoder.
+- VROOM determines the stop order for one vehicle, minimizing driving time.
+- OSRM calculates the final road geometry, distance, and duration for the VROOM order.
+- Coordinates use WGS84 (`EPSG:4326`) and are represented as `[longitude, latitude]` in GeoJSON and routing-engine payloads.
+- The approved route plan is immutable after the route starts. Any stop change while `PENDING` requires a new optimization covering all existing and new stops.
+- The first version provides a planned route only. Live GPS tracking, automatic rerouting, turn-by-turn navigation, offline maps, vehicle capacity, time windows, and multi-vehicle optimization are excluded.
+
 ## Rules
 
 - Only confirmed sales can be assigned.
 - Do not assign cancelled sales.
+- Do not optimize or assign a sale already assigned to another route.
+- A mapped route must have a geocoded origin and every stop must have validated coordinates.
+- A search result, reverse-geocoded label, or moved marker must not overwrite the sale or customer address silently; the delivery order preserves the selected planning address separately.
+- Route creation from a geographic plan must revalidate the active driver, origin, sales, receivables, and concurrent assignments before persistence.
+- An optimization with unreachable or unassigned stops must not create a route.
+- A routing or geocoding provider failure must not create partial route, order, inventory, payment, or settlement records.
+- A route plan expires after 30 minutes and may be consumed only once. A retry with the same idempotency key returns the route already created.
+- Historical routes without coordinates remain readable through the existing text-only experience.
 - Drivers only see their own routes.
 - Drivers only update orders assigned to them.
 - Delivered orders must store `deliveredAt`.
@@ -81,15 +105,25 @@ Exact routes must be defined in:
 ## UI
 
 - Admin route table.
-- Route creation.
+- Geospatial route planner with eligible-sale selection, address search, map pinning, optimization preview, and confirmation.
 - Order assignment.
-- Driver route list.
+- Driver route list with the approved static map and ordered stops when geographic data exists.
 - Evidence review.
 - Settlement view.
 
 ## Minimum tests
 
 - Create route.
+- Geocode origin and delivery addresses.
+- Reject a geographic plan with a missing coordinate.
+- Optimize one stop as origin, delivery, origin.
+- Optimize multiple stops and preserve every sale exactly once.
+- Reject unreachable or unassigned stops.
+- Reject an expired or already consumed route plan.
+- Revalidate concurrent assignment before consuming a plan.
+- Persist the same stop order, geometry, distance, and duration returned by the approved plan.
+- Re-optimize all stops when adding an order to a mapped pending route.
+- Preserve text-only access to a historical route without geometry.
 - Assign confirmed order.
 - Reject cancelled sale assignment.
 - Driver only sees own routes.

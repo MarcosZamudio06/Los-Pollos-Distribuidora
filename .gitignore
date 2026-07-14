@@ -35,6 +35,9 @@ __MACOSX/
 .atl/
 .engram/
 
+# Local OpenStreetMap/Photon datasets (large generated artifacts)
+.map-data/
+
 
 .venv
 .tokensave

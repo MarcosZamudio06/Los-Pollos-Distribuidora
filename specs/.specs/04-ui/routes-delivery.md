@@ -6,12 +6,15 @@ Administrar rutas, asignación de pedidos, experiencia móvil de repartidor, evi
 
 La experiencia móvil del chofer forma parte del MVP, pero no se asume operación offline hasta que exista decisión de negocio y arquitectura.
 
+La planeación geoespacial utiliza React Leaflet con datos de OpenStreetMap. Photon, VROOM y OSRM se consumen exclusivamente a través de la API NestJS; el navegador no conoce sus URLs internas.
+
 ## Alcance TASK-071 — Administrador de rutas
 
 Pantallas y componentes requeridos:
 
 - `DeliveryRoutesPage`.
-- `CreateRouteModal`.
+- `RoutePlannerPage` en `/delivery-routes/new`.
+- `CreateRouteModal` queda deprecated y deja de invocarse desde el flujo primario; la acción Crear ruta navega al planificador.
 - `AssignOrdersModal`.
 - `RouteDetailPage`.
 - `RouteEvidenceReview`.
@@ -63,9 +66,59 @@ Acciones:
 - Consultar liquidación mediante `GET /api/route-settlements/:id` cuando la ruta muestre `routeSettlementId`.
 - Cerrar liquidación mediante `POST /api/route-settlements/:id/close` desde la vista de liquidación cuando el rol y estado lo permitan.
 
+Las rutas optimizadas deben mostrar `mapAvailable`, distancia, duración y estado de optimización. Las rutas históricas sin mapa conservan las acciones y presentación textual existentes.
+
+## Planificador geoespacial
+
+Debe consumir:
+
+- `GET /api/delivery-route-planning/eligible-sales`.
+- `GET /api/geocoding/search`.
+- `GET /api/geocoding/reverse`.
+- `POST /api/delivery-route-plans`.
+- `POST /api/delivery-routes` al confirmar.
+
+Estructura:
+
+- Página dedicada, no modal, por el tamaño y complejidad del mapa.
+- Panel de planeación con nombre, fecha, origen, repartidor y ventas elegibles.
+- Mapa principal con origen, marcadores numerados y recorrido optimizado.
+- Lista ordenada sincronizada con los marcadores; la lista es la alternativa accesible y no depende del mapa.
+- Resumen de distancia total, duración estimada, número de paradas y regreso al origen.
+
+Flujo:
+
+1. Seleccionar nombre, fecha, ubicación operativa de origen y repartidor activo.
+2. Seleccionar una o varias ventas elegibles; no permitir paradas libres.
+3. Proponer la dirección de entrega del cliente sin modificarla en su registro fuente.
+4. Buscar cada dirección con Photon o colocar/mover manualmente el marcador.
+5. Exigir coordenadas válidas para origen y todas las paradas.
+6. Calcular la ruta. VROOM define el orden y OSRM devuelve el recorrido vial origen-paradas-origen.
+7. Mostrar la previsualización con marcadores numerados y métricas.
+8. Cualquier cambio de origen, repartidor o paradas invalida la previsualización y obliga a recalcular.
+9. Confirmar la creación consumiendo `routePlanId` con `Idempotency-Key`.
+
+Estados y errores:
+
+- Dirección ambigua: mostrar alternativas y permitir pin manual.
+- Photon no disponible: conservar la captura sin coordenadas, impedir optimizar y permitir reintentar.
+- Parada inalcanzable: identificar la venta afectada, mantener el formulario y no permitir crear.
+- VROOM u OSRM no disponible: mostrar error reintentable y no convertir el orden ingresado en una ruta supuestamente optimizada.
+- Plan expirado o invalidado por concurrencia: recalcular antes de confirmar.
+- Una sola parada sigue mostrando el recorrido origen-entrega-origen.
+- Varias ventas en las mismas coordenadas permanecen como pedidos independientes y visibles en la lista.
+
+Accesibilidad y responsive:
+
+- Marcadores, colores y línea no son la única fuente de información.
+- Todas las paradas se pueden seleccionar desde teclado en la lista.
+- Foco visible y relación clara entre fila y marcador numerado.
+- En móvil, mapa y lista se apilan; la creación sigue siendo administrativa y no se convierte en navegación GPS.
+- La atribución de OpenStreetMap permanece visible.
+
 ## Crear ruta y asignar pedidos
 
-Debe consumir `POST /api/delivery-routes` para crear rutas con pedidos iniciales y `POST /api/delivery-routes/:id/orders` para asignar pedidos confirmados adicionales a una ruta existente elegible.
+Debe consumir `POST /api/delivery-route-plans` y `POST /api/delivery-routes` para crear rutas geoespaciales. `POST /api/delivery-routes/:id/orders` usa un nuevo plan completo para agregar pedidos a una ruta optimizada existente.
 
 Campos:
 
@@ -88,6 +141,8 @@ Validaciones:
 - Conservar `accountReceivableId` cuando exista saldo a crédito.
 - Para asignación adicional, no permitir rutas completadas, canceladas o con liquidación abierta/cerrada.
 - No enviar ni editar `routeSettlementId` al asignar pedidos.
+- No permitir crear una ruta geoespacial sin previsualización vigente.
+- Para una ruta optimizada, cualquier pedido adicional exige recalcular todas las paradas antes de guardar.
 
 ## Detalle de ruta
 
@@ -101,6 +156,7 @@ Debe mostrar:
 - Resumen de evidencias.
 - Resumen de cobros por método y vuelta de cobranza.
 - `routeSettlementId` solo si existe liquidación asociada.
+- Mapa, paradas numeradas, distancia y duración cuando `mapAvailable=true`.
 
 Relación visible con liquidación:
 
@@ -111,6 +167,8 @@ Relación visible con liquidación:
 ## Experiencia del repartidor
 
 Debe mostrar solo rutas asignadas al usuario `DRIVER`.
+
+Cuando `mapAvailable=true`, debe mostrar el recorrido estático aprobado por ADMIN, el origen, el regreso al origen y las paradas según `stopSequence`. El mapa no solicita ubicación del dispositivo ni recalcula el trayecto.
 
 Cada pedido debe mostrar:
 
@@ -125,6 +183,7 @@ Cada pedido debe mostrar:
 - Notas.
 - Evidencias capturadas.
 - Acciones permitidas.
+- Número de parada y duración/distancia del tramo cuando existan.
 
 Estados de pedido soportados:
 
@@ -246,11 +305,22 @@ Toda vista debe contemplar:
 - Empty.
 - Success.
 - Unauthorized.
+- Geocoding unavailable.
+- Optimization unavailable.
+- Unreachable stops.
+- Expired plan.
+- Legacy route without map.
 
 ## Validaciones
 
 - No crear ruta sin repartidor.
 - No crear ruta sin fecha.
+- No optimizar sin ubicación operativa de origen geocodificada.
+- No optimizar sin al menos una venta confirmada.
+- No optimizar con una parada sin coordenadas válidas.
+- No crear desde un plan expirado, consumido o invalidado.
+- No mostrar una geometría distinta de la aprobada por ADMIN.
+- No permitir que `DRIVER` consulte el mapa de una ruta ajena.
 - No asignar ventas canceladas.
 - No completar ruta con pedidos pendientes sin estado final.
 - No registrar cobro sin cuenta por cobrar en MVP.
