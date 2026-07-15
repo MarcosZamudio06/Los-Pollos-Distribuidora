@@ -1,4 +1,5 @@
 export { DeliveryRoutesPage } from './pages/DeliveryRoutesPage'
+export { RoutePlannerPage } from './pages/RoutePlannerPage'
 export { RouteDetailPage } from './pages/RouteDetailPage'
 export { RouteEvidenceReview } from './pages/RouteEvidenceReview'
 export { RouteSettlementView } from './pages/RouteSettlementView'

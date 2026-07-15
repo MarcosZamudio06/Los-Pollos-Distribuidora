@@ -2,20 +2,22 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, ClipboardList, FilterX, MapPin, PackageCheck, Plus, Route, Search, Truck } from 'lucide-react'
 import { AssignOrdersModal } from '../components/AssignOrdersModal'
-import { CreateRouteModal } from '../components/CreateRouteModal'
+import { RoutingTechnicalStatusPanel } from '../components/RoutingTechnicalStatusPanel'
 import { Card, Field, PageFrame, PageShell, PrimaryButton, RouteHero, RouteStatusBadge, SecondaryButton, SecondaryLink, SelectInput, StatusMessage, TextInput } from '../components/RouteUi'
 import { date, shortId } from '../labels'
-import { useDeliveryRoutes, useOpenRouteSettlement } from '../hooks'
+import { useDeliveryRoutes, useOpenRouteSettlement, useRoutingTechnicalStatus } from '../hooks'
+import { useAuth } from '../../auth'
 import type { DeliveryRouteListItem, DeliveryRouteStatus } from '../types'
 
 export function DeliveryRoutesPage() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [filters, setFilters] = useState({ driverId: '', originLocationId: '', scheduledDate: '', status: '' as DeliveryRouteStatus | '' })
-  const [showCreate, setShowCreate] = useState(false)
   const [routeToAssign, setRouteToAssign] = useState<DeliveryRouteListItem | null>(null)
   const queryFilters = useMemo(() => ({ ...filters, limit: 50, page: 1 }), [filters])
   const routes = useDeliveryRoutes(queryFilters)
   const openSettlement = useOpenRouteSettlement()
+  const technicalStatus = useRoutingTechnicalStatus(user?.role === 'ADMIN')
   const items = routes.data?.items ?? []
   const hasFilters = Object.values(filters).some(Boolean)
   const inProgressCount = items.filter((route) => route.status === 'IN_PROGRESS').length
@@ -31,7 +33,7 @@ export function DeliveryRoutesPage() {
     <PageShell>
       <PageFrame>
         <RouteHero
-          action={<PrimaryButton onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Crear ruta</PrimaryButton>}
+          action={<PrimaryButton onClick={() => navigate('/delivery-routes/new')}><Plus className="h-4 w-4" />Crear ruta</PrimaryButton>}
           eyebrow="Torre de reparto"
           title="Mesa de control de rutas"
           subtitle="Administra salidas, pedidos confirmados, evidencias y liquidación operativa sin perder trazabilidad con ROUTE_STOCK."
@@ -42,6 +44,8 @@ export function DeliveryRoutesPage() {
           <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><Truck className="h-4 w-4 text-[var(--erp-success)]" />En operación</p><p className="mt-3 text-2xl font-black tracking-[-0.05em] tabular-nums">{inProgressCount}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Rutas actualmente en camino</p></Card>
           <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><ClipboardList className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />Pedidos asignados</p><p className="mt-3 text-2xl font-black tracking-[-0.05em] tabular-nums">{totalOrders}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">{pendingCount} rutas pendientes</p></Card>
         </section>
+
+        {user?.role === 'ADMIN' && <RoutingTechnicalStatusPanel data={technicalStatus.data} error={technicalStatus.error} isLoading={technicalStatus.isLoading} />}
 
         <Card className="p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -88,14 +92,15 @@ export function DeliveryRoutesPage() {
                         <span className="flex items-center gap-2"><PackageCheck className="h-4 w-4" />ROUTE_STOCK {route.routeStockLocationName ?? shortId(route.routeStockLocationId)}</span>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[var(--erp-surface)] p-3 text-sm"><span><strong className="block text-lg text-[var(--erp-foreground)]">{route.ordersCount ?? 0}</strong>pedidos</span><span><strong className="block text-lg text-[var(--erp-foreground)]">{route.pendingOrdersCount ?? 0}</strong>pendientes</span></div>
-                      <div className="mt-4 flex flex-wrap gap-2"><SecondaryLink to={`/delivery-routes/${route.id}`}>Detalle</SecondaryLink><SecondaryLink to={`/delivery-routes/${route.id}/evidence`}>Evidencia</SecondaryLink>{!route.routeSettlementId && !['COMPLETED', 'CANCELLED'].includes(route.status) && <SecondaryButton onClick={() => setRouteToAssign(route)}>Asignar pedido</SecondaryButton>}{!route.routeSettlementId && route.status !== 'CANCELLED' && <SecondaryButton disabled={openSettlement.isPending} onClick={() => void handleOpenSettlement(route.id)}>Abrir liquidación</SecondaryButton>}</div>
+                      {route.optimizationStatus === 'OPTIMIZED' && <p className="mt-3 rounded-xl border border-[rgba(214,155,45,.28)] bg-[rgba(214,155,45,.09)] px-3 py-2 text-xs font-bold text-[var(--erp-brand-gold-deep)]">Mapa disponible · {route.distanceMeters == null ? 'Distancia pendiente' : `${(route.distanceMeters / 1000).toFixed(1)} km`} · {route.durationSeconds == null ? 'Tiempo pendiente' : `${Math.round(route.durationSeconds / 60)} min`}</p>}
+                      <div className="mt-4 flex flex-wrap gap-2"><SecondaryLink to={`/delivery-routes/${route.id}`}>Detalle</SecondaryLink><SecondaryLink to={`/delivery-routes/${route.id}/evidence`}>Evidencia</SecondaryLink>{!route.routeSettlementId && !['COMPLETED', 'CANCELLED'].includes(route.status) && (route.optimizationStatus === 'OPTIMIZED' ? <SecondaryLink to={`/delivery-routes/${route.id}/reoptimize`}>Agregar y reoptimizar</SecondaryLink> : <SecondaryButton onClick={() => setRouteToAssign(route)}>Asignar pedido</SecondaryButton>)}{!route.routeSettlementId && route.status !== 'CANCELLED' && <SecondaryButton disabled={openSettlement.isPending} onClick={() => void handleOpenSettlement(route.id)}>Abrir liquidación</SecondaryButton>}</div>
                     </article>
                   ))}
                 </div>
 
                 <div className="hidden overflow-x-auto rounded-[1.2rem] border border-[color:var(--erp-border)] lg:block">
                   <table className="min-w-[1120px] border-separate border-spacing-0 text-left text-sm">
-                    <thead className="text-xs uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]"><tr><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Nombre</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Repartidor</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Fecha</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Origen</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">ROUTE_STOCK</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Estado</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Pedidos</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Liquidación</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3 text-right">Acciones</th></tr></thead>
+                    <thead className="text-xs uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]"><tr><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Nombre</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Repartidor</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Fecha</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Origen</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">ROUTE_STOCK</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Estado</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Optimización</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Pedidos</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">Liquidación</th><th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3 text-right">Acciones</th></tr></thead>
                     <tbody>
                       {items.map((route) => (
                         <tr className="transition hover:bg-[var(--erp-surface)]" key={route.id}>
@@ -105,9 +110,10 @@ export function DeliveryRoutesPage() {
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4">{route.originLocationName ?? shortId(route.originLocationId)}</td>
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4 font-bold text-[var(--erp-info)]">{route.routeStockLocationName ?? shortId(route.routeStockLocationId)}</td>
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4"><RouteStatusBadge status={route.status} /></td>
+                          <td className="border-b border-[color:var(--erp-border)] px-4 py-4">{route.optimizationStatus === 'OPTIMIZED' ? <span className="font-bold text-[var(--erp-brand-gold-deep)]">Mapa · {route.distanceMeters == null ? '—' : `${(route.distanceMeters / 1000).toFixed(1)} km`}<small className="block text-[var(--erp-muted-foreground)]">{route.durationSeconds == null ? '—' : `${Math.round(route.durationSeconds / 60)} min`}</small></span> : <span className="text-[var(--erp-muted-foreground)]">Histórica</span>}</td>
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4"><span className="font-black">{route.ordersCount ?? 0}</span><span className="block text-xs text-[var(--erp-muted-foreground)]">{route.pendingOrdersCount ?? 0} pendientes</span></td>
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4">{route.routeSettlementId ? <SecondaryLink to={`/route-settlements/${route.routeSettlementId}`}>{shortId(route.routeSettlementId)}</SecondaryLink> : <span className="text-[var(--erp-muted-foreground)]">Sin liquidación</span>}</td>
-                          <td className="border-b border-[color:var(--erp-border)] px-4 py-4"><div className="flex min-w-48 flex-wrap justify-end gap-2"><SecondaryLink to={`/delivery-routes/${route.id}`}>Detalle</SecondaryLink><SecondaryLink to={`/delivery-routes/${route.id}/evidence`}>Evidencia</SecondaryLink>{!route.routeSettlementId && !['COMPLETED', 'CANCELLED'].includes(route.status) && <SecondaryButton onClick={() => setRouteToAssign(route)}>Asignar pedido</SecondaryButton>}{!route.routeSettlementId && route.status !== 'CANCELLED' && <SecondaryButton disabled={openSettlement.isPending} onClick={() => void handleOpenSettlement(route.id)}>Abrir liquidación</SecondaryButton>}</div></td>
+                          <td className="border-b border-[color:var(--erp-border)] px-4 py-4"><div className="flex min-w-48 flex-wrap justify-end gap-2"><SecondaryLink to={`/delivery-routes/${route.id}`}>Detalle</SecondaryLink><SecondaryLink to={`/delivery-routes/${route.id}/evidence`}>Evidencia</SecondaryLink>{!route.routeSettlementId && !['COMPLETED', 'CANCELLED'].includes(route.status) && (route.optimizationStatus === 'OPTIMIZED' ? <SecondaryLink to={`/delivery-routes/${route.id}/reoptimize`}>Agregar y reoptimizar</SecondaryLink> : <SecondaryButton onClick={() => setRouteToAssign(route)}>Asignar pedido</SecondaryButton>)}{!route.routeSettlementId && route.status !== 'CANCELLED' && <SecondaryButton disabled={openSettlement.isPending} onClick={() => void handleOpenSettlement(route.id)}>Abrir liquidación</SecondaryButton>}</div></td>
                         </tr>
                       ))}
                     </tbody>
@@ -118,7 +124,6 @@ export function DeliveryRoutesPage() {
           </div>
         </Card>
       </PageFrame>
-      {showCreate && <CreateRouteModal onClose={() => setShowCreate(false)} onCreated={(routeId) => navigate(`/delivery-routes/${routeId}`)} />}
       {routeToAssign && <AssignOrdersModal onClose={() => setRouteToAssign(null)} routeId={routeToAssign.id} routeName={routeToAssign.name} />}
     </PageShell>
   )

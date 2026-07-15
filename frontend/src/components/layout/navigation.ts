@@ -4,13 +4,13 @@ import {
   ClipboardList,
   History,
   Home,
+  MapPinned,
   Package,
   Route,
   Settings,
   ShoppingBasket,
   ShoppingCart,
   Store,
-  Truck,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -27,6 +27,7 @@ export type NavigationItemKey =
   | 'purchase-suppliers'
   | 'purchases-new'
   | 'my-routes'
+  | 'route-planner'
   | 'delivery-routes'
   | 'reports'
   | 'employees'
@@ -145,13 +146,24 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     to: '/purchases/new',
   },
   {
+    activePaths: ['/delivery-routes/new'],
+    allowedRoles: ROUTE_ACCESS_ROLES.deliveryRoutePlanner,
+    routeAccessKey: 'deliveryRoutePlanner',
+    description: 'Optimización geoespacial',
+    icon: MapPinned,
+    key: 'route-planner',
+    label: 'Planificar ruta',
+    section: 'operations',
+    to: '/delivery-routes/new',
+  },
+  {
     activePaths: ['/my-routes'],
     allowedRoles: ROUTE_ACCESS_ROLES.myRoutes,
     routeAccessKey: 'myRoutes',
-    description: 'Rutas asignadas',
-    icon: Truck,
+    description: 'Secuencia y entregas asignadas',
+    icon: MapPinned,
     key: 'my-routes',
-    label: 'Mis rutas',
+    label: 'Mi ruta en mapa',
     section: 'operations',
     to: '/my-routes',
   },

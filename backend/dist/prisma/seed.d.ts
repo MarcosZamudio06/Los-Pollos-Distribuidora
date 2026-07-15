@@ -63,18 +63,24 @@ export declare const initialSeedLocations: readonly [{
     readonly code: "VER";
     readonly type: "BRANCH";
     readonly address: "Sucursal Veracruz";
+    readonly latitude: 19.183;
+    readonly longitude: -96.134;
     readonly isActive: true;
 }, {
     readonly name: "Boca del Río";
     readonly code: "BDR";
     readonly type: "BRANCH";
     readonly address: "Sucursal Boca del Río";
+    readonly latitude: 19.1065;
+    readonly longitude: -96.108;
     readonly isActive: true;
 }, {
     readonly name: "Alvarado";
     readonly code: "ALV";
     readonly type: "BRANCH";
     readonly address: "Sucursal Alvarado";
+    readonly latitude: 18.7735;
+    readonly longitude: -95.7615;
     readonly isActive: true;
 }];
 export declare const initialCategories: readonly [{

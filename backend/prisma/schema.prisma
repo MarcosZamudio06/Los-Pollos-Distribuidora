@@ -149,6 +149,11 @@ enum DeliveryRouteStatus {
   CANCELLED
 }
 
+enum RouteOptimizationStatus {
+  NOT_OPTIMIZED
+  OPTIMIZED
+}
+
 enum DeliveryOrderStatus {
   PENDING
   IN_ROUTE
@@ -267,6 +272,8 @@ model User {
   createdOperationalConfigs   OperationalConfig[]     @relation("OperationalConfigCreatedBy")
   updatedOperationalConfigs   OperationalConfig[]     @relation("OperationalConfigUpdatedBy")
   deliveryRoutes              DeliveryRoute[]         @relation("DeliveryRouteDriver")
+  createdRoutePlans           DeliveryRoutePlanDraft[] @relation("RoutePlanCreatedBy")
+  plannedRouteAssignments     DeliveryRoutePlanDraft[] @relation("RoutePlanDriver")
   deliveredOrders             DeliveryOrder[]         @relation("DeliveryOrderDeliveredBy")
   collectedOrders             DeliveryOrder[]         @relation("DeliveryOrderCollectedBy")
   requestedBillingRequests    BillingRequest[]        @relation("BillingRequestRequestedBy")
@@ -294,6 +301,9 @@ model OperationalLocation {
   type                  OperationalLocationType
   parentId              String?
   address               String?
+  latitude              Decimal?                   @db.Decimal(9, 6)
+  longitude             Decimal?                   @db.Decimal(9, 6)
+  locationPoint         Unsupported("geometry(Point, 4326)")?
   isActive              Boolean                    @default(true)
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
@@ -308,6 +318,7 @@ model OperationalLocation {
   inboundTransfers      InventoryTransfer[]        @relation("TransferDestination")
   operationalConfigs    OperationalConfig[]
   originRoutes          DeliveryRoute[]            @relation("RouteOriginLocation")
+  routePlans            DeliveryRoutePlanDraft[]   @relation("RoutePlanOriginLocation")
   routeStockFor         DeliveryRoute?             @relation("RouteStockLocation")
   payments              Payment[]
   saleDocuments         SaleDocument[]
@@ -823,6 +834,16 @@ model DeliveryRoute {
   routeStockLocationId String                 @unique
   startedAt            DateTime?
   completedAt          DateTime?
+  optimizationStatus   RouteOptimizationStatus @default(NOT_OPTIMIZED)
+  geometry             Json?
+  routeGeometry        Unsupported("geometry(LineString, 4326)")?
+  distanceMeters       Int?
+  durationSeconds      Int?
+  optimizedAt          DateTime?
+  routingProfile       String?
+  routingDataVersion   String?
+  creationIdempotencyKey String?              @unique
+  creationPayloadHash  String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   driver               User                   @relation("DeliveryRouteDriver", fields: [driverId], references: [id])
@@ -834,8 +855,40 @@ model DeliveryRoute {
   payments             Payment[]
   deliveryOrders       DeliveryOrder[]
   settlement           RouteSettlement?
+  sourcePlans          DeliveryRoutePlanDraft[] @relation("RoutePlanSourceRoute")
+  consumedPlans        DeliveryRoutePlanDraft[] @relation("RoutePlanConsumedRoute")
 
   @@index([driverId, scheduledDate, status])
+}
+
+model DeliveryRoutePlanDraft {
+  id                 String              @id @default(cuid())
+  createdByUserId    String
+  sourceRouteId      String?
+  consumedByRouteId  String?
+  driverId           String
+  scheduledDate      DateTime            @db.Date
+  originLocationId   String
+  orderedStops       Json
+  geometry           Json
+  distanceMeters     Int
+  durationSeconds    Int
+  routingProfile     String
+  routingDataVersion String
+  requestHash        String
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  createdBy          User                @relation("RoutePlanCreatedBy", fields: [createdByUserId], references: [id])
+  driver             User                @relation("RoutePlanDriver", fields: [driverId], references: [id])
+  sourceRoute        DeliveryRoute?      @relation("RoutePlanSourceRoute", fields: [sourceRouteId], references: [id])
+  consumedByRoute    DeliveryRoute?      @relation("RoutePlanConsumedRoute", fields: [consumedByRouteId], references: [id])
+  originLocation     OperationalLocation @relation("RoutePlanOriginLocation", fields: [originLocationId], references: [id])
+
+  @@index([createdByUserId, expiresAt, consumedAt])
+  @@index([sourceRouteId])
+  @@index([consumedByRouteId])
+  @@index([driverId, scheduledDate])
 }
 
 model DeliveryOrder {
@@ -845,6 +898,14 @@ model DeliveryOrder {
   accountReceivableId   String?
   status                DeliveryOrderStatus @default(PENDING)
   deliveryAddress       String
+  latitude              Decimal?            @db.Decimal(9, 6)
+  longitude             Decimal?            @db.Decimal(9, 6)
+  locationPoint         Unsupported("geometry(Point, 4326)")?
+  geocoderOsmType       String?
+  geocoderOsmId         String?
+  stopSequence          Int?
+  legDistanceMeters     Int?
+  legDurationSeconds    Int?
   deliveredAt           DateTime?
   notes                 String?
   collectedByUserId     String?
@@ -858,6 +919,8 @@ model DeliveryOrder {
   collectedBy           User?               @relation("DeliveryOrderCollectedBy", fields: [collectedByUserId], references: [id])
   deliveredBy           User?               @relation("DeliveryOrderDeliveredBy", fields: [deliveredByUserId], references: [id])
   evidence              DeliveryEvidence[]
+
+  @@unique([routeId, stopSequence])
 }
 
 model DeliveryEvidence {

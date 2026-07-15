@@ -272,6 +272,34 @@ describe('Prisma seed contract', () => {
       ]),
     );
 
+    expect(initialSeedLocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'VER',
+          latitude: 19.183,
+          longitude: -96.134,
+        }),
+        expect.objectContaining({
+          code: 'BDR',
+          latitude: 19.1065,
+          longitude: -96.108,
+        }),
+        expect.objectContaining({
+          code: 'ALV',
+          latitude: 18.7735,
+          longitude: -95.7615,
+        }),
+      ]),
+    );
+    initialSeedLocations.forEach((location) => {
+      expect(Number.isFinite(location.latitude)).toBe(true);
+      expect(Number.isFinite(location.longitude)).toBe(true);
+      expect(location.latitude).toBeGreaterThanOrEqual(-90);
+      expect(location.latitude).toBeLessThanOrEqual(90);
+      expect(location.longitude).toBeGreaterThanOrEqual(-180);
+      expect(location.longitude).toBeLessThanOrEqual(180);
+    });
+
     expect(initialCategories.map((category) => category.name)).toEqual([
       'Base chicken products',
       'Cuts',

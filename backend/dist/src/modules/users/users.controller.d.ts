@@ -9,20 +9,20 @@ export declare class UsersController {
         message: string;
         data: {
             items: {
-                email: string;
                 id: string;
+                name: string;
+                createdAt: Date;
+                updatedAt: Date;
+                isActive: boolean;
+                email: string;
                 controlNumber: string;
                 phone: string;
-                name: string;
                 roleId: string;
                 operationalLocationId: string;
-                isActive: boolean;
                 mustChangePassword: boolean;
                 deactivatedAt: Date | null;
                 deactivatedByUserId: string | null;
                 deactivationReason: string | null;
-                createdAt: Date;
-                updatedAt: Date;
                 role: {
                     id: string;
                     name: string;
@@ -45,20 +45,20 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
-            email: string;
             id: string;
+            name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            isActive: boolean;
+            email: string;
             controlNumber: string;
             phone: string;
-            name: string;
             roleId: string;
             operationalLocationId: string;
-            isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
-            createdAt: Date;
-            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -77,20 +77,20 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
-            email: string;
             id: string;
+            name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            isActive: boolean;
+            email: string;
             controlNumber: string;
             phone: string;
-            name: string;
             roleId: string;
             operationalLocationId: string;
-            isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
-            createdAt: Date;
-            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -111,20 +111,20 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
-            email: string;
             id: string;
+            name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            isActive: boolean;
+            email: string;
             controlNumber: string;
             phone: string;
-            name: string;
             roleId: string;
             operationalLocationId: string;
-            isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
-            createdAt: Date;
-            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -143,20 +143,20 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
-            email: string;
             id: string;
+            name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            isActive: boolean;
+            email: string;
             controlNumber: string;
             phone: string;
-            name: string;
             roleId: string;
             operationalLocationId: string;
-            isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
-            createdAt: Date;
-            updatedAt: Date;
             role: {
                 id: string;
                 name: string;
@@ -175,20 +175,20 @@ export declare class UsersController {
         success: boolean;
         message: string;
         data: {
-            email: string;
             id: string;
+            name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            isActive: boolean;
+            email: string;
             controlNumber: string;
             phone: string;
-            name: string;
             roleId: string;
             operationalLocationId: string;
-            isActive: boolean;
             mustChangePassword: boolean;
             deactivatedAt: Date | null;
             deactivatedByUserId: string | null;
             deactivationReason: string | null;
-            createdAt: Date;
-            updatedAt: Date;
             role: {
                 id: string;
                 name: string;

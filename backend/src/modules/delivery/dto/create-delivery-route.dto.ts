@@ -35,6 +35,11 @@ export class CreateDeliveryRouteDto {
   @IsString()
   routeStockLocationId?: string;
 
+  @IsOptional()
+  @IsString()
+  routePlanId?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateDeliveryRouteOrderDto)
@@ -43,6 +48,11 @@ export class CreateDeliveryRouteDto {
 
 
 export class AssignDeliveryRouteOrdersDto {
+  @IsOptional()
+  @IsString()
+  routePlanId?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateDeliveryRouteOrderDto)

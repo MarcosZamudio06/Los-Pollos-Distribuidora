@@ -73,7 +73,7 @@ let LocationsService = class LocationsService {
         const location = (await this.prisma.operationalLocation
             .update({
             where: { id: currentLocation.id },
-            data,
+            data: data,
         })
             .catch((error) => {
             this.throwDuplicateCodeConflict(error);
@@ -308,6 +308,8 @@ let LocationsService = class LocationsService {
             type: location.type,
             parentId: location.parentId,
             address: location.address,
+            latitude: location.latitude == null ? null : Number(location.latitude.toString()),
+            longitude: location.longitude == null ? null : Number(location.longitude.toString()),
             isActive: location.isActive,
             createdAt: location.createdAt,
             updatedAt: location.updatedAt,

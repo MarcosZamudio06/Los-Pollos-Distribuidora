@@ -14,6 +14,13 @@ import type {
   RouteSettlementDetail,
   RouteSettlementListItem,
   UpdateDeliveryOrderStatusPayload,
+  CreateDeliveryRoutePlanPayload,
+  DeliveryRoutePlan,
+  EligibleDeliverySale,
+  GeocodingResult,
+  PlannerDriver,
+  PlannerLocation,
+  RoutingTechnicalStatus,
 } from './types'
 
 type ApiEnvelope<T> = { data?: T; message?: string; success?: boolean }
@@ -61,6 +68,38 @@ function withParams(path: string, filters: Record<string, string | number | bool
 }
 
 export const deliveryService = {
+  async getRoutingTechnicalStatus(accessToken?: string | null) {
+    const response = await apiClient.get<ItemEnvelope<RoutingTechnicalStatus>>('/delivery-routing/technical-status', { headers: authHeaders(accessToken) })
+    return unwrapItem(response)
+  },
+  async listEligibleSales(filters: { page?: number; limit?: number; search?: string; originLocationId?: string }, accessToken?: string | null) {
+    const response = await apiClient.get<ListEnvelope<EligibleDeliverySale>>(withParams('/delivery-route-planning/eligible-sales', filters), { headers: authHeaders(accessToken) })
+    return unwrapList(response)
+  },
+  async searchAddresses(filters: { q: string; latitude?: number; longitude?: number; limit?: number }, accessToken?: string | null) {
+    const response = await apiClient.get<ListEnvelope<GeocodingResult>>(withParams('/geocoding/search', filters), { headers: authHeaders(accessToken) })
+    return unwrapList(response)
+  },
+  async reverseAddress(latitude: number, longitude: number, accessToken?: string | null) {
+    const response = await apiClient.get<ItemEnvelope<GeocodingResult>>(withParams('/geocoding/reverse', { latitude, longitude }), { headers: authHeaders(accessToken) })
+    return unwrapItem(response)
+  },
+  async createRoutePlan(payload: CreateDeliveryRoutePlanPayload, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<DeliveryRoutePlan>, CreateDeliveryRoutePlanPayload>('/delivery-route-plans', { body: payload, headers: authHeaders(accessToken) })
+    return unwrapItem(response)
+  },
+  async createOptimizedRoute(payload: Omit<CreateDeliveryRoutePayload, 'orders'> & { routePlanId: string }, idempotencyKey: string, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<DeliveryRouteDetail>, typeof payload>('/delivery-routes', { body: payload, headers: authHeaders(accessToken, idempotencyKey) })
+    return unwrapItem(response)
+  },
+  async listPlannerDrivers(accessToken?: string | null) {
+    const response = await apiClient.get<ApiEnvelope<{ items: PlannerDriver[] }>>('/users?status=active&limit=100', { headers: authHeaders(accessToken) })
+    return (response.data?.items ?? []).filter((user) => user.isActive && user.role?.name === 'DRIVER')
+  },
+  async listPlannerLocations(accessToken?: string | null) {
+    const response = await apiClient.get<ListEnvelope<PlannerLocation>>('/locations?isActive=true&limit=100', { headers: authHeaders(accessToken) })
+    return unwrapList(response).items.filter((location) => location.isActive !== false && location.type !== 'ROUTE_STOCK')
+  },
   async listRoutes(filters: DeliveryRoutesFilters, accessToken?: string | null) {
     const response = await apiClient.get<ListEnvelope<DeliveryRouteListItem>>(withParams('/delivery-routes', filters), {
       headers: authHeaders(accessToken),

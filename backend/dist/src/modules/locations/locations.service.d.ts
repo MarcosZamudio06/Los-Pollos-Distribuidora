@@ -8,11 +8,20 @@ type LocationRecord = {
     type: OperationalLocationType;
     parentId: string | null;
     address: string | null;
+    latitude: {
+        toString(): string;
+    } | number | string | null;
+    longitude: {
+        toString(): string;
+    } | number | string | null;
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
 };
-type LocationResponse = LocationRecord;
+type LocationResponse = Omit<LocationRecord, 'latitude' | 'longitude'> & {
+    latitude: number | null;
+    longitude: number | null;
+};
 type LocationListResponse = {
     items: LocationResponse[];
 };

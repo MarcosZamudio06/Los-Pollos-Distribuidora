@@ -25,16 +25,19 @@ type LocationRecord = {
   type: OperationalLocationType;
   parentId: string | null;
   address: string | null;
+  latitude: { toString(): string } | number | string | null;
+  longitude: { toString(): string } | number | string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
 
-type LocationResponse = LocationRecord;
+type LocationResponse = Omit<LocationRecord, 'latitude' | 'longitude'> & { latitude: number | null; longitude: number | null };
 
 type LocationListResponse = { items: LocationResponse[] };
 
 type LocationMutationDto = CreateLocationDto | UpdateLocationDto;
+type LocationMutationData = Pick<LocationRecord, 'name' | 'code' | 'type' | 'parentId' | 'address' | 'isActive'>;
 
 @Injectable()
 export class LocationsService {
@@ -109,7 +112,7 @@ export class LocationsService {
     const location = (await this.prisma.operationalLocation
       .update({
         where: { id: currentLocation.id },
-        data,
+        data: data as Prisma.OperationalLocationUncheckedUpdateInput,
       })
       .catch((error: unknown) => {
         this.throwDuplicateCodeConflict(error);
@@ -369,7 +372,7 @@ export class LocationsService {
   private normalizeMutationData(
     dto: LocationMutationDto,
     options: { forCreate?: boolean } = {},
-  ): Partial<LocationResponse> {
+  ): Partial<LocationMutationData> {
     const name = dto.name !== undefined ? dto.name.trim() : undefined;
 
     if (name !== undefined && name.length === 0) {
@@ -417,6 +420,8 @@ export class LocationsService {
       type: location.type,
       parentId: location.parentId,
       address: location.address,
+      latitude: location.latitude == null ? null : Number(location.latitude.toString()),
+      longitude: location.longitude == null ? null : Number(location.longitude.toString()),
       isActive: location.isActive,
       createdAt: location.createdAt,
       updatedAt: location.updatedAt,

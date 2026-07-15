@@ -72,6 +72,8 @@ exports.initialSeedLocations = [
         code: 'VER',
         type: 'BRANCH',
         address: 'Sucursal Veracruz',
+        latitude: 19.183,
+        longitude: -96.134,
         isActive: true,
     },
     {
@@ -79,6 +81,8 @@ exports.initialSeedLocations = [
         code: 'BDR',
         type: 'BRANCH',
         address: 'Sucursal Boca del Río',
+        latitude: 19.1065,
+        longitude: -96.108,
         isActive: true,
     },
     {
@@ -86,6 +90,8 @@ exports.initialSeedLocations = [
         code: 'ALV',
         type: 'BRANCH',
         address: 'Sucursal Alvarado',
+        latitude: 18.7735,
+        longitude: -95.7615,
         isActive: true,
     },
 ];

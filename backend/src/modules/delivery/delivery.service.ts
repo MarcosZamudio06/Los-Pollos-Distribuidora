@@ -11,6 +11,7 @@ import {
   PaymentStatus,
   Prisma,
   RouteSettlementStatus,
+  RouteOptimizationStatus,
   SaleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -43,7 +44,12 @@ type DeliveryOrderRecord = Record<string, unknown> & {
   collectedByUserId?: string | null;
   collectionPass?: number | null;
   notes?: string | null;
-  sale?: { id: string; saleNumber: string } | null;
+  latitude?: DecimalLike;
+  longitude?: DecimalLike;
+  stopSequence?: number | null;
+  legDistanceMeters?: number | null;
+  legDurationSeconds?: number | null;
+  sale?: { id: string; saleNumber: string; customer?: { name: string } | null } | null;
   accountReceivable?: { id: string; outstandingAmount?: DecimalLike } | null;
   evidence?: Array<{ type: string }>;
   route?: DeliveryRouteRecord | null;
@@ -139,6 +145,27 @@ type DeliveryRouteRecord = Record<string, unknown> & {
   deliveryOrders?: DeliveryOrderRecord[];
   settlement?: { id: string } | null;
   payments?: PaymentSummaryRecord[];
+  optimizationStatus?: RouteOptimizationStatus;
+  geometry?: Prisma.JsonValue | null;
+  distanceMeters?: number | null;
+  durationSeconds?: number | null;
+  optimizedAt?: Date | null;
+  routingProfile?: string | null;
+  routingDataVersion?: string | null;
+  creationPayloadHash?: string | null;
+};
+
+type PlannedStop = {
+  saleId: string;
+  accountReceivableId?: string | null;
+  deliveryAddress: string;
+  latitude: number;
+  longitude: number;
+  geocoderOsmType?: string | null;
+  geocoderOsmId?: string | null;
+  sequence: number;
+  legDistanceMeters: number;
+  legDurationSeconds: number;
 };
 
 const FINAL_ORDER_STATUSES = new Set<DeliveryOrderStatus>([
@@ -192,9 +219,9 @@ export class DeliveryService {
         settlement: { select: { id: true } },
         payments: { where: { status: PaymentStatus.APPLIED } },
         deliveryOrders: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: [{ stopSequence: 'asc' }, { createdAt: 'asc' }],
           include: {
-            sale: { select: { id: true, saleNumber: true } },
+            sale: { select: { id: true, saleNumber: true, customer: { select: { name: true } } } },
             accountReceivable: { select: { id: true, outstandingAmount: true } },
             evidence: { select: { type: true } },
           },
@@ -209,11 +236,15 @@ export class DeliveryService {
     return this.toRouteDetail(route);
   }
 
-  async createRoute(dto: CreateDeliveryRouteDto, currentUser: Actor) {
+  async createRoute(dto: CreateDeliveryRouteDto, currentUser: Actor, idempotencyKey?: string) {
     if (currentUser.role !== 'ADMIN') {
       throw new NotFoundException('Delivery route not found');
     }
 
+    if (dto.routePlanId) {
+      if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key is required for optimized route creation');
+      return this.createOptimizedRoute(dto, currentUser, idempotencyKey.trim());
+    }
     if (!dto.orders?.length) {
       throw new BadRequestException('At least one delivery order is required');
     }
@@ -265,11 +296,66 @@ export class DeliveryService {
     });
   }
 
+  private async createOptimizedRoute(dto: CreateDeliveryRouteDto, currentUser: Actor, idempotencyKey: string) {
+    const payloadHash = this.hashPayload({ ...dto, orders: undefined });
+    return this.prisma.$transaction(async (tx) => {
+      const existing = (await tx.deliveryRoute.findFirst({
+        where: { creationIdempotencyKey: idempotencyKey },
+        include: this.routeDetailInclude(),
+      } as Prisma.DeliveryRouteFindFirstArgs)) as DeliveryRouteRecord | null;
+      if (existing) {
+        if (existing.creationPayloadHash !== payloadHash) throw new ConflictException('Idempotency-Key was already used with a different payload');
+        return this.toRouteDetail(existing);
+      }
+
+      const plan = await tx.deliveryRoutePlanDraft.findFirst({ where: { id: dto.routePlanId, createdByUserId: currentUser.id } });
+      if (!plan) throw new NotFoundException('Delivery route plan not found');
+      if (plan.consumedAt || plan.expiresAt <= new Date()) throw new ConflictException('Delivery route plan is expired or already consumed');
+      if (plan.sourceRouteId) throw new BadRequestException('A reoptimization plan cannot create a new route');
+      if (plan.driverId !== dto.driverId || plan.originLocationId !== dto.originLocationId || plan.scheduledDate.toISOString().slice(0, 10) !== dto.scheduledDate.slice(0, 10)) {
+        throw new ConflictException('Delivery route plan does not match the route context');
+      }
+      await this.assertDriver(tx, dto.driverId);
+      const origin = await tx.operationalLocation.findFirst({ where: { id: dto.originLocationId, isActive: true, latitude: { not: null }, longitude: { not: null } }, select: { id: true } });
+      if (!origin) throw new ConflictException('Route origin is no longer active or geocoded');
+      const stops = plan.orderedStops as unknown as PlannedStop[];
+      if (!Array.isArray(stops) || !stops.length) throw new ConflictException('Delivery route plan has no stops');
+      const orders = stops.map((stop) => ({ saleId: stop.saleId, accountReceivableId: stop.accountReceivableId ?? undefined, deliveryAddress: stop.deliveryAddress }));
+      await this.assertAssignableSales(tx, orders);
+      const routeStockLocationId = dto.routeStockLocationId
+        ? await this.resolveProvidedRouteStockLocation(tx, dto.routeStockLocationId)
+        : await this.createRouteStockLocation(tx, dto.name);
+      const now = new Date();
+      const route = (await tx.deliveryRoute.create({
+        data: {
+          name: dto.name.trim(), driverId: dto.driverId, scheduledDate: new Date(dto.scheduledDate),
+          originLocationId: dto.originLocationId, routeStockLocationId,
+          optimizationStatus: RouteOptimizationStatus.OPTIMIZED, geometry: plan.geometry,
+          distanceMeters: plan.distanceMeters, durationSeconds: plan.durationSeconds, optimizedAt: now,
+          routingProfile: plan.routingProfile, routingDataVersion: plan.routingDataVersion,
+          creationIdempotencyKey: idempotencyKey, creationPayloadHash: payloadHash,
+          deliveryOrders: { create: stops.map((stop) => ({
+            saleId: stop.saleId, accountReceivableId: stop.accountReceivableId ?? null,
+            deliveryAddress: stop.deliveryAddress.trim(), latitude: stop.latitude, longitude: stop.longitude,
+            geocoderOsmType: stop.geocoderOsmType ?? null, geocoderOsmId: stop.geocoderOsmId ?? null,
+            stopSequence: stop.sequence, legDistanceMeters: stop.legDistanceMeters, legDurationSeconds: stop.legDurationSeconds,
+          })) },
+        },
+        include: this.routeDetailInclude(),
+      } as Prisma.DeliveryRouteCreateArgs)) as DeliveryRouteRecord;
+      await tx.sale.updateMany({ where: { id: { in: stops.map((stop) => stop.saleId) }, routeId: null }, data: { routeId: route.id } });
+      const consumed = await tx.deliveryRoutePlanDraft.updateMany({ where: { id: plan.id, consumedAt: null, expiresAt: { gt: now } }, data: { consumedAt: now, consumedByRouteId: route.id } });
+      if (consumed.count !== 1) throw new ConflictException('Delivery route plan was consumed concurrently');
+      return this.toRouteDetail(route);
+    });
+  }
+
   async assignOrdersToRoute(id: string, dto: AssignDeliveryRouteOrdersDto, currentUser: Actor) {
     if (currentUser.role !== 'ADMIN') {
       throw new NotFoundException('Delivery route not found');
     }
 
+    if (dto.routePlanId) return this.assignOptimizedPlanToRoute(id, dto.routePlanId, currentUser);
     if (!dto.orders?.length) {
       throw new BadRequestException('At least one delivery order is required');
     }
@@ -291,6 +377,9 @@ export class DeliveryService {
       }
       if (route.settlement?.id) {
         throw new BadRequestException('Cannot assign orders after route settlement has been opened');
+      }
+      if (route.optimizationStatus === RouteOptimizationStatus.OPTIMIZED) {
+        throw new BadRequestException('Optimized routes require a combined reoptimization plan');
       }
 
       this.assertNoDuplicateRouteSales(route, dto.orders);
@@ -327,6 +416,54 @@ export class DeliveryService {
         data: { routeId: route.id },
       });
 
+      return this.toRouteDetail(updated);
+    });
+  }
+
+  private async assignOptimizedPlanToRoute(id: string, routePlanId: string, currentUser: Actor) {
+    return this.prisma.$transaction(async (tx) => {
+      const route = (await tx.deliveryRoute.findFirst({
+        where: this.buildRouteAccessWhere(id, currentUser),
+        include: { settlement: { select: { id: true } }, deliveryOrders: true },
+      } as Prisma.DeliveryRouteFindFirstArgs)) as DeliveryRouteRecord | null;
+      if (!route) throw new NotFoundException('Delivery route not found');
+      if (route.optimizationStatus !== RouteOptimizationStatus.OPTIMIZED) throw new BadRequestException('Historical routes must use the legacy orders payload');
+      if (route.status !== DeliveryRouteStatus.PENDING || route.settlement?.id) throw new ConflictException('The route can no longer be reoptimized');
+      const plan = await tx.deliveryRoutePlanDraft.findFirst({ where: { id: routePlanId, sourceRouteId: route.id, createdByUserId: currentUser.id } });
+      if (!plan) throw new NotFoundException('Delivery route plan not found');
+      const now = new Date();
+      if (plan.consumedAt || plan.expiresAt <= now) throw new ConflictException('Delivery route plan is expired or already consumed');
+      if (plan.driverId !== route.driverId || plan.originLocationId !== route.originLocationId || plan.scheduledDate.toISOString().slice(0, 10) !== route.scheduledDate.toISOString().slice(0, 10)) throw new ConflictException('Delivery route plan does not match the route context');
+      const stops = plan.orderedStops as unknown as PlannedStop[];
+      const existingBySale = new Map((route.deliveryOrders ?? []).map((order) => [order.saleId, order]));
+      const plannedIds = new Set(stops.map((stop) => stop.saleId));
+      const missing = [...existingBySale.keys()].filter((saleId) => !plannedIds.has(saleId));
+      if (missing.length) throw new ConflictException('The reoptimization plan omits existing route stops');
+      await this.assertAssignableSales(tx, stops.map((stop) => ({ saleId: stop.saleId, accountReceivableId: stop.accountReceivableId ?? undefined, deliveryAddress: stop.deliveryAddress })), route.id);
+
+      await tx.deliveryOrder.updateMany({ where: { routeId: route.id }, data: { stopSequence: null } });
+      for (const stop of stops.filter((candidate) => existingBySale.has(candidate.saleId))) {
+        await tx.deliveryOrder.update({ where: { saleId: stop.saleId }, data: {
+          accountReceivableId: stop.accountReceivableId ?? null, deliveryAddress: stop.deliveryAddress.trim(),
+          latitude: stop.latitude, longitude: stop.longitude, geocoderOsmType: stop.geocoderOsmType ?? null,
+          geocoderOsmId: stop.geocoderOsmId ?? null, stopSequence: stop.sequence,
+          legDistanceMeters: stop.legDistanceMeters, legDurationSeconds: stop.legDurationSeconds,
+        } });
+      }
+      const newStops = stops.filter((stop) => !existingBySale.has(stop.saleId));
+      const updated = (await tx.deliveryRoute.update({ where: { id: route.id }, data: {
+        geometry: plan.geometry, distanceMeters: plan.distanceMeters, durationSeconds: plan.durationSeconds,
+        optimizedAt: now, routingProfile: plan.routingProfile, routingDataVersion: plan.routingDataVersion,
+        deliveryOrders: { create: newStops.map((stop) => ({
+          saleId: stop.saleId, accountReceivableId: stop.accountReceivableId ?? null, deliveryAddress: stop.deliveryAddress.trim(),
+          latitude: stop.latitude, longitude: stop.longitude, geocoderOsmType: stop.geocoderOsmType ?? null,
+          geocoderOsmId: stop.geocoderOsmId ?? null, stopSequence: stop.sequence,
+          legDistanceMeters: stop.legDistanceMeters, legDurationSeconds: stop.legDurationSeconds,
+        })) },
+      }, include: this.routeDetailInclude() } as Prisma.DeliveryRouteUpdateArgs)) as DeliveryRouteRecord;
+      if (newStops.length) await tx.sale.updateMany({ where: { id: { in: newStops.map((stop) => stop.saleId) }, routeId: null }, data: { routeId: route.id } });
+      const consumed = await tx.deliveryRoutePlanDraft.updateMany({ where: { id: plan.id, consumedAt: null, expiresAt: { gt: now } }, data: { consumedAt: now, consumedByRouteId: route.id } });
+      if (consumed.count !== 1) throw new ConflictException('Delivery route plan was consumed concurrently');
       return this.toRouteDetail(updated);
     });
   }
@@ -492,7 +629,7 @@ export class DeliveryService {
         },
         include: {
           route: true,
-          sale: { select: { id: true, saleNumber: true } },
+          sale: { select: { id: true, saleNumber: true, customer: { select: { name: true } } } },
           accountReceivable: { select: { id: true, outstandingAmount: true } },
           evidence: { select: { type: true } },
         },
@@ -530,7 +667,7 @@ export class DeliveryService {
         },
         include: {
           route: true,
-          sale: { select: { id: true, saleNumber: true } },
+          sale: { select: { id: true, saleNumber: true, customer: { select: { name: true } } } },
           accountReceivable: { select: { id: true, outstandingAmount: true } },
           evidence: { select: { type: true } },
         },
@@ -758,6 +895,22 @@ export class DeliveryService {
     };
   }
 
+  private routeDetailInclude() {
+    return {
+      driver: { select: { id: true, name: true } },
+      settlement: { select: { id: true } },
+      payments: { where: { status: PaymentStatus.APPLIED } },
+      deliveryOrders: {
+        orderBy: [{ stopSequence: 'asc' as const }, { createdAt: 'asc' as const }],
+        include: {
+          sale: { select: { id: true, saleNumber: true, customer: { select: { name: true } } } },
+          accountReceivable: { select: { id: true, outstandingAmount: true } },
+          evidence: { select: { type: true } },
+        },
+      },
+    };
+  }
+
   private async resolveProvidedRouteStockLocation(tx: Prisma.TransactionClient, routeStockLocationId: string) {
     const location = await tx.operationalLocation.findFirst({
       where: { id: routeStockLocationId, type: OperationalLocationType.ROUTE_STOCK, isActive: true },
@@ -866,6 +1019,13 @@ export class DeliveryService {
       ordersCount: orders.length,
       pendingOrdersCount: orders.filter((order) => !FINAL_ORDER_STATUSES.has(order.status)).length,
       routeSettlementId: route.settlement?.id ?? null,
+      optimizationStatus: route.optimizationStatus ?? RouteOptimizationStatus.NOT_OPTIMIZED,
+      mapAvailable: route.optimizationStatus === RouteOptimizationStatus.OPTIMIZED && Boolean(route.geometry),
+      distanceMeters: route.distanceMeters ?? null,
+      durationSeconds: route.durationSeconds ?? null,
+      optimizedAt: route.optimizedAt?.toISOString() ?? null,
+      routingProfile: route.routingProfile ?? null,
+      routingDataVersion: route.routingDataVersion ?? null,
       createdAt: route.createdAt.toISOString(),
     };
   }
@@ -873,6 +1033,7 @@ export class DeliveryService {
   private toRouteDetail(route: DeliveryRouteRecord) {
     return {
       ...this.toRouteListItem(route),
+      geometry: route.geometry ?? null,
       orders: (route.deliveryOrders ?? []).map((order) => this.toOrderResponse(order)),
       evidenceSummary: (route.deliveryOrders ?? []).flatMap((order) =>
         (order.evidence ?? []).map((evidence) => ({ deliveryOrderId: order.id, type: evidence.type })),
@@ -886,9 +1047,15 @@ export class DeliveryService {
       id: order.id,
       saleId: order.saleId,
       saleNumber: order.sale?.saleNumber ?? null,
+      customerName: order.sale?.customer?.name ?? null,
       accountReceivableId: order.accountReceivableId ?? null,
       status: order.status,
       deliveryAddress: order.deliveryAddress,
+      latitude: order.latitude == null ? null : this.toNumber(order.latitude),
+      longitude: order.longitude == null ? null : this.toNumber(order.longitude),
+      stopSequence: order.stopSequence ?? null,
+      legDistanceMeters: order.legDistanceMeters ?? null,
+      legDurationSeconds: order.legDurationSeconds ?? null,
       deliveredAt: order.deliveredAt?.toISOString() ?? null,
       deliveredByUserId: order.deliveredByUserId ?? null,
       collectedByUserId: order.collectedByUserId ?? null,

@@ -13,6 +13,7 @@ export const ROUTE_ACCESS_ROLES = {
   deliveryRouteDetail: ['ADMIN', 'COLLECTIONS', 'DRIVER'],
   deliveryRouteEvidence: ['ADMIN', 'COLLECTIONS', 'DRIVER'],
   deliveryRoutes: ['ADMIN', 'COLLECTIONS', 'WAREHOUSE'],
+  deliveryRoutePlanner: ['ADMIN'],
   myRoutes: ['DRIVER'],
   purchaseDetail: ['ADMIN', 'WAREHOUSE'],
   purchaseNew: ['ADMIN', 'WAREHOUSE'],

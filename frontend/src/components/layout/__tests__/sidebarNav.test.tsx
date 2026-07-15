@@ -45,6 +45,7 @@ describe('role navigation', () => {
       '/purchases',
       '/purchases/suppliers',
       '/purchases/new',
+      '/delivery-routes/new',
       '/delivery-routes',
       '/reports',
       '/admin/employees',
@@ -80,6 +81,10 @@ describe('role navigation', () => {
       '/reports',
     ])
     expect(getSidebarNavForRole('DRIVER').map((item) => item.to)).toEqual(['/', '/my-routes', '/reports'])
+    expect(getSidebarNavForRole('DRIVER').find((item) => item.to === '/my-routes')).toEqual(expect.objectContaining({
+      label: 'Mi ruta en mapa',
+      description: 'Secuencia y entregas asignadas',
+    }))
     expect(getSidebarNavForRole('USER').map((item) => item.to)).toEqual(['/'])
   })
 
@@ -88,6 +93,7 @@ describe('role navigation', () => {
     expect(getActiveSidebarItemKey('/purchases/purchase-1')).toBe('purchases')
     expect(getActiveSidebarItemKey('/purchases/suppliers')).toBe('purchase-suppliers')
     expect(getActiveSidebarItemKey('/delivery-routes/route-1/evidence')).toBe('delivery-routes')
+    expect(getActiveSidebarItemKey('/delivery-routes/new')).toBe('route-planner')
     expect(getActiveSidebarItemKey('/route-settlements/settlement-1')).toBe('delivery-routes')
   })
 

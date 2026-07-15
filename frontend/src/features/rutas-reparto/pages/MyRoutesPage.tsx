@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { ApiClientError } from '../../../lib/api'
-import { BadgeDollarSign, CheckCircle2, ClipboardList, Route, Truck } from 'lucide-react'
+import { BadgeDollarSign, CheckCircle2, ClipboardList, Clock3, MapPin, Route, Ruler, Truck } from 'lucide-react'
 import { DeliveryEvidenceCapture } from '../components/DeliveryEvidenceCapture'
 import { DeliveryIncidentDialog } from '../components/DeliveryIncidentDialog'
 import { DeliveryOrderCard } from '../components/DeliveryOrderCard'
+import { DriverRouteMap } from '../components/DriverRouteMap'
 import { RouteCollectionDialog, RouteSecondPassCollectionDialog } from '../components/RouteCollectionDialog'
 import { Card, PageFrame, PageShell, RouteHero, RouteStatusBadge, StatusMessage } from '../components/RouteUi'
 import { UpdateDeliveryStatusDialog } from '../components/UpdateDeliveryStatusDialog'
@@ -17,6 +18,17 @@ function routeSortValue(route: DeliveryRouteListItem) {
 
 function isUnauthorizedRemoteError(error: unknown) {
   return error instanceof ApiClientError && (error.statusCode === 401 || error.statusCode === 403)
+}
+
+function distanceLabel(meters?: number | null) {
+  if (meters == null) return 'Sin estimación'
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`
+}
+
+function durationLabel(seconds?: number | null) {
+  if (seconds == null) return 'Sin estimación'
+  const minutes = Math.round(seconds / 60)
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`
 }
 
 export function MyRoutesPage() {
@@ -113,20 +125,46 @@ export function MyRoutesPage() {
                     </div>
                   </Card>
 
+                  {detail.mapAvailable && detail.geometry ? (
+                    <Card className="grid gap-4 p-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]"><MapPin className="h-4 w-4" />Recorrido aprobado</p>
+                          <h3 className="mt-1 text-xl font-black tracking-[-0.04em]">Secuencia de reparto</h3>
+                          <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Este trazado es el mismo aprobado por administración. No utiliza la ubicación del dispositivo ni recalcula desvíos.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-sm font-black">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-[rgba(47,111,115,0.10)] px-3 py-2 text-[var(--erp-info)]"><Ruler className="h-4 w-4" />{distanceLabel(detail.distanceMeters)}</span>
+                          <span className="inline-flex items-center gap-2 rounded-full bg-[rgba(214,155,45,0.14)] px-3 py-2 text-[var(--erp-brand-gold-deep)]"><Clock3 className="h-4 w-4" />{durationLabel(detail.durationSeconds)}</span>
+                        </div>
+                      </div>
+                      <DriverRouteMap geometry={detail.geometry} orders={orders} routeName={detail.name} />
+                    </Card>
+                  ) : (
+                    <StatusMessage tone="empty">Esta ruta histórica no tiene un trazado disponible. Consulta la secuencia textual de entregas.</StatusMessage>
+                  )}
+
                   {orders.length === 0 ? <StatusMessage tone="empty">Esta ruta no muestra pedidos asignados.</StatusMessage> : (
                     <div className="grid gap-4">
                       {orders.map((order) => (
-                        <DeliveryOrderCard
-                          evidence={detail.evidenceSummary ?? []}
-                          key={order.id}
-                          onCaptureEvidence={setEvidenceOrder}
-                          onCollect={setCollectionOrder}
-                          onIncident={setIncidentOrder}
-                          onSecondPassCollect={setSecondPassCollectionOrder}
-                          onUpdateStatus={setStatusOrder}
-                          order={order}
-                          routeSettlementId={detail.routeSettlementId}
-                        />
+                        <div className="grid gap-2" key={order.id}>
+                          <div className="flex flex-wrap items-center gap-2 px-1 text-xs font-black uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+                            <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--erp-danger)] text-white">{order.stopSequence ?? '—'}</span>
+                            <span>{distanceLabel(order.legDistanceMeters)}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{durationLabel(order.legDurationSeconds)}</span>
+                          </div>
+                          <DeliveryOrderCard
+                            evidence={detail.evidenceSummary ?? []}
+                            onCaptureEvidence={setEvidenceOrder}
+                            onCollect={setCollectionOrder}
+                            onIncident={setIncidentOrder}
+                            onSecondPassCollect={setSecondPassCollectionOrder}
+                            onUpdateStatus={setStatusOrder}
+                            order={order}
+                            routeSettlementId={detail.routeSettlementId}
+                          />
+                        </div>
                       ))}
                     </div>
                   )}

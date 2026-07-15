@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, CalendarDays, CircleDollarSign, FileText, PackageCheck, Printer, ReceiptText, ShieldCheck, UserRound, WalletCards } from 'lucide-react'
+import { ArrowLeft, Ban, CalendarDays, CircleDollarSign, FileText, PackageCheck, Printer, ReceiptText, ShieldCheck, Truck, UserRound, WalletCards } from 'lucide-react'
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui'
 import { useAuth } from '../auth'
 import { TicketModal } from './components'
@@ -144,8 +144,9 @@ export function SaleDetailView({
 
         {sale.data && (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard icon={ShieldCheck} label="Estado" tone={saleStatusTone(sale.data.status)} value={saleStatusLabel(sale.data.status)} />
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <SummaryCard icon={ShieldCheck} label="Estado comercial" tone={saleStatusTone(sale.data.status)} value={saleStatusLabel(sale.data.status)} />
+              <SummaryCard icon={Truck} label="Asignación de ruta" tone={sale.data.routeId ? 'blue' : 'amber'} value={sale.data.routeId ? 'Ruta asignada' : 'Sin ruta asignada'} />
               <SummaryCard icon={WalletCards} label="Cobranza" tone={collectionStatusTone(sale.data.collectionStatus)} value={collectionStatusLabel(sale.data.collectionStatus)} />
               <SummaryCard icon={CircleDollarSign} label="Total" value={money(sale.data.total)} />
               <SummaryCard icon={CalendarDays} label="Fecha" value={dateTime(sale.data.createdAt)} />

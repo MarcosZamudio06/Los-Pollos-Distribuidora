@@ -93,7 +93,7 @@
   - Adaptar AssignOrdersModal: las rutas geoespaciales solo aceptarán nuevas entregas mediante un plan combinado y reoptimizado.
   - Gate: creación completa desde navegador, incluyendo una ruta de una parada y otra de varias paradas.
 
-  ### Fase 5 — Experiencia del repartidor
+  ### Fase 5 — Experiencia del repartidor — COMPLETED
 
   - Integrar en /my-routes el mapa de la ruta seleccionada, geometría persistida y marcadores numerados.
   - Mostrar secuencia operativa, dirección, cliente, estado, distancia y duración estimada.
@@ -102,7 +102,7 @@
   - No solicitar ubicación del dispositivo ni recalcular por desvíos en esta versión.
   - Gate: el repartidor ve exactamente la misma secuencia y trazado aprobados por ADMIN.
 
-  ### Fase 6 — Observabilidad, compatibilidad y despliegue
+  ### Fase 6 — Observabilidad, compatibilidad y despliegue — COMPLETED
 
   - Registrar latencia, timeout y resultado por proveedor sin escribir direcciones completas en logs.
   - Exponer estado técnico agregado para PostGIS, Photon, VROOM, OSRM y antigüedad del dataset.

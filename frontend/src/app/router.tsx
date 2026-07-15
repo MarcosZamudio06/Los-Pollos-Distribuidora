@@ -16,7 +16,7 @@ import { DashboardPage } from '../features/dashboard'
 import { ReportsPage } from '../features/reportes'
 import { ProductListPage } from '../features/inventario'
 import { EmployeesPage } from '../features/employees'
-import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RouteSettlementView } from '../features/rutas-reparto'
+import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RoutePlannerPage, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 
 export function AppRouter() {
@@ -127,6 +127,14 @@ export function AppRouter() {
               <RouteSettlementView />
             </RoleRoute>
           }
+        />
+        <Route
+          path="/delivery-routes/new"
+          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}><RoutePlannerPage /></RoleRoute>}
+        />
+        <Route
+          path="/delivery-routes/:routeId/reoptimize"
+          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}><RoutePlannerPage /></RoleRoute>}
         />
         <Route
           path="/delivery-routes/:routeId/evidence"

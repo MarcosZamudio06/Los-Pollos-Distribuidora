@@ -47,6 +47,30 @@ Datasets are stored under `.map-data/`, which is intentionally ignored by Git. D
 
 Refresh datasets by rerunning the preparation scripts during a maintenance window and restarting the affected service. The scripts retain the active dataset until the replacement has downloaded, validated, and finished preprocessing.
 
+## Production rollout order
+
+Deploy in this order so historical textual routes remain available throughout the rollout:
+
+1. Start PostGIS, Photon, OSRM, and VROOM and run `./scripts/maps/verify-stack.sh`.
+2. Apply the compatible database migration.
+3. Deploy the backend with `MAP_DATA_VERSION` and `MAP_DATA_PREPARED_AT`.
+4. Deploy the frontend only after the backend technical-status endpoint is healthy.
+5. Run `./scripts/maps/smoke-route.sh` before enabling route planning.
+
+The smoke test uses a controlled closed route through Veracruz, Boca del Rio, and Alvarado. It checks that OSRM returns road geometry, distance, and duration. It does not create application records.
+
+## Monthly renewal
+
+Run during a maintenance window:
+
+```bash
+./scripts/maps/refresh-monthly.sh
+```
+
+The refresh stages and validates replacement data before activation, recreates only the map services and backend, then executes health and controlled-route smoke checks. Persist the printed `MAP_DATA_VERSION` and `MAP_DATA_PREPARED_AT` values in the deployment configuration. Existing routes keep their original `routingDataVersion`; they are never rewritten during a dataset refresh.
+
+The ADMIN route control page reads `GET /api/delivery-routing/technical-status`. It reports PostGIS, Photon, VROOM, OSRM, dataset version, and dataset age without exposing internal service URLs.
+
 ## Boundaries
 
 - Dataset preparation is explicit and never runs during normal application startup.

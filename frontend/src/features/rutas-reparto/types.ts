@@ -40,6 +40,10 @@ export type DeliveryRouteListItem = {
   pendingOrdersCount?: number | string | null
   routeSettlementId?: string | null
   createdAt?: string | null
+  optimizationStatus?: 'NOT_OPTIMIZED' | 'OPTIMIZED' | string
+  mapAvailable?: boolean
+  distanceMeters?: number | null
+  durationSeconds?: number | null
 }
 
 export type DeliveryOrder = {
@@ -60,6 +64,11 @@ export type DeliveryOrder = {
   outstandingAmount?: number | string | null
   derivedCollectedAmount?: number | string | null
   expectedAmount?: number | string | null
+  latitude?: number | null
+  longitude?: number | null
+  stopSequence?: number | null
+  legDistanceMeters?: number | null
+  legDurationSeconds?: number | null
 }
 
 export type EvidenceSummaryItem = {
@@ -84,6 +93,7 @@ export type CollectionSummary = {
 }
 
 export type DeliveryRouteDetail = DeliveryRouteListItem & {
+  geometry?: GeoJsonLineString | null
   orders?: DeliveryOrder[]
   evidenceSummary?: EvidenceSummaryItem[]
   collectionsSummary?: CollectionSummary
@@ -101,12 +111,30 @@ export type CreateDeliveryRoutePayload = {
   scheduledDate: string
   originLocationId?: string
   routeStockLocationId?: string
-  orders: CreateDeliveryRouteOrderPayload[]
+  orders?: CreateDeliveryRouteOrderPayload[]
+  routePlanId?: string
 }
 
 export type AssignDeliveryRouteOrdersPayload = {
-  orders: CreateDeliveryRouteOrderPayload[]
+  orders?: CreateDeliveryRouteOrderPayload[]
+  routePlanId?: string
 }
+
+export type PlannerDriver = { id: string; name: string; isActive: boolean; role?: { name?: string } }
+export type PlannerLocation = { id: string; name: string; address?: string | null; latitude?: number | string | null; longitude?: number | string | null; isActive?: boolean; type?: string }
+export type EligibleDeliverySale = { saleId: string; saleNumber: string; customerId?: string | null; customerName: string; accountReceivableId?: string | null; suggestedDeliveryAddress: string }
+export type GeocodingResult = { label: string; latitude: number; longitude: number; osmType?: string | null; osmId?: string | null }
+export type RoutePlanStopInput = { saleId: string; accountReceivableId?: string; deliveryAddress: string; latitude: number; longitude: number; geocoderOsmType?: string; geocoderOsmId?: string }
+export type RoutePlanStop = RoutePlanStopInput & { sequence: number; legDistanceMeters: number; legDurationSeconds: number }
+export type GeoJsonLineString = { type: 'LineString'; coordinates: [number, number][] }
+export type DeliveryRoutePlan = { id: string; expiresAt: string; orderedStops: RoutePlanStop[]; geometry: GeoJsonLineString; distanceMeters: number; durationSeconds: number; routingProfile: string; routingDataVersion: string }
+export type RoutingTechnicalStatus = {
+  status: 'operational' | 'degraded'
+  checkedAt: string
+  dataset: { version: string; preparedAt?: string | null; ageDays?: number | null; renewalRecommended: boolean }
+  services: Array<{ name: 'PostGIS' | 'Photon' | 'VROOM' | 'OSRM'; status: 'up' | 'down'; latencyMs: number }>
+}
+export type CreateDeliveryRoutePlanPayload = { routeId?: string; driverId: string; scheduledDate: string; originLocationId: string; stops: RoutePlanStopInput[] }
 
 export type UpdateDeliveryOrderStatusPayload = {
   status: DeliveryOrderStatus

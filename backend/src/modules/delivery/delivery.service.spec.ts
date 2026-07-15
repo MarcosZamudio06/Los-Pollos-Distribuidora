@@ -26,7 +26,9 @@ type MockPrisma = {
   deliveryOrder: {
     findFirst: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
+  deliveryRoutePlanDraft: { findFirst: jest.Mock; updateMany: jest.Mock };
   deliveryEvidence: { create: jest.Mock };
   accountReceivable: { findUnique: jest.Mock; update: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
@@ -103,7 +105,9 @@ function createPrisma(): MockPrisma {
     deliveryOrder: {
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
+    deliveryRoutePlanDraft: { findFirst: jest.fn(), updateMany: jest.fn() },
     deliveryEvidence: { create: jest.fn() },
     accountReceivable: { findUnique: jest.fn(), update: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
@@ -164,6 +168,51 @@ describe('DeliveryService', () => {
     );
   });
 
+  it('returns the approved map, ordered stops, and customer to the assigned DRIVER', async () => {
+    const { service, prisma } = createService();
+    const geometry = { type: 'LineString', coordinates: [[-96.14, 19.18], [-96.13, 19.17]] };
+    prisma.deliveryRoute.findFirst.mockResolvedValue(createRoute({
+      optimizationStatus: 'OPTIMIZED',
+      geometry,
+      distanceMeters: 8600,
+      durationSeconds: 1440,
+      deliveryOrders: [
+        createOrder({
+          stopSequence: 1,
+          latitude: money('19.1738'),
+          longitude: money('-96.1342'),
+          legDistanceMeters: 4300,
+          legDurationSeconds: 720,
+          sale: { id: 'sale-1', saleNumber: 'S-1001', customer: { name: 'Polleria Centro' } },
+        }),
+      ],
+    }));
+
+    await expect(service.findRoute('route-1', driver)).resolves.toEqual(expect.objectContaining({
+      mapAvailable: true,
+      geometry,
+      distanceMeters: 8600,
+      durationSeconds: 1440,
+      orders: [expect.objectContaining({
+        customerName: 'Polleria Centro',
+        stopSequence: 1,
+        latitude: 19.1738,
+        longitude: -96.1342,
+        legDistanceMeters: 4300,
+        legDurationSeconds: 720,
+      })],
+    }));
+
+    expect(prisma.deliveryRoute.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'route-1', driverId: 'driver-1' },
+      include: expect.objectContaining({
+        deliveryOrders: expect.objectContaining({
+          orderBy: [{ stopSequence: 'asc' }, { createdAt: 'asc' }],
+        }),
+      }),
+    }));
+  });
+
   it('creates a route with confirmed non-cancelled sales and a ROUTE_STOCK location', async () => {
     const { service, prisma } = createService();
     prisma.user.findFirst.mockResolvedValue({ id: 'driver-1', role: { name: 'DRIVER' } });
@@ -212,6 +261,29 @@ describe('DeliveryService', () => {
     expect(prisma.sale.updateMany.mock.calls[0][0].data).not.toHaveProperty('locationId');
   });
 
+  it('atomically consumes an optimized route plan with idempotency', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findFirst.mockResolvedValue({ id: 'driver-1', role: { name: 'DRIVER' } });
+    prisma.deliveryRoute.findFirst.mockResolvedValue(null);
+    prisma.deliveryRoutePlanDraft.findFirst.mockResolvedValue({
+      id: 'plan-1', createdByUserId: 'admin-1', sourceRouteId: null, consumedAt: null,
+      driverId: 'driver-1', scheduledDate: date('2026-06-19T00:00:00.000Z'), originLocationId: 'origin-1',
+      expiresAt: date('2099-06-19T10:30:00.000Z'), orderedStops: [{ saleId: 'sale-1', accountReceivableId: 'ar-1', deliveryAddress: 'Av Centro 123', latitude: 19.1738, longitude: -96.1342, sequence: 1, legDistanceMeters: 4300, legDurationSeconds: 720 }],
+      geometry: { type: 'LineString', coordinates: [[-96.14, 19.18], [-96.13, 19.17], [-96.14, 19.18]] },
+      distanceMeters: 8600, durationSeconds: 1440, routingProfile: 'driving', routingDataVersion: 'mx-2026-06',
+    });
+    prisma.sale.findMany.mockResolvedValue([{ id: 'sale-1', status: SaleStatus.CONFIRMED, routeId: null, accountReceivable: { id: 'ar-1' } }]);
+    prisma.operationalLocation.findFirst.mockResolvedValue({ id: 'origin-1' });
+    prisma.operationalLocation.create.mockResolvedValue({ id: 'route-stock-1' });
+    prisma.deliveryRoutePlanDraft.updateMany.mockResolvedValue({ count: 1 });
+    prisma.deliveryRoute.create.mockResolvedValue(createRoute({ optimizationStatus: 'OPTIMIZED', geometry: { type: 'LineString', coordinates: [] }, deliveryOrders: [createOrder({ latitude: money('19.1738'), longitude: money('-96.1342'), stopSequence: 1 })] }));
+
+    await service.createRoute({ name: 'Ruta Centro', driverId: 'driver-1', scheduledDate: '2026-06-19', originLocationId: 'origin-1', routePlanId: 'plan-1', orders: [] }, admin, 'key-1');
+
+    expect(prisma.deliveryRoute.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ optimizationStatus: 'OPTIMIZED', creationIdempotencyKey: 'key-1', deliveryOrders: { create: [expect.objectContaining({ saleId: 'sale-1', stopSequence: 1, latitude: 19.1738 })] } }) }));
+    expect(prisma.deliveryRoutePlanDraft.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'plan-1', consumedAt: null }), data: expect.objectContaining({ consumedAt: expect.any(Date) }) }));
+  });
+
   it('assigns confirmed orders to an existing route before settlement is opened', async () => {
     const { service, prisma } = createService();
     prisma.deliveryRoute.findFirst.mockResolvedValue(
@@ -252,6 +324,31 @@ describe('DeliveryService', () => {
       where: { id: { in: ['sale-2'] } },
       data: { routeId: 'route-1' },
     });
+  });
+
+  it('reoptimizes an optimized route when assigning a combined route plan', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(createRoute({ optimizationStatus: 'OPTIMIZED', deliveryOrders: [createOrder({ saleId: 'sale-1', stopSequence: 1 })], settlement: null }));
+    prisma.deliveryRoutePlanDraft.findFirst.mockResolvedValue({
+      id: 'plan-2', sourceRouteId: 'route-1', createdByUserId: 'admin-1', consumedAt: null, expiresAt: date('2099-06-19T10:30:00.000Z'),
+      driverId: 'driver-1', originLocationId: 'origin-1', scheduledDate: date('2026-06-19T00:00:00.000Z'),
+      orderedStops: [
+        { saleId: 'sale-1', deliveryAddress: 'Av Centro 123', latitude: 19.17, longitude: -96.13, sequence: 2, legDistanceMeters: 2000, legDurationSeconds: 300 },
+        { saleId: 'sale-2', deliveryAddress: 'Av Norte 456', latitude: 19.19, longitude: -96.12, sequence: 1, legDistanceMeters: 3000, legDurationSeconds: 500 },
+      ], geometry: { type: 'LineString', coordinates: [] }, distanceMeters: 10000, durationSeconds: 1600, routingProfile: 'driving', routingDataVersion: 'mx-2026-06',
+    });
+    prisma.sale.findMany.mockResolvedValue([
+      { id: 'sale-1', status: SaleStatus.CONFIRMED, routeId: 'route-1', accountReceivable: null },
+      { id: 'sale-2', status: SaleStatus.CONFIRMED, routeId: null, accountReceivable: null },
+    ]);
+    prisma.deliveryOrder.update.mockResolvedValue(createOrder());
+    prisma.deliveryRoutePlanDraft.updateMany.mockResolvedValue({ count: 1 });
+    prisma.deliveryRoute.update.mockResolvedValue(createRoute({ optimizationStatus: 'OPTIMIZED', deliveryOrders: [] }));
+
+    await service.assignOrdersToRoute('route-1', { routePlanId: 'plan-2', orders: [] }, admin);
+
+    expect(prisma.deliveryOrder.update).toHaveBeenCalledWith(expect.objectContaining({ where: { saleId: 'sale-1' }, data: expect.objectContaining({ stopSequence: 2 }) }));
+    expect(prisma.deliveryRoute.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ distanceMeters: 10000, deliveryOrders: { create: [expect.objectContaining({ saleId: 'sale-2', stopSequence: 1 })] } }) }));
   });
 
   it('rejects assigning duplicate or settled route orders to an existing route', async () => {

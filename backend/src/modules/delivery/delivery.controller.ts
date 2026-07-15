@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -43,15 +43,19 @@ export class DeliveryController {
   async create(
     @Body() body: CreateDeliveryRouteDto,
     @CurrentUser() currentUser: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (!body.orders?.length) {
-      throw new BadRequestException('At least one delivery order is required');
+    if (Boolean(body.routePlanId) === Boolean(body.orders?.length)) {
+      throw new BadRequestException('Provide exactly one of routePlanId or orders');
+    }
+    if (body.routePlanId && !idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key is required for optimized route creation');
     }
 
     return {
       success: true,
       message: 'Delivery route created successfully',
-      data: await this.deliveryService.createRoute(body, currentUser),
+      data: await this.deliveryService.createRoute(body, currentUser, idempotencyKey),
     };
   }
 
@@ -62,8 +66,8 @@ export class DeliveryController {
     @Body() body: AssignDeliveryRouteOrdersDto,
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
-    if (!body.orders?.length) {
-      throw new BadRequestException('At least one delivery order is required');
+    if (Boolean(body.routePlanId) === Boolean(body.orders?.length)) {
+      throw new BadRequestException('Provide exactly one of routePlanId or orders');
     }
 
     return {

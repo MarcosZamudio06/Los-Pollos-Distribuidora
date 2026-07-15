@@ -129,10 +129,16 @@ describe('TASK-062 purchase UI behavior', () => {
 
   it('deja vacíos los inputs numéricos cuyo valor inicial es cero', () => {
     const html = renderToStaticMarkup(<PurchaseItemsTable items={[{ productId: 'prod-1', productName: 'Pollo entero', presentationType: 'WHOLE', quantityKg: 0, quantityPieces: 0, unit: 'KG', unitCost: 0 }]} onAddItem={() => undefined} onRemoveItem={() => undefined} onUpdateItem={() => undefined} products={[]} />)
+    const container = document.createElement('div')
+    container.innerHTML = html
+    const piecesInputs = Array.from(container.querySelectorAll<HTMLInputElement>('[aria-label="Piezas de Pollo entero"]'))
+    const costInputs = Array.from(container.querySelectorAll<HTMLInputElement>('[aria-label="Costo de Pollo entero"]'))
 
     expect(html.match(/value="0"/g)).toBeNull()
-    expect(html).toContain('aria-label="Piezas de Pollo entero" value=""')
-    expect(html).toContain('aria-label="Costo de Pollo entero" value=""')
+    expect(piecesInputs).toHaveLength(2)
+    expect(costInputs).toHaveLength(2)
+    expect(piecesInputs.every((input) => input.value === '' && input.disabled)).toBe(true)
+    expect(costInputs.every((input) => input.value === '')).toBe(true)
   })
 
   it('obliga selección explícita de equivalencia para kilo y pieza mixto', () => {

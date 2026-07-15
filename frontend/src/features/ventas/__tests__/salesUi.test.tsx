@@ -194,8 +194,10 @@ describe('TASK-055 sales UI behavior', () => {
       expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
       expect(container.textContent).toContain('0 partidas')
       expect(container.textContent).not.toContain('$5,000.00')
-      expect(container.textContent).not.toContain('$3,200.00')
       expect(container.textContent).not.toContain('Limpiar cliente')
+      expect(container.textContent).toContain('Límite de crédito—')
+      expect(container.textContent).toContain('Crédito disponible—')
+      expect(container.textContent).toContain('Saldo pendiente—')
       expect(getSelectByLabelText(container, 'Ubicación operativa').value).toBe('loc-counter')
     } finally {
       await act(async () => { root.unmount() })
@@ -273,6 +275,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Nota sencilla')
     expect(html).toContain('Venta a crédito')
     expect(html).toContain('Pendiente')
+    expect(html).toContain('Sin ruta asignada')
     expect(html).toContain('Ver detalle')
   })
 
@@ -298,6 +301,25 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Nota sencilla')
     expect(html).toContain('Estado: ISSUED')
     expect(html).toContain('Venta a crédito')
+    expect(html).toContain('Sin ruta asignada')
+  })
+
+  it('separa la asignación de ruta del estado comercial de la venta', () => {
+    const routedSale = { ...confirmedSale, id: 'sale-2', routeId: 'route-1', saleNumber: 'V-1002' }
+    mockState.sales = { data: { items: [confirmedSale, routedSale] }, error: null, isLoading: false }
+    mockState.sale = { data: routedSale, error: null, isLoading: false }
+
+    const historyHtml = renderWithRouter(<SalesHistoryPage />)
+    const detailHtml = renderWithRouter(
+      <Routes><Route path="/sales/:saleId" element={<SaleDetailPage />} /></Routes>,
+      '/sales/sale-2',
+    )
+
+    expect(historyHtml).toContain('Confirmada')
+    expect(historyHtml).toContain('Sin ruta asignada')
+    expect(historyHtml).toContain('Ruta asignada')
+    expect(detailHtml).toContain('Confirmada')
+    expect(detailHtml).toContain('Ruta asignada')
   })
 
   it('abre el modal de ticket interno con un click real en la acción de reimpresión', async () => {
@@ -325,9 +347,9 @@ describe('TASK-055 sales UI behavior', () => {
         reprintButton.click()
       })
 
-      expect(container.textContent).toContain('Ticket interno')
-      expect(container.textContent).toContain('Imprimir')
-      expect(container.textContent).toContain('V-1001')
+      expect(document.body.textContent).toContain('Ticket interno')
+      expect(document.body.textContent).toContain('Imprimir')
+      expect(document.body.textContent).toContain('V-1001')
     } finally {
       await act(async () => {
         root.unmount()

@@ -114,9 +114,9 @@ export function SalesHistoryPage() {
 
             {items.length > 0 && (
               <div className="overflow-x-auto rounded-[1.2rem] border border-[color:var(--erp-border)]">
-                <Table className="min-w-[980px]">
+                <Table className="min-w-[1080px]">
                   <thead>
-                    <tr><Th>Venta</Th><Th>Cliente</Th><Th>Documento</Th><Th className="text-right">Total</Th><Th>Estado</Th><Th>Cobranza</Th><Th>Fecha</Th><Th className="text-right">Acciones</Th></tr>
+                    <tr><Th>Venta</Th><Th>Cliente</Th><Th>Documento</Th><Th className="text-right">Total</Th><Th>Estado comercial</Th><Th>Asignación de ruta</Th><Th>Cobranza</Th><Th>Fecha</Th><Th className="text-right">Acciones</Th></tr>
                   </thead>
                   <tbody>
                     {pagination.pageItems.map((sale) => (
@@ -126,6 +126,7 @@ export function SalesHistoryPage() {
                         <Td><p className="font-semibold">{documentTypeLabel(sale.documentType)}</p>{sale.physicalFolio ? <p className="mt-1 flex items-center gap-1 text-xs text-[var(--erp-muted-foreground)]"><FileText className="h-3.5 w-3.5" />Folio {sale.physicalFolio}</p> : null}</Td>
                         <Td className="text-right text-base font-black tabular-nums">{money(sale.total)}</Td>
                         <Td><Badge tone={saleStatusTone(sale.status)}>{saleStatusLabel(sale.status)}</Badge></Td>
+                        <Td><Badge tone={sale.routeId ? 'blue' : 'amber'}>{sale.routeId ? 'Ruta asignada' : 'Sin ruta asignada'}</Badge></Td>
                         <Td><Badge tone={collectionStatusTone(sale.collectionStatus)}>{collectionStatusLabel(sale.collectionStatus)}</Badge></Td>
                         <Td><p className="flex items-center gap-2 text-sm text-[var(--erp-muted-foreground)]"><CalendarDays className="h-4 w-4" />{dateTime(sale.createdAt)}</p></Td>
                         <Td className="text-right"><Link className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-white px-3 text-sm font-black text-[var(--erp-danger)] transition hover:border-[var(--erp-danger)] hover:bg-[rgba(157,45,36,0.06)]" to={`/sales/${sale.id}`}><Search className="h-4 w-4" />Ver detalle</Link></Td>

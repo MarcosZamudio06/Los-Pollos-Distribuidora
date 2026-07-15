@@ -34,13 +34,14 @@ services:
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       MAP_DATA_VERSION: ${MAP_DATA_VERSION:-mexico-latest}
+      MAP_DATA_PREPARED_AT: ${MAP_DATA_PREPARED_AT:-}
       NODE_ENV: production
       OSRM_PROFILE: ${OSRM_PROFILE:-driving}
       OSRM_URL: ${OSRM_URL:-http://osrm:5000}
       PHOTON_URL: ${PHOTON_URL:-http://photon:2322}
       PORT: ${PORT:-4000}
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
-      VROOM_URL: ${VROOM_URL:-http://vroom:3000}
+      VROOM_URL: ${VROOM_URL:-http://vroom:3001}
     command: npm run start:docker
     depends_on:
       postgres:

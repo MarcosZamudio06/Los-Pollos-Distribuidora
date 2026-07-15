@@ -18,6 +18,8 @@ type LocationRecord = {
   type: OperationalLocationType;
   parentId: string | null;
   address: string | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +50,8 @@ function createLocation(
     type: OperationalLocationType.WAREHOUSE,
     parentId: null,
     address: 'Dirección operativa',
+    latitude: '19.173800',
+    longitude: '-96.134200',
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -111,6 +115,8 @@ describe('LocationsService', () => {
           isActive: true,
           createdAt: now,
           updatedAt: now,
+          latitude: 19.1738,
+          longitude: -96.1342,
         }),
         expect.objectContaining({
           id: 'location-2',
