@@ -15,6 +15,16 @@ export type InventoryMovementType =
   | 'SHRINKAGE'
   | 'RETURN'
 
+export type InventoryCategory = {
+  id: string
+  name: string
+}
+
+export type InventoryLocation = {
+  id: string
+  name: string
+}
+
 export type ProductEquivalenceSummary = {
   id: string
   unitFrom: OperationalUnit

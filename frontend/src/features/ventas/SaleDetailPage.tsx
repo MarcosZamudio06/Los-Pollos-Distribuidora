@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, CalendarDays, CircleDollarSign, FileText, PackageCheck, Printer, ReceiptText, ShieldCheck, Truck, UserRound, WalletCards } from 'lucide-react'
+import { ArrowLeft, Ban, CalendarDays, CircleDollarSign, Clock3, FileText, MapPin, PackageCheck, Printer, ReceiptText, Ruler, ShieldCheck, Truck, UserRound, WalletCards } from 'lucide-react'
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui'
 import { useAuth } from '../auth'
 import { TicketModal } from './components'
 import { CancelSaleDialog } from './CancelSaleDialog'
+import { DriverRouteMap } from '../rutas-reparto/components/DriverRouteMap'
 import { useSale, useSaleDocuments, useSaleTicket } from './hooks'
 import { collectionStatusLabel, dateTime, documentTypeLabel, money, paymentMethodLabel, paymentTypeLabel, saleChannelLabel, saleStatusLabel } from './saleLabels'
 import type { BadgeTone } from '@/components/ui'
@@ -21,6 +22,16 @@ function collectionStatusTone(status?: string | null): BadgeTone {
   if (status === 'CANCELLED') return 'red'
   if (status === 'PARTIALLY_PAID') return 'blue'
   return 'amber'
+}
+
+function distanceLabel(meters?: number | null) {
+  if (meters == null) return 'Distancia no disponible'
+  return `${(meters / 1000).toLocaleString('es-MX', { maximumFractionDigits: 1 })} km`
+}
+
+function durationLabel(seconds?: number | null) {
+  if (seconds == null) return 'Duración no disponible'
+  return `${Math.round(seconds / 60)} min`
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -170,6 +181,32 @@ export function SaleDetailView({
                     <DetailRow label="Documento" value={`${documentTypeLabel(sale.data.documentType)}${sale.data.physicalFolio ? ` · ${sale.data.physicalFolio}` : ''}`} />
                   </CardContent>
                 </Card>
+
+                {sale.data.routePreview && (
+                  <Card className="grid gap-4 p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]"><MapPin className="h-4 w-4" />{sale.data.routePreview.mapAvailable ? 'Ruta optimizada asignada' : 'Ruta asignada'}</p>
+                        <CardTitle className="mt-1">{sale.data.routePreview.name}</CardTitle>
+                        <CardDescription>Recorrido operativo asignado a este pedido.</CardDescription>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-sm font-black">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-[rgba(47,111,115,0.10)] px-3 py-2 text-[var(--erp-info)]"><Ruler className="h-4 w-4" />{distanceLabel(sale.data.routePreview.distanceMeters)}</span>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-[rgba(214,155,45,0.14)] px-3 py-2 text-[var(--erp-brand-gold-deep)]"><Clock3 className="h-4 w-4" />{durationLabel(sale.data.routePreview.durationSeconds)}</span>
+                      </div>
+                    </div>
+                    {sale.data.routePreview.mapAvailable && sale.data.routePreview.geometry ? (
+                      <DriverRouteMap
+                        compact
+                        currentOrder={sale.data.routePreview.order ?? undefined}
+                        geometry={sale.data.routePreview.geometry}
+                        routeName={sale.data.routePreview.name}
+                      />
+                    ) : (
+                      <p className="rounded-2xl border border-dashed border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4 text-sm font-semibold text-[var(--erp-muted-foreground)]">El trazado optimizado no está disponible para esta ruta.</p>
+                    )}
+                  </Card>
+                )}
 
                 <Card className="overflow-hidden p-0">
                   <div className="flex flex-col gap-2 border-b border-[color:var(--erp-border)] bg-white/70 p-5 sm:flex-row sm:items-center sm:justify-between">

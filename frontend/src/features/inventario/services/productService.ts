@@ -2,6 +2,8 @@ import { apiClient } from '../../../lib/api'
 import type {
   InventoryAdjustmentValues,
   InventoryBalance,
+  InventoryCategory,
+  InventoryLocation,
   InventoryMovement,
   InventoryTransfer,
   InventoryTransferValues,
@@ -58,6 +60,18 @@ function withParams(path: string, filters: Record<string, string | number | bool
 }
 
 export const productService = {
+  async listCategories(accessToken?: string | null) {
+    const response = await apiClient.get<ListEnvelope<InventoryCategory>>('/categories?isActive=true&limit=100', {
+      headers: authHeaders(accessToken),
+    })
+    return unwrapList(response)
+  },
+  async listLocations(accessToken?: string | null) {
+    const response = await apiClient.get<ListEnvelope<InventoryLocation>>('/locations?isActive=true&limit=100', {
+      headers: authHeaders(accessToken),
+    })
+    return unwrapList(response)
+  },
   async listProducts(filters: Record<string, string | boolean | undefined>, accessToken?: string | null) {
     const response = await apiClient.get<ListEnvelope<Product>>(withParams('/products', filters), {
       headers: authHeaders(accessToken),

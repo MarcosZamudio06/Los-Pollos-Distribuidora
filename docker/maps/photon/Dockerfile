@@ -12,4 +12,4 @@ WORKDIR /data
 
 EXPOSE 2322
 
-CMD ["java", "-jar", "/opt/photon/photon.jar", "serve", "-data-dir", "/data", "-listen-ip", "0.0.0.0", "-listen-port", "2322", "-default-language", "es", "-max-results", "10", "-max-reverse-results", "10", "-metrics-enable"]
+CMD ["java", "-jar", "/opt/photon/photon.jar", "serve", "-data-dir", "/data", "-listen-ip", "0.0.0.0", "-listen-port", "2322", "-default-language", "default", "-max-results", "10", "-max-reverse-results", "10", "-metrics-enable", "prometheus"]

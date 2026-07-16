@@ -29,11 +29,26 @@ describe('RoutingProvidersService', () => {
 
     const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
     expect(url.pathname).toBe('/api/');
-    expect(url.searchParams.get('lang')).toBe('es');
+    expect(url.searchParams.get('lang')).toBe('default');
     expect(url.searchParams.get('limit')).toBe('5');
     expect(url.searchParams.get('lat')).toBe('19.18');
     expect(url.searchParams.get('lon')).toBe('-96.14');
     expect(url.searchParams.get('countrycode')).toBe('MX');
+  });
+
+  it('uses the dataset local language for Photon reverse geocoding', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      features: [{
+        geometry: { coordinates: [-96.1342, 19.1738] },
+        properties: { name: 'Avenida Salvador Díaz Mirón', city: 'Veracruz', country: 'México' },
+      }],
+    }), { status: 200 }));
+
+    const service = new RoutingProvidersService(config);
+    await service.reverseAddress(19.1738, -96.1342);
+
+    const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
+    expect(url.searchParams.get('lang')).toBe('default');
   });
 
   it('sends a closed single-vehicle problem to VROOM and rejects unassigned jobs', async () => {
@@ -50,7 +65,11 @@ describe('RoutingProvidersService', () => {
     )).rejects.toBeInstanceOf(UnprocessableEntityException);
 
     const body = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body);
-    expect(body.vehicles[0]).toEqual(expect.objectContaining({ start: [-96.1421, 19.1802], end: [-96.1421, 19.1802] }));
+    expect(body.vehicles[0]).toEqual(expect.objectContaining({
+      profile: 'car',
+      start: [-96.1421, 19.1802],
+      end: [-96.1421, 19.1802],
+    }));
     expect(body.jobs[0].location).toEqual([-96.1342, 19.1738]);
   });
 

@@ -287,6 +287,77 @@ describe('SalesService', () => {
     );
   });
 
+  it('projects only the current sale optimized route preview in authorized sale detail', async () => {
+    const { service, prisma } = createService();
+    const geometry = { type: 'LineString', coordinates: [[-96.14, 19.18], [-96.13, 19.17]] };
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 'sale-1', saleNumber: 'SALE-000001', userId: 'seller-1', locationId: 'loc-1',
+      saleChannel: SaleChannel.COUNTER, documentType: SaleDocumentType.SIMPLE_NOTE,
+      subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
+      paymentType: SalePaymentType.CASH_SALE, collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED, customer: null, commercialPolicy: null,
+      accountReceivable: null, billingRequest: null, documents: [], inventoryMovements: [], payments: [], items: [],
+      route: { id: 'route-1', name: 'Ruta Norte', optimizationStatus: 'OPTIMIZED', geometry, distanceMeters: 8600, durationSeconds: 1440 },
+      deliveryOrder: { latitude: decimal('19.173800'), longitude: decimal('-96.134200'), stopSequence: 2 },
+      createdAt: now,
+    });
+
+    const detail = await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'sale-1', userId: 'seller-1' },
+      include: expect.objectContaining({
+        route: { select: { id: true, name: true, optimizationStatus: true, geometry: true, distanceMeters: true, durationSeconds: true } },
+        deliveryOrder: { select: { latitude: true, longitude: true, stopSequence: true } },
+      }),
+    }));
+    expect(detail.routePreview).toEqual({
+      id: 'route-1', name: 'Ruta Norte', geometry, mapAvailable: true,
+      distanceMeters: 8600, durationSeconds: 1440,
+      order: { latitude: 19.1738, longitude: -96.1342, stopSequence: 2 },
+    });
+    expect(detail.routePreview).not.toHaveProperty('orders');
+  });
+
+  it('returns no route preview when unassigned and an unavailable preview without geometry when not optimized', async () => {
+    const { service, prisma } = createService();
+    const baseSale = {
+      id: 'sale-1', saleNumber: 'SALE-000001', userId: 'seller-1', locationId: 'loc-1',
+      saleChannel: SaleChannel.COUNTER, documentType: SaleDocumentType.SIMPLE_NOTE,
+      subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
+      paymentType: SalePaymentType.CASH_SALE, collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED, customer: null, commercialPolicy: null,
+      accountReceivable: null, billingRequest: null, documents: [], inventoryMovements: [], payments: [], items: [],
+      deliveryOrder: null, createdAt: now,
+    };
+    prisma.sale.findFirst.mockResolvedValueOnce({ ...baseSale, routeId: null, route: null });
+    expect((await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' })).routePreview).toBeNull();
+
+    prisma.sale.findFirst.mockResolvedValueOnce({
+      ...baseSale, routeId: 'route-1',
+      route: { id: 'route-1', name: 'Ruta histórica', optimizationStatus: 'NOT_OPTIMIZED', geometry: null, distanceMeters: null, durationSeconds: null },
+    });
+    expect((await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' })).routePreview).toEqual({
+      id: 'route-1', name: 'Ruta histórica', geometry: null, mapAvailable: false,
+      distanceMeters: null, durationSeconds: null, order: null,
+    });
+
+    for (const geometry of [
+      { type: 'LineString', coordinates: [] },
+      { type: 'LineString', coordinates: [[-96.14, Number.NaN], [-96.13, 19.17]] },
+      { type: 'Point', coordinates: [-96.14, 19.18] },
+    ]) {
+      prisma.sale.findFirst.mockResolvedValueOnce({
+        ...baseSale, routeId: 'route-1',
+        route: { id: 'route-1', name: 'Ruta inválida', optimizationStatus: 'OPTIMIZED', geometry, distanceMeters: 100, durationSeconds: 60 },
+      });
+      expect((await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' })).routePreview).toEqual(expect.objectContaining({
+        geometry: null,
+        mapAvailable: false,
+      }));
+    }
+  });
+
   it('returns an internal MVP ticket with seller, customer, location, items, totals, and payment methods from Payment records', async () => {
     const { service, prisma } = createService();
     prisma.sale.findFirst.mockResolvedValue({

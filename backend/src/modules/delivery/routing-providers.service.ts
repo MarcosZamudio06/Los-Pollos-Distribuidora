@@ -22,7 +22,7 @@ export class RoutingProvidersService {
   async searchAddress(query: string, limit = 5, latitude?: number, longitude?: number) {
     const url = new URL('/api/', this.photonUrl);
     url.searchParams.set('q', query.trim());
-    url.searchParams.set('lang', 'es');
+    url.searchParams.set('lang', 'default');
     url.searchParams.set('countrycode', 'MX');
     url.searchParams.set('limit', String(limit));
     if (latitude !== undefined) url.searchParams.set('lat', String(latitude));
@@ -35,7 +35,7 @@ export class RoutingProvidersService {
     const url = new URL('/reverse', this.photonUrl);
     url.searchParams.set('lat', String(latitude));
     url.searchParams.set('lon', String(longitude));
-    url.searchParams.set('lang', 'es');
+    url.searchParams.set('lang', 'default');
     const payload = await this.request(url, undefined, 'Photon');
     const feature = payload.features?.[0];
     if (!feature) throw new UnprocessableEntityException('No address was found for the selected coordinates');
@@ -47,7 +47,7 @@ export class RoutingProvidersService {
     const payload = await this.request(url, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        vehicles: [{ id: 1, profile: 'driving', start: origin, end: origin }],
+        vehicles: [{ id: 1, profile: 'car', start: origin, end: origin }],
         jobs: stops.map((stop, index) => ({ id: index + 1, location: [stop.longitude, stop.latitude] })),
       }),
     }, 'VROOM');

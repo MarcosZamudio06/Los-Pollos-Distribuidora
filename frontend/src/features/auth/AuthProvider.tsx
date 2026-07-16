@@ -2,10 +2,15 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react'
-import { ApiClientError } from '../../lib/api'
+import {
+  AUTH_UNAUTHORIZED_EVENT,
+  ApiClientError,
+  type AuthUnauthorizedEvent,
+} from '../../lib/api'
 import * as authApi from './authApi'
 import { AuthContext, type AuthContextValue } from './authContext'
 import type { AuthSession, ChangePasswordValues, LoginCredentials } from './types'
@@ -46,19 +51,41 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
   const [error, setError] = useState<string | null>(null)
   const accessToken = session?.accessToken ?? null
+  const accessTokenRef = useRef(accessToken)
   const user = session?.user ?? null
 
   const clearSession = useCallback(() => {
+    accessTokenRef.current = null
     window.localStorage.removeItem(AUTH_STORAGE_KEY)
     setSession(null)
     setStatus('guest')
   }, [])
 
   const persistSession = useCallback((nextSession: AuthSession) => {
+    accessTokenRef.current = nextSession.accessToken
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
     setSession(nextSession)
     setStatus('authenticated')
   }, [])
+
+  useEffect(() => {
+    const handleUnauthorized = (event: Event) => {
+      const unauthorizedEvent = event as AuthUnauthorizedEvent
+
+      if (
+        unauthorizedEvent.detail.statusCode === 401 &&
+        unauthorizedEvent.detail.matchesAccessToken(accessTokenRef.current)
+      ) {
+        clearSession()
+      }
+    }
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+
+    return () => {
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    }
+  }, [clearSession])
 
   const refreshUser = useCallback(async () => {
     if (!accessToken) {
@@ -66,10 +93,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return
     }
 
+    const requestedAccessToken = accessToken
+
     try {
-      const currentUser = await authApi.getCurrentUser(accessToken)
+      const currentUser = await authApi.getCurrentUser(requestedAccessToken)
+
+      if (accessTokenRef.current !== requestedAccessToken) {
+        return
+      }
+
       setSession((currentSession) => {
-        if (!currentSession) {
+        if (!currentSession || currentSession.accessToken !== requestedAccessToken) {
           return currentSession
         }
 
@@ -80,9 +114,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setStatus('authenticated')
       setError(null)
     } catch (caughtError) {
+      if (accessTokenRef.current !== requestedAccessToken) {
+        return
+      }
+
       if (
         caughtError instanceof ApiClientError &&
-        [401, 403].includes(caughtError.statusCode)
+        caughtError.statusCode === 401
       ) {
         clearSession()
         return
@@ -153,15 +191,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     let isCurrent = true
+    const requestedAccessToken = accessToken
 
-    void authApi.getCurrentUser(accessToken)
+    void authApi.getCurrentUser(requestedAccessToken)
       .then((currentUser) => {
-        if (!isCurrent) {
+        if (!isCurrent || accessTokenRef.current !== requestedAccessToken) {
           return
         }
 
         setSession((currentSession) => {
-          if (!currentSession) {
+          if (!currentSession || currentSession.accessToken !== requestedAccessToken) {
             return currentSession
           }
 
@@ -173,24 +212,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setError(null)
       })
       .catch((caughtError) => {
-        if (!isCurrent) {
+        if (!isCurrent || accessTokenRef.current !== requestedAccessToken) {
           return
         }
 
         if (
           caughtError instanceof ApiClientError &&
-          [401, 403].includes(caughtError.statusCode)
+          caughtError.statusCode === 401
         ) {
-          window.localStorage.removeItem(AUTH_STORAGE_KEY)
-          setSession(null)
-          setStatus('guest')
+          clearSession()
           return
         }
 
         setError(getErrorMessage(caughtError))
       })
       .finally(() => {
-        if (!isCurrent) {
+        if (!isCurrent || accessTokenRef.current !== requestedAccessToken) {
           return
         }
 
@@ -202,7 +239,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       isCurrent = false
     }
-  }, [accessToken])
+  }, [accessToken, clearSession])
 
   const value = useMemo<AuthContextValue>(
     () => ({

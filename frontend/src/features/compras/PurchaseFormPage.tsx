@@ -80,18 +80,18 @@ export function PurchaseFormPage() {
   return (
     <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <section className="mx-auto grid max-w-7xl gap-5">
-        <header className="relative overflow-hidden rounded-[2rem] border border-black/10 bg-[var(--erp-charcoal)] p-6 text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)] sm:p-7">
+        <header className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-[var(--erp-shadow-elevated)] sm:p-7">
           <div className="absolute right-0 top-0 h-36 w-36 rounded-bl-full bg-[rgba(214,155,45,0.16)]" />
           <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
             <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.10)] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">
                 <PackagePlus className="h-4 w-4" />
                 Nueva compra
               </div>
-              <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-white sm:text-4xl">Confirmar entrada al inventario receptor</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/72">Captura proveedor, ubicación operativa e items. La confirmación, movimientos y saldos siguen controlados por el backend actual.</p>
+              <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-[var(--erp-foreground)] sm:text-4xl">Confirmar entrada al inventario receptor</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Captura proveedor, ubicación operativa e items. La confirmación, movimientos y saldos siguen controlados por el backend actual.</p>
             </div>
-            <Link className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/8 px-5 text-sm font-black text-[var(--erp-brand-gold-soft)] transition hover:bg-white/12 focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)]" to="/purchases">
+            <Link className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-white px-5 text-sm font-black text-[var(--erp-brand-red)] transition hover:border-[var(--erp-brand-red)] hover:bg-[rgba(182,42,34,0.04)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)]" to="/purchases">
               <ArrowLeft className="h-4 w-4" />
               Volver a compras
             </Link>
@@ -99,7 +99,7 @@ export function PurchaseFormPage() {
         </header>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><ShieldCheck className="h-4 w-4 text-[var(--erp-info)]" />Permiso de costo</p><p className="mt-3 text-lg font-black">{isAdmin ? 'ADMIN autorizado' : 'Sin actualización de costo'}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Se respeta el RBAC existente.</p></Card>
+          <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><ShieldCheck className="h-4 w-4 text-[var(--erp-info)]" />Permiso de costo</p><p className="mt-3 text-lg font-black">{isAdmin ? 'ADMIN autorizado' : 'Sin actualización de costo'}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]"></p></Card>
           <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><ClipboardList className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />Productos</p><p className="mt-3 text-2xl font-black tabular-nums">{items.length}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Partidas en captura</p></Card>
           <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />Validación</p><p className="mt-3 text-lg font-black">{errors.length === 0 ? 'Lista para registrar' : `${errors.length} pendiente(s)`}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Sin cambiar reglas de validación.</p></Card>
         </div>

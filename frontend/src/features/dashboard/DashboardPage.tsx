@@ -423,18 +423,18 @@ export function DashboardPage() {
   return (
     <main className="min-h-screen bg-[var(--erp-background)] px-4 py-5 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <section className="mx-auto flex max-w-[92rem] flex-col gap-6">
-        <header className="relative overflow-hidden rounded-[2rem] border border-black/10 bg-[var(--erp-charcoal)] p-6 text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)] sm:p-8">
-          <div className="absolute right-0 top-0 h-full w-2/3 bg-[radial-gradient(circle_at_top_right,rgba(214,155,45,0.34),transparent_34%),linear-gradient(135deg,transparent,rgba(182,42,34,0.22))]" />
+        <header className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white p-6 shadow-[var(--erp-shadow-elevated)] sm:p-8">
+          <div className="absolute right-0 top-0 h-full w-2/3 bg-[radial-gradient(circle_at_top_right,rgba(214,155,45,0.16),transparent_34%),linear-gradient(135deg,transparent,rgba(182,42,34,0.08))]" />
           <div className="relative grid gap-6 lg:grid-cols-[1.5fr_1fr] lg:items-end">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--erp-brand-gold-soft)]">Dashboard Ejecutivo</p>
-              <h1 className="mt-3 max-w-3xl text-4xl font-black tracking-[-0.07em] text-white sm:text-5xl">
+              <h1 className="mt-3 max-w-3xl text-4xl font-black tracking-[-0.07em] text-[var(--erp-foreground)] sm:text-5xl">
                 {isDriver ? 'Operación diaria de reparto' : 'El Pollo de los Pollos'}
               </h1>
             </div>
-            <div className="rounded-[1.35rem] border border-white/15 bg-white/8 p-4 backdrop-blur">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">Sesión</p>
-              <p className="mt-2 text-xl font-black text-white">{user?.name ?? 'Usuario'}</p>
+            <div className="rounded-[1.35rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-4 backdrop-blur">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--erp-muted-foreground)]">Sesión</p>
+              <p className="mt-2 text-xl font-black text-[var(--erp-foreground)]">{user?.name ?? 'Usuario'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge tone="amber">{roleLabel}</Badge>
                 {user?.mustChangePassword && <Badge tone="red">Cambiar contraseña</Badge>}

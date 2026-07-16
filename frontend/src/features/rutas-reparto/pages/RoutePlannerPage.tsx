@@ -30,7 +30,7 @@ export function RoutePlannerPage() {
   const [plan, setPlan] = useState<DeliveryRoutePlan | null>(null)
   const [idempotencyKey, setIdempotencyKey] = useState('')
   const [confirming, setConfirming] = useState(false)
-  const catalog = useRoutePlannerCatalog(salesSearch)
+  const catalog = useRoutePlannerCatalog(salesSearch, form.originLocationId)
   const addressSearch = useAddressSearch()
   const reverseAddress = useReverseAddress()
   const createPlan = useCreateRoutePlan()
@@ -38,7 +38,7 @@ export function RoutePlannerPage() {
   const assignPlan = useAssignDeliveryRouteOrders(routeId ?? '')
   const existingRoute = useDeliveryRoute(routeId)
   const isReoptimization = Boolean(routeId)
-  const sales = catalog.sales.data?.items ?? []
+  const sales = form.originLocationId ? catalog.sales.data?.items ?? [] : []
   const origin = catalog.locations.data?.find((location) => location.id === form.originLocationId)
   const activeStop = stops.find((stop) => stop.saleId === activeSaleId)
   const addressResults = activeSaleId ? addressResultsBySale[activeSaleId] ?? [] : []
@@ -127,8 +127,8 @@ export function RoutePlannerPage() {
 
   return <PageShell><PageFrame>
     {existingRoute.isLoading && <StatusMessage>Cargando ruta para reoptimizar…</StatusMessage>}{existingRoute.error && <StatusMessage tone="error">No fue posible cargar la ruta seleccionada.</StatusMessage>}
-    <header className="overflow-hidden rounded-[1.8rem] border border-black/10 bg-[var(--erp-charcoal)] text-white shadow-[0_24px_80px_rgba(17,24,21,.18)]">
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_auto]"><div className="p-6 sm:p-8"><button className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[.16em] text-white/65 hover:text-white" onClick={() => navigate('/delivery-routes')}><ArrowLeft className="h-4 w-4"/>Volver a rutas</button><p className="mt-7 text-xs font-black uppercase tracking-[.22em] text-[var(--erp-brand-gold-soft)]">Mesa de despacho · {isReoptimization ? 'Reoptimización' : 'Planeación'}</p><h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-4xl">{isReoptimization ? 'Integra nuevas entregas sin dejar un mapa obsoleto' : 'Construye el recorrido antes de mover una unidad'}</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-white/70">Selecciona ventas confirmadas, valida cada punto y aprueba el trazado vial que verá el repartidor.</p></div><div className="grid min-w-64 grid-cols-3 border-t border-white/10 bg-white/[.04] lg:grid-cols-1 lg:border-l lg:border-t-0"><div className="p-4"><span className="text-[10px] font-black uppercase tracking-[.18em] text-white/45">Paradas</span><p className="mt-1 text-xl font-black">{stops.length}</p></div><div className="border-l border-white/10 p-4 lg:border-l-0 lg:border-t"><span className="text-[10px] font-black uppercase tracking-[.18em] text-white/45">Distancia</span><p className="mt-1 text-xl font-black text-[var(--erp-brand-gold-soft)]">{distance(plan?.distanceMeters)}</p></div><div className="border-l border-white/10 p-4 lg:border-l-0 lg:border-t"><span className="text-[10px] font-black uppercase tracking-[.18em] text-white/45">Tiempo</span><p className="mt-1 text-xl font-black">{duration(plan?.durationSeconds)}</p></div></div></div>
+    <header className="overflow-hidden rounded-[1.8rem] border border-[color:var(--erp-border)] bg-white text-[var(--erp-foreground)] shadow-[var(--erp-shadow-elevated)]">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_auto]"><div className="p-6 sm:p-8"><button className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[.16em] text-[var(--erp-muted-foreground)] hover:text-[var(--erp-foreground)]" onClick={() => navigate('/delivery-routes')}><ArrowLeft className="h-4 w-4"/>Volver a rutas</button><p className="mt-7 text-xs font-black uppercase tracking-[.22em] text-[var(--erp-brand-gold-deep)]">Mesa de despacho · {isReoptimization ? 'Reoptimización' : 'Planeación'}</p><h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-4xl">{isReoptimization ? 'Integra nuevas entregas sin dejar un mapa obsoleto' : 'Construye el recorrido antes de mover una unidad'}</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Selecciona ventas confirmadas, valida cada punto y aprueba el trazado vial que verá el repartidor.</p></div><div className="grid min-w-64 grid-cols-3 border-t border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/80 lg:grid-cols-1 lg:border-l lg:border-t-0"><div className="p-4"><span className="text-[10px] font-black uppercase tracking-[.18em] text-[var(--erp-muted-foreground)]">Paradas</span><p className="mt-1 text-xl font-black">{stops.length}</p></div><div className="border-l border-[color:var(--erp-border)] p-4 lg:border-l-0 lg:border-t"><span className="text-[10px] font-black uppercase tracking-[.18em] text-[var(--erp-muted-foreground)]">Distancia</span><p className="mt-1 text-xl font-black text-[var(--erp-brand-gold-deep)]">{distance(plan?.distanceMeters)}</p></div><div className="border-l border-[color:var(--erp-border)] p-4 lg:border-l-0 lg:border-t"><span className="text-[10px] font-black uppercase tracking-[.18em] text-[var(--erp-muted-foreground)]">Tiempo</span><p className="mt-1 text-xl font-black">{duration(plan?.durationSeconds)}</p></div></div></div>
     </header>
 
     <div className="grid gap-5 xl:grid-cols-[23rem_minmax(0,1fr)]">

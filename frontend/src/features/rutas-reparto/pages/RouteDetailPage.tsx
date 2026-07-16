@@ -1,8 +1,17 @@
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BadgeDollarSign, CalendarDays, ClipboardList, MapPin, PackageCheck, Route, Truck, UserRound } from 'lucide-react'
 import { Card, OrderStatusBadge, PageFrame, PageShell, PrimaryButton, RouteHero, RouteStatusBadge, SecondaryLink, StatusMessage } from '../components/RouteUi'
 import { date, dateTime, money, shortId } from '../labels'
 import { useDeliveryRoute, useOpenRouteSettlement } from '../hooks'
+import { DriverRouteMap } from '../components/DriverRouteMap'
+import type { GeoJsonLineString } from '../types'
+
+function hasRenderableGeometry(geometry: GeoJsonLineString | null | undefined): geometry is GeoJsonLineString {
+  return geometry?.type === 'LineString'
+    && geometry.coordinates.length >= 2
+    && geometry.coordinates.every((coordinate) => coordinate.length === 2 && coordinate.every(Number.isFinite))
+}
 
 export function RouteDetailPage() {
   const { routeId } = useParams()
@@ -11,6 +20,9 @@ export function RouteDetailPage() {
   const openSettlement = useOpenRouteSettlement()
   const detail = route.data
   const collections = detail?.collectionsSummary
+  const orderedStops = useMemo(() => [...(detail?.orders ?? [])].sort((left, right) => (
+    (left.stopSequence ?? Number.MAX_SAFE_INTEGER) - (right.stopSequence ?? Number.MAX_SAFE_INTEGER)
+  )), [detail?.orders])
 
   async function handleOpenSettlement() {
     if (!routeId) return
@@ -69,6 +81,19 @@ export function RouteDetailPage() {
                 )}
               </Card>
             </section>
+
+            <Card className="grid gap-4 p-5">
+              <div>
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]"><MapPin className="h-4 w-4" />Recorrido optimizado</p>
+                <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">Ruta y paradas</h2>
+                <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Secuencia operativa completa asignada a esta ruta.</p>
+              </div>
+              {detail.mapAvailable && hasRenderableGeometry(detail.geometry) ? (
+                <DriverRouteMap compact geometry={detail.geometry} orders={orderedStops} routeName={detail.name} />
+              ) : (
+                <p className="rounded-2xl border border-dashed border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4 text-sm font-semibold text-[var(--erp-muted-foreground)]">El trazado optimizado no está disponible para esta ruta.</p>
+              )}
+            </Card>
 
             <Card className="grid gap-4 p-5 md:grid-cols-4">
               <div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />Esperado</p><p className="mt-2 text-2xl font-black tabular-nums">{money(collections?.expectedAmount)}</p></div>

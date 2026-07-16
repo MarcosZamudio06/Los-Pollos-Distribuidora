@@ -34,28 +34,28 @@ export function PurchasesPage() {
   return (
     <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <section className="mx-auto grid max-w-7xl gap-5">
-        <header className="relative overflow-hidden rounded-[2rem] border border-black/10 bg-[var(--erp-charcoal)] p-6 text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)] sm:p-7">
+        <header className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-[var(--erp-shadow-elevated)] sm:p-7">
           <div className="absolute right-0 top-0 h-36 w-36 rounded-bl-full bg-[rgba(214,155,45,0.16)]" />
           <div className="absolute bottom-0 left-0 h-24 w-56 rounded-tr-full bg-[rgba(182,42,34,0.16)]" />
           <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
             <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.10)] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">
                 <ClipboardList className="h-4 w-4" />
                 Compras
               </div>
-              <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-white sm:text-4xl">Recepción de mercancía por ubicación</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/72">Consulta entradas confirmadas, proveedor, ubicación receptora y trazabilidad operativa sin consolidar stock global.</p>
+              <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-[var(--erp-foreground)] sm:text-4xl">Recepción de mercancía por ubicación</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Consulta entradas confirmadas, proveedor, ubicación receptora y trazabilidad operativa sin consolidar stock global.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3 lg:min-w-96">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3">
-                <span className="block text-xs font-black uppercase tracking-[0.16em] text-white/54">Resultados</span>
-                <span className="mt-1 block text-2xl font-black tracking-[-0.05em] text-white">{items.length}</span>
+              <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 px-4 py-3">
+                <span className="block text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Resultados</span>
+                <span className="mt-1 block text-2xl font-black tracking-[-0.05em] text-[var(--erp-foreground)]">{items.length}</span>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3">
-                <span className="block text-xs font-black uppercase tracking-[0.16em] text-white/54">Confirmadas</span>
-                <span className="mt-1 block text-2xl font-black tracking-[-0.05em] text-white">{confirmedCount}</span>
+              <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 px-4 py-3">
+                <span className="block text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Confirmadas</span>
+                <span className="mt-1 block text-2xl font-black tracking-[-0.05em] text-[var(--erp-foreground)]">{confirmedCount}</span>
               </div>
-              <Link className="inline-flex h-full min-h-16 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-4 text-sm font-black text-[var(--erp-brand-gold-soft)] transition hover:bg-white/12 focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] sm:col-span-1" to="/purchases/new">
+              <Link className="inline-flex h-full min-h-16 items-center justify-center gap-2 rounded-2xl border border-[color:var(--erp-border)] bg-white px-4 text-sm font-black text-[var(--erp-brand-red)] transition hover:border-[var(--erp-brand-red)] hover:bg-[rgba(182,42,34,0.04)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] sm:col-span-1" to="/purchases/new">
                 <Plus className="h-4 w-4" />
                 Nueva compra
               </Link>

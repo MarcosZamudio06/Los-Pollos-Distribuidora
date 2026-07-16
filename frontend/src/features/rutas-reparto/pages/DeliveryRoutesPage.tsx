@@ -2,10 +2,9 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, ClipboardList, FilterX, MapPin, PackageCheck, Plus, Route, Search, Truck } from 'lucide-react'
 import { AssignOrdersModal } from '../components/AssignOrdersModal'
-import { RoutingTechnicalStatusPanel } from '../components/RoutingTechnicalStatusPanel'
 import { Card, Field, PageFrame, PageShell, PrimaryButton, RouteHero, RouteStatusBadge, SecondaryButton, SecondaryLink, SelectInput, StatusMessage, TextInput } from '../components/RouteUi'
 import { date, shortId } from '../labels'
-import { useDeliveryRoutes, useOpenRouteSettlement, useRoutingTechnicalStatus } from '../hooks'
+import { useDeliveryRoutes, useOpenRouteSettlement } from '../hooks'
 import { useAuth } from '../../auth'
 import type { DeliveryRouteListItem, DeliveryRouteStatus } from '../types'
 
@@ -17,7 +16,6 @@ export function DeliveryRoutesPage() {
   const queryFilters = useMemo(() => ({ ...filters, limit: 50, page: 1 }), [filters])
   const routes = useDeliveryRoutes(queryFilters)
   const openSettlement = useOpenRouteSettlement()
-  const technicalStatus = useRoutingTechnicalStatus(user?.role === 'ADMIN')
   const items = routes.data?.items ?? []
   const hasFilters = Object.values(filters).some(Boolean)
   const inProgressCount = items.filter((route) => route.status === 'IN_PROGRESS').length
@@ -37,6 +35,7 @@ export function DeliveryRoutesPage() {
           eyebrow="Torre de reparto"
           title="Mesa de control de rutas"
           subtitle="Administra salidas, pedidos confirmados, evidencias y liquidación operativa sin perder trazabilidad con ROUTE_STOCK."
+          surface="white"
         />
 
         <section className="grid gap-4 md:grid-cols-3">
@@ -45,7 +44,6 @@ export function DeliveryRoutesPage() {
           <Card className="p-5"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><ClipboardList className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />Pedidos asignados</p><p className="mt-3 text-2xl font-black tracking-[-0.05em] tabular-nums">{totalOrders}</p><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">{pendingCount} rutas pendientes</p></Card>
         </section>
 
-        {user?.role === 'ADMIN' && <RoutingTechnicalStatusPanel data={technicalStatus.data} error={technicalStatus.error} isLoading={technicalStatus.isLoading} />}
 
         <Card className="p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

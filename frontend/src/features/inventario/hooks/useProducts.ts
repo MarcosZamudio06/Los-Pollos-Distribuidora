@@ -21,6 +21,22 @@ export function useProducts(filters: ProductFilters) {
   })
 }
 
+export function useInventoryCategories() {
+  const { accessToken } = useAuth()
+  return useQuery({
+    queryKey: ['inventory-categories'],
+    queryFn: () => productService.listCategories(accessToken),
+  })
+}
+
+export function useInventoryLocations() {
+  const { accessToken } = useAuth()
+  return useQuery({
+    queryKey: ['inventory-locations'],
+    queryFn: () => productService.listLocations(accessToken),
+  })
+}
+
 export function useSaveProduct(productId?: string) {
   const { accessToken } = useAuth()
   const queryClient = useQueryClient()

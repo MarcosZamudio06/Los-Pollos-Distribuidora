@@ -51,6 +51,15 @@ vi.mock('../../clientes/hooks/useCustomers', () => ({
   useCustomers: () => mockState.customers,
 }))
 
+vi.mock('../../rutas-reparto/components/DriverRouteMap', () => ({
+  DriverRouteMap: ({ compact, currentOrder, orders = [], routeName }: { compact?: boolean; currentOrder?: { stopSequence?: number | null }; orders?: Array<{ stopSequence?: number | null }>; routeName: string }) => (
+    <div aria-label={`Mapa de ${routeName}`} data-compact={compact ? 'true' : 'false'}>
+      {orders.map((order) => <span key={order.stopSequence}>Pedido {order.stopSequence}</span>)}
+      {currentOrder && <span>Pedido {currentOrder.stopSequence}</span>}
+    </div>
+  ),
+}))
+
 function renderWithRouter(element: React.ReactElement, initialEntry = '/sales/history') {
   return renderToStaticMarkup(<MemoryRouter initialEntries={[initialEntry]}>{element}</MemoryRouter>)
 }
@@ -320,6 +329,52 @@ describe('TASK-055 sales UI behavior', () => {
     expect(historyHtml).toContain('Ruta asignada')
     expect(detailHtml).toContain('Confirmada')
     expect(detailHtml).toContain('Ruta asignada')
+  })
+
+  it('muestra un minimapa compacto con la ruta optimizada y la parada del pedido actual', () => {
+    mockState.sale = {
+      data: {
+        ...confirmedSale,
+        routeId: 'route-1',
+        routePreview: {
+          id: 'route-1', name: 'Ruta Norte', mapAvailable: true,
+          geometry: { type: 'LineString', coordinates: [[-96.14, 19.18], [-96.13, 19.17]] },
+          distanceMeters: 8600, durationSeconds: 1440,
+          order: { latitude: 19.1738, longitude: -96.1342, stopSequence: 2 },
+        },
+      },
+      error: null,
+      isLoading: false,
+    }
+
+    const html = renderWithRouter(<Routes><Route path="/sales/:saleId" element={<SaleDetailPage />} /></Routes>, '/sales/sale-1')
+
+    expect(html).toContain('Ruta optimizada asignada')
+    expect(html).toContain('Ruta Norte')
+    expect(html).toContain('Mapa de Ruta Norte')
+    expect(html).toContain('data-compact="true"')
+    expect(html).toContain('Pedido 2')
+    expect(html).toContain('8.6 km')
+    expect(html).toContain('24 min')
+  })
+
+  it('muestra estado operativo sin mapa para ruta sin geometría y omite la sección si no hay asignación', () => {
+    mockState.sale = {
+      data: { ...confirmedSale, routeId: 'route-1', routePreview: { id: 'route-1', name: 'Ruta histórica', mapAvailable: false, geometry: null, distanceMeters: null, durationSeconds: null, order: null } },
+      error: null,
+      isLoading: false,
+    }
+    const unavailableHtml = renderWithRouter(<Routes><Route path="/sales/:saleId" element={<SaleDetailPage />} /></Routes>, '/sales/sale-1')
+    expect(unavailableHtml).toContain('Ruta histórica')
+    expect(unavailableHtml).toContain('Ruta asignada')
+    expect(unavailableHtml).not.toContain('Ruta optimizada asignada')
+    expect(unavailableHtml).toContain('El trazado optimizado no está disponible para esta ruta.')
+    expect(unavailableHtml).not.toContain('Mapa de Ruta histórica')
+
+    mockState.sale = { data: confirmedSale, error: null, isLoading: false }
+    const unassignedHtml = renderWithRouter(<Routes><Route path="/sales/:saleId" element={<SaleDetailPage />} /></Routes>, '/sales/sale-1')
+    expect(unassignedHtml).not.toContain('Ruta optimizada asignada')
+    expect(unassignedHtml).not.toContain('trazado optimizado')
   })
 
   it('abre el modal de ticket interno con un click real en la acción de reimpresión', async () => {

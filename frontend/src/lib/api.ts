@@ -23,6 +23,13 @@ export class ApiClientError extends Error {
   }
 }
 
+export const AUTH_UNAUTHORIZED_EVENT = 'pollos:auth-unauthorized' as const
+
+export type AuthUnauthorizedEvent = CustomEvent<{
+  matchesAccessToken: (accessToken: string | null) => boolean
+  statusCode: 401
+}>
+
 type RequestOptions<TBody> = {
   body?: TBody
   headers?: HeadersInit
@@ -99,6 +106,25 @@ export function createApiClient(baseUrl = getDefaultApiBaseUrl()) {
         typeof errorPayload === 'string'
           ? errorPayload
           : errorPayload?.message ?? response.statusText
+
+      const authorization = requestHeaders.get('authorization')
+
+      if (
+        response.status === 401 &&
+        authorization !== null &&
+        /^Bearer\s+\S+/i.test(authorization)
+      ) {
+        const failedAccessToken = authorization.replace(/^Bearer\s+/i, '')
+
+        window.dispatchEvent(
+          new CustomEvent(AUTH_UNAUTHORIZED_EVENT, {
+            detail: {
+              matchesAccessToken: (accessToken) => accessToken === failedAccessToken,
+              statusCode: 401,
+            },
+          }) satisfies AuthUnauthorizedEvent,
+        )
+      }
 
       throw new ApiClientError(message, response.status, errorPayload)
     }

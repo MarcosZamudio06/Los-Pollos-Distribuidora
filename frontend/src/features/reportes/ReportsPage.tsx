@@ -648,31 +648,31 @@ export function ReportsPage() {
   return (
     <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <section className="mx-auto max-w-7xl space-y-6">
-        <div className="relative overflow-hidden rounded-[2rem] border border-black/10 bg-[var(--erp-charcoal)] text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)]">
-          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(214,155,45,0.28),transparent_36%),linear-gradient(135deg,transparent,rgba(255,255,255,0.08))] lg:block" />
+        <div className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white text-[var(--erp-foreground)] shadow-[var(--erp-shadow-elevated)]">
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(214,155,45,0.16),transparent_36%),linear-gradient(135deg,transparent,rgba(182,42,34,0.05))] lg:block" />
           <div className="relative grid gap-6 p-6 lg:grid-cols-[1.2fr_0.8fr] lg:p-8">
             <div className="max-w-4xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
-                <BarChart3 className="h-4 w-4" />FASE UI-011 · Reportes ejecutivos
+              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.10)] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">
+                <BarChart3 className="h-4 w-4" />Reportes ejecutivos
               </div>
               <h1 className="mt-4 max-w-3xl text-3xl font-black tracking-[-0.07em] sm:text-5xl">Mesa ejecutiva para ventas, caja, inventario, cobranza y reparto.</h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">Reportes casi en tiempo real basados en operaciones confirmadas. La vista separa caja, crédito, inventario y reparto sin cambiar cálculos ni permisos existentes.</p>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--erp-muted-foreground)]">Reportes casi en tiempo real basados en operaciones confirmadas. La vista separa caja, crédito, inventario y reparto sin cambiar cálculos ni permisos existentes.</p>
               <div className="mt-6 flex flex-wrap gap-2">
-                <Badge className="border-white/10 bg-white/8 text-white" tone="slate">RBAC conservado</Badge>
-                <Badge className="border-white/10 bg-white/8 text-white" tone="slate">Sin datos simulados</Badge>
-                <Badge className="border-white/10 bg-white/8 text-white" tone="slate">Responsive</Badge>
+                <Badge className="border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] text-[var(--erp-foreground)]" tone="slate">Trazabilidad</Badge>
+                <Badge className="border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] text-[var(--erp-foreground)]" tone="slate">Todo en uno</Badge>
+                <Badge className="border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] text-[var(--erp-foreground)]" tone="slate"></Badge>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-5 backdrop-blur">
-                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/55"><RefreshCw className="h-4 w-4" />Frescura operativa</p>
-                <p className="mt-3 text-4xl font-black tracking-[-0.08em] text-[var(--erp-brand-gold-soft)] sm:text-5xl">60s</p>
-                <p className="mt-2 text-sm leading-6 text-white/70">Cada reporte conserva su indicador de generación y datos incluidos.</p>
+              <div className="rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-5 backdrop-blur">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-muted-foreground)]"><RefreshCw className="h-4 w-4" />Frescura operativa</p>
+                <p className="mt-3 text-4xl font-black tracking-[-0.08em] text-[var(--erp-brand-gold-deep)] sm:text-5xl">60s</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">Cada reporte conserva su indicador de generación y datos incluidos.</p>
               </div>
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-5 backdrop-blur sm:col-span-2 lg:col-span-1">
-                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/55"><Sparkles className="h-4 w-4" />Panel visible</p>
-                <p className="mt-3 text-xl font-black tracking-[-0.04em] text-white">{visibleTabs.length} reporte(s) autorizados</p>
-                <p className="mt-2 text-sm leading-6 text-white/70">La navegación se deriva del mismo filtro de roles existente.</p>
+              <div className="rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-5 backdrop-blur sm:col-span-2 lg:col-span-1">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-muted-foreground)]"><Sparkles className="h-4 w-4" />Panel visible</p>
+                <p className="mt-3 text-xl font-black tracking-[-0.04em] text-[var(--erp-foreground)]">{visibleTabs.length} reporte(s) autorizados</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">La navegación se deriva del mismo filtro de roles existente.</p>
               </div>
             </div>
           </div>

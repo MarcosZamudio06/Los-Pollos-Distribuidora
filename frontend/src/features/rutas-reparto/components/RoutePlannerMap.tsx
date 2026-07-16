@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import L from 'leaflet'
 import { GeoJSON, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { DeliveryRoutePlan, PlannerLocation, RoutePlanStopInput } from '../types'
+import { animateRoutePath, cancelRouteAnimations, routeGeometryRevision, routeLengthMeters, sampleDirectionMarkers } from './routeGeometry'
 
 type Props = {
   activeSaleId?: string
@@ -38,13 +39,63 @@ function FitRoute({ points }: { points: [number, number][] }) {
   return null
 }
 
+function directionIcon(bearing: number) {
+  return L.divIcon({
+    className: 'route-planner-direction',
+    html: `<span aria-hidden="true" style="display:grid;place-items:center;width:24px;height:24px;transform:rotate(${bearing}deg);filter:drop-shadow(0 2px 3px rgba(29,36,32,.35))"><span style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:13px solid #f0c56a;filter:drop-shadow(0 0 1px #1d2420)"></span></span>`,
+    iconAnchor: [12, 12],
+    iconSize: [24, 24],
+  })
+}
+
+function AnimatedRoute({ plan }: { plan: DeliveryRoutePlan }) {
+  const routeLayer = useRef<L.GeoJSON>(null)
+  const totalDistance = useMemo(() => routeLengthMeters(plan.geometry), [plan.geometry])
+  const arrows = useMemo(() => {
+    const spacing = Math.min(1_800, Math.max(350, totalDistance / 6))
+    return sampleDirectionMarkers(plan.geometry, spacing)
+  }, [plan.geometry, totalDistance])
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const animations: Animation[] = []
+    routeLayer.current?.eachLayer((layer) => {
+      if (layer instanceof L.Path) {
+        const path = layer.getElement()
+        if (path instanceof SVGPathElement) {
+          const animation = animateRoutePath(path, reducedMotion)
+          if (animation) animations.push(animation)
+        }
+      }
+    })
+    return () => cancelRouteAnimations(animations)
+  }, [plan.id, plan.geometry])
+
+  return (
+    <>
+      <GeoJSON ref={routeLayer} data={plan.geometry} style={{ color: '#b62a22', weight: 6, opacity: 0.88 }} />
+      {arrows.map((arrow, index) => (
+        <Marker
+          interactive={false}
+          keyboard={false}
+          icon={directionIcon(arrow.bearing)}
+          key={`${plan.id}-direction-${index}`}
+          position={[arrow.latitude, arrow.longitude]}
+          zIndexOffset={250}
+        />
+      ))}
+    </>
+  )
+}
+
 export function RoutePlannerMap({ activeSaleId, origin, plan, stops, onMoveStop, onSelectStop }: Props) {
   const originPoint = useMemo(() => origin?.latitude != null && origin?.longitude != null ? [Number(origin.latitude), Number(origin.longitude)] as [number, number] : undefined, [origin])
   const sequence = useMemo(() => new Map((plan?.orderedStops ?? []).map((stop) => [stop.saleId, stop.sequence])), [plan])
   const points = useMemo(() => [originPoint, ...stops.filter((stop) => Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude)).map((stop) => [stop.latitude, stop.longitude] as [number, number])].filter(Boolean) as [number, number][], [originPoint, stops])
+  const geometryRevision = plan?.geometry ? routeGeometryRevision(plan.geometry) : undefined
 
   return (
-    <div className="h-[34rem] min-h-[420px] overflow-hidden rounded-[1.4rem] border border-black/10 bg-[#dce5df] shadow-[0_20px_60px_rgba(29,36,32,.16)]" aria-label="Mapa para planificar la ruta">
+    <div className="relative z-0 isolate h-[34rem] min-h-[420px] overflow-hidden rounded-[1.4rem] border border-black/10 bg-[#dce5df] shadow-[0_20px_60px_rgba(29,36,32,.16)]" aria-label="Mapa para planificar la ruta">
       <MapContainer center={originPoint ?? fallbackCenter} className="h-full w-full" scrollWheelZoom zoom={12}>
         <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <MapClick activeSaleId={activeSaleId} onMoveStop={onMoveStop} />
@@ -63,7 +114,7 @@ export function RoutePlannerMap({ activeSaleId, origin, plan, stops, onMoveStop,
             title={`Parada ${sequence.get(stop.saleId) ?? index + 1}: ${stop.deliveryAddress}`}
           />
         ))}
-        {plan?.geometry && <GeoJSON data={plan.geometry} key={plan.id} style={{ color: '#b62a22', weight: 6, opacity: 0.88 }} />}
+        {plan?.geometry && <AnimatedRoute key={`${plan.id}:${geometryRevision}`} plan={plan} />}
       </MapContainer>
     </div>
   )

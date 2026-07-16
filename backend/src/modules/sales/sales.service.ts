@@ -96,6 +96,19 @@ type SaleDetailRecord = SaleListRecord & {
   commercialPolicy?: Record<string, unknown> | null;
   documents?: Record<string, unknown>[];
   inventoryMovements?: Record<string, unknown>[];
+  route?: {
+    id: string;
+    name: string;
+    optimizationStatus?: string | null;
+    geometry?: Prisma.JsonValue | null;
+    distanceMeters?: number | null;
+    durationSeconds?: number | null;
+  } | null;
+  deliveryOrder?: {
+    latitude?: DecimalLike;
+    longitude?: DecimalLike;
+    stopSequence?: number | null;
+  } | null;
 };
 
 type SaleDocumentListRecord = Record<string, unknown> & {
@@ -192,6 +205,17 @@ export class SalesService {
           orderBy: { paidAt: 'desc' },
         },
         items: true,
+        route: {
+          select: {
+            id: true,
+            name: true,
+            optimizationStatus: true,
+            geometry: true,
+            distanceMeters: true,
+            durationSeconds: true,
+          },
+        },
+        deliveryOrder: { select: { latitude: true, longitude: true, stopSequence: true } },
       },
     } as Prisma.SaleFindFirstArgs)) as SaleDetailRecord | null;
 
@@ -935,6 +959,8 @@ export class SalesService {
   }
 
   private toSaleDetail(sale: SaleDetailRecord) {
+    const route = sale.route;
+    const routeGeometry = this.validLineStringGeometry(route?.geometry) ? route?.geometry ?? null : null;
     return {
       ...this.toSaleListItem(sale),
       items: sale.items?.map((item) => ({
@@ -957,7 +983,31 @@ export class SalesService {
       ticket: this.findTicketDocument(sale.documents ?? []),
       documents: sale.documents ?? [],
       inventoryMovements: sale.inventoryMovements?.map((movement) => this.toMovementRecordResponse(movement)) ?? [],
+      routePreview: route ? {
+        id: route.id,
+        name: route.name,
+        geometry: routeGeometry,
+        mapAvailable: route.optimizationStatus === 'OPTIMIZED' && routeGeometry !== null,
+        distanceMeters: route.distanceMeters ?? null,
+        durationSeconds: route.durationSeconds ?? null,
+        order: sale.deliveryOrder?.latitude != null && sale.deliveryOrder.longitude != null ? {
+          latitude: this.toNumber(sale.deliveryOrder.latitude),
+          longitude: this.toNumber(sale.deliveryOrder.longitude),
+          stopSequence: sale.deliveryOrder.stopSequence ?? null,
+        } : null,
+      } : null,
     };
+  }
+
+  private validLineStringGeometry(value: Prisma.JsonValue | null | undefined): boolean {
+    if (!value || Array.isArray(value) || typeof value !== 'object') return false;
+    const geometry = value as Prisma.JsonObject;
+    if (geometry.type !== 'LineString' || !Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) return false;
+    return geometry.coordinates.every((coordinate) => (
+      Array.isArray(coordinate)
+      && coordinate.length === 2
+      && coordinate.every((axis) => typeof axis === 'number' && Number.isFinite(axis))
+    ));
   }
 
   private toSaleTicket(sale: SaleTicketRecord) {

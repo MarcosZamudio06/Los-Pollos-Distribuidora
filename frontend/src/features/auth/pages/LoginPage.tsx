@@ -6,8 +6,6 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
-  Truck,
-  Warehouse,
 } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, Button, Card, CardContent, Input } from '@/components/ui'
@@ -72,24 +70,6 @@ export function LoginPage() {
               <p className="mt-5 max-w-md text-base leading-7 text-white/68">
                 Ventas, inventario, cobranza y reparto bajo una sesión segura del ERP.
               </p>
-            </div>
-
-            <div className="grid gap-3">
-              {[
-                { icon: Warehouse, label: 'Inventario por ubicación' },
-                { icon: Truck, label: 'Rutas y cobranza en campo' },
-                { icon: LockKeyhole, label: 'Permisos validados por sesión' },
-              ].map(({ icon: Icon, label }) => (
-                <div
-                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.07] p-4 text-sm font-bold text-white/82 backdrop-blur"
-                  key={label}
-                >
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-[rgba(214,155,45,0.16)] text-[var(--erp-brand-gold-soft)]">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  {label}
-                </div>
-              ))}
             </div>
           </div>
         </div>

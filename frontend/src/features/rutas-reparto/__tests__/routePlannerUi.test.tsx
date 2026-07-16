@@ -10,7 +10,7 @@ import { RoutePlannerPage } from '../pages/RoutePlannerPage'
 type AddressSearchPayload = { q: string; latitude?: number; longitude?: number }
 
 const mockState = vi.hoisted(() => ({
-  catalogCalls: [] as string[],
+  catalogCalls: [] as Array<{ search: string; originLocationId: string }>,
   reverseAddress: vi.fn(async ({ latitude, longitude }: { latitude: number; longitude: number }) => ({
     label: `Punto ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
   })),
@@ -21,8 +21,8 @@ const mockState = vi.hoisted(() => ({
 }))
 
 vi.mock('../hooks', () => ({
-  useRoutePlannerCatalog: (search = '') => {
-    mockState.catalogCalls.push(search)
+  useRoutePlannerCatalog: (search = '', originLocationId = '') => {
+    mockState.catalogCalls.push({ search, originLocationId })
     const saleItems = [
       { saleId: 'sale-ver', saleNumber: 'V-2001', customerName: 'Cliente Veracruz', suggestedDeliveryAddress: 'Centro, Veracruz', status: 'CONFIRMED', routeId: null },
       { saleId: 'sale-alv', saleNumber: 'V-2002', customerName: 'Cliente Alvarado', suggestedDeliveryAddress: 'Centro, Alvarado', status: 'CONFIRMED', routeId: null },
@@ -31,7 +31,7 @@ vi.mock('../hooks', () => ({
       drivers: { data: [{ id: 'driver-1', name: 'Repartidor Uno' }], error: null },
       locations: { data: [{ id: 'origin-bdr', name: 'Boca del Río', latitude: 19.1065, longitude: -96.108 }], error: null },
       sales: {
-        data: { items: saleItems },
+        data: { items: originLocationId ? saleItems : [] },
         error: null,
         isLoading: false,
       },
@@ -104,6 +104,14 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+async function selectOrigin(container: HTMLElement) {
+  const origin = selectByLabel(container, 'Origen')
+  await act(async () => {
+    origin.value = 'origin-bdr'
+    origin.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
 describe('route planner delivery points', () => {
   beforeEach(() => {
     mockState.catalogCalls.length = 0
@@ -111,16 +119,18 @@ describe('route planner delivery points', () => {
     mockState.addressSearch.mockReset().mockResolvedValue({ items: [] })
   })
 
-  it('keeps eligible-sale search independent from the selected route origin', async () => {
+  it('hides eligible sales until an origin branch is selected and filters the catalog by it', async () => {
     const { container, root } = await renderPage()
     try {
+      expect(container.textContent).not.toContain('V-2001')
+
       const origin = selectByLabel(container, 'Origen')
       await act(async () => {
         origin.value = 'origin-bdr'
         origin.dispatchEvent(new Event('change', { bubbles: true }))
       })
 
-      expect(mockState.catalogCalls.at(-1)).toBe('')
+      expect(mockState.catalogCalls.at(-1)).toEqual({ search: '', originLocationId: 'origin-bdr' })
       expect(container.textContent).toContain('V-2001')
     } finally {
       await act(async () => { root.unmount() })
@@ -131,6 +141,7 @@ describe('route planner delivery points', () => {
   it('selects two sales and preserves an independent delivery point for each one', async () => {
     const { container, root } = await renderPage()
     try {
+      await selectOrigin(container)
       await act(async () => { button(container, 'V-2001').click() })
       await act(async () => { button(container, 'Seleccionar punto de entrega').click() })
       await act(async () => { button(container, 'V-2002').click() })
@@ -153,6 +164,7 @@ describe('route planner delivery points', () => {
     }))
     const { container, root } = await renderPage()
     try {
+      await selectOrigin(container)
       await act(async () => { button(container, 'V-2001').click() })
       await act(async () => { button(container, 'Seleccionar punto de entrega').click() })
       await act(async () => { button(container, 'V-2002').click() })
@@ -176,6 +188,7 @@ describe('route planner delivery points', () => {
     mockState.addressSearch.mockImplementation((params?: AddressSearchPayload) => new Promise((resolve) => { pending.set(params?.q ?? '', resolve) }))
     const { container, root } = await renderPage()
     try {
+      await selectOrigin(container)
       await act(async () => { button(container, 'V-2001').click() })
       const addressInput = inputByPlaceholder(container, 'Buscar calle, número, colonia y ciudad')
       await act(async () => { setInputValue(addressInput, 'Búsqueda A') })
@@ -209,6 +222,7 @@ describe('route planner delivery points', () => {
     mockState.reverseAddress.mockImplementation(({ latitude }: { latitude: number }) => new Promise((resolve) => { pendingReverse.set(latitude, resolve) }))
     const { container, root } = await renderPage()
     try {
+      await selectOrigin(container)
       await act(async () => { button(container, 'V-2001').click() })
       const addressInput = inputByPlaceholder(container, 'Buscar calle, número, colonia y ciudad')
       await act(async () => { setInputValue(addressInput, 'Búsqueda de instancia anterior') })

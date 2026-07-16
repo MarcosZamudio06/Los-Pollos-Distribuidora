@@ -202,6 +202,19 @@ export type SaleDocument = {
 }
 
 export type SaleDetail = SaleListItem & {
+  routePreview?: {
+    id: string
+    name: string
+    geometry: { type: 'LineString'; coordinates: [number, number][] } | null
+    mapAvailable: boolean
+    distanceMeters: number | null
+    durationSeconds: number | null
+    order: {
+      latitude: number
+      longitude: number
+      stopSequence: number | null
+    } | null
+  } | null
   items?: Array<{
     id?: string
     productId?: string

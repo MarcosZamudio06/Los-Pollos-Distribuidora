@@ -8,7 +8,7 @@ import { InventoryMovementsView } from '../components/InventoryMovementsView'
 import { InventoryTransferView } from '../components/InventoryTransferView'
 import { LowStockBadge } from '../components/LowStockBadge'
 import { ProductFormModal } from '../components/ProductFormModal'
-import { useProducts, type ProductFilters } from '../hooks/useProducts'
+import { useInventoryCategories, useInventoryLocations, useProducts, type ProductFilters } from '../hooks/useProducts'
 import type { InventoryBalance, Product } from '../types'
 import { TablePagination, useTablePagination } from '../../../components/shared/table-pagination'
 
@@ -62,6 +62,8 @@ export function ProductListPage() {
   const [filters, setFilters] = useState<ProductFilters>({})
   const [editingProduct, setEditingProduct] = useState<Product | null>()
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null)
+  const categories = useInventoryCategories()
+  const locations = useInventoryLocations()
   const products = useProducts(filters)
   const pagination = useTablePagination(products.data ?? [])
   const locationSelected = Boolean(filters.locationId)
@@ -128,15 +130,27 @@ export function ProductListPage() {
               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[var(--erp-muted-foreground)]" aria-hidden="true" />
               <input className={`${fieldClass} w-full pl-9`} placeholder="Buscar nombre o SKU" onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
             </label>
-            <input className={fieldClass} placeholder="ID de categoría" onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })} />
+            <select aria-label="Categoría" className={fieldClass} disabled={categories.isLoading || Boolean(categories.error)} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value || undefined })}>
+              <option value="">{categories.isLoading ? 'Cargando categorías…' : categories.error ? 'Categorías no disponibles' : 'Todas las categorías'}</option>
+              {categories.data?.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
             <select className={fieldClass} onChange={(event) => setFilters({ ...filters, presentationType: event.target.value })}><option value="">Presentación</option><option value="KG">Kilo</option><option value="WHOLE">Entero</option><option value="CUT">Corte</option></select>
             <select className={fieldClass} onChange={(event) => setFilters({ ...filters, unit: event.target.value })}><option value="">Unidad</option><option value="KG">KG</option><option value="PIECE">PIECE</option><option value="KG_AND_PIECE">KG_AND_PIECE</option></select>
-            <input className={fieldClass} placeholder="ID de ubicación" onChange={(event) => setFilters({ ...filters, locationId: event.target.value })} />
+            <select aria-label="Ubicación" className={fieldClass} disabled={locations.isLoading || Boolean(locations.error)} onChange={(event) => setFilters({ ...filters, locationId: event.target.value || undefined, lowStock: event.target.value ? filters.lowStock : undefined })}>
+              <option value="">{locations.isLoading ? 'Cargando ubicaciones…' : locations.error ? 'Ubicaciones no disponibles' : 'Todas las ubicaciones'}</option>
+              {locations.data?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </select>
             <select className={fieldClass} onChange={(event) => setFilters({ ...filters, isActive: event.target.value })}><option value="">Estado</option><option value="true">Activo</option><option value="false">Inactivo</option></select>
             <label className="flex h-11 items-center gap-2 rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] px-3 text-sm font-semibold text-[var(--erp-muted-foreground)]">
-              <input className="h-4 w-4 accent-[var(--erp-brand-red)]" disabled={!locationSelected} type="checkbox" onChange={(event) => setFilters({ ...filters, lowStock: event.target.checked || undefined })} /> Stock bajo
+              <input aria-label="Solo stock bajo" checked={Boolean(filters.lowStock)} className="h-4 w-4 accent-[var(--erp-brand-red)]" disabled={!locationSelected} type="checkbox" onChange={(event) => setFilters({ ...filters, lowStock: event.target.checked || undefined })} /> Stock bajo
             </label>
           </div>
+          {(categories.error || locations.error) && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2" role="status">
+              {categories.error && <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.08)] px-3 py-2 text-xs font-medium text-[var(--erp-danger)]"><span>No se pudieron cargar las categorías.</span><button className="font-semibold underline underline-offset-2" onClick={() => void categories.refetch()} type="button">Reintentar</button></div>}
+              {locations.error && <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.08)] px-3 py-2 text-xs font-medium text-[var(--erp-danger)]"><span>No se pudieron cargar las ubicaciones.</span><button className="font-semibold underline underline-offset-2" onClick={() => void locations.refetch()} type="button">Reintentar</button></div>}
+            </div>
+          )}
         </section>
 
         <AsyncState empty={!products.data?.length} emptyMessage="No hay productos para estos filtros. Prueba con una ubicación, categoría o SKU." error={products.error} isLoading={products.isLoading}>

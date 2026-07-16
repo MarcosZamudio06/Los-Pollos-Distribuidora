@@ -11,19 +11,20 @@ export function PageFrame({ children }: { children: ReactNode }) {
   return <section className="mx-auto grid max-w-7xl gap-5">{children}</section>
 }
 
-export function RouteHero({ action, eyebrow, subtitle, title }: { action?: ReactNode; eyebrow: string; subtitle: string; title: string }) {
+export function RouteHero({ action, eyebrow, subtitle, surface = 'charcoal', title }: { action?: ReactNode; eyebrow: string; subtitle: string; surface?: 'charcoal' | 'white'; title: string }) {
+  const isWhiteSurface = surface === 'white'
   return (
-    <header className="relative overflow-hidden rounded-[2rem] border border-black/10 bg-[var(--erp-charcoal)] p-6 text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)] sm:p-7">
+    <header className={`relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--erp-shadow-elevated)] sm:p-7 ${isWhiteSurface ? 'border-[color:var(--erp-border)] bg-white text-[var(--erp-foreground)]' : 'border-black/10 bg-[var(--erp-charcoal)] text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)]'}`}>
       <div className="absolute right-0 top-0 h-36 w-36 rounded-bl-full bg-[rgba(214,155,45,0.16)]" />
       <div className="absolute bottom-0 left-0 h-24 w-56 rounded-tr-full bg-[rgba(47,111,115,0.18)]" />
       <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.18em] ${isWhiteSurface ? 'border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.10)] text-[var(--erp-brand-gold-deep)]' : 'border-white/10 bg-white/5 text-[var(--erp-brand-gold-soft)]'}`}>
             <span className="h-2 w-2 rounded-full bg-[var(--erp-brand-gold-soft)]" aria-hidden="true" />
             {eyebrow}
           </div>
-          <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-white sm:text-4xl">{title}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/72">{subtitle}</p>
+          <h1 className={`mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] sm:text-4xl ${isWhiteSurface ? 'text-[var(--erp-foreground)]' : 'text-white'}`}>{title}</h1>
+          <p className={`mt-3 max-w-3xl text-sm leading-6 ${isWhiteSurface ? 'text-[var(--erp-muted-foreground)]' : 'text-white/72'}`}>{subtitle}</p>
         </div>
         {action}
       </div>

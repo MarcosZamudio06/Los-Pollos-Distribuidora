@@ -41,7 +41,7 @@ services:
       PHOTON_URL: ${PHOTON_URL:-http://photon:2322}
       PORT: ${PORT:-4000}
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
-      VROOM_URL: ${VROOM_URL:-http://vroom:3001}
+      VROOM_URL: ${VROOM_URL:-http://vroom:3000}
     command: npm run start:docker
     depends_on:
       postgres:

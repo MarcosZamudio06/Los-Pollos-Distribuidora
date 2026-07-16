@@ -3,11 +3,15 @@ import { useAuth } from '../auth'
 import { deliveryService } from './deliveryService'
 import type { AssignDeliveryRouteOrdersPayload, CloseRouteSettlementPayload, CreateDeliveryEvidencePayload, CreateDeliveryIncidentPayload, CreateDeliveryRoutePayload, CreateRouteCollectionPayload, CreateDeliveryRoutePlanPayload, DeliveryRoutesFilters, UpdateDeliveryOrderStatusPayload } from './types'
 
-export function useRoutePlannerCatalog(search = '') {
+export function useRoutePlannerCatalog(search = '', originLocationId = '') {
   const { accessToken } = useAuth()
   const drivers = useQuery({ queryKey: ['route-planner', 'drivers'], queryFn: () => deliveryService.listPlannerDrivers(accessToken) })
   const locations = useQuery({ queryKey: ['route-planner', 'locations'], queryFn: () => deliveryService.listPlannerLocations(accessToken) })
-  const sales = useQuery({ queryKey: ['route-planner', 'eligible-sales', search], queryFn: () => deliveryService.listEligibleSales({ limit: 100, search: search || undefined }, accessToken) })
+  const sales = useQuery({
+    enabled: Boolean(originLocationId),
+    queryKey: ['route-planner', 'eligible-sales', originLocationId, search],
+    queryFn: () => deliveryService.listEligibleSales({ limit: 100, originLocationId, search: search || undefined }, accessToken),
+  })
   return { drivers, locations, sales }
 }
 
