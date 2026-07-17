@@ -26,6 +26,7 @@ export const ROUTE_ACCESS_ROLES = {
   salesHistory: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   salesPos: ['ADMIN', 'SELLER'],
   inventory: ['ADMIN', 'WAREHOUSE', 'SELLER'],
+  dailyClose: ['ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS'],
 } as const satisfies Record<string, readonly KnownRole[]>
 
 export type RouteAccessKey = keyof typeof ROUTE_ACCESS_ROLES

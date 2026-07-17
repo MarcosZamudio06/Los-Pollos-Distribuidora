@@ -19,6 +19,7 @@ import { EmployeesPage } from '../features/employees'
 import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RoutePlannerPage, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 import { BillingRequestDetailPage, BillingRequestsPage } from '../features/billing-requests'
+import { DailyClosePage } from '../features/cierre-diario'
 
 export function AppRouter() {
   return (
@@ -162,6 +163,10 @@ export function AppRouter() {
               <DeliveryRoutesPage />
             </RoleRoute>
           }
+        />
+        <Route
+          path="/daily-close"
+          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.dailyClose}><DailyClosePage /></RoleRoute>}
         />
         <Route
           path="/reports"

@@ -1,0 +1,1 @@
+export { DailyClosePage } from './DailyClosePage'

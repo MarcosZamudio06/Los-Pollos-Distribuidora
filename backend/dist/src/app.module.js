@@ -29,6 +29,8 @@ const suppliers_module_1 = require("./modules/suppliers/suppliers.module");
 const purchases_module_1 = require("./modules/purchases/purchases.module");
 const delivery_module_1 = require("./modules/delivery/delivery.module");
 const reports_module_1 = require("./modules/reports/reports.module");
+const billing_requests_module_1 = require("./modules/billing-requests/billing-requests.module");
+const point_of_sale_daily_close_module_1 = require("./modules/point-of-sale-daily-close/point-of-sale-daily-close.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -58,6 +60,8 @@ exports.AppModule = AppModule = __decorate([
             purchases_module_1.PurchasesModule,
             delivery_module_1.DeliveryModule,
             reports_module_1.ReportsModule,
+            billing_requests_module_1.BillingRequestsModule,
+            point_of_sale_daily_close_module_1.PointOfSaleDailyCloseModule,
         ],
         controllers: [],
         providers: [],

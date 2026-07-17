@@ -21,6 +21,7 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { BillingRequestsModule } from './modules/billing-requests/billing-requests.module';
+import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close/point-of-sale-daily-close.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BillingRequestsModule } from './modules/billing-requests/billing-reques
     DeliveryModule,
     ReportsModule,
     BillingRequestsModule,
+    PointOfSaleDailyCloseModule,
   ],
   controllers: [],
   providers: [],

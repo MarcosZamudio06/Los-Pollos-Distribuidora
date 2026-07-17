@@ -32,6 +32,7 @@ export type NavigationItemKey =
   | 'route-planner'
   | 'delivery-routes'
   | 'reports'
+  | 'daily-close'
   | 'employees'
 
 export type NavigationItem = {
@@ -190,6 +191,9 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Reparto / Rutas',
     section: 'operations',
     to: '/delivery-routes',
+  },
+  {
+    activePaths: ['/daily-close'], allowedRoles: ROUTE_ACCESS_ROLES.dailyClose, routeAccessKey: 'dailyClose', description: 'Conciliación de jornada', icon: ClipboardCheck, key: 'daily-close', label: 'Cierre diario', section: 'financial', to: '/daily-close',
   },
   {
     activePaths: ['/reports'],

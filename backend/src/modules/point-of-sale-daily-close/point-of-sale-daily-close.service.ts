@@ -1,0 +1,165 @@
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { PointOfSaleDailyCloseStatus, Prisma } from '@prisma/client';
+import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
+import { calculateDailyCloseKilos } from './daily-close-calculations';
+import { CreateExpenseDto, CreateScaleTicketDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, VersionedDailyCloseDto } from './dto';
+
+const detailInclude = {
+  operationalLocation: { select: { id: true, name: true, code: true, type: true } },
+  cashMovements: { orderBy: { occurredAt: 'desc' as const } },
+  scaleTicketReferences: { include: { product: { select: { id: true, name: true, sku: true } } }, orderBy: { capturedAt: 'desc' as const } },
+  lines: { include: { product: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' as const } },
+  sales: { include: { items: true } },
+  payments: true,
+  inventoryMovements: true,
+} satisfies Prisma.PointOfSaleDailyCloseInclude;
+
+@Injectable()
+export class PointOfSaleDailyCloseService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async list(query: ListDailyCloseQueryDto) {
+    return this.prisma.pointOfSaleDailyClose.findMany({
+      where: {
+        ...(query.operationalLocationId ? { operationalLocationId: query.operationalLocationId } : {}),
+        ...(query.businessDate ? { businessDate: this.date(query.businessDate) } : {}),
+      },
+      include: { operationalLocation: { select: { id: true, name: true, code: true } } },
+      orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async get(id: string) {
+    const close = await this.prisma.pointOfSaleDailyClose.findUnique({ where: { id }, include: detailInclude });
+    if (!close) throw new NotFoundException('DAILY_CLOSE_NOT_FOUND');
+    return close;
+  }
+
+  async open(dto: OpenDailyCloseDto, user: AuthenticatedUser) {
+    const location = await this.prisma.operationalLocation.findUnique({ where: { id: dto.operationalLocationId }, select: { id: true, isActive: true } });
+    if (!location?.isActive) throw new BadRequestException('LOCATION_INACTIVE');
+    const businessDate = this.date(dto.businessDate);
+    const duplicate = await this.prisma.pointOfSaleDailyClose.findFirst({
+      where: { operationalLocationId: dto.operationalLocationId, businessDate, status: { not: 'CANCELLED' } }, select: { id: true },
+    });
+    if (duplicate) throw new ConflictException('DAILY_CLOSE_ALREADY_EXISTS');
+    const nextDate = new Date(businessDate); nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const close = await tx.pointOfSaleDailyClose.create({ data: { operationalLocationId: dto.operationalLocationId, businessDate, openedByUserId: user.id, notes: dto.notes?.trim() || null } });
+      await this.syncOperations(tx, close.id, dto.operationalLocationId, businessDate, nextDate);
+      return close;
+    });
+    return this.recalculate(created.id);
+  }
+
+  async addExpense(id: string, dto: CreateExpenseDto, user: AuthenticatedUser) {
+    const close = await this.requireDraft(id);
+    if (!dto.reason.trim()) throw new BadRequestException('EXPENSE_REASON_REQUIRED');
+    await this.prisma.cashMovement.create({ data: {
+      operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, type: 'EXPENSE', movementChannel: 'CASH',
+      amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(), userId: user.id,
+    }});
+    await this.bump(id);
+    return this.recalculate(id);
+  }
+
+  async addScaleTicket(id: string, dto: CreateScaleTicketDto, user: AuthenticatedUser) {
+    const close = await this.requireDraft(id);
+    if (dto.weightKg === undefined && dto.pieceCount === undefined && dto.amount === undefined) throw new BadRequestException('SCALE_TICKET_QUANTITY_REQUIRED');
+    try {
+      await this.prisma.scaleTicketReference.create({ data: {
+        operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, physicalFolio: dto.physicalFolio.trim(), capturedDate: this.date(dto.capturedDate),
+        productId: dto.productId || null, weightKg: dto.weightKg, pieceCount: dto.pieceCount, unitPrice: dto.unitPrice, amount: dto.amount,
+        capturedByUserId: user.id, capturedAt: new Date(), notes: dto.notes?.trim() || null,
+      }});
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('SCALE_TICKET_ALREADY_EXISTS');
+      throw error;
+    }
+    await this.bump(id);
+    return this.recalculate(id);
+  }
+
+  async validate(id: string) {
+    const close = await this.requireDraft(id);
+    const updated = await this.recalculate(id);
+    const errors: Array<{ code: string; message: string }> = [];
+    if (updated.lines.some((line) => line.operationalLocationId !== close.operationalLocationId)) errors.push({ code: 'OPERATION_LOCATION_MISMATCH', message: 'Hay operaciones de otra ubicación.' });
+    const differences = [
+      { code: 'SCALE_DIFFERENCE', value: Number(updated.scaleDifferenceKg), unit: 'kg' },
+      { code: 'CASH_DIFFERENCE', value: Number(updated.cashDifferenceTotal), unit: 'MXN' },
+    ].filter((item) => item.value !== 0);
+    const validated = await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { lastValidatedAt: new Date(), validatedSourceVersion: updated.version }, include: detailInclude });
+    return { close: validated, valid: errors.length === 0, errors, differences };
+  }
+
+  async review(id: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
+    this.admin(user);
+    const validation = await this.validate(id);
+    if (!validation.valid) throw new BadRequestException({ message: 'DAILY_CLOSE_VALIDATION_FAILED', errors: validation.errors });
+    return this.transition(id, dto.version, 'DRAFT', { status: 'REVIEWED', reviewedByUserId: user.id, reviewedAt: new Date(), validatedSourceVersion: dto.version + 1 });
+  }
+
+  async close(id: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
+    this.admin(user);
+    const current = await this.get(id);
+    if (current.validatedSourceVersion !== current.version) throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
+    return this.transition(id, dto.version, 'REVIEWED', { status: 'CLOSED', closedByUserId: user.id, closedAt: new Date() });
+  }
+
+  async cancel(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
+    this.admin(user);
+    return this.transition(id, dto.version, undefined, { status: 'CANCELLED', cancelledByUserId: user.id, cancelledAt: new Date(), notes: `Cancelación: ${dto.reason.trim()}` });
+  }
+
+  async reopen(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
+    this.admin(user);
+    return this.transition(id, dto.version, 'CLOSED', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null });
+  }
+
+  private async recalculate(id: string) {
+    let close = await this.get(id);
+    if (close.status === 'DRAFT') {
+      const nextDate = new Date(close.businessDate); nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+      await this.prisma.$transaction((tx) => this.syncOperations(tx, close.id, close.operationalLocationId, close.businessDate, nextDate));
+      close = await this.get(id);
+    }
+    const sum = (values: Array<Prisma.Decimal | null>, fallback = 0) => values.reduce<number>((total, value) => total + Number(value ?? fallback), 0);
+    const byConcept = (concept: string, field: 'quantityKg' | 'amount') => sum(close.lines.filter((line) => line.conceptType === concept).map((line) => line[field] as Prisma.Decimal | null));
+    const scaleReportedKg = sum(close.scaleTicketReferences.map((ticket) => ticket.weightKg));
+    const kilos = calculateDailyCloseKilos({
+      inventoryMovements: close.inventoryMovements,
+      manualInputKg: byConcept('PRODUCT_RECEIVED', 'quantityKg'),
+      manualSoldKg: byConcept('SALE_NOTE', 'quantityKg') + byConcept('SALE_SCALE_TICKET', 'quantityKg'),
+      sales: close.sales,
+    });
+    const expenseTotal = sum(close.cashMovements.filter((movement) => movement.type === 'EXPENSE').map((movement) => movement.amount));
+    const grossSalesTotal = sum(close.sales.map((sale) => sale.total));
+    const cashTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'CASH').map((payment) => payment.amount));
+    const cardVoucherTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'CARD' || payment.paymentMethod === 'VOUCHER').map((payment) => payment.amount));
+    const transferTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT').map((payment) => payment.amount));
+    const purchaseCostTotal = byConcept('PURCHASE_COST', 'amount');
+    const data = {
+      totalInputKg: kilos.totalInputKg, totalSoldKg: kilos.totalSoldKg, totalRemainingKg: byConcept('REMAINING_STOCK', 'quantityKg'), totalShortageKg: byConcept('SHORTAGE', 'quantityKg'), totalSurplusKg: byConcept('SURPLUS', 'quantityKg'),
+      scaleReportedKg, scaleDifferenceKg: scaleReportedKg - kilos.totalSoldKg, cashTotal, cardVoucherTotal, transferTotal,
+      expenseTotal, grossSalesTotal, netCashExpected: cashTotal - expenseTotal, purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
+    };
+    return this.prisma.pointOfSaleDailyClose.update({ where: { id }, data, include: detailInclude });
+  }
+
+  private async requireDraft(id: string) { const close = await this.get(id); if (close.status !== 'DRAFT') throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'); return close; }
+  private async syncOperations(tx: Prisma.TransactionClient, closeId: string, locationId: string, from: Date, to: Date) {
+    await tx.sale.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED', routeId: null, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
+    await tx.payment.updateMany({ where: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, status: { in: ['REGISTERED', 'APPLIED'] }, routeId: null, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
+    await tx.inventoryMovement.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, type: { in: ['IN', 'PURCHASE', 'TRANSFER_IN'] }, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
+  }
+  private async bump(id: string) { await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null } }); }
+  private async transition(id: string, version: number, expected: PointOfSaleDailyCloseStatus | undefined, data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput) {
+    const result = await this.prisma.pointOfSaleDailyClose.updateMany({ where: { id, version, ...(expected ? { status: expected } : { status: { not: 'CANCELLED' } }) }, data: { ...data, version: { increment: 1 } } });
+    if (!result.count) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+    return this.get(id);
+  }
+  private admin(user: AuthenticatedUser) { if (user.role !== 'ADMIN') throw new ForbiddenException('DAILY_CLOSE_ADMIN_REQUIRED'); }
+  private date(value: string) { const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`); if (Number.isNaN(date.getTime())) throw new BadRequestException('INVALID_BUSINESS_DATE'); return date; }
+}
