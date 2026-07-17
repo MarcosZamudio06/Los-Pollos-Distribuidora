@@ -90,7 +90,6 @@ export function CustomersPage() {
             </div>
             <div className="grid gap-3 lg:justify-items-end">
               {canManage ? <button className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--erp-charcoal)] px-5 text-sm font-black text-white shadow-[0_14px_36px_rgba(17,24,21,0.18)] transition hover:bg-[var(--erp-graphite)]" onClick={() => setEditingCustomer(null)} type="button"><UserPlus className="h-4 w-4" /> Nuevo cliente</button> : <div className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4 text-sm font-semibold text-[var(--erp-muted-foreground)]">Sesión de consulta. La edición requiere ADMIN o SELLER.</div>}
-              <p className="text-xs text-[var(--erp-muted-foreground)]">La presentación conserva filtros, acciones y contratos existentes.</p>
             </div>
           </div>
         </header>

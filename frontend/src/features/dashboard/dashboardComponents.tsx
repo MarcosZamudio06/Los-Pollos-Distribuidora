@@ -144,7 +144,7 @@ export function FilterPanel({ children, onClear }: { children: ReactNode; onClea
           </span>
           <div>
             <p className="text-sm font-black">Filtros operativos</p>
-            <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Ajusta el alcance sin cambiar contratos ni permisos.</p>
+            <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Sigue las operaciones en tiempo real.</p>
           </div>
         </div>
         <div className="grid flex-1 gap-3 sm:grid-cols-[1fr_1fr_auto] lg:max-w-3xl">

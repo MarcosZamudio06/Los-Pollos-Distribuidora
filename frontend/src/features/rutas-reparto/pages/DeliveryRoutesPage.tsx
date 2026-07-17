@@ -33,7 +33,7 @@ export function DeliveryRoutesPage() {
           action={<PrimaryButton onClick={() => navigate('/delivery-routes/new')}><Plus className="h-4 w-4" />Crear ruta</PrimaryButton>}
           eyebrow="Torre de reparto"
           title="Mesa de control de rutas"
-          subtitle="Administra salidas, pedidos confirmados, evidencias y liquidación operativa sin perder trazabilidad con ROUTE_STOCK."
+          subtitle="Administra salidas, pedidos confirmados, evidencias y liquidación operativa sin perder trazabilidad."
           surface="white"
         />
 

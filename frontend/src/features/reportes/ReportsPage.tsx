@@ -680,7 +680,6 @@ export function ReportsPage() {
               <div className="rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-5 backdrop-blur sm:col-span-2 lg:col-span-1">
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-muted-foreground)]"><Sparkles className="h-4 w-4" />Panel visible</p>
                 <p className="mt-3 text-xl font-black tracking-[-0.04em] text-[var(--erp-foreground)]">{visibleTabs.length} reporte(s) autorizados</p>
-                <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">La navegación se deriva del mismo filtro de roles existente.</p>
               </div>
             </div>
           </div>

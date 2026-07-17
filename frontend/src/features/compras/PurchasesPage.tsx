@@ -44,7 +44,7 @@ export function PurchasesPage() {
                 Compras
               </div>
               <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-[var(--erp-foreground)] sm:text-4xl">Recepción de mercancía por ubicación</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Consulta entradas confirmadas, proveedor, ubicación receptora y trazabilidad operativa sin consolidar stock global.</p>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Consulta entradas confirmadas, proveedor, ubicación receptora y trazabilidad operativa.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3 lg:min-w-96">
               <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 px-4 py-3">

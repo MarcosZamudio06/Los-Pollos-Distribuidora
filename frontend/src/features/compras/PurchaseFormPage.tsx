@@ -89,7 +89,7 @@ export function PurchaseFormPage() {
                 Nueva compra
               </div>
               <h1 className="mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] text-[var(--erp-foreground)] sm:text-4xl">Confirmar entrada al inventario receptor</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Captura proveedor, ubicación operativa e items. La confirmación, movimientos y saldos siguen controlados por el backend actual.</p>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Captura proveedor, ubicación operativa e items.</p>
             </div>
             <Link className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-white px-5 text-sm font-black text-[var(--erp-brand-red)] transition hover:border-[var(--erp-brand-red)] hover:bg-[rgba(182,42,34,0.04)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)]" to="/purchases">
               <ArrowLeft className="h-4 w-4" />
