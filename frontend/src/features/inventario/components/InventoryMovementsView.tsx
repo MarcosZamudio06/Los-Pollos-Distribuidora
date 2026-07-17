@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AsyncState } from './AsyncState'
-import { useInventoryMovements } from '../hooks/useProducts'
+import { useInventoryLocations, useInventoryMovements } from '../hooks/useProducts'
+import { CatalogSelect } from '../../../components/shared/operational-catalogs'
 import { TablePagination, useTablePagination } from '../../../components/shared/table-pagination'
 
 const fieldClass =
@@ -10,6 +11,7 @@ const cellClass = 'px-4 py-3 align-middle'
 export function InventoryMovementsView() {
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
   const movements = useInventoryMovements(filters)
+  const locations = useInventoryLocations()
   const pagination = useTablePagination(movements.data ?? [])
   return (
     <section className="grid gap-4 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[0_18px_50px_rgba(16,24,32,0.06)]">
@@ -19,9 +21,9 @@ export function InventoryMovementsView() {
       </div>
       <div className="grid gap-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] p-4 md:grid-cols-6">
         <input className={fieldClass} placeholder="ID del producto" onChange={(event) => setFilters({ ...filters, productId: event.target.value })} />
-        <input className={fieldClass} placeholder="ID de ubicación" onChange={(event) => setFilters({ ...filters, locationId: event.target.value })} />
+        <CatalogSelect className={fieldClass} error={locations.error} isLoading={locations.isLoading} label="Ubicación" onChange={(locationId) => setFilters({ ...filters, locationId })} options={locations.data?.map((item) => ({ id: item.id, label: item.name ?? item.id }))} placeholder="Todas las ubicaciones" value={filters.locationId} />
         <select className={fieldClass} onChange={(event) => setFilters({ ...filters, type: event.target.value })}><option value="">Tipo de movimiento</option><option value="IN">Entrada</option><option value="OUT">Salida</option><option value="ADJUSTMENT">Ajuste</option><option value="SHRINKAGE">Merma</option><option value="RETURN">Devolución</option><option value="TRANSFER_OUT">Traspaso de salida</option><option value="TRANSFER_IN">Traspaso de entrada</option><option value="SALE">Venta</option><option value="PURCHASE">Compra</option></select>
-        <input className={fieldClass} placeholder="Tipo de referencia" onChange={(event) => setFilters({ ...filters, referenceType: event.target.value })} />
+        <select aria-label="Tipo de referencia" className={fieldClass} onChange={(event) => setFilters({ ...filters, referenceType: event.target.value })} value={filters.referenceType ?? ''}><option value="">Todos los tipos de referencia</option><option value="Sale">Venta</option><option value="DeliveryOrder">Pedido de reparto</option><option value="POINT_OF_SALE_DAILY_CLOSE">Cierre diario de punto de venta</option><option value="PURCHASE">Compra</option><option value="INVENTORY_TRANSFER">Traspaso</option><option value="MANUAL">Manual</option></select>
         <input className={fieldClass} placeholder="ID de referencia" onChange={(event) => setFilters({ ...filters, referenceId: event.target.value })} />
         <div className="grid gap-2 sm:grid-cols-2 md:col-span-6"><label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Desde<input className={`${fieldClass} text-sm normal-case tracking-normal`} type="date" onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })} /></label><label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Hasta<input className={`${fieldClass} text-sm normal-case tracking-normal`} type="date" onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })} /></label></div>
       </div>

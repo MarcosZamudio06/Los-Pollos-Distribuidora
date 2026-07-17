@@ -10,6 +10,7 @@ import { formatDate, formatMoney } from '../components/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import type { AccountReceivable, AccountsReceivableFilters, AgingStatus, CollectionStatus } from '../types'
 import { TablePagination, useTablePagination } from '../../../components/shared/table-pagination'
+import { MiniAjaxSelect } from '../../../components/shared/operational-catalogs'
 
 function canAccessReceivables(role?: string | null) { return role === 'ADMIN' || role === 'COLLECTIONS' || role === 'SELLER' }
 function canRegisterPayment(role?: string | null) { return role === 'ADMIN' || role === 'COLLECTIONS' }
@@ -88,6 +89,7 @@ export function AccountsReceivablePage() {
   const [selectedAccount, setSelectedAccount] = useState<AccountReceivable | null>(null)
   const [paymentAccount, setPaymentAccount] = useState<AccountReceivable | null>(null)
   const accounts = useAccountsReceivable(filters)
+  const billingRequestCatalog = useAccountsReceivable({})
   const canAccess = canAccessReceivables(user?.role)
   const canPay = canRegisterPayment(user?.role)
   const balances = useMemo(() => {
@@ -122,10 +124,10 @@ export function AccountsReceivablePage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="relative sm:col-span-2 lg:col-span-1">
               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[var(--erp-muted-foreground)]" aria-hidden="true" />
-              <input className={`${fieldClass} w-full pl-9`} placeholder="Cliente ID" value={filters.customerId ?? ''} onChange={(event) => setFilters({ ...filters, customerId: event.target.value })} />
+              <MiniAjaxSelect className={`${fieldClass} w-full pl-9`} endpoint="/customers?isActive=true" label="Cliente" onChange={(customerId) => setFilters({ ...filters, customerId })} placeholder="Buscar cliente" value={filters.customerId} />
             </label>
             <input className={fieldClass} placeholder="Venta ID" value={filters.saleId ?? ''} onChange={(event) => setFilters({ ...filters, saleId: event.target.value })} />
-            <input className={fieldClass} placeholder="Solicitud administrativa" value={filters.billingRequestId ?? ''} onChange={(event) => setFilters({ ...filters, billingRequestId: event.target.value })} />
+            <select aria-label="Solicitud administrativa" className={fieldClass} value={filters.billingRequestId ?? ''} onChange={(event) => setFilters({ ...filters, billingRequestId: event.target.value })}><option value="">Todas las solicitudes</option>{Array.from(new Set((billingRequestCatalog.data ?? []).map((account) => account.billingRequestId).filter((id): id is string => Boolean(id)))).map((id) => <option key={id} value={id}>Solicitud {id}</option>)}</select>
             <select className={fieldClass} value={filters.status ?? ''} onChange={(event) => setFilters({ ...filters, status: event.target.value as CollectionStatus | '' })}><option value="">Estado</option><option value="UNPAID">No pagada</option><option value="PARTIALLY_PAID">Parcial</option><option value="PAID">Pagada</option><option value="CANCELLED">Cancelada</option></select>
             <select className={fieldClass} value={filters.agingStatus ?? ''} onChange={(event) => setFilters({ ...filters, agingStatus: event.target.value as AgingStatus | '' })}><option value="">Envejecimiento</option><option value="CURRENT">Vigente</option><option value="DUE_SOON">Por vencer</option><option value="OVERDUE">Vencida</option></select>
             <input className={fieldClass} type="date" value={filters.dueDateFrom ?? ''} onChange={(event) => setFilters({ ...filters, dueDateFrom: event.target.value })} />

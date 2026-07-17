@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { AsyncState } from './AsyncState'
-import { useCancelInventoryTransfer, useConfirmInventoryTransfer, useCreateInventoryTransfer, useInventoryTransferDetail, useInventoryTransfers } from '../hooks/useProducts'
+import { useCancelInventoryTransfer, useConfirmInventoryTransfer, useCreateInventoryTransfer, useInventoryLocations, useInventoryTransferDetail, useInventoryTransfers } from '../hooks/useProducts'
+import { CatalogSelect } from '@/components/shared/operational-catalogs'
 import type { InventoryTransfer, InventoryTransferValues } from '../types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
@@ -33,6 +34,8 @@ export function InventoryTransferView({ canManage }: InventoryTransferViewProps)
   const createTransfer = useCreateInventoryTransfer()
   const confirmTransfer = useConfirmInventoryTransfer()
   const cancelTransfer = useCancelInventoryTransfer()
+  const locations = useInventoryLocations()
+  const locationOptions = locations.data?.map((location) => ({ id: location.id, label: location.name ?? location.id }))
 
   function validate() {
     if (!values.originLocationId || !values.destinationLocationId) return 'El origen y el destino son obligatorios.'
@@ -84,7 +87,7 @@ export function InventoryTransferView({ canManage }: InventoryTransferViewProps)
       {canManage && (
         <form onSubmit={submitTransfer} className="grid gap-4 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] p-4">
           {error && <p role="alert" className="rounded-xl border border-[rgba(157,45,36,0.25)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-semibold text-[var(--erp-danger)]">{error}</p>}
-          <div className="grid gap-3 md:grid-cols-3"><input className={fieldClass} placeholder="ID de ubicación origen" value={values.originLocationId} onChange={(event) => setValues({ ...values, originLocationId: event.target.value })} /><input className={fieldClass} placeholder="ID de ubicación destino" value={values.destinationLocationId} onChange={(event) => setValues({ ...values, destinationLocationId: event.target.value })} /><input className={fieldClass} placeholder="Notas" value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} /></div>
+          <div className="grid gap-3 md:grid-cols-3"><CatalogSelect className={fieldClass} error={locations.error} isLoading={locations.isLoading} label="Ubicación de origen" onChange={(originLocationId) => setValues({ ...values, originLocationId })} options={locationOptions} placeholder="Selecciona origen" value={values.originLocationId} /><CatalogSelect className={fieldClass} error={locations.error} isLoading={locations.isLoading} label="Ubicación de destino" onChange={(destinationLocationId) => setValues({ ...values, destinationLocationId })} options={locationOptions?.filter((item) => item.id !== values.originLocationId)} placeholder="Selecciona destino" value={values.destinationLocationId} /><input className={fieldClass} placeholder="Notas" value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} /></div>
           {values.items.map((item, index) => <div key={index} className="grid gap-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-3 md:grid-cols-4"><input className={fieldClass} placeholder="ID del producto" value={item.productId} onChange={(event) => setValues({ ...values, items: values.items.map((line, lineIndex) => lineIndex === index ? { ...line, productId: event.target.value } : line) })} /><select className={fieldClass} value={item.unit} onChange={(event) => setValues({ ...values, items: values.items.map((line, lineIndex) => lineIndex === index ? { ...line, unit: event.target.value as typeof item.unit } : line) })}><option value="KG">Kilo</option><option value="PIECE">Pieza</option><option value="KG_AND_PIECE">Kilo y pieza</option></select><input className={fieldClass} min="0" step="0.001" type="number" placeholder="Kg" value={item.quantityKg || ''} onChange={(event) => setValues({ ...values, items: values.items.map((line, lineIndex) => lineIndex === index ? { ...line, quantityKg: Number(event.target.value) } : line) })} /><input className={fieldClass} min="0" step="1" type="number" placeholder="Piezas" value={item.quantityPieces || ''} onChange={(event) => setValues({ ...values, items: values.items.map((line, lineIndex) => lineIndex === index ? { ...line, quantityPieces: Number(event.target.value) } : line) })} /></div>)}
           <button disabled={createTransfer.isPending} className="inline-flex h-11 items-center justify-center rounded-xl border border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] px-5 text-sm font-semibold text-[var(--erp-on-brand)] shadow-[0_14px_32px_rgba(157,45,36,0.18)] transition hover:bg-[var(--erp-brand-red-strong)] disabled:opacity-60">Crear traspaso</button>
         </form>

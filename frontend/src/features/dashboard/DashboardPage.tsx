@@ -22,6 +22,7 @@ import {
   Td,
 } from './dashboardComponents'
 import { BadgeDollarSign, Boxes, CircleDollarSign, ClipboardList, PackageSearch, ReceiptText, Route, Truck } from 'lucide-react'
+import { CatalogSelect, useOperationalCatalog } from '../../components/shared/operational-catalogs'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' })
 const numberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
@@ -215,6 +216,7 @@ function LowStockTable({ canLinkInventory, items }: { canLinkInventory: boolean;
 }
 
 function DashboardFilters({ filters, onChange }: { filters: DashboardReportFilters; onChange: (filters: DashboardReportFilters) => void }) {
+  const locations = useOperationalCatalog('/locations?isActive=true&limit=100')
   return (
     <FilterPanel onClear={() => onChange({})}>
       <FieldLabel>
@@ -228,12 +230,7 @@ function DashboardFilters({ filters, onChange }: { filters: DashboardReportFilte
       </FieldLabel>
       <FieldLabel>
         Ubicación operativa
-        <Input
-          className="normal-case tracking-normal"
-          onChange={(event) => onChange({ ...filters, locationId: event.target.value || undefined })}
-          placeholder="Clave de ubicación autorizada"
-          value={filters.locationId ?? ''}
-        />
+        <CatalogSelect className="h-10 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3 text-sm normal-case tracking-normal" error={locations.error} isLoading={locations.isLoading} label="Ubicación operativa" onChange={(locationId) => onChange({ ...filters, locationId: locationId || undefined })} options={locations.data} placeholder="Todas las ubicaciones" value={filters.locationId} />
       </FieldLabel>
     </FilterPanel>
   )

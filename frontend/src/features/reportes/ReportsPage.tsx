@@ -40,6 +40,8 @@ import type {
   ReportFreshness,
   SalesDailyReport,
 } from './types'
+import { CatalogSelect, MiniAjaxSelect, useOperationalCatalog } from '../../components/shared/operational-catalogs'
+import { useRoutePlannerCatalog } from '../rutas-reparto/hooks'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' })
 const numberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
@@ -201,7 +203,12 @@ function DateFilter({ label, onChange, value }: { label: string; onChange: (valu
 
 function AdminUserFilter({ isAdmin, onChange, value }: { isAdmin: boolean; onChange: (value: string) => void; value?: string }) {
   if (!isAdmin) return null
-  return <TextFilter label="Usuario" onChange={onChange} placeholder="ID de vendedor o usuario" value={value} />
+  return <label className={filterLabelClass}>Usuario<MiniAjaxSelect className="h-10 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3.5 text-sm font-semibold normal-case tracking-normal" endpoint="/users?status=active" label="Usuario" onChange={onChange} placeholder="Escribe nombre o usuario" value={value} /></label>
+}
+
+function CatalogFilter({ constrainWidth = false, endpoint, label, onChange, value }: { constrainWidth?: boolean; endpoint: string; label: string; onChange: (value: string) => void; value?: string }) {
+  const catalog = useOperationalCatalog(endpoint)
+  return <label className={`${filterLabelClass} ${constrainWidth ? 'min-w-0' : ''}`}>{label}<CatalogSelect className={`h-10 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3.5 text-sm font-semibold normal-case tracking-normal ${constrainWidth ? 'w-full min-w-0 max-w-full' : ''}`} error={catalog.error} isLoading={catalog.isLoading} label={label} onChange={onChange} options={catalog.data} placeholder="Todos" value={value} /></label>
 }
 
 function FreshnessNotice({ data }: { data?: ReportFreshness }) {
@@ -382,10 +389,10 @@ function SalesDailyReport({ isAdmin }: { isAdmin: boolean }) {
         <>
           <DateFilter label="Fecha" onChange={(date) => setFilters({ ...filters, date })} value={filters.date} />
           <AdminUserFilter isAdmin={isAdmin} onChange={(userId) => setFilters({ ...filters, userId })} value={filters.userId} />
-          <TextFilter label="Ubicación" onChange={(locationId) => setFilters({ ...filters, locationId })} placeholder="ID de ubicación" value={filters.locationId} />
+          <CatalogFilter constrainWidth endpoint="/locations?isActive=true&limit=100" label="Ubicación" onChange={(locationId) => setFilters({ ...filters, locationId })} value={filters.locationId} />
           <NativeSelect label="Tipo de venta" onChange={(paymentType) => setFilters({ ...filters, paymentType })} options={paymentTypes} value={filters.paymentType} />
-          <TextFilter label="Método de pago" onChange={(paymentMethod) => setFilters({ ...filters, paymentMethod })} placeholder="Efectivo, transferencia…" value={filters.paymentMethod} />
-          <TextFilter label="Documento" onChange={(documentType) => setFilters({ ...filters, documentType })} placeholder="Ticket, nota…" value={filters.documentType} />
+          <NativeSelect label="Método de pago" onChange={(paymentMethod) => setFilters({ ...filters, paymentMethod })} options={[{label:'Todos',value:''},{label:'Efectivo',value:'CASH'},{label:'Transferencia',value:'TRANSFER'},{label:'Depósito',value:'DEPOSIT'},{label:'Tarjeta',value:'CARD'},{label:'Cheque',value:'CHECK'}]} value={filters.paymentMethod} />
+          <NativeSelect label="Documento" onChange={(documentType) => setFilters({ ...filters, documentType })} options={[{label:'Todos',value:''},{label:'Ticket de báscula',value:'SCALE_TICKET'},{label:'Nota sencilla',value:'SIMPLE_NOTE'},{label:'Nota grande',value:'LARGE_NOTE'},{label:'Comprobante interno',value:'INTERNAL_RECEIPT'}]} value={filters.documentType} />
         </>
       }
       subtitle="Ventas confirmadas separadas por contado, crédito, cobranza y documento."
@@ -439,7 +446,7 @@ function CashClosingReport({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <ReportPanel
-      filters={<><DateFilter label="Fecha" onChange={(date) => setFilters({ ...filters, date })} value={filters.date} /><AdminUserFilter isAdmin={isAdmin} onChange={(userId) => setFilters({ ...filters, userId })} value={filters.userId} /><TextFilter label="Ubicación" onChange={(locationId) => setFilters({ ...filters, locationId })} placeholder="ID de ubicación" value={filters.locationId} /></>}
+      filters={<><DateFilter label="Fecha" onChange={(date) => setFilters({ ...filters, date })} value={filters.date} /><AdminUserFilter isAdmin={isAdmin} onChange={(userId) => setFilters({ ...filters, userId })} value={filters.userId} /><CatalogFilter constrainWidth endpoint="/locations?isActive=true&limit=100" label="Ubicación" onChange={(locationId) => setFilters({ ...filters, locationId })} value={filters.locationId} /></>}
       subtitle="Corte operativo; no sustituye cierre contable ni liquidación de ruta."
       title="Corte operativo de caja"
     >
@@ -493,7 +500,7 @@ function InventoryPanel({ filters, onChange, query, showSearch = false, subtitle
 }) {
   return (
     <ReportPanel
-      filters={<><TextFilter label="Ubicación" onChange={(locationId) => onChange({ ...filters, locationId })} placeholder="ID de ubicación" value={filters.locationId} /><TextFilter label="Producto" onChange={(productId) => onChange({ ...filters, productId })} placeholder="ID de producto" value={filters.productId} /><TextFilter label="Categoría" onChange={(categoryId) => onChange({ ...filters, categoryId })} placeholder="ID de categoría" value={filters.categoryId} />{showSearch && <TextFilter label="Búsqueda" onChange={(search) => onChange({ ...filters, search })} placeholder="Producto o SKU" value={filters.search} />}</>}
+      filters={<><CatalogFilter constrainWidth endpoint="/locations?isActive=true&limit=100" label="Ubicación" onChange={(locationId) => onChange({ ...filters, locationId })} value={filters.locationId} /><CatalogFilter endpoint="/products?isActive=true&limit=100" label="Producto" onChange={(productId) => onChange({ ...filters, productId })} value={filters.productId} /><CatalogFilter endpoint="/categories?isActive=true&limit=100" label="Categoría" onChange={(categoryId) => onChange({ ...filters, categoryId })} value={filters.categoryId} />{showSearch && <TextFilter label="Búsqueda" onChange={(search) => onChange({ ...filters, search })} placeholder="Producto o SKU" value={filters.search} />}</>}
       subtitle={subtitle}
       title={title}
     >
@@ -534,7 +541,7 @@ function AccountsReceivableReport() {
 
   return (
     <ReportPanel
-      filters={<><TextFilter label="Cliente" onChange={(customerId) => setFilters({ ...filters, customerId })} placeholder="ID de cliente" value={filters.customerId} /><NativeSelect label="Estado de cobranza" onChange={(status) => setFilters({ ...filters, status })} options={collectionStatuses} value={filters.status} /><NativeSelect label="Antigüedad" onChange={(agingStatus) => setFilters({ ...filters, agingStatus })} options={agingStatuses} value={filters.agingStatus} /><DateFilter label="Vence desde" onChange={(dueDateFrom) => setFilters({ ...filters, dueDateFrom })} value={filters.dueDateFrom} /><DateFilter label="Vence hasta" onChange={(dueDateTo) => setFilters({ ...filters, dueDateTo })} value={filters.dueDateTo} /></>}
+      filters={<><label className={filterLabelClass}>Cliente<MiniAjaxSelect className="h-10 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3.5 text-sm font-semibold normal-case tracking-normal" endpoint="/customers?isActive=true" label="Cliente" onChange={(customerId) => setFilters({ ...filters, customerId })} placeholder="Escribe nombre o número" value={filters.customerId} /></label><NativeSelect label="Estado de cobranza" onChange={(status) => setFilters({ ...filters, status })} options={collectionStatuses} value={filters.status} /><NativeSelect label="Antigüedad" onChange={(agingStatus) => setFilters({ ...filters, agingStatus })} options={agingStatuses} value={filters.agingStatus} /><DateFilter label="Vence desde" onChange={(dueDateFrom) => setFilters({ ...filters, dueDateFrom })} value={filters.dueDateFrom} /><DateFilter label="Vence hasta" onChange={(dueDateTo) => setFilters({ ...filters, dueDateTo })} value={filters.dueDateTo} /></>}
       subtitle="Saldo original, pendiente, vencido y pagos conservando accountReceivableId."
       title="Reporte de cuentas por cobrar"
     >
@@ -567,10 +574,11 @@ function AccountsReceivableReport() {
 function DeliveryOperationsReport() {
   const [filters, setFilters] = useState({ dateFrom: today(), dateTo: today(), driverId: '', routeId: '', status: '' })
   const query = useDeliveryOperationsReport(filters)
+  const catalog = useRoutePlannerCatalog()
 
   return (
     <ReportPanel
-      filters={<><DateFilter label="Desde" onChange={(dateFrom) => setFilters({ ...filters, dateFrom })} value={filters.dateFrom} /><DateFilter label="Hasta" onChange={(dateTo) => setFilters({ ...filters, dateTo })} value={filters.dateTo} /><TextFilter label="Ruta" onChange={(routeId) => setFilters({ ...filters, routeId })} placeholder="ID de ruta" value={filters.routeId} /><TextFilter label="Repartidor" onChange={(driverId) => setFilters({ ...filters, driverId })} placeholder="ID de repartidor" value={filters.driverId} /><NativeSelect label="Estado" onChange={(status) => setFilters({ ...filters, status })} options={deliveryStatuses} value={filters.status} /></>}
+      filters={<><DateFilter label="Desde" onChange={(dateFrom) => setFilters({ ...filters, dateFrom })} value={filters.dateFrom} /><DateFilter label="Hasta" onChange={(dateTo) => setFilters({ ...filters, dateTo })} value={filters.dateTo} /><TextFilter label="Ruta" onChange={(routeId) => setFilters({ ...filters, routeId })} placeholder="ID de ruta" value={filters.routeId} /><NativeSelect label="Repartidor" onChange={(driverId) => setFilters({ ...filters, driverId })} options={[{ label: catalog.drivers.error ? 'Catálogo no disponible' : catalog.drivers.isLoading ? 'Cargando…' : 'Todos', value: '' }, ...(catalog.drivers.data ?? []).map((driver) => ({ label: driver.name, value: driver.id }))]} value={filters.driverId} /><NativeSelect label="Estado" onChange={(status) => setFilters({ ...filters, status })} options={deliveryStatuses} value={filters.status} /></>}
       subtitle="Cobros en ruta separados de contado y cobranza directa."
       title="Reporte de operaciones de reparto"
     >

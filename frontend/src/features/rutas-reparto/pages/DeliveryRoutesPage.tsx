@@ -4,18 +4,17 @@ import { CalendarDays, ClipboardList, FilterX, MapPin, PackageCheck, Plus, Route
 import { AssignOrdersModal } from '../components/AssignOrdersModal'
 import { Card, Field, PageFrame, PageShell, PrimaryButton, RouteHero, RouteStatusBadge, SecondaryButton, SecondaryLink, SelectInput, StatusMessage, TextInput } from '../components/RouteUi'
 import { date, shortId } from '../labels'
-import { useDeliveryRoutes, useOpenRouteSettlement } from '../hooks'
-import { useAuth } from '../../auth'
+import { useDeliveryRoutes, useOpenRouteSettlement, useRoutePlannerCatalog } from '../hooks'
 import type { DeliveryRouteListItem, DeliveryRouteStatus } from '../types'
 
 export function DeliveryRoutesPage() {
-  const { user } = useAuth()
   const navigate = useNavigate()
   const [filters, setFilters] = useState({ driverId: '', originLocationId: '', scheduledDate: '', status: '' as DeliveryRouteStatus | '' })
   const [routeToAssign, setRouteToAssign] = useState<DeliveryRouteListItem | null>(null)
   const queryFilters = useMemo(() => ({ ...filters, limit: 50, page: 1 }), [filters])
   const routes = useDeliveryRoutes(queryFilters)
   const openSettlement = useOpenRouteSettlement()
+  const catalog = useRoutePlannerCatalog()
   const items = routes.data?.items ?? []
   const hasFilters = Object.values(filters).some(Boolean)
   const inProgressCount = items.filter((route) => route.status === 'IN_PROGRESS').length
@@ -54,10 +53,10 @@ export function DeliveryRoutesPage() {
             <SecondaryButton disabled={!hasFilters} onClick={() => setFilters({ driverId: '', originLocationId: '', scheduledDate: '', status: '' })}><FilterX className="h-4 w-4" />Limpiar filtros</SecondaryButton>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Repartidor"><TextInput onChange={(event) => setFilters({ ...filters, driverId: event.target.value })} placeholder="driverId" value={filters.driverId} /></Field>
+            <Field label="Repartidor"><SelectInput disabled={catalog.drivers.isLoading || Boolean(catalog.drivers.error)} onChange={(event) => setFilters({ ...filters, driverId: event.target.value })} value={filters.driverId}><option value="">{catalog.drivers.error ? 'Catálogo no disponible' : catalog.drivers.isLoading ? 'Cargando…' : 'Todos los repartidores'}</option>{catalog.drivers.data?.map((driver) => <option key={driver.id} value={driver.id}>{driver.name}</option>)}</SelectInput></Field>
             <Field label="Estado"><SelectInput onChange={(event) => setFilters({ ...filters, status: event.target.value as DeliveryRouteStatus | '' })} value={filters.status}><option value="">Todos</option><option value="PENDING">Pendiente</option><option value="IN_PROGRESS">En ruta</option><option value="COMPLETED">Completada</option><option value="CANCELLED">Cancelada</option></SelectInput></Field>
             <Field label="Fecha programada"><TextInput onChange={(event) => setFilters({ ...filters, scheduledDate: event.target.value })} type="date" value={filters.scheduledDate} /></Field>
-            <Field label="Ubicación origen"><TextInput onChange={(event) => setFilters({ ...filters, originLocationId: event.target.value })} placeholder="originLocationId" value={filters.originLocationId} /></Field>
+            <Field label="Ubicación origen"><SelectInput disabled={catalog.locations.isLoading || Boolean(catalog.locations.error)} onChange={(event) => setFilters({ ...filters, originLocationId: event.target.value })} value={filters.originLocationId}><option value="">{catalog.locations.error ? 'Catálogo no disponible' : catalog.locations.isLoading ? 'Cargando…' : 'Todas las ubicaciones'}</option>{catalog.locations.data?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</SelectInput></Field>
           </div>
         </Card>
 
