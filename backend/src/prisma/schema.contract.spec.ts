@@ -64,10 +64,11 @@ describe('Prisma schema contract', () => {
       'CashMovement',
       'ScaleTicketReference',
       'BillingRequest',
+      'BillingRequestHistory',
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(31);
+    expect(modelNames).toHaveLength(32);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');

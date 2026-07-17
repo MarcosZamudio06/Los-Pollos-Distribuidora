@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  BillingRequestStatus,
   CollectionStatus,
   CreditStatus,
   EquivalentStatus,
@@ -87,7 +88,7 @@ type SalePaymentSummaryInput = {
 type SaleListRecord = Record<string, unknown> & {
   customer?: { id: string; name: string } | null;
   accountReceivable?: { id: string } | null;
-  billingRequest?: { id: string } | null;
+  billingRequest?: { id: string; status?: BillingRequestStatus } | null;
   payments?: SalePaymentSummaryInput[];
 };
 
@@ -177,7 +178,7 @@ export class SalesService {
       include: {
         customer: { select: { id: true, name: true } },
         accountReceivable: { select: { id: true } },
-        billingRequest: { select: { id: true } },
+        billingRequest: { select: { id: true, status: true } },
         payments: {
           where: { status: PaymentStatus.APPLIED },
           orderBy: { paidAt: 'desc' },
@@ -260,7 +261,7 @@ export class SalesService {
       async (tx) => {
         const existingSale = await tx.sale.findUnique({
           where: { idempotencyKey },
-          include: { items: true, payments: true, accountReceivable: true, inventoryMovements: true, documents: true },
+          include: { items: true, payments: true, accountReceivable: true, billingRequest: true, inventoryMovements: true, documents: true },
         });
 
         if (existingSale) {
@@ -272,7 +273,7 @@ export class SalesService {
             sale: this.toSaleResponse(existingSale),
             payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
             accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
-            billingRequest: null,
+            billingRequest: existingSale.billingRequest ?? null,
             inventoryMovements: existingSale.inventoryMovements.map((movement) => this.toMovementResponse(movement)),
             documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
           };
@@ -291,6 +292,8 @@ export class SalesService {
         if (dto.customerId && !customer?.isActive) {
           throw new NotFoundException('Customer not found');
         }
+
+        this.assertBillingRequestInput(dto, customer);
 
         const preparedItems = await this.prepareItems(tx, dto.items);
         const subtotal = this.roundMoney(preparedItems.reduce((sum, item) => sum + item.subtotal, 0));
@@ -421,17 +424,60 @@ export class SalesService {
             })
           : null;
 
+        const billingRequest = dto.requiresAdministrativeInvoice && customer && dto.billingRequest
+          ? await tx.billingRequest.create({
+              data: {
+                saleId: sale.id,
+                customerId: customer.id,
+                requestedByUserId: currentUser.id,
+                status: BillingRequestStatus.REQUESTED,
+                reason: dto.billingRequest.reason.trim(),
+                notes: this.normalizeOptionalText(dto.billingRequest.notes),
+                history: {
+                  create: {
+                    toStatus: BillingRequestStatus.REQUESTED,
+                    changedByUserId: currentUser.id,
+                    reason: dto.billingRequest.reason.trim(),
+                    notes: this.normalizeOptionalText(dto.billingRequest.notes),
+                  },
+                },
+              },
+            })
+          : null;
+
+        if (accountReceivable && billingRequest) {
+          await tx.accountReceivable.update({
+            where: { id: accountReceivable.id },
+            data: { billingRequestId: billingRequest.id },
+          });
+        }
+
         return {
           sale: this.toSaleResponse(sale),
           payment: payment ? this.toPaymentResponse(payment) : null,
           accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
-          billingRequest: null,
+          billingRequest,
           inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
           documents: [this.toSaleDocumentResponse(internalReceiptDocument as SaleDocumentListRecord)],
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  private assertBillingRequestInput(dto: CreateSaleDto, customer: CustomerCredit | null): void {
+    if (!dto.requiresAdministrativeInvoice) {
+      if (dto.billingRequest) {
+        throw new BadRequestException('billingRequest requires requiresAdministrativeInvoice=true');
+      }
+      return;
+    }
+    if (!customer) {
+      throw new BadRequestException('customerId is required for an administrative billing request');
+    }
+    if (!dto.billingRequest?.reason?.trim()) {
+      throw new BadRequestException('billingRequest.reason is required');
+    }
   }
 
   async findDocuments(id: string, currentUser: Actor) {
@@ -950,6 +996,7 @@ export class SalesService {
       createdAt: sale.createdAt,
       accountReceivableId: sale.accountReceivable?.id ?? null,
       billingRequestId: sale.billingRequest?.id ?? null,
+      billingRequestStatus: sale.billingRequest?.status ?? null,
       paymentsSummary: this.toPaymentsSummary(sale.payments ?? []),
       deliveredByUserId: sale.deliveredByUserId ?? null,
       collectedByUserId: sale.collectedByUserId ?? null,

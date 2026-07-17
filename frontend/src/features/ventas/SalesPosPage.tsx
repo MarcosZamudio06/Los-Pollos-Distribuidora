@@ -84,6 +84,8 @@ function getSubmitBlocker({
   paymentMethod,
   paymentType,
   submitting,
+  requiresAdministrativeInvoice,
+  billingRequestReason,
 }: {
   cart: CartItem[]
   customer: CustomerOption | null
@@ -91,6 +93,8 @@ function getSubmitBlocker({
   paymentMethod: PaymentMethod
   paymentType: PaymentType
   submitting: boolean
+  requiresAdministrativeInvoice: boolean
+  billingRequestReason: string
 }) {
   if (!locationId) return 'Selecciona una ubicación operativa.'
   if (cart.length === 0) return 'Agrega al menos un producto.'
@@ -98,6 +102,8 @@ function getSubmitBlocker({
   if (locationError) return locationError
   const invalidItem = cart.find((item) => getQuantityValidationError(item))
   if (invalidItem) return getQuantityValidationError(invalidItem)
+  if (requiresAdministrativeInvoice && !customer) return 'Selecciona un cliente para crear la solicitud administrativa.'
+  if (requiresAdministrativeInvoice && !billingRequestReason.trim()) return 'Captura el motivo de la solicitud administrativa.'
   return canConfirmSale({
     cart,
     creditRestriction: getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod),
@@ -131,7 +137,8 @@ export function SalesPosPage() {
   const [documentType, setDocumentType] = useState<SaleDocumentType>('SIMPLE_NOTE')
   const [physicalFolio, setPhysicalFolio] = useState('')
   const [requiresAdministrativeInvoice, setRequiresAdministrativeInvoice] = useState(false)
-  const [billingRequestId, setBillingRequestId] = useState('')
+  const [billingRequestReason, setBillingRequestReason] = useState('')
+  const [billingRequestNotes, setBillingRequestNotes] = useState('')
   const [backendError, setBackendError] = useState<string | null>(null)
   const [confirmedSaleId, setConfirmedSaleId] = useState<string>()
   const [ticketFallback, setTicketFallback] = useState<TicketData | null>(null)
@@ -151,7 +158,7 @@ export function SalesPosPage() {
   const locationOptions = useMemo(() => locations.data ?? [], [locations.data])
   const selectedLocation = useMemo(() => locationOptions.find((location) => location.id === locationId) ?? null, [locationId, locationOptions])
   const total = calculateCartTotal(cart)
-  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending })
+  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason })
 
   function handleLocationChange(nextLocationId: string) {
     setLocationId(nextLocationId)
@@ -179,12 +186,12 @@ export function SalesPosPage() {
   }
 
   function handleConfirmSale() {
-    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending })
+    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason })
     if (blocker) return
     setBackendError(null)
     setPendingSale({
       payload: buildCreateSalePayload({
-        billingRequestId, cart, customer: selectedCustomer, documentType,
+        billingRequestReason, billingRequestNotes, cart, customer: selectedCustomer, documentType,
         initialPaymentAmount: paymentType === 'CREDIT_SALE' ? initialPaymentAmount : undefined,
         locationId, paymentMethod, paymentType, physicalFolio,
         requiresAdministrativeInvoice, saleChannel, total,
@@ -217,6 +224,7 @@ export function SalesPosPage() {
             paymentType: pendingSale.paymentType,
             collectionStatus: sale?.collectionStatus,
             status: sale?.status,
+            billingRequest: response.billingRequest,
             payments: response.payment ? [{ amount: response.payment.amount, paymentMethod: response.payment.paymentMethod }] : [],
           },
           pendingSale.locationId,
@@ -229,7 +237,8 @@ export function SalesPosPage() {
       setInitialPaymentAmount(0)
       setPhysicalFolio('')
       setRequiresAdministrativeInvoice(false)
-      setBillingRequestId('')
+      setBillingRequestReason('')
+      setBillingRequestNotes('')
       setPendingSale(null)
       toast.success('Venta registrada correctamente.')
       void products.refetch()
@@ -327,9 +336,12 @@ export function SalesPosPage() {
               </div>
             </section>
             <BillingRequestPanel
-              billingRequestId={billingRequestId}
-              onBillingRequestIdChange={setBillingRequestId}
+              hasCustomer={Boolean(selectedCustomer)}
+              notes={billingRequestNotes}
+              onNotesChange={setBillingRequestNotes}
+              onReasonChange={setBillingRequestReason}
               onRequiresAdministrativeInvoiceChange={setRequiresAdministrativeInvoice}
+              reason={billingRequestReason}
               requiresAdministrativeInvoice={requiresAdministrativeInvoice}
             />
             <SaleSummary cart={cart} customer={selectedCustomer} paymentType={paymentType} />

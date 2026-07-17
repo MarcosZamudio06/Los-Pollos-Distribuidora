@@ -15,6 +15,16 @@ export class CreateSaleInitialPaymentDto {
   paidAt!: string;
 }
 
+export class CreateSaleBillingRequestDto {
+  @IsString()
+  @IsNotEmpty()
+  reason!: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 export class CreateSaleItemDto {
   @IsString()
   @IsNotEmpty()
@@ -63,6 +73,11 @@ export class CreateSaleDto {
   @IsBoolean()
   requiresAdministrativeInvoice?: boolean;
 
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateSaleBillingRequestDto)
+  billingRequest?: CreateSaleBillingRequestDto;
+
   @IsEnum(SalePaymentType)
   paymentType!: SalePaymentType;
 
@@ -80,10 +95,6 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   commercialPolicyId?: string;
-
-  @IsOptional()
-  @IsString()
-  billingRequestId?: string;
 
   @IsOptional()
   @IsString()

@@ -278,6 +278,7 @@ model User {
   collectedOrders             DeliveryOrder[]         @relation("DeliveryOrderCollectedBy")
   requestedBillingRequests    BillingRequest[]        @relation("BillingRequestRequestedBy")
   reviewedBillingRequests     BillingRequest[]        @relation("BillingRequestReviewedBy")
+  billingRequestChanges       BillingRequestHistory[] @relation("BillingRequestHistoryChangedBy")
   collectedReceivables        AccountReceivable[]     @relation("AccountReceivableCollector")
   routeSettlements            RouteSettlement[]       @relation("RouteSettlementDriver")
   reopenedRouteSettlements    RouteSettlement[]       @relation("RouteSettlementReopenedBy")
@@ -775,6 +776,26 @@ model BillingRequest {
   requestedBy         User                 @relation("BillingRequestRequestedBy", fields: [requestedByUserId], references: [id])
   reviewedBy          User?                @relation("BillingRequestReviewedBy", fields: [reviewedByUserId], references: [id])
   accountReceivable   AccountReceivable?
+  history             BillingRequestHistory[]
+
+  @@index([customerId, status, requestedAt])
+  @@index([requestedByUserId, requestedAt])
+}
+
+model BillingRequestHistory {
+  id                  String                @id @default(cuid())
+  billingRequestId    String
+  fromStatus          BillingRequestStatus?
+  toStatus            BillingRequestStatus
+  changedByUserId     String
+  changedAt           DateTime              @default(now())
+  reason              String
+  notes               String?
+  billingRequest      BillingRequest        @relation(fields: [billingRequestId], references: [id])
+  changedBy           User                  @relation("BillingRequestHistoryChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([billingRequestId, changedAt])
+  @@index([changedByUserId, changedAt])
 }
 
 model CommercialPolicy {

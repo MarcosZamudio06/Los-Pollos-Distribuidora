@@ -32,6 +32,7 @@ type MockPrisma = {
   sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock };
   accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
+  billingRequest: { create: jest.Mock };
 };
 
 function decimal(value: string | number): Prisma.Decimal {
@@ -54,6 +55,7 @@ function createPrisma(): MockPrisma {
     sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn() },
     accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+    billingRequest: { create: jest.fn() },
   };
   return prisma;
 }
@@ -129,6 +131,7 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
   prisma.accountReceivable.findFirst.mockResolvedValue(null);
   prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
   prisma.accountReceivable.create.mockImplementation(({ data }) => Promise.resolve({ id: 'ar-1', createdAt: now, updatedAt: now, ...data }));
+  prisma.billingRequest.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-1', createdAt: now, updatedAt: now, requestedAt: now, reviewedAt: null, reviewedByUserId: null, status: 'REQUESTED', ...data }));
   Object.assign(prisma.sale.create, saleOverrides);
 }
 
@@ -610,7 +613,6 @@ describe('SalesService', () => {
           physicalFolio: 'SALE-000001',
           status: SaleDocumentStatus.ISSUED,
           requiresAdministrativeInvoice: false,
-          customerSnapshot: null,
           productSnapshot: expect.objectContaining({
             items: [expect.objectContaining({ productId: 'product-1', productName: 'Chicken breast' })],
           }),
@@ -634,6 +636,38 @@ describe('SalesService', () => {
         documents: [expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.INTERNAL_RECEIPT })],
       }),
     );
+  });
+
+  it('creates and returns one administrative billing request inside the sale transaction', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1', name: 'Cliente Uno', isActive: true, creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'), creditDays: 15, commercialPolicyId: null,
+    });
+
+    const result = await service.create(validCashSale({
+      customerId: 'customer-1',
+      requiresAdministrativeInvoice: true,
+      billingRequest: { reason: 'Cliente solicita seguimiento', notes: 'Enviar a administración' },
+    }), { id: 'seller-1', role: 'SELLER' }, 'idem-billing-sale');
+
+    expect(prisma.billingRequest.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        saleId: 'sale-1', customerId: 'customer-1', requestedByUserId: 'seller-1',
+        status: 'REQUESTED', reason: 'Cliente solicita seguimiento', notes: 'Enviar a administración',
+        history: { create: expect.objectContaining({ toStatus: 'REQUESTED', changedByUserId: 'seller-1' }) },
+      }),
+    });
+    expect(result.billingRequest).toEqual(expect.objectContaining({ id: 'billing-1', status: 'REQUESTED' }));
+  });
+
+  it('requires a customer and billing reason when administrative invoicing is requested', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    await expect(service.create(validCashSale({ requiresAdministrativeInvoice: true, billingRequest: { reason: 'Razón' } }), { id: 'seller-1', role: 'SELLER' }, 'idem-no-customer')).rejects.toBeInstanceOf(BadRequestException);
+    prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE, creditLimit: decimal('1000'), creditDays: 15 });
+    await expect(service.create(validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true }), { id: 'seller-1', role: 'SELLER' }, 'idem-no-reason')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('creates a credit sale with an account receivable for the outstanding backend total', async () => {
@@ -766,6 +800,22 @@ describe('SalesService', () => {
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
     expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-1' }));
+  });
+
+  it('replays the administrative request created by an idempotent sale without duplicating it', async () => {
+    const { service, prisma } = createService();
+    const dto = validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true, billingRequest: { reason: 'Seguimiento' } });
+    prisma.sale.findUnique.mockResolvedValue({
+      id: 'sale-1', saleNumber: 'SALE-000001', subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
+      paymentType: SalePaymentType.CASH_SALE, idempotencyPayloadHash: hashPayload(dto), items: [], payments: [], accountReceivable: null,
+      billingRequest: { id: 'billing-1', status: 'REQUESTED' }, inventoryMovements: [], documents: [],
+    });
+
+    const result = await service.create(dto, { id: 'seller-1', role: 'SELLER' }, 'idem-billing-sale');
+
+    expect(result.billingRequest).toEqual({ id: 'billing-1', status: 'REQUESTED' });
+    expect(prisma.billingRequest.create).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
   });
 
   it('allows only ADMIN to authorize credit limit override and persists the approval reason', async () => {

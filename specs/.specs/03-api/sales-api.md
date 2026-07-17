@@ -61,7 +61,11 @@ Body importante:
   "saleChannel": "COUNTER",
   "documentType": "SIMPLE_NOTE",
   "physicalFolio": "string opcional",
-  "requiresAdministrativeInvoice": false,
+  "requiresAdministrativeInvoice": true,
+  "billingRequest": {
+    "reason": "Motivo obligatorio",
+    "notes": "Notas opcionales"
+  },
   "paymentType": "CASH_SALE",
   "initialPayment": {
     "amount": 500,
@@ -70,7 +74,6 @@ Body importante:
   },
   "discount": 0,
   "commercialPolicyId": "string opcional",
-  "billingRequestId": "string opcional",
   "administrativeOverrideReason": "string opcional",
   "items": [
     {
@@ -117,7 +120,8 @@ Validaciones:
 - Contraentrega no registra dinero recibido hasta que exista `Payment`.
 - `Payment` es la única fuente monetaria del flujo; `Sale` no persiste `paymentMethod`.
 - Si `requiresAdministrativeInvoice=true`, la venta solo genera relación administrativa; no emite CFDI.
-- `billingRequestId` solo puede usarse con cliente registrado y relación comercial válida.
+- Si `requiresAdministrativeInvoice=true`, `customerId` y `billingRequest.reason` son obligatorios; `billingRequest.notes` es opcional.
+- No se aceptan identificadores internos de solicitud escritos manualmente.
 - Descontar inventario, crear venta, items, pago inicial y cuenta por cobrar cuando aplique en una transacción.
 - Requerir idempotencia para creación de venta y pago inicial.
 
@@ -205,7 +209,7 @@ Los endpoints existentes de ventas deben soportar los siguientes campos sin crea
 - `ROUTE` requiere `locationId` de tipo `ROUTE_STOCK` activo asociado a la ruta.
 - Público general puede omitir `customerId` en contado.
 - Cliente fijo usa `customerId` y precios resueltos por política comercial o autorización auditable.
-- La solicitud administrativa se modela con `billingRequestId` y `requiresAdministrativeInvoice`; no agrega un valor propio de `documentType` ni genera CFDI.
+- La solicitud administrativa se crea con `requiresAdministrativeInvoice` y el objeto `billingRequest`; no agrega un valor propio de `documentType` ni genera CFDI.
 - `SCALE_TICKET` registra una venta interna y puede asociar después una `ScaleTicketReference`; la referencia se captura manualmente.
 - La venta confirmada descuenta inventario únicamente de su `OperationalLocation`.
 

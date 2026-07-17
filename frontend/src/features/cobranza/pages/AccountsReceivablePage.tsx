@@ -56,7 +56,7 @@ function ReceivableTable({ accounts, canPay, onRegisterPayment, onViewDetail }: 
               return <tr className="align-top transition hover:bg-[var(--erp-surface)]/70" key={account.id}>
                 <td className={`${bodyCell} font-black`}>{account.customerName ?? account.customerId}</td>
                 <td className={bodyCell}><span className="inline-flex items-center gap-2"><ReceiptText className="h-4 w-4 text-[var(--erp-muted-foreground)]" />{account.saleNumber ?? account.saleId ?? '—'}</span></td>
-                <td className={bodyCell}><BillingRequestBadge billingRequestId={account.billingRequestId} /></td>
+                <td className={bodyCell}><BillingRequestBadge billingRequestId={account.billingRequestId} status={account.billingRequestStatus} /></td>
                 <td className={`${bodyCell} text-right font-semibold tabular-nums`}>{formatMoney(account.originalAmount)}</td>
                 <td className={`${bodyCell} text-right font-black tabular-nums text-[var(--erp-danger)]`}>{formatMoney(account.outstandingAmount)}</td>
                 <td className={`${bodyCell} text-right font-semibold tabular-nums`}>{formatMoney(account.outstandingAmount)}</td>

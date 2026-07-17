@@ -65,6 +65,10 @@ export type CreateSalePayload = {
   documentType: SaleDocumentType
   physicalFolio?: string
   requiresAdministrativeInvoice: boolean
+  billingRequest?: {
+    reason: string
+    notes?: string
+  }
   paymentType: PaymentType
   initialPayment?: {
     amount: number
@@ -73,13 +77,13 @@ export type CreateSalePayload = {
   }
   discount: number
   commercialPolicyId?: string
-  billingRequestId?: string
   administrativeOverrideReason?: string
   items: CreateSaleItemPayload[]
 }
 
 export type BuildCreateSalePayloadInput = {
-  billingRequestId?: string
+  billingRequestReason?: string
+  billingRequestNotes?: string
   cart: CartItem[]
   customer: CustomerOption | null
   documentType: SaleDocumentType
@@ -126,6 +130,7 @@ export type TicketData = {
   documentType?: SaleDocumentType | string
   physicalFolio?: string | null
   requiresAdministrativeInvoice?: boolean
+  billingRequest?: { id?: string; status?: string } | null
   sellerName?: string
   customerName?: string | null
   locationId?: string
@@ -179,6 +184,7 @@ export type SaleListItem = {
   createdAt?: string
   accountReceivableId?: string | null
   billingRequestId?: string | null
+  billingRequestStatus?: string | null
   paymentsSummary?: PaymentsSummary
   deliveredByUserId?: string | null
   collectedByUserId?: string | null

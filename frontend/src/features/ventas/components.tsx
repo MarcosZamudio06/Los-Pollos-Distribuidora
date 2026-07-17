@@ -265,16 +265,22 @@ export function PaymentMethodSelector({
 }
 
 type BillingRequestPanelProps = {
-  billingRequestId: string
-  onBillingRequestIdChange: (billingRequestId: string) => void
+  hasCustomer: boolean
+  notes: string
+  onNotesChange: (notes: string) => void
+  onReasonChange: (reason: string) => void
   onRequiresAdministrativeInvoiceChange: (requiresAdministrativeInvoice: boolean) => void
+  reason: string
   requiresAdministrativeInvoice: boolean
 }
 
 export function BillingRequestPanel({
-  billingRequestId,
-  onBillingRequestIdChange,
+  hasCustomer,
+  notes,
+  onNotesChange,
+  onReasonChange,
   onRequiresAdministrativeInvoiceChange,
+  reason,
   requiresAdministrativeInvoice,
 }: BillingRequestPanelProps) {
   return (
@@ -282,18 +288,14 @@ export function BillingRequestPanel({
       <h2 className="text-lg font-black tracking-[-0.04em]">Documento administrativo</h2>
       <div className="mt-3 grid gap-3">
         <label className="flex items-start gap-3 rounded-2xl bg-[var(--erp-surface-muted)] p-3 text-sm font-bold text-[var(--erp-muted-foreground)]">
-          <input checked={requiresAdministrativeInvoice} onChange={(event) => onRequiresAdministrativeInvoiceChange(event.target.checked)} type="checkbox" />
+          <input checked={requiresAdministrativeInvoice} disabled={!hasCustomer} onChange={(event) => onRequiresAdministrativeInvoiceChange(event.target.checked)} type="checkbox" />
           Vincula esta venta con una solicitud administrativa interna.
         </label>
-        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
-          ID de la solicitud administrativa
-          <input
-            className={inputClass}
-            onChange={(event) => onBillingRequestIdChange(event.target.value)}
-            placeholder="billingRequestId"
-            value={billingRequestId}
-          />
-        </label>
+        {!hasCustomer && <p className="text-sm font-semibold text-[var(--erp-danger)]">Selecciona un cliente antes de solicitar seguimiento administrativo.</p>}
+        {requiresAdministrativeInvoice && <>
+          <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Motivo obligatorio<input className={inputClass} onChange={(event) => onReasonChange(event.target.value)} placeholder="Describe por qué requiere seguimiento" required value={reason} /></label>
+          <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Notas opcionales<textarea className={`${inputClass} min-h-24 resize-y`} onChange={(event) => onNotesChange(event.target.value)} placeholder="Indicaciones para administración" value={notes} /></label>
+        </>}
         <p className="rounded-2xl border border-[rgba(47,111,115,0.20)] bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">
           Solo relación administrativa interna. Esto no emite CFDI, UUID SAT, timbrado ni ninguna factura fiscal.
         </p>
@@ -376,6 +378,7 @@ export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModa
           <div className="ticket-data-row"><dt>Ubicación</dt><dd>{data.locationName ?? data.locationId ?? '—'}</dd></div>
           <div className="ticket-data-row"><dt>Documento</dt><dd>{documentTypeLabel(data.documentType)} {data.physicalFolio ? `· ${data.physicalFolio}` : ''}</dd></div>
           <div className="ticket-data-row"><dt>Pago</dt><dd>{paymentTypeLabel(data.paymentType)} · {paymentMethodLabel(data.payments?.[0]?.paymentMethod)}</dd></div>
+          {data.billingRequest?.id && <div className="ticket-data-row"><dt>Solicitud administrativa</dt><dd>{data.billingRequest.id} · {data.billingRequest.status ?? 'REQUESTED'}</dd></div>}
         </dl>
         <section className="mt-10 border-t border-[#e8e8e8] pt-8">
           <p className="mb-7 text-sm font-semibold text-[#737373]">Detalle de venta</p>

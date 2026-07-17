@@ -2,6 +2,7 @@ import {
   BarChart3,
   CircleDollarSign,
   ClipboardList,
+  ClipboardCheck,
   History,
   Home,
   MapPinned,
@@ -22,6 +23,7 @@ export type NavigationItemKey =
   | 'sales-history'
   | 'customers'
   | 'accounts-receivable'
+  | 'billing-requests'
   | 'inventory'
   | 'purchases'
   | 'purchase-suppliers'
@@ -100,6 +102,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Cuentas por cobrar',
     section: 'financial',
     to: '/accounts-receivable',
+  },
+  {
+    activePaths: ['/billing-requests', '/billing-requests/'],
+    allowedRoles: ROUTE_ACCESS_ROLES.billingRequests,
+    routeAccessKey: 'billingRequests',
+    description: 'Seguimiento administrativo',
+    icon: ClipboardCheck,
+    key: 'billing-requests',
+    label: 'Solicitudes de facturación',
+    section: 'financial',
+    to: '/billing-requests',
   },
   {
     activePaths: ['/inventory'],

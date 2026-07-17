@@ -18,6 +18,7 @@ import { ProductListPage } from '../features/inventario'
 import { EmployeesPage } from '../features/employees'
 import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RoutePlannerPage, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
+import { BillingRequestDetailPage, BillingRequestsPage } from '../features/billing-requests'
 
 export function AppRouter() {
   return (
@@ -40,6 +41,8 @@ export function AppRouter() {
         }
       >
         <Route path="/403" element={<ForbiddenPage />} />
+        <Route path="/billing-requests/:id" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestDetailPage /></RoleRoute>} />
+        <Route path="/billing-requests" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestsPage /></RoleRoute>} />
         <Route
           path="/customers"
           element={

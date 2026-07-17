@@ -57,6 +57,8 @@ Validaciones:
 - `reason` requerido.
 - La solicitud no debe crear CFDI ni campos SAT.
 - Debe conservar la trazabilidad interna de la venta.
+- La venta no puede estar cancelada, debe tener cliente y no puede tener otra solicitud.
+- Una solicitud creada para una venta con saldo pendiente se enlaza a su cuenta por cobrar.
 
 ## PATCH /api/billing-requests/:id
 
@@ -70,6 +72,9 @@ Validaciones:
 - No modificar inventario ni importes de venta.
 - No permitir cambios que conviertan la solicitud en CFDI.
 - Solo permitir transición controlada entre `REQUESTED`, `IN_REVIEW`, `APPROVED`, `REJECTED` y `CANCELLED`.
+- Transiciones permitidas: `REQUESTED → IN_REVIEW|CANCELLED` e `IN_REVIEW → APPROVED|REJECTED|CANCELLED`.
+- `APPROVED`, `REJECTED` y `CANCELLED` son terminales.
+- Cada transición registra actor, fecha, motivo y notas en historial.
 
 ## POST /api/billing-requests/:id/cancel
 

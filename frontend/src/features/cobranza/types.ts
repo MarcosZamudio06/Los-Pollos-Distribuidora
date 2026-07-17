@@ -23,6 +23,7 @@ export type AccountReceivable = {
   saleId?: string | null
   saleNumber?: string | null
   billingRequestId?: string | null
+  billingRequestStatus?: string | null
   originalAmount: string | number
   outstandingAmount: string | number
   saleDate: string | Date

@@ -10,6 +10,8 @@ import { useSale, useSaleDocuments, useSaleTicket } from './hooks'
 import { collectionStatusLabel, dateTime, documentTypeLabel, money, paymentMethodLabel, paymentTypeLabel, saleChannelLabel, saleStatusLabel } from './saleLabels'
 import type { BadgeTone } from '@/components/ui'
 import type { SaleDetail, SaleDocument, TicketData } from './types'
+import { BillingRequestStatusBadge } from '../billing-requests'
+import type { BillingRequestStatus } from '../billing-requests/types'
 
 function saleStatusTone(status?: string | null): BadgeTone {
   if (status === 'CONFIRMED') return 'green'
@@ -267,7 +269,7 @@ export function SaleDetailView({
                       <DetailRow label="Pagado" value={money(sale.data.paymentsSummary?.totalPaid)} />
                       <DetailRow label="Último pago" value={dateTime(sale.data.paymentsSummary?.lastPaidAt)} />
                       <DetailRow label="Cuenta por cobrar" value={sale.data.accountReceivableId ?? '—'} />
-                      <DetailRow label="Solicitud administrativa" value={sale.data.billingRequestId ?? '—'} />
+                      {sale.data.billingRequestId ? <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"><dt className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Solicitud administrativa</dt><dd className="mt-2"><Link className="inline-flex items-center gap-2 font-bold text-[var(--erp-info)]" to={`/billing-requests/${sale.data.billingRequestId}`}>{sale.data.billingRequest?.status ? <BillingRequestStatusBadge status={sale.data.billingRequest.status as BillingRequestStatus} /> : sale.data.billingRequestId}</Link></dd></div> : <DetailRow label="Solicitud administrativa" value="—" />}
                     </dl>
                     {sale.data.requiresAdministrativeInvoice && <p className="mt-4 rounded-2xl border border-[rgba(47,111,115,0.20)] bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">Solicitud administrativa interna; no es CFDI ni comprobante fiscal.</p>}
                   </CardContent>

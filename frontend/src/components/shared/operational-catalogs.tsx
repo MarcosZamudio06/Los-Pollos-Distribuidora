@@ -19,7 +19,7 @@ function option(item: unknown): CatalogOption | null {
   if (!item || typeof item !== 'object') return null
   const value = item as Record<string, unknown>
   const id = String(value.id ?? '')
-  const label = String(value.name ?? value.fullName ?? value.commercialName ?? value.customerNumber ?? id)
+  const label = String(value.name ?? value.fullName ?? value.commercialName ?? value.customerNumber ?? value.saleNumber ?? id)
   return id ? { id, label } : null
 }
 

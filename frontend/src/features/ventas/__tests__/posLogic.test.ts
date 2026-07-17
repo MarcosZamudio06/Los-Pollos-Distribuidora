@@ -178,6 +178,8 @@ describe('POS sale payload', () => {
         paymentType: 'CREDIT_SALE',
         physicalFolio: '',
         requiresAdministrativeInvoice: true,
+        billingRequestReason: 'Cliente solicita seguimiento',
+        billingRequestNotes: 'Enviar a administración',
         saleChannel: 'WHOLESALE',
         total: 276,
       }),
@@ -189,6 +191,10 @@ describe('POS sale payload', () => {
       paymentType: 'CREDIT_SALE',
       physicalFolio: undefined,
       requiresAdministrativeInvoice: true,
+      billingRequest: {
+        reason: 'Cliente solicita seguimiento',
+        notes: 'Enviar a administración',
+      },
       saleChannel: 'WHOLESALE',
     })
   })
@@ -219,10 +225,11 @@ describe('POS sale payload', () => {
     })
   })
 
-  it('sends an existing administrative billing request link in the create-sale payload', () => {
+  it('creates an administrative billing request without accepting an internal id', () => {
     expect(
       buildCreateSalePayload({
-        billingRequestId: 'billing-request-123',
+        billingRequestReason: ' Motivo administrativo ',
+        billingRequestNotes: ' Nota opcional ',
         cart: [kgItem],
         customer: activeCustomer,
         documentType: 'SIMPLE_NOTE',
@@ -235,7 +242,7 @@ describe('POS sale payload', () => {
         total: 301.2,
       }),
     ).toMatchObject({
-      billingRequestId: 'billing-request-123',
+      billingRequest: { reason: 'Motivo administrativo', notes: 'Nota opcional' },
       customerId: 'customer-active',
       requiresAdministrativeInvoice: true,
     })

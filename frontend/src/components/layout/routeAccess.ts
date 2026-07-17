@@ -7,6 +7,7 @@ export type KnownRole = (typeof KNOWN_ROLES)[number]
 
 export const ROUTE_ACCESS_ROLES = {
   accountsReceivable: ['ADMIN', 'COLLECTIONS'],
+  billingRequests: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   admin: ['ADMIN'],
   customers: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   dashboard: ALL_ROLES,

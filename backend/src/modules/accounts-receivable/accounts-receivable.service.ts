@@ -36,7 +36,7 @@ type ReceivableRecord = AccountReceivable & {
     documentType: string;
     physicalFolio?: string | null;
   } | null;
-  billingRequest?: unknown | null;
+  billingRequest?: { id?: string; status?: string } | null;
   payments?: Payment[];
 };
 
@@ -402,6 +402,7 @@ export class AccountsReceivableService {
       saleId: receivable.saleId,
       saleNumber: receivable.sale?.saleNumber,
       billingRequestId: receivable.billingRequestId,
+      billingRequestStatus: receivable.billingRequest?.status ?? null,
       originalAmount: this.toMoneyString(receivable.originalAmount),
       outstandingAmount: this.toMoneyString(receivable.outstandingAmount),
       saleDate: receivable.saleDate,

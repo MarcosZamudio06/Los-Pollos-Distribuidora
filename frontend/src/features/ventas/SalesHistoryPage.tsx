@@ -9,6 +9,8 @@ import { useSales } from './hooks'
 import { collectionStatusLabel, dateTime, documentTypeLabel, money, paymentTypeLabel, saleChannelLabel, saleStatusLabel } from './saleLabels'
 import type { BadgeTone } from '@/components/ui'
 import type { CollectionStatus, PaymentType, SaleChannel, SaleDocumentType, SaleStatus } from './types'
+import { BillingRequestStatusBadge } from '../billing-requests'
+import type { BillingRequestStatus } from '../billing-requests/types'
 
 const filterLabelClass = 'grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]'
 
@@ -116,7 +118,7 @@ export function SalesHistoryPage() {
               <div className="overflow-x-auto rounded-[1.2rem] border border-[color:var(--erp-border)]">
                 <Table className="min-w-[1080px]">
                   <thead>
-                    <tr><Th>Venta</Th><Th>Cliente</Th><Th>Documento</Th><Th className="text-right">Total</Th><Th>Estado comercial</Th><Th>Asignación de ruta</Th><Th>Cobranza</Th><Th>Fecha</Th><Th className="text-right">Acciones</Th></tr>
+                    <tr><Th>Venta</Th><Th>Cliente</Th><Th>Documento</Th><Th className="text-right">Total</Th><Th>Estado comercial</Th><Th>Solicitud</Th><Th>Asignación de ruta</Th><Th>Cobranza</Th><Th>Fecha</Th><Th className="text-right">Acciones</Th></tr>
                   </thead>
                   <tbody>
                     {pagination.pageItems.map((sale) => (
@@ -126,6 +128,7 @@ export function SalesHistoryPage() {
                         <Td><p className="font-semibold">{documentTypeLabel(sale.documentType)}</p>{sale.physicalFolio ? <p className="mt-1 flex items-center gap-1 text-xs text-[var(--erp-muted-foreground)]"><FileText className="h-3.5 w-3.5" />Folio {sale.physicalFolio}</p> : null}</Td>
                         <Td className="text-right text-base font-black tabular-nums">{money(sale.total)}</Td>
                         <Td><Badge tone={saleStatusTone(sale.status)}>{saleStatusLabel(sale.status)}</Badge></Td>
+                        <Td>{sale.billingRequestId && sale.billingRequestStatus ? <Link className="inline-flex" to={`/billing-requests/${sale.billingRequestId}`}><BillingRequestStatusBadge status={sale.billingRequestStatus as BillingRequestStatus} /></Link> : <span className="text-[var(--erp-muted-foreground)]">Sin solicitud</span>}</Td>
                         <Td><Badge tone={sale.routeId ? 'blue' : 'amber'}>{sale.routeId ? 'Ruta asignada' : 'Sin ruta asignada'}</Badge></Td>
                         <Td><Badge tone={collectionStatusTone(sale.collectionStatus)}>{collectionStatusLabel(sale.collectionStatus)}</Badge></Td>
                         <Td><p className="flex items-center gap-2 text-sm text-[var(--erp-muted-foreground)]"><CalendarDays className="h-4 w-4" />{dateTime(sale.createdAt)}</p></Td>

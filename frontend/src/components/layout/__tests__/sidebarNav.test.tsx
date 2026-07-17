@@ -28,6 +28,7 @@ describe('role navigation', () => {
   it('mantiene navegación enlazada a la matriz central de rutas', () => {
     expect(NAVIGATION_ITEMS.every((item) => item.allowedRoles === ROUTE_ACCESS_ROLES[item.routeAccessKey])).toBe(true)
     expect(ROUTE_ACCESS_ROLES.accountsReceivable).toEqual(['ADMIN', 'COLLECTIONS'])
+    expect(ROUTE_ACCESS_ROLES.billingRequests).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS'])
     expect(ROUTE_ACCESS_ROLES.deliveryRouteDetail).toEqual(['ADMIN', 'COLLECTIONS', 'DRIVER'])
     expect(ROUTE_ACCESS_ROLES.deliveryRoutes).toEqual(['ADMIN', 'COLLECTIONS', 'WAREHOUSE'])
   })
@@ -41,6 +42,7 @@ describe('role navigation', () => {
       '/sales/history',
       '/customers',
       '/accounts-receivable',
+      '/billing-requests',
       '/inventory',
       '/purchases',
       '/purchases/suppliers',
@@ -60,6 +62,7 @@ describe('role navigation', () => {
       '/sales',
       '/sales/history',
       '/customers',
+      '/billing-requests',
       '/inventory',
       '/reports',
     ])
@@ -77,6 +80,7 @@ describe('role navigation', () => {
       '/sales/history',
       '/customers',
       '/accounts-receivable',
+      '/billing-requests',
       '/delivery-routes',
       '/reports',
     ])
@@ -90,6 +94,7 @@ describe('role navigation', () => {
 
   it('marca rutas de detalle en el acceso principal correcto', () => {
     expect(getActiveSidebarItemKey('/sales/sale-1')).toBe('sales-history')
+    expect(getActiveSidebarItemKey('/billing-requests/request-1')).toBe('billing-requests')
     expect(getActiveSidebarItemKey('/purchases/purchase-1')).toBe('purchases')
     expect(getActiveSidebarItemKey('/purchases/suppliers')).toBe('purchase-suppliers')
     expect(getActiveSidebarItemKey('/delivery-routes/route-1/evidence')).toBe('delivery-routes')

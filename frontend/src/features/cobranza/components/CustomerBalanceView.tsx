@@ -31,7 +31,7 @@ export function CustomerBalanceView({ accountId, fallbackAccount, onClose }: Cus
           <p className="mt-2 text-sm text-white/70">Saldo pendiente {formatMoney(account.outstandingAmount)} · Estado {account.status}</p>
         </header>
         <section className="rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white p-5 text-sm shadow-[var(--erp-shadow)]">
-          <div className="mb-4 flex flex-wrap gap-2"><BillingRequestBadge billingRequestId={account.billingRequestId} /><CreditBlockedCustomerBadge creditStatus={detail.data?.customer?.creditStatus} daysOverdue={account.daysOverdue} outstandingAmount={account.outstandingAmount} /></div>
+          <div className="mb-4 flex flex-wrap gap-2"><BillingRequestBadge billingRequestId={account.billingRequestId} status={account.billingRequestStatus} /><CreditBlockedCustomerBadge creditStatus={detail.data?.customer?.creditStatus} daysOverdue={account.daysOverdue} outstandingAmount={account.outstandingAmount} /></div>
           <div className="grid gap-3">
             <p className="flex justify-between gap-4"><span className="text-[var(--erp-muted-foreground)]">Monto original</span><strong>{formatMoney(account.originalAmount)}</strong></p>
             <p className="flex justify-between gap-4"><span className="text-[var(--erp-muted-foreground)]">Saldo final</span><strong className="text-[var(--erp-danger)]">{formatMoney(account.outstandingAmount)}</strong></p>

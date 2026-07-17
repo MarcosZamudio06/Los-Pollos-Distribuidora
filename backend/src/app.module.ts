@@ -20,6 +20,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BillingRequestsModule } from './modules/billing-requests/billing-requests.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     PurchasesModule,
     DeliveryModule,
     ReportsModule,
+    BillingRequestsModule,
   ],
   controllers: [],
   providers: [],

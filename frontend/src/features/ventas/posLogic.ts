@@ -112,7 +112,8 @@ export function getSaleRestriction(
 
 export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): CreateSalePayload {
   const physicalFolio = input.physicalFolio.trim()
-  const billingRequestId = input.billingRequestId?.trim()
+  const billingRequestReason = input.billingRequestReason?.trim()
+  const billingRequestNotes = input.billingRequestNotes?.trim()
   const initialPaymentAmount = input.initialPaymentAmount ?? (input.paymentType === 'CASH_SALE' ? input.total : 0)
   const initialPayment =
     input.paymentMethod && initialPaymentAmount > 0
@@ -130,11 +131,13 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
     documentType: input.documentType,
     physicalFolio: physicalFolio || undefined,
     requiresAdministrativeInvoice: input.requiresAdministrativeInvoice,
+    billingRequest: input.requiresAdministrativeInvoice && billingRequestReason
+      ? { reason: billingRequestReason, notes: billingRequestNotes || undefined }
+      : undefined,
     paymentType: input.paymentType,
     initialPayment,
     discount: 0,
     commercialPolicyId: input.customer?.commercialPolicyId ?? input.customer?.creditSummary?.commercialPolicyId ?? undefined,
-    billingRequestId: billingRequestId || undefined,
     items: input.cart.map((item) => ({
       productId: item.productId,
       presentationType: item.presentationType,
