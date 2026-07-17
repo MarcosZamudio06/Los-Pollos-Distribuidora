@@ -365,7 +365,7 @@ export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModa
         </div>
         <div className="px-6 py-9 sm:px-12 sm:py-12">
           <header>
-            <img alt="" aria-hidden="true" className="h-16 w-auto max-w-[11rem] object-contain object-left" src="/ticket.png" />
+            <img alt="" aria-hidden="true" className="h-16 w-auto max-w-[11rem] object-contain object-left" src="/477123481_10232415903693976_8230121272963336539_n.svg" />
             <h2 className="mt-9 text-[2rem] font-black leading-[1.08] tracking-[-0.04em] sm:text-[2.4rem]">Comprobante de venta</h2>
             <p className="mt-3 text-base leading-relaxed text-[#696969] sm:text-lg">{data.createdAt ? new Date(data.createdAt).toLocaleString('es-MX') : 'Generado al confirmar la venta'}</p>
           </header>
