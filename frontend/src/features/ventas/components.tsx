@@ -357,36 +357,41 @@ export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModa
   const data = ticket ?? fallback
   if (!data) return null
   const modal = (
-    <aside className="ticket-print-root fixed inset-0 z-40 grid place-items-center bg-[#20211f]/60 p-4">
-      <section className="ticket-print-content max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-6 text-[#20211f] shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-[#9d2d24]">Ticket interno</p>
-            <h2 className="mt-2 text-3xl font-black tracking-[-0.05em]">{data.ticketNumber ?? data.saleNumber ?? data.ticketId ?? 'Venta confirmada'}</h2>
-            <p className="mt-1 text-sm text-[#68645c]">{data.createdAt ? new Date(data.createdAt).toLocaleString('es-MX') : 'Generado al confirmar la venta'}</p>
-          </div>
-          <div className="flex gap-3">
-            <button className="font-black text-[#9d2d24]" onClick={() => window.print()} type="button">Imprimir</button>
-            <button className="font-black text-[#68645c]" onClick={onClose} type="button">Cerrar</button>
-          </div>
+    <aside className="ticket-print-root fixed inset-0 z-40 grid place-items-center bg-black/55 p-3 sm:p-6">
+      <section className="ticket-print-content max-h-[94vh] w-full max-w-[42rem] overflow-y-auto bg-white text-[#171717] shadow-2xl sm:rounded-md">
+        <div className="ticket-actions sticky top-0 z-10 flex justify-end gap-5 border-b border-[#ececec] bg-white/95 px-6 py-4 backdrop-blur sm:px-10">
+          <button className="text-sm font-bold text-[#292929] transition hover:text-black" onClick={() => window.print()} type="button">Imprimir</button>
+          <button className="text-sm font-bold text-[#686868] transition hover:text-black" onClick={onClose} type="button">Cerrar</button>
         </div>
+        <div className="px-6 py-9 sm:px-12 sm:py-12">
+          <header>
+            <img alt="" aria-hidden="true" className="h-16 w-auto max-w-[11rem] object-contain object-left" src="/ticket.png" />
+            <h2 className="mt-9 text-[2rem] font-black leading-[1.08] tracking-[-0.04em] sm:text-[2.4rem]">Comprobante de venta</h2>
+            <p className="mt-3 text-base leading-relaxed text-[#696969] sm:text-lg">{data.createdAt ? new Date(data.createdAt).toLocaleString('es-MX') : 'Generado al confirmar la venta'}</p>
+          </header>
         {isLoading && <p className="mt-4 rounded-2xl bg-[#f5f3ee] p-3 text-sm font-bold text-[#39798b]">Cargando datos del ticket interno...</p>}
-        <dl className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
-          <div><dt className="text-[#68645c]">Cliente</dt><dd className="font-bold">{data.customerName ?? 'Público general'}</dd></div>
-          <div><dt className="text-[#68645c]">Ubicación</dt><dd className="font-bold">{data.locationName ?? data.locationId ?? '—'}</dd></div>
-          <div><dt className="text-[#68645c]">Documento</dt><dd className="font-bold">{documentTypeLabel(data.documentType)} {data.physicalFolio ? `· ${data.physicalFolio}` : ''}</dd></div>
-          <div><dt className="text-[#68645c]">Pago</dt><dd className="font-bold">{paymentTypeLabel(data.paymentType)} · {paymentMethodLabel(data.payments?.[0]?.paymentMethod)}</dd></div>
+        <dl className="mt-10 grid gap-7 text-sm sm:text-base">
+          <div className="ticket-data-row"><dt>Ticket interno</dt><dd>{data.ticketNumber ?? data.saleNumber ?? data.ticketId ?? 'Venta confirmada'}</dd></div>
+          <div className="ticket-data-row"><dt>Cliente</dt><dd>{data.customerName ?? 'Público general'}</dd></div>
+          <div className="ticket-data-row"><dt>Ubicación</dt><dd>{data.locationName ?? data.locationId ?? '—'}</dd></div>
+          <div className="ticket-data-row"><dt>Documento</dt><dd>{documentTypeLabel(data.documentType)} {data.physicalFolio ? `· ${data.physicalFolio}` : ''}</dd></div>
+          <div className="ticket-data-row"><dt>Pago</dt><dd>{paymentTypeLabel(data.paymentType)} · {paymentMethodLabel(data.payments?.[0]?.paymentMethod)}</dd></div>
         </dl>
-        <div className="mt-5 grid gap-2">
+        <section className="mt-10 border-t border-[#e8e8e8] pt-8">
+          <p className="mb-7 text-sm font-semibold text-[#737373]">Detalle de venta</p>
+          <div className="grid gap-7">
           {data.items?.map((item, index) => (
-            <article className="rounded-2xl bg-[#f5f3ee] p-3 text-sm" key={`${item.productName ?? item.product ?? 'item'}-${index}`}>
-              <p className="font-black">{item.productName ?? item.product}</p>
-              <p className="text-[#68645c]">{operationalUnitLabel(item.unit)} · {item.quantityKg ?? item.kilos ?? 0} kg · {item.quantityPieces ?? item.pieces ?? 0} piezas · {toMoney(item.subtotal)}</p>
+            <article className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-5 gap-y-2 text-sm sm:text-base" key={`${item.productName ?? item.product ?? 'item'}-${index}`}>
+              <p className="min-w-0 break-words font-bold leading-snug">{item.productName ?? item.product}</p>
+              <p className="text-right font-semibold text-[#555]">{toMoney(item.subtotal)}</p>
+              <p className="col-span-2 break-words leading-relaxed text-[#6b6b6b]">{operationalUnitLabel(item.unit)} · {item.quantityKg ?? item.kilos ?? 0} kg · {item.quantityPieces ?? item.pieces ?? 0} piezas</p>
             </article>
           ))}
+          </div>
+        </section>
+        <div className="ticket-total-row mt-10 border-t border-[#e8e8e8] pt-8"><span>Total</span><strong>{toMoney(data.total)}</strong></div>
+        <p className="mt-10 border-t border-[#e8e8e8] pt-8 text-sm font-semibold leading-relaxed text-[#686868]">Comprobante interno sin validez fiscal. Las solicitudes administrativas son controles internos; este POS no emite CFDI ni comprobantes fiscales.</p>
         </div>
-        <p className="mt-5 text-right text-3xl font-black tracking-[-0.05em]">{toMoney(data.total)}</p>
-        <p className="mt-5 rounded-2xl border border-[#20211f]/10 bg-[#f5f3ee] p-4 text-sm font-bold text-[#68645c]">Comprobante interno sin validez fiscal. Las solicitudes administrativas son controles internos; este POS no emite CFDI ni comprobantes fiscales.</p>
       </section>
     </aside>
   )

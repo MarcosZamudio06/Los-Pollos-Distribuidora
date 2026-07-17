@@ -77,11 +77,16 @@ export function Sidebar({ collapsed = false, onNavigate, variant = 'desktop' }: 
       <div className={cn('relative flex items-start gap-3 px-4 py-5', !expanded && 'justify-center px-3')}>
         <Link
           aria-label="Ir al inicio"
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[var(--erp-surface)] text-sm font-black tracking-[-0.04em] text-[var(--erp-brand-red)] shadow-[0_14px_34px_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5 focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
+          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[var(--erp-surface)] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5 focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
           onClick={onNavigate}
           to="/"
         >
-          EP
+          <img
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-contain"
+            src="/logo-circular-colored.svg"
+          />
         </Link>
 
         {expanded && (

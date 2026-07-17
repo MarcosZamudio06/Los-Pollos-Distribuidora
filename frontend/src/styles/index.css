@@ -25,11 +25,14 @@
     max-height: none !important;
     overflow: visible !important;
     border-radius: 0 !important;
-    padding: 0 !important;
     box-shadow: none !important;
   }
 
-  .ticket-print-content button {
+  .ticket-print-content > div:last-child {
+    padding: 5mm !important;
+  }
+
+  .ticket-actions {
     display: none !important;
   }
 
@@ -37,6 +40,42 @@
   .ticket-print-content dl,
   .ticket-print-content p {
     break-inside: avoid;
+  }
+}
+
+@layer components {
+  .ticket-data-row,
+  .ticket-total-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.72fr) minmax(0, 1.28fr);
+    align-items: start;
+    gap: 1.25rem;
+  }
+
+  .ticket-data-row dt,
+  .ticket-total-row span {
+    font-weight: 700;
+    color: #171717;
+  }
+
+  .ticket-data-row dd,
+  .ticket-total-row strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+    color: #5f5f5f;
+  }
+
+  .ticket-total-row {
+    align-items: baseline;
+    font-size: 1.125rem;
+  }
+
+  .ticket-total-row strong {
+    font-size: clamp(1.75rem, 6vw, 2.35rem);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    color: #171717;
   }
 }
 
