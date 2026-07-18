@@ -8,6 +8,7 @@ import {
   InventoryTransferStatus,
   MovementChannel,
   OperationalLocationType,
+  OverdueBlockingMode,
   PaymentMethod,
   PaymentStatus,
   PointOfSaleDailyCloseLineConcept,
@@ -120,7 +121,7 @@ export type SeedCommercialPolicy = {
   customerType: CustomerType;
   defaultCreditLimit: number;
   defaultCreditDays: number;
-  overdueBlockingMode: string;
+  overdueBlockingMode: OverdueBlockingMode;
   creditLimitBlockingMode: string;
   allowAdministrativeOverride: boolean;
 };

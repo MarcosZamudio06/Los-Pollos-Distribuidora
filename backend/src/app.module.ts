@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { validateEnvironment } from './config/env.validation';
@@ -31,6 +32,7 @@ import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close
       load: [appConfig, databaseConfig],
       validate: validateEnvironment,
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,

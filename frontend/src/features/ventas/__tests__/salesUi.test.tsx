@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancelSaleDialog } from '../CancelSaleDialog'
-import { Cart, TicketModal } from '../components'
+import { Cart, CustomerSelector, SaleSummary, TicketModal } from '../components'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
 import { SalesPosPage } from '../SalesPosPage'
@@ -24,7 +24,10 @@ const mockState = vi.hoisted(() => ({
   sale: { data: null as SaleDetail | null, error: null, isLoading: false },
   sales: { data: { items: [] as SaleDetail[] }, error: null, isLoading: false },
   ticket: { data: undefined as TicketData | undefined, error: null, isLoading: false },
+  toast: { success: vi.fn(), warning: vi.fn() },
 }))
+
+vi.mock('sonner', () => ({ toast: mockState.toast }))
 
 vi.mock('../hooks', () => ({
   useCancelSale: () => mockState.cancelSale,
@@ -77,6 +80,12 @@ function getSelectByLabelText(container: HTMLElement, text: string): HTMLSelectE
   return select
 }
 
+function changeTextarea(textarea: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  setter?.call(textarea, value)
+  textarea.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 async function renderDom(element: React.ReactElement): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -118,6 +127,8 @@ describe('TASK-055 sales UI behavior', () => {
     mockState.sale = { data: null, error: null, isLoading: false }
     mockState.sales = { data: { items: [] }, error: null, isLoading: false }
     mockState.ticket = { data: undefined, error: null, isLoading: false }
+    mockState.toast.success.mockReset()
+    mockState.toast.warning.mockReset()
   })
 
 
@@ -157,6 +168,79 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Confirmar venta')
   })
 
+  it('muestra advertencia, mora y política sin presentar WARN_ONLY como bloqueo', () => {
+    const customer = {
+      id: 'customer-warning', name: 'Comedor Central', customerType: 'INSTITUTIONAL' as const,
+      creditStatus: 'ACTIVE', isActive: true,
+      creditSummary: {
+        effectiveCreditStatus: 'WARNING' as const,
+        overdueAmount: 125,
+        maximumDaysOverdue: 4,
+        overdueBlockingMode: 'WARN_ONLY' as const,
+        blockingReasons: ['CREDIT_OVERDUE_WARNING'],
+        availableCredit: 900,
+      },
+    }
+
+    const selector = renderToStaticMarkup(<CustomerSelector customers={[customer]} error={null} isLoading={false} onSearchChange={() => undefined} onSelect={() => undefined} search="" selectedCustomer={customer} />)
+    const summary = renderToStaticMarkup(<SaleSummary cart={[]} customer={customer} paymentType="CREDIT_SALE" />)
+
+    expect(selector).toContain('Advertencia de crédito')
+    expect(selector).toContain('Vencido $125.00')
+    expect(selector).toContain('4 días de atraso')
+    expect(summary).toContain('Solo advertencia')
+    expect(summary).not.toContain('Crédito bloqueado')
+  })
+
+  it('permite a ADMIN autorizar un bloqueo de mora con motivo explícito y lo envía en la venta', async () => {
+    mockState.auth = { user: { role: 'ADMIN' } }
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
+    mockState.customers = { data: [{ id: 'customer-1', name: 'Restaurante Norte', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', commercialPolicyId: 'policy-1', isActive: true, creditSummary: { effectiveCreditStatus: 'BLOCKED', isBlockedForCredit: true, blockingReason: 'Saldo vencido', blockingReasons: ['CREDIT_OVERDUE_BLOCKED'], canAdministrativeOverride: true, overdueAmount: 800, maximumDaysOverdue: 8, availableCredit: 3000 } }], error: null, isLoading: false }
+    mockState.createSale.mutateAsync.mockResolvedValue({ sale: { id: 'sale-1', items: [], total: 92, paymentType: 'CREDIT_SALE', status: 'CONFIRMED' } })
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
+      await act(async () => { getButtonByText(container, 'Agregar').click(); getButtonByText(container, 'Restaurante Norte').click(); getButtonByText(container, 'Venta a crédito').click() })
+
+      expect(container.textContent).toContain('Autorizar excepción de crédito')
+      const overrideCheckbox = container.querySelector('input[name="credit-override"]') as HTMLInputElement
+      await act(async () => { overrideCheckbox.click() })
+      const reason = container.querySelector('textarea[name="credit-override-reason"]') as HTMLTextAreaElement
+      await act(async () => { changeTextarea(reason, 'Autorizado por dirección') })
+      await act(async () => { getButtonByText(container, 'Venta de contado').click(); getButtonByText(container, 'Venta a crédito').click() })
+      expect((container.querySelector('input[name="credit-override"]') as HTMLInputElement).checked).toBe(false)
+      expect(container.querySelector('textarea[name="credit-override-reason"]')).toBeNull()
+      await act(async () => { (container.querySelector('input[name="credit-override"]') as HTMLInputElement).click() })
+      await act(async () => { changeTextarea(container.querySelector('textarea[name="credit-override-reason"]') as HTMLTextAreaElement, 'Autorizado por dirección') })
+      await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
+      expect(document.body.textContent).toContain('Autorización administrativa')
+      await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
+
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección' }))
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('no expone autorización de crédito a SELLER', async () => {
+    mockState.auth = { user: { role: 'SELLER' } }
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.customers = { data: [{ id: 'customer-1', name: 'Cliente bloqueado', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', isActive: true, creditSummary: { effectiveCreditStatus: 'BLOCKED', isBlockedForCredit: true, blockingReason: 'Saldo vencido', blockingReasons: ['CREDIT_OVERDUE_BLOCKED'], canAdministrativeOverride: true } }], error: null, isLoading: false }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      await act(async () => { getButtonByText(container, 'Cliente bloqueado').click(); getButtonByText(container, 'Venta a crédito').click() })
+      expect(container.textContent).not.toContain('Autorizar excepción de crédito')
+      expect(container.textContent).toContain('Saldo vencido')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('deja vacíos kilos y piezas del carrito cuando su valor es cero', () => {
     const html = renderToStaticMarkup(<Cart items={[{ availableKg: 10, availablePieces: 10, id: 'prod-1', locationId: 'loc-counter', name: 'Pollo mixto', presentationType: 'WHOLE', productId: 'prod-1', quantityKg: 0, quantityPieces: 0, salePrice: 100, unit: 'KG_AND_PIECE', unitPrice: 100 }]} onQuantityChange={() => undefined} onRemove={() => undefined} />)
 
@@ -178,6 +262,7 @@ describe('TASK-055 sales UI behavior', () => {
       isLoading: false,
     }
     mockState.createSale.mutateAsync.mockResolvedValue({
+      creditWarnings: ['CREDIT_OVERDUE_WARNING'],
       sale: { id: 'sale-1', saleNumber: 'V-1001', items: [], total: 92, paymentType: 'CASH_SALE', status: 'CONFIRMED', collectionStatus: 'PAID' },
       payment: { amount: 92, paymentMethod: 'CASH' },
       ticketId: 'ticket-1',
@@ -201,6 +286,7 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
       expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
+      expect(mockState.toast.warning).toHaveBeenCalledWith('Venta registrada con advertencia por saldo vencido.')
       expect(container.textContent).toContain('0 partidas')
       expect(container.textContent).not.toContain('$5,000.00')
       expect(container.textContent).not.toContain('Limpiar cliente')

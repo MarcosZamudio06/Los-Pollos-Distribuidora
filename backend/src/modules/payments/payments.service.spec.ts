@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { CollectionStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { AgingStatus, CollectionStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentsService } from './payments.service';
 
@@ -69,6 +69,7 @@ function createService(prisma = createPrisma()) {
 
 describe('PaymentsService', () => {
   it('cancels a collection payment and restores receivable balance transactionally', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-20T12:00:00.000Z'));
     const { service, prisma } = createService();
 
     await expect(
@@ -76,7 +77,12 @@ describe('PaymentsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.payment.findFirst.mockResolvedValue(null);
-    prisma.payment.findUnique.mockResolvedValue(createPayment());
+    prisma.payment.findUnique.mockResolvedValue(createPayment({
+      accountReceivable: {
+        ...createPayment().accountReceivable,
+        dueDate: new Date('2026-06-25T06:00:00.000Z'),
+      },
+    }));
     prisma.payment.update.mockResolvedValue({
       ...createPayment(),
       status: PaymentStatus.CANCELLED,
@@ -129,10 +135,12 @@ describe('PaymentsService', () => {
       data: expect.objectContaining({
         outstandingAmount: 1000,
         status: CollectionStatus.UNPAID,
+        agingStatus: AgingStatus.DUE_SOON,
         lastPaymentDate: null,
         paidAt: null,
       }),
     }));
+    jest.useRealTimers();
   });
 
   it('rejects cancellation without reason, missing payment, already cancelled payment, or stale expectedVersion', async () => {

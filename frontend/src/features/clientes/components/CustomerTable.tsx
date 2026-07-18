@@ -15,6 +15,9 @@ const actionClass = 'inline-flex h-9 items-center justify-center gap-2 rounded-x
 
 function CustomerBadge({ customer }: { customer: Customer }) {
   if (!isActive(customer)) return <span className="inline-flex rounded-full border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] px-2.5 py-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">Inactivo</span>
+  const effective = customer.creditSummary?.effectiveCreditStatus ?? customer.effectiveCreditStatus
+  if (effective === 'WARNING') return <span className="inline-flex rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">Crédito con advertencia</span>
+  if (effective === 'BLOCKED') return <span className="inline-flex rounded-full border border-[rgba(157,45,36,0.25)] bg-[rgba(157,45,36,0.10)] px-2.5 py-1 text-xs font-semibold text-[var(--erp-danger)]">Crédito bloqueado</span>
   if (customer.creditStatus === 'BLOCKED') return <span className="inline-flex rounded-full border border-[rgba(157,45,36,0.25)] bg-[rgba(157,45,36,0.10)] px-2.5 py-1 text-xs font-semibold text-[var(--erp-danger)]">Bloqueado</span>
   if (customer.creditStatus === 'ACTIVE') return <span className="inline-flex rounded-full border border-[rgba(63,123,65,0.25)] bg-[rgba(63,123,65,0.10)] px-2.5 py-1 text-xs font-semibold text-[var(--erp-success)]">Crédito activo</span>
   return <span className="inline-flex rounded-full border border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">{text(customer.creditStatus)}</span>

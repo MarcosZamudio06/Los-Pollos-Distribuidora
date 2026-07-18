@@ -83,9 +83,9 @@ export class PointOfSaleDailyCloseController {
       await this.service.validate(id),
     );
   }
-  @Post(':id/refresh') @Roles('ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS') async refresh(
-    @Param('id') id: string,
-  ) {
+  @Post(':id/refresh')
+  @Roles('ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS')
+  async refresh(@Param('id') id: string) {
     return this.response(
       'Daily close refreshed successfully',
       await this.service.refresh(id),

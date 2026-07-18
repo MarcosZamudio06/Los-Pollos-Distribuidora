@@ -29,7 +29,7 @@ describe('CommercialPoliciesController API', () => {
     await request(app.getHttpServer()).get('/api/commercial-policies?page=1&limit=10&customerType=WHOLESALE&isActive=true').set('Authorization', 'Bearer seller-token').expect(200);
     expect(service.findAll).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 10, customerType: 'WHOLESALE', isActive: true }));
 
-    await request(app.getHttpServer()).post('/api/commercial-policies').set('Authorization', 'Bearer admin-token').send({ name: 'Wholesale standard', defaultCreditLimit: 50000, defaultCreditDays: 15, overdueBlockingMode: 'BLOCK', creditLimitBlockingMode: 'BLOCK', effectiveFrom: '2026-06-19', isActive: true }).expect(201);
+    await request(app.getHttpServer()).post('/api/commercial-policies').set('Authorization', 'Bearer admin-token').send({ name: 'Wholesale standard', defaultCreditLimit: 50000, defaultCreditDays: 15, overdueBlockingMode: 'BLOCK_NEW_CREDIT', creditLimitBlockingMode: 'BLOCK', effectiveFrom: '2026-06-19', isActive: true }).expect(201);
     expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Wholesale standard' }), adminUser);
 
     await request(app.getHttpServer()).patch('/api/commercial-policies/policy-1').set('Authorization', 'Bearer admin-token').send({ defaultCreditDays: 20 }).expect(200);

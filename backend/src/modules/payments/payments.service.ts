@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { createHash } from 'crypto';
 import { CollectionStatus, PaymentStatus, Prisma, type AccountReceivable, type Payment } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { calculateReceivableAging } from '../accounts-receivable/receivable-aging';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CancelPaymentDto } from './dto';
 
@@ -179,7 +180,7 @@ export class PaymentsService {
     const nextStatus = restoredOutstanding >= originalAmount
       ? CollectionStatus.UNPAID
       : CollectionStatus.PARTIALLY_PAID;
-    const daysOverdue = this.calculateDaysOverdue(accountReceivable.dueDate, new Date(), restoredOutstanding);
+    const aging = calculateReceivableAging(accountReceivable.dueDate, restoredOutstanding);
     const lastPayment = (await tx.payment.findFirst({
       where: {
         accountReceivableId: accountReceivable.id,
@@ -195,8 +196,7 @@ export class PaymentsService {
       data: {
         outstandingAmount: restoredOutstanding,
         status: nextStatus,
-        agingStatus: daysOverdue > 0 ? 'OVERDUE' : 'CURRENT',
-        daysOverdue,
+        ...aging,
         lastPaymentDate: lastPayment?.paidAt ?? null,
         paidAt: null,
       },
@@ -231,15 +231,6 @@ export class PaymentsService {
 
   private hashPayload(payload: Record<string, unknown>): string {
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-  }
-
-  private calculateDaysOverdue(dueDate: Date, referenceDate: Date, outstandingAmount: number): number {
-    if (outstandingAmount <= 0 || referenceDate <= dueDate) {
-      return 0;
-    }
-
-    const millisecondsPerDay = 24 * 60 * 60 * 1000;
-    return Math.floor((referenceDate.getTime() - dueDate.getTime()) / millisecondsPerDay);
   }
 
   private toPaymentResponse(payment: PaymentWithReceivable) {

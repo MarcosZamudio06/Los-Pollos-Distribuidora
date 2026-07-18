@@ -34,6 +34,20 @@ npm --prefix frontend run lint
 
 ---
 
+## Despliegue de automatización de crédito
+
+Aplicar en este orden para evitar incompatibilidad entre columnas y Prisma Client:
+
+```bash
+OPENSSL_CONF=/dev/null npm --prefix backend --script-shell=/bin/sh exec prisma -- migrate deploy --schema backend/prisma/schema.prisma
+OPENSSL_CONF=/dev/null npm --prefix backend --script-shell=/bin/sh exec prisma -- generate --schema backend/prisma/schema.prisma
+OPENSSL_CONF=/dev/null npm --prefix backend run build
+```
+
+Después de migrar, desplegar o recrear el backend. `APP_TIMEZONE` acepta una zona IANA y usa `America/Mexico_City` por defecto.
+
+---
+
 ## Comandos que no deben usarse como validación SDD principal
 
 No usar `npm test` raíz si es placeholder.

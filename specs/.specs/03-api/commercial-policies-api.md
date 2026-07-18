@@ -37,7 +37,7 @@ Body importante:
   "priceListId": "string opcional",
   "defaultCreditLimit": 50000,
   "defaultCreditDays": 15,
-  "overdueBlockingMode": "BLOCK",
+  "overdueBlockingMode": "BLOCK_NEW_CREDIT",
   "creditLimitBlockingMode": "BLOCK",
   "allowAdministrativeOverride": true,
   "effectiveFrom": "2026-06-19",
@@ -53,6 +53,7 @@ Validaciones:
 - `effectiveFrom` requerido para políticas activas.
 - No permitir una política que desactive cuentas por cobrar en ventas a crédito.
 - `customerType` debe ser compatible con clientes minoristas, mayoristas o institucionales.
+- `overdueBlockingMode` solo admite `WARN_ONLY` o `BLOCK_NEW_CREDIT`.
 
 ## PATCH /api/commercial-policies/:id
 

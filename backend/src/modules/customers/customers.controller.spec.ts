@@ -126,6 +126,9 @@ describe('CustomersController API', () => {
           message: 'Customers retrieved successfully',
           data: { items: [customerResponse] },
         });
+        expect(body.data.items[0]).not.toHaveProperty('accountReceivables');
+        expect(body.data.items[0]).not.toHaveProperty('payments');
+        expect(body.data.items[0]).not.toHaveProperty('billingRequests');
       });
 
     expect(customersService.findAll).toHaveBeenCalledWith(
@@ -149,6 +152,9 @@ describe('CustomersController API', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.data).toEqual(customerResponse);
+        expect(body.data).not.toHaveProperty('accountReceivables');
+        expect(body.data).not.toHaveProperty('payments');
+        expect(body.data).not.toHaveProperty('billingRequests');
       });
     expect(customersService.findOne).toHaveBeenCalledWith('customer-1');
   });

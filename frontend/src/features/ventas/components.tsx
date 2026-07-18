@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
-import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney } from './posLogic'
+import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
 import { documentTypeLabel, operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
 
 type ProductSearchProps = {
@@ -27,6 +27,20 @@ function errorMessage(error: unknown, fallback: string): string {
 
 const panelClass = 'rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[var(--erp-shadow)]'
 const inputClass = 'rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-3 text-[var(--erp-foreground)] outline-none transition focus:border-[var(--erp-info)] focus:ring-2 focus:ring-[rgba(47,111,115,0.16)]'
+
+function effectiveCreditLabel(customer: CustomerOption) {
+  const status = customer.creditSummary?.effectiveCreditStatus ?? customer.effectiveCreditStatus
+  if (status === 'BLOCKED') return 'Crédito bloqueado'
+  if (status === 'WARNING') return 'Advertencia de crédito'
+  return 'Crédito disponible'
+}
+
+function overduePolicyLabel(customer: CustomerOption) {
+  const mode = customer.creditSummary?.overdueBlockingMode
+  if (mode === 'BLOCK_NEW_CREDIT') return 'Bloquea crédito nuevo'
+  if (mode === 'WARN_ONLY') return 'Solo advertencia'
+  return 'Sin bloqueo automático'
+}
 
 export function ProductSearch({
   error,
@@ -195,15 +209,15 @@ export function CustomerSelector({ customers, error, isLoading, onSearchChange, 
       {Boolean(error) && <p role="alert" className="mt-3 text-sm font-bold text-[var(--erp-danger)]">{errorMessage(error, 'La búsqueda de clientes falló.')}</p>}
       {selectedCustomer && (
         <article className="mt-3 rounded-2xl bg-[var(--erp-foreground)] p-4 text-white">
-          <p className="font-black">{selectedCustomer.name}</p>
-          <p className="text-sm text-white/70">{selectedCustomer.customerType} · Crédito {selectedCustomer.creditStatus ?? '—'}</p>
+          <div className="flex items-start justify-between gap-3"><div><p className="font-black">{selectedCustomer.name}</p><p className="text-sm text-white/70">{selectedCustomer.customerType} · Estado administrativo {selectedCustomer.creditStatus ?? '—'}</p></div><span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-black">{effectiveCreditLabel(selectedCustomer)}</span></div>
+          <div className="mt-3 grid gap-1 text-sm text-white/75"><p>Vencido {toMoney(selectedCustomer.creditSummary?.overdueAmount)}</p><p>{selectedCustomer.creditSummary?.maximumDaysOverdue ?? selectedCustomer.creditSummary?.daysOverdue ?? 0} días de atraso</p><p>{overduePolicyLabel(selectedCustomer)}</p></div>
           <button className="mt-3 text-sm font-black text-[var(--erp-brand-gold)]" onClick={() => onSelect(null)} type="button">Limpiar cliente</button>
         </article>
       )}
       <div className="mt-3 grid max-h-72 gap-2 overflow-auto">
         {customers.map((customer) => (
           <button className="rounded-xl border border-[color:var(--erp-border)] bg-white p-3 text-left transition hover:border-[var(--erp-info)] disabled:opacity-50" disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
-            <span className="block font-black">{customer.name}</span>
+            <span className="flex items-center justify-between gap-2"><span className="font-black">{customer.name}</span><span className="text-xs font-black text-[var(--erp-muted-foreground)]">{effectiveCreditLabel(customer)}</span></span>
             <span className="text-sm text-[var(--erp-muted-foreground)]">{customer.customerType} · {customer.creditSummary?.availableCredit !== undefined ? `Disponible ${toMoney(customer.creditSummary.availableCredit)}` : customer.creditLimit !== undefined && customer.creditLimit !== null ? `Límite ${toMoney(customer.creditLimit)}` : 'Límite —'}</span>
           </button>
         ))}
@@ -306,13 +320,14 @@ export function BillingRequestPanel({
 
 type SaleSummaryProps = {
   cart: CartItem[]
+  creditOptions?: CreditRestrictionOptions
   customer: CustomerOption | null
   paymentType: PaymentType
 }
 
-export function SaleSummary({ cart, customer, paymentType }: SaleSummaryProps) {
+export function SaleSummary({ cart, creditOptions, customer, paymentType }: SaleSummaryProps) {
   const total = calculateCartTotal(cart)
-  const creditRestriction = getCreditRestriction(paymentType, customer, total)
+  const creditRestriction = getCreditRestriction(paymentType, customer, total, creditOptions)
   return (
     <section className={panelClass}>
       <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black tracking-[-0.04em]">Resumen de la venta</h2><CheckCircle2 className="h-5 w-5 text-[var(--erp-success)]" /></div>
@@ -323,8 +338,13 @@ export function SaleSummary({ cart, customer, paymentType }: SaleSummaryProps) {
         <div className="flex justify-between"><dt>Límite de crédito</dt><dd className="font-black">{customer ? toMoney(customer.creditSummary?.creditLimit ?? customer.creditLimit) : '—'}</dd></div>
         <div className="flex justify-between"><dt>Crédito disponible</dt><dd className="font-black">{customer?.creditSummary?.availableCredit !== undefined ? toMoney(customer.creditSummary.availableCredit) : '—'}</dd></div>
         <div className="flex justify-between"><dt>Saldo pendiente</dt><dd className="font-black">{customer?.creditSummary?.outstandingAmount !== undefined ? toMoney(customer.creditSummary.outstandingAmount) : '—'}</dd></div>
+        <div className="flex justify-between"><dt>Saldo vencido</dt><dd className="font-black text-[var(--erp-danger)]">{customer ? toMoney(customer.creditSummary?.overdueAmount) : '—'}</dd></div>
+        <div className="flex justify-between"><dt>Días máximos de atraso</dt><dd className="font-black">{customer?.creditSummary?.maximumDaysOverdue ?? customer?.creditSummary?.daysOverdue ?? '—'}</dd></div>
+        <div className="flex justify-between"><dt>Política de mora</dt><dd className="font-black">{customer ? overduePolicyLabel(customer) : '—'}</dd></div>
       </dl>
       {creditRestriction && <p role="alert" className="mt-4 rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-3 text-sm font-bold text-[var(--erp-danger)]">{creditRestriction}</p>}
+      {paymentType === 'CREDIT_SALE' && customer?.creditSummary?.effectiveCreditStatus === 'WARNING' && <p className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-800"><AlertTriangle className="mr-2 inline h-4 w-4" />El cliente tiene saldo vencido. La política permite continuar con advertencia.</p>}
+      {creditOptions?.overrideEnabled && !creditRestriction && <p className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-800">La venta continuará con autorización administrativa y motivo auditable.</p>}
       {paymentType === 'CREDIT_SALE' && !creditRestriction && <p className="mt-4 rounded-2xl border border-[rgba(47,111,115,0.20)] bg-[rgba(47,111,115,0.08)] p-3 text-sm font-bold text-[var(--erp-info)]">Esta venta generará una cuenta por cobrar por el saldo pendiente.</p>}
     </section>
   )

@@ -68,15 +68,27 @@ function numberFrom(value: string | number | null | undefined) {
   return Number.isFinite(numericValue) ? numericValue : 0
 }
 
-export function getCreditRestriction(paymentType: PaymentType, customer: CustomerOption | null, total: number) {
+export type CreditRestrictionOptions = {
+  isAdmin?: boolean
+  overrideEnabled?: boolean
+  overrideReason?: string
+}
+
+export function getCreditRestriction(paymentType: PaymentType, customer: CustomerOption | null, total: number, options: CreditRestrictionOptions = {}) {
   if (paymentType !== 'CREDIT_SALE') return null
   if (!customer || customer.isActive === false || customer.active === false) {
     return 'Selecciona un cliente activo para una venta a crédito.'
   }
 
   const summary = customer.creditSummary
-  const isBlocked = customer.isBlockedForCredit || summary?.isBlocked || summary?.isBlockedForCredit
+  const isBlocked = summary?.effectiveCreditStatus === 'BLOCKED' || customer.effectiveCreditStatus === 'BLOCKED' || customer.isBlockedForCredit || summary?.isBlocked || summary?.isBlockedForCredit
   if (isBlocked || customer.creditStatus === 'BLOCKED' || summary?.creditStatus === 'BLOCKED') {
+    const administrativelyBlocked = summary?.blockingReasons?.includes('CREDIT_ADMINISTRATIVELY_BLOCKED') || customer.creditStatus === 'BLOCKED' || customer.creditStatus === 'SUSPENDED'
+    const canOverride = options.isAdmin && summary?.canAdministrativeOverride && !administrativelyBlocked
+    if (options.overrideEnabled && canOverride) {
+      if (!options.overrideReason?.trim()) return 'Captura el motivo de la autorización administrativa.'
+      return null
+    }
     return summary?.blockingReason ?? summary?.blockReason ?? 'El crédito del cliente está bloqueado.'
   }
 
@@ -102,12 +114,36 @@ export function getSaleRestriction(
   customer: CustomerOption | null,
   total: number,
   paymentMethod: PaymentMethod,
+  options: CreditRestrictionOptions = {},
 ) {
   if (paymentType === 'CASH_SALE' && !paymentMethod && (!customer || customer.isActive === false || customer.active === false)) {
     return 'Selecciona un cliente activo cuando no se capture pago inicial.'
   }
 
-  return getCreditRestriction(paymentType, customer, total)
+  return getCreditRestriction(paymentType, customer, total, options)
+}
+
+const CREDIT_ERROR_MESSAGES: Record<string, string> = {
+  CREDIT_ADMINISTRATIVELY_BLOCKED: 'El crédito del cliente está bloqueado administrativamente.',
+  CREDIT_CONCURRENCY_RETRY_EXHAUSTED: 'El crédito cambió durante la venta. Actualiza el cliente e inténtalo nuevamente.',
+  CREDIT_LIMIT_EXCEEDED: 'La venta excede el límite de crédito disponible del cliente.',
+  CREDIT_OVERDUE_BLOCKED: 'El cliente tiene saldo vencido y su política bloquea nuevas ventas a crédito.',
+  CREDIT_OVERRIDE_FORBIDDEN: 'Solo un administrador puede autorizar esta excepción de crédito.',
+  CREDIT_OVERRIDE_NOT_ALLOWED: 'La política comercial del cliente no permite autorizaciones administrativas.',
+  CREDIT_OVERRIDE_NOT_APPLICABLE: 'La autorización administrativa ya no aplica. Actualiza el estado de crédito del cliente.',
+  CREDIT_OVERRIDE_REASON_REQUIRED: 'Captura el motivo de la autorización administrativa.',
+  CREDIT_POLICY_MISMATCH: 'La política comercial enviada no coincide con la asignada al cliente. Actualiza la información del cliente.',
+}
+
+export function getSaleErrorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'payload' in error) {
+    const payload = (error as { payload?: unknown }).payload
+    if (typeof payload === 'object' && payload !== null && 'code' in payload) {
+      const code = String((payload as { code?: unknown }).code ?? '')
+      if (CREDIT_ERROR_MESSAGES[code]) return CREDIT_ERROR_MESSAGES[code]
+    }
+  }
+  return error instanceof Error && error.message ? error.message : 'La confirmación de la venta falló.'
 }
 
 export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): CreateSalePayload {
@@ -138,6 +174,7 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
     initialPayment,
     discount: 0,
     commercialPolicyId: input.customer?.commercialPolicyId ?? input.customer?.creditSummary?.commercialPolicyId ?? undefined,
+    administrativeOverrideReason: input.administrativeOverrideReason?.trim() || undefined,
     items: input.cart.map((item) => ({
       productId: item.productId,
       presentationType: item.presentationType,

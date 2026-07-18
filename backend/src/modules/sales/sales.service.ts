@@ -21,6 +21,7 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, ListSalesQueryDto } from './dto';
+import { evaluateCreditDecision } from './credit-decision';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
@@ -255,10 +256,11 @@ export class SalesService {
     if (!dto.items?.length) {
       throw new BadRequestException('Sale must contain at least one item');
     }
+    this.assertOverrideIntent(dto, currentUser);
 
     const payloadHash = this.hashPayload(dto);
 
-    return this.prisma.$transaction(
+    return this.withSerializableRetry(() => this.prisma.$transaction(
       async (tx) => {
         const existingSale = await tx.sale.findUnique({
           where: { idempotencyKey },
@@ -311,10 +313,19 @@ export class SalesService {
         if (outstandingAmount > 0 && !customer) {
           throw new BadRequestException('customerId is required when sale leaves an outstanding balance');
         }
+        if (dto.administrativeOverrideReason !== undefined && (dto.paymentType !== SalePaymentType.CREDIT_SALE || outstandingAmount <= 0 || !customer)) {
+          throw new BadRequestException({ code: 'CREDIT_OVERRIDE_NOT_APPLICABLE', message: 'Administrative override is not applicable to this sale' });
+        }
 
-        const hasAdministrativeOverride = this.hasAdministrativeOverride(dto, currentUser);
+        let creditDecision: Awaited<ReturnType<typeof evaluateCreditDecision>> | null = null;
         if (outstandingAmount > 0 && customer && dto.paymentType === SalePaymentType.CREDIT_SALE) {
-          await this.assertCreditAllowed(tx, customer, outstandingAmount, hasAdministrativeOverride);
+          creditDecision = await evaluateCreditDecision(tx, {
+            customer,
+            newOutstandingAmount: outstandingAmount,
+            actor: currentUser,
+            policyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer.commercialPolicyId),
+            overrideReason: dto.administrativeOverrideReason,
+          });
         }
 
         const inventoryChanges = await this.reserveInventory(tx, preparedItems, dto.locationId);
@@ -333,8 +344,10 @@ export class SalesService {
             commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer?.commercialPolicyId),
             idempotencyKey,
             idempotencyPayloadHash: payloadHash,
-            administrativeOverrideReason: hasAdministrativeOverride ? dto.administrativeOverrideReason?.trim() : null,
-            administrativeOverrideApprovedByUserId: hasAdministrativeOverride ? currentUser.id : null,
+            administrativeOverrideReason: creditDecision?.overrideReason ?? null,
+            administrativeOverrideApprovedByUserId: creditDecision?.overrideActorId ?? null,
+            creditDecisionSnapshot: creditDecision ?? undefined,
+            creditDecisionEvaluatedAt: creditDecision ? new Date() : null,
             collectionStatus: outstandingAmount > 0 ? CollectionStatus.UNPAID : CollectionStatus.PAID,
             subtotal,
             discount,
@@ -466,7 +479,37 @@ export class SalesService {
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    ));
+  }
+
+  private assertOverrideIntent(dto: CreateSaleDto, currentUser: Actor): void {
+    if (dto.administrativeOverrideReason === undefined) return;
+    if (!dto.administrativeOverrideReason.trim()) {
+      throw new BadRequestException({ code: 'CREDIT_OVERRIDE_REASON_REQUIRED', message: 'Administrative override reason must not be blank' });
+    }
+    if (currentUser.role !== 'ADMIN') {
+      throw new BadRequestException({ code: 'CREDIT_OVERRIDE_FORBIDDEN', message: 'Administrative override requires ADMIN authorization' });
+    }
+    if (dto.paymentType !== SalePaymentType.CREDIT_SALE) {
+      throw new BadRequestException({ code: 'CREDIT_OVERRIDE_NOT_APPLICABLE', message: 'Administrative override is not applicable to this sale' });
+    }
+  }
+
+  private async withSerializableRetry<T>(operation: () => Promise<T>): Promise<T> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2034')) throw error;
+        if (attempt === 3) {
+          throw new ConflictException({
+            code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED',
+            message: 'Credit decision could not be completed after concurrent updates',
+          });
+        }
+      }
+    }
+    throw new ConflictException({ code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED' });
   }
 
   private assertBillingRequestInput(dto: CreateSaleDto, customer: CustomerCredit | null): void {
@@ -844,48 +887,6 @@ export class SalesService {
       throw new BadRequestException('customerId is required for credit sales');
     }
 
-    if (dto.paymentType === SalePaymentType.CREDIT_SALE && customer?.creditStatus !== CreditStatus.ACTIVE) {
-      throw new BadRequestException('Customer credit is not active');
-    }
-  }
-
-  private hasAdministrativeOverride(dto: CreateSaleDto, currentUser: Actor): boolean {
-    const reason = dto.administrativeOverrideReason?.trim();
-    if (!reason) {
-      return false;
-    }
-
-    if (currentUser.role !== 'ADMIN') {
-      throw new BadRequestException('Administrative override requires ADMIN authorization');
-    }
-
-    return true;
-  }
-
-  private async assertCreditAllowed(
-    tx: Prisma.TransactionClient,
-    customer: CustomerCredit,
-    newOutstandingAmount: number,
-    hasAdministrativeOverride: boolean,
-  ) {
-    if (customer.creditStatus !== CreditStatus.ACTIVE) {
-      throw new BadRequestException('Customer credit is not active');
-    }
-
-    const creditLimit = this.toNumber(customer.creditLimit);
-    if (creditLimit <= 0 || hasAdministrativeOverride) {
-      return;
-    }
-
-    const aggregate = await tx.accountReceivable.aggregate({
-      where: { customerId: customer.id, status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] } },
-      _sum: { outstandingAmount: true },
-    });
-    const currentOutstanding = this.toNumber(aggregate._sum.outstandingAmount);
-
-    if (this.roundMoney(currentOutstanding + newOutstandingAmount) > creditLimit) {
-      throw new BadRequestException('Customer credit limit exceeded');
-    }
   }
 
   private async nextSaleNumber(tx: Prisma.TransactionClient): Promise<string> {
@@ -894,8 +895,10 @@ export class SalesService {
   }
 
   private toSaleResponse(sale: { [key: string]: unknown; items?: Array<Record<string, unknown>> }) {
+    const creditDecision = sale.creditDecisionSnapshot as Record<string, unknown> | null | undefined;
     return {
       ...sale,
+      creditWarnings: Array.isArray(creditDecision?.warnings) ? creditDecision.warnings : [],
       subtotal: this.decimalToString(sale.subtotal),
       discount: this.decimalToString(sale.discount),
       tax: this.decimalToString(sale.tax),

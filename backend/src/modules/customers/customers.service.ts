@@ -20,6 +20,7 @@ import {
   ListCustomersQueryDto,
   UpdateCustomerDto,
 } from './dto';
+import { calculateCreditState } from '../sales/credit-decision';
 
 type CustomerRecord = Prisma.CustomerGetPayload<{
   include: {
@@ -82,6 +83,12 @@ type CustomerResponse = Omit<CustomerListRecord, 'creditLimit'> & {
     lastPaymentDate: Date | null;
     creditStatus: CreditStatus;
     isBlockedForCredit: boolean;
+    isBlocked: boolean;
+    effectiveCreditStatus: 'ACTIVE' | 'WARNING' | 'BLOCKED';
+    blockingReasons: string[];
+    blockingReason: string | null;
+    overdueBlockingMode: string | null;
+    canAdministrativeOverride: boolean;
   };
   billingSummary?: {
     billedAmount: string;
@@ -563,15 +570,32 @@ export class CustomersService {
   private toCustomerResponse(
     customer: CustomerListRecord | CustomerRecord,
   ): CustomerResponse {
+    const detailRecord = this.isCustomerDetailRecord(customer);
+    const {
+      accountReceivables: _accountReceivables,
+      payments: _payments,
+      billingRequests: _billingRequests,
+      commercialPolicy,
+      ...publicCustomer
+    } = customer as CustomerRecord;
     const response = {
-      ...customer,
+      ...publicCustomer,
       creditLimit: customer.creditLimit?.toString() ?? null,
       isBlockedForCredit: customer.creditStatus !== CreditStatus.ACTIVE,
     } as CustomerResponse;
 
-    if (this.isCustomerDetailRecord(customer)) {
-      response.commercialPolicy = customer.commercialPolicy;
+    if (detailRecord) {
+      response.commercialPolicy = commercialPolicy ? {
+        id: commercialPolicy.id,
+        name: commercialPolicy.name,
+        overdueBlockingMode: commercialPolicy.overdueBlockingMode,
+        allowAdministrativeOverride: commercialPolicy.allowAdministrativeOverride,
+        isActive: commercialPolicy.isActive,
+        effectiveFrom: commercialPolicy.effectiveFrom,
+        effectiveTo: commercialPolicy.effectiveTo,
+      } : null;
       response.creditSummary = this.buildCreditSummary(customer);
+      response.isBlockedForCredit = response.creditSummary?.isBlockedForCredit ?? response.isBlockedForCredit;
       response.billingSummary = this.buildBillingSummary(customer);
     }
 
@@ -590,18 +614,16 @@ export class CustomersService {
 
   private buildCreditSummaryResponse(customer: CustomerRecord) {
     const receivables = this.activeReceivables(customer);
-    const outstandingAmount = receivables.reduce(
-      (total, accountReceivable) =>
-        total + Number(accountReceivable.outstandingAmount),
-      0,
-    );
-    const overdueAmount = receivables
-      .filter((accountReceivable) => accountReceivable.daysOverdue > 0)
-      .reduce(
-        (total, accountReceivable) =>
-          total + Number(accountReceivable.outstandingAmount),
-        0,
-      );
+    const creditState = calculateCreditState({
+      creditStatus: customer.creditStatus,
+      creditLimit: customer.creditLimit,
+      newOutstandingAmount: 0,
+      receivables,
+      policy: customer.commercialPolicy,
+      asOf: new Date(),
+    });
+    const outstandingAmount = creditState.currentExposure;
+    const overdueAmount = creditState.overdueAmount;
     const payments = this.customerPayments(customer);
     const lastPaymentDate = payments.reduce<Date | null>(
       (latestDate, payment) =>
@@ -613,18 +635,9 @@ export class CustomersService {
     const creditLimit = customer.creditLimit === null ? null : Number(customer.creditLimit);
     const availableCredit =
       creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0);
-    const daysOverdue = Math.max(
-      0,
-      ...receivables.map(
-        (accountReceivable) => accountReceivable.daysOverdue,
-      ),
-    );
+    const daysOverdue = creditState.maximumDaysOverdue;
     const hasOverdueBalance = overdueAmount > 0;
-    const isLimitExceeded = creditLimit !== null && outstandingAmount > creditLimit;
-    const isBlocked =
-      customer.creditStatus !== CreditStatus.ACTIVE ||
-      hasOverdueBalance ||
-      isLimitExceeded;
+    const isBlocked = creditState.effectiveCreditStatus === 'BLOCKED';
 
     return {
       customerId: customer.id,
@@ -632,7 +645,7 @@ export class CustomersService {
       creditLimit: customer.creditLimit?.toString() ?? null,
       creditDays: customer.creditDays,
       paymentTermsDays: customer.creditDays,
-      agingStatus: this.resolveAgingStatus(customer),
+      agingStatus: creditState.agingStatus,
       collectionStatus: this.resolveCollectionStatus(customer),
       globalBalance: outstandingAmount.toString(),
       outstandingAmount: outstandingAmount.toString(),
@@ -641,11 +654,11 @@ export class CustomersService {
       hasOverdueBalance,
       isBlocked,
       isBlockedForCredit: isBlocked,
-      blockingReason: this.resolveBlockingReason(
-        customer,
-        hasOverdueBalance,
-        isLimitExceeded,
-      ),
+      effectiveCreditStatus: creditState.effectiveCreditStatus,
+      blockingReasons: creditState.blockingReasons,
+      blockingReason: creditState.blockingReasons[0] ?? null,
+      overdueBlockingMode: creditState.overdueBlockingMode,
+      canAdministrativeOverride: creditState.canAdministrativeOverride,
       daysOverdue,
       lastPaymentDate,
       commercialPolicyId: customer.commercialPolicyId,
@@ -660,26 +673,6 @@ export class CustomersService {
       paidAmount: this.buildBillingSummary(customer)?.paidAmount,
       finalBalance: this.buildBillingSummary(customer)?.finalBalance,
     };
-  }
-
-  private resolveAgingStatus(customer: CustomerRecord): AgingStatus {
-    if (
-      this.activeReceivables(customer).some(
-        (accountReceivable) => accountReceivable.agingStatus === AgingStatus.OVERDUE,
-      )
-    ) {
-      return AgingStatus.OVERDUE;
-    }
-
-    if (
-      this.activeReceivables(customer).some(
-        (accountReceivable) => accountReceivable.agingStatus === AgingStatus.DUE_SOON,
-      )
-    ) {
-      return AgingStatus.DUE_SOON;
-    }
-
-    return AgingStatus.CURRENT;
   }
 
   private resolveCollectionStatus(customer: CustomerRecord): CollectionStatus {
@@ -735,26 +728,6 @@ export class CustomersService {
     }
 
     return [...paymentsById.values(), ...anonymousPayments];
-  }
-
-  private resolveBlockingReason(
-    customer: CustomerRecord,
-    hasOverdueBalance: boolean,
-    isLimitExceeded: boolean,
-  ): string | null {
-    if (customer.creditStatus !== CreditStatus.ACTIVE) {
-      return 'CUSTOMER_CREDIT_STATUS';
-    }
-
-    if (hasOverdueBalance) {
-      return 'OVERDUE_BALANCE';
-    }
-
-    if (isLimitExceeded) {
-      return 'CREDIT_LIMIT_EXCEEDED';
-    }
-
-    return null;
   }
 
   private toSaleHistoryItem(sale: CustomerSaleRecord) {

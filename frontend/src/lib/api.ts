@@ -1,6 +1,7 @@
 export type HttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST' | 'PUT'
 
 export type ApiErrorPayload = {
+  code?: string
   error?: string
   message?: string
   statusCode?: number

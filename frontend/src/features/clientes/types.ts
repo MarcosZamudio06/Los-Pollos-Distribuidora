@@ -1,6 +1,8 @@
 export type CustomerType = 'RETAIL' | 'WHOLESALE' | 'INSTITUTIONAL'
 export type CreditStatus = 'ACTIVE' | 'BLOCKED' | 'SUSPENDED'
 export type AgingStatusFilter = 'CURRENT' | 'DUE_SOON' | 'OVERDUE' | 'LATE'
+export type EffectiveCreditStatus = 'ACTIVE' | 'WARNING' | 'BLOCKED'
+export type OverdueBlockingMode = 'WARN_ONLY' | 'BLOCK_NEW_CREDIT'
 
 export type Customer = {
   id: string
@@ -28,6 +30,7 @@ export type Customer = {
   isActive?: boolean
   active?: boolean
   isBlockedForCredit?: boolean
+  effectiveCreditStatus?: EffectiveCreditStatus
   creditSummary?: CustomerCreditSummary | null
   billingSummary?: BillingSummary | null
 }
@@ -48,6 +51,11 @@ export type CustomerCreditSummary = {
   isBlocked?: boolean
   isBlockedForCredit?: boolean
   daysOverdue?: number | null
+  maximumDaysOverdue?: number | null
+  effectiveCreditStatus?: EffectiveCreditStatus
+  blockingReasons?: string[]
+  overdueBlockingMode?: OverdueBlockingMode | null
+  canAdministrativeOverride?: boolean
   lastPaymentDate?: string | Date | null
   blockReason?: string | null
   blockingReason?: string | null

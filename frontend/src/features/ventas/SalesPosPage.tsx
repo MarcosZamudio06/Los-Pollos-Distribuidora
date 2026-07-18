@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BadgeDollarSign, MapPin, ReceiptText, ShieldCheck } from 'lucide-react'
 import { PageHeader } from '../../components/layout/PageHeader'
-import { ApiClientError } from '../../lib/api'
 import { useAuth } from '../auth'
 import { useCustomers } from '../clientes/hooks/useCustomers'
 import type { Customer } from '../clientes/types'
@@ -21,7 +20,7 @@ import {
   TicketModal,
 } from './components'
 import { useCreateSale, useSaleTicket } from './hooks'
-import { buildCreateSalePayload, calculateCartTotal, canConfirmSale, getLocationValidationError, getQuantityValidationError, getSaleRestriction, toMoney } from './posLogic'
+import { buildCreateSalePayload, calculateCartTotal, canConfirmSale, getLocationValidationError, getQuantityValidationError, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, SaleChannel, SaleDocumentType, TicketData } from './types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
@@ -67,6 +66,7 @@ function customerToOption(customer: Customer): CustomerOption {
     isActive: customer.isActive,
     active: customer.active,
     isBlockedForCredit: customer.isBlockedForCredit,
+    effectiveCreditStatus: customer.effectiveCreditStatus,
     commercialPolicyId: customer.commercialPolicyId,
     creditSummary: customer.creditSummary,
   }
@@ -86,6 +86,9 @@ function getSubmitBlocker({
   submitting,
   requiresAdministrativeInvoice,
   billingRequestReason,
+  isAdmin,
+  overrideEnabled,
+  overrideReason,
 }: {
   cart: CartItem[]
   customer: CustomerOption | null
@@ -95,6 +98,9 @@ function getSubmitBlocker({
   submitting: boolean
   requiresAdministrativeInvoice: boolean
   billingRequestReason: string
+  isAdmin: boolean
+  overrideEnabled: boolean
+  overrideReason: string
 }) {
   if (!locationId) return 'Selecciona una ubicación operativa.'
   if (cart.length === 0) return 'Agrega al menos un producto.'
@@ -106,12 +112,12 @@ function getSubmitBlocker({
   if (requiresAdministrativeInvoice && !billingRequestReason.trim()) return 'Captura el motivo de la solicitud administrativa.'
   return canConfirmSale({
     cart,
-    creditRestriction: getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod),
+    creditRestriction: getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod, { isAdmin, overrideEnabled, overrideReason }),
     isSubmitting: submitting,
     locationId,
   })
     ? null
-    : getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod) ?? 'La venta todavía no puede confirmarse.'
+    : getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod, { isAdmin, overrideEnabled, overrideReason }) ?? 'La venta todavía no puede confirmarse.'
 }
 
 function saleResponseToTicketFallback(response: TicketData | null, locationId: string): TicketData | null {
@@ -140,6 +146,8 @@ export function SalesPosPage() {
   const [billingRequestReason, setBillingRequestReason] = useState('')
   const [billingRequestNotes, setBillingRequestNotes] = useState('')
   const [backendError, setBackendError] = useState<string | null>(null)
+  const [overrideEnabled, setOverrideEnabled] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
   const [confirmedSaleId, setConfirmedSaleId] = useState<string>()
   const [ticketFallback, setTicketFallback] = useState<TicketData | null>(null)
   const [pendingSale, setPendingSale] = useState<{ payload: ReturnType<typeof buildCreateSalePayload>; customerName: string; locationName: string; paymentMethod: PaymentMethod; paymentType: PaymentType; documentType: SaleDocumentType; physicalFolio: string; requiresAdministrativeInvoice: boolean; locationId: string; total: number } | null>(null)
@@ -158,12 +166,26 @@ export function SalesPosPage() {
   const locationOptions = useMemo(() => locations.data ?? [], [locations.data])
   const selectedLocation = useMemo(() => locationOptions.find((location) => location.id === locationId) ?? null, [locationId, locationOptions])
   const total = calculateCartTotal(cart)
-  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason })
+  const isAdmin = user?.role === 'ADMIN'
+  const canOverrideCredit = Boolean(paymentType === 'CREDIT_SALE' && isAdmin && selectedCustomer?.creditSummary?.effectiveCreditStatus === 'BLOCKED' && selectedCustomer.creditSummary.canAdministrativeOverride && !selectedCustomer.creditSummary.blockingReasons?.includes('CREDIT_ADMINISTRATIVELY_BLOCKED'))
+  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason })
+
+  function resetOverride() {
+    setOverrideEnabled(false)
+    setOverrideReason('')
+  }
+
+  function handleCustomerSelect(customer: CustomerOption | null) {
+    setSelectedCustomer(customer)
+    resetOverride()
+    setBackendError(null)
+  }
 
   function handleLocationChange(nextLocationId: string) {
     setLocationId(nextLocationId)
     setCart([])
     setBackendError(null)
+    resetOverride()
   }
 
   function handleAddProduct(product: ProductOption) {
@@ -186,11 +208,12 @@ export function SalesPosPage() {
   }
 
   function handleConfirmSale() {
-    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason })
+    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason })
     if (blocker) return
     setBackendError(null)
     setPendingSale({
       payload: buildCreateSalePayload({
+        administrativeOverrideReason: overrideEnabled ? overrideReason : undefined,
         billingRequestReason, billingRequestNotes, cart, customer: selectedCustomer, documentType,
         initialPaymentAmount: paymentType === 'CREDIT_SALE' ? initialPaymentAmount : undefined,
         locationId, paymentMethod, paymentType, physicalFolio,
@@ -239,11 +262,14 @@ export function SalesPosPage() {
       setRequiresAdministrativeInvoice(false)
       setBillingRequestReason('')
       setBillingRequestNotes('')
+      resetOverride()
       setPendingSale(null)
       toast.success('Venta registrada correctamente.')
+      if ((response.creditWarnings ?? sale?.creditWarnings ?? []).includes('CREDIT_OVERDUE_WARNING')) toast.warning('Venta registrada con advertencia por saldo vencido.')
+      if ((response.creditWarnings ?? sale?.creditWarnings ?? []).includes('CREDIT_OVERRIDE_APPLIED')) toast.warning('Venta registrada con autorización administrativa de crédito.')
       void products.refetch()
     } catch (error) {
-      setBackendError(error instanceof ApiClientError || error instanceof Error ? error.message : 'La confirmación de la venta falló.')
+      setBackendError(getSaleErrorMessage(error))
     }
   }
 
@@ -306,12 +332,12 @@ export function SalesPosPage() {
                 <ReceiptText className="h-6 w-6 text-[var(--erp-brand-gold)]" />
               </div>
             </section>
-            <CustomerSelector customers={customerOptions} error={customers.error} isLoading={customers.isLoading} onSearchChange={setCustomerSearch} onSelect={setSelectedCustomer} search={customerSearch} selectedCustomer={selectedCustomer} />
+            <CustomerSelector customers={customerOptions} error={customers.error} isLoading={customers.isLoading} onSearchChange={setCustomerSearch} onSelect={handleCustomerSelect} search={customerSearch} selectedCustomer={selectedCustomer} />
             <PaymentMethodSelector
               initialPaymentAmount={initialPaymentAmount}
               onInitialPaymentAmountChange={setInitialPaymentAmount}
               onPaymentMethodChange={setPaymentMethod}
-              onPaymentTypeChange={(type) => { setPaymentType(type); if (type === 'CASH_SALE') setInitialPaymentAmount(0) }}
+              onPaymentTypeChange={(type) => { setPaymentType(type); resetOverride(); if (type === 'CASH_SALE') setInitialPaymentAmount(0) }}
               paymentMethod={paymentMethod}
               paymentType={paymentType}
             />
@@ -344,7 +370,11 @@ export function SalesPosPage() {
               reason={billingRequestReason}
               requiresAdministrativeInvoice={requiresAdministrativeInvoice}
             />
-            <SaleSummary cart={cart} customer={selectedCustomer} paymentType={paymentType} />
+            {canOverrideCredit && <section className="rounded-[1.5rem] border border-amber-300 bg-amber-50 p-5 text-amber-950 shadow-[var(--erp-shadow)]">
+              <label className="flex items-start gap-3 font-black"><input checked={overrideEnabled} name="credit-override" onChange={(event) => { setOverrideEnabled(event.target.checked); if (!event.target.checked) setOverrideReason('') }} type="checkbox" /><span>Autorizar excepción de crédito<span className="mt-1 block text-sm font-semibold text-amber-800">Solo ADMIN puede continuar y el motivo quedará registrado en la venta.</span></span></label>
+              {overrideEnabled && <label className="mt-4 grid gap-2 text-sm font-black">Motivo obligatorio<textarea className="min-h-24 rounded-xl border border-amber-300 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-amber-300" name="credit-override-reason" onChange={(event) => setOverrideReason(event.target.value)} placeholder="Describe quién autorizó y por qué" value={overrideReason} /></label>}
+            </section>}
+            <SaleSummary cart={cart} creditOptions={{ isAdmin, overrideEnabled, overrideReason }} customer={selectedCustomer} paymentType={paymentType} />
             {backendError && <p role="alert" className="rounded-2xl border border-[rgba(157,45,36,0.22)] bg-[rgba(157,45,36,0.08)] p-4 text-sm font-bold text-[var(--erp-danger)]">{backendError}</p>}
             <ConfirmSaleButton disabledReason={submitBlocker} isSubmitting={createSale.isPending} onConfirm={handleConfirmSale} />
           </aside>
@@ -353,6 +383,7 @@ export function SalesPosPage() {
       {(ticketFallback || ticket.data) && <TicketModal fallback={ticketFallback} isLoading={ticket.isLoading} onClose={() => { setConfirmedSaleId(undefined); setTicketFallback(null) }} ticket={ticket.data} />}
       <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique la venta antes de descontar inventario y registrar el cobro." isLoading={createSale.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingSale(null) }} open={Boolean(pendingSale)} title="Confirmar venta">
         <p><strong>Cliente:</strong> {pendingSale?.customerName}</p><p><strong>Sucursal:</strong> {pendingSale?.locationName}</p><p><strong>Total:</strong> {toMoney(pendingSale?.total ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingSale?.paymentMethod}</p>
+        {pendingSale?.payload.administrativeOverrideReason && <p className="rounded-xl bg-amber-50 p-3 text-amber-900"><strong>Autorización administrativa:</strong> {pendingSale.payload.administrativeOverrideReason}</p>}
         {backendError && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{backendError}</p>}
       </ConfirmationDialog>
     </main>

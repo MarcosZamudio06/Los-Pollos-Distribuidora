@@ -117,6 +117,11 @@ Validaciones:
 - Venta a crédito sin pago inicial genera `AccountReceivable` por el total.
 - Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
 - Rechazar venta a crédito si cliente está bloqueado por mora o excede límite sin autorización administrativa explícita.
+- La política enviada debe coincidir con la asignada al cliente y estar activa dentro de su vigencia.
+- `WARN_ONLY` permite confirmar y devuelve `creditWarnings[]`; `BLOCK_NEW_CREDIT` rechaza salvo override permitido.
+- El override requiere `ADMIN`, motivo no vacío y `allowAdministrativeOverride=true`; no puede omitir `BLOCKED` o `SUSPENDED` administrativo.
+- La venta conserva `creditDecisionSnapshot` y `creditDecisionEvaluatedAt` para auditoría.
+- Los rechazos exponen códigos estables: `CREDIT_ADMINISTRATIVELY_BLOCKED`, `CREDIT_OVERDUE_BLOCKED`, `CREDIT_LIMIT_EXCEEDED`, `CREDIT_POLICY_MISMATCH` y códigos `CREDIT_OVERRIDE_*`.
 - Contraentrega no registra dinero recibido hasta que exista `Payment`.
 - `Payment` es la única fuente monetaria del flujo; `Sale` no persiste `paymentMethod`.
 - Si `requiresAdministrativeInvoice=true`, la venta solo genera relación administrativa; no emite CFDI.

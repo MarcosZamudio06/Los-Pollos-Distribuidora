@@ -670,6 +670,8 @@ Reglas:
 - Puede relacionarse con una solicitud administrativa de factura interna cuando aplique.
 - `status` representa cobranza y `agingStatus` representa envejecimiento; no deben mezclarse.
 - `status` es la fuente de verdad del ciclo de cobranza; `agingStatus` se deriva de fechas y saldo vigente, y no reemplaza ni duplica `status`.
+- `agingStatus` y `daysOverdue` se reconcilian al iniciar el backend, diariamente y dentro de los flujos de pago; la autorización de una venta debe recalcularlos desde `dueDate` y saldo, sin confiar en una proyección persistida potencialmente atrasada.
+- `DUE_SOON` aplica durante los siete días calendario anteriores al vencimiento y hasta el propio día; `OVERDUE` inicia al día siguiente en la zona horaria operativa.
 
 ### Payment
 
@@ -776,6 +778,8 @@ Reglas:
 
 - No debe eliminar la obligación estructural de crear cuentas por cobrar en ventas a crédito.
 - Puede definir valores predeterminados, pero el cliente puede conservar condiciones específicas cuando negocio lo autorice.
+- `overdueBlockingMode` admite únicamente `WARN_ONLY` y `BLOCK_NEW_CREDIT`; `null` significa que la mora se informa sin crear una regla automática adicional.
+- `allowAdministrativeOverride` solo habilita excepciones explícitas de `ADMIN` para mora o límite, con actor y motivo auditables; nunca reactiva un `creditStatus` administrativo bloqueado o suspendido.
 
 ### OperationalConfig
 

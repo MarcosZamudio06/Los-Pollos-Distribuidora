@@ -40,10 +40,18 @@ type CustomerRecord = {
   assignedRouteId: string | null;
   commercialPolicyId: string | null;
   isActive: boolean;
-  commercialPolicy?: unknown;
+  commercialPolicy?: {
+    id: string;
+    isActive: boolean;
+    effectiveFrom: Date | null;
+    effectiveTo: Date | null;
+    overdueBlockingMode: 'WARN_ONLY' | 'BLOCK_NEW_CREDIT' | null;
+    allowAdministrativeOverride: boolean;
+  } | null;
   accountReceivables?: Array<{
     originalAmount: { toString(): string };
     outstandingAmount: { toString(): string };
+    dueDate: Date;
     daysOverdue: number;
     lastPaymentDate: Date | null;
     agingStatus?: AgingStatus;
@@ -193,6 +201,11 @@ describe('CustomersService', () => {
         }),
       ],
     });
+    const list = await service.findAll();
+    expect(list.items[0]).not.toHaveProperty('accountReceivables');
+    expect(list.items[0]).not.toHaveProperty('payments');
+    expect(list.items[0]).not.toHaveProperty('billingRequests');
+    expect(list.items[0]).toHaveProperty('creditSummary');
 
     expect(prisma.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
       include: {
@@ -242,6 +255,16 @@ describe('CustomersService', () => {
         }),
       }),
     );
+    prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
+    const detail = await service.findOne('customer-1');
+    expect(detail).not.toHaveProperty('accountReceivables');
+    expect(detail).not.toHaveProperty('payments');
+    expect(detail).not.toHaveProperty('billingRequests');
+    expect(detail).toEqual(expect.objectContaining({
+      commercialPolicy: null,
+      creditSummary: expect.any(Object),
+      billingSummary: expect.any(Object),
+    }));
 
     expect(prisma.customer.findFirst).toHaveBeenCalledWith({
       where: { id: 'customer-1' },
@@ -521,17 +544,23 @@ describe('CustomersService', () => {
   });
 
   it('returns dedicated credit summary with aging, blocking, and billing summary', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-17T12:00:00Z'));
     const { service, prisma } = createService();
     prisma.customer.findFirst.mockResolvedValueOnce(
       createCustomer({
         creditLimit: money('1000'),
+        commercialPolicy: {
+          id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null,
+          overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
+        },
         accountReceivables: [
           {
             originalAmount: money('1200'),
             outstandingAmount: money('1100'),
-            daysOverdue: 3,
+            dueDate: new Date('2026-07-14T06:00:00Z'),
+            daysOverdue: 0,
             lastPaymentDate: null,
-            agingStatus: AgingStatus.OVERDUE,
+            agingStatus: AgingStatus.CURRENT,
             status: CollectionStatus.PARTIALLY_PAID,
           },
         ],
@@ -552,11 +581,67 @@ describe('CustomersService', () => {
         availableCredit: '0',
         hasOverdueBalance: true,
         isBlocked: true,
-        blockingReason: 'OVERDUE_BALANCE',
+        isBlockedForCredit: true,
+        effectiveCreditStatus: 'BLOCKED',
+        blockingReasons: ['CREDIT_OVERDUE_BLOCKED', 'CREDIT_LIMIT_EXCEEDED'],
+        blockingReason: 'CREDIT_OVERDUE_BLOCKED',
+        overdueBlockingMode: 'BLOCK_NEW_CREDIT',
+        canAdministrativeOverride: true,
         daysOverdue: 3,
         billingSummary: expect.objectContaining({ finalBalance: '1100' }),
       }),
     );
+    jest.useRealTimers();
+  });
+
+  it('keeps list, detail, and legacy blocking fields derived from the same live state', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-17T12:00:00Z'));
+    const { service, prisma } = createService();
+    const customer = createCustomer({
+      commercialPolicy: {
+        id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null,
+        overdueBlockingMode: 'WARN_ONLY', allowAdministrativeOverride: true,
+      },
+      accountReceivables: [{
+        originalAmount: money('200'), outstandingAmount: money('200'), dueDate: new Date('2026-07-15T06:00:00Z'),
+        daysOverdue: 0, lastPaymentDate: null, agingStatus: AgingStatus.CURRENT, status: CollectionStatus.UNPAID,
+      }],
+    });
+    prisma.customer.findMany.mockResolvedValue([customer]);
+    prisma.customer.findFirst.mockResolvedValue(customer);
+
+    const list = await service.findAll();
+    const detail = await service.findOne('customer-1');
+
+    expect(list.items[0]).toEqual(expect.objectContaining({
+      isBlockedForCredit: false,
+      creditSummary: expect.objectContaining({ effectiveCreditStatus: 'WARNING', blockingReasons: ['CREDIT_OVERDUE_WARNING'], daysOverdue: 2 }),
+    }));
+    expect(detail.creditSummary).toEqual(expect.objectContaining({
+      effectiveCreditStatus: 'WARNING', blockingReasons: ['CREDIT_OVERDUE_WARNING'], isBlocked: false, isBlockedForCredit: false,
+    }));
+    jest.useRealTimers();
+  });
+
+  it('keeps overdue visible but uses null-mode when policy effectiveFrom is null', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-17T12:00:00Z'));
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValue(createCustomer({
+      commercialPolicy: {
+        id: 'policy-1', isActive: true, effectiveFrom: null, effectiveTo: null,
+        overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
+      },
+      accountReceivables: [{
+        originalAmount: money('200'), outstandingAmount: money('200'), dueDate: new Date('2026-07-15T06:00:00Z'),
+        daysOverdue: 99, lastPaymentDate: null, agingStatus: AgingStatus.OVERDUE, status: CollectionStatus.UNPAID,
+      }],
+    }));
+
+    await expect(service.getCreditSummary('customer-1')).resolves.toEqual(expect.objectContaining({
+      overdueAmount: '200', daysOverdue: 2, effectiveCreditStatus: 'ACTIVE', overdueBlockingMode: null,
+      blockingReasons: [], isBlockedForCredit: false, canAdministrativeOverride: false,
+    }));
+    jest.useRealTimers();
   });
 
   it('returns customer sales history with payment summary and traceability ids', async () => {

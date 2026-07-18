@@ -1,7 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
-  AgingStatus,
   BillingRequestStatus,
   CollectionStatus,
   CreditStatus,
@@ -15,6 +14,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { ListAccountsReceivableQueryDto, RegisterReceivablePaymentDto } from './dto';
+import { calculateReceivableAging } from './receivable-aging';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
@@ -147,8 +147,7 @@ export class AccountsReceivableService {
         const nextStatus = newOutstandingAmount === 0
           ? CollectionStatus.PAID
           : CollectionStatus.PARTIALLY_PAID;
-        const daysOverdue = this.calculateDaysOverdue(receivable.dueDate, paidAt, newOutstandingAmount);
-        const agingStatus = this.resolveAgingStatus(receivable.dueDate, paidAt, newOutstandingAmount);
+        const { daysOverdue, agingStatus } = calculateReceivableAging(receivable.dueDate, newOutstandingAmount, paidAt);
 
         const payment = await tx.payment.create({
           data: {
@@ -268,8 +267,7 @@ export class AccountsReceivableService {
             saleDate: sale.createdAt,
             dueDate,
             paymentTermsDays: creditDays,
-            agingStatus: this.resolveAgingStatus(dueDate, new Date(), pendingAmount),
-            daysOverdue: this.calculateDaysOverdue(dueDate, new Date(), pendingAmount),
+            ...calculateReceivableAging(dueDate, pendingAmount),
             physicalDocumentFolio: this.normalizeOptionalText(sale.physicalFolio),
             commercialPolicyId: sale.commercialPolicyId ?? sale.customer?.commercialPolicyId ?? null,
             status: CollectionStatus.UNPAID,
@@ -528,23 +526,6 @@ export class AccountsReceivableService {
 
   private hashPayload(payload: Record<string, unknown>): string {
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-  }
-
-  private calculateDaysOverdue(dueDate: Date, paidAt: Date, outstandingAmount: number): number {
-    if (outstandingAmount <= 0 || paidAt <= dueDate) {
-      return 0;
-    }
-
-    const millisecondsPerDay = 24 * 60 * 60 * 1000;
-    return Math.floor((paidAt.getTime() - dueDate.getTime()) / millisecondsPerDay);
-  }
-
-  private resolveAgingStatus(dueDate: Date, paidAt: Date, outstandingAmount: number): AgingStatus {
-    if (outstandingAmount <= 0) {
-      return AgingStatus.CURRENT;
-    }
-
-    return paidAt > dueDate ? AgingStatus.OVERDUE : AgingStatus.CURRENT;
   }
 
   private addDays(date: Date, days: number): Date {

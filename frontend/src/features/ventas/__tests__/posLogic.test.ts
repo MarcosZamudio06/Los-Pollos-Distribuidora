@@ -3,6 +3,7 @@ import {
   buildCreateSalePayload,
   calculateCartTotal,
   getCreditRestriction,
+  getSaleErrorMessage,
   getQuantityValidationError,
   getLocationValidationError,
   getSaleRestriction,
@@ -114,6 +115,33 @@ describe('POS credit restrictions', () => {
     expect(getCreditRestriction('CREDIT_SALE', { ...activeCustomer, creditSummary: { ...activeCustomer.creditSummary, availableCredit: 0 } }, 1)).toBe('La venta excede el crédito disponible de $0.00.')
     expect(getCreditRestriction('CREDIT_SALE', activeCustomer, 2700)).toBe('La venta excede el crédito disponible de $2,600.00.')
     expect(getCreditRestriction('CREDIT_SALE', activeCustomer, 2500)).toBeNull()
+  })
+
+  it('permits warnings and only bypasses an eligible block with an intentional admin override', () => {
+    const warningCustomer: CustomerOption = {
+      ...activeCustomer,
+      creditSummary: {
+        ...activeCustomer.creditSummary,
+        effectiveCreditStatus: 'WARNING',
+        blockingReasons: ['CREDIT_OVERDUE_WARNING'],
+      },
+    }
+    const blockedCustomer: CustomerOption = {
+      ...activeCustomer,
+      creditSummary: {
+        ...activeCustomer.creditSummary,
+        effectiveCreditStatus: 'BLOCKED',
+        isBlockedForCredit: true,
+        canAdministrativeOverride: true,
+        blockingReasons: ['CREDIT_OVERDUE_BLOCKED'],
+        blockingReason: 'Saldo vencido',
+      },
+    }
+
+    expect(getCreditRestriction('CREDIT_SALE', warningCustomer, 100)).toBeNull()
+    expect(getCreditRestriction('CREDIT_SALE', blockedCustomer, 100, { isAdmin: true, overrideEnabled: true, overrideReason: '' })).toBe('Captura el motivo de la autorización administrativa.')
+    expect(getCreditRestriction('CREDIT_SALE', blockedCustomer, 100, { isAdmin: true, overrideEnabled: true, overrideReason: 'Autorizado por dirección' })).toBeNull()
+    expect(getCreditRestriction('CREDIT_SALE', blockedCustomer, 100, { isAdmin: false, overrideEnabled: true, overrideReason: 'No autorizado' })).toBe('Saldo vencido')
   })
 })
 
@@ -246,5 +274,30 @@ describe('POS sale payload', () => {
       customerId: 'customer-active',
       requiresAdministrativeInvoice: true,
     })
+  })
+
+  it('only sends a trimmed administrative override reason when it was intentionally captured', () => {
+    const payload = buildCreateSalePayload({
+      administrativeOverrideReason: '  Autorizado por dirección  ',
+      cart: [pieceItem],
+      customer: activeCustomer,
+      documentType: 'LARGE_NOTE',
+      locationId: 'loc-counter',
+      paymentMethod: '',
+      paymentType: 'CREDIT_SALE',
+      physicalFolio: '',
+      requiresAdministrativeInvoice: false,
+      saleChannel: 'WHOLESALE',
+      total: 276,
+    })
+
+    expect(payload.administrativeOverrideReason).toBe('Autorizado por dirección')
+  })
+})
+
+describe('POS backend credit errors', () => {
+  it('maps stable credit codes to actionable Spanish messages', () => {
+    expect(getSaleErrorMessage({ payload: { code: 'CREDIT_OVERDUE_BLOCKED' } })).toBe('El cliente tiene saldo vencido y su política bloquea nuevas ventas a crédito.')
+    expect(getSaleErrorMessage({ payload: { code: 'CREDIT_POLICY_MISMATCH' } })).toBe('La política comercial enviada no coincide con la asignada al cliente. Actualiza la información del cliente.')
   })
 })

@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CustomerType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CommercialPoliciesService } from './commercial-policies.service';
+import { OverdueBlockingMode } from './dto';
 
 type PolicyRecord = {
   id: string;
@@ -45,7 +46,7 @@ function policy(overrides: Partial<PolicyRecord> = {}): PolicyRecord {
     priceListId: null,
     defaultCreditLimit: decimal('50000'),
     defaultCreditDays: 15,
-    overdueBlockingMode: 'BLOCK',
+    overdueBlockingMode: OverdueBlockingMode.BLOCK_NEW_CREDIT,
     creditLimitBlockingMode: 'BLOCK',
     allowAdministrativeOverride: true,
     isActive: true,
@@ -81,7 +82,7 @@ describe('CommercialPoliciesService', () => {
           customerType: CustomerType.WHOLESALE,
           defaultCreditLimit: 50000,
           defaultCreditDays: 15,
-          overdueBlockingMode: 'BLOCK',
+          overdueBlockingMode: OverdueBlockingMode.BLOCK_NEW_CREDIT,
           creditLimitBlockingMode: 'BLOCK',
           allowAdministrativeOverride: true,
           effectiveFrom: '2026-06-19',
@@ -94,7 +95,7 @@ describe('CommercialPoliciesService', () => {
       name: 'Wholesale standard',
       defaultCreditLimit: '50000',
       defaultCreditDays: 15,
-      overdueBlockingMode: 'BLOCK',
+      overdueBlockingMode: OverdueBlockingMode.BLOCK_NEW_CREDIT,
       creditLimitBlockingMode: 'BLOCK',
       createdByUserId: 'admin-1',
       updatedByUserId: 'admin-1',
@@ -112,7 +113,7 @@ describe('CommercialPoliciesService', () => {
     await expect(service.create({ name: 'Bad', defaultCreditLimit: -1, effectiveFrom: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create({ name: 'Bad', defaultCreditDays: -1, effectiveFrom: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create({ name: 'Bad', defaultCreditDays: 15, creditLimitBlockingMode: 'BLOCK', effectiveFrom: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.create({ name: 'Bad', defaultCreditLimit: 1000, overdueBlockingMode: 'BLOCK', effectiveFrom: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create({ name: 'Bad', defaultCreditLimit: 1000, overdueBlockingMode: OverdueBlockingMode.BLOCK_NEW_CREDIT, effectiveFrom: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create({ name: 'Bad', isActive: true }, user)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create({ name: 'Bad', effectiveFrom: 'bad-date' }, user)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create({ name: 'Bad', effectiveFrom: '2026-06-20', effectiveTo: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);

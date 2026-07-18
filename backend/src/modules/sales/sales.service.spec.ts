@@ -25,13 +25,14 @@ type MockPrisma = {
   $transaction: jest.Mock;
   product: { findUnique: jest.Mock };
   customer: { findUnique: jest.Mock };
+  commercialPolicy: { findFirst: jest.Mock };
   operationalLocation: { findUnique: jest.Mock };
   inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
   inventoryMovement: { create: jest.Mock };
   saleDocument: { create: jest.Mock; findMany: jest.Mock };
   sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock };
-  accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
+  accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; update: jest.Mock };
   billingRequest: { create: jest.Mock };
 };
 
@@ -48,13 +49,14 @@ function createPrisma(): MockPrisma {
     $transaction: jest.fn(async (callback) => callback(prisma)),
     product: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
+    commercialPolicy: { findFirst: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
     inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     inventoryMovement: { create: jest.fn() },
     saleDocument: { create: jest.fn(), findMany: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn() },
-    accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+    accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     billingRequest: { create: jest.fn() },
   };
   return prisma;
@@ -130,6 +132,7 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
     Promise.resolve({ id: 'doc-1', createdAt: now, updatedAt: now, status: SaleDocumentStatus.ISSUED, ...data }),
   );
   prisma.accountReceivable.findFirst.mockResolvedValue(null);
+  prisma.accountReceivable.findMany.mockResolvedValue([]);
   prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
   prisma.accountReceivable.create.mockImplementation(({ data }) => Promise.resolve({ id: 'ar-1', createdAt: now, updatedAt: now, ...data }));
   prisma.billingRequest.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-1', createdAt: now, updatedAt: now, requestedAt: now, reviewedAt: null, reviewedByUserId: null, status: 'REQUESTED', ...data }));
@@ -717,6 +720,65 @@ describe('SalesService', () => {
     expect(result.accountReceivable).toEqual(expect.objectContaining({ outstandingAmount: '200' }));
   });
 
+  it('persists the evaluated credit decision snapshot and returns policy warnings', async () => {
+    jest.useFakeTimers().setSystemTime(now);
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'), creditDays: 15, commercialPolicyId: 'policy-1',
+    });
+    prisma.commercialPolicy.findFirst.mockResolvedValue({
+      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'WARN_ONLY', allowAdministrativeOverride: false,
+    });
+    prisma.accountReceivable.findMany.mockResolvedValue([
+      { dueDate: new Date('2026-06-19T06:00:00Z'), outstandingAmount: decimal('100'), status: CollectionStatus.UNPAID },
+    ]);
+
+    const result = await service.create(
+      validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
+      { id: 'seller-1', role: 'SELLER' },
+      'idem-credit-warning',
+    );
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      creditDecisionSnapshot: expect.objectContaining({
+        policyId: 'policy-1', overdueBlockingMode: 'WARN_ONLY', overdueAmount: 100,
+        maximumDaysOverdue: 2, projectedExposure: 350, creditLimit: 1000,
+        outcome: 'WARNING', warnings: ['CREDIT_OVERDUE_WARNING'], overrideActorId: null, overrideReason: null,
+      }),
+      creditDecisionEvaluatedAt: now,
+    }) }));
+    expect(result.sale).toEqual(expect.objectContaining({ creditWarnings: ['CREDIT_OVERDUE_WARNING'] }));
+    jest.useRealTimers();
+  });
+
+  it('treats an assigned policy with null effectiveFrom as null-mode for sale enforcement', async () => {
+    jest.useFakeTimers().setSystemTime(now);
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'), creditDays: 15, commercialPolicyId: 'policy-1',
+    });
+    prisma.commercialPolicy.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findMany.mockResolvedValue([
+      { dueDate: new Date('2026-06-19T06:00:00Z'), outstandingAmount: decimal('100'), status: CollectionStatus.UNPAID },
+    ]);
+
+    const result = await service.create(
+      validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
+      { id: 'seller-1', role: 'SELLER' },
+      'idem-null-effective-from',
+    );
+
+    expect(result.sale).toEqual(expect.objectContaining({
+      creditDecisionSnapshot: expect.objectContaining({ policyId: null, overdueBlockingMode: null, outcome: 'PERMITTED' }),
+      creditWarnings: [],
+    }));
+    jest.useRealTimers();
+  });
+
   it('rejects an empty cart before opening a transaction', async () => {
     const { service, prisma } = createService();
 
@@ -726,6 +788,39 @@ describe('SalesService', () => {
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects override intent before non-applicable sale evaluation with stable codes', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    await expect(service.create(validCashSale({ administrativeOverrideReason: '   ' }), { id: 'admin-1', role: 'ADMIN' }, 'blank')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_REASON_REQUIRED' }),
+    });
+    await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), { id: 'seller-1', role: 'SELLER' }, 'seller')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_FORBIDDEN' }),
+    });
+    await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), { id: 'admin-1', role: 'ADMIN' }, 'cash')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_NOT_APPLICABLE' }),
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('retries serialization conflicts up to three attempts and then returns a stable code', async () => {
+    const first = createService();
+    mockHappyPath(first.prisma);
+    first.prisma.$transaction
+      .mockRejectedValueOnce({ code: 'P2034' })
+      .mockRejectedValueOnce({ code: 'P2034' })
+      .mockImplementationOnce(async (callback) => callback(first.prisma));
+    await expect(first.service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'retry-success')).resolves.toBeDefined();
+    expect(first.prisma.$transaction).toHaveBeenCalledTimes(3);
+
+    const exhausted = createService();
+    exhausted.prisma.$transaction.mockRejectedValue({ code: 'P2034' });
+    await expect(exhausted.service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'retry-fail')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED' }),
+    });
+    expect(exhausted.prisma.$transaction).toHaveBeenCalledTimes(3);
   });
 
   it('rejects insufficient stock at the discount location without creating sale records', async () => {
@@ -750,6 +845,10 @@ describe('SalesService', () => {
       creditStatus: CreditStatus.BLOCKED,
       creditLimit: decimal('1000'),
       creditDays: 15,
+      commercialPolicyId: 'policy-1',
+    });
+    prisma.commercialPolicy.findFirst.mockResolvedValue({
+      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
     });
 
     await expect(
@@ -766,6 +865,10 @@ describe('SalesService', () => {
       creditStatus: CreditStatus.ACTIVE,
       creditLimit: decimal('100'),
       creditDays: 15,
+      commercialPolicyId: 'policy-1',
+    });
+    prisma.commercialPolicy.findFirst.mockResolvedValue({
+      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
     });
     prisma.accountReceivable.aggregate.mockResolvedValueOnce({ _sum: { outstandingAmount: decimal('0') } });
 
@@ -831,6 +934,10 @@ describe('SalesService', () => {
       creditStatus: CreditStatus.ACTIVE,
       creditLimit: decimal('100'),
       creditDays: 15,
+      commercialPolicyId: 'policy-1',
+    });
+    prisma.commercialPolicy.findFirst.mockResolvedValue({
+      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
     });
     prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
 

@@ -487,6 +487,8 @@ model Sale {
   idempotencyPayloadHash        String?
   administrativeOverrideReason  String?
   administrativeOverrideApprovedByUserId String?
+  creditDecisionSnapshot          Json?
+  creditDecisionEvaluatedAt       DateTime?
   version                       Int                        @default(1)
   createdAt                     DateTime                   @default(now())
   updatedAt                     DateTime                   @updatedAt
@@ -814,7 +816,7 @@ model CommercialPolicy {
   priceListId              String?
   defaultCreditLimit       Decimal?           @db.Decimal(14, 2)
   defaultCreditDays        Int?
-  overdueBlockingMode      String?
+  overdueBlockingMode      OverdueBlockingMode?
   creditLimitBlockingMode  String?
   allowAdministrativeOverride Boolean         @default(false)
   isActive                 Boolean            @default(true)
@@ -829,6 +831,11 @@ model CommercialPolicy {
   customers                Customer[]
   sales                    Sale[]
   accountReceivables       AccountReceivable[]
+}
+
+enum OverdueBlockingMode {
+  WARN_ONLY
+  BLOCK_NEW_CREDIT
 }
 
 model OperationalConfig {

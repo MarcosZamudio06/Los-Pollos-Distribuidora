@@ -20,7 +20,7 @@ Query:
 Respuesta `data.items[]`:
 
 - `id`, `customerNumber`, `name`, `commercialName`, `phone`, `email`, `billingEmail`, `address`.
-- `customerType`, `priceListId`, `creditLimit`, `creditDays`, `creditStatus`, `requiresBilling`, `isBlockedForCredit`.
+- `customerType`, `priceListId`, `creditLimit`, `creditDays`, `creditStatus`, `requiresBilling`, `isBlockedForCredit`, `effectiveCreditStatus`.
 - `deliveryAddress`, `assignedRouteId`, `commercialPolicyId`.
 - `fiscalName`, `taxId`, `fiscalAddress` como datos comerciales opcionales.
 - `isActive`.
@@ -146,7 +146,9 @@ Respuesta `data`:
 - `customerId`, `creditStatus`, `creditLimit`, `creditDays`, `paymentTermsDays`.
 - `agingStatus` y `collectionStatus` se consultan por cuenta por cobrar, no en el estado administrativo del cliente.
 - `globalBalance`, `outstandingAmount`, `overdueAmount`, `availableCredit`.
-- `hasOverdueBalance`, `isBlocked`, `blockingReason`, `daysOverdue`, `lastPaymentDate`.
+- `hasOverdueBalance`, `isBlocked`, `blockingReason`, `blockingReasons[]`, `daysOverdue`, `maximumDaysOverdue`, `lastPaymentDate`.
+- `effectiveCreditStatus`: `ACTIVE`, `WARNING` o `BLOCKED`; `overdueBlockingMode`; `canAdministrativeOverride`.
+- Los campos efectivos se derivan en tiempo de consulta desde vencimientos, saldo, límite, estado administrativo y política efectiva. No reemplazan `creditStatus`.
 - `commercialPolicyId` aplicada.
 - `billingSummary`: facturado, pagado, saldo final.
 

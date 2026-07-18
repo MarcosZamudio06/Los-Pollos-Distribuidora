@@ -30,6 +30,9 @@ Gestionar saldos, vencimientos, crédito atrasado, saldo final por cliente y pag
 - El saldo global del cliente debe sumar todas sus cuentas por cobrar vigentes, por vencer, vencidas y atrasadas.
 - `status` representa cobranza y `agingStatus` representa envejecimiento; no deben mezclarse.
 - `Payment` es la única fuente monetaria del cobro recibido.
+- La antigüedad debe reconciliarse automáticamente al iniciar el backend y cada día, además de actualizarse transaccionalmente en pagos y cancelaciones.
+- La mora inicia el día calendario posterior al vencimiento; `DUE_SOON` cubre los siete días anteriores y el día de vencimiento.
+- Las nuevas ventas a crédito deben recalcular la mora en línea y aplicar `WARN_ONLY` o `BLOCK_NEW_CREDIT` de la política efectiva, sin modificar `Customer.creditStatus`.
 
 ## Permisos
 

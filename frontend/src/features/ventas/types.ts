@@ -20,6 +20,7 @@ export type CustomerOption = Pick<
   | 'isActive'
   | 'active'
   | 'isBlockedForCredit'
+  | 'effectiveCreditStatus'
   | 'commercialPolicyId'
 > & {
   creditSummary?: CustomerCreditSummary | null
@@ -82,6 +83,7 @@ export type CreateSalePayload = {
 }
 
 export type BuildCreateSalePayloadInput = {
+  administrativeOverrideReason?: string
   billingRequestReason?: string
   billingRequestNotes?: string
   cart: CartItem[]
@@ -98,6 +100,7 @@ export type BuildCreateSalePayloadInput = {
 }
 
 export type CreateSaleResponse = {
+  creditWarnings?: string[]
   sale?: {
     id: string
     saleNumber?: string
@@ -114,6 +117,7 @@ export type CreateSaleResponse = {
       unitPrice?: number | string | null
       subtotal?: number | string | null
     }>
+    creditWarnings?: string[]
   }
   payment?: { id?: string; amount?: number | string; paymentMethod?: string } | null
   accountReceivable?: { id?: string; balance?: number | string; dueDate?: string } | null

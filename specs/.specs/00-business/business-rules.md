@@ -86,6 +86,9 @@
 - Un cliente debe considerarse moroso cuando tenga saldo vencido conforme a sus días de crédito o fecha de vencimiento.
 - El límite de crédito debe validar el saldo pendiente acumulado del cliente antes de permitir nuevas ventas a crédito.
 - Un cliente bloqueado por mora o exceso de límite no debe recibir nuevas ventas a crédito sin autorización administrativa explícita.
+- El bloqueo automático por mora debe respetar la política comercial efectiva: `BLOCK_NEW_CREDIT` bloquea crédito nuevo, `WARN_ONLY` informa sin bloquear y la ausencia de modo no crea bloqueo automático.
+- `Customer.creditStatus` conserva el estado administrativo; la mora y el exceso de límite producen una decisión efectiva derivada y no deben sobrescribir ese estado.
+- Una cuenta entra en mora a las 00:00 del día calendario siguiente a `dueDate` en la zona horaria operativa. `DUE_SOON` comprende los siete días previos y el propio día de vencimiento.
 - La cancelación de una venta a crédito debe ajustar o cancelar la cuenta por cobrar relacionada según corresponda.
 - El crédito no recuperado al día siguiente conserva su condición de atrasado hasta que se pague o se cancele conforme a regla.
 

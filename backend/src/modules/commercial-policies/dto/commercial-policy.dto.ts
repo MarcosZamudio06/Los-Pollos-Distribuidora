@@ -1,6 +1,7 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-import { CustomerType } from '@prisma/client';
+import { CustomerType, OverdueBlockingMode } from '@prisma/client';
+export { OverdueBlockingMode } from '@prisma/client';
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -73,9 +74,8 @@ export class CreateCommercialPolicyDto {
   defaultCreditDays?: number;
 
   @IsOptional()
-  @Transform(trimString)
-  @IsString()
-  overdueBlockingMode?: string;
+  @IsEnum(OverdueBlockingMode)
+  overdueBlockingMode?: OverdueBlockingMode;
 
   @IsOptional()
   @Transform(trimString)

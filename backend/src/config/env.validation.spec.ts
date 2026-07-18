@@ -2,6 +2,11 @@ import { DEFAULT_DATABASE_URL } from './database.config';
 import { validateEnvironment } from './env.validation';
 
 describe('validateEnvironment', () => {
+  it('defaults and validates the operational timezone', () => {
+    expect(validateEnvironment({}).APP_TIMEZONE).toBe('America/Mexico_City');
+    expect(validateEnvironment({ APP_TIMEZONE: 'America/Cancun' }).APP_TIMEZONE).toBe('America/Cancun');
+    expect(() => validateEnvironment({ APP_TIMEZONE: 'Invalid/Timezone' })).toThrow('Invalid APP_TIMEZONE value');
+  });
   it('uses the repo default DATABASE_URL when none is provided', () => {
     expect(
       validateEnvironment({
