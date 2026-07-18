@@ -102,6 +102,7 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
     sku: 'PCH-001',
     unit: ProductUnit.KG,
     salePrice: decimal('100'),
+    purchaseCost: decimal('62.50'),
     isActive: true,
     unitEquivalents: [],
   });
@@ -568,6 +569,9 @@ describe('SalesService', () => {
                 subtotal: 250,
                 productNameSnapshot: 'Chicken breast',
                 quantitySnapshot: 2.5,
+                unitCostSnapshot: 62.5,
+                costSubtotalSnapshot: 156.25,
+                costSnapshotSource: 'SALE_CONFIRMATION',
               }),
             ],
           },

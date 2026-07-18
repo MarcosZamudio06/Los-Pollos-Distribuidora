@@ -184,6 +184,11 @@ enum PointOfSaleDailyCloseStatus {
   CANCELLED
 }
 
+enum CostSnapshotSource {
+  SALE_CONFIRMATION
+  LEGACY_BACKFILL
+}
+
 enum PointOfSaleDailyCloseLineSection {
   INPUT
   OUTPUT
@@ -526,6 +531,9 @@ model SaleItem {
   unitPriceSnapshot       Decimal                @db.Decimal(14, 2)
   quantitySnapshot        Decimal                @db.Decimal(14, 3)
   subtotal                Decimal                @db.Decimal(14, 2)
+  unitCostSnapshot        Decimal                @db.Decimal(14, 2)
+  costSubtotalSnapshot    Decimal                @db.Decimal(14, 2)
+  costSnapshotSource      CostSnapshotSource
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   sale                    Sale                   @relation(fields: [saleId], references: [id])

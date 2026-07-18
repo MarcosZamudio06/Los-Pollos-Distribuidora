@@ -31,6 +31,7 @@ type SaleProduct = {
   sku?: string | null;
   unit: ProductUnit;
   salePrice: DecimalLike;
+  purchaseCost: DecimalLike;
   isActive: boolean;
   unitEquivalents?: Array<{
     id: string;
@@ -357,6 +358,9 @@ export class SalesService {
                 unitPriceSnapshot: item.unitPrice,
                 quantitySnapshot: item.quantityKg || item.quantityPieces,
                 subtotal: item.subtotal,
+                unitCostSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost)),
+                costSubtotalSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost) * (item.quantityKg || item.quantityPieces)),
+                costSnapshotSource: 'SALE_CONFIRMATION',
               })),
             },
           },
@@ -905,6 +909,8 @@ export class SalesService {
         quantitySnapshot: this.decimalToString(item.quantitySnapshot),
         appliedEquivalentFactor: this.decimalToString(item.appliedEquivalentFactor),
         subtotal: this.decimalToString(item.subtotal),
+        unitCostSnapshot: this.decimalToString(item.unitCostSnapshot),
+        costSubtotalSnapshot: this.decimalToString(item.costSubtotalSnapshot),
       })) ?? [],
     };
   }

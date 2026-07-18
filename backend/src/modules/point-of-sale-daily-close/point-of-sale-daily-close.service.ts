@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PointOfSaleDailyCloseStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { calculateDailyCloseKilos } from './daily-close-calculations';
+import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
 import { CreateExpenseDto, CreateScaleTicketDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, VersionedDailyCloseDto } from './dto';
 
 const detailInclude = {
@@ -33,7 +33,7 @@ export class PointOfSaleDailyCloseService {
   async get(id: string) {
     const close = await this.prisma.pointOfSaleDailyClose.findUnique({ where: { id }, include: detailInclude });
     if (!close) throw new NotFoundException('DAILY_CLOSE_NOT_FOUND');
-    return close;
+    return this.withCostQuality(close);
   }
 
   async open(dto: OpenDailyCloseDto, user: AuthenticatedUser) {
@@ -44,10 +44,10 @@ export class PointOfSaleDailyCloseService {
       where: { operationalLocationId: dto.operationalLocationId, businessDate, status: { not: 'CANCELLED' } }, select: { id: true },
     });
     if (duplicate) throw new ConflictException('DAILY_CLOSE_ALREADY_EXISTS');
-    const nextDate = new Date(businessDate); nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const { from, to } = this.operationalDay(businessDate);
     const created = await this.prisma.$transaction(async (tx) => {
       const close = await tx.pointOfSaleDailyClose.create({ data: { operationalLocationId: dto.operationalLocationId, businessDate, openedByUserId: user.id, notes: dto.notes?.trim() || null } });
-      await this.syncOperations(tx, close.id, dto.operationalLocationId, businessDate, nextDate);
+      await this.syncOperations(tx, close.id, dto.operationalLocationId, from, to);
       return close;
     });
     return this.recalculate(created.id);
@@ -118,13 +118,17 @@ export class PointOfSaleDailyCloseService {
     return this.transition(id, dto.version, 'CLOSED', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null });
   }
 
+  async refresh(id: string) {
+    await this.requireDraft(id);
+    return this.recalculate(id);
+  }
+
   private async recalculate(id: string) {
     let close = await this.get(id);
-    if (close.status === 'DRAFT') {
-      const nextDate = new Date(close.businessDate); nextDate.setUTCDate(nextDate.getUTCDate() + 1);
-      await this.prisma.$transaction((tx) => this.syncOperations(tx, close.id, close.operationalLocationId, close.businessDate, nextDate));
-      close = await this.get(id);
-    }
+    if (close.status !== 'DRAFT') return this.withCostQuality(close);
+    const { from, to } = this.operationalDay(close.businessDate);
+    await this.prisma.$transaction((tx) => this.syncOperations(tx, close.id, close.operationalLocationId, from, to));
+    close = await this.get(id);
     const sum = (values: Array<Prisma.Decimal | null>, fallback = 0) => values.reduce<number>((total, value) => total + Number(value ?? fallback), 0);
     const byConcept = (concept: string, field: 'quantityKg' | 'amount') => sum(close.lines.filter((line) => line.conceptType === concept).map((line) => line[field] as Prisma.Decimal | null));
     const scaleReportedKg = sum(close.scaleTicketReferences.map((ticket) => ticket.weightKg));
@@ -139,18 +143,22 @@ export class PointOfSaleDailyCloseService {
     const cashTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'CASH').map((payment) => payment.amount));
     const cardVoucherTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'CARD' || payment.paymentMethod === 'VOUCHER').map((payment) => payment.amount));
     const transferTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT').map((payment) => payment.amount));
-    const purchaseCostTotal = byConcept('PURCHASE_COST', 'amount');
+    const { purchaseCostTotal, costQuality } = calculateDailyCloseCost(close.sales);
+    const cashExpenseTotal = sum(close.cashMovements.filter((movement) => movement.type === 'EXPENSE' && movement.movementChannel === 'CASH').map((movement) => movement.amount));
     const data = {
       totalInputKg: kilos.totalInputKg, totalSoldKg: kilos.totalSoldKg, totalRemainingKg: byConcept('REMAINING_STOCK', 'quantityKg'), totalShortageKg: byConcept('SHORTAGE', 'quantityKg'), totalSurplusKg: byConcept('SURPLUS', 'quantityKg'),
       scaleReportedKg, scaleDifferenceKg: scaleReportedKg - kilos.totalSoldKg, cashTotal, cardVoucherTotal, transferTotal,
-      expenseTotal, grossSalesTotal, netCashExpected: cashTotal - expenseTotal, purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
+      expenseTotal, grossSalesTotal, netCashExpected: cashTotal - cashExpenseTotal, purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
     };
-    return this.prisma.pointOfSaleDailyClose.update({ where: { id }, data, include: detailInclude });
+    const updated = await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data, include: detailInclude });
+    return { ...updated, costQuality, dataAsOf: updated.updatedAt };
   }
 
   private async requireDraft(id: string) { const close = await this.get(id); if (close.status !== 'DRAFT') throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'); return close; }
   private async syncOperations(tx: Prisma.TransactionClient, closeId: string, locationId: string, from: Date, to: Date) {
-    await tx.sale.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED', routeId: null, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
+    await tx.sale.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED' } }, data: { pointOfSaleDailyCloseId: null } });
+    await tx.payment.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, status: { in: ['REGISTERED', 'APPLIED'] }, routeId: null } }, data: { pointOfSaleDailyCloseId: null } });
+    await tx.sale.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED' }, data: { pointOfSaleDailyCloseId: closeId } });
     await tx.payment.updateMany({ where: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, status: { in: ['REGISTERED', 'APPLIED'] }, routeId: null, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
     await tx.inventoryMovement.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, type: { in: ['IN', 'PURCHASE', 'TRANSFER_IN'] }, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
   }
@@ -162,4 +170,12 @@ export class PointOfSaleDailyCloseService {
   }
   private admin(user: AuthenticatedUser) { if (user.role !== 'ADMIN') throw new ForbiddenException('DAILY_CLOSE_ADMIN_REQUIRED'); }
   private date(value: string) { const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`); if (Number.isNaN(date.getTime())) throw new BadRequestException('INVALID_BUSINESS_DATE'); return date; }
+  private operationalDay(businessDate: Date) {
+    const from = new Date(Date.UTC(businessDate.getUTCFullYear(), businessDate.getUTCMonth(), businessDate.getUTCDate(), 6));
+    return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000) };
+  }
+  private withCostQuality<T extends { sales: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date }>(close: T) {
+    const estimated = close.sales.some((sale) => sale.items.some((item) => item.costSnapshotSource === 'LEGACY_BACKFILL'));
+    return { ...close, costQuality: estimated ? 'ESTIMATED' as const : 'EXACT' as const, dataAsOf: close.updatedAt };
+  }
 }

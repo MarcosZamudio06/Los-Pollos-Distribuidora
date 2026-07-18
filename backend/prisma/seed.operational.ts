@@ -1020,7 +1020,12 @@ async function seedSales(prisma: PrismaClient, ctx: SeedContext, plans: SalePlan
       await tx.sale.create({ data: { id: plan.id, ...salePayload } })
 
       await tx.saleItem.createMany({
-        data: plan.items.map((item, itemIndex) => ({
+        data: plan.items.map((item, itemIndex) => {
+          const product = ctx.productsBySku.get(item.productSku ?? item.productName)
+          if (!product) throw new Error(`Missing product ${item.productName}`)
+          const snapshotQuantity = item.quantityKg > 0 ? item.quantityKg : item.quantityPieces
+          const unitCost = Number(product.purchaseCost)
+          return {
           id: seedId(`sale-item-${plan.saleNumber}-${itemIndex + 1}`),
           saleId: plan.id,
           productId: item.productId,
@@ -1035,10 +1040,14 @@ async function seedSales(prisma: PrismaClient, ctx: SeedContext, plans: SalePlan
           productNameSnapshot: item.productName,
           productSkuSnapshot: item.productSku,
           unitPriceSnapshot: item.unitPrice,
-          quantitySnapshot: item.quantityKg > 0 ? item.quantityKg : item.quantityPieces,
+          quantitySnapshot: snapshotQuantity,
           subtotal: buildLineSubtotal(item),
+          unitCostSnapshot: unitCost,
+          costSubtotalSnapshot: roundMoney(unitCost * snapshotQuantity),
+          costSnapshotSource: 'SALE_CONFIRMATION',
           createdAt: plan.saleDate,
-        })),
+          }
+        }),
       })
 
       const movementRows: Prisma.InventoryMovementCreateManyInput[] = []

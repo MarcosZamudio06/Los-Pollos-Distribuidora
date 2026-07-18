@@ -1,4 +1,4 @@
-import { calculateDailyCloseKilos } from './daily-close-calculations';
+import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
 
 describe('calculateDailyCloseKilos', () => {
   it('sums sold kilos from confirmed sales assigned to the close', () => {
@@ -27,5 +27,20 @@ describe('calculateDailyCloseKilos', () => {
     });
 
     expect(result.totalInputKg).toBe(46);
+  });
+});
+
+describe('calculateDailyCloseCost', () => {
+  it('sums immutable item cost snapshots and reports exact quality', () => {
+    expect(calculateDailyCloseCost([
+      { items: [{ costSubtotalSnapshot: 120, costSnapshotSource: 'SALE_CONFIRMATION' }] },
+      { items: [{ costSubtotalSnapshot: '80.50', costSnapshotSource: 'SALE_CONFIRMATION' }] },
+    ])).toEqual({ purchaseCostTotal: 200.5, costQuality: 'EXACT' });
+  });
+
+  it('reports estimated quality when any legacy backfill contributes', () => {
+    expect(calculateDailyCloseCost([
+      { items: [{ costSubtotalSnapshot: 50, costSnapshotSource: 'LEGACY_BACKFILL' }] },
+    ])).toEqual({ purchaseCostTotal: 50, costQuality: 'ESTIMATED' });
   });
 });

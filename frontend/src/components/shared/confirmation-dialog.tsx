@@ -11,12 +11,13 @@ type ConfirmationDialogProps = {
   confirmLabel: string
   cancelLabel?: string
   isLoading?: boolean
+  confirmDisabled?: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void | Promise<void>
   children?: ReactNode
 }
 
-export function ConfirmationDialog({ open, title, description, confirmLabel, cancelLabel = 'Regresar y editar', isLoading = false, onOpenChange, onConfirm, children }: ConfirmationDialogProps) {
+export function ConfirmationDialog({ open, title, description, confirmLabel, cancelLabel = 'Regresar y editar', isLoading = false, confirmDisabled = false, onOpenChange, onConfirm, children }: ConfirmationDialogProps) {
   const submittingRef = useRef(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const loading = isLoading || isConfirming
@@ -46,7 +47,7 @@ export function ConfirmationDialog({ open, title, description, confirmLabel, can
         {children && <div className="grid gap-2 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] p-4 text-sm">{children}</div>}
         <AlertDialogFooter>
           <Button disabled={loading} onClick={() => onOpenChange(false)} variant="secondary">{cancelLabel}</Button>
-          <Button aria-busy={loading} disabled={loading} onClick={() => void handleConfirm()}>
+          <Button aria-busy={loading} disabled={loading || confirmDisabled} onClick={() => void handleConfirm()}>
             {loading && <LoaderCircle className="h-4 w-4 animate-spin" />}{loading ? 'Guardando...' : confirmLabel}
           </Button>
         </AlertDialogFooter>
