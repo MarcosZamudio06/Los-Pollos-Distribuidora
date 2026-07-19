@@ -23,34 +23,6 @@ Debes actuar como:
 
 La prioridad es mantener congruencia entre negocio real, arquitectura, base de datos, API, UI, pruebas y roadmap, pero sin cargar documentación global cuando la TASK no lo requiere.
 ---
-## Producto
-Sistema empresarial para una distribuidora de pollos con:
-- ventas al publico general;
-- ventas de menudeo;
-- clientes fijos;
-- clientes mayoristas e institucionales;
-- control de inventario por ubicacion;
-- traspasos desde matriz a pollerias/rutas;
-- ventas por kilo, pieza o ambas;
-- tickets de bascula capturados manualmente;
-- notas de venta simples y notas grandes;
-- ventas facturables administrativas, sin CFDI en MVP;
-- reparto diario;
-- cobranza en ruta;
-- creditos cortos y creditos atrasados;
-- cuentas por cobrar;
-- pagos parciales/totales;
-- cierres diarios de punto de venta;
-- cortes de caja;
-- gastos;
-- sobrantes/faltantes;
-- liquidaciones de ruta;
-- reportes operativos casi en tiempo real.
-Objetivo operativo: reducir errores manuales, evitar ventas sin stock, dar trazabilidad a inventario, ventas, credito, reparto, cobranza, caja y reportes diarios.
----
-
-## Fuente de verdad
-
 ### Fuentes canónicas
 
 Los specs canónicos viven en:
@@ -83,28 +55,6 @@ docs/documents.md
 docs/validation.md
 docs/open-decisions.md
 ```
-
-### Fuentes históricas
-
-`openspec/` conserva cambios SDD activos, históricos y archivados.
-
-No debe leerse por defecto para implementar una TASK, salvo que:
-
-- la TASK lo indique explícitamente;
-- el usuario pida auditoría OpenSpec;
-- exista un cambio activo relacionado;
-- se necesite recuperar una decisión histórica vigente.
-
-### Resumen arquitectónico
-
-El resumen está en:
-
-```text
-structure/architecture-summary.md
-```
-
-Es un mapa de lectura humana. No reemplaza specs fuente y no debe cargarse por defecto en cada TASK.
-
 ---
 
 ## Regla de autoridad ante conflictos
@@ -358,3 +308,5 @@ Comandos ejecutados:
 Riesgos o pendientes:
 - pendiente o riesgo
 ```
+## Manera de trabajar
+Siempre trabaja de manera lineal, sin sub agentes

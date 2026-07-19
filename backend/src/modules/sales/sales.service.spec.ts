@@ -27,6 +27,7 @@ type MockPrisma = {
   customer: { findUnique: jest.Mock };
   commercialPolicy: { findFirst: jest.Mock };
   operationalLocation: { findUnique: jest.Mock };
+  legalEntityOperationalLocation: { findFirst: jest.Mock };
   inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
   inventoryMovement: { create: jest.Mock };
   saleDocument: { create: jest.Mock; findMany: jest.Mock };
@@ -34,6 +35,8 @@ type MockPrisma = {
   payment: { create: jest.Mock; findFirst: jest.Mock };
   accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; update: jest.Mock };
   billingRequest: { create: jest.Mock };
+  billingRequestSaleDocument: { create: jest.Mock };
+  billingDataRemediation: { upsert: jest.Mock };
 };
 
 function decimal(value: string | number): Prisma.Decimal {
@@ -51,6 +54,7 @@ function createPrisma(): MockPrisma {
     customer: { findUnique: jest.fn() },
     commercialPolicy: { findFirst: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
+    legalEntityOperationalLocation: { findFirst: jest.fn() },
     inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     inventoryMovement: { create: jest.fn() },
     saleDocument: { create: jest.fn(), findMany: jest.fn() },
@@ -58,6 +62,8 @@ function createPrisma(): MockPrisma {
     payment: { create: jest.fn(), findFirst: jest.fn() },
     accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     billingRequest: { create: jest.fn() },
+    billingRequestSaleDocument: { create: jest.fn() },
+    billingDataRemediation: { upsert: jest.fn() },
   };
   return prisma;
 }
@@ -98,6 +104,9 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
     type: 'BRANCH',
     isActive: true,
   });
+  prisma.legalEntityOperationalLocation.findFirst.mockResolvedValue({
+    legalEntityId: 'legal-entity-1',
+  });
   prisma.product.findUnique.mockResolvedValue({
     id: 'product-1',
     name: 'Chicken breast',
@@ -136,6 +145,7 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
   prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
   prisma.accountReceivable.create.mockImplementation(({ data }) => Promise.resolve({ id: 'ar-1', createdAt: now, updatedAt: now, ...data }));
   prisma.billingRequest.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-1', createdAt: now, updatedAt: now, requestedAt: now, reviewedAt: null, reviewedByUserId: null, status: 'REQUESTED', ...data }));
+  prisma.billingRequestSaleDocument.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-doc-1', createdAt: now, updatedAt: now, ...data }));
   Object.assign(prisma.sale.create, saleOverrides);
 }
 
@@ -384,7 +394,14 @@ describe('SalesService', () => {
       paymentType: SalePaymentType.CASH_SALE,
       collectionStatus: CollectionStatus.PAID,
       status: SaleStatus.CONFIRMED,
-      customer: { id: 'customer-1', name: 'Restaurant Norte' },
+      customer: {
+        id: 'customer-1',
+        name: 'Restaurant Norte',
+        address: 'Av. Principal 123',
+        phone: '229 000 0000',
+        taxId: 'XAXX010101000',
+        creditDays: 7,
+      },
       user: { id: 'seller-1', name: 'Seller One' },
       location: { id: 'loc-1', name: 'Sucursal Centro' },
       documents: [
@@ -405,7 +422,7 @@ describe('SalesService', () => {
       expect.objectContaining({
         where: { id: 'sale-1', userId: 'seller-1' },
         include: expect.objectContaining({
-          customer: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true, address: true, phone: true, taxId: true, creditDays: true } },
           user: { select: { id: true, name: true } },
           location: { select: { id: true, name: true } },
           items: true,
@@ -424,6 +441,10 @@ describe('SalesService', () => {
       requiresAdministrativeInvoice: false,
       sellerName: 'Seller One',
       customerName: 'Restaurant Norte',
+      customerAddress: 'Av. Principal 123',
+      customerPhone: '229 000 0000',
+      customerTaxId: 'XAXX010101000',
+      customerCreditDays: 7,
       locationId: 'loc-1',
       locationName: 'Sucursal Centro',
       items: [
@@ -559,6 +580,8 @@ describe('SalesService', () => {
         data: expect.objectContaining({
           subtotal: 250,
           total: 250,
+          currencyCode: 'MXN',
+          legalEntityId: 'legal-entity-1',
           paymentType: SalePaymentType.CASH_SALE,
           status: SaleStatus.CONFIRMED,
           items: {
@@ -570,6 +593,10 @@ describe('SalesService', () => {
                 quantityPieces: 0,
                 unitPrice: 100,
                 subtotal: 250,
+                discount: 0,
+                taxableBase: 250,
+                tax: 0,
+                total: 250,
                 productNameSnapshot: 'Chicken breast',
                 quantitySnapshot: 2.5,
                 unitCostSnapshot: 62.5,
@@ -611,11 +638,12 @@ describe('SalesService', () => {
         }),
       }),
     );
-    expect(prisma.saleDocument.create).toHaveBeenCalledWith(
+    expect(prisma.saleDocument.create).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         data: expect.objectContaining({
           saleId: 'sale-1',
-          documentType: SaleDocumentType.INTERNAL_RECEIPT,
+          documentType: SaleDocumentType.SIMPLE_NOTE,
           operationalLocationId: 'loc-1',
           physicalFolio: 'SALE-000001',
           status: SaleDocumentStatus.ISSUED,
@@ -633,6 +661,15 @@ describe('SalesService', () => {
         }),
       }),
     );
+    expect(prisma.saleDocument.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          saleId: 'sale-1',
+          documentType: SaleDocumentType.INTERNAL_RECEIPT,
+        }),
+      }),
+    );
     expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
@@ -640,7 +677,53 @@ describe('SalesService', () => {
         payment: expect.objectContaining({ amount: '250', saleId: 'sale-1', accountReceivableId: null }),
         accountReceivable: null,
         inventoryMovements: [expect.objectContaining({ saleId: 'sale-1' })],
-        documents: [expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.INTERNAL_RECEIPT })],
+        documents: [
+          expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.SIMPLE_NOTE }),
+          expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.INTERNAL_RECEIPT }),
+        ],
+      }),
+    );
+  });
+
+  it('does not duplicate the internal receipt when it is the requested document type', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    const result = await service.create(
+      validCashSale({ documentType: SaleDocumentType.INTERNAL_RECEIPT }),
+      { id: 'seller-1', role: 'SELLER' },
+      'idem-internal-receipt',
+    );
+
+    expect(prisma.saleDocument.create).toHaveBeenCalledTimes(1);
+    expect(result.documents).toEqual([
+      expect.objectContaining({ documentType: SaleDocumentType.INTERNAL_RECEIPT }),
+    ]);
+  });
+
+  it('records an explicit remediation when the sale location has no issuer mapping', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.legalEntityOperationalLocation.findFirst.mockResolvedValue(null);
+
+    await service.create(
+      validCashSale(),
+      { id: 'seller-1', role: 'SELLER' },
+      'idem-missing-issuer',
+    );
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ legalEntityId: null, currencyCode: 'MXN' }),
+      }),
+    );
+    expect(prisma.billingDataRemediation.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          code: 'MISSING_LEGAL_ENTITY_MAPPING',
+          entityType: 'Sale',
+          entityId: 'sale-1',
+        }),
       }),
     );
   });
@@ -664,6 +747,16 @@ describe('SalesService', () => {
         saleId: 'sale-1', customerId: 'customer-1', requestedByUserId: 'seller-1',
         status: 'REQUESTED', reason: 'Cliente solicita seguimiento', notes: 'Enviar a administración',
         history: { create: expect.objectContaining({ toStatus: 'REQUESTED', changedByUserId: 'seller-1' }) },
+      }),
+    });
+    expect(prisma.billingRequestSaleDocument.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        billingRequestId: 'billing-1',
+        saleDocumentId: 'doc-1',
+        requestedSubtotal: 250,
+        requestedTax: 0,
+        requestedTotal: 250,
+        createdByUserId: 'seller-1',
       }),
     });
     expect(result.billingRequest).toEqual(expect.objectContaining({ id: 'billing-1', status: 'REQUESTED' }));

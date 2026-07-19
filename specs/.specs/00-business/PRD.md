@@ -255,3 +255,9 @@ El cierre diario de punto de venta es distinto de `RouteSettlement`: el primero 
 - Política de folios físicos por punto de venta y tipo de documento.
 - Si un cierre puede reabrirse después de afectar un periodo administrativo y qué evidencia o motivo exige.
 - Si debe existir un rol `CASHIER`; hasta decidirlo se reutilizan `ADMIN` y `SELLER`.
+
+## 8. Fase posterior aprobada: conciliación de facturas externas
+
+Se aprueba una fase post-MVP para identificar notas facturables, gestionar solicitudes totales, parciales o agrupadas y registrar facturas emitidas externamente. El ERP conserva serie, folio y UUID opcional únicamente para conciliación; no genera CFDI, XML, no timbra y no integra PAC o SAT.
+
+Esta fase incorpora `LegalEntity`, moneda de venta, perfil fiscal mínimo, rol `BILLING`, política de facturabilidad y vencimiento, conforme a `specs/modules/billing-reportable-notes/spec.md`. `PaymentAllocation` continúa fuera del alcance.

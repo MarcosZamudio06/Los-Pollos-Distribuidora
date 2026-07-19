@@ -18,6 +18,12 @@ type CustomerResponse = Omit<CustomerListRecord, 'creditLimit'> & {
         lastPaymentDate: Date | null;
         creditStatus: CreditStatus;
         isBlockedForCredit: boolean;
+        isBlocked: boolean;
+        effectiveCreditStatus: 'ACTIVE' | 'WARNING' | 'BLOCKED';
+        blockingReasons: string[];
+        blockingReason: string | null;
+        overdueBlockingMode: string | null;
+        canAdministrativeOverride: boolean;
     };
     billingSummary?: {
         billedAmount: string;
@@ -40,7 +46,7 @@ export declare class CustomersService {
         creditLimit: string | null;
         creditDays: number | null;
         paymentTermsDays: number | null;
-        agingStatus: import("@prisma/client").$Enums.AgingStatus;
+        agingStatus: "CURRENT" | "DUE_SOON" | "OVERDUE";
         collectionStatus: import("@prisma/client").$Enums.CollectionStatus;
         globalBalance: string;
         outstandingAmount: string;
@@ -49,7 +55,11 @@ export declare class CustomersService {
         hasOverdueBalance: boolean;
         isBlocked: boolean;
         isBlockedForCredit: boolean;
-        blockingReason: string | null;
+        effectiveCreditStatus: "ACTIVE" | "BLOCKED" | "WARNING";
+        blockingReasons: string[];
+        blockingReason: string;
+        overdueBlockingMode: string | null;
+        canAdministrativeOverride: boolean;
         daysOverdue: number;
         lastPaymentDate: Date | null;
         commercialPolicyId: string | null;
@@ -80,7 +90,7 @@ export declare class CustomersService {
                 methods: import("@prisma/client").$Enums.PaymentMethod[];
             };
             accountReceivableId: string | null;
-            billingRequestId: string | null;
+            billingRequestId: string;
         }[];
     }>;
     findPayments(id: string, query?: ListCustomerPaymentsQueryDto): Promise<{
@@ -123,11 +133,9 @@ export declare class CustomersService {
     private isCustomerDetailRecord;
     private buildCreditSummary;
     private buildCreditSummaryResponse;
-    private resolveAgingStatus;
     private resolveCollectionStatus;
     private activeReceivables;
     private customerPayments;
-    private resolveBlockingReason;
     private toSaleHistoryItem;
     private toPaymentHistoryItem;
     private buildBillingSummary;

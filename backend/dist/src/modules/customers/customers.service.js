@@ -13,6 +13,7 @@ exports.CustomersService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../database/prisma.service");
+const credit_decision_1 = require("../sales/credit-decision");
 let CustomersService = class CustomersService {
     prisma;
     constructor(prisma) {
@@ -56,7 +57,11 @@ let CustomersService = class CustomersService {
             include: {
                 payments: true,
                 accountReceivable: { select: { id: true } },
-                billingRequest: { select: { id: true } },
+                billingRequests: {
+                    select: { id: true },
+                    orderBy: { requestedAt: 'desc' },
+                    take: 1,
+                },
             },
             orderBy: { createdAt: 'desc' },
             ...this.buildPagination(query),
@@ -372,14 +377,25 @@ let CustomersService = class CustomersService {
         return normalizedValue.length > 0 ? normalizedValue : null;
     }
     toCustomerResponse(customer) {
+        const detailRecord = this.isCustomerDetailRecord(customer);
+        const { accountReceivables: _accountReceivables, payments: _payments, billingRequests: _billingRequests, commercialPolicy, ...publicCustomer } = customer;
         const response = {
-            ...customer,
+            ...publicCustomer,
             creditLimit: customer.creditLimit?.toString() ?? null,
             isBlockedForCredit: customer.creditStatus !== client_1.CreditStatus.ACTIVE,
         };
-        if (this.isCustomerDetailRecord(customer)) {
-            response.commercialPolicy = customer.commercialPolicy;
+        if (detailRecord) {
+            response.commercialPolicy = commercialPolicy ? {
+                id: commercialPolicy.id,
+                name: commercialPolicy.name,
+                overdueBlockingMode: commercialPolicy.overdueBlockingMode,
+                allowAdministrativeOverride: commercialPolicy.allowAdministrativeOverride,
+                isActive: commercialPolicy.isActive,
+                effectiveFrom: commercialPolicy.effectiveFrom,
+                effectiveTo: commercialPolicy.effectiveTo,
+            } : null;
             response.creditSummary = this.buildCreditSummary(customer);
+            response.isBlockedForCredit = response.creditSummary?.isBlockedForCredit ?? response.isBlockedForCredit;
             response.billingSummary = this.buildBillingSummary(customer);
         }
         return response;
@@ -392,29 +408,32 @@ let CustomersService = class CustomersService {
     }
     buildCreditSummaryResponse(customer) {
         const receivables = this.activeReceivables(customer);
-        const outstandingAmount = receivables.reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
-        const overdueAmount = receivables
-            .filter((accountReceivable) => accountReceivable.daysOverdue > 0)
-            .reduce((total, accountReceivable) => total + Number(accountReceivable.outstandingAmount), 0);
+        const creditState = (0, credit_decision_1.calculateCreditState)({
+            creditStatus: customer.creditStatus,
+            creditLimit: customer.creditLimit,
+            newOutstandingAmount: 0,
+            receivables,
+            policy: customer.commercialPolicy,
+            asOf: new Date(),
+        });
+        const outstandingAmount = creditState.currentExposure;
+        const overdueAmount = creditState.overdueAmount;
         const payments = this.customerPayments(customer);
         const lastPaymentDate = payments.reduce((latestDate, payment) => latestDate === null || payment.paidAt > latestDate
             ? payment.paidAt
             : latestDate, null);
         const creditLimit = customer.creditLimit === null ? null : Number(customer.creditLimit);
         const availableCredit = creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0);
-        const daysOverdue = Math.max(0, ...receivables.map((accountReceivable) => accountReceivable.daysOverdue));
+        const daysOverdue = creditState.maximumDaysOverdue;
         const hasOverdueBalance = overdueAmount > 0;
-        const isLimitExceeded = creditLimit !== null && outstandingAmount > creditLimit;
-        const isBlocked = customer.creditStatus !== client_1.CreditStatus.ACTIVE ||
-            hasOverdueBalance ||
-            isLimitExceeded;
+        const isBlocked = creditState.effectiveCreditStatus === 'BLOCKED';
         return {
             customerId: customer.id,
             creditStatus: customer.creditStatus,
             creditLimit: customer.creditLimit?.toString() ?? null,
             creditDays: customer.creditDays,
             paymentTermsDays: customer.creditDays,
-            agingStatus: this.resolveAgingStatus(customer),
+            agingStatus: creditState.agingStatus,
             collectionStatus: this.resolveCollectionStatus(customer),
             globalBalance: outstandingAmount.toString(),
             outstandingAmount: outstandingAmount.toString(),
@@ -423,7 +442,11 @@ let CustomersService = class CustomersService {
             hasOverdueBalance,
             isBlocked,
             isBlockedForCredit: isBlocked,
-            blockingReason: this.resolveBlockingReason(customer, hasOverdueBalance, isLimitExceeded),
+            effectiveCreditStatus: creditState.effectiveCreditStatus,
+            blockingReasons: creditState.blockingReasons,
+            blockingReason: creditState.blockingReasons[0] ?? null,
+            overdueBlockingMode: creditState.overdueBlockingMode,
+            canAdministrativeOverride: creditState.canAdministrativeOverride,
             daysOverdue,
             lastPaymentDate,
             commercialPolicyId: customer.commercialPolicyId,
@@ -437,15 +460,6 @@ let CustomersService = class CustomersService {
             paidAmount: this.buildBillingSummary(customer)?.paidAmount,
             finalBalance: this.buildBillingSummary(customer)?.finalBalance,
         };
-    }
-    resolveAgingStatus(customer) {
-        if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.agingStatus === client_1.AgingStatus.OVERDUE)) {
-            return client_1.AgingStatus.OVERDUE;
-        }
-        if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.agingStatus === client_1.AgingStatus.DUE_SOON)) {
-            return client_1.AgingStatus.DUE_SOON;
-        }
-        return client_1.AgingStatus.CURRENT;
     }
     resolveCollectionStatus(customer) {
         if (this.activeReceivables(customer).some((accountReceivable) => accountReceivable.status === client_1.CollectionStatus.UNPAID)) {
@@ -484,18 +498,6 @@ let CustomersService = class CustomersService {
         }
         return [...paymentsById.values(), ...anonymousPayments];
     }
-    resolveBlockingReason(customer, hasOverdueBalance, isLimitExceeded) {
-        if (customer.creditStatus !== client_1.CreditStatus.ACTIVE) {
-            return 'CUSTOMER_CREDIT_STATUS';
-        }
-        if (hasOverdueBalance) {
-            return 'OVERDUE_BALANCE';
-        }
-        if (isLimitExceeded) {
-            return 'CREDIT_LIMIT_EXCEEDED';
-        }
-        return null;
-    }
     toSaleHistoryItem(sale) {
         const totalPaid = sale.payments.reduce((total, payment) => total + Number(payment.amount), 0);
         const lastPaidAt = sale.payments.reduce((latestDate, payment) => latestDate === null || payment.paidAt > latestDate
@@ -513,7 +515,7 @@ let CustomersService = class CustomersService {
             locationId: sale.locationId,
             paymentsSummary: { totalPaid: totalPaid.toString(), lastPaidAt, methods },
             accountReceivableId: sale.accountReceivable?.id ?? null,
-            billingRequestId: sale.billingRequest?.id ?? null,
+            billingRequestId: sale.billingRequests?.[0]?.id ?? sale.billingRequest?.id ?? null,
         };
     }
     toPaymentHistoryItem(payment) {

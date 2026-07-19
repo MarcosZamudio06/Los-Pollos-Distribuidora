@@ -35,9 +35,9 @@ type CustomerSaleRecord = Prisma.SaleGetPayload<{
   include: {
     payments: true;
     accountReceivable: { select: { id: true } };
-    billingRequest: { select: { id: true } };
+    billingRequests: { select: { id: true } };
   };
-}>;
+}> & { billingRequest?: { id: string } | null };
 type CustomerPaymentRecord = Prisma.PaymentGetPayload<Record<string, never>>;
 type CustomerMutationDto = CreateCustomerDto | UpdateCustomerDto;
 type CustomerMutationData = {
@@ -148,7 +148,11 @@ export class CustomersService {
       include: {
         payments: true,
         accountReceivable: { select: { id: true } },
-        billingRequest: { select: { id: true } },
+        billingRequests: {
+          select: { id: true },
+          orderBy: { requestedAt: 'desc' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
       ...this.buildPagination(query),
@@ -757,7 +761,8 @@ export class CustomersService {
       locationId: sale.locationId,
       paymentsSummary: { totalPaid: totalPaid.toString(), lastPaidAt, methods },
       accountReceivableId: sale.accountReceivable?.id ?? null,
-      billingRequestId: sale.billingRequest?.id ?? null,
+      billingRequestId:
+        sale.billingRequests?.[0]?.id ?? sale.billingRequest?.id ?? null,
     };
   }
 

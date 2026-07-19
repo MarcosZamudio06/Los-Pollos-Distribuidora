@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
   AgingStatus,
@@ -89,7 +94,10 @@ function createPrisma(): MockPrisma {
       update: jest.fn(),
     },
     payment: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
-    sale: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue(undefined) },
+    sale: {
+      findUnique: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
+    },
     $transaction: jest.fn(async (callback) => callback(prisma)),
   };
   return prisma;
@@ -310,20 +318,31 @@ describe('AccountsReceivableService', () => {
     await expect(
       service.registerPayment(
         'missing',
-        { accountReceivableId: 'missing', amount: 10, paymentMethod: PaymentMethod.CASH },
+        {
+          accountReceivableId: 'missing',
+          amount: 10,
+          paymentMethod: PaymentMethod.CASH,
+        },
         { id: 'collector-1', role: 'COLLECTIONS' },
         'idem-missing',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     prisma.accountReceivable.findUnique.mockResolvedValueOnce(
-      createReceivable({ status: CollectionStatus.PAID, outstandingAmount: money('0') }),
+      createReceivable({
+        status: CollectionStatus.PAID,
+        outstandingAmount: money('0'),
+      }),
     );
 
     await expect(
       service.registerPayment(
         'ar-1',
-        { accountReceivableId: 'ar-1', amount: 10, paymentMethod: PaymentMethod.CASH },
+        {
+          accountReceivableId: 'ar-1',
+          amount: 10,
+          paymentMethod: PaymentMethod.CASH,
+        },
         { id: 'collector-1', role: 'COLLECTIONS' },
         'idem-paid',
       ),
@@ -391,8 +410,14 @@ describe('AccountsReceivableService', () => {
         'same-key',
       ),
     ).resolves.toEqual({
-      payment: expect.objectContaining({ id: 'payment-existing', amount: '250' }),
-      accountReceivable: expect.objectContaining({ id: 'ar-1', outstandingAmount: '750' }),
+      payment: expect.objectContaining({
+        id: 'payment-existing',
+        amount: '250',
+      }),
+      accountReceivable: expect.objectContaining({
+        id: 'ar-1',
+        outstandingAmount: '750',
+      }),
     });
     expect(prisma.payment.create).not.toHaveBeenCalled();
 
@@ -414,7 +439,6 @@ describe('AccountsReceivableService', () => {
       ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
-
 
   it('deduplicates a simultaneous same-key payment registration after a unique-key race', async () => {
     const { service, prisma } = createService();
@@ -453,10 +477,19 @@ describe('AccountsReceivableService', () => {
       }),
     };
 
-    prisma.payment.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(existingPayment);
+    prisma.payment.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingPayment);
     prisma.accountReceivable.findUnique
-      .mockResolvedValueOnce(createReceivable({ outstandingAmount: money('1000') }))
-      .mockResolvedValueOnce(createReceivable({ outstandingAmount: money('600'), status: CollectionStatus.PARTIALLY_PAID }));
+      .mockResolvedValueOnce(
+        createReceivable({ outstandingAmount: money('1000') }),
+      )
+      .mockResolvedValueOnce(
+        createReceivable({
+          outstandingAmount: money('600'),
+          status: CollectionStatus.PARTIALLY_PAID,
+        }),
+      );
     prisma.payment.create.mockRejectedValueOnce({ code: 'P2002' });
 
     await expect(
@@ -473,7 +506,10 @@ describe('AccountsReceivableService', () => {
       ),
     ).resolves.toEqual({
       payment: expect.objectContaining({ id: 'payment-race', amount: '400' }),
-      accountReceivable: expect.objectContaining({ id: 'ar-1', outstandingAmount: '600' }),
+      accountReceivable: expect.objectContaining({
+        id: 'ar-1',
+        outstandingAmount: '600',
+      }),
     });
     expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
   });
@@ -526,17 +562,20 @@ describe('AccountsReceivableService', () => {
   it('denies SELLER list and detail access until an ownership policy exists', async () => {
     const { service, prisma } = createService();
 
-    await expect(service.findAll({}, { id: 'seller-1', role: 'SELLER' })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
     await expect(
-      service.findAll({ customerId: 'customer-1' }, { id: 'seller-1', role: 'SELLER' }),
+      service.findAll({}, { id: 'seller-1', role: 'SELLER' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.findAll(
+        { customerId: 'customer-1' },
+        { id: 'seller-1', role: 'SELLER' },
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.accountReceivable.findMany).not.toHaveBeenCalled();
 
-    await expect(service.findOne('ar-1', { id: 'seller-1', role: 'SELLER' })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.findOne('ar-1', { id: 'seller-1', role: 'SELLER' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('does not swallow Sale.collectionStatus update failures when registering payments', async () => {
@@ -555,14 +594,21 @@ describe('AccountsReceivableService', () => {
       paidAt: new Date('2026-06-19T10:00:00.000Z'),
     });
     prisma.accountReceivable.update.mockResolvedValue(
-      createReceivable({ outstandingAmount: money('600'), status: CollectionStatus.PARTIALLY_PAID }),
+      createReceivable({
+        outstandingAmount: money('600'),
+        status: CollectionStatus.PARTIALLY_PAID,
+      }),
     );
     prisma.sale.update.mockRejectedValue(new Error('sale update failed'));
 
     await expect(
       service.registerPayment(
         'ar-1',
-        { accountReceivableId: 'ar-1', amount: 400, paymentMethod: PaymentMethod.CASH },
+        {
+          accountReceivableId: 'ar-1',
+          amount: 400,
+          paymentMethod: PaymentMethod.CASH,
+        },
         { id: 'collector-1', role: 'COLLECTIONS' },
         'sale-update-key',
       ),
@@ -593,7 +639,9 @@ describe('AccountsReceivableService', () => {
       payments: [{ amount: money('200'), status: PaymentStatus.APPLIED }],
       accountReceivable: null,
     });
-    prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: money('500') } });
+    prisma.accountReceivable.aggregate.mockResolvedValue({
+      _sum: { outstandingAmount: money('500') },
+    });
     prisma.accountReceivable.findFirst.mockResolvedValue(null);
     prisma.accountReceivable.create.mockResolvedValue(
       createReceivable({
@@ -605,7 +653,9 @@ describe('AccountsReceivableService', () => {
       }),
     );
 
-    await expect(service.createFromConfirmedCreditSale('sale-1')).resolves.toEqual(
+    await expect(
+      service.createFromConfirmedCreditSale('sale-1'),
+    ).resolves.toEqual(
       expect.objectContaining({
         id: 'ar-1',
         originalAmount: '800',
@@ -655,16 +705,18 @@ describe('AccountsReceivableService', () => {
       payments: [],
       accountReceivable: null,
     });
-    prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: money('500') } });
+    prisma.accountReceivable.aggregate.mockResolvedValue({
+      _sum: { outstandingAmount: money('500') },
+    });
     prisma.accountReceivable.findFirst.mockResolvedValue({ id: 'overdue-ar' });
 
-    await expect(service.createFromConfirmedCreditSale('sale-1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.createFromConfirmedCreditSale('sale-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.accountReceivable.findFirst.mockResolvedValue(null);
-    await expect(service.createFromConfirmedCreditSale('sale-1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.createFromConfirmedCreditSale('sale-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

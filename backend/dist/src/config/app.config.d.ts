@@ -1,5 +1,6 @@
 export type AppConfig = {
     apiPrefix: string;
+    timezone: string;
     port: number;
     swaggerPath: string;
 };

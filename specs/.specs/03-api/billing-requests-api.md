@@ -1,5 +1,8 @@
 # API — Solicitudes administrativas de factura
 
+> Este contrato describe el MVP legacy. La migración post-MVP por múltiples documentos e importes se define en `specs/.specs/03-api/billing-reportable-notes-api.md`; el contrato anterior solo puede mantenerse temporalmente durante expand–backfill–contract.
+
+
 Define contratos para la relación interna entre cliente, venta, documento y cuenta por cobrar cuando administración solicita control de factura futura. No emite CFDI ni habilita SAT.
 
 ## GET /api/billing-requests

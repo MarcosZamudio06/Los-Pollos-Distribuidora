@@ -17,6 +17,10 @@ export const initialRoles = [
     name: 'COLLECTIONS',
     description: 'Accounts receivable and collections user.',
   },
+  {
+    name: 'BILLING',
+    description: 'Billing review, reconciliation and invoice linking user.',
+  },
 ] as const;
 
 export const initialAdminUser = {
@@ -61,6 +65,14 @@ export const initialRoleTestUsers = [
     isActive: true,
     mustChangePassword: false,
     controlNumber: 'EPDP-000005', phone: '+520000000005',
+  },
+  {
+    roleName: 'BILLING',
+    name: 'Development Billing',
+    email: 'dev.billing@pollos.local',
+    isActive: true,
+    mustChangePassword: false,
+    controlNumber: 'EPDP-000006', phone: '+520000000006',
   },
 ] as const;
 

@@ -31,6 +31,9 @@ export declare class CustomersController {
                 fiscalName: string | null;
                 taxId: string | null;
                 fiscalAddress: string | null;
+                fiscalPostalCode: string | null;
+                fiscalRegime: string | null;
+                fiscalUseCode: string | null;
                 deliveryAddress: string | null;
                 notes: string | null;
             }, "creditLimit"> & {
@@ -48,6 +51,12 @@ export declare class CustomersController {
                     lastPaymentDate: Date | null;
                     creditStatus: import("@prisma/client").CreditStatus;
                     isBlockedForCredit: boolean;
+                    isBlocked: boolean;
+                    effectiveCreditStatus: "ACTIVE" | "WARNING" | "BLOCKED";
+                    blockingReasons: string[];
+                    blockingReason: string | null;
+                    overdueBlockingMode: string | null;
+                    canAdministrativeOverride: boolean;
                 };
                 billingSummary?: {
                     billedAmount: string;
@@ -67,7 +76,7 @@ export declare class CustomersController {
             creditLimit: string | null;
             creditDays: number | null;
             paymentTermsDays: number | null;
-            agingStatus: import("@prisma/client").$Enums.AgingStatus;
+            agingStatus: "CURRENT" | "DUE_SOON" | "OVERDUE";
             collectionStatus: import("@prisma/client").$Enums.CollectionStatus;
             globalBalance: string;
             outstandingAmount: string;
@@ -76,7 +85,11 @@ export declare class CustomersController {
             hasOverdueBalance: boolean;
             isBlocked: boolean;
             isBlockedForCredit: boolean;
-            blockingReason: string | null;
+            effectiveCreditStatus: "ACTIVE" | "BLOCKED" | "WARNING";
+            blockingReasons: string[];
+            blockingReason: string;
+            overdueBlockingMode: string | null;
+            canAdministrativeOverride: boolean;
             daysOverdue: number;
             lastPaymentDate: Date | null;
             commercialPolicyId: string | null;
@@ -111,7 +124,7 @@ export declare class CustomersController {
                     methods: import("@prisma/client").$Enums.PaymentMethod[];
                 };
                 accountReceivableId: string | null;
-                billingRequestId: string | null;
+                billingRequestId: string;
             }[];
         };
     }>;
@@ -162,6 +175,9 @@ export declare class CustomersController {
             fiscalName: string | null;
             taxId: string | null;
             fiscalAddress: string | null;
+            fiscalPostalCode: string | null;
+            fiscalRegime: string | null;
+            fiscalUseCode: string | null;
             deliveryAddress: string | null;
             notes: string | null;
         }, "creditLimit"> & {
@@ -179,6 +195,12 @@ export declare class CustomersController {
                 lastPaymentDate: Date | null;
                 creditStatus: import("@prisma/client").CreditStatus;
                 isBlockedForCredit: boolean;
+                isBlocked: boolean;
+                effectiveCreditStatus: "ACTIVE" | "WARNING" | "BLOCKED";
+                blockingReasons: string[];
+                blockingReason: string | null;
+                overdueBlockingMode: string | null;
+                canAdministrativeOverride: boolean;
             };
             billingSummary?: {
                 billedAmount: string;
@@ -214,6 +236,9 @@ export declare class CustomersController {
             fiscalName: string | null;
             taxId: string | null;
             fiscalAddress: string | null;
+            fiscalPostalCode: string | null;
+            fiscalRegime: string | null;
+            fiscalUseCode: string | null;
             deliveryAddress: string | null;
             notes: string | null;
         }, "creditLimit"> & {
@@ -231,6 +256,12 @@ export declare class CustomersController {
                 lastPaymentDate: Date | null;
                 creditStatus: import("@prisma/client").CreditStatus;
                 isBlockedForCredit: boolean;
+                isBlocked: boolean;
+                effectiveCreditStatus: "ACTIVE" | "WARNING" | "BLOCKED";
+                blockingReasons: string[];
+                blockingReason: string | null;
+                overdueBlockingMode: string | null;
+                canAdministrativeOverride: boolean;
             };
             billingSummary?: {
                 billedAmount: string;
@@ -266,6 +297,9 @@ export declare class CustomersController {
             fiscalName: string | null;
             taxId: string | null;
             fiscalAddress: string | null;
+            fiscalPostalCode: string | null;
+            fiscalRegime: string | null;
+            fiscalUseCode: string | null;
             deliveryAddress: string | null;
             notes: string | null;
         }, "creditLimit"> & {
@@ -283,6 +317,12 @@ export declare class CustomersController {
                 lastPaymentDate: Date | null;
                 creditStatus: import("@prisma/client").CreditStatus;
                 isBlockedForCredit: boolean;
+                isBlocked: boolean;
+                effectiveCreditStatus: "ACTIVE" | "WARNING" | "BLOCKED";
+                blockingReasons: string[];
+                blockingReason: string | null;
+                overdueBlockingMode: string | null;
+                canAdministrativeOverride: boolean;
             };
             billingSummary?: {
                 billedAmount: string;
@@ -318,6 +358,9 @@ export declare class CustomersController {
             fiscalName: string | null;
             taxId: string | null;
             fiscalAddress: string | null;
+            fiscalPostalCode: string | null;
+            fiscalRegime: string | null;
+            fiscalUseCode: string | null;
             deliveryAddress: string | null;
             notes: string | null;
         }, "creditLimit"> & {
@@ -335,6 +378,12 @@ export declare class CustomersController {
                 lastPaymentDate: Date | null;
                 creditStatus: import("@prisma/client").CreditStatus;
                 isBlockedForCredit: boolean;
+                isBlocked: boolean;
+                effectiveCreditStatus: "ACTIVE" | "WARNING" | "BLOCKED";
+                blockingReasons: string[];
+                blockingReason: string | null;
+                overdueBlockingMode: string | null;
+                canAdministrativeOverride: boolean;
             };
             billingSummary?: {
                 billedAmount: string;

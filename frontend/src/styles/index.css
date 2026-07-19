@@ -13,14 +13,14 @@
   .ticket-print-root {
     position: static !important;
     display: block !important;
-    width: 72mm !important;
+    width: 100% !important;
     min-height: 0 !important;
     padding: 0 !important;
     background: transparent !important;
   }
 
   .ticket-print-content {
-    width: 72mm !important;
+    width: 100% !important;
     max-width: none !important;
     max-height: none !important;
     overflow: visible !important;
@@ -29,7 +29,18 @@
   }
 
   .ticket-print-content > div:last-child {
-    padding: 5mm !important;
+    padding: 0 !important;
+  }
+
+  .ticket-print-root:has(.receipt-format-simple),
+  .ticket-print-root:has(.receipt-format-simple) .ticket-print-content {
+    width: 72mm !important;
+  }
+
+  .ticket-print-root:has(.receipt-format-large) .ticket-print-content,
+  .ticket-print-root:has(.receipt-format-internal) .ticket-print-content {
+    width: 190mm !important;
+    margin: 0 auto !important;
   }
 
   .ticket-actions {
@@ -44,6 +55,193 @@
 }
 
 @layer components {
+  .receipt-document {
+    border: 1px solid #b9b9b9;
+    background: white;
+    color: #171717;
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .receipt-format-simple {
+    margin: 0 auto;
+    max-width: 80mm;
+    font-size: 0.75rem;
+  }
+
+  .receipt-brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid #b9b9b9;
+  }
+
+  .receipt-brand img {
+    width: auto;
+    height: 3.2rem;
+    object-fit: contain;
+  }
+
+  .receipt-brand div,
+  .receipt-brand-centered {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .receipt-brand-centered {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .receipt-brand-centered img {
+    height: 3.8rem;
+  }
+
+  .receipt-brand strong {
+    font-size: 1.05rem;
+  }
+
+  .receipt-brand h2,
+  .receipt-section h2,
+  .receipt-title-row h2 {
+    color: #171717;
+    font-size: 1.1rem;
+    letter-spacing: 0.04em;
+  }
+
+  .receipt-section,
+  .receipt-title-row,
+  .receipt-items,
+  .receipt-totals,
+  .receipt-payment,
+  .receipt-signatures,
+  .receipt-footer {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #b9b9b9;
+  }
+
+  .receipt-section h3 {
+    margin-bottom: 0.45rem;
+    color: #171717;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+  }
+
+  .receipt-title-row {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .receipt-simple-head,
+  .receipt-simple-item {
+    display: grid;
+    grid-template-columns: 3.2rem minmax(0, 1fr) auto;
+    gap: 0.4rem;
+    align-items: start;
+  }
+
+  .receipt-simple-head {
+    padding: 0.65rem 1rem 0;
+    font-size: 0.65rem;
+    font-weight: 800;
+  }
+
+  .receipt-simple-head span:last-child,
+  .receipt-simple-item span:last-child {
+    text-align: right;
+  }
+
+  .receipt-items {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .receipt-item {
+    display: grid;
+    grid-template-columns: 0.55fr 0.8fr minmax(8rem, 2fr) 0.9fr 0.9fr;
+    gap: 0.65rem;
+    align-items: start;
+  }
+
+  .receipt-item span:nth-last-child(-n + 2) {
+    text-align: right;
+  }
+
+  .receipt-item-header {
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .receipt-totals,
+  .receipt-payment {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .receipt-totals div,
+  .receipt-payment div {
+    display: flex;
+    justify-content: flex-end;
+    gap: 2rem;
+  }
+
+  .receipt-totals dt,
+  .receipt-payment dt {
+    min-width: 7rem;
+  }
+
+  .receipt-totals dd,
+  .receipt-payment dd {
+    min-width: 6rem;
+    margin: 0;
+    text-align: right;
+  }
+
+  .receipt-grand-total {
+    margin-top: 0.2rem;
+    font-size: 1.05rem;
+    font-weight: 900;
+  }
+
+  .receipt-signatures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem 3rem;
+    padding-top: 2.4rem;
+  }
+
+  .receipt-signatures-three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .receipt-amount {
+    margin: 0.65rem 0;
+    font-size: 1.15rem;
+  }
+
+  .receipt-footer {
+    display: grid;
+    gap: 0.15rem;
+    border-bottom: 0;
+    text-align: center;
+  }
+
+  @media (max-width: 640px) {
+    .receipt-item {
+      grid-template-columns: 0.55fr 0.8fr minmax(5rem, 1.5fr) 0.9fr 0.9fr;
+      gap: 0.35rem;
+      font-size: 0.68rem;
+    }
+
+    .receipt-signatures-three {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .ticket-data-row,
   .ticket-total-row {
     display: grid;

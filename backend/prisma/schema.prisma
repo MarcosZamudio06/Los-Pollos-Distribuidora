@@ -142,6 +142,12 @@ enum BillingRequestStatus {
   CANCELLED
 }
 
+enum InvoiceStatus {
+  ACTIVE
+  CANCELLED
+  SUBSTITUTED
+}
+
 enum DeliveryRouteStatus {
   PENDING
   IN_PROGRESS
@@ -284,6 +290,16 @@ model User {
   requestedBillingRequests    BillingRequest[]        @relation("BillingRequestRequestedBy")
   reviewedBillingRequests     BillingRequest[]        @relation("BillingRequestReviewedBy")
   billingRequestChanges       BillingRequestHistory[] @relation("BillingRequestHistoryChangedBy")
+  createdInvoices             Invoice[] @relation("InvoiceCreatedBy")
+  cancelledInvoices           Invoice[] @relation("InvoiceCancelledBy")
+  createdBillingDocuments     BillingRequestSaleDocument[] @relation("BillingRequestSaleDocumentCreatedBy")
+  reversedBillingDocuments    BillingRequestSaleDocument[] @relation("BillingRequestSaleDocumentReversedBy")
+  createdInvoiceDocuments     InvoiceSaleDocument[] @relation("InvoiceSaleDocumentCreatedBy")
+  reversedInvoiceDocuments    InvoiceSaleDocument[] @relation("InvoiceSaleDocumentReversedBy")
+  createdInvoiceItemApplications InvoiceSaleItemApplication[] @relation("InvoiceSaleItemApplicationCreatedBy")
+  reversedInvoiceItemApplications InvoiceSaleItemApplication[] @relation("InvoiceSaleItemApplicationReversedBy")
+  resolvedBillingRemediations BillingDataRemediation[] @relation("BillingDataRemediationResolvedBy")
+  billingAuditLogs            BillingAuditLog[]         @relation("BillingAuditActor")
   collectedReceivables        AccountReceivable[]     @relation("AccountReceivableCollector")
   routeSettlements            RouteSettlement[]       @relation("RouteSettlementDriver")
   reopenedRouteSettlements    RouteSettlement[]       @relation("RouteSettlementReopenedBy")
@@ -332,6 +348,7 @@ model OperationalLocation {
   dailyCloseLines       PointOfSaleDailyCloseLine[]
   cashMovements         CashMovement[]
   scaleTicketReferences ScaleTicketReference[]
+  legalEntityMappings   LegalEntityOperationalLocation[]
 }
 
 model Category {
@@ -429,6 +446,9 @@ model Customer {
   fiscalName          String?
   taxId               String?
   fiscalAddress       String?
+  fiscalPostalCode    String?
+  fiscalRegime        String?
+  fiscalUseCode       String?
   deliveryAddress     String?
   assignedRouteId     String?
   commercialPolicyId  String?
@@ -464,6 +484,8 @@ model Sale {
   locationId                    String
   saleChannel                   SaleChannel
   documentType                  SaleDocumentType
+  currencyCode                  String                     @default("MXN") @db.VarChar(3)
+  legalEntityId                 String?
   physicalFolio                 String?
   requiresAdministrativeInvoice Boolean                    @default(false)
   deliveredByUserId             String?
@@ -495,6 +517,7 @@ model Sale {
   customer                      Customer?                  @relation(fields: [customerId], references: [id])
   user                          User                       @relation("SaleCreatedBy", fields: [userId], references: [id])
   location                      OperationalLocation        @relation(fields: [locationId], references: [id])
+  legalEntity                   LegalEntity?                @relation(fields: [legalEntityId], references: [id])
   deliveredBy                   User?                      @relation("SaleDeliveredBy", fields: [deliveredByUserId], references: [id])
   collectedBy                   User?                      @relation("SaleCollectedBy", fields: [collectedByUserId], references: [id])
   cancelledBy                   User?                      @relation("SaleCancelledBy", fields: [cancelledByUserId], references: [id])
@@ -506,7 +529,7 @@ model Sale {
   payments                      Payment[]
   accountReceivable             AccountReceivable?         @relation("AccountReceivableSale")
   originatedReceivables         AccountReceivable[]        @relation("AccountReceivableOriginalSale")
-  billingRequest                BillingRequest?
+  billingRequests               BillingRequest[]
   deliveryOrder                 DeliveryOrder?
   inventoryMovements            InventoryMovement[]
   scaleTicketReferences         ScaleTicketReference[]
@@ -514,6 +537,7 @@ model Sale {
 
   @@index([locationId, createdAt])
   @@index([customerId, collectionStatus])
+  @@index([legalEntityId, currencyCode, createdAt])
 }
 
 model SaleItem {
@@ -533,6 +557,10 @@ model SaleItem {
   unitPriceSnapshot       Decimal                @db.Decimal(14, 2)
   quantitySnapshot        Decimal                @db.Decimal(14, 3)
   subtotal                Decimal                @db.Decimal(14, 2)
+  discount                Decimal                @default(0) @db.Decimal(14, 2)
+  taxableBase             Decimal                @default(0) @db.Decimal(14, 2)
+  tax                     Decimal                @default(0) @db.Decimal(14, 2)
+  total                   Decimal                @default(0) @db.Decimal(14, 2)
   unitCostSnapshot        Decimal                @db.Decimal(14, 2)
   costSubtotalSnapshot    Decimal                @db.Decimal(14, 2)
   costSnapshotSource      CostSnapshotSource
@@ -541,6 +569,7 @@ model SaleItem {
   sale                    Sale                   @relation(fields: [saleId], references: [id])
   product                 Product                @relation(fields: [productId], references: [id])
   unitEquivalent          ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id])
+  invoiceApplications     InvoiceSaleItemApplication[]
 }
 
 model SaleDocument {
@@ -566,8 +595,12 @@ model SaleDocument {
   deliveredBy                   User?              @relation("SaleDocumentDeliveredBy", fields: [deliveredByUserId], references: [id])
   collectedBy                   User?              @relation("SaleDocumentCollectedBy", fields: [collectedByUserId], references: [id])
   route                         DeliveryRoute?     @relation(fields: [routeId], references: [id])
+  billingRequestDocuments       BillingRequestSaleDocument[]
+  invoiceDocuments              InvoiceSaleDocument[]
 
   @@index([operationalLocationId, physicalFolio])
+  @@index([documentType, status, createdAt])
+  @@index([saleId, documentType])
 }
 
 model Purchase {
@@ -691,7 +724,7 @@ model AccountReceivable {
   id                      String           @id @default(cuid())
   customerId              String
   saleId                  String           @unique
-  billingRequestId        String?          @unique
+  billingRequestId        String?
   originalSaleId          String
   originalAmount          Decimal          @db.Decimal(14, 2)
   outstandingAmount       Decimal          @db.Decimal(14, 2)
@@ -770,7 +803,7 @@ model Payment {
 
 model BillingRequest {
   id                  String               @id @default(cuid())
-  saleId              String               @unique
+  saleId              String?
   customerId          String
   requestedByUserId   String
   status              BillingRequestStatus @default(REQUESTED)
@@ -779,17 +812,26 @@ model BillingRequest {
   reviewedByUserId    String?
   reason              String?
   notes               String?
+  version             Int                  @default(1)
+  creationIdempotencyKey String?            @unique
+  creationPayloadHash String?
+  retryOfBillingRequestId String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
-  sale                Sale                 @relation(fields: [saleId], references: [id])
+  sale                Sale?                @relation(fields: [saleId], references: [id])
   customer            Customer             @relation(fields: [customerId], references: [id])
   requestedBy         User                 @relation("BillingRequestRequestedBy", fields: [requestedByUserId], references: [id])
   reviewedBy          User?                @relation("BillingRequestReviewedBy", fields: [reviewedByUserId], references: [id])
-  accountReceivable   AccountReceivable?
+  accountReceivables  AccountReceivable[]
   history             BillingRequestHistory[]
+  documents           BillingRequestSaleDocument[]
+  retryOf              BillingRequest?      @relation("BillingRequestRetry", fields: [retryOfBillingRequestId], references: [id])
+  retries              BillingRequest[]     @relation("BillingRequestRetry")
 
   @@index([customerId, status, requestedAt])
   @@index([requestedByUserId, requestedAt])
+  @@index([saleId])
+  @@index([retryOfBillingRequestId])
 }
 
 model BillingRequestHistory {
@@ -801,6 +843,7 @@ model BillingRequestHistory {
   changedAt           DateTime              @default(now())
   reason              String
   notes               String?
+  compositionSnapshot Json?
   billingRequest      BillingRequest        @relation(fields: [billingRequestId], references: [id])
   changedBy           User                  @relation("BillingRequestHistoryChangedBy", fields: [changedByUserId], references: [id])
 
@@ -1127,4 +1170,180 @@ model ScaleTicketReference {
 
   @@index([operationalLocationId, capturedAt])
   @@unique([operationalLocationId, capturedDate, physicalFolio])
+}
+
+model LegalEntity {
+  id                          String                           @id @default(cuid())
+  legalName                   String
+  taxId                       String                           @unique
+  fiscalPostalCode            String?
+  fiscalRegime                String?
+  isActive                    Boolean                          @default(true)
+  createdAt                   DateTime                         @default(now())
+  updatedAt                   DateTime                         @updatedAt
+  operationalLocationMappings LegalEntityOperationalLocation[]
+  sales                       Sale[]
+  invoices                    Invoice[]
+
+  @@index([isActive, legalName])
+}
+
+model LegalEntityOperationalLocation {
+  id                    String              @id @default(cuid())
+  legalEntityId         String
+  operationalLocationId String
+  effectiveFrom         DateTime            @default(now())
+  effectiveTo           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  legalEntity           LegalEntity         @relation(fields: [legalEntityId], references: [id])
+  operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
+
+  @@unique([legalEntityId, operationalLocationId, effectiveFrom])
+  @@index([operationalLocationId, effectiveFrom, effectiveTo])
+}
+
+model Invoice {
+  id                     String                @id @default(cuid())
+  legalEntityId          String
+  currencyCode           String                @db.VarChar(3)
+  series                 String
+  folio                  String
+  uuid                   String?               @unique
+  subtotal               Decimal               @db.Decimal(14, 2)
+  discount               Decimal               @default(0) @db.Decimal(14, 2)
+  tax                    Decimal               @default(0) @db.Decimal(14, 2)
+  total                  Decimal               @db.Decimal(14, 2)
+  status                 InvoiceStatus         @default(ACTIVE)
+  cancelledAt            DateTime?
+  cancelledByUserId      String?
+  cancellationReason     String?
+  substitutedByInvoiceId String?               @unique
+  version                Int                   @default(1)
+  linkIdempotencyKey     String?               @unique
+  linkPayloadHash        String?
+  createdByUserId        String
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  legalEntity            LegalEntity           @relation(fields: [legalEntityId], references: [id])
+  createdBy              User                  @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
+  cancelledBy            User?                 @relation("InvoiceCancelledBy", fields: [cancelledByUserId], references: [id])
+  substitutedBy          Invoice?              @relation("InvoiceSubstitution", fields: [substitutedByInvoiceId], references: [id])
+  substitutes            Invoice?              @relation("InvoiceSubstitution")
+  documents              InvoiceSaleDocument[]
+
+  @@unique([legalEntityId, series, folio])
+  @@index([status, createdAt])
+  @@index([legalEntityId, currencyCode, createdAt])
+  @@index([cancelledByUserId])
+}
+
+model BillingRequestSaleDocument {
+  id                String         @id @default(cuid())
+  billingRequestId  String
+  saleDocumentId    String
+  requestedSubtotal Decimal        @db.Decimal(14, 2)
+  requestedTax      Decimal        @default(0) @db.Decimal(14, 2)
+  requestedTotal    Decimal        @db.Decimal(14, 2)
+  createdByUserId   String
+  reversedAt        DateTime?
+  reversedByUserId  String?
+  reversalReason    String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  billingRequest    BillingRequest @relation(fields: [billingRequestId], references: [id])
+  saleDocument      SaleDocument   @relation(fields: [saleDocumentId], references: [id])
+  createdBy         User           @relation("BillingRequestSaleDocumentCreatedBy", fields: [createdByUserId], references: [id])
+  reversedBy        User?          @relation("BillingRequestSaleDocumentReversedBy", fields: [reversedByUserId], references: [id])
+
+  @@unique([billingRequestId, saleDocumentId])
+  @@index([saleDocumentId, reversedAt])
+  @@index([createdByUserId])
+  @@index([reversedByUserId])
+}
+
+model InvoiceSaleDocument {
+  id               String                       @id @default(cuid())
+  invoiceId        String
+  saleDocumentId   String
+  subtotalApplied  Decimal                      @db.Decimal(14, 2)
+  taxApplied       Decimal                      @default(0) @db.Decimal(14, 2)
+  totalApplied     Decimal                      @db.Decimal(14, 2)
+  createdByUserId  String
+  reversedAt       DateTime?
+  reversedByUserId String?
+  reversalReason   String?
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+  invoice          Invoice                      @relation(fields: [invoiceId], references: [id])
+  saleDocument     SaleDocument                 @relation(fields: [saleDocumentId], references: [id])
+  createdBy        User                         @relation("InvoiceSaleDocumentCreatedBy", fields: [createdByUserId], references: [id])
+  reversedBy       User?                        @relation("InvoiceSaleDocumentReversedBy", fields: [reversedByUserId], references: [id])
+  itemApplications InvoiceSaleItemApplication[]
+
+  @@index([saleDocumentId, reversedAt])
+  @@index([createdByUserId])
+  @@index([reversedByUserId])
+}
+
+model InvoiceSaleItemApplication {
+  id                    String              @id @default(cuid())
+  invoiceSaleDocumentId String
+  saleItemId            String
+  subtotalApplied       Decimal             @db.Decimal(14, 2)
+  taxApplied            Decimal             @default(0) @db.Decimal(14, 2)
+  totalApplied          Decimal             @db.Decimal(14, 2)
+  createdByUserId       String
+  reversedAt            DateTime?
+  reversedByUserId      String?
+  reversalReason        String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  invoiceSaleDocument   InvoiceSaleDocument @relation(fields: [invoiceSaleDocumentId], references: [id])
+  saleItem              SaleItem            @relation(fields: [saleItemId], references: [id])
+  createdBy             User                @relation("InvoiceSaleItemApplicationCreatedBy", fields: [createdByUserId], references: [id])
+  reversedBy            User?               @relation("InvoiceSaleItemApplicationReversedBy", fields: [reversedByUserId], references: [id])
+
+  @@index([saleItemId, reversedAt])
+  @@index([createdByUserId])
+  @@index([reversedByUserId])
+}
+
+model BillingDataRemediation {
+  id               String    @id @default(cuid())
+  code             String
+  entityType       String
+  entityId         String
+  details          Json
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolutionNotes  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  resolvedBy       User?     @relation("BillingDataRemediationResolvedBy", fields: [resolvedByUserId], references: [id])
+
+  @@unique([code, entityType, entityId])
+  @@index([resolvedAt, code])
+  @@index([resolvedByUserId])
+}
+
+model BillingAuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String
+  action        String
+  entityType    String
+  entityId      String
+  before        Json?
+  after         Json?
+  reason        String?
+  ipAddress     String?
+  correlationId String?
+  context       Json?
+  createdAt     DateTime @default(now())
+  actor         User     @relation("BillingAuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([correlationId])
 }

@@ -1,5 +1,8 @@
 # API — Reportes
 
+> El reporte detallado de notas facturables pertenece al módulo de facturación y usa `/api/billing/reportable-notes`; ver `specs/.specs/03-api/billing-reportable-notes-api.md`. El reporte administrativo existente permanece como contrato legacy.
+
+
 Define contratos para reportes operativos casi en tiempo real. Los reportes se basan en operaciones confirmadas y deben reflejar cambios con latencia máxima esperada de 60 segundos en condiciones normales. Deben distinguir tipo de venta, estado de cobranza, antigüedad de cartera, transferencias/depositos, pagos por banco y solicitudes administrativas sin mezclar dimensiones.
 
 Todos los reportes deben incluir metadatos de frescura en `data`:

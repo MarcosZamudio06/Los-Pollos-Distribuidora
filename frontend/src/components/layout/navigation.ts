@@ -3,6 +3,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   ClipboardCheck,
+  FileCheck2,
   History,
   Home,
   MapPinned,
@@ -24,6 +25,7 @@ export type NavigationItemKey =
   | 'customers'
   | 'accounts-receivable'
   | 'billing-requests'
+  | 'billing-reportable-notes'
   | 'inventory'
   | 'purchases'
   | 'purchase-suppliers'
@@ -114,6 +116,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Solicitudes de facturación',
     section: 'financial',
     to: '/billing-requests',
+  },
+  {
+    activePaths: ['/billing/reportable-notes'],
+    allowedRoles: ROUTE_ACCESS_ROLES.billingReportableNotes,
+    routeAccessKey: 'billingReportableNotes',
+    description: 'Conciliación documental',
+    icon: FileCheck2,
+    key: 'billing-reportable-notes',
+    label: 'Notas facturables',
+    section: 'financial',
+    to: '/billing/reportable-notes',
   },
   {
     activePaths: ['/inventory'],

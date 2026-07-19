@@ -45,6 +45,7 @@ describe('Prisma schema contract', () => {
       'Supplier',
       'Sale',
       'SaleItem',
+      'SaleDocument',
       'Purchase',
       'PurchaseItem',
       'InventoryMovement',
@@ -65,10 +66,18 @@ describe('Prisma schema contract', () => {
       'ScaleTicketReference',
       'BillingRequest',
       'BillingRequestHistory',
+      'LegalEntity',
+      'LegalEntityOperationalLocation',
+      'Invoice',
+      'BillingRequestSaleDocument',
+      'InvoiceSaleDocument',
+      'InvoiceSaleItemApplication',
+      'BillingDataRemediation',
+      'BillingAuditLog',
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(32);
+    expect(modelNames).toHaveLength(40);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');

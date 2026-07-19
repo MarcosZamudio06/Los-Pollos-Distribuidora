@@ -28,7 +28,7 @@ describe('role navigation', () => {
   it('mantiene navegación enlazada a la matriz central de rutas', () => {
     expect(NAVIGATION_ITEMS.every((item) => item.allowedRoles === ROUTE_ACCESS_ROLES[item.routeAccessKey])).toBe(true)
     expect(ROUTE_ACCESS_ROLES.accountsReceivable).toEqual(['ADMIN', 'COLLECTIONS'])
-    expect(ROUTE_ACCESS_ROLES.billingRequests).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS'])
+    expect(ROUTE_ACCESS_ROLES.billingRequests).toEqual(['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS'])
     expect(ROUTE_ACCESS_ROLES.deliveryRouteDetail).toEqual(['ADMIN', 'COLLECTIONS', 'DRIVER'])
     expect(ROUTE_ACCESS_ROLES.deliveryRoutes).toEqual(['ADMIN', 'COLLECTIONS', 'WAREHOUSE'])
   })
@@ -43,12 +43,14 @@ describe('role navigation', () => {
       '/customers',
       '/accounts-receivable',
       '/billing-requests',
+      '/billing/reportable-notes',
       '/inventory',
       '/purchases',
       '/purchases/suppliers',
       '/purchases/new',
       '/delivery-routes/new',
       '/delivery-routes',
+      '/daily-close',
       '/reports',
       '/admin/employees',
     ])
@@ -63,7 +65,9 @@ describe('role navigation', () => {
       '/sales/history',
       '/customers',
       '/billing-requests',
+      '/billing/reportable-notes',
       '/inventory',
+      '/daily-close',
       '/reports',
     ])
     expect(getSidebarNavForRole('WAREHOUSE').map((item) => item.to)).toEqual([
@@ -73,6 +77,7 @@ describe('role navigation', () => {
       '/purchases/suppliers',
       '/purchases/new',
       '/delivery-routes',
+      '/daily-close',
       '/reports',
     ])
     expect(getSidebarNavForRole('COLLECTIONS').map((item) => item.to)).toEqual([
@@ -81,10 +86,13 @@ describe('role navigation', () => {
       '/customers',
       '/accounts-receivable',
       '/billing-requests',
+      '/billing/reportable-notes',
       '/delivery-routes',
+      '/daily-close',
       '/reports',
     ])
     expect(getSidebarNavForRole('DRIVER').map((item) => item.to)).toEqual(['/', '/my-routes', '/reports'])
+    expect(getSidebarNavForRole('BILLING').map((item) => item.to)).toEqual(['/', '/billing-requests', '/billing/reportable-notes', '/reports'])
     expect(getSidebarNavForRole('DRIVER').find((item) => item.to === '/my-routes')).toEqual(expect.objectContaining({
       label: 'Mi ruta en mapa',
       description: 'Secuencia y entregas asignadas',

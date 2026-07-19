@@ -137,6 +137,10 @@ export type TicketData = {
   billingRequest?: { id?: string; status?: string } | null
   sellerName?: string
   customerName?: string | null
+  customerAddress?: string | null
+  customerPhone?: string | null
+  customerTaxId?: string | null
+  customerCreditDays?: number | null
   locationId?: string
   locationName?: string
   items?: Array<{

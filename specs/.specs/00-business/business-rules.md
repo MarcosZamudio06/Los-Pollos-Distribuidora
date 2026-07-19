@@ -210,3 +210,24 @@
 - Definir si el cierre es único por día o por turno/caja.
 - Definir catálogo final de gastos, entradas, salidas y otros conceptos.
 - Definir política de reapertura y bloqueo de periodos ya revisados.
+
+## 9. Conciliación post-MVP de facturas externas
+
+- Una factura registrada por el ERP debe haber sido emitida externamente; el sistema no emite, timbra ni cancela CFDI ante SAT.
+- `SaleDocument` es la unidad facturable y `SaleItem` la unidad de detalle; `BillingRequest`, `Invoice`, `Sale` y `Payment` son conceptos separados.
+- `LegalEntity` es el emisor fiscal y no equivale a una ubicación operativa.
+- Toda agrupación debe compartir cliente, perfil fiscal, moneda, entidad emisora y condiciones compatibles.
+- La política inicial permite `SIMPLE_NOTE` y `LARGE_NOTE`; `INTERNAL_RECEIPT` requiere habilitación explícita y `SCALE_TICKET` no es facturable por sí solo.
+- La fecha límite se deriva de la política y zona horaria operativa; una excepción vencida requiere `ADMIN`, motivo y auditoría.
+- No se puede solicitar ni aplicar un importe superior al saldo disponible.
+- Vincular, cancelar o sustituir una factura no crea ni modifica ventas, pagos o movimientos de inventario.
+- `PaymentAllocation` permanece fuera del modelo; el cobro se deriva desde `Payment` y `AccountReceivable`.
+
+### Permisos
+
+- `BILLING` consulta notas globales, aprueba o rechaza solicitudes, bloquea incidencias, vincula facturas externas y exporta información; no modifica inventario ni registra pagos.
+- `SELLER` solo consulta notas propias y crea solicitudes permitidas.
+- `COLLECTIONS` consulta pagos y conciliación autorizada, pero no vincula facturas.
+- `WAREHOUSE` y `DRIVER` no acceden al módulo ni a datos fiscales sensibles.
+
+El contrato completo está en `specs/modules/billing-reportable-notes/spec.md`.

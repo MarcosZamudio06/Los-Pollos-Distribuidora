@@ -247,7 +247,7 @@ export function SaleDetailView({
                   <CardContent className="mt-4 grid gap-3">
                     <Button disabled={ticket.isLoading} onClick={onShowTicket} variant="primary">
                       <Printer className="h-4 w-4" />
-                      {ticket.isLoading ? 'Cargando ticket...' : 'Reimprimir ticket interno'}
+                      {ticket.isLoading ? 'Cargando documento...' : 'Reimprimir documento'}
                     </Button>
                     <Button disabled={!canCancel} onClick={onShowCancelDialog} variant="destructive">
                       <Ban className="h-4 w-4" />

@@ -550,3 +550,38 @@ Validaciones:
 - Fórmulas oficiales de costo y utilidad.
 - Catálogo final de conceptos de línea y movimientos de caja.
 - Política de reapertura y conservación de snapshots previos.
+
+## Extensión post-MVP de notas facturables
+
+### LegalEntity
+
+- Emisor fiscal distinto de `OperationalLocation`.
+- Conserva identidad legal y estado; su relación operativa se configura y audita explícitamente.
+
+### Invoice
+
+- Registro de una factura emitida externamente, con emisor, moneda, serie, folio, UUID opcional, importes `Decimal(14,2)`, estado, versión, cancelación y sustitución.
+- Estados mínimos: `ACTIVE`, `CANCELLED`, `SUBSTITUTED`.
+- No contiene secretos, certificados, XML ni operaciones de timbrado.
+
+### BillingRequestSaleDocument
+
+Relación N:M entre solicitud y documento, con subtotal, impuesto y total solicitados.
+
+### InvoiceSaleDocument
+
+Relación N:M entre factura externa y documento, con importes aplicados y reversión lógica.
+
+### InvoiceSaleItemApplication
+
+Aplicación exacta por partida; la suma debe coincidir con la aplicación del documento.
+
+### Extensiones a entidades existentes
+
+- `Sale` incorpora `currencyCode` y referencia a `LegalEntity` resuelta explícitamente.
+- `SaleItem` conserva descuento, base gravable, impuesto y total históricos.
+- `Customer` conserva perfil fiscal estructurado y su completitud se deriva.
+- `BillingRequest.customerId` permanece; `saleId` deja de ser autoritativo tras el backfill.
+- `PaymentAllocation` no se activa.
+
+Ver invariantes en `specs/modules/billing-reportable-notes/spec.md`.

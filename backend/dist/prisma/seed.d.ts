@@ -16,6 +16,9 @@ export declare const initialRoles: readonly [{
 }, {
     readonly name: "COLLECTIONS";
     readonly description: "Accounts receivable and collections user.";
+}, {
+    readonly name: "BILLING";
+    readonly description: "Billing review, reconciliation and invoice linking user.";
 }];
 export declare const initialAdminUser: {
     readonly name: "Development Admin";
@@ -57,6 +60,14 @@ export declare const initialRoleTestUsers: readonly [{
     readonly mustChangePassword: false;
     readonly controlNumber: "EPDP-000005";
     readonly phone: "+520000000005";
+}, {
+    readonly roleName: "BILLING";
+    readonly name: "Development Billing";
+    readonly email: "dev.billing@pollos.local";
+    readonly isActive: true;
+    readonly mustChangePassword: false;
+    readonly controlNumber: "EPDP-000006";
+    readonly phone: "+520000000006";
 }];
 export declare const initialSeedLocations: readonly [{
     readonly name: "Veracruz";

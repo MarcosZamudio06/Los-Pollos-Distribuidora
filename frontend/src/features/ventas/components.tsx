@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
 import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
-import { documentTypeLabel, operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
+import { operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
 
 type ProductSearchProps = {
   error: unknown
@@ -374,46 +374,120 @@ type TicketModalProps = {
   ticket?: TicketData
 }
 
+function receiptDate(value?: string) {
+  return value ? new Date(value).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Generado al confirmar la venta'
+}
+
+function receiptNumber(data: TicketData) {
+  return data.physicalFolio ?? data.ticketNumber ?? data.saleNumber ?? data.ticketId ?? 'Venta confirmada'
+}
+
+function receiptPaid(data: TicketData) {
+  return data.payments?.reduce((total, payment) => total + Number(payment.amount ?? 0), 0) ?? 0
+}
+
+function ReceiptItems({ data, detailed = false }: { data: TicketData; detailed?: boolean }) {
+  return (
+    <div className="receipt-items">
+      {detailed && <div className="receipt-item receipt-item-header"><span>Cant.</span><span>Unidad</span><span>Descripción</span><span>P. unitario</span><span>Importe</span></div>}
+      {data.items?.map((item, index) => {
+        const quantity = Number(item.quantityKg ?? item.kilos ?? 0) || Number(item.quantityPieces ?? item.pieces ?? 0)
+        return detailed ? (
+          <div className="receipt-item" key={`${item.productName ?? item.product ?? 'item'}-${index}`}>
+            <span>{quantity.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</span>
+            <span>{operationalUnitLabel(item.unit)}</span>
+            <strong>{item.productName ?? item.product}</strong>
+            <span>{toMoney(item.unitPrice)}</span>
+            <span>{toMoney(item.subtotal)}</span>
+          </div>
+        ) : (
+          <article className="receipt-simple-item" key={`${item.productName ?? item.product ?? 'item'}-${index}`}>
+            <span>{quantity.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</span>
+            <strong>{item.productName ?? item.product}</strong>
+            <span>{toMoney(item.subtotal)}</span>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function ReceiptTotals({ data, includeBalance = false }: { data: TicketData; includeBalance?: boolean }) {
+  const paid = receiptPaid(data)
+  const balance = Math.max(Number(data.total ?? 0) - paid, 0)
+  return (
+    <dl className="receipt-totals">
+      <div><dt>Subtotal</dt><dd>{toMoney(data.subtotal)}</dd></div>
+      <div><dt>Descuento</dt><dd>{toMoney(data.discount)}</dd></div>
+      <div className="receipt-grand-total"><dt>TOTAL</dt><dd>{toMoney(data.total)}</dd></div>
+      {includeBalance && <><div><dt>Pagado</dt><dd>{toMoney(paid)}</dd></div><div><dt>Saldo</dt><dd>{toMoney(balance)}</dd></div></>}
+    </dl>
+  )
+}
+
+function SimpleNote({ data }: { data: TicketData }) {
+  const paid = receiptPaid(data)
+  const change = Math.max(paid - Number(data.total ?? 0), 0)
+  return (
+    <div className="receipt-document receipt-format-simple">
+      <header className="receipt-brand receipt-brand-centered"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><strong>El Pollo de Los Pollos</strong><span>{data.locationName ?? data.locationId ?? 'Punto de venta'}</span></header>
+      <section className="receipt-section"><h2>NOTA DE VENTA</h2><p><b>Folio:</b> {receiptNumber(data)}</p><p><b>Fecha:</b> {receiptDate(data.createdAt)}</p><p><b>Vendedor:</b> {data.sellerName ?? '—'}</p><p><b>Cliente:</b> {data.customerName ?? 'Público general'}</p></section>
+      <div className="receipt-simple-head"><span>CANT.</span><span>PRODUCTO</span><span>IMPORTE</span></div>
+      <ReceiptItems data={data} />
+      <ReceiptTotals data={data} />
+      <dl className="receipt-payment"><div><dt>Pago: {paymentMethodLabel(data.payments?.[0]?.paymentMethod)}</dt><dd>{toMoney(paid)}</dd></div>{change > 0 && <div><dt>Cambio</dt><dd>{toMoney(change)}</dd></div>}</dl>
+      <footer className="receipt-footer"><strong>Gracias por su compra</strong><span>No es comprobante fiscal</span></footer>
+    </div>
+  )
+}
+
+function LargeNote({ data }: { data: TicketData }) {
+  return (
+    <div className="receipt-document receipt-format-large">
+      <header className="receipt-brand"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><div><strong>El Pollo de Los Pollos</strong><span>{data.locationName ?? data.locationId ?? 'Punto de venta'}</span></div></header>
+      <section className="receipt-title-row"><div><h2>NOTA DE VENTA</h2><p><b>Fecha:</b> {receiptDate(data.createdAt)}</p></div><p><b>Folio:</b> {receiptNumber(data)}</p></section>
+      <section className="receipt-section"><h3>DATOS DEL CLIENTE</h3><p><b>Nombre:</b> {data.customerName ?? 'Público general'}</p>{data.customerAddress && <p><b>Dirección:</b> {data.customerAddress}</p>}{data.customerPhone && <p><b>Teléfono:</b> {data.customerPhone}</p>}{data.customerTaxId && <p><b>RFC:</b> {data.customerTaxId}</p>}<p><b>Condición:</b> {data.paymentType === 'CREDIT_SALE' ? `Crédito${data.customerCreditDays ? ` a ${data.customerCreditDays} días` : ''}` : 'Contado'}</p></section>
+      <ReceiptItems data={data} detailed />
+      <ReceiptTotals data={data} includeBalance />
+      <section className="receipt-signatures"><span>Entregó: ______________</span><span>Recibió: ______________</span><span>Firma: ________________</span><span>Firma: _________________</span></section>
+      <footer className="receipt-footer">Documento comercial no válido como comprobante fiscal</footer>
+    </div>
+  )
+}
+
+function InternalReceipt({ data }: { data: TicketData }) {
+  const paid = receiptPaid(data) || Number(data.total ?? 0)
+  return (
+    <div className="receipt-document receipt-format-internal">
+      <header className="receipt-brand"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><div><strong>El Pollo de Los Pollos</strong><h2>RECIBO INTERNO</h2><span>NO VÁLIDO COMO COMPROBANTE FISCAL</span></div></header>
+      <section className="receipt-section"><p><b>Folio:</b> {receiptNumber(data)}</p><p><b>Fecha:</b> {receiptDate(data.createdAt)}</p><p><b>Sucursal:</b> {data.locationName ?? data.locationId ?? '—'}</p></section>
+      <section className="receipt-section"><h3>TIPO DE MOVIMIENTO</h3><strong>Registro interno de venta</strong><p><b>Se recibió de:</b> {data.customerName ?? 'Público general'}</p><p className="receipt-amount"><b>Cantidad:</b> {toMoney(paid)}</p><p><b>Concepto:</b> Cobro de venta {data.saleNumber ?? receiptNumber(data)}</p><p><b>Referencia:</b> {receiptNumber(data)}</p></section>
+      <section className="receipt-signatures receipt-signatures-three"><span>Entregó: ______________</span><span>Recibió: ______________</span><span>Autorizó: ______________</span></section>
+      <footer className="receipt-footer"><strong>DOCUMENTO DE CONTROL INTERNO</strong></footer>
+    </div>
+  )
+}
+
+function ReceiptDocument({ data }: { data: TicketData }) {
+  if (data.documentType === 'LARGE_NOTE') return <LargeNote data={data} />
+  if (data.documentType === 'INTERNAL_RECEIPT') return <InternalReceipt data={data} />
+  return <SimpleNote data={data} />
+}
+
 export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModalProps) {
   const portalReady = useSyncExternalStore(() => () => undefined, () => true, () => false)
   const data = ticket ?? fallback
   if (!data) return null
   const modal = (
     <aside className="ticket-print-root fixed inset-0 z-40 grid place-items-center bg-black/55 p-3 sm:p-6">
-      <section className="ticket-print-content max-h-[94vh] w-full max-w-[42rem] overflow-y-auto bg-white text-[#171717] shadow-2xl sm:rounded-md">
+      <section className={`ticket-print-content max-h-[94vh] w-full overflow-y-auto bg-white text-[#171717] shadow-2xl sm:rounded-md ${data.documentType === 'SIMPLE_NOTE' ? 'max-w-[25rem]' : 'max-w-[52rem]'}`}>
         <div className="ticket-actions sticky top-0 z-10 flex justify-end gap-5 border-b border-[#ececec] bg-white/95 px-6 py-4 backdrop-blur sm:px-10">
           <button className="text-sm font-bold text-[#292929] transition hover:text-black" onClick={() => window.print()} type="button">Imprimir</button>
           <button className="text-sm font-bold text-[#686868] transition hover:text-black" onClick={onClose} type="button">Cerrar</button>
         </div>
-        <div className="px-6 py-9 sm:px-12 sm:py-12">
-          <header>
-            <img alt="" aria-hidden="true" className="h-16 w-auto max-w-[11rem] object-contain object-left" src="/477123481_10232415903693976_8230121272963336539_n.svg" />
-            <h2 className="mt-9 text-[2rem] font-black leading-[1.08] tracking-[-0.04em] sm:text-[2.4rem]">Comprobante de venta</h2>
-            <p className="mt-3 text-base leading-relaxed text-[#696969] sm:text-lg">{data.createdAt ? new Date(data.createdAt).toLocaleString('es-MX') : 'Generado al confirmar la venta'}</p>
-          </header>
-        {isLoading && <p className="mt-4 rounded-2xl bg-[#f5f3ee] p-3 text-sm font-bold text-[#39798b]">Cargando datos del ticket interno...</p>}
-        <dl className="mt-10 grid gap-7 text-sm sm:text-base">
-          <div className="ticket-data-row"><dt>Ticket interno</dt><dd>{data.ticketNumber ?? data.saleNumber ?? data.ticketId ?? 'Venta confirmada'}</dd></div>
-          <div className="ticket-data-row"><dt>Cliente</dt><dd>{data.customerName ?? 'Público general'}</dd></div>
-          <div className="ticket-data-row"><dt>Ubicación</dt><dd>{data.locationName ?? data.locationId ?? '—'}</dd></div>
-          <div className="ticket-data-row"><dt>Documento</dt><dd>{documentTypeLabel(data.documentType)} {data.physicalFolio ? `· ${data.physicalFolio}` : ''}</dd></div>
-          <div className="ticket-data-row"><dt>Pago</dt><dd>{paymentTypeLabel(data.paymentType)} · {paymentMethodLabel(data.payments?.[0]?.paymentMethod)}</dd></div>
-          {data.billingRequest?.id && <div className="ticket-data-row"><dt>Solicitud administrativa</dt><dd>{data.billingRequest.id} · {data.billingRequest.status ?? 'REQUESTED'}</dd></div>}
-        </dl>
-        <section className="mt-10 border-t border-[#e8e8e8] pt-8">
-          <p className="mb-7 text-sm font-semibold text-[#737373]">Detalle de venta</p>
-          <div className="grid gap-7">
-          {data.items?.map((item, index) => (
-            <article className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-5 gap-y-2 text-sm sm:text-base" key={`${item.productName ?? item.product ?? 'item'}-${index}`}>
-              <p className="min-w-0 break-words font-bold leading-snug">{item.productName ?? item.product}</p>
-              <p className="text-right font-semibold text-[#555]">{toMoney(item.subtotal)}</p>
-              <p className="col-span-2 break-words leading-relaxed text-[#6b6b6b]">{operationalUnitLabel(item.unit)} · {item.quantityKg ?? item.kilos ?? 0} kg · {item.quantityPieces ?? item.pieces ?? 0} piezas</p>
-            </article>
-          ))}
-          </div>
-        </section>
-        <div className="ticket-total-row mt-10 border-t border-[#e8e8e8] pt-8"><span>Total</span><strong>{toMoney(data.total)}</strong></div>
-        <p className="mt-10 border-t border-[#e8e8e8] pt-8 text-sm font-semibold leading-relaxed text-[#686868]">Comprobante interno sin validez fiscal. Las solicitudes administrativas son controles internos; este POS no emite CFDI ni comprobantes fiscales.</p>
+        <div className="p-5 sm:p-8">
+          {isLoading && <p className="mb-4 rounded-lg bg-[#f5f3ee] p-3 text-sm font-bold text-[#39798b]">Cargando datos del documento...</p>}
+          <ReceiptDocument data={data} />
         </div>
       </section>
     </aside>

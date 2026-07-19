@@ -16,7 +16,7 @@ export declare class CommercialPoliciesController {
                 priceListId: string | null;
                 defaultCreditLimit: string | null;
                 defaultCreditDays: number | null;
-                overdueBlockingMode: string | null;
+                overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
                 creditLimitBlockingMode: string | null;
                 allowAdministrativeOverride: boolean;
                 isActive: boolean;
@@ -40,7 +40,7 @@ export declare class CommercialPoliciesController {
             priceListId: string | null;
             defaultCreditLimit: string | null;
             defaultCreditDays: number | null;
-            overdueBlockingMode: string | null;
+            overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
             isActive: boolean;
@@ -63,7 +63,7 @@ export declare class CommercialPoliciesController {
             priceListId: string | null;
             defaultCreditLimit: string | null;
             defaultCreditDays: number | null;
-            overdueBlockingMode: string | null;
+            overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
             isActive: boolean;
@@ -86,7 +86,7 @@ export declare class CommercialPoliciesController {
             priceListId: string | null;
             defaultCreditLimit: string | null;
             defaultCreditDays: number | null;
-            overdueBlockingMode: string | null;
+            overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
             isActive: boolean;

@@ -1,4 +1,5 @@
-import { CustomerType } from '@prisma/client';
+import { CustomerType, OverdueBlockingMode } from '@prisma/client';
+export { OverdueBlockingMode } from '@prisma/client';
 export declare class ListCommercialPoliciesQueryDto {
     page?: number;
     limit?: number;
@@ -13,7 +14,7 @@ export declare class CreateCommercialPolicyDto {
     priceListId?: string;
     defaultCreditLimit?: number;
     defaultCreditDays?: number;
-    overdueBlockingMode?: string;
+    overdueBlockingMode?: OverdueBlockingMode;
     creditLimitBlockingMode?: string;
     allowAdministrativeOverride?: boolean;
     effectiveFrom?: string;

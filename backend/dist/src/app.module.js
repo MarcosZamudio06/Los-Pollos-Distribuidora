@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const schedule_1 = require("@nestjs/schedule");
 const app_config_1 = require("./config/app.config");
 const database_config_1 = require("./config/database.config");
 const env_validation_1 = require("./config/env.validation");
@@ -31,6 +32,7 @@ const delivery_module_1 = require("./modules/delivery/delivery.module");
 const reports_module_1 = require("./modules/reports/reports.module");
 const billing_requests_module_1 = require("./modules/billing-requests/billing-requests.module");
 const point_of_sale_daily_close_module_1 = require("./modules/point-of-sale-daily-close/point-of-sale-daily-close.module");
+const billing_module_1 = require("./modules/billing/billing.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -43,6 +45,7 @@ exports.AppModule = AppModule = __decorate([
                 load: [app_config_1.appConfig, database_config_1.databaseConfig],
                 validate: env_validation_1.validateEnvironment,
             }),
+            schedule_1.ScheduleModule.forRoot(),
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
@@ -62,6 +65,7 @@ exports.AppModule = AppModule = __decorate([
             reports_module_1.ReportsModule,
             billing_requests_module_1.BillingRequestsModule,
             point_of_sale_daily_close_module_1.PointOfSaleDailyCloseModule,
+            billing_module_1.BillingModule,
         ],
         controllers: [],
         providers: [],

@@ -314,3 +314,13 @@ Las transiciones críticas de estado y cualquier ajuste asociado deben ejecutars
 - No convertir tickets, notas o cierres en CFDI.
 - No incorporar `PaymentAllocation`.
 - Mantener abiertas las tolerancias de diferencia, fórmulas de utilidad, política de redondeo, catálogo de conceptos y reglas de reapertura.
+
+## 15. Módulo post-MVP de conciliación de facturas externas
+
+El cambio explícito de PRD habilita un bounded context de facturación operativo que registra facturas emitidas externamente. Mantiene separados `Sale`, `SaleDocument`, `BillingRequest`, `Invoice` y `Payment`; no invoca servicios de venta, inventario o pagos al vincular, cancelar o sustituir facturas.
+
+`SaleDocument` es la raíz de lectura facturable y `SaleItem` la unidad exacta de aplicación. El estado de facturación se deriva mediante un servicio de dominio puro. Los acumulados se protegen con transacción serializable, bloqueo ordenado, versión, idempotencia y restricción PostgreSQL de respaldo.
+
+`LegalEntity` modela el emisor y no se confunde con `OperationalLocation`. Reporte, indicadores y exportaciones comparten read model y predicado de filtros. Importes JSON se serializan como cadenas decimales; CSV/XLSX conserva importes numéricos.
+
+La fuente canónica es `specs/modules/billing-reportable-notes/spec.md`. Persisten fuera de alcance CFDI/XML, timbrado, PAC, integración SAT y `PaymentAllocation`.

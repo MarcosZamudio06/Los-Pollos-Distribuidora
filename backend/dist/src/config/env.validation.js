@@ -23,6 +23,13 @@ function validateEnvironment(env) {
     const portValue = env.PORT?.trim() ?? '3000';
     const parsedPort = Number(portValue);
     const nodeEnv = env.NODE_ENV?.trim() || 'development';
+    const appTimezone = env.APP_TIMEZONE?.trim() || 'America/Mexico_City';
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
+    }
+    catch {
+        throw new Error(`Invalid APP_TIMEZONE value: ${appTimezone}`);
+    }
     if (Number.isNaN(parsedPort) || parsedPort <= 0) {
         throw new Error(`Invalid PORT value: ${portValue}`);
     }
@@ -40,6 +47,7 @@ function validateEnvironment(env) {
     }
     return {
         API_PREFIX: env.API_PREFIX?.trim() || 'api',
+        APP_TIMEZONE: appTimezone,
         DATABASE_SSL: env.DATABASE_SSL === 'true',
         DATABASE_URL: env.DATABASE_URL?.trim() || database_config_1.DEFAULT_DATABASE_URL,
         JWT_ACCESS_SECRET: jwtAccessSecret,

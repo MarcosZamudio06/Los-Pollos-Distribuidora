@@ -88,9 +88,17 @@ type SalePaymentSummaryInput = {
 };
 
 type SaleListRecord = Record<string, unknown> & {
-  customer?: { id: string; name: string } | null;
+  customer?: {
+    id: string;
+    name: string;
+    address?: string | null;
+    phone?: string | null;
+    taxId?: string | null;
+    creditDays?: number | null;
+  } | null;
   accountReceivable?: { id: string } | null;
   billingRequest?: { id: string; status?: BillingRequestStatus } | null;
+  billingRequests?: Array<{ id: string; status?: BillingRequestStatus }>;
   payments?: SalePaymentSummaryInput[];
 };
 
@@ -180,7 +188,11 @@ export class SalesService {
       include: {
         customer: { select: { id: true, name: true } },
         accountReceivable: { select: { id: true } },
-        billingRequest: { select: { id: true, status: true } },
+        billingRequests: {
+          select: { id: true, status: true },
+          orderBy: { requestedAt: 'desc' },
+          take: 1,
+        },
         payments: {
           where: { status: PaymentStatus.APPLIED },
           orderBy: { paidAt: 'desc' },
@@ -200,7 +212,7 @@ export class SalesService {
         customer: true,
         commercialPolicy: true,
         accountReceivable: true,
-        billingRequest: true,
+        billingRequests: { orderBy: { requestedAt: 'desc' }, take: 1 },
         documents: { orderBy: { createdAt: 'desc' } },
         inventoryMovements: { orderBy: { createdAt: 'asc' } },
         payments: {
@@ -233,7 +245,7 @@ export class SalesService {
     const sale = (await this.prisma.sale.findFirst({
       where: this.buildVisibleSaleDetailWhere(id, currentUser),
       include: {
-        customer: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true, address: true, phone: true, taxId: true, creditDays: true } },
         user: { select: { id: true, name: true } },
         location: { select: { id: true, name: true } },
         documents: { orderBy: { createdAt: 'desc' } },
@@ -264,7 +276,7 @@ export class SalesService {
       async (tx) => {
         const existingSale = await tx.sale.findUnique({
           where: { idempotencyKey },
-          include: { items: true, payments: true, accountReceivable: true, billingRequest: true, inventoryMovements: true, documents: true },
+          include: { items: true, payments: true, accountReceivable: true, billingRequests: { orderBy: { requestedAt: 'desc' }, take: 1 }, inventoryMovements: true, documents: true },
         });
 
         if (existingSale) {
@@ -272,11 +284,12 @@ export class SalesService {
             throw new ConflictException('Idempotency-Key was already used for a different sale payload');
           }
 
+          const existingBillingState = existingSale as unknown as SaleListRecord;
           return {
             sale: this.toSaleResponse(existingSale),
             payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
             accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
-            billingRequest: existingSale.billingRequest ?? null,
+            billingRequest: existingSale.billingRequests?.[0] ?? existingBillingState.billingRequest ?? null,
             inventoryMovements: existingSale.inventoryMovements.map((movement) => this.toMovementResponse(movement)),
             documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
           };
@@ -330,6 +343,17 @@ export class SalesService {
 
         const inventoryChanges = await this.reserveInventory(tx, preparedItems, dto.locationId);
 
+        const legalEntityMapping = await tx.legalEntityOperationalLocation.findFirst({
+          where: {
+            operationalLocationId: dto.locationId,
+            effectiveFrom: { lte: new Date() },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+            legalEntity: { isActive: true },
+          },
+          orderBy: { effectiveFrom: 'desc' },
+          select: { legalEntityId: true },
+        });
+
         const saleNumber = await this.nextSaleNumber(tx);
         const sale = await tx.sale.create({
           data: {
@@ -339,6 +363,8 @@ export class SalesService {
             locationId: dto.locationId,
             saleChannel: dto.saleChannel,
             documentType: dto.documentType,
+            currencyCode: 'MXN',
+            legalEntityId: legalEntityMapping?.legalEntityId ?? null,
             physicalFolio: this.normalizeOptionalText(dto.physicalFolio),
             requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
             commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer?.commercialPolicyId),
@@ -371,6 +397,10 @@ export class SalesService {
                 unitPriceSnapshot: item.unitPrice,
                 quantitySnapshot: item.quantityKg || item.quantityPieces,
                 subtotal: item.subtotal,
+                discount: 0,
+                taxableBase: item.subtotal,
+                tax: 0,
+                total: item.subtotal,
                 unitCostSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost)),
                 costSubtotalSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost) * (item.quantityKg || item.quantityPieces)),
                 costSnapshotSource: 'SALE_CONFIRMATION',
@@ -379,10 +409,37 @@ export class SalesService {
           },
           include: { items: true },
         });
-        const internalReceiptDocument = await tx.saleDocument.create({
-          data: {
+        if (!legalEntityMapping) {
+          await tx.billingDataRemediation.upsert({
+            where: {
+              code_entityType_entityId: {
+                code: 'MISSING_LEGAL_ENTITY_MAPPING',
+                entityType: 'Sale',
+                entityId: sale.id,
+              },
+            },
+            create: {
+              code: 'MISSING_LEGAL_ENTITY_MAPPING',
+              entityType: 'Sale',
+              entityId: sale.id,
+              details: {
+                operationalLocationId: dto.locationId,
+                currencyCode: 'MXN',
+              },
+            },
+            update: {
+              details: {
+                operationalLocationId: dto.locationId,
+                currencyCode: 'MXN',
+              },
+              resolvedAt: null,
+              resolvedByUserId: null,
+              resolutionNotes: null,
+            },
+          });
+        }
+        const documentData = {
             saleId: sale.id,
-            documentType: SaleDocumentType.INTERNAL_RECEIPT,
             operationalLocationId: dto.locationId,
             physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
             status: SaleDocumentStatus.ISSUED,
@@ -402,8 +459,18 @@ export class SalesService {
               physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
               requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
             }),
-          },
+        };
+        const requestedDocument = await tx.saleDocument.create({
+          data: { ...documentData, documentType: dto.documentType },
         });
+        const internalReceiptDocument = dto.documentType === SaleDocumentType.INTERNAL_RECEIPT
+          ? null
+          : await tx.saleDocument.create({
+              data: { ...documentData, documentType: SaleDocumentType.INTERNAL_RECEIPT },
+            });
+        const saleDocuments = [requestedDocument, internalReceiptDocument].filter(
+          (document): document is NonNullable<typeof document> => document !== null,
+        );
 
         const inventoryMovements = await this.recordInventoryMovements(tx, inventoryChanges, dto.locationId, sale.id, currentUser.id);
         const payment = dto.initialPayment
@@ -462,6 +529,19 @@ export class SalesService {
             })
           : null;
 
+        if (billingRequest) {
+          await tx.billingRequestSaleDocument.create({
+            data: {
+              billingRequestId: billingRequest.id,
+              saleDocumentId: requestedDocument.id,
+              requestedSubtotal: this.roundMoney(subtotal - discount),
+              requestedTax: 0,
+              requestedTotal: total,
+              createdByUserId: currentUser.id,
+            },
+          });
+        }
+
         if (accountReceivable && billingRequest) {
           await tx.accountReceivable.update({
             where: { id: accountReceivable.id },
@@ -475,7 +555,9 @@ export class SalesService {
           accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
           billingRequest,
           inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
-          documents: [this.toSaleDocumentResponse(internalReceiptDocument as SaleDocumentListRecord)],
+          documents: saleDocuments.map((document) =>
+            this.toSaleDocumentResponse(document as SaleDocumentListRecord),
+          ),
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -984,6 +1066,7 @@ export class SalesService {
   }
 
   private toSaleListItem(sale: SaleListRecord) {
+    const billingRequest = sale.billingRequests?.[0] ?? sale.billingRequest ?? null;
     return {
       id: sale.id,
       saleNumber: sale.saleNumber,
@@ -1004,8 +1087,8 @@ export class SalesService {
       status: sale.status,
       createdAt: sale.createdAt,
       accountReceivableId: sale.accountReceivable?.id ?? null,
-      billingRequestId: sale.billingRequest?.id ?? null,
-      billingRequestStatus: sale.billingRequest?.status ?? null,
+      billingRequestId: billingRequest?.id ?? null,
+      billingRequestStatus: billingRequest?.status ?? null,
       paymentsSummary: this.toPaymentsSummary(sale.payments ?? []),
       deliveredByUserId: sale.deliveredByUserId ?? null,
       collectedByUserId: sale.collectedByUserId ?? null,
@@ -1016,6 +1099,7 @@ export class SalesService {
 
   private toSaleDetail(sale: SaleDetailRecord) {
     const route = sale.route;
+    const billingRequest = sale.billingRequests?.[0] ?? sale.billingRequest ?? null;
     const routeGeometry = this.validLineStringGeometry(route?.geometry) ? route?.geometry ?? null : null;
     return {
       ...this.toSaleListItem(sale),
@@ -1035,7 +1119,7 @@ export class SalesService {
       customer: sale.customer ?? null,
       commercialPolicy: this.toCommercialPolicyResponse(sale.commercialPolicy ?? null),
       accountReceivable: sale.accountReceivable ? this.toReceivableRecordResponse(sale.accountReceivable as Record<string, unknown>) : null,
-      billingRequest: sale.billingRequest ?? null,
+      billingRequest,
       ticket: this.findTicketDocument(sale.documents ?? []),
       documents: sale.documents ?? [],
       inventoryMovements: sale.inventoryMovements?.map((movement) => this.toMovementRecordResponse(movement)) ?? [],
@@ -1080,6 +1164,10 @@ export class SalesService {
       requiresAdministrativeInvoice: sale.requiresAdministrativeInvoice,
       sellerName: sale.user?.name ?? null,
       customerName: sale.customer?.name ?? null,
+      customerAddress: sale.customer?.address ?? null,
+      customerPhone: sale.customer?.phone ?? null,
+      customerTaxId: sale.customer?.taxId ?? null,
+      customerCreditDays: sale.customer?.creditDays ?? null,
       locationId: sale.locationId,
       locationName: sale.location?.name ?? null,
       items: sale.items?.map((item) => ({

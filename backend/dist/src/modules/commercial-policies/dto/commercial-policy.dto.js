@@ -9,10 +9,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateCommercialPolicyDto = exports.CreateCommercialPolicyDto = exports.ListCommercialPoliciesQueryDto = void 0;
+exports.UpdateCommercialPolicyDto = exports.CreateCommercialPolicyDto = exports.ListCommercialPoliciesQueryDto = exports.OverdueBlockingMode = void 0;
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
+var client_2 = require("@prisma/client");
+Object.defineProperty(exports, "OverdueBlockingMode", { enumerable: true, get: function () { return client_2.OverdueBlockingMode; } });
 function trimString({ value }) {
     return typeof value === 'string' ? value.trim() : value;
 }
@@ -116,8 +118,7 @@ __decorate([
 ], CreateCommercialPolicyDto.prototype, "defaultCreditDays", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(trimString),
-    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsEnum)(client_1.OverdueBlockingMode),
     __metadata("design:type", String)
 ], CreateCommercialPolicyDto.prototype, "overdueBlockingMode", void 0);
 __decorate([

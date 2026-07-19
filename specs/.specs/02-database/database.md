@@ -1249,3 +1249,18 @@ Reglas:
 - Catálogo final de conceptos y métodos de pago.
 - Política de folios físicos y correcciones.
 - Reglas de reapertura y snapshots históricos.
+
+## Extensión post-MVP: persistencia de facturas externas
+
+Esta extensión permite persistir `LegalEntity`, `Invoice`, `BillingRequestSaleDocument`, `InvoiceSaleDocument` e `InvoiceSaleItemApplication` para conciliación. No crea tablas ni servicios de certificados, XML, timbrado, PAC o integración SAT.
+
+- `Sale.currencyCode` inicia en `MXN` para legacy y `Sale.legalEntityId` se resuelve mediante conciliación explícita de ubicación–emisor.
+- `SaleDocument` debe existir para el `Sale.documentType`; `INTERNAL_RECEIPT` puede coexistir como documento adicional.
+- `BillingRequest.saleId` y `AccountReceivable.billingRequestId` dejan de ser relaciones autoritativas y pierden unicidad después de expandir, conciliar y validar las relaciones N:M.
+- Las aplicaciones monetarias usan `Decimal(14,2)`, actor, timestamps y reversión lógica.
+- La suma activa solicitada o aplicada no puede exceder el saldo del documento; se protege en servicio y con restricción o trigger PostgreSQL.
+- Los índices cubren emisor, moneda, documento, estado, fecha, cliente, ubicación, vendedor, ruta, solicitud, factura, UUID y tablas puente.
+- La migración sigue expand–backfill–validate–contract. Datos ambiguos se exportan para remediación y nunca se infieren automáticamente.
+- `PaymentAllocation` permanece fuera del modelo activo.
+
+La estructura e invariantes están en `specs/modules/billing-reportable-notes/spec.md`.

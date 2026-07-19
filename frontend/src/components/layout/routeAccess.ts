@@ -1,13 +1,14 @@
 import type { UserRole } from '../../features/auth'
 
-export const KNOWN_ROLES = ['ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS', 'DRIVER'] as const
+export const KNOWN_ROLES = ['ADMIN', 'BILLING', 'SELLER', 'WAREHOUSE', 'COLLECTIONS', 'DRIVER'] as const
 export const ALL_ROLES = KNOWN_ROLES
 
 export type KnownRole = (typeof KNOWN_ROLES)[number]
 
 export const ROUTE_ACCESS_ROLES = {
   accountsReceivable: ['ADMIN', 'COLLECTIONS'],
-  billingRequests: ['ADMIN', 'SELLER', 'COLLECTIONS'],
+  billingRequests: ['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS'],
+  billingReportableNotes: ['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS'],
   admin: ['ADMIN'],
   customers: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   dashboard: ALL_ROLES,
@@ -33,6 +34,7 @@ export type RouteAccessKey = keyof typeof ROUTE_ACCESS_ROLES
 
 export const ROLE_LABELS: Record<KnownRole | 'UNKNOWN', string> = {
   ADMIN: 'Administración',
+  BILLING: 'Facturación',
   SELLER: 'Ventas',
   WAREHOUSE: 'Almacén',
   COLLECTIONS: 'Cobranza',

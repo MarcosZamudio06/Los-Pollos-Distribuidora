@@ -1,5 +1,8 @@
 # UI — Solicitudes Administrativas de Factura
 
+> Esta pantalla conserva el flujo MVP durante la migración. La bandeja post-MVP y las solicitudes parciales o agrupadas se definen en `specs/.specs/04-ui/billing-reportable-notes.md`.
+
+
 ## Objetivo
 
 Gestionar la relación interna de solicitudes administrativas sin presentar CFDI ni flujos fiscales.

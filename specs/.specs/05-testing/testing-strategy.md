@@ -360,3 +360,14 @@ Las siguientes pruebas no deben inventar comportamiento final. Deben marcarse co
 - E2E prioritarios pasan o tienen bloqueo documentado por decisión abierta.
 - Permisos por rol validados en backend y frontend.
 - No existen pruebas ni UI de flujos fiscales fuera del MVP.
+
+## Estrategia post-MVP para notas facturables
+
+- Unitarias: evaluador puro, estados derivados, `Decimal`, agrupación, vencimiento, cancelación y sustitución.
+- Integración PostgreSQL: migración/backfill, restricciones cruzadas, concurrencia, sobrefacturación y rollback total.
+- Contrato: DTO común, filtros, ordenamiento, paginación, strings decimales, códigos y paridad entre tabla, resumen y exportación.
+- E2E backend: total, parcial, agrupado, rechazo, cancelación, sustitución, reversión y matriz RBAC.
+- Frontend: estados, filtros URL, selección compatible, detalle, acciones, accesibilidad y descarga.
+- Conciliación: aplicaciones vigentes contra documentos/facturas y saldo de venta contra `Payment`/`AccountReceivable`.
+- Regresión: vincular, cancelar o sustituir facturas no crea ni modifica ventas, pagos o inventario.
+- Límite fiscal: se prueba registro de factura externa y UUID sin emisión CFDI, XML, timbrado, PAC o SAT; `PaymentAllocation` permanece ausente.

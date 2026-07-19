@@ -19,6 +19,7 @@ import { EmployeesPage } from '../features/employees'
 import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RoutePlannerPage, RouteSettlementView } from '../features/rutas-reparto'
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 import { BillingRequestDetailPage, BillingRequestsPage } from '../features/billing-requests'
+import { BillingReportableNotesPage } from '../features/billing-reportable-notes'
 import { DailyClosePage } from '../features/cierre-diario'
 
 export function AppRouter() {
@@ -44,6 +45,7 @@ export function AppRouter() {
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/billing-requests/:id" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestDetailPage /></RoleRoute>} />
         <Route path="/billing-requests" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestsPage /></RoleRoute>} />
+        <Route path="/billing/reportable-notes" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingReportableNotes}><BillingReportableNotesPage /></RoleRoute>} />
         <Route
           path="/customers"
           element={

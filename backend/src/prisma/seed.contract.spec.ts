@@ -55,13 +55,14 @@ function createPrismaSeedMock(): {
 }
 
 describe('Prisma seed contract', () => {
-  it('defines the required roles including collections', () => {
+  it('defines the required roles including billing and collections', () => {
     expect(initialRoles.map((role) => role.name)).toEqual([
       'ADMIN',
       'SELLER',
       'WAREHOUSE',
       'DRIVER',
       'COLLECTIONS',
+      'BILLING',
     ]);
   });
 
@@ -117,6 +118,7 @@ describe('Prisma seed contract', () => {
       'WAREHOUSE',
       'DRIVER',
       'COLLECTIONS',
+      'BILLING',
     ]);
 
     initialRoleTestUsers.forEach((user) => {

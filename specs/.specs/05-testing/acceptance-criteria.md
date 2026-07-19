@@ -199,3 +199,16 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - No permitir que `DRIVER` opere rutas ajenas.
 - No cerrar ruta o liquidación ignorando pedidos pendientes cuando el spec requiere estado final.
 - No mostrar ticket interno como comprobante fiscal, CFDI ni integración SAT.
+
+## Notas facturables y facturas externas post-MVP
+
+- Dado un documento elegible, cuando se evalúa, entonces su estado se deriva de datos y políticas, no de un booleano manual.
+- Dadas operaciones concurrentes sobre el mismo saldo, entonces nunca se excede el importe facturable.
+- Dada una factura cancelada o sustituida, sus aplicaciones sin efecto se excluyen sin borrar historia.
+- Notas con distinto cliente, perfil fiscal, moneda o emisor no pueden agruparse.
+- `BILLING` puede revisar, aprobar, rechazar, vincular y exportar sin modificar inventario ni pagos.
+- `SELLER` ve únicamente notas propias; `WAREHOUSE` y `DRIVER` no acceden al módulo ni a datos fiscales.
+- Vincular, cancelar o sustituir facturas no crea ni modifica `Sale`, `Payment` o `InventoryMovement`.
+- Con los mismos filtros, tabla, resumen, CSV y XLSX producen conteos e importes conciliados.
+- Puede registrarse UUID de una factura externa, pero no existe emisión CFDI, XML, timbrado, PAC ni integración SAT.
+- `PaymentAllocation` no existe como mecanismo del flujo.

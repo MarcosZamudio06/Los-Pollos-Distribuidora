@@ -147,3 +147,19 @@ Resumen de ingresos por vendedor, fecha y método de pago.
 ## RBAC
 
 Control de acceso basado en roles.
+
+## Entidad legal emisora
+
+Persona moral o física que emite una factura externa. Es distinta de la ubicación operativa donde ocurre la venta, almacenamiento o entrega.
+
+## Nota facturable
+
+`SaleDocument` que cumple política, completitud fiscal, saldo, entrega y compatibilidad necesarias para solicitar una factura externa.
+
+## Perfil fiscal
+
+Conjunto estructurado de RFC o identificador fiscal, razón social, código postal fiscal, régimen, uso fiscal y correo administrativo requerido para una solicitud.
+
+## Registro de factura externa
+
+Representación auditable de una factura emitida fuera del ERP. Puede conservar serie, folio y UUID para conciliación, pero no implica emisión, XML, timbrado, PAC o integración SAT.

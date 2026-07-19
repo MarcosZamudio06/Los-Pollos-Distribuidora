@@ -390,7 +390,7 @@ describe('TASK-055 sales UI behavior', () => {
     )
 
     expect(html).toContain('Detalle de venta')
-    expect(html).toContain('Reimprimir ticket interno')
+    expect(html).toContain('Reimprimir documento')
     expect(html).toContain('Cancelar venta')
     expect(html).toContain('Documentos internos')
     expect(html).toContain('Nota sencilla')
@@ -480,7 +480,7 @@ describe('TASK-055 sales UI behavior', () => {
     )
 
     try {
-      const reprintButton = getButtonByText(container, 'Reimprimir ticket interno')
+      const reprintButton = getButtonByText(container, 'Reimprimir documento')
 
       expect(container.textContent).not.toContain('Ticket interno')
 
@@ -488,7 +488,7 @@ describe('TASK-055 sales UI behavior', () => {
         reprintButton.click()
       })
 
-      expect(document.body.textContent).toContain('Ticket interno')
+      expect(document.body.textContent).toContain('NOTA DE VENTA')
       expect(document.body.textContent).toContain('Imprimir')
       expect(document.body.textContent).toContain('V-1001')
     } finally {
@@ -515,7 +515,7 @@ describe('TASK-055 sales UI behavior', () => {
         onClose={() => undefined}
         ticket={{
           customerName: 'Público general',
-          documentType: 'INTERNAL_RECEIPT',
+          documentType: 'LARGE_NOTE',
           items: [
             { productName: 'Pierna y muslo', quantityKg: 2.5, quantityPieces: 4, subtotal: 310, unit: 'KG_AND_PIECE' },
             { productName: 'Pechuga', quantityKg: 1.2, quantityPieces: 0, subtotal: 144, unit: 'KG' },
@@ -532,5 +532,38 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).not.toContain('KG_AND_PIECE')
     expect(html).toContain('ticket-print-root')
     expect(html).toContain('ticket-print-content')
+  })
+
+  it('renderiza los tres formatos documentales con sus prioridades y oculta un RFC inexistente', () => {
+    const baseTicket: TicketData = {
+      createdAt: '2026-07-17T18:35:00.000Z',
+      customerName: 'Pollería San José',
+      locationName: 'Sucursal Centro',
+      payments: [{ amount: 500, paymentMethod: 'CASH' }],
+      sellerName: 'Juan Pérez',
+      paymentType: 'CREDIT_SALE',
+      subtotal: 1912.5,
+      discount: 0,
+      total: 1912.5,
+      items: [{ productName: 'Pollo entero', quantityKg: 25, unit: 'KG', unitPrice: 42.5, subtotal: 1062.5 }],
+    }
+
+    const simple = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'SIMPLE_NOTE' }} />)
+    const largeWithoutTaxId = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'LARGE_NOTE', customerAddress: 'Av. Principal 123', customerPhone: '229 000 0000', customerCreditDays: 7 }} />)
+    const largeWithTaxId = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'LARGE_NOTE', customerTaxId: 'XAXX010101000' }} />)
+    const internal = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'INTERNAL_RECEIPT' }} />)
+
+    expect(simple).toContain('NOTA DE VENTA')
+    expect(simple).toContain('Gracias por su compra')
+    expect(simple).toContain('receipt-format-simple')
+    expect(largeWithoutTaxId).toContain('DATOS DEL CLIENTE')
+    expect(largeWithoutTaxId).toContain('Crédito a 7 días')
+    expect(largeWithoutTaxId).not.toContain('RFC:')
+    expect(largeWithTaxId).toContain('RFC:')
+    expect(largeWithTaxId).toContain('XAXX010101000')
+    expect(internal).toContain('RECIBO INTERNO')
+    expect(internal).toContain('Entregó')
+    expect(internal).toContain('Autorizó')
+    expect(internal).toContain('DOCUMENTO DE CONTROL INTERNO')
   })
 })

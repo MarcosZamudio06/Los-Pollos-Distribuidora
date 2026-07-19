@@ -1,5 +1,8 @@
 # UI — Reportes
 
+> “Notas facturables” es un módulo operativo separado bajo `/billing/reportable-notes`; ver `specs/.specs/04-ui/billing-reportable-notes.md`. El reporte administrativo existente permanece como vista legacy.
+
+
 ## Objetivo
 
 Mostrar reportes operativos casi en tiempo real de ventas, inventario, caja, cobranza, facturación administrativa y reparto, basados en operaciones confirmadas y con latencia máxima esperada de 60 segundos en condiciones normales. Los reportes deben separar menudeo, crédito corto, crédito atrasado, abonos, transferencias/depositos y solicitudes administrativas.
