@@ -60,6 +60,11 @@ enum SaleDocumentType {
   INTERNAL_RECEIPT
 }
 
+enum BillingDeadlineBasis {
+  ISSUED_AT
+  DELIVERED_AT
+}
+
 enum CollectionStatus {
   UNPAID
   PARTIALLY_PAID
@@ -876,6 +881,19 @@ model CommercialPolicy {
   accountReceivables       AccountReceivable[]
 }
 
+model BillingPolicy {
+  id                       String               @id
+  billableDocumentTypes    SaleDocumentType[]
+  allowInternalReceipt     Boolean              @default(false)
+  requireConfirmedDelivery Boolean              @default(false)
+  deadlineDays             Int?
+  deadlineBasis            BillingDeadlineBasis @default(ISSUED_AT)
+  timezone                 String
+  version                  Int                  @default(1)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+}
+
 enum OverdueBlockingMode {
   WARN_ONLY
   BLOCK_NEW_CREDIT
@@ -1222,6 +1240,8 @@ model Invoice {
   version                Int                   @default(1)
   linkIdempotencyKey     String?               @unique
   linkPayloadHash        String?
+  cancellationIdempotencyKey String?           @unique
+  cancellationPayloadHash String?
   createdByUserId        String
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
@@ -1245,6 +1265,7 @@ model BillingRequestSaleDocument {
   requestedSubtotal Decimal        @db.Decimal(14, 2)
   requestedTax      Decimal        @default(0) @db.Decimal(14, 2)
   requestedTotal    Decimal        @db.Decimal(14, 2)
+  selectedSaleItemIds Json
   createdByUserId   String
   reversedAt        DateTime?
   reversedByUserId  String?
@@ -1255,6 +1276,7 @@ model BillingRequestSaleDocument {
   saleDocument      SaleDocument   @relation(fields: [saleDocumentId], references: [id])
   createdBy         User           @relation("BillingRequestSaleDocumentCreatedBy", fields: [createdByUserId], references: [id])
   reversedBy        User?          @relation("BillingRequestSaleDocumentReversedBy", fields: [reversedByUserId], references: [id])
+  invoiceApplications InvoiceSaleDocument[]
 
   @@unique([billingRequestId, saleDocumentId])
   @@index([saleDocumentId, reversedAt])
@@ -1266,6 +1288,7 @@ model InvoiceSaleDocument {
   id               String                       @id @default(cuid())
   invoiceId        String
   saleDocumentId   String
+  billingRequestSaleDocumentId String?
   subtotalApplied  Decimal                      @db.Decimal(14, 2)
   taxApplied       Decimal                      @default(0) @db.Decimal(14, 2)
   totalApplied     Decimal                      @db.Decimal(14, 2)
@@ -1277,11 +1300,13 @@ model InvoiceSaleDocument {
   updatedAt        DateTime                     @updatedAt
   invoice          Invoice                      @relation(fields: [invoiceId], references: [id])
   saleDocument     SaleDocument                 @relation(fields: [saleDocumentId], references: [id])
+  billingRequestSaleDocument BillingRequestSaleDocument? @relation(fields: [billingRequestSaleDocumentId], references: [id])
   createdBy        User                         @relation("InvoiceSaleDocumentCreatedBy", fields: [createdByUserId], references: [id])
   reversedBy       User?                        @relation("InvoiceSaleDocumentReversedBy", fields: [reversedByUserId], references: [id])
   itemApplications InvoiceSaleItemApplication[]
 
   @@index([saleDocumentId, reversedAt])
+  @@index([billingRequestSaleDocumentId, reversedAt])
   @@index([createdByUserId])
   @@index([reversedByUserId])
 }

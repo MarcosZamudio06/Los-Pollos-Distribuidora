@@ -45,18 +45,34 @@ La dirección de entrega no sustituye el domicilio fiscal. La completitud se der
 
 ## Documentos facturables y normalización
 
-Los tipos facturables son configurables. La política inicial permite `SIMPLE_NOTE` y `LARGE_NOTE`; `INTERNAL_RECEIPT` solo cuando la política comercial lo habilita. `SCALE_TICKET` no es facturable por sí solo.
+Los tipos facturables son configurables. La política inicial permite `SIMPLE_NOTE` y `LARGE_NOTE`. `INTERNAL_RECEIPT` se conserva únicamente como evidencia relacionada y `SCALE_TICKET` no es facturable por sí solo.
 
-`Sale.documentType` expresa el tipo solicitado para la venta. Por cada venta nueva debe persistirse un `SaleDocument` de ese tipo. Un `INTERNAL_RECEIPT` puede coexistir como comprobante adicional, pero no reemplaza el documento solicitado. Los datos históricos deben normalizarse antes de activar el reporte; cualquier caso ambiguo se remedia manualmente.
+`Sale.documentType` expresa el tipo solicitado para la venta. Por cada venta nueva debe persistirse un `SaleDocument` de ese tipo. Un `INTERNAL_RECEIPT` puede coexistir como comprobante adicional, pero no reemplaza el documento solicitado.
+
+Para el read model de conciliación, cada venta tiene una sola unidad facturable primaria: el `SaleDocument` cuyo `documentType` coincide con `Sale.documentType`. Los demás documentos de la venta se muestran únicamente como evidencia relacionada. Sus importes monetarios son cero y no participan en indicadores, totales ni saldos. Los documentos con estado derivado `NOT_BILLABLE` o `CANCELLED` tampoco participan en acumulados monetarios. Una venta solo podrá tener más de una unidad facturable cuando un spec futuro defina una asignación monetaria explícita por documento; no se permite replicar el total de la venta entre documentos.
+
+Los datos históricos deben normalizarse antes de activar el reporte; cualquier caso ambiguo se remedia manualmente.
+
+### Remediaciones de datos
+
+`BillingDataRemediation` representa una inconsistencia de datos, no una tarea administrativa. La bandeja operativa permite consultar casos abiertos e históricos y aplicar una corrección explícita cuando el tipo de inconsistencia lo permita. También admite validar una corrección realizada previamente por otro flujo.
+
+La resolución es mixta y atómica: primero se aplican las correcciones solicitadas sobre los datos fuente, después se ejecuta nuevamente el validador canónico del código de remediación y solo si la inconsistencia ya no existe se registran `resolvedAt`, `resolvedByUserId` y las notas de resolución. Si la validación posterior falla, ninguna corrección ni cierre se persiste.
+
+Los códigos iniciales son `MISSING_LEGAL_ENTITY_MAPPING`, `AMBIGUOUS_SALE_DOCUMENT`, `UNALLOCATED_ITEM_AMOUNTS` e `INVALID_SALE_TOTAL`. La asignación de entidad legal modifica la venta afectada; la selección documental conserva el documento elegido y cancela lógicamente los duplicados sin relaciones contables; la distribución monetaria actualiza las partidas; y la corrección de totales actualiza los importes de venta. Ninguna resolución puede eliminar documentos, solicitudes, facturas, aplicaciones ni auditoría histórica.
 
 ## Política de facturabilidad y vencimiento
 
 La política configurable define:
 
 - tipos documentales facturables;
-- si `INTERNAL_RECEIPT` puede solicitar factura;
+- tipos de evidencia documental que deben mostrarse sin saldo facturable;
 - si la entrega confirmada es requisito;
 - número de días naturales disponibles desde la fecha de emisión o entrega definida por la política.
+
+La fuente persistida es `BillingPolicy`, separada de `CommercialPolicy` porque las condiciones de crédito y las reglas de facturabilidad tienen ciclos y responsabilidades diferentes. El evaluador, el read model SQL y los comandos de solicitud consumen sus mismos campos. La configuración inicial permite `SIMPLE_NOTE` y `LARGE_NOTE`, no habilita `INTERNAL_RECEIPT`, no exige entrega confirmada, usa 30 días desde emisión y la zona `America/Mexico_City`.
+
+La ejecución canónica de las reglas derivadas reside en la vista PostgreSQL `BillingReportableNoteReadModel`. Listado, resumen, detalle, exportación y comandos consultan esa vista; no recrean estados ni códigos mediante árboles `CASE` adicionales en servicios. `evaluateBillability()` se conserva como oráculo de dominio y su vocabulario se verifica contractualmente contra la vista durante la transición.
 
 La fecha límite se calcula en la zona horaria operativa configurada. Rebasarla produce un bloqueo derivado, salvo excepción autorizada y auditada por `ADMIN`. La política no puede desactivar invariantes como saldo disponible, cliente, moneda o emisor compatibles.
 
@@ -76,6 +92,8 @@ El estado de facturación se calcula desde venta, documento, cliente, entrega, p
 
 No se persiste como fuente de verdad ni se cambia manualmente. Solicitudes rechazadas o canceladas y facturas canceladas o sustituidas sin efecto vigente se excluyen de los acumulados.
 
+El read model expone `pendingSubtotal`, `pendingTax` y `pendingTotal`, además de las partidas con saldo vigente y su mismo desglose. Una solicitud parcial se compone exclusivamente mediante selección exacta de partidas; no se prorratea el total del documento. El backend recalcula el desglose desde `SaleItem` menos aplicaciones vigentes y rechaza importes enviados que no coincidan exactamente. La selección de partidas queda persistida en `BillingRequestSaleDocument.selectedSaleItemIds` para trazabilidad.
+
 ## Factura externa
 
 `Invoice` conserva emisor, moneda, serie, folio, UUID opcional, importes, estado, versión, cancelación y sustitución. Estados mínimos:
@@ -84,15 +102,18 @@ No se persiste como fuente de verdad ni se cambia manualmente. Solicitudes recha
 - `CANCELLED`
 - `SUBSTITUTED`
 
-La sustitución crea una relación explícita entre factura original y sustituta; nunca sobrescribe UUID, serie o folio históricos. Cancelaciones, sustituciones y reversiones requieren motivo, actor, timestamp y evidencia auditable.
+La sustitución crea una relación explícita entre factura original y sustituta; nunca sobrescribe UUID, serie o folio históricos. La sustituta conserva el emisor, la moneda y exactamente las mismas aplicaciones vigentes por nota y partida, con importes equivalentes. La factura original se bloquea antes de validar su estado para impedir sustituciones concurrentes. Cancelaciones, sustituciones y reversiones requieren motivo, actor, timestamp y evidencia auditable.
 
 ## Relaciones e integridad monetaria
 
 - `BillingRequestSaleDocument` relaciona solicitudes y documentos con importes solicitados.
 - `InvoiceSaleDocument` relaciona facturas externas y documentos con importes aplicados y reversión lógica.
+- Cada `InvoiceSaleDocument` conserva la referencia a `BillingRequestSaleDocument` que originó la aplicación. El importe solicitado es histórico e inmutable; la reserva pendiente se deriva como `requestedTotal - totalApplied vigente` contra esa relación, con mínimo cero. Una solicitud totalmente consumida conserva estado e historia, pero deja de reservar saldo.
 - `InvoiceSaleItemApplication` conserva la aplicación exacta por partida.
 
 Los importes usan `Decimal(14,2)`. La suma solicitada o aplicada no puede exceder el saldo disponible. Las operaciones bloquean documentos en orden estable, usan transacción serializable, `expectedVersion`, idempotencia y una protección PostgreSQL de respaldo.
+
+Para una factura `ACTIVE`, la suma de aplicaciones vigentes debe coincidir globalmente con `subtotal - discount`, `tax` y `total` de la factura. Al reutilizar una factura existente se bloquea su registro y se consideran conjuntamente sus aplicaciones previas y las nuevas. PostgreSQL verifica esta igualdad mediante constraints diferibles al cierre de la transacción.
 
 ## Solicitudes
 
@@ -113,12 +134,16 @@ Comandos principales:
 
 - `POST /api/billing/requests`
 - `GET /api/billing/requests/:id`
+- `POST /api/billing/requests/:id/start-review`
 - `POST /api/billing/requests/:id/approve`
 - `POST /api/billing/requests/:id/reject`
 - `POST /api/billing/requests/:id/cancel`
 - `POST /api/billing/requests/:id/link-invoice`
+- `POST /api/billing/invoices/:id/cancel`
 
 Los importes JSON se exponen como cadenas decimales. Los comandos críticos requieren `Idempotency-Key` y `expectedVersion`. Los errores usan códigos estables, entre ellos `OVER_INVOICED`, `ACTIVE_REQUEST_EXISTS`, `MIXED_CURRENCIES` y `MIXED_LEGAL_ENTITIES`.
+
+La cancelación operativa revierte lógicamente las aplicaciones vigentes, conserva historia y auditoría, y reabre el saldo facturable derivado. Se bloquea cuando la factura no está activa o participa en una sustitución incompatible; no representa una cancelación ante SAT.
 
 ## Permisos
 
@@ -135,7 +160,7 @@ El backend aplica el alcance. Ocultar rutas o controles en frontend es solo defe
 
 La ruta protegida es `/billing/reportable-notes` y se presenta como “Notas facturables”. Incluye indicadores, filtros persistidos en URL, tabla paginada, selección compatible, detalle de partidas y relaciones, estados de frescura y acciones según permisos.
 
-CSV y XLSX se generan desde el mismo read model y filtros. Los archivos incluyen usuario, zona horaria, fecha, filtros, totales de control e identificadores; importes como valores numéricos y UUID/folios como texto.
+CSV y XLSX se generan desde el mismo read model y filtros. Los archivos incluyen usuario, zona horaria, fecha, filtros, ubicación, vendedor, ruta, saldos cobrados y por cobrar, códigos de bloqueo, fecha límite, estado de entrega, identificadores y totales completos de control. Los importes se conservan como valores numéricos y UUID/folios como texto.
 
 ## Auditoría
 

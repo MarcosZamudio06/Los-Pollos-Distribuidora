@@ -12,7 +12,7 @@ const billing = { id: 'billing-1', email: 'billing@pollos.local', name: 'Billing
 
 describe('BillingRequestsController API', () => {
   let app: INestApplication;
-  const service = { findAll: jest.fn(), findOne: jest.fn(), create: jest.fn(), update: jest.fn(), approve: jest.fn(), reject: jest.fn(), cancel: jest.fn(), linkInvoice: jest.fn() };
+  const service = { findAll: jest.fn(), findOne: jest.fn(), create: jest.fn(), update: jest.fn(), startReview: jest.fn(), approve: jest.fn(), reject: jest.fn(), cancel: jest.fn(), linkInvoice: jest.fn() };
 
   beforeEach(async () => {
     Object.values(service).forEach((mock) => mock.mockReset().mockResolvedValue({ id: 'request-1' }));
@@ -31,6 +31,8 @@ describe('BillingRequestsController API', () => {
     await request(app.getHttpServer()).get('/api/billing-requests/request-1').set('Authorization', 'Bearer seller').expect(200);
     await request(app.getHttpServer()).post('/api/billing/requests').set('Authorization', 'Bearer seller').set('Idempotency-Key', 'create-1').send({ customerId: 'customer-1', reason: 'Seguimiento', documents: [{ saleDocumentId: 'document-1', requestedSubtotal: '90.00', requestedTax: '10.00', requestedTotal: '100.00' }] }).expect(201);
     expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ documents: [expect.objectContaining({ saleDocumentId: 'document-1' })] }), seller, 'create-1');
+    await request(app.getHttpServer()).post('/api/billing/requests/request-1/start-review').set('Authorization', 'Bearer admin').send({ expectedVersion: 1, reason: 'Review started' }).expect(201);
+    expect(service.startReview).toHaveBeenCalledWith('request-1', expect.objectContaining({ expectedVersion: 1 }), admin);
     await request(app.getHttpServer()).post('/api/billing/requests/request-1/approve').set('Authorization', 'Bearer admin').send({ expectedVersion: 1, reason: 'Validated' }).expect(201);
     await request(app.getHttpServer()).post('/api/billing/requests/request-1/reject').set('Authorization', 'Bearer admin').send({ expectedVersion: 1, reason: 'Invalid fiscal data' }).expect(201);
     await request(app.getHttpServer()).patch('/api/billing-requests/request-1').set('Authorization', 'Bearer seller').send({ notes: 'Nota' }).expect(200);

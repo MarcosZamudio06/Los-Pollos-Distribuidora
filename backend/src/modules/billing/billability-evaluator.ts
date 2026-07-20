@@ -29,7 +29,15 @@ export type BillingBlockingCode =
   | 'OVER_REQUESTED'
   | 'OVER_INVOICED';
 
-type SaleDocumentType = 'SCALE_TICKET' | 'SIMPLE_NOTE' | 'LARGE_NOTE' | 'INTERNAL_RECEIPT';
+export type SaleDocumentType = 'SCALE_TICKET' | 'SIMPLE_NOTE' | 'LARGE_NOTE' | 'INTERNAL_RECEIPT';
+export type BillingPolicyRules = {
+  billableDocumentTypes: readonly SaleDocumentType[];
+  allowInternalReceipt: boolean;
+  requireConfirmedDelivery: boolean;
+  deadlineDays: number | null;
+  deadlineBasis: 'ISSUED_AT' | 'DELIVERED_AT';
+  timezone: string;
+};
 type BillingRequestStatus = 'REQUESTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 export interface BillabilityInput {
@@ -59,14 +67,7 @@ export interface BillabilityInput {
     status: 'PENDING' | 'IN_ROUTE' | 'DELIVERED' | 'NOT_DELIVERED' | 'CANCELLED' | 'PARTIALLY_REJECTED' | 'RETURNED';
     deliveredAt: Date | null;
   } | null;
-  policy: {
-    billableDocumentTypes: readonly SaleDocumentType[];
-    allowInternalReceipt: boolean;
-    requireConfirmedDelivery: boolean;
-    deadlineDays: number | null;
-    deadlineBasis: 'ISSUED_AT' | 'DELIVERED_AT';
-    timezone: string;
-  };
+  policy: BillingPolicyRules;
   requests: readonly {
     status: BillingRequestStatus;
     requestedTotal: Prisma.Decimal;
@@ -136,6 +137,22 @@ const addCalendarDays = (date: Date, days: number, timezone: string) => {
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days, 12));
 };
 
+export const isDocumentTypeBillable = (documentType: SaleDocumentType, policy: BillingPolicyRules) =>
+  policy.billableDocumentTypes.includes(documentType) &&
+  (documentType !== 'INTERNAL_RECEIPT' || policy.allowInternalReceipt);
+
+export const calculateBillingDeadline = (
+  issuedAt: Date,
+  deliveredAt: Date | null | undefined,
+  policy: BillingPolicyRules,
+) => {
+  const basis = policy.deadlineBasis === 'DELIVERED_AT' ? deliveredAt : issuedAt;
+  return basis && policy.deadlineDays !== null ? addCalendarDays(basis, policy.deadlineDays, policy.timezone) : null;
+};
+
+export const isBillingDeadlineExpired = (deadline: Date | null, evaluatedAt: Date, timezone: string) =>
+  Boolean(deadline && calendarKey(evaluatedAt, timezone) > calendarKey(deadline, timezone));
+
 export function validateRequestedAmount(amount: Prisma.Decimal, availableBalance: Prisma.Decimal): void {
   if (amount.lessThanOrEqualTo(ZERO)) throw new BillingBalanceError('INVALID_REQUESTED_AMOUNT');
   if (amount.greaterThan(availableBalance)) throw new BillingBalanceError('OVER_REQUESTED');
@@ -179,9 +196,7 @@ export function evaluateBillability(input: BillabilityInput): BillabilityResult 
   if (input.sale.status !== 'CONFIRMED') blockingCodes.push('SALE_NOT_CONFIRMED');
   if (!input.sale.customerId) blockingCodes.push('MISSING_CUSTOMER');
   if (billable.lessThanOrEqualTo(ZERO)) blockingCodes.push(billable.isZero() ? 'ZERO_BALANCE' : 'INVALID_TOTAL');
-  const typeAllowed =
-    input.policy.billableDocumentTypes.includes(input.document.documentType) &&
-    (input.document.documentType !== 'INTERNAL_RECEIPT' || input.policy.allowInternalReceipt);
+  const typeAllowed = isDocumentTypeBillable(input.document.documentType, input.policy);
   if (!typeAllowed) blockingCodes.push('DOCUMENT_TYPE_NOT_BILLABLE');
   if (blockingCodes.length) return result('NOT_BILLABLE');
 
@@ -204,12 +219,8 @@ export function evaluateBillability(input: BillabilityInput): BillabilityResult 
   }
   if (blockingCodes.length) return result('PENDING_INFORMATION');
 
-  const deadlineBase = input.policy.deadlineBasis === 'DELIVERED_AT' ? input.delivery?.deliveredAt : input.document.issuedAt;
-  const deadline =
-    deadlineBase && input.policy.deadlineDays !== null
-      ? addCalendarDays(deadlineBase, input.policy.deadlineDays, input.policy.timezone)
-      : null;
-  if (deadline && calendarKey(input.evaluatedAt, input.policy.timezone) > calendarKey(deadline, input.policy.timezone)) {
+  const deadline = calculateBillingDeadline(input.document.issuedAt, input.delivery?.deliveredAt, input.policy);
+  if (isBillingDeadlineExpired(deadline, input.evaluatedAt, input.policy.timezone)) {
     blockingCodes.push('BILLING_DEADLINE_EXPIRED');
   }
   if (activeInvoiced.greaterThan(billable)) blockingCodes.push('OVER_INVOICED');

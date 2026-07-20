@@ -14,12 +14,16 @@ import {
   CreateBillingRequestDto,
   ListBillingRequestsQueryDto,
   LinkInvoiceDto,
+  InvoiceSaleDocumentApplicationDto,
   ReviewBillingRequestDto,
   UpdateBillingRequestDto,
 } from './dto';
 import { BillingBalanceError, validateRequestedAmount } from '../billing/billability-evaluator';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type SubstitutionInvoice = Prisma.InvoiceGetPayload<{
+  include: { documents: { include: { itemApplications: true } } };
+}>;
 
 const transitions: Record<
   BillingRequestStatus,
@@ -40,7 +44,7 @@ const detailInclude = {
   customer: true,
   sale: true,
   accountReceivables: true,
-  documents: { include: { saleDocument: true } },
+  documents: { where: { reversedAt: null }, include: { saleDocument: { include: { sale: { include: { items: true } } } } } },
   requestedBy: { select: { id: true, name: true } },
   reviewedBy: { select: { id: true, name: true } },
   history: {
@@ -101,6 +105,8 @@ export class BillingRequestsService {
               billingRequests: { select: { id: true }, take: 1 },
               accountReceivable: { select: { id: true } },
               documents: true,
+              items: { select: { id: true } },
+              deliveryOrder: true,
             },
           });
           if (!sale) throw new NotFoundException('Sale not found');
@@ -120,6 +126,10 @@ export class BillingRequestsService {
             throw new ForbiddenException(
               'SELLER can only create requests for own sales',
             );
+          const requestedDocuments = sale.documents.filter((document) => document.documentType === sale.documentType);
+          if (requestedDocuments.length !== 1) throw new ConflictException('Sale document requires remediation before billing request creation');
+          const requestedDocument = requestedDocuments[0];
+          await this.assertDocumentsRequestable(tx, [requestedDocument.id]);
 
           const created = await tx.billingRequest.create({
             data: {
@@ -141,21 +151,14 @@ export class BillingRequestsService {
             include: detailInclude,
           });
 
-          const requestedDocuments = sale.documents.filter(
-            (document) => document.documentType === sale.documentType,
-          );
-          if (requestedDocuments.length !== 1) {
-            throw new ConflictException(
-              'Sale document requires remediation before billing request creation',
-            );
-          }
           await tx.billingRequestSaleDocument.create({
             data: {
               billingRequestId: created.id,
-              saleDocumentId: requestedDocuments[0].id,
+              saleDocumentId: requestedDocument.id,
               requestedSubtotal: sale.subtotal.minus(sale.discount),
               requestedTax: sale.tax,
               requestedTotal: sale.total,
+              selectedSaleItemIds: sale.items?.map((item) => item.id) ?? [],
               createdByUserId: actor.id,
             },
           });
@@ -209,7 +212,7 @@ export class BillingRequestsService {
         const records = await tx.saleDocument.findMany({
           where: { id: { in: ids } },
           include: {
-            sale: { include: { customer: true, deliveryOrder: true } },
+            sale: { include: { customer: true, deliveryOrder: true, items: { include: { invoiceApplications: { include: { invoiceSaleDocument: { include: { invoice: true } } } } } } } },
             billingRequestDocuments: { where: { reversedAt: null }, include: { billingRequest: { select: { status: true } } } },
             invoiceDocuments: { where: { reversedAt: null }, include: { invoice: { select: { status: true } } } },
           },
@@ -231,18 +234,33 @@ export class BillingRequestsService {
           const record = records.find((candidate) => candidate.id === item.saleDocumentId)!;
           if (record.sale.status !== SaleStatus.CONFIRMED) throw new BadRequestException('SALE_NOT_CONFIRMED');
           if (record.status === 'CANCELLED') throw new BadRequestException('DOCUMENT_CANCELLED');
-          if (!['SIMPLE_NOTE', 'LARGE_NOTE'].includes(record.documentType)) throw new BadRequestException('DOCUMENT_TYPE_NOT_BILLABLE');
-          if (record.sale.deliveryOrder && record.sale.deliveryOrder.status !== 'DELIVERED') throw new BadRequestException('DELIVERY_PENDING');
           const subtotal = new Prisma.Decimal(item.requestedSubtotal);
           const tax = new Prisma.Decimal(item.requestedTax);
           const total = new Prisma.Decimal(item.requestedTotal);
           if (!subtotal.plus(tax).equals(total)) throw new BadRequestException('INVALID_REQUESTED_AMOUNT');
           if (subtotal.greaterThan(record.sale.subtotal.minus(record.sale.discount)) || tax.greaterThan(record.sale.tax)) throw new BadRequestException('INVALID_REQUESTED_TAX_BREAKDOWN');
+          if (item.items) {
+            const selectedIds = item.items.map((selected) => selected.saleItemId);
+            if (new Set(selectedIds).size !== selectedIds.length) throw new BadRequestException('items must not contain duplicates');
+            const selectedItems = record.sale.items.filter((saleItem) => selectedIds.includes(saleItem.id));
+            if (selectedItems.length !== selectedIds.length) throw new BadRequestException('INVALID_SALE_ITEM_SELECTION');
+            const pendingFor = (saleItem: typeof selectedItems[number], field: 'subtotalApplied' | 'taxApplied' | 'totalApplied', original: Prisma.Decimal) => {
+              const applied = saleItem.invoiceApplications
+                .filter((application) => !application.reversedAt && !application.invoiceSaleDocument.reversedAt && application.invoiceSaleDocument.invoice.status === InvoiceStatus.ACTIVE)
+                .reduce((sum, application) => sum.plus(application[field]), new Prisma.Decimal(0));
+              return Prisma.Decimal.max(new Prisma.Decimal(0), original.minus(applied));
+            };
+            const exactSubtotal = selectedItems.reduce((sum, saleItem) => sum.plus(pendingFor(saleItem, 'subtotalApplied', saleItem.taxableBase)), new Prisma.Decimal(0));
+            const exactTax = selectedItems.reduce((sum, saleItem) => sum.plus(pendingFor(saleItem, 'taxApplied', saleItem.tax)), new Prisma.Decimal(0));
+            const exactTotal = selectedItems.reduce((sum, saleItem) => sum.plus(pendingFor(saleItem, 'totalApplied', saleItem.total)), new Prisma.Decimal(0));
+            if (!subtotal.equals(exactSubtotal) || !tax.equals(exactTax) || !total.equals(exactTotal)) throw new BadRequestException('INVALID_REQUESTED_ITEM_BREAKDOWN');
+          }
           const activeRequested = record.billingRequestDocuments.filter((entry) => !['REJECTED', 'CANCELLED'].includes(entry.billingRequest.status)).reduce((sum, entry) => sum.plus(entry.requestedTotal), new Prisma.Decimal(0));
           const activeInvoiced = record.invoiceDocuments.filter((entry) => entry.invoice.status === 'ACTIVE').reduce((sum, entry) => sum.plus(entry.totalApplied), new Prisma.Decimal(0));
           try { validateRequestedAmount(total, record.sale.total.minus(activeRequested).minus(activeInvoiced)); }
           catch (error) { if (error instanceof BillingBalanceError) throw new ConflictException(error.code); throw error; }
         }
+        await this.assertDocumentsRequestable(tx, ids);
 
         if (dto.retryOfBillingRequestId) {
           const previous = await tx.billingRequest.findUnique({ where: { id: dto.retryOfBillingRequestId }, select: { status: true, customerId: true } });
@@ -261,6 +279,7 @@ export class BillingRequestsService {
         for (const item of normalized) await tx.billingRequestSaleDocument.create({ data: {
           billingRequestId: created.id, saleDocumentId: item.saleDocumentId,
           requestedSubtotal: new Prisma.Decimal(item.requestedSubtotal), requestedTax: new Prisma.Decimal(item.requestedTax), requestedTotal: new Prisma.Decimal(item.requestedTotal), createdByUserId: actor.id,
+          selectedSaleItemIds: item.items?.map((selected) => selected.saleItemId) ?? [],
         } });
         await this.writeAudit(tx, actor, 'BILLING_REQUEST_CREATED', 'BillingRequest', created.id, {
           after: this.toAuditJson({ status: created.status, customerId: created.customerId, documents: normalized }),
@@ -281,6 +300,10 @@ export class BillingRequestsService {
 
   approve(id: string, dto: ReviewBillingRequestDto, actor: Actor) {
     return this.reviewCommand(id, BillingRequestStatus.APPROVED, dto, actor);
+  }
+
+  startReview(id: string, dto: ReviewBillingRequestDto, actor: Actor) {
+    return this.reviewCommand(id, BillingRequestStatus.IN_REVIEW, dto, actor);
   }
 
   reject(id: string, dto: ReviewBillingRequestDto, actor: Actor) {
@@ -366,6 +389,8 @@ export class BillingRequestsService {
 
   async linkInvoice(id: string, dto: LinkInvoiceDto, actor: Actor, idempotencyKey: string) {
     const normalizedApplications = [...dto.applications].sort((a, b) => a.saleDocumentId.localeCompare(b.saleDocumentId));
+    const substitutionReason = dto.invoice?.substitutesInvoiceId ? dto.invoice.substitutionReason?.trim() : undefined;
+    if (dto.invoice?.substitutesInvoiceId && !substitutionReason) throw new BadRequestException('SUBSTITUTION_REASON_REQUIRED');
     const payloadHash = createHash('sha256').update(JSON.stringify({ id, expectedVersion: dto.expectedVersion, invoiceId: dto.invoiceId ?? null, invoice: dto.invoice ?? null, applications: normalizedApplications })).digest('hex');
 
     try {
@@ -379,7 +404,10 @@ export class BillingRequestsService {
         await tx.$queryRaw`SELECT "id" FROM "BillingRequest" WHERE "id" = ${id} FOR UPDATE`;
         const request = await tx.billingRequest.findUnique({
           where: { id },
-          include: { documents: { where: { reversedAt: null }, include: { saleDocument: { include: { sale: { include: { items: true } }, invoiceDocuments: { where: { reversedAt: null }, include: { invoice: { select: { id: true, status: true } } } } } } } } },
+          include: { documents: { where: { reversedAt: null }, include: {
+            invoiceApplications: { where: { reversedAt: null }, include: { invoice: { select: { id: true, status: true } } } },
+            saleDocument: { include: { sale: { include: { items: true } }, invoiceDocuments: { where: { reversedAt: null }, include: { invoice: { select: { id: true, status: true } } } } } },
+          } } },
         });
         if (!request) throw new NotFoundException('Billing request not found');
         if (request.version !== dto.expectedVersion) throw new ConflictException('VERSION_CONFLICT');
@@ -392,6 +420,18 @@ export class BillingRequestsService {
         await tx.$queryRaw`SELECT "id" FROM "SaleDocument" WHERE "id" IN (${Prisma.join(documentIds)}) ORDER BY "id" FOR UPDATE`;
 
         const firstSale = requestDocuments.get(normalizedApplications[0].saleDocumentId)!.saleDocument.sale;
+        let originalInvoice: SubstitutionInvoice | null = null;
+        if (dto.invoice?.substitutesInvoiceId) {
+          await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${dto.invoice.substitutesInvoiceId} FOR UPDATE`;
+          originalInvoice = await tx.invoice.findUnique({
+            where: { id: dto.invoice.substitutesInvoiceId },
+            include: { documents: { where: { reversedAt: null }, include: { itemApplications: { where: { reversedAt: null } } } } },
+          });
+          if (!originalInvoice || originalInvoice.status !== InvoiceStatus.ACTIVE || originalInvoice.substitutedByInvoiceId) throw new BadRequestException('INVOICE_TO_REPLACE_NOT_ACTIVE');
+          if (originalInvoice.legalEntityId !== dto.invoice.legalEntityId) throw new BadRequestException('SUBSTITUTION_LEGAL_ENTITY_MISMATCH');
+          if (originalInvoice.currencyCode !== dto.invoice.currencyCode) throw new BadRequestException('SUBSTITUTION_CURRENCY_MISMATCH');
+          if (!this.hasEquivalentApplications(originalInvoice.documents, normalizedApplications)) throw new BadRequestException('SUBSTITUTION_APPLICATION_MISMATCH');
+        }
         const sum = (values: Prisma.Decimal[]) => values.reduce((total, value) => total.plus(value), new Prisma.Decimal(0));
         for (const application of normalizedApplications) {
           const relation = requestDocuments.get(application.saleDocumentId)!;
@@ -408,8 +448,11 @@ export class BillingRequestsService {
           if (!itemSubtotal.equals(subtotal) || !itemTax.equals(tax) || !itemTotal.equals(total)) throw new BadRequestException('ITEM_APPLICATION_MISMATCH');
           const saleItemIds = new Set(sale.items.map((item) => item.id));
           if (new Set(application.items.map((item) => item.saleItemId)).size !== application.items.length || application.items.some((item) => !saleItemIds.has(item.saleItemId))) throw new BadRequestException('INVALID_SALE_ITEM_APPLICATION');
-          if (total.greaterThan(relation.requestedTotal)) throw new ConflictException('OVER_INVOICED');
-          const activeInvoiced = sum(relation.saleDocument.invoiceDocuments.filter((entry) => entry.invoice.status === InvoiceStatus.ACTIVE).map((entry) => entry.totalApplied));
+          const consumedFromRequest = sum((relation.invoiceApplications ?? [])
+            .filter((entry) => entry.invoice.status === InvoiceStatus.ACTIVE && (!originalInvoice || entry.invoice.id !== originalInvoice.id))
+            .map((entry) => entry.totalApplied));
+          if (total.greaterThan(Prisma.Decimal.max(new Prisma.Decimal(0), relation.requestedTotal.minus(consumedFromRequest)))) throw new ConflictException('OVER_INVOICED');
+          const activeInvoiced = sum(relation.saleDocument.invoiceDocuments.filter((entry) => entry.invoice.status === InvoiceStatus.ACTIVE && (!originalInvoice || entry.invoice.id !== originalInvoice.id)).map((entry) => entry.totalApplied));
           if (total.greaterThan(sale.total.minus(activeInvoiced))) throw new ConflictException('OVER_INVOICED');
         }
 
@@ -418,7 +461,11 @@ export class BillingRequestsService {
         const appliedTotal = sum(normalizedApplications.map((item) => new Prisma.Decimal(item.totalApplied)));
         let invoice;
         if (dto.invoiceId) {
-          invoice = await tx.invoice.findUnique({ where: { id: dto.invoiceId } });
+          await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${dto.invoiceId} FOR UPDATE`;
+          invoice = await tx.invoice.findUnique({
+            where: { id: dto.invoiceId },
+            include: { documents: { where: { reversedAt: null } } },
+          });
           if (!invoice) throw new NotFoundException('Invoice not found');
           if (invoice.status !== InvoiceStatus.ACTIVE) throw new BadRequestException('INVOICE_NOT_ACTIVE');
           if (invoice.legalEntityId !== firstSale.legalEntityId) throw new BadRequestException('MIXED_LEGAL_ENTITIES');
@@ -431,16 +478,19 @@ export class BillingRequestsService {
           const invoiceSubtotal = new Prisma.Decimal(external.subtotal).minus(external.discount);
           if (!appliedSubtotal.equals(invoiceSubtotal) || !appliedTax.equals(external.tax) || !appliedTotal.equals(external.total)) throw new BadRequestException('INVOICE_TOTAL_MISMATCH');
           invoice = await tx.invoice.create({ data: { legalEntityId: external.legalEntityId, currencyCode: external.currencyCode, series: external.series, folio: external.folio, uuid: external.uuid, subtotal: new Prisma.Decimal(external.subtotal), discount: new Prisma.Decimal(external.discount), tax: new Prisma.Decimal(external.tax), total: new Prisma.Decimal(external.total), createdByUserId: actor.id, linkIdempotencyKey: idempotencyKey, linkPayloadHash: payloadHash } });
-          if (external.substitutesInvoiceId) {
-            const original = await tx.invoice.findUnique({ where: { id: external.substitutesInvoiceId } });
-            if (!original || original.status !== InvoiceStatus.ACTIVE) throw new BadRequestException('INVOICE_TO_REPLACE_NOT_ACTIVE');
-            await tx.invoice.update({ where: { id: original.id, version: original.version }, data: { status: InvoiceStatus.SUBSTITUTED, substitutedByInvoiceId: invoice.id, version: { increment: 1 } } });
+          if (originalInvoice) {
+            await tx.invoice.update({ where: { id: originalInvoice.id, version: originalInvoice.version }, data: { status: InvoiceStatus.SUBSTITUTED, substitutedByInvoiceId: invoice.id, version: { increment: 1 } } });
           }
         }
-        if (!appliedSubtotal.equals(invoice.subtotal.minus(invoice.discount)) || !appliedTax.equals(invoice.tax) || !appliedTotal.equals(invoice.total)) throw new BadRequestException('INVOICE_TOTAL_MISMATCH');
+        const existingApplications = dto.invoiceId ? (invoice.documents ?? []) : [];
+        const totalSubtotalApplied = sum(existingApplications.map((item) => item.subtotalApplied)).plus(appliedSubtotal);
+        const totalTaxApplied = sum(existingApplications.map((item) => item.taxApplied)).plus(appliedTax);
+        const totalApplied = sum(existingApplications.map((item) => item.totalApplied)).plus(appliedTotal);
+        if (!totalSubtotalApplied.equals(invoice.subtotal.minus(invoice.discount)) || !totalTaxApplied.equals(invoice.tax) || !totalApplied.equals(invoice.total)) throw new BadRequestException('INVOICE_TOTAL_MISMATCH');
 
         for (const application of normalizedApplications) {
-          const documentApplication = await tx.invoiceSaleDocument.create({ data: { invoiceId: invoice.id, saleDocumentId: application.saleDocumentId, subtotalApplied: new Prisma.Decimal(application.subtotalApplied), taxApplied: new Prisma.Decimal(application.taxApplied), totalApplied: new Prisma.Decimal(application.totalApplied), createdByUserId: actor.id } });
+          const requestDocument = requestDocuments.get(application.saleDocumentId)!;
+          const documentApplication = await tx.invoiceSaleDocument.create({ data: { invoiceId: invoice.id, saleDocumentId: application.saleDocumentId, billingRequestSaleDocumentId: requestDocument.id, subtotalApplied: new Prisma.Decimal(application.subtotalApplied), taxApplied: new Prisma.Decimal(application.taxApplied), totalApplied: new Prisma.Decimal(application.totalApplied), createdByUserId: actor.id } });
           for (const item of application.items) await tx.invoiceSaleItemApplication.create({ data: { invoiceSaleDocumentId: documentApplication.id, saleItemId: item.saleItemId, subtotalApplied: new Prisma.Decimal(item.subtotalApplied), taxApplied: new Prisma.Decimal(item.taxApplied), totalApplied: new Prisma.Decimal(item.totalApplied), createdByUserId: actor.id } });
         }
         await tx.billingRequest.update({ where: { id, version: dto.expectedVersion }, data: { version: { increment: 1 } } });
@@ -456,7 +506,9 @@ export class BillingRequestsService {
         });
         if (dto.invoice?.substitutesInvoiceId) {
           await this.writeAudit(tx, actor, 'INVOICE_SUBSTITUTED', 'Invoice', dto.invoice.substitutesInvoiceId, {
+            before: { status: InvoiceStatus.ACTIVE, version: originalInvoice?.version },
             after: { substitutedByInvoiceId: invoice.id },
+            reason: substitutionReason,
             correlationId: idempotencyKey,
             context: { billingRequestId: id },
           });
@@ -467,6 +519,43 @@ export class BillingRequestsService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('IDEMPOTENCY_CONFLICT');
       throw error;
     }
+  }
+
+  private hasEquivalentApplications(
+    originalDocuments: unknown[] | undefined,
+    replacementApplications: InvoiceSaleDocumentApplicationDto[],
+  ): boolean {
+    const amount = (value: Prisma.Decimal | string) => new Prisma.Decimal(value).toFixed(2);
+    const canonicalReplacement = replacementApplications.map((document) => ({
+      saleDocumentId: document.saleDocumentId,
+      subtotalApplied: amount(document.subtotalApplied), taxApplied: amount(document.taxApplied), totalApplied: amount(document.totalApplied),
+      items: [...document.items].sort((a, b) => a.saleItemId.localeCompare(b.saleItemId)).map((item) => ({
+        saleItemId: item.saleItemId, subtotalApplied: amount(item.subtotalApplied), taxApplied: amount(item.taxApplied), totalApplied: amount(item.totalApplied),
+      })),
+    })).sort((a, b) => a.saleDocumentId.localeCompare(b.saleDocumentId));
+    const canonicalOriginal = (originalDocuments ?? []).map((value) => {
+      const document = value as { saleDocumentId: string; subtotalApplied: Prisma.Decimal; taxApplied: Prisma.Decimal; totalApplied: Prisma.Decimal; itemApplications: Array<{ saleItemId: string; subtotalApplied: Prisma.Decimal; taxApplied: Prisma.Decimal; totalApplied: Prisma.Decimal }> };
+      return {
+        saleDocumentId: document.saleDocumentId,
+        subtotalApplied: amount(document.subtotalApplied), taxApplied: amount(document.taxApplied), totalApplied: amount(document.totalApplied),
+        items: [...document.itemApplications].sort((a, b) => a.saleItemId.localeCompare(b.saleItemId)).map((item) => ({
+          saleItemId: item.saleItemId, subtotalApplied: amount(item.subtotalApplied), taxApplied: amount(item.taxApplied), totalApplied: amount(item.totalApplied),
+        })),
+      };
+    }).sort((a, b) => a.saleDocumentId.localeCompare(b.saleDocumentId));
+    return JSON.stringify(canonicalOriginal) === JSON.stringify(canonicalReplacement);
+  }
+
+  private async assertDocumentsRequestable(tx: Prisma.TransactionClient, ids: string[]): Promise<void> {
+    const rows = await tx.$queryRaw<Array<{ saleDocumentId: string; billingStatus: string; blockingCodes: string[] }>>`
+      SELECT "saleDocumentId", "billingStatus", "blockingCodes"
+      FROM "BillingReportableNoteReadModel"
+      WHERE "saleDocumentId" IN (${Prisma.join([...ids].sort())})
+    `;
+    if (ids.some((id) => !rows.some((row) => row.saleDocumentId === id))) throw new BadRequestException('BILLING_READ_MODEL_INCOMPLETE');
+    const requestable = new Set(['BILLABLE', 'REQUESTED', 'IN_PROCESS', 'PARTIALLY_INVOICED']);
+    const blocked = rows.find((row) => ids.includes(row.saleDocumentId) && !requestable.has(row.billingStatus));
+    if (blocked) throw new BadRequestException(blocked.blockingCodes[0] ?? 'BILLING_DOCUMENT_NOT_REQUESTABLE');
   }
 
   private async reviewCommand(id: string, nextStatus: BillingRequestStatus, dto: ReviewBillingRequestDto, actor: Actor) {

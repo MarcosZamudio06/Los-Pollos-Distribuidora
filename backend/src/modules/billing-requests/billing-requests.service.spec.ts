@@ -21,7 +21,10 @@ function request(overrides: Record<string, unknown> = {}) {
 
 function createPrisma() {
   const tx = {
-    $queryRaw: jest.fn(),
+    $queryRaw: jest.fn().mockResolvedValue([
+        { saleDocumentId: 'document-1', billingStatus: 'BILLABLE', blockingCodes: [] },
+        { saleDocumentId: 'document-2', billingStatus: 'BILLABLE', blockingCodes: [] },
+      ]),
     sale: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     saleDocument: { findMany: jest.fn() },
     billingRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
@@ -31,6 +34,10 @@ function createPrisma() {
     invoice: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     invoiceSaleDocument: { create: jest.fn() },
     invoiceSaleItemApplication: { create: jest.fn() },
+    billingPolicy: { findUnique: jest.fn().mockResolvedValue({
+      id: 'default', billableDocumentTypes: ['SIMPLE_NOTE', 'LARGE_NOTE'], allowInternalReceipt: false,
+      requireConfirmedDelivery: false, deadlineDays: 30, deadlineBasis: 'ISSUED_AT', timezone: 'America/Mexico_City',
+    }) },
     billingAuditLog: { create: jest.fn() },
     payment: { create: jest.fn(), update: jest.fn() },
     inventoryMovement: { create: jest.fn(), update: jest.fn() },
@@ -47,9 +54,11 @@ function createPrisma() {
 
 const documentRecord = {
   id: 'document-1', documentType: 'SIMPLE_NOTE', status: 'ISSUED',
+  createdAt: now,
   sale: {
     id: 'sale-1', customerId: 'customer-1', userId: 'seller-1', status: SaleStatus.CONFIRMED,
     currencyCode: 'MXN', legalEntityId: 'legal-1', subtotal: new Prisma.Decimal(90), discount: new Prisma.Decimal(0), tax: new Prisma.Decimal(10), total: new Prisma.Decimal(100),
+    items: [{ id: 'item-1', taxableBase: new Prisma.Decimal(90), tax: new Prisma.Decimal(10), total: new Prisma.Decimal(100), invoiceApplications: [] }],
     customer: { id: 'customer-1', isActive: true, taxId: 'XAXX010101000', fiscalName: 'Cliente Uno', fiscalPostalCode: '64000', fiscalRegime: '601', fiscalUseCode: 'G03', billingEmail: 'billing@example.com' },
     deliveryOrder: null,
   },
@@ -57,6 +66,24 @@ const documentRecord = {
 };
 
 describe('BillingRequestsService', () => {
+  it('loads request documents with sale items required for invoice reconciliation', async () => {
+    const { prisma } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    prisma.billingRequest.findFirst.mockResolvedValue(request());
+
+    await service.findOne('request-1', admin);
+
+    expect(prisma.billingRequest.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        documents: expect.objectContaining({
+          include: expect.objectContaining({
+            saleDocument: expect.objectContaining({ include: expect.objectContaining({ sale: expect.objectContaining({ include: { items: true } }) }) }),
+          }),
+        }),
+      }),
+    }));
+  });
+
   it('links an external invoice with exact document and item applications', async () => {
     const { prisma, tx } = createPrisma();
     const service = new BillingRequestsService(prisma as unknown as PrismaService);
@@ -64,11 +91,16 @@ describe('BillingRequestsService', () => {
     tx.invoice.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(invoice);
     tx.invoice.create.mockResolvedValue(invoice);
     tx.invoiceSaleDocument.create.mockResolvedValue({ id: 'invoice-document-1' });
-    tx.billingRequest.findUnique.mockResolvedValue({ id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED, documents: [{ saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100), saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }] });
+    tx.billingRequest.findUnique.mockResolvedValue({ id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED, documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100), invoiceApplications: [], saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }] });
 
     await service.linkInvoice('request-1', { expectedVersion: 1, invoice: { legalEntityId: 'legal-1', currencyCode: 'MXN', series: 'A', folio: '1', subtotal: '90.00', discount: '0.00', tax: '10.00', total: '100.00' }, applications: [{ saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00', items: [{ saleItemId: 'item-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00' }] }] }, admin, 'link-key');
 
     expect(tx.invoice.create).toHaveBeenCalledWith({ data: expect.objectContaining({ linkIdempotencyKey: 'link-key', total: new Prisma.Decimal(100) }) });
+    expect(tx.invoiceSaleDocument.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      billingRequestSaleDocumentId: 'request-document-1',
+      saleDocumentId: 'document-1',
+      totalApplied: new Prisma.Decimal(100),
+    }) });
     expect(tx.invoiceSaleItemApplication.create).toHaveBeenCalledWith({ data: expect.objectContaining({ saleItemId: 'item-1', totalApplied: new Prisma.Decimal(100) }) });
     expect(tx.billingRequest.update).toHaveBeenCalledWith({ where: { id: 'request-1', version: 1 }, data: { version: { increment: 1 } } });
     expect(tx.billingAuditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'INVOICE_LINKED', actorUserId: 'admin-1', entityId: 'invoice-1' }) });
@@ -114,10 +146,82 @@ describe('BillingRequestsService', () => {
     expect(tx.billingAuditLog.create).not.toHaveBeenCalled();
   });
 
+  it('rejects an application that exceeds the unconsumed request balance', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.invoice.findUnique.mockResolvedValue(null);
+    tx.billingRequest.findUnique.mockResolvedValue({
+      id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
+      documents: [{
+        id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(50),
+        invoiceApplications: [{ totalApplied: new Prisma.Decimal(30), invoice: { status: 'ACTIVE' } }],
+        saleDocument: {
+          id: 'document-1', invoiceDocuments: [{ totalApplied: new Prisma.Decimal(30), invoice: { id: 'invoice-existing', status: 'ACTIVE' } }],
+          sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(200), items: [{ id: 'item-1' }] },
+        },
+      }],
+    });
+
+    await expect(service.linkInvoice('request-1', {
+      expectedVersion: 1,
+      invoiceId: 'invoice-2',
+      applications: [{
+        saleDocumentId: 'document-1', subtotalApplied: '27.00', taxApplied: '3.00', totalApplied: '30.00',
+        items: [{ saleItemId: 'item-1', subtotalApplied: '27.00', taxApplied: '3.00', totalApplied: '30.00' }],
+      }],
+    }, admin, 'over-request-balance')).rejects.toThrow('OVER_INVOICED');
+
+    expect(tx.invoiceSaleDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects linking an existing invoice when prior and new applications exceed its totals', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    const invoice = {
+      id: 'invoice-1', legalEntityId: 'legal-1', currencyCode: 'MXN',
+      subtotal: new Prisma.Decimal(900), discount: new Prisma.Decimal(0),
+      tax: new Prisma.Decimal(100), total: new Prisma.Decimal(1000), status: 'ACTIVE',
+      documents: [{
+        subtotalApplied: new Prisma.Decimal(900), taxApplied: new Prisma.Decimal(100),
+        totalApplied: new Prisma.Decimal(1000), reversedAt: null,
+      }],
+    };
+    tx.invoice.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(invoice);
+    tx.billingRequest.findUnique.mockResolvedValue({
+      id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
+      documents: [{
+        id: 'request-document-2', saleDocumentId: 'document-2', requestedTotal: new Prisma.Decimal(1000),
+        invoiceApplications: [],
+        saleDocument: {
+          id: 'document-2', invoiceDocuments: [],
+          sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(1000), items: [{ id: 'item-2' }] },
+        },
+      }],
+    });
+
+    await expect(service.linkInvoice('request-1', {
+      expectedVersion: 1,
+      invoiceId: 'invoice-1',
+      applications: [{
+        saleDocumentId: 'document-2', subtotalApplied: '900.00', taxApplied: '100.00', totalApplied: '1000.00',
+        items: [{ saleItemId: 'item-2', subtotalApplied: '900.00', taxApplied: '100.00', totalApplied: '1000.00' }],
+      }],
+    }, admin, 'existing-invoice-over-total')).rejects.toThrow('INVOICE_TOTAL_MISMATCH');
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+    expect(tx.invoiceSaleDocument.create).not.toHaveBeenCalled();
+  });
+
   it('records substitution without creating sales, payments, or inventory movements', async () => {
     const { prisma, tx } = createPrisma();
     const service = new BillingRequestsService(prisma as unknown as PrismaService);
-    const original = { id: 'invoice-old', status: 'ACTIVE', version: 3 };
+    const original = {
+      id: 'invoice-old', status: 'ACTIVE', version: 3, legalEntityId: 'legal-1', currencyCode: 'MXN', substitutedByInvoiceId: null,
+      documents: [{
+        saleDocumentId: 'document-1', subtotalApplied: new Prisma.Decimal(90), taxApplied: new Prisma.Decimal(10), totalApplied: new Prisma.Decimal(100),
+        itemApplications: [{ saleItemId: 'item-1', subtotalApplied: new Prisma.Decimal(90), taxApplied: new Prisma.Decimal(10), totalApplied: new Prisma.Decimal(100) }],
+      }],
+    };
     const replacement = {
       id: 'invoice-new', legalEntityId: 'legal-1', currencyCode: 'MXN',
       subtotal: new Prisma.Decimal(90), discount: new Prisma.Decimal(0),
@@ -133,7 +237,8 @@ describe('BillingRequestsService', () => {
       id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
       documents: [{
         saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100),
-        saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } },
+        invoiceApplications: [{ totalApplied: new Prisma.Decimal(100), invoice: { id: 'invoice-old', status: 'ACTIVE' } }],
+        saleDocument: { id: 'document-1', invoiceDocuments: [{ totalApplied: new Prisma.Decimal(100), invoice: { id: 'invoice-old', status: 'ACTIVE' } }], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } },
       }],
     });
 
@@ -143,6 +248,7 @@ describe('BillingRequestsService', () => {
         legalEntityId: 'legal-1', currencyCode: 'MXN', series: 'B', folio: '2',
         subtotal: '90.00', discount: '0.00', tax: '10.00', total: '100.00',
         substitutesInvoiceId: 'invoice-old',
+        substitutionReason: 'Correct external invoice data',
       },
       applications: [{
         saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00',
@@ -154,8 +260,9 @@ describe('BillingRequestsService', () => {
       where: { id: 'invoice-old', version: 3 },
       data: { status: 'SUBSTITUTED', substitutedByInvoiceId: 'invoice-new', version: { increment: 1 } },
     });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
     expect(tx.billingAuditLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ action: 'INVOICE_SUBSTITUTED', entityId: 'invoice-old' }),
+      data: expect.objectContaining({ action: 'INVOICE_SUBSTITUTED', entityId: 'invoice-old', reason: 'Correct external invoice data' }),
     });
     expect(tx.sale.create).not.toHaveBeenCalled();
     expect(tx.sale.update).not.toHaveBeenCalled();
@@ -165,6 +272,48 @@ describe('BillingRequestsService', () => {
     expect(tx.inventoryMovement.update).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['issuer', { legalEntityId: 'legal-2' }, 'SUBSTITUTION_LEGAL_ENTITY_MISMATCH'],
+    ['currency', { currencyCode: 'USD' }, 'SUBSTITUTION_CURRENCY_MISMATCH'],
+  ])('rejects a replacement with a different %s', async (_field, originalOverride, errorCode) => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.invoice.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'invoice-old', status: 'ACTIVE', version: 3, substitutedByInvoiceId: null,
+      legalEntityId: 'legal-1', currencyCode: 'MXN', documents: [], ...originalOverride,
+    });
+    tx.billingRequest.findUnique.mockResolvedValue({
+      id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
+      documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100), invoiceApplications: [], saleDocument: { invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }],
+    });
+
+    await expect(service.linkInvoice('request-1', {
+      expectedVersion: 1,
+      invoice: { legalEntityId: 'legal-1', currencyCode: 'MXN', series: 'B', folio: '2', subtotal: '90.00', discount: '0.00', tax: '10.00', total: '100.00', substitutesInvoiceId: 'invoice-old', substitutionReason: 'Correction' },
+      applications: [{ saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00', items: [{ saleItemId: 'item-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00' }] }],
+    }, admin, `mismatch-${_field}`)).rejects.toThrow(errorCode);
+    expect(tx.invoice.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a replacement whose document or item applications differ from the original', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.invoice.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'invoice-old', status: 'ACTIVE', version: 3, substitutedByInvoiceId: null, legalEntityId: 'legal-1', currencyCode: 'MXN',
+      documents: [{ saleDocumentId: 'different-document', subtotalApplied: new Prisma.Decimal(90), taxApplied: new Prisma.Decimal(10), totalApplied: new Prisma.Decimal(100), itemApplications: [] }],
+    });
+    tx.billingRequest.findUnique.mockResolvedValue({
+      id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
+      documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100), invoiceApplications: [], saleDocument: { invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }],
+    });
+    await expect(service.linkInvoice('request-1', {
+      expectedVersion: 1,
+      invoice: { legalEntityId: 'legal-1', currencyCode: 'MXN', series: 'B', folio: '2', subtotal: '90.00', discount: '0.00', tax: '10.00', total: '100.00', substitutesInvoiceId: 'invoice-old', substitutionReason: 'Correction' },
+      applications: [{ saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00', items: [{ saleItemId: 'item-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00' }] }],
+    }, admin, 'application-mismatch')).rejects.toThrow('SUBSTITUTION_APPLICATION_MISMATCH');
+    expect(tx.invoice.create).not.toHaveBeenCalled();
+  });
+
   it('creates a request only for a confirmed customer sale and links an existing receivable', async () => {
     const { prisma, tx } = createPrisma();
     const service = new BillingRequestsService(prisma as unknown as PrismaService);
@@ -172,7 +321,7 @@ describe('BillingRequestsService', () => {
       id: 'sale-1', customerId: 'customer-1', userId: 'seller-1', status: SaleStatus.CONFIRMED,
       documentType: 'SIMPLE_NOTE', subtotal: { minus: () => 100 }, discount: 0, tax: 0, total: 100,
       billingRequests: [], accountReceivable: { id: 'ar-1' },
-      documents: [{ id: 'document-1', documentType: 'SIMPLE_NOTE' }],
+      documents: [{ id: 'document-1', documentType: 'SIMPLE_NOTE', createdAt: now }], deliveryOrder: null,
     });
     tx.billingRequest.create.mockResolvedValue(request());
     tx.billingRequest.update.mockResolvedValue(request());
@@ -199,14 +348,46 @@ describe('BillingRequestsService', () => {
 
     await service.create({
       customerId: 'customer-1', reason: 'Grouped request', documents: [
-        { saleDocumentId: 'document-2', requestedSubtotal: '45.00', requestedTax: '5.00', requestedTotal: '50.00' },
-        { saleDocumentId: 'document-1', requestedSubtotal: '90.00', requestedTax: '10.00', requestedTotal: '100.00' },
+        { saleDocumentId: 'document-2', requestedSubtotal: '90.00', requestedTax: '10.00', requestedTotal: '100.00', items: [{ saleItemId: 'item-1' }] },
+        { saleDocumentId: 'document-1', requestedSubtotal: '90.00', requestedTax: '10.00', requestedTotal: '100.00', items: [{ saleItemId: 'item-1' }] },
       ],
     }, seller, 'grouped-key');
 
     expect(tx.$queryRaw).toHaveBeenCalled();
     expect(tx.billingRequestSaleDocument.create).toHaveBeenCalledTimes(2);
+    expect(tx.billingRequestSaleDocument.create).toHaveBeenCalledWith({ data: expect.objectContaining({ selectedSaleItemIds: ['item-1'], requestedSubtotal: new Prisma.Decimal(90), requestedTax: new Prisma.Decimal(10) }) });
     expect(tx.billingRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ saleId: null, creationIdempotencyKey: 'grouped-key' }) }));
+  });
+
+  it('rejects a document amount that does not equal the exact selected item breakdown', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.saleDocument.findMany.mockResolvedValue([documentRecord]);
+    tx.billingRequest.findUnique.mockResolvedValue(null);
+
+    await expect(service.create({ customerId: 'customer-1', reason: 'Incorrect tax split', documents: [{
+      saleDocumentId: 'document-1', items: [{ saleItemId: 'item-1' }],
+      requestedSubtotal: '80.00', requestedTax: '10.00', requestedTotal: '90.00',
+    }] }, seller, 'invalid-item-breakdown')).rejects.toThrow('INVALID_REQUESTED_ITEM_BREAKDOWN');
+
+    expect(tx.billingRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('uses the canonical read model for internal receipt, delivery, and deadline rules', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.billingPolicy.findUnique.mockResolvedValue({
+      id: 'default', billableDocumentTypes: ['INTERNAL_RECEIPT'], allowInternalReceipt: true,
+      requireConfirmedDelivery: false, deadlineDays: null, deadlineBasis: 'DELIVERED_AT', timezone: 'America/Cancun',
+    });
+    tx.saleDocument.findMany.mockResolvedValue([{ ...documentRecord, documentType: 'INTERNAL_RECEIPT' }]);
+    tx.billingRequest.findUnique.mockResolvedValueOnce(null).mockResolvedValue(request());
+    tx.billingRequest.create.mockResolvedValue(request());
+
+    await expect(service.create({ customerId: 'customer-1', reason: 'Configured policy', documents: [
+      { saleDocumentId: 'document-1', requestedSubtotal: '90', requestedTax: '10', requestedTotal: '100' },
+    ] }, seller, 'configured-policy')).resolves.toMatchObject({ id: 'request-1' });
+    expect(tx.$queryRaw.mock.calls.some(([query]) => JSON.stringify(query).includes('BillingReportableNoteReadModel'))).toBe(true);
   });
 
   it('rejects mixed issuers and incomplete fiscal profiles', async () => {
@@ -284,5 +465,18 @@ describe('BillingRequestsService', () => {
     await expect(service.update('request-1', { notes: 'Nota' }, seller)).rejects.toBeInstanceOf(ForbiddenException);
     tx.billingRequest.findUnique.mockResolvedValue(request());
     await expect(service.update('request-1', { status: BillingRequestStatus.IN_REVIEW }, seller)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('starts review through the explicit versioned and audited command', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.billingRequest.findUnique.mockResolvedValue(request({ version: 3, status: BillingRequestStatus.REQUESTED, creationIdempotencyKey: 'created-from-report', documents: [] }));
+    tx.billingRequest.update.mockResolvedValue(request({ version: 4, status: BillingRequestStatus.IN_REVIEW }));
+
+    await service.startReview('request-1', { expectedVersion: 3, reason: 'Validar expediente' }, admin);
+
+    expect(tx.billingRequest.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'request-1', version: 3 }, data: expect.objectContaining({ status: BillingRequestStatus.IN_REVIEW, version: { increment: 1 } }) }));
+    expect(tx.billingRequestHistory.create).toHaveBeenCalledWith({ data: expect.objectContaining({ fromStatus: 'REQUESTED', toStatus: 'IN_REVIEW', changedByUserId: 'admin-1' }) });
+    expect(tx.billingAuditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'BILLING_REQUEST_IN_REVIEW', actorUserId: 'admin-1' }) });
   });
 });

@@ -9,6 +9,7 @@ export const ROUTE_ACCESS_ROLES = {
   accountsReceivable: ['ADMIN', 'COLLECTIONS'],
   billingRequests: ['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS'],
   billingReportableNotes: ['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS'],
+  billingRemediations: ['ADMIN', 'BILLING'],
   admin: ['ADMIN'],
   customers: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   dashboard: ALL_ROLES,

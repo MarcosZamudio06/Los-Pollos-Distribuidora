@@ -19,7 +19,7 @@ export function billingRequestStatusTone(status: BillingRequestStatus): BadgeTon
 }
 
 export function availableBillingRequestActions(status: BillingRequestStatus, role?: string | null): BillingRequestStatus[] {
-  if (role !== 'ADMIN') return []
+  if (role !== 'ADMIN' && role !== 'BILLING') return []
   if (status === 'REQUESTED') return ['IN_REVIEW', 'CANCELLED']
   if (status === 'IN_REVIEW') return ['APPROVED', 'REJECTED', 'CANCELLED']
   return []

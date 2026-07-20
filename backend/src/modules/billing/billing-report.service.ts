@@ -17,6 +17,9 @@ type ReportRow = Record<string, unknown> & {
   activeRequested: DecimalLike;
   activeInvoiced: DecimalLike;
   pendingInvoice: DecimalLike;
+  pendingSubtotal: DecimalLike;
+  pendingTax: DecimalLike;
+  pendingTotal: DecimalLike;
   activePaid: DecimalLike;
   collectionBalance: DecimalLike;
   updatedAt?: Date | string | null;
@@ -30,6 +33,9 @@ const MONEY_FIELDS = [
   'activeRequested',
   'activeInvoiced',
   'pendingInvoice',
+  'pendingSubtotal',
+  'pendingTax',
+  'pendingTotal',
   'activePaid',
   'collectionBalance',
 ] as const;
@@ -74,7 +80,9 @@ export class BillingReportService {
         COALESCE(SUM("total"), 0) AS "totalBillable",
         COALESCE(SUM("activeRequested"), 0) AS "totalRequested",
         COALESCE(SUM("activeInvoiced"), 0) AS "totalInvoiced",
-        COALESCE(SUM("pendingInvoice"), 0) AS "totalPending"
+        COALESCE(SUM("pendingInvoice"), 0) AS "totalPending",
+        COALESCE(SUM("activePaid"), 0) AS "totalCollected",
+        COALESCE(SUM("collectionBalance"), 0) AS "totalReceivable"
       FROM filtered
     `);
     const total = Number(rows[0]?.totalCount ?? 0);
@@ -110,6 +118,8 @@ export class BillingReportService {
         COALESCE(SUM("activeRequested"), 0) AS "totalRequested",
         COALESCE(SUM("activeInvoiced"), 0) AS "totalInvoiced",
         COALESCE(SUM("pendingInvoice"), 0) AS "totalPending",
+        COALESCE(SUM("activePaid"), 0) AS "totalCollected",
+        COALESCE(SUM("collectionBalance"), 0) AS "totalReceivable",
         MAX("updatedAt") AS "dataAsOf"
       FROM filtered
     `);
@@ -139,9 +149,18 @@ export class BillingReportService {
           JOIN "BillingRequest" br ON br."id" = brd."billingRequestId" WHERE brd."saleDocumentId" = f."saleDocumentId"), '[]'::jsonb) AS requests,
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
           'id', i."id", 'series', i."series", 'folio', i."folio", 'uuid', i."uuid", 'status', i."status",
-          'totalApplied', idoc."totalApplied"::text, 'reversedAt', idoc."reversedAt"
+          'totalApplied', idoc."totalApplied"::text, 'reversedAt', idoc."reversedAt",
+          'cancelledAt', i."cancelledAt", 'substitutedByInvoiceId', i."substitutedByInvoiceId"
         ) ORDER BY i."createdAt" DESC) FROM "InvoiceSaleDocument" idoc
-          JOIN "Invoice" i ON i."id" = idoc."invoiceId" WHERE idoc."saleDocumentId" = f."saleDocumentId"), '[]'::jsonb) AS invoices,
+          JOIN "Invoice" i ON i."id" = idoc."invoiceId" WHERE idoc."saleDocumentId" = f."saleDocumentId"
+          AND idoc."reversedAt" IS NULL AND i."status" = 'ACTIVE'), '[]'::jsonb) AS "activeInvoices",
+        COALESCE((SELECT jsonb_agg(jsonb_build_object(
+          'id', i."id", 'series', i."series", 'folio', i."folio", 'uuid', i."uuid", 'status', i."status",
+          'totalApplied', idoc."totalApplied"::text, 'reversedAt', idoc."reversedAt", 'reversalReason', idoc."reversalReason",
+          'cancelledAt', i."cancelledAt", 'cancellationReason', i."cancellationReason", 'substitutedByInvoiceId', i."substitutedByInvoiceId"
+        ) ORDER BY i."createdAt" DESC) FROM "InvoiceSaleDocument" idoc
+          JOIN "Invoice" i ON i."id" = idoc."invoiceId" WHERE idoc."saleDocumentId" = f."saleDocumentId"
+          AND (idoc."reversedAt" IS NOT NULL OR i."status" <> 'ACTIVE')), '[]'::jsonb) AS "invoiceHistory",
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
           'id', p."id", 'amount', p."amount"::text, 'status', p."status", 'paymentMethod', p."paymentMethod", 'paidAt', p."paidAt"
         ) ORDER BY p."paidAt" DESC) FROM "Payment" p WHERE p."saleId" = f."saleId" OR p."accountReceivableId" IN
@@ -167,7 +186,8 @@ export class BillingReportService {
       ...item,
       items: rows[0].items ?? [],
       requests: rows[0].requests ?? [],
-      invoices: rows[0].invoices ?? [],
+      activeInvoices: rows[0].activeInvoices ?? [],
+      invoiceHistory: rows[0].invoiceHistory ?? [],
       payments: rows[0].payments ?? [],
       delivery: rows[0].delivery ?? null,
       audit: rows[0].audit ?? [],
@@ -190,9 +210,13 @@ export class BillingReportService {
       Record<string, unknown>[]
     >(Prisma.sql`
       ${filtered}
-      SELECT COUNT(*)::bigint AS "totalDocuments", COALESCE(SUM("total"), 0) AS "totalBillable",
+      SELECT COUNT(*)::bigint AS "totalDocuments",
+        COUNT(*) FILTER (WHERE "billingStatus" = 'BILLABLE')::bigint AS "billableDocuments",
+        COUNT(*) FILTER (WHERE "billingStatus" = 'BLOCKED')::bigint AS "blockedDocuments",
+        COALESCE(SUM("total"), 0) AS "totalBillable",
         COALESCE(SUM("activeRequested"), 0) AS "totalRequested", COALESCE(SUM("activeInvoiced"), 0) AS "totalInvoiced",
-        COALESCE(SUM("pendingInvoice"), 0) AS "totalPending" FROM filtered
+        COALESCE(SUM("pendingInvoice"), 0) AS "totalPending", COALESCE(SUM("activePaid"), 0) AS "totalCollected",
+        COALESCE(SUM("collectionBalance"), 0) AS "totalReceivable" FROM filtered
     `);
     const items = exported.map((row) => this.toItem(row, user));
     const filters = Object.fromEntries(
@@ -243,8 +267,11 @@ export class BillingReportService {
       conditions.push(Prisma.sql`b."sellerId" = ${user.id}`);
     if (query.dateFrom)
       conditions.push(Prisma.sql`b."issuedAt" >= ${new Date(query.dateFrom)}`);
-    if (query.dateTo)
-      conditions.push(Prisma.sql`b."issuedAt" <= ${new Date(query.dateTo)}`);
+    if (query.dateTo) {
+      const exclusiveDateTo = new Date(query.dateTo);
+      exclusiveDateTo.setUTCDate(exclusiveDateTo.getUTCDate() + 1);
+      conditions.push(Prisma.sql`b."issuedAt" < ${exclusiveDateTo}`);
+    }
     if (query.locationId)
       conditions.push(Prisma.sql`b."locationId" = ${query.locationId}`);
     if (query.customerId)
@@ -275,7 +302,7 @@ export class BillingReportService {
       );
     if (query.overdue !== undefined)
       conditions.push(
-        Prisma.sql`(b.deadline < CURRENT_TIMESTAMP) = ${query.overdue}`,
+        Prisma.sql`(b.deadline < (CURRENT_TIMESTAMP AT TIME ZONE b."policyTimezone")::date) = ${query.overdue}`,
       );
     if (query.blocked !== undefined)
       conditions.push(
@@ -287,7 +314,7 @@ export class BillingReportService {
       );
     if (query.uuid)
       conditions.push(
-        Prisma.sql`EXISTS (SELECT 1 FROM "InvoiceSaleDocument" ix JOIN "Invoice" i ON i."id" = ix."invoiceId" WHERE ix."saleDocumentId" = b."saleDocumentId" AND i."uuid" ILIKE ${`%${query.uuid}%`})`,
+        Prisma.sql`EXISTS (SELECT 1 FROM "InvoiceSaleDocument" ix JOIN "Invoice" i ON i."id" = ix."invoiceId" WHERE ix."saleDocumentId" = b."saleDocumentId" AND ix."reversedAt" IS NULL AND i."status" = 'ACTIVE' AND i."uuid" ILIKE ${`%${query.uuid}%`})`,
       );
     if (query.search) {
       const search = `%${query.search}%`;
@@ -299,71 +326,28 @@ export class BillingReportService {
       ? Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
       : Prisma.empty;
 
-    return Prisma.sql`
-      WITH request_totals AS (
-        SELECT brd."saleDocumentId", COALESCE(SUM(brd."requestedTotal") FILTER (
-          WHERE brd."reversedAt" IS NULL AND br."status" NOT IN ('REJECTED', 'CANCELLED')), 0) AS requested,
-          BOOL_OR(br."status" = 'REQUESTED' AND brd."reversedAt" IS NULL) AS requested_state,
-          BOOL_OR(br."status" IN ('IN_REVIEW', 'APPROVED') AND brd."reversedAt" IS NULL) AS process_state
-        FROM "BillingRequestSaleDocument" brd JOIN "BillingRequest" br ON br."id" = brd."billingRequestId"
-        GROUP BY brd."saleDocumentId"
-      ), invoice_totals AS (
-        SELECT idoc."saleDocumentId", COALESCE(SUM(idoc."totalApplied") FILTER (
-          WHERE idoc."reversedAt" IS NULL AND i."status" = 'ACTIVE'), 0) AS invoiced
-        FROM "InvoiceSaleDocument" idoc JOIN "Invoice" i ON i."id" = idoc."invoiceId"
-        GROUP BY idoc."saleDocumentId"
-      ), payment_totals AS (
-        SELECT s."id" AS "saleId", COALESCE(SUM(p."amount") FILTER (WHERE p."status" <> 'CANCELLED'), 0) AS paid
-        FROM "Sale" s LEFT JOIN "AccountReceivable" ar ON ar."saleId" = s."id"
-        LEFT JOIN "Payment" p ON p."saleId" = s."id" OR p."accountReceivableId" = ar."id"
-        GROUP BY s."id"
-      ), calculated AS (
-        SELECT sd."id" AS "saleDocumentId", s."id" AS "saleId", s."saleNumber", sd."createdAt" AS "issuedAt",
-          sd."documentType", sd."status" AS "documentStatus", sd."physicalFolio",
-          s."locationId", loc."name" AS "locationName", s."customerId", c."name" AS "customerName", c."taxId",
-          s."userId" AS "sellerId", u."name" AS "sellerName", s."routeId", route."name" AS "routeName",
-          s."currencyCode", s."legalEntityId", s."total",
-          COALESCE((SELECT STRING_AGG(DISTINCT i."uuid", ', ' ORDER BY i."uuid") FROM "InvoiceSaleDocument" ix
-            JOIN "Invoice" i ON i."id" = ix."invoiceId" WHERE ix."saleDocumentId" = sd."id" AND i."uuid" IS NOT NULL), '') AS "invoiceUuids",
-          COALESCE((SELECT STRING_AGG(DISTINCT CONCAT_WS('-', i."series", i."folio"), ', ' ORDER BY CONCAT_WS('-', i."series", i."folio"))
-            FROM "InvoiceSaleDocument" ix JOIN "Invoice" i ON i."id" = ix."invoiceId" WHERE ix."saleDocumentId" = sd."id"), '') AS "invoiceFolios",
-          COALESCE(rt.requested, 0) AS "activeRequested",
-          COALESCE(it.invoiced, 0) AS "activeInvoiced", GREATEST(s."total" - COALESCE(it.invoiced, 0), 0) AS "pendingInvoice",
-          COALESCE(pt.paid, 0) AS "activePaid", GREATEST(s."total" - COALESCE(pt.paid, 0), 0) AS "collectionBalance",
-          dord."status"::text AS "deliveryStatus", s."collectionStatus"::text AS "paymentStatus",
-          (NULLIF(BTRIM(c."taxId"), '') IS NOT NULL AND NULLIF(BTRIM(c."fiscalName"), '') IS NOT NULL
-            AND NULLIF(BTRIM(c."fiscalPostalCode"), '') IS NOT NULL AND NULLIF(BTRIM(c."fiscalRegime"), '') IS NOT NULL
-            AND NULLIF(BTRIM(c."fiscalUseCode"), '') IS NOT NULL AND NULLIF(BTRIM(c."billingEmail"), '') IS NOT NULL) AS "fiscalProfileComplete",
-          sd."createdAt" + INTERVAL '30 days' AS deadline,
-          CASE
-            WHEN s."status" = 'CANCELLED' OR sd."status" = 'CANCELLED' THEN 'CANCELLED'
-            WHEN s."status" <> 'CONFIRMED' OR s."customerId" IS NULL OR s."total" <= 0
-              OR sd."documentType" NOT IN ('SIMPLE_NOTE', 'LARGE_NOTE') THEN 'NOT_BILLABLE'
-            WHEN NOT c."isActive" OR NULLIF(BTRIM(c."taxId"), '') IS NULL OR NULLIF(BTRIM(c."fiscalName"), '') IS NULL
-              OR NULLIF(BTRIM(c."fiscalPostalCode"), '') IS NULL OR NULLIF(BTRIM(c."fiscalRegime"), '') IS NULL
-              OR NULLIF(BTRIM(c."fiscalUseCode"), '') IS NULL OR NULLIF(BTRIM(c."billingEmail"), '') IS NULL
-              OR s."currencyCode" IS NULL OR s."legalEntityId" IS NULL THEN 'PENDING_INFORMATION'
-            WHEN COALESCE(it.invoiced, 0) > s."total" OR COALESCE(rt.requested, 0) > GREATEST(s."total" - COALESCE(it.invoiced, 0), 0)
-              OR sd."createdAt" + INTERVAL '30 days' < CURRENT_TIMESTAMP THEN 'BLOCKED'
-            WHEN COALESCE(it.invoiced, 0) = s."total" THEN 'FULLY_INVOICED'
-            WHEN COALESCE(it.invoiced, 0) > 0 THEN 'PARTIALLY_INVOICED'
-            WHEN COALESCE(rt.process_state, false) THEN 'IN_PROCESS'
-            WHEN COALESCE(rt.requested_state, false) THEN 'REQUESTED'
-            ELSE 'BILLABLE'
-          END AS "billingStatus",
-          ARRAY_REMOVE(ARRAY[
-            CASE WHEN COALESCE(it.invoiced, 0) > s."total" THEN 'OVER_INVOICED' END,
-            CASE WHEN COALESCE(rt.requested, 0) > GREATEST(s."total" - COALESCE(it.invoiced, 0), 0) THEN 'OVER_REQUESTED' END,
-            CASE WHEN sd."createdAt" + INTERVAL '30 days' < CURRENT_TIMESTAMP THEN 'BILLING_DEADLINE_EXPIRED' END
-          ], NULL) AS "blockingCodes",
-          GREATEST(s."updatedAt", sd."updatedAt", COALESCE(c."updatedAt", sd."updatedAt")) AS "updatedAt"
-        FROM "SaleDocument" sd JOIN "Sale" s ON s."id" = sd."saleId"
-        LEFT JOIN "Customer" c ON c."id" = s."customerId" JOIN "User" u ON u."id" = s."userId"
-        JOIN "OperationalLocation" loc ON loc."id" = s."locationId" LEFT JOIN "DeliveryRoute" route ON route."id" = s."routeId"
-        LEFT JOIN "DeliveryOrder" dord ON dord."saleId" = s."id" LEFT JOIN request_totals rt ON rt."saleDocumentId" = sd."id"
-        LEFT JOIN invoice_totals it ON it."saleDocumentId" = sd."id" LEFT JOIN payment_totals pt ON pt."saleId" = s."id"
-      ), filtered AS (SELECT * FROM calculated b ${where})
-    `;
+    return Prisma.sql`WITH filtered AS (
+      SELECT b.*,
+        GREATEST((s."subtotal" - s."discount") - COALESCE((SELECT SUM(ix."subtotalApplied") FROM "InvoiceSaleDocument" ix JOIN "Invoice" i ON i."id" = ix."invoiceId" WHERE ix."saleDocumentId" = b."saleDocumentId" AND ix."reversedAt" IS NULL AND i."status" = 'ACTIVE'), 0), 0) AS "pendingSubtotal",
+        GREATEST(s."tax" - COALESCE((SELECT SUM(ix."taxApplied") FROM "InvoiceSaleDocument" ix JOIN "Invoice" i ON i."id" = ix."invoiceId" WHERE ix."saleDocumentId" = b."saleDocumentId" AND ix."reversedAt" IS NULL AND i."status" = 'ACTIVE'), 0), 0) AS "pendingTax",
+        b."pendingInvoice" AS "pendingTotal",
+        COALESCE((SELECT jsonb_agg(item ORDER BY item->>'productName') FROM (
+          SELECT jsonb_build_object(
+            'saleItemId', si."id", 'productName', si."productNameSnapshot",
+            'pendingSubtotal', GREATEST(si."taxableBase" - COALESCE(SUM(iia."subtotalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0)::text,
+            'pendingTax', GREATEST(si."tax" - COALESCE(SUM(iia."taxApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0)::text,
+            'pendingTotal', GREATEST(si."total" - COALESCE(SUM(iia."totalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0)::text
+          ) AS item
+          FROM "SaleItem" si
+          LEFT JOIN "InvoiceSaleItemApplication" iia ON iia."saleItemId" = si."id"
+          LEFT JOIN "InvoiceSaleDocument" ix ON ix."id" = iia."invoiceSaleDocumentId"
+          LEFT JOIN "Invoice" inv ON inv."id" = ix."invoiceId"
+          WHERE si."saleId" = b."saleId"
+          GROUP BY si."id"
+          HAVING GREATEST(si."total" - COALESCE(SUM(iia."totalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0) > 0
+        ) requestable), '[]'::jsonb) AS "requestableItems"
+      FROM "BillingReportableNoteReadModel" b JOIN "Sale" s ON s."id" = b."saleId" ${where}
+    )`;
   }
 
   private buildOrder(query: Partial<BillingReportQueryDto>) {
@@ -377,6 +361,7 @@ export class BillingReportService {
   private toItem(row: ReportRow, user: ReportUser) {
     const item: Record<string, unknown> = { ...row };
     delete item.totalCount;
+    delete item.policyTimezone;
     for (const field of MONEY_FIELDS) item[field] = this.money(row[field]);
     if (user.role === 'COLLECTIONS') item.taxId = null;
     return item;
@@ -391,6 +376,8 @@ export class BillingReportService {
       totalRequested: this.money(row?.totalRequested as DecimalLike),
       totalInvoiced: this.money(row?.totalInvoiced as DecimalLike),
       totalPending: this.money(row?.totalPending as DecimalLike),
+      totalCollected: this.money(row?.totalCollected as DecimalLike),
+      totalReceivable: this.money(row?.totalReceivable as DecimalLike),
     };
   }
 

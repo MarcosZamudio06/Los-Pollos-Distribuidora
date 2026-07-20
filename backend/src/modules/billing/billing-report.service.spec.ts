@@ -19,6 +19,7 @@ describe('BillingReportService', () => {
     sellerId: 'seller-1', sellerName: 'Seller', routeId: null, routeName: null, currencyCode: 'MXN',
     legalEntityId: 'le-1', total: new Prisma.Decimal('100.00'), activeRequested: new Prisma.Decimal('0'),
     activeInvoiced: new Prisma.Decimal('0'), pendingInvoice: new Prisma.Decimal('100.00'),
+    pendingSubtotal: new Prisma.Decimal('90.00'), pendingTax: new Prisma.Decimal('10.00'), pendingTotal: new Prisma.Decimal('100.00'), requestableItems: [],
     activePaid: new Prisma.Decimal('20.00'), collectionBalance: new Prisma.Decimal('80.00'),
     billingStatus: 'BILLABLE', blockingCodes: [], deliveryStatus: 'DELIVERED', paymentStatus: 'PARTIALLY_PAID',
     fiscalProfileComplete: true, deadline: new Date('2026-08-17T12:00:00Z'), updatedAt: new Date('2026-07-18T12:30:00Z'),
@@ -36,7 +37,8 @@ describe('BillingReportService', () => {
     const result = await service.list(query(), admin);
 
     expect(raw).toHaveBeenCalledTimes(2);
-    expect(result.items[0]).toMatchObject({ saleDocumentId: 'doc-1', total: '100.00', pendingInvoice: '100.00' });
+    expect(result.items[0]).toMatchObject({ saleDocumentId: 'doc-1', total: '100.00', pendingSubtotal: '90.00', pendingTax: '10.00', pendingTotal: '100.00' });
+    expect(JSON.stringify(raw.mock.calls[0][0])).toContain('requestableItems');
     expect(result.pagination).toEqual({ page: 1, limit: 25, total: 1, totalPages: 1 });
     expect(result.summary.totalPending).toBe('100.00');
     expect(result).toEqual(expect.objectContaining({ generatedAt: expect.any(String), dataAsOf: expect.any(String), freshnessSeconds: expect.any(Number), isStale: expect.any(Boolean) }));
@@ -50,13 +52,30 @@ describe('BillingReportService', () => {
     expect(serialized.every((query) => query.includes('seller-1'))).toBe(true);
   });
 
+  it('treats dateTo as an exclusive boundary at the start of the following day', async () => {
+    raw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await service.list(query({ dateFrom: '2026-07-01', dateTo: '2026-07-19' }), admin);
+
+    const reportQuery = raw.mock.calls[0][0];
+    expect(reportQuery.strings.join('')).toContain('b."issuedAt" < ');
+    expect(reportQuery.strings.join('')).not.toContain('b."issuedAt" <= ');
+    expect(reportQuery.values).toContainEqual(new Date('2026-07-20T00:00:00.000Z'));
+  });
+
   it('loads detail with one batched query and returns decimal strings', async () => {
-    raw.mockResolvedValueOnce([{ ...row, items: [], requests: [], invoices: [], payments: [], delivery: null }]);
+    raw.mockResolvedValueOnce([{ ...row, items: [], requests: [], activeInvoices: [{ id: 'invoice-active' }], invoiceHistory: [{ id: 'invoice-cancelled' }], payments: [], delivery: null }]);
 
     const result = await service.detail('doc-1', admin);
 
     expect(raw).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({ saleDocumentId: 'doc-1', total: '100.00', items: [], requests: [] });
+    expect(result).toMatchObject({ saleDocumentId: 'doc-1', total: '100.00', items: [], requests: [], activeInvoices: [{ id: 'invoice-active' }], invoiceHistory: [{ id: 'invoice-cancelled' }] });
+    expect(result).not.toHaveProperty('invoices');
+    const sql = raw.mock.calls[0][0].strings.join('');
+    expect(sql).toContain('AS "activeInvoices"');
+    expect(sql).toContain('AS "invoiceHistory"');
+    expect(sql).toContain('idoc."reversedAt" IS NULL AND i."status" = \'ACTIVE\'');
+    expect(sql).toContain('idoc."reversedAt" IS NOT NULL OR i."status" <> \'ACTIVE\'');
   });
 
   it('throws when detail is not visible or does not exist', async () => {
@@ -65,10 +84,11 @@ describe('BillingReportService', () => {
   });
 
   it('uses one bounded query for export read-model rows', async () => {
-    raw.mockResolvedValueOnce([row]).mockResolvedValueOnce([{ totalDocuments: 1n, totalPending: new Prisma.Decimal(100) }]);
+    raw.mockResolvedValueOnce([row]).mockResolvedValueOnce([{ totalDocuments: 1n, billableDocuments: 1n, blockedDocuments: 0n, totalBillable: new Prisma.Decimal(100), totalRequested: new Prisma.Decimal(0), totalInvoiced: new Prisma.Decimal(0), totalPending: new Prisma.Decimal(100), totalCollected: new Prisma.Decimal(20), totalReceivable: new Prisma.Decimal(80) }]);
     const result = await service.exportFile(query({ format: 'csv' }), admin);
     expect(raw).toHaveBeenCalledTimes(2);
     expect(exporter.createFile).toHaveBeenCalledWith([expect.objectContaining({ total: '100.00' })], expect.objectContaining({ timeZone: 'America/Mexico_City', truncated: false }), 'csv');
+    expect(exporter.createFile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ totals: expect.objectContaining({ billableDocuments: 1, totalCollected: '20.00', totalReceivable: '80.00' }) }), 'csv');
     expect(auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ actorUserId: 'admin-1', action: 'BILLING_REPORT_EXPORTED', entityType: 'BillingReportExport' }) });
     expect(result).toEqual(expect.objectContaining({ fileName: 'file.csv' }));
   });
@@ -96,6 +116,33 @@ describe('BillingReportService', () => {
       expect(query).toContain('BLOCKED');
       expect(query).toContain('true');
     }
+  });
+
+  it('assigns monetary amounts only to the primary billable sale document', async () => {
+    raw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await service.list(query(), admin);
+
+    const readModelSql = raw.mock.calls[0][0].strings.join('');
+    expect(readModelSql).toContain('FROM "BillingReportableNoteReadModel"');
+    expect(readModelSql).not.toContain('CASE');
+  });
+
+  it('delegates eligibility, delivery, deadline, and timezone to the canonical read model', async () => {
+    raw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    await service.list(query(), admin);
+    const sql = raw.mock.calls[0][0].strings.join('');
+    expect(sql).toContain('FROM "BillingReportableNoteReadModel"');
+    expect(sql).not.toContain('bp."billableDocumentTypes"');
+  });
+
+  it('reserves only the unconsumed remainder of active billing requests', async () => {
+    raw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await service.list(query(), admin);
+
+    const readModelSql = raw.mock.calls[0][0].strings.join('');
+    expect(readModelSql).toContain('FROM "BillingReportableNoteReadModel"');
   });
 
   it('enforces the report and export RBAC matrix in the service layer', async () => {

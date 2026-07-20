@@ -1,5 +1,5 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, Min, ValidateIf, ValidateNested } from 'class-validator';
 import { BillingRequestStatus } from '@prisma/client';
 
 function trim({ value }: TransformFnParams): unknown {
@@ -29,9 +29,15 @@ export class CreateBillingRequestDto {
 
 export class BillingRequestDocumentDto {
   @Transform(trim) @IsString() @IsNotEmpty() saleDocumentId!: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => BillingRequestItemDto)
+  items?: BillingRequestItemDto[];
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) requestedSubtotal!: string;
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) requestedTax!: string;
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) requestedTotal!: string;
+}
+
+export class BillingRequestItemDto {
+  @Transform(trim) @IsString() @IsNotEmpty() saleItemId!: string;
 }
 
 export class UpdateBillingRequestDto {
@@ -76,6 +82,8 @@ export class ExternalInvoiceDto {
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) tax!: string;
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) total!: string;
   @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() substitutesInvoiceId?: string;
+  @ValidateIf((invoice: ExternalInvoiceDto) => Boolean(invoice.substitutesInvoiceId))
+  @Transform(trim) @IsString() @IsNotEmpty() substitutionReason?: string;
 }
 
 export class LinkInvoiceDto {

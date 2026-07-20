@@ -4,6 +4,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   FileCheck2,
+  ListChecks,
   History,
   Home,
   MapPinned,
@@ -26,6 +27,7 @@ export type NavigationItemKey =
   | 'accounts-receivable'
   | 'billing-requests'
   | 'billing-reportable-notes'
+  | 'billing-remediations'
   | 'inventory'
   | 'purchases'
   | 'purchase-suppliers'
@@ -127,6 +129,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Notas facturables',
     section: 'financial',
     to: '/billing/reportable-notes',
+  },
+  {
+    activePaths: ['/billing/remediations'],
+    allowedRoles: ROUTE_ACCESS_ROLES.billingRemediations,
+    routeAccessKey: 'billingRemediations',
+    description: 'Integridad de datos contables',
+    icon: ListChecks,
+    key: 'billing-remediations',
+    label: 'Remediaciones contables',
+    section: 'financial',
+    to: '/billing/remediations',
   },
   {
     activePaths: ['/inventory'],

@@ -31,6 +31,12 @@ export class BillingRequestsController {
     return { success: true, message: 'Billing request created successfully', data: await this.service.create(body, user, idempotencyKey) };
   }
 
+  @Post(':id/start-review')
+  @Roles('ADMIN', 'BILLING')
+  async startReview(@Param('id') id: string, @Body() body: ReviewBillingRequestDto, @CurrentUser() user: AuthenticatedUser) {
+    return { success: true, message: 'Billing request review started successfully', data: await this.service.startReview(id, body, user) };
+  }
+
   @Post(':id/approve')
   @Roles('ADMIN', 'BILLING')
   async approve(@Param('id') id: string, @Body() body: ReviewBillingRequestDto, @CurrentUser() user: AuthenticatedUser) {

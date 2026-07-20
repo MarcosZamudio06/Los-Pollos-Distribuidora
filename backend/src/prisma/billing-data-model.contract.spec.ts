@@ -24,7 +24,9 @@ describe('billing reportable notes phase 1 data contract', () => {
     expect(model('Invoice')).toMatch(/uuid\s+String\?\s+@unique/);
     expect(model('Invoice')).toMatch(/version\s+Int\s+@default\(1\)/);
     expect(model('BillingRequestSaleDocument')).toContain('requestedTotal');
+    expect(model('BillingRequestSaleDocument')).toContain('selectedSaleItemIds');
     expect(model('InvoiceSaleDocument')).toContain('totalApplied');
+    expect(model('InvoiceSaleDocument')).toContain('billingRequestSaleDocumentId');
     expect(model('InvoiceSaleItemApplication')).toContain('saleItemId');
     expect(schema).not.toMatch(/model\s+PaymentAllocation\s+\{/);
   });
@@ -39,6 +41,13 @@ describe('billing reportable notes phase 1 data contract', () => {
     expect(model('SaleItem')).toMatch(/taxableBase\s+Decimal/);
     expect(model('SaleItem')).toMatch(/tax\s+Decimal/);
     expect(model('SaleItem')).toMatch(/total\s+Decimal/);
+  });
+
+  it('persists a structured billing policy instead of relying on report literals', () => {
+    const policy = model('BillingPolicy');
+    for (const field of ['billableDocumentTypes', 'allowInternalReceipt', 'requireConfirmedDelivery', 'deadlineDays', 'deadlineBasis', 'timezone']) {
+      expect(policy).toContain(field);
+    }
   });
 
   it('expands legacy links and backfills before contracting uniqueness', () => {

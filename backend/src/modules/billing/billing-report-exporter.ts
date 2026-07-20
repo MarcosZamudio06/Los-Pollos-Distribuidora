@@ -18,8 +18,15 @@ const COLUMNS = [
   ['issuedAt', 'Fecha'], ['customerName', 'Cliente'], ['taxId', 'RFC'], ['documentType', 'Tipo de documento'],
   ['billingStatus', 'Estado de facturación'], ['activeRequested', 'Solicitado'], ['activeInvoiced', 'Facturado'],
   ['pendingInvoice', 'Pendiente'], ['total', 'Total'], ['currencyCode', 'Moneda'], ['invoiceUuids', 'UUID'], ['invoiceFolios', 'Folios factura'],
+  ['locationName', 'Ubicación'], ['sellerName', 'Vendedor'], ['routeName', 'Ruta'], ['activePaid', 'Saldo cobrado'],
+  ['collectionBalance', 'Saldo por cobrar'], ['blockingCodes', 'Códigos de bloqueo'], ['deadline', 'Fecha límite'], ['deliveryStatus', 'Estado de entrega'],
 ] as const;
-const MONEY_KEYS = new Set(['activeRequested', 'activeInvoiced', 'pendingInvoice', 'total']);
+const MONEY_KEYS = new Set(['activeRequested', 'activeInvoiced', 'pendingInvoice', 'total', 'activePaid', 'collectionBalance']);
+const CONTROL_TOTALS = [
+  ['totalDocuments', 'Total de documentos', false], ['billableDocuments', 'Documentos facturables', false], ['blockedDocuments', 'Documentos bloqueados', false],
+  ['totalBillable', 'Total facturable', true], ['totalRequested', 'Total solicitado', true], ['totalInvoiced', 'Total facturado', true],
+  ['totalPending', 'Total pendiente', true], ['totalCollected', 'Total cobrado', true], ['totalReceivable', 'Total por cobrar', true],
+] as const;
 
 @Injectable()
 export class BillingReportExporter {
@@ -40,11 +47,10 @@ export class BillingReportExporter {
       ['Usuario', `${metadata.user.name} (${metadata.user.id})`],
       ['Zona horaria', metadata.timeZone],
       ['Filtros', this.stableJson(metadata.filters)],
-      ['Total de documentos', metadata.totals.totalDocuments ?? 0],
-      ['Total pendiente', metadata.totals.totalPending ?? '0.00'],
+      ...CONTROL_TOTALS.map(([key, label]) => [label, metadata.totals[key] ?? (key.endsWith('Documents') ? 0 : '0.00')]),
       [],
       COLUMNS.map(([, label]) => label),
-      ...rows.map((row) => COLUMNS.map(([key]) => MONEY_KEYS.has(key) ? Number(row[key] ?? 0) : this.csvValue(row[key]))),
+      ...rows.map((row) => COLUMNS.map(([key]) => MONEY_KEYS.has(key) ? Number(row[key] ?? 0) : this.csvValue(key, row[key]))),
     ];
     return `\uFEFF${lines.map((line) => line.map((value) => this.escapeCsv(value)).join(',')).join('\r\n')}\r\n`;
   }
@@ -65,17 +71,21 @@ export class BillingReportExporter {
     const workbook = new excelStream.xlsx.WorkbookWriter({ stream: output, useStyles: true, useSharedStrings: true });
     workbook.creator = 'Pollos Distribuidora';
     workbook.created = metadata.generatedAt;
-    const sheet = workbook.addWorksheet('Notas facturables', { views: [{ state: 'frozen', ySplit: 8 }] });
+    const headerRowNumber = 4 + CONTROL_TOTALS.length + 2;
+    const sheet = workbook.addWorksheet('Notas facturables', { views: [{ state: 'frozen', ySplit: headerRowNumber }] });
     const metadataRows = [
       ['Fecha de generación', metadata.generatedAt],
       ['Usuario', `${metadata.user.name} (${metadata.user.id})`],
       ['Zona horaria', metadata.timeZone],
       ['Filtros', this.stableJson(metadata.filters)],
-      ['Total de documentos', Number(metadata.totals.totalDocuments ?? 0)],
-      ['Total pendiente', Number(metadata.totals.totalPending ?? 0)],
+      ...CONTROL_TOTALS.map(([key, label]) => [label, Number(metadata.totals[key] ?? 0)]),
       [],
     ];
-    metadataRows.forEach((values) => sheet.addRow(values).commit());
+    metadataRows.forEach((values, index) => {
+      const row = sheet.addRow(values);
+      if (index >= 4 + 3 && index < 4 + CONTROL_TOTALS.length) row.getCell(2).numFmt = '#,##0.00';
+      row.commit();
+    });
     const header = sheet.addRow(COLUMNS.map(([, label]) => label));
     header.font = { bold: true };
     header.commit();
@@ -86,6 +96,7 @@ export class BillingReportExporter {
         row.getCell(index).numFmt = '#,##0.00';
       }
       row.getCell(COLUMNS.findIndex(([key]) => key === 'issuedAt') + 1).numFmt = 'yyyy-mm-dd hh:mm';
+      row.getCell(COLUMNS.findIndex(([key]) => key === 'deadline') + 1).numFmt = 'yyyy-mm-dd';
       row.commit();
     }
     sheet.columns.forEach((column) => { column.width = 20; });
@@ -94,11 +105,13 @@ export class BillingReportExporter {
 
   private xlsxValue(key: string, value: unknown) {
     if (MONEY_KEYS.has(key)) return Number(value ?? 0);
-    if (key === 'issuedAt' && value) return new Date(value as string | Date);
+    if ((key === 'issuedAt' || key === 'deadline') && value) return new Date(value as string | Date);
+    if (key === 'blockingCodes' && Array.isArray(value)) return value.join(' | ');
     return value == null ? '' : String(value);
   }
 
-  private csvValue(value: unknown) {
+  private csvValue(key: string, value: unknown) {
+    if (key === 'blockingCodes' && Array.isArray(value)) return value.join(' | ');
     if (value instanceof Date) return value.toISOString();
     return value ?? '';
   }

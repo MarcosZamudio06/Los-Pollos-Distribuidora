@@ -9,6 +9,7 @@ coverage/
 **/dist/
 **/build/
 **/coverage/
+backend/dist/
 
 # Logs
 *.log

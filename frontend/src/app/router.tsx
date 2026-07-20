@@ -20,6 +20,7 @@ import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview,
 import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
 import { BillingRequestDetailPage, BillingRequestsPage } from '../features/billing-requests'
 import { BillingReportableNotesPage } from '../features/billing-reportable-notes'
+import { BillingRemediationsPage } from '../features/billing-remediations'
 import { DailyClosePage } from '../features/cierre-diario'
 
 export function AppRouter() {
@@ -46,6 +47,7 @@ export function AppRouter() {
         <Route path="/billing-requests/:id" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestDetailPage /></RoleRoute>} />
         <Route path="/billing-requests" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestsPage /></RoleRoute>} />
         <Route path="/billing/reportable-notes" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingReportableNotes}><BillingReportableNotesPage /></RoleRoute>} />
+        <Route path="/billing/remediations" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRemediations}><BillingRemediationsPage /></RoleRoute>} />
         <Route
           path="/customers"
           element={

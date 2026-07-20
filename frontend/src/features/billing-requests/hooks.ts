@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { billingRequestsService } from './billingRequestsService'
-import type { BillingRequestFilters, BillingRequestMutation } from './types'
+import type { BillingRequestFilters, BillingRequestMutation, InvoiceReconciliationInput } from './types'
 
 export function useBillingRequests(filters: BillingRequestFilters) {
   const { accessToken } = useAuth()
@@ -17,5 +17,14 @@ export function useCreateBillingRequest() {
 }
 export function useUpdateBillingRequest(id: string) {
   const { accessToken } = useAuth(); const client = useQueryClient()
-  return useMutation({ mutationFn: (input: BillingRequestMutation) => input.status === 'CANCELLED' ? billingRequestsService.cancel(id, { reason: input.reason ?? '', notes: input.notes }, accessToken) : billingRequestsService.update(id, input, accessToken), onSuccess: (result) => { client.setQueryData(['billing-requests', id], result); void client.invalidateQueries({ queryKey: ['billing-requests'] }) } })
+  return useMutation({ mutationFn: (input: BillingRequestMutation) => {
+    if (!input.status) return billingRequestsService.update(id, input, accessToken)
+    if (!input.expectedVersion) throw new Error('expectedVersion is required for billing request transitions')
+    const command = input.status === 'IN_REVIEW' ? 'start-review' : input.status.toLowerCase() as 'approve' | 'reject' | 'cancel'
+    return billingRequestsService.transition(id, command, { expectedVersion: input.expectedVersion, reason: input.reason ?? '', notes: input.notes }, accessToken)
+  }, onSuccess: (result) => { client.setQueryData(['billing-requests', id], result); void client.invalidateQueries({ queryKey: ['billing-requests'] }) } })
+}
+export function useLinkBillingInvoice(id: string) {
+  const { accessToken } = useAuth(); const client = useQueryClient()
+  return useMutation({ mutationFn: (input: InvoiceReconciliationInput) => billingRequestsService.linkInvoice(id, input, accessToken), onSuccess: () => { void client.invalidateQueries({ queryKey: ['billing-requests', id] }); void client.invalidateQueries({ queryKey: ['billing-requests'] }); void client.invalidateQueries({ queryKey: ['billing-reportable-notes'] }) } })
 }

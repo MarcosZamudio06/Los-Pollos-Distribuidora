@@ -537,6 +537,7 @@ export class SalesService {
               requestedSubtotal: this.roundMoney(subtotal - discount),
               requestedTax: 0,
               requestedTotal: total,
+              selectedSaleItemIds: sale.items.map((item) => item.id),
               createdByUserId: currentUser.id,
             },
           });

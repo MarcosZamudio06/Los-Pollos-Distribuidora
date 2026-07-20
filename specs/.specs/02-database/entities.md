@@ -564,9 +564,15 @@ Validaciones:
 - Estados mínimos: `ACTIVE`, `CANCELLED`, `SUBSTITUTED`.
 - No contiene secretos, certificados, XML ni operaciones de timbrado.
 
+### BillingPolicy
+
+- Configuración singleton y versionada para facturabilidad; no forma parte de `CommercialPolicy` ni de sus reglas de crédito.
+- Conserva `billableDocumentTypes`, `allowInternalReceipt`, `requireConfirmedDelivery`, `deadlineDays`, `deadlineBasis` (`ISSUED_AT` o `DELIVERED_AT`) y `timezone`.
+- Reportes y comandos consultan este mismo registro; no mantienen listas de tipos ni plazos alternos en código.
+
 ### BillingRequestSaleDocument
 
-Relación N:M entre solicitud y documento, con subtotal, impuesto y total solicitados.
+Relación N:M entre solicitud y documento, con subtotal, impuesto y total solicitados. Conserva `selectedSaleItemIds` como composición inmutable de la selección exacta que originó esos importes.
 
 ### InvoiceSaleDocument
 

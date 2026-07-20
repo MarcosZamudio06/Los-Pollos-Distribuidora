@@ -7,6 +7,7 @@ import { BillingRequestStatusBadge } from './BillingRequestStatusBadge'
 import { useBillingRequest, useUpdateBillingRequest } from './hooks'
 import { availableBillingRequestActions, billingRequestStatusLabel } from './status'
 import type { BillingRequestDetail, BillingRequestStatus } from './types'
+import { InvoiceReconciliationPanel } from './InvoiceReconciliationPanel'
 
 function RequestEditor({ data, role }: { data: BillingRequestDetail; role?: string | null }) {
   const update = useUpdateBillingRequest(data.id)
@@ -17,7 +18,7 @@ function RequestEditor({ data, role }: { data: BillingRequestDetail; role?: stri
 
   async function mutate(status?: BillingRequestStatus) {
     if (!reason.trim()) return
-    await update.mutateAsync({ status, reason: reason.trim(), notes: notes.trim() || undefined })
+    await update.mutateAsync({ status, expectedVersion: status ? data.version : undefined, reason: reason.trim(), notes: notes.trim() || undefined })
   }
 
   return (
@@ -63,6 +64,7 @@ export function BillingRequestDetailPage() {
           <RequestEditor data={data} key={data.updatedAt} role={user?.role} />
           <Card className="p-5"><CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" />Relaciones</CardTitle></CardHeader><CardContent className="mt-4 grid gap-3 text-sm"><p><strong>Venta:</strong> <Link className="text-[var(--erp-info)]" to={`/sales/${data.saleId}`}>{data.sale?.saleNumber ?? data.saleId}</Link></p><p><strong>Cliente:</strong> {data.customer?.name ?? data.customerId}</p><p><strong>Cuenta por cobrar:</strong> {data.accountReceivable?.id ?? 'No aplica'}</p><p><strong>Solicitó:</strong> {data.requestedBy?.name ?? data.requestedByUserId}</p><p><strong>Revisó:</strong> {data.reviewedBy?.name ?? data.reviewedByUserId ?? 'Pendiente'}</p></CardContent></Card>
         </div>
+        <InvoiceReconciliationPanel request={data} role={user?.role} />
         <Card className="p-5"><CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="h-5 w-5" />Historial de estados</CardTitle><CardDescription>Bitácora cronológica de actor, fecha, motivo y notas.</CardDescription></CardHeader><CardContent className="mt-5 grid gap-4">{data.history?.map((entry) => <article className="relative border-l-2 border-[var(--erp-brand-gold)] pl-5" key={entry.id}><div className="flex flex-wrap items-center gap-2"><BillingRequestStatusBadge status={entry.toStatus} /><span className="text-xs font-semibold text-[var(--erp-muted-foreground)]">{new Date(entry.changedAt).toLocaleString('es-MX')}</span></div><p className="mt-2 font-bold">{entry.reason}</p><p className="text-sm text-[var(--erp-muted-foreground)]">{entry.notes || 'Sin notas'} · {entry.changedBy?.name ?? entry.changedByUserId}</p></article>)}</CardContent></Card>
       </div>
     </main>
