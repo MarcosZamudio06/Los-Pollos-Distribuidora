@@ -1091,7 +1091,7 @@ describe('SalesService', () => {
     expect(result.accountReceivable).toEqual(expect.objectContaining({ outstandingAmount: '250' }));
   });
 
-  it('preserves captured pieces and applied unit equivalence in the sale item and inventory movement', async () => {
+  it('converts KG_AND_PIECE pieces to canonical kilograms for pricing while preserving both inventory quantities', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.product.findUnique.mockResolvedValue({
@@ -1100,9 +1100,19 @@ describe('SalesService', () => {
       sku: 'CHK-001',
       unit: ProductUnit.KG_AND_PIECE,
       salePrice: decimal('80'),
+      purchaseCost: decimal('50'),
       isActive: true,
       unitEquivalents: [
-        { id: 'eq-1', factor: decimal('1.250'), roundingMode: 'HALF_UP', status: 'ACTIVE' },
+        {
+          id: 'eq-1',
+          unitFrom: ProductUnit.PIECE,
+          unitTo: ProductUnit.KG,
+          factor: decimal('1.250'),
+          roundingMode: 'HALF_UP',
+          effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+          effectiveTo: null,
+          status: 'ACTIVE',
+        },
       ],
     });
     prisma.inventoryBalance.findUnique.mockResolvedValue({
@@ -1114,7 +1124,7 @@ describe('SalesService', () => {
 
     await service.create(
       validCashSale({
-        initialPayment: { amount: 100, paymentMethod: PaymentMethod.CASH, paidAt: now.toISOString() },
+        initialPayment: { amount: 300, paymentMethod: PaymentMethod.CASH, paidAt: now.toISOString() },
         items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 1.25, quantityPieces: 2, unitEquivalentId: 'eq-1' }],
       }),
       { id: 'seller-1', role: 'SELLER' },
@@ -1133,6 +1143,10 @@ describe('SalesService', () => {
                 unitEquivalentId: 'eq-1',
                 appliedEquivalentFactor: 1.25,
                 roundingMode: 'HALF_UP',
+                quantity: 3.75,
+                quantitySnapshot: 3.75,
+                subtotal: 300,
+                costSubtotalSnapshot: 187.5,
               }),
             ],
           },
@@ -1144,6 +1158,7 @@ describe('SalesService', () => {
         data: expect.objectContaining({
           quantityKg: 1.25,
           quantityPieces: 2,
+          quantity: 3.75,
           previousQuantityKg: 5,
           newQuantityKg: 3.75,
           previousQuantityPieces: 10,
@@ -1151,6 +1166,62 @@ describe('SalesService', () => {
         }),
       }),
     );
+  });
+
+  it('rejects a sale item whose requested unit does not match the configured product unit', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(
+      service.create(
+        validCashSale({
+          items: [{ productId: 'product-1', unit: ProductUnit.PIECE, quantityKg: 0, quantityPieces: 1 }],
+        }),
+        { id: 'seller-1', role: 'SELLER' },
+        'idem-invalid-unit',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an equivalence that does not convert any requested pieces', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1',
+      name: 'Chicken breast',
+      sku: 'PCH-001',
+      unit: ProductUnit.KG,
+      salePrice: decimal('100'),
+      purchaseCost: decimal('62.50'),
+      isActive: true,
+      unitEquivalents: [
+        {
+          id: 'eq-1',
+          unitFrom: ProductUnit.PIECE,
+          unitTo: ProductUnit.KG,
+          factor: decimal('1.250'),
+          effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+          effectiveTo: null,
+          status: 'ACTIVE',
+        },
+      ],
+    });
+
+    await expect(
+      service.create(
+        validCashSale({
+          items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 2.5, quantityPieces: 0, unitEquivalentId: 'eq-1' }],
+        }),
+        { id: 'seller-1', role: 'SELLER' },
+        'idem-unneeded-equivalence',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
   });
 
   it('requires existing active products and locations', async () => {

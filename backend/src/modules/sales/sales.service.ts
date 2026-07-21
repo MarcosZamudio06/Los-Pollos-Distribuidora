@@ -26,6 +26,17 @@ import { evaluateCreditDecision } from './credit-decision';
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
+type SaleProductUnitEquivalent = {
+  id: string;
+  unitFrom: ProductUnit;
+  unitTo: ProductUnit;
+  factor: DecimalLike;
+  roundingMode?: string | null;
+  effectiveFrom?: Date | null;
+  effectiveTo?: Date | null;
+  status: EquivalentStatus;
+};
+
 type SaleProduct = {
   id: string;
   name: string;
@@ -34,12 +45,7 @@ type SaleProduct = {
   salePrice: DecimalLike;
   purchaseCost: DecimalLike;
   isActive: boolean;
-  unitEquivalents?: Array<{
-    id: string;
-    factor: DecimalLike;
-    roundingMode?: string | null;
-    status: EquivalentStatus;
-  }>;
+  unitEquivalents?: SaleProductUnitEquivalent[];
 };
 
 type CustomerCredit = {
@@ -55,10 +61,11 @@ type CustomerCredit = {
 };
 
 type PreparedItem = {
-  dto: CreateSaleItemDto;
   product: SaleProduct;
+  unitEquivalentId: string | null;
   quantityKg: number;
   quantityPieces: number;
+  billableQuantityKg: number;
   unitPrice: number;
   subtotal: number;
   equivalentFactor: number | null;
@@ -384,25 +391,25 @@ export class SalesService {
             items: {
               create: preparedItems.map((item) => ({
                 productId: item.product.id,
-                quantity: item.quantityKg || item.quantityPieces,
+                quantity: item.billableQuantityKg,
                 quantityKg: item.quantityKg,
                 quantityPieces: item.quantityPieces,
-                unit: item.dto.unit,
+                unit: item.product.unit,
                 unitPrice: item.unitPrice,
-                unitEquivalentId: this.normalizeOptionalText(item.dto.unitEquivalentId),
+                unitEquivalentId: item.unitEquivalentId,
                 appliedEquivalentFactor: item.equivalentFactor,
                 roundingMode: item.roundingMode,
                 productNameSnapshot: item.product.name,
                 productSkuSnapshot: item.product.sku ?? null,
                 unitPriceSnapshot: item.unitPrice,
-                quantitySnapshot: item.quantityKg || item.quantityPieces,
+                quantitySnapshot: item.billableQuantityKg,
                 subtotal: item.subtotal,
                 discount: 0,
                 taxableBase: item.subtotal,
                 tax: 0,
                 total: item.subtotal,
                 unitCostSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost)),
-                costSubtotalSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost) * (item.quantityKg || item.quantityPieces)),
+                costSubtotalSnapshot: this.roundMoney(this.toNumber(item.product.purchaseCost) * item.billableQuantityKg),
                 costSnapshotSource: 'SALE_CONFIRMATION',
               })),
             },
@@ -537,8 +544,15 @@ export class SalesService {
               requestedSubtotal: this.roundMoney(subtotal - discount),
               requestedTax: 0,
               requestedTotal: total,
-              selectedSaleItemIds: sale.items.map((item) => item.id),
               createdByUserId: currentUser.id,
+              requestedItems: {
+                create: sale.items.map((item) => ({
+                  saleItemId: item.id,
+                  requestedSubtotal: item.taxableBase,
+                  requestedTax: item.tax,
+                  requestedTotal: item.total,
+                })),
+              },
             },
           });
         }
@@ -847,6 +861,8 @@ export class SalesService {
         throw new NotFoundException('Product not found');
       }
 
+      this.assertItemMatchesProductUnit(item.unit, product.unit, quantityKg, quantityPieces);
+
       const equivalent = item.unitEquivalentId
         ? product.unitEquivalents?.find((candidate) => candidate.id === item.unitEquivalentId && candidate.status === EquivalentStatus.ACTIVE)
         : undefined;
@@ -855,20 +871,79 @@ export class SalesService {
         throw new BadRequestException('Active unit equivalent not found for product');
       }
 
+      if (item.unitEquivalentId && (product.unit !== ProductUnit.KG_AND_PIECE || quantityPieces === 0)) {
+        throw new BadRequestException('Unit equivalence is only valid when KG_AND_PIECE sales convert pieces');
+      }
+
+      if (quantityPieces > 0 && product.unit === ProductUnit.KG_AND_PIECE && !this.isActiveKgPieceEquivalent(equivalent)) {
+        throw new BadRequestException('KG_AND_PIECE sales with pieces require an active KG/PIECE equivalent');
+      }
+
+      const billableQuantityKg = this.roundQuantity(
+        quantityKg + (quantityPieces > 0 && equivalent ? this.convertPiecesToKg(quantityPieces, equivalent) : 0),
+      );
+
       const unitPrice = this.roundMoney(this.toNumber(product.salePrice));
       prepared.push({
-        dto: item,
         product,
+        unitEquivalentId: this.normalizeOptionalText(item.unitEquivalentId),
         quantityKg,
         quantityPieces,
+        billableQuantityKg,
         unitPrice,
-        subtotal: this.roundMoney(unitPrice * (quantityKg || quantityPieces)),
+        subtotal: this.roundMoney(unitPrice * billableQuantityKg),
         equivalentFactor: equivalent ? this.toNumber(equivalent.factor) : null,
         roundingMode: equivalent?.roundingMode ?? null,
       });
     }
 
     return prepared;
+  }
+
+  private assertItemMatchesProductUnit(
+    requestedUnit: ProductUnit,
+    productUnit: ProductUnit,
+    quantityKg: number,
+    quantityPieces: number,
+  ): void {
+    if (requestedUnit !== productUnit) {
+      throw new BadRequestException('Sale item unit must match the configured product unit');
+    }
+
+    if (productUnit === ProductUnit.KG && (quantityKg <= 0 || quantityPieces !== 0)) {
+      throw new BadRequestException('KG products require a positive quantityKg only');
+    }
+
+    if (productUnit === ProductUnit.PIECE && (quantityPieces <= 0 || quantityKg !== 0)) {
+      throw new BadRequestException('PIECE products require a positive quantityPieces only');
+    }
+  }
+
+  private isActiveKgPieceEquivalent(
+    equivalent: SaleProductUnitEquivalent | undefined,
+  ): boolean {
+    if (!equivalent || equivalent.status !== EquivalentStatus.ACTIVE || this.toNumber(equivalent.factor) <= 0) return false;
+    const isKgPiecePair =
+      (equivalent.unitFrom === ProductUnit.PIECE && equivalent.unitTo === ProductUnit.KG)
+      || (equivalent.unitFrom === ProductUnit.KG && equivalent.unitTo === ProductUnit.PIECE);
+    if (!isKgPiecePair || !equivalent.effectiveFrom) return false;
+
+    const now = new Date();
+    return equivalent.effectiveFrom <= now && (!equivalent.effectiveTo || equivalent.effectiveTo >= now);
+  }
+
+  private convertPiecesToKg(
+    quantityPieces: number,
+    equivalent: SaleProductUnitEquivalent,
+  ): number {
+    const factor = this.toNumber(equivalent.factor);
+    if (equivalent.unitFrom === ProductUnit.PIECE && equivalent.unitTo === ProductUnit.KG) {
+      return quantityPieces * factor;
+    }
+    if (equivalent.unitFrom === ProductUnit.KG && equivalent.unitTo === ProductUnit.PIECE) {
+      return quantityPieces / factor;
+    }
+    throw new BadRequestException('Unit equivalent must convert between KG and PIECE');
   }
 
   private async reserveInventory(
@@ -931,7 +1006,7 @@ export class SalesService {
           locationId,
           userId,
           type: InventoryMovementType.SALE,
-          quantity: item.quantityKg || item.quantityPieces,
+          quantity: item.billableQuantityKg,
           quantityKg: item.quantityKg,
           quantityPieces: item.quantityPieces,
           previousStock: item.previousQuantityKg,
@@ -1267,7 +1342,7 @@ export class SalesService {
         productId: item.product.id,
         productName: item.product.name,
         productSku: item.product.sku ?? null,
-        unit: item.dto.unit,
+        unit: item.product.unit,
         quantityKg: item.quantityKg,
         quantityPieces: item.quantityPieces,
         unitPrice: item.unitPrice,

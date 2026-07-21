@@ -42,6 +42,9 @@ export type ProductOption = {
   isLowStock?: boolean
   equivalentPolicyStatus?: string | null
   unitEquivalentId?: string | null
+  equivalentFactor?: number | null
+  equivalentUnitFrom?: OperationalUnit | null
+  equivalentUnitTo?: OperationalUnit | null
 }
 
 export type CartItem = ProductOption & {

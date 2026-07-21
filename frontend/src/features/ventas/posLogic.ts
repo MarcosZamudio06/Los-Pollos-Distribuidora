@@ -21,7 +21,13 @@ function roundMoney(value: number) {
 export function itemQuantity(item: CartItem) {
   if (item.unit === 'KG') return item.quantityKg
   if (item.unit === 'PIECE') return item.quantityPieces
-  return Math.max(item.quantityKg, 0) + Math.max(item.quantityPieces, 0)
+  const factor = item.equivalentFactor ?? 0
+  const piecesInKg = item.equivalentUnitFrom === 'PIECE' && item.equivalentUnitTo === 'KG'
+    ? item.quantityPieces * factor
+    : item.equivalentUnitFrom === 'KG' && item.equivalentUnitTo === 'PIECE' && factor > 0
+      ? item.quantityPieces / factor
+      : 0
+  return Math.max(item.quantityKg, 0) + Math.max(piecesInKg, 0)
 }
 
 export function calculateItemSubtotal(item: CartItem) {
@@ -54,6 +60,9 @@ export function getQuantityValidationError(item: CartItem) {
 
   if (item.quantityKg <= 0 || item.quantityPieces <= 0) return 'Ingresa kilos y piezas mayores que cero.'
   if (!Number.isInteger(item.quantityPieces)) return 'Las piezas deben ser un número entero.'
+  if (!item.unitEquivalentId || !item.equivalentFactor || !item.equivalentUnitFrom || !item.equivalentUnitTo) {
+    return 'El producto requiere una equivalencia activa entre kilos y piezas.'
+  }
   if (item.quantityKg > item.availableKg) {
     return `La cantidad no puede exceder ${item.availableKg} kg disponibles en ${locationName}.`
   }

@@ -572,7 +572,11 @@ Validaciones:
 
 ### BillingRequestSaleDocument
 
-Relación N:M entre solicitud y documento, con subtotal, impuesto y total solicitados. Conserva `selectedSaleItemIds` como composición inmutable de la selección exacta que originó esos importes.
+Relación N:M entre solicitud y documento, con subtotal, impuesto y total solicitados. Su composición contable exacta reside en `BillingRequestSaleItem`; no se autoriza mediante arreglos JSON.
+
+### BillingRequestSaleItem
+
+Reserva normalizada por partida entre `BillingRequestSaleDocument` y `SaleItem`. Conserva subtotal, impuesto y total solicitados por separado, admite reversión lógica y es la única fuente autorizativa para aplicar una factura a una partida.
 
 ### InvoiceSaleDocument
 

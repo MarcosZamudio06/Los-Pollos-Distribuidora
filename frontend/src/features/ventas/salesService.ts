@@ -39,10 +39,10 @@ export const salesService = {
     })
     return unwrapItem(response)
   },
-  async createSale(payload: CreateSalePayload, accessToken?: string | null) {
+  async createSale(payload: CreateSalePayload, idempotencyKey: string, accessToken?: string | null) {
     const response = await apiClient.post<ItemEnvelope<CreateSaleResponse>, CreateSalePayload>('/sales', {
       body: payload,
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     })
     return unwrapItem(response)
   },

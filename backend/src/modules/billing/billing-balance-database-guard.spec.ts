@@ -57,3 +57,22 @@ describe('billing request invoice application database guard', () => {
     expect(migration).toContain("MESSAGE = 'INVOICE_TOTAL_MISMATCH'");
   });
 });
+
+describe('billing request sale item database guard', () => {
+  const migration = readFileSync(
+    resolve(process.cwd(), 'prisma/migrations/20260720090000_normalize_billing_request_sale_items/migration.sql'),
+    'utf8',
+  );
+
+  it('serializes reservations per sale item and rejects duplicate active reservations', () => {
+    expect(migration).toContain('pg_advisory_xact_lock(hashtextextended(NEW."saleItemId", 0))');
+    expect(migration).toContain("MESSAGE = 'SALE_ITEM_ALREADY_RESERVED'");
+  });
+
+  it('bounds item applications by the authorized subtotal, tax, and total', () => {
+    expect(migration).toContain('consumed_subtotal + NEW."subtotalApplied" > requested_subtotal');
+    expect(migration).toContain('consumed_tax + NEW."taxApplied" > requested_tax');
+    expect(migration).toContain('consumed_total + NEW."totalApplied" > requested_total');
+    expect(migration).toContain("MESSAGE = 'BILLING_REQUEST_ITEM_AMOUNT_EXCEEDED'");
+  });
+});

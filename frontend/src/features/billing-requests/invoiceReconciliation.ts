@@ -8,7 +8,7 @@ export function buildInvoiceReconciliation(request: BillingRequestDetail): Invoi
     saleDocumentId: document.saleDocumentId,
     label: `${document.saleDocument.documentType}${document.saleDocument.physicalFolio ? ` · ${document.saleDocument.physicalFolio}` : ''}`,
     subtotalApplied: money(document.requestedSubtotal), taxApplied: money(document.requestedTax), totalApplied: money(document.requestedTotal),
-    items: document.saleDocument.sale.items.map((item) => ({ saleItemId: item.id, productName: item.productNameSnapshot, subtotalApplied: money(item.subtotal), taxApplied: money(item.tax), totalApplied: money(item.total) })),
+    items: document.requestedItems.map((item) => ({ saleItemId: item.saleItemId, productName: item.saleItem.productNameSnapshot, subtotalApplied: money(item.requestedSubtotal), taxApplied: money(item.requestedTax), totalApplied: money(item.requestedTotal) })),
   }))
   return { expectedVersion: request.version, invoice: {
     legalEntityId: request.sale?.legalEntityId ?? request.documents?.[0]?.saleDocument.sale.legalEntityId ?? '',

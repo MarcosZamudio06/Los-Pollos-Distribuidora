@@ -36,6 +36,7 @@ function asNumber(value: string | number | null | undefined) {
 
 function productToOption(product: Product, locationId: string): ProductOption {
   const balance = product.inventoryBalance ?? product.locationBalance ?? product.balances?.[0]
+  const equivalent = product.activeEquivalences?.[0]
   return {
     id: product.id,
     name: product.name,
@@ -50,7 +51,10 @@ function productToOption(product: Product, locationId: string): ProductOption {
     availablePieces: asNumber(balance?.quantityPieces),
     isLowStock: balance?.isLowStock,
     equivalentPolicyStatus: product.equivalentPolicyStatus ?? product.equivalencePolicyStatus,
-    unitEquivalentId: product.activeEquivalences?.[0]?.id,
+    unitEquivalentId: equivalent?.id,
+    equivalentFactor: equivalent?.factor,
+    equivalentUnitFrom: equivalent?.unitFrom,
+    equivalentUnitTo: equivalent?.unitTo,
   }
 }
 
@@ -150,7 +154,7 @@ export function SalesPosPage() {
   const [overrideReason, setOverrideReason] = useState('')
   const [confirmedSaleId, setConfirmedSaleId] = useState<string>()
   const [ticketFallback, setTicketFallback] = useState<TicketData | null>(null)
-  const [pendingSale, setPendingSale] = useState<{ payload: ReturnType<typeof buildCreateSalePayload>; customerName: string; locationName: string; paymentMethod: PaymentMethod; paymentType: PaymentType; documentType: SaleDocumentType; physicalFolio: string; requiresAdministrativeInvoice: boolean; locationId: string; total: number } | null>(null)
+  const [pendingSale, setPendingSale] = useState<{ payload: ReturnType<typeof buildCreateSalePayload>; idempotencyKey: string; customerName: string; locationName: string; paymentMethod: PaymentMethod; paymentType: PaymentType; documentType: SaleDocumentType; physicalFolio: string; requiresAdministrativeInvoice: boolean; locationId: string; total: number } | null>(null)
 
   const products = useProducts({ isActive: 'true', locationId, search: productSearch })
   const customers = useCustomers({ isActive: 'true', search: customerSearch })
@@ -212,6 +216,7 @@ export function SalesPosPage() {
     if (blocker) return
     setBackendError(null)
     setPendingSale({
+      idempotencyKey: crypto.randomUUID(),
       payload: buildCreateSalePayload({
         administrativeOverrideReason: overrideEnabled ? overrideReason : undefined,
         billingRequestReason, billingRequestNotes, cart, customer: selectedCustomer, documentType,
@@ -228,7 +233,7 @@ export function SalesPosPage() {
   async function confirmRegistration() {
     if (!pendingSale || createSale.isPending) return
     try {
-      const response = await createSale.mutateAsync(pendingSale.payload)
+      const response = await createSale.mutateAsync({ payload: pendingSale.payload, idempotencyKey: pendingSale.idempotencyKey })
       const sale = response.sale
       const saleId = sale?.id
       setConfirmedSaleId(saleId)

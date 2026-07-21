@@ -92,7 +92,7 @@ El estado de facturación se calcula desde venta, documento, cliente, entrega, p
 
 No se persiste como fuente de verdad ni se cambia manualmente. Solicitudes rechazadas o canceladas y facturas canceladas o sustituidas sin efecto vigente se excluyen de los acumulados.
 
-El read model expone `pendingSubtotal`, `pendingTax` y `pendingTotal`, además de las partidas con saldo vigente y su mismo desglose. Una solicitud parcial se compone exclusivamente mediante selección exacta de partidas; no se prorratea el total del documento. El backend recalcula el desglose desde `SaleItem` menos aplicaciones vigentes y rechaza importes enviados que no coincidan exactamente. La selección de partidas queda persistida en `BillingRequestSaleDocument.selectedSaleItemIds` para trazabilidad.
+El read model expone `pendingSubtotal`, `pendingTax` y `pendingTotal`, además de las partidas con saldo vigente y su mismo desglose. Una solicitud parcial se compone exclusivamente mediante selección exacta de partidas; no se prorratea el total del documento. El backend recalcula el desglose desde `SaleItem` menos aplicaciones vigentes y reservas de solicitudes activas, y rechaza importes enviados que no coincidan exactamente. La selección queda normalizada en `BillingRequestSaleItem`, con subtotal, impuesto y total solicitados por partida.
 
 ## Factura externa
 
@@ -110,6 +110,8 @@ La sustitución crea una relación explícita entre factura original y sustituta
 - `InvoiceSaleDocument` relaciona facturas externas y documentos con importes aplicados y reversión lógica.
 - Cada `InvoiceSaleDocument` conserva la referencia a `BillingRequestSaleDocument` que originó la aplicación. El importe solicitado es histórico e inmutable; la reserva pendiente se deriva como `requestedTotal - totalApplied vigente` contra esa relación, con mínimo cero. Una solicitud totalmente consumida conserva estado e historia, pero deja de reservar saldo.
 - `InvoiceSaleItemApplication` conserva la aplicación exacta por partida.
+- Cada aplicación por partida debe corresponder a un `BillingRequestSaleItem` de la relación solicitada. Sus acumulados vigentes no pueden exceder por separado `requestedSubtotal`, `requestedTax` ni `requestedTotal`.
+- Una partida no puede reservarse simultáneamente en más de una solicitud activa. El servicio y PostgreSQL serializan y protegen esta invariancia por `saleItemId`.
 
 Los importes usan `Decimal(14,2)`. La suma solicitada o aplicada no puede exceder el saldo disponible. Las operaciones bloquean documentos en orden estable, usan transacción serializable, `expectedVersion`, idempotencia y una protección PostgreSQL de respaldo.
 

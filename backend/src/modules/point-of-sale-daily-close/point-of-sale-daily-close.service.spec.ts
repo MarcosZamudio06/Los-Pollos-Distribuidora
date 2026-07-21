@@ -1,10 +1,13 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PointOfSaleDailyCloseService } from './point-of-sale-daily-close.service';
 
 describe('PointOfSaleDailyCloseService', () => {
   const prisma = {
+    user: { findUnique: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
-    pointOfSaleDailyClose: { findFirst: jest.fn(), findUnique: jest.fn() },
+    pointOfSaleDailyClose: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+    cashMovement: { create: jest.fn() },
+    scaleTicketReference: { create: jest.fn() },
   };
   const service = new PointOfSaleDailyCloseService(prisma as never);
 
@@ -12,14 +15,14 @@ describe('PointOfSaleDailyCloseService', () => {
 
   it('rejects opening an inactive location', async () => {
     prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: false });
-    await expect(service.open({ operationalLocationId: 'loc-1', businessDate: '2026-07-17' }, { id: 'u1' } as never))
+    await expect(service.open({ operationalLocationId: 'loc-1', businessDate: '2026-07-17' }, { id: 'u1', role: 'ADMIN' } as never))
       .rejects.toThrow(new BadRequestException('LOCATION_INACTIVE'));
   });
 
   it('rejects a duplicate non-cancelled close', async () => {
     prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true });
     prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue({ id: 'close-1' });
-    await expect(service.open({ operationalLocationId: 'loc-1', businessDate: '2026-07-17' }, { id: 'u1' } as never))
+    await expect(service.open({ operationalLocationId: 'loc-1', businessDate: '2026-07-17' }, { id: 'u1', role: 'ADMIN' } as never))
       .rejects.toThrow(new ConflictException('DAILY_CLOSE_ALREADY_EXISTS'));
   });
 
@@ -56,5 +59,105 @@ describe('PointOfSaleDailyCloseService', () => {
       from: new Date('2026-07-17T06:00:00.000Z'),
       to: new Date('2026-07-18T06:00:00.000Z'),
     });
+  });
+
+  it('rejects a seller attempting to access or change a close from another location', async () => {
+    const seller = { id: 'seller-1', role: 'SELLER' } as never;
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-seller', isActive: true });
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      id: 'close-other',
+      operationalLocationId: 'loc-other',
+      status: 'DRAFT',
+      sales: [],
+      updatedAt: new Date(),
+    });
+
+    await expect(service.get('close-other', seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+    await expect(service.validate('close-other', seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+    await expect(service.refresh('close-other', seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+    await expect(service.addExpense('close-other', { amount: 10, reason: 'Gasto' }, seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+    await expect(service.addScaleTicket('close-other', { physicalFolio: 'B-1', capturedDate: '2026-07-17', weightKg: 1 }, seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+
+    expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+    expect(prisma.scaleTicketReference.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a seller list query for another location', async () => {
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-seller', isActive: true });
+
+    await expect(
+      service.list({ operationalLocationId: 'loc-other' }, { id: 'seller-1', role: 'SELLER' } as never),
+    ).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+
+    expect(prisma.pointOfSaleDailyClose.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a seller opening a close outside the assigned location', async () => {
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-other', isActive: true });
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-seller', isActive: true });
+
+    await expect(
+      service.open({ operationalLocationId: 'loc-other', businessDate: '2026-07-17' }, { id: 'seller-1', role: 'SELLER' } as never),
+    ).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+
+    expect(prisma.pointOfSaleDailyClose.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('scopes a seller list to the assigned location without loading detail relations', async () => {
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-seller', isActive: true });
+    prisma.pointOfSaleDailyClose.findMany.mockResolvedValue([
+      { id: 'close-1', operationalLocationId: 'loc-seller', businessDate: new Date(), status: 'DRAFT', updatedAt: new Date() },
+    ]);
+
+    const result = await service.list({}, { id: 'seller-1', role: 'SELLER' } as never);
+
+    expect(prisma.pointOfSaleDailyClose.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { operationalLocationId: 'loc-seller' },
+    }));
+    expect(result).toEqual([expect.objectContaining({ id: 'close-1', operationalLocationId: 'loc-seller' })]);
+  });
+
+  it('projects only inventory to WAREHOUSE and only financial data to COLLECTIONS', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      status: 'DRAFT',
+      updatedAt: new Date(),
+      sales: [],
+      payments: [{ id: 'payment-1' }],
+      cashMovements: [{ id: 'cash-1' }],
+      inventoryMovements: [{ id: 'movement-1' }],
+      lines: [{ id: 'line-1', amount: 100 }],
+      scaleTicketReferences: [{ id: 'ticket-1', amount: 100, unitPrice: 50, weightKg: 2 }],
+      purchaseCostTotal: 80,
+      grossProfitTotal: 20,
+      netProfitTotal: 10,
+      totalInputKg: 2,
+      totalSoldKg: 1,
+      totalRemainingKg: 1,
+      totalShortageKg: 0,
+      totalSurplusKg: 0,
+      scaleReportedKg: 1,
+      scaleDifferenceKg: 0,
+      cashTotal: 100,
+      cardVoucherTotal: 0,
+      transferTotal: 0,
+      expenseTotal: 0,
+      grossSalesTotal: 100,
+      netCashExpected: 100,
+      cashDifferenceTotal: 0,
+    };
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-1', isActive: true });
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(close);
+
+    const warehouse = await service.get('close-1', { id: 'warehouse-1', role: 'WAREHOUSE' } as never);
+    const collections = await service.get('close-1', { id: 'collections-1', role: 'COLLECTIONS' } as never);
+
+    expect(warehouse).toHaveProperty('inventoryMovements');
+    expect(warehouse).not.toHaveProperty('payments');
+    expect(warehouse).not.toHaveProperty('purchaseCostTotal');
+    expect(collections).toHaveProperty('payments');
+    expect(collections).not.toHaveProperty('inventoryMovements');
+    expect(collections).not.toHaveProperty('purchaseCostTotal');
   });
 });

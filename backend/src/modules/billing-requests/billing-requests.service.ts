@@ -44,7 +44,7 @@ const detailInclude = {
   customer: true,
   sale: true,
   accountReceivables: true,
-  documents: { where: { reversedAt: null }, include: { saleDocument: { include: { sale: { include: { items: true } } } } } },
+  documents: { where: { reversedAt: null }, include: { requestedItems: { where: { reversedAt: null }, include: { saleItem: true } }, saleDocument: { include: { sale: { include: { items: true } } } } } },
   requestedBy: { select: { id: true, name: true } },
   reviewedBy: { select: { id: true, name: true } },
   history: {
@@ -105,7 +105,7 @@ export class BillingRequestsService {
               billingRequests: { select: { id: true }, take: 1 },
               accountReceivable: { select: { id: true } },
               documents: true,
-              items: { select: { id: true } },
+              items: { select: { id: true, taxableBase: true, tax: true, total: true } },
               deliveryOrder: true,
             },
           });
@@ -158,8 +158,8 @@ export class BillingRequestsService {
               requestedSubtotal: sale.subtotal.minus(sale.discount),
               requestedTax: sale.tax,
               requestedTotal: sale.total,
-              selectedSaleItemIds: sale.items?.map((item) => item.id) ?? [],
               createdByUserId: actor.id,
+              requestedItems: { create: (sale.items ?? []).map((item) => ({ saleItemId: item.id, requestedSubtotal: item.taxableBase, requestedTax: item.tax, requestedTotal: item.total })) },
             },
           });
           await this.writeAudit(tx, actor, 'BILLING_REQUEST_CREATED', 'BillingRequest', created.id, {
@@ -212,7 +212,7 @@ export class BillingRequestsService {
         const records = await tx.saleDocument.findMany({
           where: { id: { in: ids } },
           include: {
-            sale: { include: { customer: true, deliveryOrder: true, items: { include: { invoiceApplications: { include: { invoiceSaleDocument: { include: { invoice: true } } } } } } } },
+            sale: { include: { customer: true, deliveryOrder: true, items: { include: { invoiceApplications: { include: { invoiceSaleDocument: { include: { invoice: true } } } }, billingRequestItems: { where: { reversedAt: null }, include: { billingRequestSaleDocument: { include: { billingRequest: { select: { status: true } } } } } } } } } },
             billingRequestDocuments: { where: { reversedAt: null }, include: { billingRequest: { select: { status: true } } } },
             invoiceDocuments: { where: { reversedAt: null }, include: { invoice: { select: { status: true } } } },
           },
@@ -230,8 +230,10 @@ export class BillingRequestsService {
         }
         if (actor.role === 'SELLER' && records.some((record) => record.sale.userId !== actor.id)) throw new ForbiddenException('SELLER can only create requests for own sales');
 
+        const requestedItemsByDocument = new Map<string, Array<{ saleItemId: string; requestedSubtotal: Prisma.Decimal; requestedTax: Prisma.Decimal; requestedTotal: Prisma.Decimal }>>();
         for (const item of normalized) {
           const record = records.find((candidate) => candidate.id === item.saleDocumentId)!;
+          if (!item.items?.length) throw new BadRequestException('SALE_ITEM_SELECTION_REQUIRED');
           if (record.sale.status !== SaleStatus.CONFIRMED) throw new BadRequestException('SALE_NOT_CONFIRMED');
           if (record.status === 'CANCELLED') throw new BadRequestException('DOCUMENT_CANCELLED');
           const subtotal = new Prisma.Decimal(item.requestedSubtotal);
@@ -244,16 +246,26 @@ export class BillingRequestsService {
             if (new Set(selectedIds).size !== selectedIds.length) throw new BadRequestException('items must not contain duplicates');
             const selectedItems = record.sale.items.filter((saleItem) => selectedIds.includes(saleItem.id));
             if (selectedItems.length !== selectedIds.length) throw new BadRequestException('INVALID_SALE_ITEM_SELECTION');
-            const pendingFor = (saleItem: typeof selectedItems[number], field: 'subtotalApplied' | 'taxApplied' | 'totalApplied', original: Prisma.Decimal) => {
+            const pendingFor = (saleItem: typeof selectedItems[number], invoiceField: 'subtotalApplied' | 'taxApplied' | 'totalApplied', requestField: 'requestedSubtotal' | 'requestedTax' | 'requestedTotal', original: Prisma.Decimal) => {
               const applied = saleItem.invoiceApplications
                 .filter((application) => !application.reversedAt && !application.invoiceSaleDocument.reversedAt && application.invoiceSaleDocument.invoice.status === InvoiceStatus.ACTIVE)
-                .reduce((sum, application) => sum.plus(application[field]), new Prisma.Decimal(0));
-              return Prisma.Decimal.max(new Prisma.Decimal(0), original.minus(applied));
+                .reduce((sum, application) => sum.plus(application[invoiceField]), new Prisma.Decimal(0));
+              const reserved = (saleItem.billingRequestItems ?? [])
+                .filter((reservation) => !['REJECTED', 'CANCELLED'].includes(reservation.billingRequestSaleDocument.billingRequest.status))
+                .reduce((sum, reservation) => sum.plus(reservation[requestField]), new Prisma.Decimal(0));
+              return Prisma.Decimal.max(new Prisma.Decimal(0), original.minus(applied).minus(reserved));
             };
-            const exactSubtotal = selectedItems.reduce((sum, saleItem) => sum.plus(pendingFor(saleItem, 'subtotalApplied', saleItem.taxableBase)), new Prisma.Decimal(0));
-            const exactTax = selectedItems.reduce((sum, saleItem) => sum.plus(pendingFor(saleItem, 'taxApplied', saleItem.tax)), new Prisma.Decimal(0));
-            const exactTotal = selectedItems.reduce((sum, saleItem) => sum.plus(pendingFor(saleItem, 'totalApplied', saleItem.total)), new Prisma.Decimal(0));
+            const requestedItems = selectedItems.map((saleItem) => ({
+              saleItemId: saleItem.id,
+              requestedSubtotal: pendingFor(saleItem, 'subtotalApplied', 'requestedSubtotal', saleItem.taxableBase),
+              requestedTax: pendingFor(saleItem, 'taxApplied', 'requestedTax', saleItem.tax),
+              requestedTotal: pendingFor(saleItem, 'totalApplied', 'requestedTotal', saleItem.total),
+            }));
+            const exactSubtotal = requestedItems.reduce((sum, selected) => sum.plus(selected.requestedSubtotal), new Prisma.Decimal(0));
+            const exactTax = requestedItems.reduce((sum, selected) => sum.plus(selected.requestedTax), new Prisma.Decimal(0));
+            const exactTotal = requestedItems.reduce((sum, selected) => sum.plus(selected.requestedTotal), new Prisma.Decimal(0));
             if (!subtotal.equals(exactSubtotal) || !tax.equals(exactTax) || !total.equals(exactTotal)) throw new BadRequestException('INVALID_REQUESTED_ITEM_BREAKDOWN');
+            requestedItemsByDocument.set(item.saleDocumentId, requestedItems);
           }
           const activeRequested = record.billingRequestDocuments.filter((entry) => !['REJECTED', 'CANCELLED'].includes(entry.billingRequest.status)).reduce((sum, entry) => sum.plus(entry.requestedTotal), new Prisma.Decimal(0));
           const activeInvoiced = record.invoiceDocuments.filter((entry) => entry.invoice.status === 'ACTIVE').reduce((sum, entry) => sum.plus(entry.totalApplied), new Prisma.Decimal(0));
@@ -279,7 +291,7 @@ export class BillingRequestsService {
         for (const item of normalized) await tx.billingRequestSaleDocument.create({ data: {
           billingRequestId: created.id, saleDocumentId: item.saleDocumentId,
           requestedSubtotal: new Prisma.Decimal(item.requestedSubtotal), requestedTax: new Prisma.Decimal(item.requestedTax), requestedTotal: new Prisma.Decimal(item.requestedTotal), createdByUserId: actor.id,
-          selectedSaleItemIds: item.items?.map((selected) => selected.saleItemId) ?? [],
+          requestedItems: { create: requestedItemsByDocument.get(item.saleDocumentId) ?? [] },
         } });
         await this.writeAudit(tx, actor, 'BILLING_REQUEST_CREATED', 'BillingRequest', created.id, {
           after: this.toAuditJson({ status: created.status, customerId: created.customerId, documents: normalized }),
@@ -405,7 +417,8 @@ export class BillingRequestsService {
         const request = await tx.billingRequest.findUnique({
           where: { id },
           include: { documents: { where: { reversedAt: null }, include: {
-            invoiceApplications: { where: { reversedAt: null }, include: { invoice: { select: { id: true, status: true } } } },
+            invoiceApplications: { where: { reversedAt: null }, include: { invoice: { select: { id: true, status: true } }, itemApplications: { where: { reversedAt: null } } } },
+            requestedItems: { where: { reversedAt: null } },
             saleDocument: { include: { sale: { include: { items: true } }, invoiceDocuments: { where: { reversedAt: null }, include: { invoice: { select: { id: true, status: true } } } } } },
           } } },
         });
@@ -446,8 +459,21 @@ export class BillingRequestsService {
           const itemTax = sum(application.items.map((item) => new Prisma.Decimal(item.taxApplied)));
           const itemTotal = sum(application.items.map((item) => new Prisma.Decimal(item.totalApplied)));
           if (!itemSubtotal.equals(subtotal) || !itemTax.equals(tax) || !itemTotal.equals(total)) throw new BadRequestException('ITEM_APPLICATION_MISMATCH');
-          const saleItemIds = new Set(sale.items.map((item) => item.id));
-          if (new Set(application.items.map((item) => item.saleItemId)).size !== application.items.length || application.items.some((item) => !saleItemIds.has(item.saleItemId))) throw new BadRequestException('INVALID_SALE_ITEM_APPLICATION');
+          const authorizedItems = new Map(relation.requestedItems.map((item) => [item.saleItemId, item]));
+          if (new Set(application.items.map((item) => item.saleItemId)).size !== application.items.length || application.items.some((item) => !authorizedItems.has(item.saleItemId))) throw new BadRequestException('ITEM_NOT_IN_BILLING_REQUEST');
+          for (const item of application.items) {
+            const authorized = authorizedItems.get(item.saleItemId)!;
+            const prior = (relation.invoiceApplications ?? [])
+              .filter((entry) => entry.invoice.status === InvoiceStatus.ACTIVE && (!originalInvoice || entry.invoice.id !== originalInvoice.id))
+              .flatMap((entry) => entry.itemApplications ?? [])
+              .filter((entry) => entry.saleItemId === item.saleItemId);
+            const consumedSubtotal = sum(prior.map((entry) => entry.subtotalApplied));
+            const consumedTax = sum(prior.map((entry) => entry.taxApplied));
+            const consumedTotal = sum(prior.map((entry) => entry.totalApplied));
+            if (consumedSubtotal.plus(item.subtotalApplied).greaterThan(authorized.requestedSubtotal)
+              || consumedTax.plus(item.taxApplied).greaterThan(authorized.requestedTax)
+              || consumedTotal.plus(item.totalApplied).greaterThan(authorized.requestedTotal)) throw new ConflictException('BILLING_REQUEST_ITEM_AMOUNT_EXCEEDED');
+          }
           const consumedFromRequest = sum((relation.invoiceApplications ?? [])
             .filter((entry) => entry.invoice.status === InvoiceStatus.ACTIVE && (!originalInvoice || entry.invoice.id !== originalInvoice.id))
             .map((entry) => entry.totalApplied));

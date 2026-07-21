@@ -73,6 +73,28 @@ describe('salesService TASK-055 contracts', () => {
     expect(lastRequest().init?.method).toBe('GET')
   })
 
+  it('reutiliza la clave de idempotencia proporcionada para cada reintento de venta', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(okJson({ sale: { id: 'sale-1' } }))
+      .mockResolvedValueOnce(okJson({ sale: { id: 'sale-1' } }))
+    const payload = {
+      discount: 0,
+      documentType: 'SIMPLE_NOTE' as const,
+      items: [{ presentationType: 'CUT' as const, productId: 'product-1', quantityKg: 1, quantityPieces: 0, unit: 'KG' as const }],
+      locationId: 'loc-1',
+      paymentType: 'CASH_SALE' as const,
+      requiresAdministrativeInvoice: false,
+      saleChannel: 'COUNTER' as const,
+    }
+
+    await salesService.createSale(payload, 'sale-attempt-key', 'access-token')
+    await salesService.createSale(payload, 'sale-attempt-key', 'access-token')
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2)
+    expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get('idempotency-key')).toBe('sale-attempt-key')
+    expect(new Headers(vi.mocked(fetch).mock.calls[1][1]?.headers).get('idempotency-key')).toBe('sale-attempt-key')
+  })
+
   it('consulta documentos internos desde GET /api/sales/:saleId/documents', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(okJson({ items: [{ id: 'doc-1', documentType: 'SIMPLE_NOTE' }] }))
 

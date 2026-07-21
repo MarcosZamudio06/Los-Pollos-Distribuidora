@@ -334,17 +334,24 @@ export class BillingReportService {
         COALESCE((SELECT jsonb_agg(item ORDER BY item->>'productName') FROM (
           SELECT jsonb_build_object(
             'saleItemId', si."id", 'productName', si."productNameSnapshot",
-            'pendingSubtotal', GREATEST(si."taxableBase" - COALESCE(SUM(iia."subtotalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0)::text,
-            'pendingTax', GREATEST(si."tax" - COALESCE(SUM(iia."taxApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0)::text,
-            'pendingTotal', GREATEST(si."total" - COALESCE(SUM(iia."totalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0)::text
+            'pendingSubtotal', GREATEST(si."taxableBase" - COALESCE(SUM(iia."subtotalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0) - COALESCE(reserved."requestedSubtotal", 0), 0)::text,
+            'pendingTax', GREATEST(si."tax" - COALESCE(SUM(iia."taxApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0) - COALESCE(reserved."requestedTax", 0), 0)::text,
+            'pendingTotal', GREATEST(si."total" - COALESCE(SUM(iia."totalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0) - COALESCE(reserved."requestedTotal", 0), 0)::text
           ) AS item
           FROM "SaleItem" si
           LEFT JOIN "InvoiceSaleItemApplication" iia ON iia."saleItemId" = si."id"
           LEFT JOIN "InvoiceSaleDocument" ix ON ix."id" = iia."invoiceSaleDocumentId"
           LEFT JOIN "Invoice" inv ON inv."id" = ix."invoiceId"
+          LEFT JOIN LATERAL (
+            SELECT SUM(bri."requestedSubtotal") AS "requestedSubtotal", SUM(bri."requestedTax") AS "requestedTax", SUM(bri."requestedTotal") AS "requestedTotal"
+            FROM "BillingRequestSaleItem" bri
+            JOIN "BillingRequestSaleDocument" brd ON brd."id" = bri."billingRequestSaleDocumentId" AND brd."reversedAt" IS NULL
+            JOIN "BillingRequest" br ON br."id" = brd."billingRequestId"
+            WHERE bri."saleItemId" = si."id" AND bri."reversedAt" IS NULL AND br."status" IN ('REQUESTED', 'IN_REVIEW', 'APPROVED')
+          ) reserved ON TRUE
           WHERE si."saleId" = b."saleId"
-          GROUP BY si."id"
-          HAVING GREATEST(si."total" - COALESCE(SUM(iia."totalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0), 0) > 0
+          GROUP BY si."id", reserved."requestedSubtotal", reserved."requestedTax", reserved."requestedTotal"
+          HAVING GREATEST(si."total" - COALESCE(SUM(iia."totalApplied") FILTER (WHERE iia."reversedAt" IS NULL AND inv."status" = 'ACTIVE'), 0) - COALESCE(reserved."requestedTotal", 0), 0) > 0
         ) requestable), '[]'::jsonb) AS "requestableItems"
       FROM "BillingReportableNoteReadModel" b JOIN "Sale" s ON s."id" = b."saleId" ${where}
     )`;

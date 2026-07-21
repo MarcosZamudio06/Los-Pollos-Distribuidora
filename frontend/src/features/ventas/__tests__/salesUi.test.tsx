@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancelSaleDialog } from '../CancelSaleDialog'
 import { Cart, CustomerSelector, SaleSummary, TicketModal } from '../components'
 import { SaleDetailPage } from '../SaleDetailPage'
@@ -131,6 +131,10 @@ describe('TASK-055 sales UI behavior', () => {
     mockState.toast.warning.mockReset()
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
 
   it('renderiza POS empresarial para ADMIN y mantiene estados operativos visibles', () => {
     mockState.auth = { user: { role: 'ADMIN' } }
@@ -219,7 +223,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect(document.body.textContent).toContain('Autorización administrativa')
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
-      expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección' }))
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección' }) }))
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -301,6 +305,7 @@ describe('TASK-055 sales UI behavior', () => {
   })
 
   it('conserva carrito, cliente y resumen cuando el registro de venta falla', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'sale-attempt-key' })
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = {
       data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
@@ -327,8 +332,11 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
+      await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
-      expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(2)
+      expect(mockState.createSale.mutateAsync).toHaveBeenNthCalledWith(1, expect.objectContaining({ idempotencyKey: 'sale-attempt-key' }))
+      expect(mockState.createSale.mutateAsync).toHaveBeenNthCalledWith(2, expect.objectContaining({ idempotencyKey: 'sale-attempt-key' }))
       expect(container.textContent).toContain('1 en carrito')
       expect(container.textContent).toContain('$5,000.00')
       expect(container.textContent).toContain('$3,200.00')

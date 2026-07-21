@@ -41,7 +41,8 @@ export type BillingRequestDetail = BillingRequest & {
 }
 
 export type BillingRequestSaleItem = { id: string; productNameSnapshot: string; productSkuSnapshot?: string | null; subtotal: string | number; tax: string | number; total: string | number }
-export type BillingRequestDocument = { id: string; saleDocumentId: string; requestedSubtotal: string | number; requestedTax: string | number; requestedTotal: string | number; saleDocument: { id: string; documentType: string; physicalFolio?: string | null; sale: { id: string; legalEntityId?: string | null; currencyCode: string; items: BillingRequestSaleItem[] } } }
+export type BillingRequestedItem = { saleItemId: string; requestedSubtotal: string | number; requestedTax: string | number; requestedTotal: string | number; saleItem: Pick<BillingRequestSaleItem, 'id' | 'productNameSnapshot'> }
+export type BillingRequestDocument = { id: string; saleDocumentId: string; requestedSubtotal: string | number; requestedTax: string | number; requestedTotal: string | number; requestedItems: BillingRequestedItem[]; saleDocument: { id: string; documentType: string; physicalFolio?: string | null; sale: { id: string; legalEntityId?: string | null; currencyCode: string; items: BillingRequestSaleItem[] } } }
 export type InvoiceItemApplication = { saleItemId: string; productName: string; subtotalApplied: string; taxApplied: string; totalApplied: string }
 export type InvoiceDocumentApplication = { saleDocumentId: string; label: string; subtotalApplied: string; taxApplied: string; totalApplied: string; items: InvoiceItemApplication[] }
 export type InvoiceReconciliationInput = { expectedVersion: number; invoice: { legalEntityId: string; currencyCode: string; series: string; folio: string; uuid?: string; subtotal: string; discount: string; tax: string; total: string }; applications: InvoiceDocumentApplication[] }

@@ -19,26 +19,36 @@ const detailInclude = {
 export class PointOfSaleDailyCloseService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: ListDailyCloseQueryDto) {
-    return this.prisma.pointOfSaleDailyClose.findMany({
+  async list(query: ListDailyCloseQueryDto, user: AuthenticatedUser) {
+    const locationId = await this.locationScope(user);
+    if (locationId && query.operationalLocationId && query.operationalLocationId !== locationId) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
+    const closes = await this.prisma.pointOfSaleDailyClose.findMany({
       where: {
-        ...(query.operationalLocationId ? { operationalLocationId: query.operationalLocationId } : {}),
+        ...(locationId ? { operationalLocationId: locationId } : query.operationalLocationId ? { operationalLocationId: query.operationalLocationId } : {}),
         ...(query.businessDate ? { businessDate: this.date(query.businessDate) } : {}),
       },
       include: { operationalLocation: { select: { id: true, name: true, code: true } } },
       orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
     });
+    return closes.map((close) => this.projectForRole(close, user));
   }
 
-  async get(id: string) {
+  async get(id: string, user: AuthenticatedUser) {
+    return this.projectForRole(await this.requireCloseAccess(id, user), user);
+  }
+
+  private async findClose(id: string) {
     const close = await this.prisma.pointOfSaleDailyClose.findUnique({ where: { id }, include: detailInclude });
     if (!close) throw new NotFoundException('DAILY_CLOSE_NOT_FOUND');
-    return this.withCostQuality(close);
+    return close;
   }
 
   async open(dto: OpenDailyCloseDto, user: AuthenticatedUser) {
     const location = await this.prisma.operationalLocation.findUnique({ where: { id: dto.operationalLocationId }, select: { id: true, isActive: true } });
     if (!location?.isActive) throw new BadRequestException('LOCATION_INACTIVE');
+    await this.assertLocationAccess(dto.operationalLocationId, user);
     const businessDate = this.date(dto.businessDate);
     const duplicate = await this.prisma.pointOfSaleDailyClose.findFirst({
       where: { operationalLocationId: dto.operationalLocationId, businessDate, status: { not: 'CANCELLED' } }, select: { id: true },
@@ -50,22 +60,22 @@ export class PointOfSaleDailyCloseService {
       await this.syncOperations(tx, close.id, dto.operationalLocationId, from, to);
       return close;
     });
-    return this.recalculate(created.id);
+    return this.projectForRole(await this.recalculate(created.id), user);
   }
 
   async addExpense(id: string, dto: CreateExpenseDto, user: AuthenticatedUser) {
-    const close = await this.requireDraft(id);
+    const close = await this.requireDraft(id, user);
     if (!dto.reason.trim()) throw new BadRequestException('EXPENSE_REASON_REQUIRED');
     await this.prisma.cashMovement.create({ data: {
       operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, type: 'EXPENSE', movementChannel: 'CASH',
       amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(), userId: user.id,
     }});
     await this.bump(id);
-    return this.recalculate(id);
+    return this.projectForRole(await this.recalculate(id), user);
   }
 
   async addScaleTicket(id: string, dto: CreateScaleTicketDto, user: AuthenticatedUser) {
-    const close = await this.requireDraft(id);
+    const close = await this.requireDraft(id, user);
     if (dto.weightKg === undefined && dto.pieceCount === undefined && dto.amount === undefined) throw new BadRequestException('SCALE_TICKET_QUANTITY_REQUIRED');
     try {
       await this.prisma.scaleTicketReference.create({ data: {
@@ -78,11 +88,11 @@ export class PointOfSaleDailyCloseService {
       throw error;
     }
     await this.bump(id);
-    return this.recalculate(id);
+    return this.projectForRole(await this.recalculate(id), user);
   }
 
-  async validate(id: string) {
-    const close = await this.requireDraft(id);
+  async validate(id: string, user: AuthenticatedUser) {
+    const close = await this.requireDraft(id, user);
     const updated = await this.recalculate(id);
     const errors: Array<{ code: string; message: string }> = [];
     if (updated.lines.some((line) => line.operationalLocationId !== close.operationalLocationId)) errors.push({ code: 'OPERATION_LOCATION_MISMATCH', message: 'Hay operaciones de otra ubicación.' });
@@ -91,44 +101,49 @@ export class PointOfSaleDailyCloseService {
       { code: 'CASH_DIFFERENCE', value: Number(updated.cashDifferenceTotal), unit: 'MXN' },
     ].filter((item) => item.value !== 0);
     const validated = await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { lastValidatedAt: new Date(), validatedSourceVersion: updated.version }, include: detailInclude });
-    return { close: validated, valid: errors.length === 0, errors, differences };
+    return {
+      close: this.projectForRole(validated, user),
+      valid: errors.length === 0,
+      errors,
+      differences: user.role === 'WAREHOUSE' ? differences.filter((item) => item.unit === 'kg') : user.role === 'COLLECTIONS' ? differences.filter((item) => item.unit === 'MXN') : differences,
+    };
   }
 
   async review(id: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    const validation = await this.validate(id);
+    const validation = await this.validate(id, user);
     if (!validation.valid) throw new BadRequestException({ message: 'DAILY_CLOSE_VALIDATION_FAILED', errors: validation.errors });
-    return this.transition(id, dto.version, 'DRAFT', { status: 'REVIEWED', reviewedByUserId: user.id, reviewedAt: new Date(), validatedSourceVersion: dto.version + 1 });
+    return this.transition(id, dto.version, 'DRAFT', { status: 'REVIEWED', reviewedByUserId: user.id, reviewedAt: new Date(), validatedSourceVersion: dto.version + 1 }, user);
   }
 
   async close(id: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    const current = await this.get(id);
+    const current = await this.requireCloseAccess(id, user);
     if (current.validatedSourceVersion !== current.version) throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
-    return this.transition(id, dto.version, 'REVIEWED', { status: 'CLOSED', closedByUserId: user.id, closedAt: new Date() });
+    return this.transition(id, dto.version, 'REVIEWED', { status: 'CLOSED', closedByUserId: user.id, closedAt: new Date() }, user);
   }
 
   async cancel(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    return this.transition(id, dto.version, undefined, { status: 'CANCELLED', cancelledByUserId: user.id, cancelledAt: new Date(), notes: `Cancelación: ${dto.reason.trim()}` });
+    return this.transition(id, dto.version, undefined, { status: 'CANCELLED', cancelledByUserId: user.id, cancelledAt: new Date(), notes: `Cancelación: ${dto.reason.trim()}` }, user);
   }
 
   async reopen(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    return this.transition(id, dto.version, 'CLOSED', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null });
+    return this.transition(id, dto.version, 'CLOSED', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null }, user);
   }
 
-  async refresh(id: string) {
-    await this.requireDraft(id);
-    return this.recalculate(id);
+  async refresh(id: string, user: AuthenticatedUser) {
+    await this.requireDraft(id, user);
+    return this.projectForRole(await this.recalculate(id), user);
   }
 
   private async recalculate(id: string) {
-    let close = await this.get(id);
+    let close = await this.findClose(id);
     if (close.status !== 'DRAFT') return this.withCostQuality(close);
     const { from, to } = this.operationalDay(close.businessDate);
     await this.prisma.$transaction((tx) => this.syncOperations(tx, close.id, close.operationalLocationId, from, to));
-    close = await this.get(id);
+    close = await this.findClose(id);
     const sum = (values: Array<Prisma.Decimal | null>, fallback = 0) => values.reduce<number>((total, value) => total + Number(value ?? fallback), 0);
     const byConcept = (concept: string, field: 'quantityKg' | 'amount') => sum(close.lines.filter((line) => line.conceptType === concept).map((line) => line[field] as Prisma.Decimal | null));
     const scaleReportedKg = sum(close.scaleTicketReferences.map((ticket) => ticket.weightKg));
@@ -154,7 +169,7 @@ export class PointOfSaleDailyCloseService {
     return { ...updated, costQuality, dataAsOf: updated.updatedAt };
   }
 
-  private async requireDraft(id: string) { const close = await this.get(id); if (close.status !== 'DRAFT') throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'); return close; }
+  private async requireDraft(id: string, user: AuthenticatedUser) { const close = await this.requireCloseAccess(id, user); if (close.status !== 'DRAFT') throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'); return close; }
   private async syncOperations(tx: Prisma.TransactionClient, closeId: string, locationId: string, from: Date, to: Date) {
     await tx.sale.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED' } }, data: { pointOfSaleDailyCloseId: null } });
     await tx.payment.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, status: { in: ['REGISTERED', 'APPLIED'] }, routeId: null } }, data: { pointOfSaleDailyCloseId: null } });
@@ -163,10 +178,39 @@ export class PointOfSaleDailyCloseService {
     await tx.inventoryMovement.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, type: { in: ['IN', 'PURCHASE', 'TRANSFER_IN'] }, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
   }
   private async bump(id: string) { await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null } }); }
-  private async transition(id: string, version: number, expected: PointOfSaleDailyCloseStatus | undefined, data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput) {
+  private async transition(id: string, version: number, expected: PointOfSaleDailyCloseStatus | undefined, data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput, user: AuthenticatedUser) {
     const result = await this.prisma.pointOfSaleDailyClose.updateMany({ where: { id, version, ...(expected ? { status: expected } : { status: { not: 'CANCELLED' } }) }, data: { ...data, version: { increment: 1 } } });
     if (!result.count) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
-    return this.get(id);
+    return this.get(id, user);
+  }
+  private async locationScope(user: AuthenticatedUser): Promise<string | null> {
+    if (user.role === 'ADMIN') return null;
+    const actor = await this.prisma.user.findUnique({ where: { id: user.id }, select: { operationalLocationId: true, isActive: true } });
+    if (!actor?.isActive || !actor.operationalLocationId) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    return actor.operationalLocationId;
+  }
+  private async assertLocationAccess(locationId: string, user: AuthenticatedUser) {
+    const allowedLocationId = await this.locationScope(user);
+    if (allowedLocationId && allowedLocationId !== locationId) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+  }
+  private async requireCloseAccess(id: string, user: AuthenticatedUser) {
+    const close = await this.findClose(id);
+    await this.assertLocationAccess(close.operationalLocationId, user);
+    return close;
+  }
+  private projectForRole(close: object, user: AuthenticatedUser) {
+    const candidate = close as { sales?: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date };
+    const result = { ...(Array.isArray(candidate.sales) ? this.withCostQuality(candidate as { sales: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date }) : candidate) } as Record<string, unknown>;
+    if (user.role === 'WAREHOUSE') {
+      ['payments', 'cashMovements', 'sales', 'cashTotal', 'cardVoucherTotal', 'transferTotal', 'expenseTotal', 'grossSalesTotal', 'netCashExpected', 'cashDifferenceTotal', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality'].forEach((field) => delete result[field]);
+      if (Array.isArray(result.lines)) result.lines = result.lines.map(({ amount, ...line }) => line);
+      if (Array.isArray(result.scaleTicketReferences)) result.scaleTicketReferences = result.scaleTicketReferences.map(({ amount, unitPrice, ...ticket }) => ticket);
+    }
+    if (user.role === 'COLLECTIONS') {
+      ['inventoryMovements', 'lines', 'scaleTicketReferences', 'totalInputKg', 'totalSoldKg', 'totalRemainingKg', 'totalShortageKg', 'totalSurplusKg', 'scaleReportedKg', 'scaleDifferenceKg', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality'].forEach((field) => delete result[field]);
+      if (Array.isArray(result.sales)) result.sales = result.sales.map(({ items, ...sale }) => sale);
+    }
+    return result;
   }
   private admin(user: AuthenticatedUser) { if (user.role !== 'ADMIN') throw new ForbiddenException('DAILY_CLOSE_ADMIN_REQUIRED'); }
   private date(value: string) { const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`); if (Number.isNaN(date.getTime())) throw new BadRequestException('INVALID_BUSINESS_DATE'); return date; }

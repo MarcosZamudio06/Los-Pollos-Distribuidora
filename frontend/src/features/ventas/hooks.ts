@@ -24,7 +24,7 @@ export function useCreateSale() {
   const { accessToken } = useAuth()
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: CreateSalePayload) => salesService.createSale(payload, accessToken),
+    mutationFn: ({ idempotencyKey, payload }: { idempotencyKey: string; payload: CreateSalePayload }) => salesService.createSale(payload, idempotencyKey, accessToken),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['products'] })
       void queryClient.invalidateQueries({ queryKey: ['inventory-balances'] })

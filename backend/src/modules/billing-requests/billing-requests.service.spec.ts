@@ -58,12 +58,19 @@ const documentRecord = {
   sale: {
     id: 'sale-1', customerId: 'customer-1', userId: 'seller-1', status: SaleStatus.CONFIRMED,
     currencyCode: 'MXN', legalEntityId: 'legal-1', subtotal: new Prisma.Decimal(90), discount: new Prisma.Decimal(0), tax: new Prisma.Decimal(10), total: new Prisma.Decimal(100),
-    items: [{ id: 'item-1', taxableBase: new Prisma.Decimal(90), tax: new Prisma.Decimal(10), total: new Prisma.Decimal(100), invoiceApplications: [] }],
+    items: [{ id: 'item-1', taxableBase: new Prisma.Decimal(90), tax: new Prisma.Decimal(10), total: new Prisma.Decimal(100), invoiceApplications: [], billingRequestItems: [] }],
     customer: { id: 'customer-1', isActive: true, taxId: 'XAXX010101000', fiscalName: 'Cliente Uno', fiscalPostalCode: '64000', fiscalRegime: '601', fiscalUseCode: 'G03', billingEmail: 'billing@example.com' },
     deliveryOrder: null,
   },
   billingRequestDocuments: [], invoiceDocuments: [],
 };
+
+const authorizedItem = (subtotal = 90, tax = 10, total = 100, saleItemId = 'item-1') => ({
+  saleItemId,
+  requestedSubtotal: new Prisma.Decimal(subtotal),
+  requestedTax: new Prisma.Decimal(tax),
+  requestedTotal: new Prisma.Decimal(total),
+});
 
 describe('BillingRequestsService', () => {
   it('loads request documents with sale items required for invoice reconciliation', async () => {
@@ -91,7 +98,7 @@ describe('BillingRequestsService', () => {
     tx.invoice.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(invoice);
     tx.invoice.create.mockResolvedValue(invoice);
     tx.invoiceSaleDocument.create.mockResolvedValue({ id: 'invoice-document-1' });
-    tx.billingRequest.findUnique.mockResolvedValue({ id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED, documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100), invoiceApplications: [], saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }] });
+    tx.billingRequest.findUnique.mockResolvedValue({ id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED, documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100), requestedItems: [authorizedItem()], invoiceApplications: [], saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }] });
 
     await service.linkInvoice('request-1', { expectedVersion: 1, invoice: { legalEntityId: 'legal-1', currencyCode: 'MXN', series: 'A', folio: '1', subtotal: '90.00', discount: '0.00', tax: '10.00', total: '100.00' }, applications: [{ saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00', items: [{ saleItemId: 'item-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00' }] }] }, admin, 'link-key');
 
@@ -114,6 +121,24 @@ describe('BillingRequestsService', () => {
     await expect(service.linkInvoice('request-1', { expectedVersion: 1, invoiceId: 'invoice-1', applications: [{ saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00', items: [{ saleItemId: 'item-1', subtotalApplied: '80.00', taxApplied: '10.00', totalApplied: '90.00' }] }] }, admin, 'mismatch')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects a sale item that was not authorized by the billing request', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.invoice.findUnique.mockResolvedValue(null);
+    tx.billingRequest.findUnique.mockResolvedValue({ id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED, documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedSubtotal: new Prisma.Decimal(90), requestedTax: new Prisma.Decimal(10), requestedTotal: new Prisma.Decimal(100), requestedItems: [authorizedItem()], invoiceApplications: [], saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(200), items: [{ id: 'item-1' }, { id: 'item-2' }] } } }] });
+
+    await expect(service.linkInvoice('request-1', { expectedVersion: 1, invoiceId: 'invoice-1', applications: [{ saleDocumentId: 'document-1', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00', items: [{ saleItemId: 'item-2', subtotalApplied: '90.00', taxApplied: '10.00', totalApplied: '100.00' }] }] }, admin, 'unauthorized-item')).rejects.toThrow('ITEM_NOT_IN_BILLING_REQUEST');
+  });
+
+  it('rejects a fiscal split that exceeds the authorized item subtotal or tax', async () => {
+    const { prisma, tx } = createPrisma();
+    const service = new BillingRequestsService(prisma as unknown as PrismaService);
+    tx.invoice.findUnique.mockResolvedValue(null);
+    tx.billingRequest.findUnique.mockResolvedValue({ id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED, documents: [{ id: 'request-document-1', saleDocumentId: 'document-1', requestedSubtotal: new Prisma.Decimal(90), requestedTax: new Prisma.Decimal(10), requestedTotal: new Prisma.Decimal(100), requestedItems: [authorizedItem()], invoiceApplications: [], saleDocument: { id: 'document-1', invoiceDocuments: [], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } } }] });
+
+    await expect(service.linkInvoice('request-1', { expectedVersion: 1, invoiceId: 'invoice-1', applications: [{ saleDocumentId: 'document-1', subtotalApplied: '100.00', taxApplied: '0.00', totalApplied: '100.00', items: [{ saleItemId: 'item-1', subtotalApplied: '100.00', taxApplied: '0.00', totalApplied: '100.00' }] }] }, admin, 'invalid-tax-split')).rejects.toThrow('BILLING_REQUEST_ITEM_AMOUNT_EXCEEDED');
+  });
+
   it('rolls back before persistence when an application would over-invoice a document', async () => {
     const { prisma, tx } = createPrisma();
     const service = new BillingRequestsService(prisma as unknown as PrismaService);
@@ -122,6 +147,7 @@ describe('BillingRequestsService', () => {
       id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
       documents: [{
         saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100),
+        requestedItems: [authorizedItem()], invoiceApplications: [],
         saleDocument: {
           id: 'document-1',
           invoiceDocuments: [{ totalApplied: new Prisma.Decimal(80), invoice: { id: 'invoice-existing', status: 'ACTIVE' } }],
@@ -154,7 +180,7 @@ describe('BillingRequestsService', () => {
       id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
       documents: [{
         id: 'request-document-1', saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(50),
-        invoiceApplications: [{ totalApplied: new Prisma.Decimal(30), invoice: { status: 'ACTIVE' } }],
+        requestedItems: [authorizedItem(45, 5, 50)], invoiceApplications: [{ totalApplied: new Prisma.Decimal(30), itemApplications: [], invoice: { status: 'ACTIVE' } }],
         saleDocument: {
           id: 'document-1', invoiceDocuments: [{ totalApplied: new Prisma.Decimal(30), invoice: { id: 'invoice-existing', status: 'ACTIVE' } }],
           sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(200), items: [{ id: 'item-1' }] },
@@ -191,7 +217,7 @@ describe('BillingRequestsService', () => {
       id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
       documents: [{
         id: 'request-document-2', saleDocumentId: 'document-2', requestedTotal: new Prisma.Decimal(1000),
-        invoiceApplications: [],
+        requestedItems: [authorizedItem(900, 100, 1000, 'item-2')], invoiceApplications: [],
         saleDocument: {
           id: 'document-2', invoiceDocuments: [],
           sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(1000), items: [{ id: 'item-2' }] },
@@ -237,7 +263,7 @@ describe('BillingRequestsService', () => {
       id: 'request-1', version: 1, status: BillingRequestStatus.APPROVED,
       documents: [{
         saleDocumentId: 'document-1', requestedTotal: new Prisma.Decimal(100),
-        invoiceApplications: [{ totalApplied: new Prisma.Decimal(100), invoice: { id: 'invoice-old', status: 'ACTIVE' } }],
+        requestedItems: [authorizedItem()], invoiceApplications: [{ totalApplied: new Prisma.Decimal(100), itemApplications: [{ saleItemId: 'item-1', subtotalApplied: new Prisma.Decimal(90), taxApplied: new Prisma.Decimal(10), totalApplied: new Prisma.Decimal(100) }], invoice: { id: 'invoice-old', status: 'ACTIVE' } }],
         saleDocument: { id: 'document-1', invoiceDocuments: [{ totalApplied: new Prisma.Decimal(100), invoice: { id: 'invoice-old', status: 'ACTIVE' } }], sale: { legalEntityId: 'legal-1', currencyCode: 'MXN', total: new Prisma.Decimal(100), items: [{ id: 'item-1' }] } },
       }],
     });
@@ -355,7 +381,7 @@ describe('BillingRequestsService', () => {
 
     expect(tx.$queryRaw).toHaveBeenCalled();
     expect(tx.billingRequestSaleDocument.create).toHaveBeenCalledTimes(2);
-    expect(tx.billingRequestSaleDocument.create).toHaveBeenCalledWith({ data: expect.objectContaining({ selectedSaleItemIds: ['item-1'], requestedSubtotal: new Prisma.Decimal(90), requestedTax: new Prisma.Decimal(10) }) });
+    expect(tx.billingRequestSaleDocument.create).toHaveBeenCalledWith({ data: expect.objectContaining({ requestedItems: { create: [expect.objectContaining({ saleItemId: 'item-1', requestedSubtotal: new Prisma.Decimal(90), requestedTax: new Prisma.Decimal(10) })] }, requestedSubtotal: new Prisma.Decimal(90), requestedTax: new Prisma.Decimal(10) }) });
     expect(tx.billingRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ saleId: null, creationIdempotencyKey: 'grouped-key' }) }));
   });
 
@@ -385,7 +411,7 @@ describe('BillingRequestsService', () => {
     tx.billingRequest.create.mockResolvedValue(request());
 
     await expect(service.create({ customerId: 'customer-1', reason: 'Configured policy', documents: [
-      { saleDocumentId: 'document-1', requestedSubtotal: '90', requestedTax: '10', requestedTotal: '100' },
+      { saleDocumentId: 'document-1', requestedSubtotal: '90', requestedTax: '10', requestedTotal: '100', items: [{ saleItemId: 'item-1' }] },
     ] }, seller, 'configured-policy')).resolves.toMatchObject({ id: 'request-1' });
     expect(tx.$queryRaw.mock.calls.some(([query]) => JSON.stringify(query).includes('BillingReportableNoteReadModel'))).toBe(true);
   });

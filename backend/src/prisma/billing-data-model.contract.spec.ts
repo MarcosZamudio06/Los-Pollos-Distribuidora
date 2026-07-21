@@ -24,7 +24,11 @@ describe('billing reportable notes phase 1 data contract', () => {
     expect(model('Invoice')).toMatch(/uuid\s+String\?\s+@unique/);
     expect(model('Invoice')).toMatch(/version\s+Int\s+@default\(1\)/);
     expect(model('BillingRequestSaleDocument')).toContain('requestedTotal');
-    expect(model('BillingRequestSaleDocument')).toContain('selectedSaleItemIds');
+    expect(model('BillingRequestSaleDocument')).toContain('requestedItems');
+    expect(model('BillingRequestSaleItem')).toMatch(/saleItemId\s+String/);
+    expect(model('BillingRequestSaleItem')).toMatch(/requestedSubtotal\s+Decimal/);
+    expect(model('BillingRequestSaleItem')).toMatch(/requestedTax\s+Decimal/);
+    expect(model('BillingRequestSaleItem')).toMatch(/requestedTotal\s+Decimal/);
     expect(model('InvoiceSaleDocument')).toContain('totalApplied');
     expect(model('InvoiceSaleDocument')).toContain('billingRequestSaleDocumentId');
     expect(model('InvoiceSaleItemApplication')).toContain('saleItemId');

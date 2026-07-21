@@ -32,18 +32,20 @@ export class PointOfSaleDailyCloseController {
   }
   @Get() @Roles('ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS') async list(
     @Query() query: ListDailyCloseQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.response(
       'Daily closes retrieved successfully',
-      await this.service.list(query),
+      await this.service.list(query, user),
     );
   }
   @Get(':id') @Roles('ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS') async get(
     @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.response(
       'Daily close retrieved successfully',
-      await this.service.get(id),
+      await this.service.get(id, user),
     );
   }
   @Post() @Roles('ADMIN', 'SELLER') async open(
@@ -77,18 +79,19 @@ export class PointOfSaleDailyCloseController {
   }
   @Post(':id/validate') @Roles('ADMIN', 'SELLER') async validate(
     @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.response(
       'Daily close validated successfully',
-      await this.service.validate(id),
+      await this.service.validate(id, user),
     );
   }
   @Post(':id/refresh')
   @Roles('ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS')
-  async refresh(@Param('id') id: string) {
+  async refresh(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.response(
       'Daily close refreshed successfully',
-      await this.service.refresh(id),
+      await this.service.refresh(id, user),
     );
   }
   @Patch(':id/review') @Roles('ADMIN') async review(

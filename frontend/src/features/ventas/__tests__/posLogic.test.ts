@@ -58,6 +58,10 @@ const kgAndPieceItem: CartItem = {
   locationName: 'Counter cooler',
   availableKg: 10,
   availablePieces: 8,
+  unitEquivalentId: 'eq-1',
+  equivalentFactor: 1.25,
+  equivalentUnitFrom: 'PIECE',
+  equivalentUnitTo: 'KG',
   quantityKg: 2,
   quantityPieces: 3,
 }
@@ -81,6 +85,10 @@ const activeCustomer: CustomerOption = {
 describe('POS cart calculations and validation', () => {
   it('calculates a real-time total using kg and piece quantities without sending it as source of truth', () => {
     expect(calculateCartTotal([kgItem, pieceItem])).toBe(577.2)
+  })
+
+  it('converts KG_AND_PIECE pieces to kilograms before calculating the preview subtotal', () => {
+    expect(calculateCartTotal([kgAndPieceItem])).toBe(460)
   })
 
   it('rejects empty, non-positive, over-stock, and fractional piece quantities per operational stock', () => {
