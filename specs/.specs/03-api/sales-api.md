@@ -52,7 +52,7 @@ Permisos: `ADMIN`, `SELLER`.
 
 Body importante:
 
-`initialPayment` es opcional cuando no se recibe dinero al confirmar la venta. Si se envía, requiere `amount`, `paymentMethod` y `paidAt`.
+`initialPayment` es opcional cuando no se recibe dinero al confirmar la venta. Si se envía, requiere `amount` y `paymentMethod`; el backend asigna `paidAt`.
 
 ```json
 {
@@ -69,8 +69,7 @@ Body importante:
   "paymentType": "CASH_SALE",
   "initialPayment": {
     "amount": 500,
-    "paymentMethod": "CASH",
-    "paidAt": "2026-06-21T10:00:00.000Z"
+    "paymentMethod": "CASH"
   },
   "discount": 0,
   "commercialPolicyId": "string opcional",
@@ -103,6 +102,8 @@ Validaciones:
 - `paymentType` clasifica solo el tipo de venta (`CASH_SALE` o `CREDIT_SALE`); no representa mora, abonos ni envejecimiento.
 - `locationId` requerido como ubicación operativa de descuento.
 - `saleChannel` y `documentType` requeridos para distinguir el flujo documental.
+- `SELLER` solo puede usar su ubicación operativa asignada; `ADMIN` puede usar cualquier ubicación activa compatible.
+- La compatibilidad canal-ubicación es: `COUNTER` con `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`; `EXTERNAL_POINT_OF_SALE` con `EXTERNAL_POINT_OF_SALE`; `ROUTE` con `ROUTE_STOCK`; `INSTITUTIONAL` y `WHOLESALE` con `BRANCH` o `MIXED`.
 - No vender sin stock suficiente en la ubicación indicada.
 - No aceptar precios enviados por frontend como fuente de verdad.
 - Calcular precios, descuentos, subtotales y totales en backend.
@@ -111,6 +112,7 @@ Validaciones:
 - `quantityPieces` debe ser entero cuando aplique.
 - Venta de contado completamente pagada requiere `initialPayment` por el total o flujo equivalente de `Payment`.
 - El pago inmediato de contado se registra como `Payment` asociado a `saleId`; no crea `AccountReceivable` artificial.
+- El pago inicial inmediato del POS siempre asigna `paidAt` en el servidor; no acepta una fecha del cliente.
 - Una venta de contado contraentrega puede confirmarse sin `initialPayment`; en ese momento no existe `Payment` ni `paymentMethod` recibido, pero requiere cliente registrado para conservar el saldo pendiente.
 - Si la contraentrega deja saldo pendiente, debe generar `AccountReceivable` conforme al canon de todo saldo pendiente.
 - El pago posterior de contraentrega liquida saldo pendiente como cobranza y requiere `Payment.accountReceivableId`.

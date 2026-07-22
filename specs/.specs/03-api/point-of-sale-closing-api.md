@@ -9,6 +9,7 @@ Define el contrato para capturar, conciliar, revisar y cerrar la operación diar
 - Tickets de báscula se capturan manualmente; no existe integración automática con hardware en el MVP.
 - Ticket, nota y cierre son documentos internos; no son CFDI.
 - Operaciones críticas de transición se ejecutan en transacción.
+- Los totales monetarios solo incluyen `Payment` con estado `APPLIED`; `REGISTERED` no representa dinero recibido para el cierre.
 
 Respuesta exitosa:
 
@@ -182,6 +183,8 @@ Validaciones:
 - Solo captura manual; no aceptar payloads que pretendan representar sincronización de dispositivo.
 - Folio único por ubicación y fecha, salvo corrección auditada.
 - La venta asociada debe pertenecer a la misma ubicación.
+- `capturedDate` debe coincidir con `businessDate` del cierre.
+- Las correcciones históricas no se realizan en este endpoint; requieren un procedimiento administrativo separado y auditable.
 - No genera venta, movimiento de inventario o CFDI.
 
 ## POST /api/point-of-sale-daily-closes/:id/cash-movements
@@ -211,6 +214,8 @@ Validaciones:
 - `CARD_VOUCHER` representa boucher/tarjeta y debe separarse de efectivo.
 - `movementChannel` clasifica solo el medio operativo de la entrada/salida de caja.
 - No sustituye `Payment` para cobranza ni duplica el `paymentMethod` de una venta o pago aplicado.
+- `occurredAt` debe estar dentro del rango operativo del cierre: inclusivo desde el inicio y exclusivo en el siguiente inicio de jornada.
+- Las correcciones históricas no se realizan en este endpoint; requieren un procedimiento administrativo separado y auditable.
 
 ## POST /api/point-of-sale-daily-closes/:id/validate
 

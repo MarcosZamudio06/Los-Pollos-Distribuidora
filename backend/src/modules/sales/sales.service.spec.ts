@@ -7,6 +7,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   PointOfSaleDailyCloseStatus,
+  OperationalLocationType,
   RouteSettlementStatus,
   Prisma,
   ProductUnit,
@@ -97,6 +98,10 @@ function validCashSale(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function seller() {
+  return { id: 'seller-1', role: 'SELLER', operationalLocationId: 'loc-1' };
+}
+
 function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown> = {}) {
   prisma.sale.findUnique.mockResolvedValue(null);
   prisma.sale.count.mockResolvedValue(0);
@@ -153,6 +158,67 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
 }
 
 describe('SalesService', () => {
+  it('rejects a seller sale from a location other than their assigned location before preparing products', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.operationalLocation.findUnique.mockResolvedValue({
+      id: 'loc-2',
+      name: 'Other branch',
+      type: OperationalLocationType.BRANCH,
+      isActive: true,
+    });
+    const assignedSeller = seller();
+
+    await expect(
+      service.create(validCashSale({ locationId: 'loc-2' }), assignedSeller, 'idem-unauthorized-location'),
+    ).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+
+    expect(prisma.product.findUnique).not.toHaveBeenCalled();
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('allows an admin to create a sale from another active location', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.operationalLocation.findUnique.mockResolvedValue({
+      id: 'loc-2',
+      name: 'Other branch',
+      type: OperationalLocationType.BRANCH,
+      isActive: true,
+    });
+
+    await expect(
+      service.create(validCashSale({ locationId: 'loc-2' }), { id: 'admin-1', role: 'ADMIN' }, 'idem-admin-location'),
+    ).resolves.toEqual(expect.objectContaining({ sale: expect.objectContaining({ locationId: 'loc-2' }) }));
+  });
+
+  it.each([
+    [SaleChannel.COUNTER, OperationalLocationType.WAREHOUSE],
+    [SaleChannel.COUNTER, OperationalLocationType.ROUTE_STOCK],
+    [SaleChannel.EXTERNAL_POINT_OF_SALE, OperationalLocationType.BRANCH],
+    [SaleChannel.ROUTE, OperationalLocationType.MIXED],
+    [SaleChannel.INSTITUTIONAL, OperationalLocationType.WAREHOUSE],
+    [SaleChannel.WHOLESALE, OperationalLocationType.ROUTE_STOCK],
+  ])('rejects %s sales from an incompatible %s location', async (saleChannel, locationType) => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.operationalLocation.findUnique.mockResolvedValue({
+      id: 'loc-1',
+      name: 'Incompatible location',
+      type: locationType,
+      isActive: true,
+    });
+
+    await expect(
+      service.create(validCashSale({ saleChannel }), { id: 'admin-1', role: 'ADMIN' }, `idem-incompatible-${saleChannel}-${locationType}`),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.product.findUnique).not.toHaveBeenCalled();
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
   it('lists ADMIN-visible sales with filters and derives payment summaries from Payment records', async () => {
     const { service, prisma } = createService();
     prisma.sale.findMany.mockResolvedValue([
@@ -575,7 +641,7 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    const result = await service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'idem-sale-1');
+    const result = await service.create(validCashSale(), seller(), 'idem-sale-1');
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.sale.create).toHaveBeenCalledWith(
@@ -688,13 +754,40 @@ describe('SalesService', () => {
     );
   });
 
+  it('uses the server timestamp for an immediate payment instead of the client supplied paidAt value', async () => {
+    const { service, prisma } = createService();
+    const serverPaidAt = new Date('2026-06-21T12:00:00.000Z');
+    mockHappyPath(prisma);
+    jest.useFakeTimers().setSystemTime(serverPaidAt);
+
+    try {
+      await service.create(
+        validCashSale({
+          initialPayment: {
+            amount: 250,
+            paymentMethod: PaymentMethod.CASH,
+            paidAt: '2030-01-01T00:00:00.000Z',
+          },
+        }),
+        seller(),
+        'idem-server-paid-at',
+      );
+
+      expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ paidAt: serverPaidAt }),
+      }));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('does not duplicate the internal receipt when it is the requested document type', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
     const result = await service.create(
       validCashSale({ documentType: SaleDocumentType.INTERNAL_RECEIPT }),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-internal-receipt',
     );
 
@@ -711,7 +804,7 @@ describe('SalesService', () => {
 
     await service.create(
       validCashSale(),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-missing-issuer',
     );
 
@@ -743,7 +836,7 @@ describe('SalesService', () => {
       customerId: 'customer-1',
       requiresAdministrativeInvoice: true,
       billingRequest: { reason: 'Cliente solicita seguimiento', notes: 'Enviar a administración' },
-    }), { id: 'seller-1', role: 'SELLER' }, 'idem-billing-sale');
+    }), seller(), 'idem-billing-sale');
 
     expect(prisma.billingRequest.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -768,9 +861,9 @@ describe('SalesService', () => {
   it('requires a customer and billing reason when administrative invoicing is requested', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    await expect(service.create(validCashSale({ requiresAdministrativeInvoice: true, billingRequest: { reason: 'Razón' } }), { id: 'seller-1', role: 'SELLER' }, 'idem-no-customer')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create(validCashSale({ requiresAdministrativeInvoice: true, billingRequest: { reason: 'Razón' } }), seller(), 'idem-no-customer')).rejects.toBeInstanceOf(BadRequestException);
     prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE, creditLimit: decimal('1000'), creditDays: 15 });
-    await expect(service.create(validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true }), { id: 'seller-1', role: 'SELLER' }, 'idem-no-reason')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create(validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true }), seller(), 'idem-no-reason')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('creates a credit sale with an account receivable for the outstanding backend total', async () => {
@@ -795,7 +888,7 @@ describe('SalesService', () => {
           paidAt: now.toISOString(),
         },
       }),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-sale-credit',
     );
 
@@ -833,7 +926,7 @@ describe('SalesService', () => {
 
     const result = await service.create(
       validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-credit-warning',
     );
 
@@ -864,7 +957,7 @@ describe('SalesService', () => {
 
     const result = await service.create(
       validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-null-effective-from',
     );
 
@@ -879,7 +972,7 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
 
     await expect(
-      service.create(validCashSale({ items: [] }), { id: 'seller-1', role: 'SELLER' }, 'idem-empty'),
+      service.create(validCashSale({ items: [] }), seller(), 'idem-empty'),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -892,7 +985,7 @@ describe('SalesService', () => {
     await expect(service.create(validCashSale({ administrativeOverrideReason: '   ' }), { id: 'admin-1', role: 'ADMIN' }, 'blank')).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_REASON_REQUIRED' }),
     });
-    await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), { id: 'seller-1', role: 'SELLER' }, 'seller')).rejects.toMatchObject({
+    await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), seller(), 'seller')).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_FORBIDDEN' }),
     });
     await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), { id: 'admin-1', role: 'ADMIN' }, 'cash')).rejects.toMatchObject({
@@ -908,12 +1001,12 @@ describe('SalesService', () => {
       .mockRejectedValueOnce({ code: 'P2034' })
       .mockRejectedValueOnce({ code: 'P2034' })
       .mockImplementationOnce(async (callback) => callback(first.prisma));
-    await expect(first.service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'retry-success')).resolves.toBeDefined();
+    await expect(first.service.create(validCashSale(), seller(), 'retry-success')).resolves.toBeDefined();
     expect(first.prisma.$transaction).toHaveBeenCalledTimes(3);
 
     const exhausted = createService();
     exhausted.prisma.$transaction.mockRejectedValue({ code: 'P2034' });
-    await expect(exhausted.service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'retry-fail')).rejects.toMatchObject({
+    await expect(exhausted.service.create(validCashSale(), seller(), 'retry-fail')).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED' }),
     });
     expect(exhausted.prisma.$transaction).toHaveBeenCalledTimes(3);
@@ -924,7 +1017,7 @@ describe('SalesService', () => {
     mockHappyPath(prisma);
     prisma.$queryRawUnsafe.mockResolvedValue([{ value: 42 }]);
 
-    const result = await service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'sequence-sale');
+    const result = await service.create(validCashSale(), seller(), 'sequence-sale');
 
     expect(result.sale.saleNumber).toBe('SALE-000042');
     expect(prisma.$queryRawUnsafe).toHaveBeenCalledWith(
@@ -939,7 +1032,7 @@ describe('SalesService', () => {
       .mockRejectedValueOnce({ code: 'P2002', meta: { target: ['saleNumber'] } })
       .mockImplementationOnce(async (callback) => callback(prisma));
 
-    await expect(service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'sequence-retry')).resolves.toBeDefined();
+    await expect(service.create(validCashSale(), seller(), 'sequence-retry')).resolves.toBeDefined();
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
@@ -950,7 +1043,7 @@ describe('SalesService', () => {
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'idem-stock'),
+      service.create(validCashSale(), seller(), 'idem-stock'),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -975,7 +1068,7 @@ describe('SalesService', () => {
     await expect(
       service.create(
         validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
-        { id: 'seller-1', role: 'SELLER' },
+        seller(),
         'idem-blocked',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -996,7 +1089,7 @@ describe('SalesService', () => {
     await expect(
       service.create(
         validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
-        { id: 'seller-1', role: 'SELLER' },
+        seller(),
         'idem-limit',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -1023,7 +1116,7 @@ describe('SalesService', () => {
     };
     prisma.sale.findUnique.mockResolvedValue(existingSale);
 
-    const result = await service.create(dto, { id: 'seller-1', role: 'SELLER' }, 'idem-sale-1');
+    const result = await service.create(dto, seller(), 'idem-sale-1');
 
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -1039,7 +1132,7 @@ describe('SalesService', () => {
       billingRequest: { id: 'billing-1', status: 'REQUESTED' }, inventoryMovements: [], documents: [],
     });
 
-    const result = await service.create(dto, { id: 'seller-1', role: 'SELLER' }, 'idem-billing-sale');
+    const result = await service.create(dto, seller(), 'idem-billing-sale');
 
     expect(result.billingRequest).toEqual({ id: 'billing-1', status: 'REQUESTED' });
     expect(prisma.billingRequest.create).not.toHaveBeenCalled();
@@ -1070,7 +1163,7 @@ describe('SalesService', () => {
           initialPayment: undefined,
           administrativeOverrideReason: 'Manager approved institutional sale',
         }),
-        { id: 'seller-1', role: 'SELLER' },
+        seller(),
         'idem-seller-override',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -1109,7 +1202,7 @@ describe('SalesService', () => {
 
     const result = await service.create(
       validCashSale({ customerId: 'customer-1', initialPayment: undefined }),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-contraentrega',
     );
 
@@ -1155,7 +1248,7 @@ describe('SalesService', () => {
         initialPayment: { amount: 300, paymentMethod: PaymentMethod.CASH, paidAt: now.toISOString() },
         items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 1.25, quantityPieces: 2, unitEquivalentId: 'eq-1' }],
       }),
-      { id: 'seller-1', role: 'SELLER' },
+      seller(),
       'idem-eq',
     );
 
@@ -1205,7 +1298,7 @@ describe('SalesService', () => {
         validCashSale({
           items: [{ productId: 'product-1', unit: ProductUnit.PIECE, quantityKg: 0, quantityPieces: 1 }],
         }),
-        { id: 'seller-1', role: 'SELLER' },
+        seller(),
         'idem-invalid-unit',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -1243,7 +1336,7 @@ describe('SalesService', () => {
         validCashSale({
           items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 2.5, quantityPieces: 0, unitEquivalentId: 'eq-1' }],
         }),
-        { id: 'seller-1', role: 'SELLER' },
+        seller(),
         'idem-unneeded-equivalence',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -1257,7 +1350,7 @@ describe('SalesService', () => {
     prisma.sale.count.mockResolvedValue(0);
     prisma.operationalLocation.findUnique.mockResolvedValue(null);
 
-    await expect(service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'idem-missing-location')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.create(validCashSale(), seller(), 'idem-missing-location')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('cancels a confirmed sale, restores stock at the original location, and records cancel-sale movements', async () => {

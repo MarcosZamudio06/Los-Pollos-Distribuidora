@@ -160,7 +160,6 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
     input.paymentMethod && initialPaymentAmount > 0
       ? {
           amount: roundMoney(initialPaymentAmount),
-          paidAt: new Date().toISOString(),
           paymentMethod: input.paymentMethod,
         }
       : undefined

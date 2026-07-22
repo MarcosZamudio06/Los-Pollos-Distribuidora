@@ -16,6 +16,7 @@ type UserWithRole = {
   passwordHash: string;
   isActive: boolean;
   mustChangePassword: boolean;
+  operationalLocationId?: string;
   role: { name: string };
 };
 
@@ -311,6 +312,20 @@ describe('AuthService', () => {
       service.verifyAccessToken('issued-before-deactivation'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(jwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('includes the assigned operational location when validating an access token', async () => {
+    const { service, jwtService } = createService(createUser({ operationalLocationId: 'location-1' }));
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'user-1',
+      email: 'dev.admin@pollos.local',
+      role: 'ADMIN',
+      type: 'access',
+    });
+
+    await expect(service.verifyAccessToken('valid-access-token')).resolves.toEqual(
+      expect.objectContaining({ id: 'user-1', operationalLocationId: 'location-1' }),
+    );
   });
 
   it('rejects an invalid refresh token', async () => {

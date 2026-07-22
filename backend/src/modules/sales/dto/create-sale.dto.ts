@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod, ProductUnit, SaleChannel, SaleDocumentType, SalePaymentType } from '@prisma/client';
 
 export class CreateSaleInitialPaymentDto {
@@ -11,8 +11,6 @@ export class CreateSaleInitialPaymentDto {
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
 
-  @IsDateString()
-  paidAt!: string;
 }
 
 export class CreateSaleBillingRequestDto {

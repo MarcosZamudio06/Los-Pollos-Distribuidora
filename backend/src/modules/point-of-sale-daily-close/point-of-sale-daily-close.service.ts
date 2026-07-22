@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { OperationalLocationType, PointOfSaleDailyCloseStatus, Prisma } from '@prisma/client';
+import { OperationalLocationType, PaymentStatus, PointOfSaleDailyCloseStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
@@ -27,6 +27,8 @@ const dailyCloseLocationTypes = new Set<OperationalLocationType>([
   OperationalLocationType.MIXED,
   OperationalLocationType.EXTERNAL_POINT_OF_SALE,
 ]);
+
+const appliedPaymentWhere = { status: PaymentStatus.APPLIED } as const;
 
 @Injectable()
 export class PointOfSaleDailyCloseService {
@@ -89,9 +91,12 @@ export class PointOfSaleDailyCloseService {
   async addExpense(id: string, dto: CreateExpenseDto, user: AuthenticatedUser) {
     const close = await this.requireDraft(id, user);
     if (!dto.reason.trim()) throw new BadRequestException('EXPENSE_REASON_REQUIRED');
+    const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
+    const { from, to } = this.operationalDay(close.businessDate);
+    if (occurredAt < from || occurredAt >= to) throw new BadRequestException('EXPENSE_OUTSIDE_OPERATIONAL_DAY');
     await this.prisma.cashMovement.create({ data: {
       operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, type: 'EXPENSE', movementChannel: 'CASH',
-      amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(), userId: user.id,
+      amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt, userId: user.id,
     }});
     await this.bump(id);
     return this.projectForRole(await this.recalculate(id), user);
@@ -100,9 +105,11 @@ export class PointOfSaleDailyCloseService {
   async addScaleTicket(id: string, dto: CreateScaleTicketDto, user: AuthenticatedUser) {
     const close = await this.requireDraft(id, user);
     if (dto.weightKg === undefined && dto.pieceCount === undefined && dto.amount === undefined) throw new BadRequestException('SCALE_TICKET_QUANTITY_REQUIRED');
+    const capturedDate = this.date(dto.capturedDate);
+    if (capturedDate.getTime() !== close.businessDate.getTime()) throw new BadRequestException('SCALE_TICKET_DATE_MISMATCH');
     try {
       await this.prisma.scaleTicketReference.create({ data: {
-        operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, physicalFolio: dto.physicalFolio.trim(), capturedDate: this.date(dto.capturedDate),
+        operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, physicalFolio: dto.physicalFolio.trim(), capturedDate,
         productId: dto.productId || null, weightKg: dto.weightKg, pieceCount: dto.pieceCount, unitPrice: dto.unitPrice, amount: dto.amount,
         capturedByUserId: user.id, capturedAt: new Date(), notes: dto.notes?.trim() || null,
       }});
@@ -188,9 +195,10 @@ export class PointOfSaleDailyCloseService {
     });
     const expenseTotal = sum(close.cashMovements.filter((movement) => movement.type === 'EXPENSE').map((movement) => movement.amount));
     const grossSalesTotal = sum(close.sales.map((sale) => sale.total));
-    const cashTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'CASH').map((payment) => payment.amount));
-    const cardVoucherTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'CARD' || payment.paymentMethod === 'VOUCHER').map((payment) => payment.amount));
-    const transferTotal = sum(close.payments.filter((payment) => payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT').map((payment) => payment.amount));
+    const appliedPayments = close.payments.filter((payment) => payment.status === PaymentStatus.APPLIED);
+    const cashTotal = sum(appliedPayments.filter((payment) => payment.paymentMethod === 'CASH').map((payment) => payment.amount));
+    const cardVoucherTotal = sum(appliedPayments.filter((payment) => payment.paymentMethod === 'CARD' || payment.paymentMethod === 'VOUCHER').map((payment) => payment.amount));
+    const transferTotal = sum(appliedPayments.filter((payment) => payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT').map((payment) => payment.amount));
     const { purchaseCostTotal, costQuality } = calculateDailyCloseCost(close.sales);
     const cashExpenseTotal = sum(close.cashMovements.filter((movement) => movement.type === 'EXPENSE' && movement.movementChannel === 'CASH').map((movement) => movement.amount));
     const data = {
@@ -207,9 +215,9 @@ export class PointOfSaleDailyCloseService {
   private async requireDraft(id: string, user: AuthenticatedUser) { const close = await this.requireCloseAccess(id, user); if (close.status !== 'DRAFT') throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'); return close; }
   private async syncOperations(tx: Prisma.TransactionClient, closeId: string, locationId: string, from: Date, to: Date) {
     await tx.sale.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED' } }, data: { pointOfSaleDailyCloseId: null } });
-    await tx.payment.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, status: { in: ['REGISTERED', 'APPLIED'] }, routeId: null } }, data: { pointOfSaleDailyCloseId: null } });
+    await tx.payment.updateMany({ where: { pointOfSaleDailyCloseId: closeId, NOT: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, ...appliedPaymentWhere, routeId: null } }, data: { pointOfSaleDailyCloseId: null } });
     await tx.sale.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, status: 'CONFIRMED' }, data: { pointOfSaleDailyCloseId: closeId } });
-    await tx.payment.updateMany({ where: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, status: { in: ['REGISTERED', 'APPLIED'] }, routeId: null, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
+    await tx.payment.updateMany({ where: { operationalLocationId: locationId, paidAt: { gte: from, lt: to }, ...appliedPaymentWhere, routeId: null, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
     await tx.inventoryMovement.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, type: { in: ['IN', 'PURCHASE', 'TRANSFER_IN'] }, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
   }
   private async bump(id: string) { await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null } }); }

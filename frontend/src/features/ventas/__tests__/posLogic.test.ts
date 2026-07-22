@@ -182,7 +182,6 @@ describe('POS sale payload', () => {
       discount: 0,
       initialPayment: {
         amount: 301.2,
-        paidAt: expect.any(String),
         paymentMethod: 'CASH',
       },
       items: [
@@ -254,7 +253,6 @@ describe('POS sale payload', () => {
       customerId: 'customer-active',
       initialPayment: {
         amount: 100,
-        paidAt: expect.any(String),
         paymentMethod: 'TRANSFER',
       },
       paymentType: 'CREDIT_SALE',

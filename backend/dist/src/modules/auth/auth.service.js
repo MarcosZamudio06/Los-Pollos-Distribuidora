@@ -69,7 +69,10 @@ let AuthService = class AuthService {
         if (!user || !user.isActive) {
             throw new common_1.UnauthorizedException('Invalid token');
         }
-        return this.toAuthenticatedUser(user);
+        return {
+            ...this.toAuthenticatedUser(user),
+            operationalLocationId: user.operationalLocationId,
+        };
     }
     async changeOwnPassword(userId, dto) {
         this.assertPasswordPolicy(dto.newPassword);

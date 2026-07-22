@@ -77,7 +77,6 @@ export type CreateSalePayload = {
   initialPayment?: {
     amount: number
     paymentMethod: Exclude<PaymentMethod, ''>
-    paidAt: string
   }
   discount: number
   commercialPolicyId?: string

@@ -25,6 +25,7 @@ type UserRecord = {
   passwordHash: string;
   isActive: boolean;
   mustChangePassword: boolean;
+  operationalLocationId?: string;
   role: { name: string };
 };
 
@@ -93,7 +94,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    return this.toAuthenticatedUser(user);
+    return {
+      ...this.toAuthenticatedUser(user),
+      operationalLocationId: user.operationalLocationId,
+    };
   }
 
   async changeOwnPassword(

@@ -23,7 +23,7 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, ListSalesQueryDto } from './dto';
 import { evaluateCreditDecision } from './credit-decision';
 
-type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'operationalLocationId'>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
 type SaleProductUnitEquivalent = {
@@ -185,6 +185,24 @@ type SaleCancellationRecord = Record<string, unknown> & {
   }>;
 };
 
+const saleChannelLocationTypes: Record<SaleChannel, ReadonlySet<OperationalLocationType>> = {
+  [SaleChannel.COUNTER]: new Set([
+    OperationalLocationType.BRANCH,
+    OperationalLocationType.MIXED,
+    OperationalLocationType.EXTERNAL_POINT_OF_SALE,
+  ]),
+  [SaleChannel.EXTERNAL_POINT_OF_SALE]: new Set([OperationalLocationType.EXTERNAL_POINT_OF_SALE]),
+  [SaleChannel.ROUTE]: new Set([OperationalLocationType.ROUTE_STOCK]),
+  [SaleChannel.INSTITUTIONAL]: new Set([
+    OperationalLocationType.BRANCH,
+    OperationalLocationType.MIXED,
+  ]),
+  [SaleChannel.WHOLESALE]: new Set([
+    OperationalLocationType.BRANCH,
+    OperationalLocationType.MIXED,
+  ]),
+};
+
 @Injectable()
 export class SalesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -301,6 +319,8 @@ export class SalesService {
             documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
           };
         }
+        this.assertLocationAccess(dto, currentUser);
+
         const location = await tx.operationalLocation.findUnique({ where: { id: dto.locationId } });
         if (!location?.isActive) {
           throw new NotFoundException('Operational location not found');
@@ -491,7 +511,7 @@ export class SalesService {
                 paymentMethod: dto.initialPayment.paymentMethod,
                 operationalLocationId: dto.locationId,
                 status: PaymentStatus.APPLIED,
-                paidAt: new Date(dto.initialPayment.paidAt),
+                paidAt: new Date(),
                 idempotencyKey,
                 idempotencyPayloadHash: payloadHash,
               },
@@ -1035,12 +1055,17 @@ export class SalesService {
   }
 
   private assertLocationMatchesSaleChannel(dto: CreateSaleDto, locationType: OperationalLocationType) {
-    if (dto.saleChannel === SaleChannel.ROUTE && locationType !== OperationalLocationType.ROUTE_STOCK) {
-      throw new BadRequestException('ROUTE sales require a ROUTE_STOCK location');
+    if (!saleChannelLocationTypes[dto.saleChannel].has(locationType)) {
+      throw new BadRequestException(`${dto.saleChannel} sales cannot use a ${locationType} location`);
     }
+  }
 
-    if (dto.saleChannel === SaleChannel.EXTERNAL_POINT_OF_SALE && locationType !== OperationalLocationType.EXTERNAL_POINT_OF_SALE) {
-      throw new BadRequestException('EXTERNAL_POINT_OF_SALE sales require an external point of sale location');
+  private assertLocationAccess(dto: CreateSaleDto, currentUser: Actor) {
+    if (
+      currentUser.role !== 'ADMIN' &&
+      currentUser.operationalLocationId !== dto.locationId
+    ) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
     }
   }
 

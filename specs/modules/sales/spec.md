@@ -33,6 +33,8 @@ Registrar ventas de contado, crédito, abonadas y atrasadas con inventario por u
 
 - La venta debe conservar `saleChannel`, `documentType` y ubicación operativa.
 - No vender sin stock suficiente.
+- Un `SELLER` solo puede crear ventas desde su ubicación operativa asignada; `ADMIN` puede crear ventas desde cualquier ubicación activa compatible.
+- La ubicación de descuento debe ser compatible con el canal: `COUNTER` acepta `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`; `EXTERNAL_POINT_OF_SALE` solo acepta `EXTERNAL_POINT_OF_SALE`; `ROUTE` solo acepta `ROUTE_STOCK`; `INSTITUTIONAL` y `WHOLESALE` solo aceptan `BRANCH` o `MIXED`.
 - Si `saleChannel=ROUTE`, la venta debe descontar inventario exclusivamente desde `ROUTE_STOCK`.
 - `Payment` es la única fuente monetaria de dinero recibido.
 - Toda venta con saldo pendiente requiere trazabilidad de cuenta por cobrar.

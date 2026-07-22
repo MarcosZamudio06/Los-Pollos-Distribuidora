@@ -267,6 +267,8 @@ Estados sugeridos:
 - `APPLIED`.
 - `CANCELLED`.
 
+`REGISTERED` representa un pago pendiente de aplicación y no integra ingresos de caja. `APPLIED` representa dinero recibido y es el único estado que integra los totales monetarios del cierre POS.
+
 Nota post-MVP:
 
 - `PaymentAllocation` queda fuera del MVP. Solo podrá agregarse para pagos agrupados o distribuidos entre varias cuentas por cobrar mediante actualización explícita de specs, modelo de datos, validaciones y flujos relacionados.

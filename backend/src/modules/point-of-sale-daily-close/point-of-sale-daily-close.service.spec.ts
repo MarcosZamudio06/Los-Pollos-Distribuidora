@@ -112,6 +112,44 @@ describe('PointOfSaleDailyCloseService', () => {
     }));
   });
 
+  it('rejects an expense outside the operational day before creating the cash movement', async () => {
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      sales: [],
+      updatedAt: new Date(),
+    });
+
+    await expect(service.addExpense(
+      'close-1',
+      { amount: 100, reason: 'Compra operativa', occurredAt: '2026-07-17T05:59:59.999Z' },
+      { id: 'admin-1', role: 'ADMIN' } as never,
+    )).rejects.toThrow(new BadRequestException('EXPENSE_OUTSIDE_OPERATIONAL_DAY'));
+
+    expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a scale ticket whose captured date differs from the daily close', async () => {
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      sales: [],
+      updatedAt: new Date(),
+    });
+
+    await expect(service.addScaleTicket(
+      'close-1',
+      { physicalFolio: 'BAS-42', capturedDate: '2026-07-16', weightKg: 2.5 },
+      { id: 'admin-1', role: 'ADMIN' } as never,
+    )).rejects.toThrow(new BadRequestException('SCALE_TICKET_DATE_MISMATCH'));
+
+    expect(prisma.scaleTicketReference.create).not.toHaveBeenCalled();
+  });
+
   it('syncs confirmed branch sales even when they are assigned to a route', async () => {
     const tx = {
       sale: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
@@ -247,7 +285,7 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(collections).not.toHaveProperty('purchaseCostTotal');
   });
 
-  it('persists the cash difference from counted cash and expected cash', async () => {
+  it('excludes registered payments from all daily-close income totals', async () => {
     const close = {
       id: 'close-1',
       operationalLocationId: 'loc-1',
@@ -258,7 +296,14 @@ describe('PointOfSaleDailyCloseService', () => {
       inventoryMovements: [],
       cashMovements: [],
       sales: [],
-      payments: [{ paymentMethod: 'CASH', amount: 120 }],
+      payments: [
+        { paymentMethod: 'CASH', amount: 120, status: 'APPLIED' },
+        { paymentMethod: 'CASH', amount: 50, status: 'REGISTERED' },
+        { paymentMethod: 'CARD', amount: 30, status: 'APPLIED' },
+        { paymentMethod: 'VOUCHER', amount: 20, status: 'REGISTERED' },
+        { paymentMethod: 'TRANSFER', amount: 40, status: 'APPLIED' },
+        { paymentMethod: 'DEPOSIT', amount: 10, status: 'REGISTERED' },
+      ],
       cashCountedTotal: 100,
       updatedAt: new Date(),
     };
@@ -269,12 +314,12 @@ describe('PointOfSaleDailyCloseService', () => {
     };
     prisma.pointOfSaleDailyClose.findUnique.mockResolvedValueOnce(close).mockResolvedValueOnce(close);
     (prisma as any).$transaction = jest.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
-    prisma.pointOfSaleDailyClose.update.mockResolvedValue({ ...close, netCashExpected: 120, cashDifferenceTotal: -20 });
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue({ ...close, cashTotal: 120, cardVoucherTotal: 30, transferTotal: 40, netCashExpected: 120, cashDifferenceTotal: -20 });
 
     const result = await (service as any).recalculate('close-1');
 
     expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ netCashExpected: 120, cashDifferenceTotal: -20 }),
+      data: expect.objectContaining({ cashTotal: 120, cardVoucherTotal: 30, transferTotal: 40, netCashExpected: 120, cashDifferenceTotal: -20 }),
     }));
     expect(result.cashDifferenceTotal).toBe(-20);
   });
