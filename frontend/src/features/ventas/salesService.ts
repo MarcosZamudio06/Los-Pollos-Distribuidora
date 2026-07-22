@@ -58,10 +58,10 @@ export const salesService = {
     })
     return unwrapItem(response)
   },
-  async cancelSale(saleId: string, payload: CancelSalePayload, accessToken?: string | null) {
+  async cancelSale(saleId: string, payload: CancelSalePayload, idempotencyKey: string, accessToken?: string | null) {
     const response = await apiClient.post<ItemEnvelope<{ sale?: SaleDetail; inventoryMovements?: Array<Record<string, unknown>>; accountReceivable?: Record<string, unknown> | null }>, CancelSalePayload>(`/sales/${saleId}/cancel`, {
       body: payload,
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     })
     return unwrapItem(response)
   },

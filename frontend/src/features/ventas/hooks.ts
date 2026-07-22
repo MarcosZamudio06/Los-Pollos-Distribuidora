@@ -55,7 +55,7 @@ export function useCancelSale(saleId: string) {
   const { accessToken } = useAuth()
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: CancelSalePayload) => salesService.cancelSale(saleId, payload, accessToken),
+    mutationFn: ({ idempotencyKey, payload }: { idempotencyKey: string; payload: CancelSalePayload }) => salesService.cancelSale(saleId, payload, idempotencyKey, accessToken),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sales'] })
       void queryClient.invalidateQueries({ queryKey: ['inventory-balances'] })

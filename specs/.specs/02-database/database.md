@@ -693,6 +693,7 @@ Campos:
 - paymentMethod
 - bankName
 - referenceNumber
+- cardLastFour (cuando el método sea tarjeta o voucher)
 - appliedDocumentId
 - appliedDocumentType
 - operationalLocationId
@@ -715,6 +716,7 @@ Reglas:
 - Los cobros recibidos por chofer deben poder asociarse a liquidación de ruta cuando aplique.
 - Una segunda vuelta de cobranza debe poder conservarse con `collectionPass` y `collectedByUserId`.
 - Debe conservar banco, referencia y documento aplicado para auditoría administrativa.
+- Transferencias, depósitos y cheques requieren banco y referencia; tarjeta o voucher requieren autorización en `referenceNumber` y los últimos cuatro dígitos en `cardLastFour`.
 - `Payment` es la única fuente monetaria del sistema para dinero recibido.
 - Contraentrega no registra dinero hasta que exista `Payment`.
 
@@ -1067,6 +1069,7 @@ Campos:
 - status
 - version
 - lastValidatedAt
+- lastValidationAttemptAt
 - validatedSourceVersion
 - openedByUserId
 - reviewedByUserId
@@ -1115,6 +1118,7 @@ Reglas:
 - Las transiciones que afecten asociaciones, snapshots o ajustes relacionados se ejecutan en transacción.
 - Una diferencia fuera de tolerancia no se oculta; genera advertencia o bloqueo según una política futura aún abierta.
 - `cashCountedTotal` es nulo hasta que se captura el efectivo físico; al capturarlo, `cashDifferenceTotal` se persiste como `cashCountedTotal - netCashExpected`.
+- `lastValidatedAt` y `validatedSourceVersion` solo se conservan tras una validación sin errores; `lastValidationAttemptAt` registra cualquier intento, incluido uno fallido.
 
 ### PointOfSaleDailyCloseLine
 

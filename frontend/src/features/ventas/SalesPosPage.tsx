@@ -20,8 +20,8 @@ import {
   TicketModal,
 } from './components'
 import { useCreateSale, useSaleTicket } from './hooks'
-import { buildCreateSalePayload, calculateCartTotal, canConfirmSale, getLocationValidationError, getQuantityValidationError, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
-import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, SaleChannel, SaleDocumentType, TicketData } from './types'
+import { buildCreateSalePayload, calculateCartTotal, canConfirmSale, getLocationValidationError, getPaymentReferenceValidationError, getQuantityValidationError, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
+import type { CartItem, CustomerOption, InitialPaymentReference, PaymentMethod, PaymentType, ProductOption, SaleChannel, SaleDocumentType, TicketData } from './types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
 
@@ -86,6 +86,7 @@ function getSubmitBlocker({
   customer,
   locationId,
   paymentMethod,
+  paymentReference,
   paymentType,
   submitting,
   requiresAdministrativeInvoice,
@@ -98,6 +99,7 @@ function getSubmitBlocker({
   customer: CustomerOption | null
   locationId: string
   paymentMethod: PaymentMethod
+  paymentReference: InitialPaymentReference
   paymentType: PaymentType
   submitting: boolean
   requiresAdministrativeInvoice: boolean
@@ -114,6 +116,8 @@ function getSubmitBlocker({
   if (invalidItem) return getQuantityValidationError(invalidItem)
   if (requiresAdministrativeInvoice && !customer) return 'Selecciona un cliente para crear la solicitud administrativa.'
   if (requiresAdministrativeInvoice && !billingRequestReason.trim()) return 'Captura el motivo de la solicitud administrativa.'
+  const paymentReferenceError = getPaymentReferenceValidationError(paymentMethod, paymentReference)
+  if (paymentReferenceError) return paymentReferenceError
   return canConfirmSale({
     cart,
     creditRestriction: getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod, { isAdmin, overrideEnabled, overrideReason }),
@@ -142,6 +146,7 @@ export function SalesPosPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
   const [paymentType, setPaymentType] = useState<PaymentType>('CASH_SALE')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH')
+  const [paymentReference, setPaymentReference] = useState<InitialPaymentReference>({ bankName: '', referenceNumber: '', cardLastFour: '' })
   const [initialPaymentAmount, setInitialPaymentAmount] = useState(0)
   const [saleChannel, setSaleChannel] = useState<SaleChannel>('COUNTER')
   const [documentType, setDocumentType] = useState<SaleDocumentType>('SIMPLE_NOTE')
@@ -172,7 +177,7 @@ export function SalesPosPage() {
   const total = calculateCartTotal(cart)
   const isAdmin = user?.role === 'ADMIN'
   const canOverrideCredit = Boolean(paymentType === 'CREDIT_SALE' && isAdmin && selectedCustomer?.creditSummary?.effectiveCreditStatus === 'BLOCKED' && selectedCustomer.creditSummary.canAdministrativeOverride && !selectedCustomer.creditSummary.blockingReasons?.includes('CREDIT_ADMINISTRATIVELY_BLOCKED'))
-  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason })
+  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentReference, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason })
 
   function resetOverride() {
     setOverrideEnabled(false)
@@ -212,7 +217,7 @@ export function SalesPosPage() {
   }
 
   function handleConfirmSale() {
-    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason })
+    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, paymentMethod, paymentReference, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason })
     if (blocker) return
     setBackendError(null)
     setPendingSale({
@@ -221,7 +226,7 @@ export function SalesPosPage() {
         administrativeOverrideReason: overrideEnabled ? overrideReason : undefined,
         billingRequestReason, billingRequestNotes, cart, customer: selectedCustomer, documentType,
         initialPaymentAmount: paymentType === 'CREDIT_SALE' ? initialPaymentAmount : undefined,
-        locationId, paymentMethod, paymentType, physicalFolio,
+        locationId, paymentMethod, paymentReference, paymentType, physicalFolio,
         requiresAdministrativeInvoice, saleChannel, total,
       }),
       customerName: selectedCustomer?.name ?? 'Público general',
@@ -262,6 +267,7 @@ export function SalesPosPage() {
       setSelectedCustomer(null)
       setPaymentType('CASH_SALE')
       setPaymentMethod('CASH')
+      setPaymentReference({ bankName: '', referenceNumber: '', cardLastFour: '' })
       setInitialPaymentAmount(0)
       setPhysicalFolio('')
       setRequiresAdministrativeInvoice(false)
@@ -341,9 +347,11 @@ export function SalesPosPage() {
             <PaymentMethodSelector
               initialPaymentAmount={initialPaymentAmount}
               onInitialPaymentAmountChange={setInitialPaymentAmount}
-              onPaymentMethodChange={setPaymentMethod}
+              onPaymentMethodChange={(method) => { setPaymentMethod(method); setPaymentReference({ bankName: '', referenceNumber: '', cardLastFour: '' }) }}
               onPaymentTypeChange={(type) => { setPaymentType(type); resetOverride(); if (type === 'CASH_SALE') setInitialPaymentAmount(0) }}
+              onPaymentReferenceChange={setPaymentReference}
               paymentMethod={paymentMethod}
+              paymentReference={paymentReference}
               paymentType={paymentType}
             />
             <section className="rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[var(--erp-shadow)]">

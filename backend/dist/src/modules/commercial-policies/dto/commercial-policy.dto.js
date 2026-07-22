@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateCommercialPolicyDto = exports.CreateCommercialPolicyDto = exports.ListCommercialPoliciesQueryDto = exports.OverdueBlockingMode = void 0;
+exports.CreateDiscountAuthorizationDto = exports.UpdateCommercialPolicyDto = exports.CreateCommercialPolicyDto = exports.ListCommercialPoliciesQueryDto = exports.OverdueBlockingMode = void 0;
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
@@ -74,6 +74,7 @@ class CreateCommercialPolicyDto {
     overdueBlockingMode;
     creditLimitBlockingMode;
     allowAdministrativeOverride;
+    maximumDiscountPercentage;
     effectiveFrom;
     effectiveTo;
     isActive;
@@ -134,6 +135,14 @@ __decorate([
 ], CreateCommercialPolicyDto.prototype, "allowAdministrativeOverride", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Max)(100),
+    __metadata("design:type", Number)
+], CreateCommercialPolicyDto.prototype, "maximumDiscountPercentage", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(trimString),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -152,4 +161,42 @@ __decorate([
 class UpdateCommercialPolicyDto extends CreateCommercialPolicyDto {
 }
 exports.UpdateCommercialPolicyDto = UpdateCommercialPolicyDto;
+class CreateDiscountAuthorizationDto {
+    authorizedForUserId;
+    maximumPercentage;
+    reason;
+    evidence;
+    expiresAt;
+}
+exports.CreateDiscountAuthorizationDto = CreateDiscountAuthorizationDto;
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDiscountAuthorizationDto.prototype, "authorizedForUserId", void 0);
+__decorate([
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0.01),
+    (0, class_validator_1.Max)(100),
+    __metadata("design:type", Number)
+], CreateDiscountAuthorizationDto.prototype, "maximumPercentage", void 0);
+__decorate([
+    (0, class_transformer_1.Transform)(trimString),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDiscountAuthorizationDto.prototype, "reason", void 0);
+__decorate([
+    (0, class_transformer_1.Transform)(trimString),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDiscountAuthorizationDto.prototype, "evidence", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", String)
+], CreateDiscountAuthorizationDto.prototype, "expiresAt", void 0);
 //# sourceMappingURL=commercial-policy.dto.js.map

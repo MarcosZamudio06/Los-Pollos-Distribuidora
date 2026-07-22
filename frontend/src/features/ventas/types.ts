@@ -2,7 +2,12 @@ import type { Customer, CustomerCreditSummary, CustomerType } from '../clientes/
 import type { OperationalUnit, ProductPresentation } from '../inventario/types'
 
 export type PaymentType = 'CASH_SALE' | 'CREDIT_SALE'
-export type PaymentMethod = '' | 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK'
+export type PaymentMethod = '' | 'CASH' | 'CARD' | 'TRANSFER' | 'DEPOSIT' | 'CHECK'
+export type InitialPaymentReference = {
+  bankName: string
+  referenceNumber: string
+  cardLastFour: string
+}
 export type SaleChannel = 'COUNTER' | 'EXTERNAL_POINT_OF_SALE' | 'ROUTE' | 'INSTITUTIONAL' | 'WHOLESALE'
 export type SaleDocumentType = 'SCALE_TICKET' | 'SIMPLE_NOTE' | 'LARGE_NOTE' | 'INTERNAL_RECEIPT'
 export type SaleStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
@@ -77,8 +82,11 @@ export type CreateSalePayload = {
   initialPayment?: {
     amount: number
     paymentMethod: Exclude<PaymentMethod, ''>
+    bankName?: string
+    referenceNumber?: string
+    cardLastFour?: string
   }
-  discount: number
+  discountAuthorizationId?: string
   commercialPolicyId?: string
   administrativeOverrideReason?: string
   items: CreateSaleItemPayload[]
@@ -94,6 +102,7 @@ export type BuildCreateSalePayloadInput = {
   initialPaymentAmount?: number
   locationId: string
   paymentMethod: PaymentMethod
+  paymentReference?: InitialPaymentReference
   paymentType: PaymentType
   physicalFolio: string
   requiresAdministrativeInvoice: boolean

@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, PackageSearch, Search, ShoppingCart } from
 import { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
-import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
+import type { CartItem, CustomerOption, InitialPaymentReference, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
 import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
 import { operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
 
@@ -176,6 +176,7 @@ export function Cart({ items, onQuantityChange, onRemove }: CartProps) {
                     </label>
                   )}
                 </div>
+                {item.unit === 'KG_AND_PIECE' && <p className="mt-3 text-sm text-[var(--erp-muted-foreground)]">Kilos y piezas son cantidades adicionales: las piezas se convierten a kilos para calcular el subtotal.</p>}
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
                   <div><dt className="text-[var(--erp-muted-foreground)]">Stock</dt><dd className="font-bold">{item.availableKg} kg · {item.availablePieces} piezas</dd></div>
                   <div><dt className="text-[var(--erp-muted-foreground)]">Vista previa del subtotal</dt><dd className="font-bold">{toMoney(calculateItemSubtotal(item))}</dd></div>
@@ -231,7 +232,9 @@ type PaymentMethodSelectorProps = {
   onPaymentMethodChange: (method: PaymentMethod) => void
   onInitialPaymentAmountChange: (amount: number) => void
   onPaymentTypeChange: (type: PaymentType) => void
+  onPaymentReferenceChange: (reference: InitialPaymentReference) => void
   paymentMethod: PaymentMethod
+  paymentReference: InitialPaymentReference
   paymentType: PaymentType
 }
 
@@ -240,7 +243,9 @@ export function PaymentMethodSelector({
   onInitialPaymentAmountChange,
   onPaymentMethodChange,
   onPaymentTypeChange,
+  onPaymentReferenceChange,
   paymentMethod,
+  paymentReference,
   paymentType,
 }: PaymentMethodSelectorProps) {
   return (
@@ -257,9 +262,18 @@ export function PaymentMethodSelector({
           <option value="CASH">Efectivo</option>
           <option value="CARD">Tarjeta</option>
           <option value="TRANSFER">Transferencia</option>
+          <option value="DEPOSIT">Depósito</option>
           <option value="CHECK">Cheque</option>
         </select>
       </label>
+      {(paymentMethod === 'TRANSFER' || paymentMethod === 'DEPOSIT' || paymentMethod === 'CHECK') && <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Banco<input className={inputClass} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, bankName: event.target.value })} value={paymentReference.bankName} /></label>
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">{paymentMethod === 'CHECK' ? 'Número de cheque' : 'Referencia'}<input className={inputClass} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, referenceNumber: event.target.value })} value={paymentReference.referenceNumber} /></label>
+      </div>}
+      {paymentMethod === 'CARD' && <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Autorización<input className={inputClass} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, referenceNumber: event.target.value })} value={paymentReference.referenceNumber} /></label>
+        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Últimos cuatro dígitos<input className={inputClass} inputMode="numeric" maxLength={4} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, cardLastFour: event.target.value.replace(/\D/g, '').slice(0, 4) })} value={paymentReference.cardLastFour} /></label>
+      </div>}
       {paymentType === 'CREDIT_SALE' && (
         <label className="mt-4 grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
           Monto del pago inicial

@@ -52,7 +52,7 @@ Permisos: `ADMIN`, `SELLER`.
 
 Body importante:
 
-`initialPayment` es opcional cuando no se recibe dinero al confirmar la venta. Si se envía, requiere `amount` y `paymentMethod`; el backend asigna `paidAt`.
+`initialPayment` es opcional cuando no se recibe dinero al confirmar la venta. Si se envía, requiere `amount` y `paymentMethod`; el backend asigna `paidAt`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`.
 
 ```json
 {
@@ -69,9 +69,11 @@ Body importante:
   "paymentType": "CASH_SALE",
   "initialPayment": {
     "amount": 500,
-    "paymentMethod": "CASH"
+    "paymentMethod": "CARD",
+    "referenceNumber": "AUTH-123",
+    "cardLastFour": "4242"
   },
-  "discount": 0,
+  "discountAuthorizationId": "string opcional; autorización creada por ADMIN",
   "commercialPolicyId": "string opcional",
   "administrativeOverrideReason": "string opcional",
   "items": [
@@ -107,6 +109,9 @@ Validaciones:
 - No vender sin stock suficiente en la ubicación indicada.
 - No aceptar precios enviados por frontend como fuente de verdad.
 - Calcular precios, descuentos, subtotales y totales en backend.
+- No aceptar `discount` como importe enviado por cliente. Un descuento requiere `discountAuthorizationId`; el backend obtiene el porcentaje y la evidencia desde una autorización vigente, de un solo uso, ligada a la política comercial aplicable.
+- Solo `ADMIN` puede crear autorizaciones extraordinarias de descuento. La autorización requiere motivo, evidencia, usuario autorizador y un porcentaje que no exceda el máximo de la política comercial.
+- La venta persiste `discountAuthorizationId`, porcentaje, importe calculado y evidencia para auditoría.
 - Generar `saleNumber` en backend desde una secuencia atómica; no depende del conteo de ventas.
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
 - `quantityPieces` debe ser entero cuando aplique.
@@ -132,6 +137,8 @@ Validaciones:
 - No se aceptan identificadores internos de solicitud escritos manualmente.
 - Descontar inventario, crear venta, items, pago inicial y cuenta por cobrar cuando aplique en una transacción.
 - Requerir idempotencia para creación de venta y pago inicial.
+- Una repetición idempotente debe comprobar el permiso de lectura sobre la venta existente antes de responder. La clave queda ligada al usuario y ubicación persistidos por la venta.
+- Para `KG_AND_PIECE` se acepta kilo, pieza o ambos; la equivalencia activa solo es obligatoria cuando se capturan piezas para conversión.
 - Reintentar conflictos únicos transitorios relacionados con `saleNumber`.
 
 ## POST /api/sales/:id/cancel

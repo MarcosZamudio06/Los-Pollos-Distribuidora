@@ -15,6 +15,7 @@ type PolicyRecord = {
   overdueBlockingMode: string | null;
   creditLimitBlockingMode: string | null;
   allowAdministrativeOverride: boolean;
+  maximumDiscountPercentage: { toString(): string } | number;
   isActive: boolean;
   effectiveFrom: Date | null;
   effectiveTo: Date | null;
@@ -26,6 +27,8 @@ type PolicyRecord = {
 
 type MockPrisma = {
   commercialPolicy: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
+  discountAuthorization: { create: jest.Mock };
+  user: { findUnique: jest.Mock };
   accountReceivable: { findFirst: jest.Mock };
   sale: { findFirst: jest.Mock };
 };
@@ -49,6 +52,7 @@ function policy(overrides: Partial<PolicyRecord> = {}): PolicyRecord {
     overdueBlockingMode: OverdueBlockingMode.BLOCK_NEW_CREDIT,
     creditLimitBlockingMode: 'BLOCK',
     allowAdministrativeOverride: true,
+    maximumDiscountPercentage: decimal('15'),
     isActive: true,
     effectiveFrom: now,
     effectiveTo: null,
@@ -63,6 +67,8 @@ function policy(overrides: Partial<PolicyRecord> = {}): PolicyRecord {
 function createPrisma(): MockPrisma {
   return {
     commercialPolicy: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    discountAuthorization: { create: jest.fn() },
+    user: { findUnique: jest.fn() },
     accountReceivable: { findFirst: jest.fn() },
     sale: { findFirst: jest.fn() },
   };
@@ -84,7 +90,8 @@ describe('CommercialPoliciesService', () => {
           defaultCreditDays: 15,
           overdueBlockingMode: OverdueBlockingMode.BLOCK_NEW_CREDIT,
           creditLimitBlockingMode: 'BLOCK',
-          allowAdministrativeOverride: true,
+        allowAdministrativeOverride: true,
+        maximumDiscountPercentage: 15,
           effectiveFrom: '2026-06-19',
           isActive: true,
         },
@@ -99,6 +106,7 @@ describe('CommercialPoliciesService', () => {
       creditLimitBlockingMode: 'BLOCK',
       createdByUserId: 'admin-1',
       updatedByUserId: 'admin-1',
+      maximumDiscountPercentage: '15',
     });
 
     expect(prisma.commercialPolicy.create).toHaveBeenCalledWith({
@@ -119,6 +127,22 @@ describe('CommercialPoliciesService', () => {
     await expect(service.create({ name: 'Bad', effectiveFrom: '2026-06-20', effectiveTo: '2026-06-19' }, user)).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.commercialPolicy.create).not.toHaveBeenCalled();
+  });
+
+  it('creates an ADMIN-only discount authorization within the commercial policy cap', async () => {
+    const prisma = createPrisma();
+    const service = new CommercialPoliciesService(prisma as unknown as PrismaService);
+    prisma.commercialPolicy.findFirst.mockResolvedValue(policy());
+    prisma.user.findUnique.mockResolvedValue({ id: 'seller-1', isActive: true });
+    prisma.discountAuthorization.create.mockImplementation(({ data }) => Promise.resolve({ id: 'discount-auth-1', ...data }));
+
+    await expect(service.authorizeDiscount('policy-1', {
+      authorizedForUserId: 'seller-1', maximumPercentage: 10, reason: 'Damaged packaging', evidence: 'Photo evidence',
+    }, user)).resolves.toMatchObject({ commercialPolicyId: 'policy-1', maximumPercentage: 10, authorizedByUserId: 'admin-1' });
+
+    await expect(service.authorizeDiscount('policy-1', {
+      maximumPercentage: 16, reason: 'Too high', evidence: 'Photo evidence',
+    }, user)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('preserves historical commercial conditions already applied to sales or receivables', async () => {

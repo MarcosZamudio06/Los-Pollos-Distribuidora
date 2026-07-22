@@ -6,6 +6,7 @@ import {
   getSaleErrorMessage,
   getQuantityValidationError,
   getLocationValidationError,
+  getPaymentReferenceValidationError,
   getSaleRestriction,
 } from '../posLogic'
 import type { CartItem, CustomerOption } from '../types'
@@ -99,12 +100,20 @@ describe('POS cart calculations and validation', () => {
     expect(getQuantityValidationError(pieceItem)).toBeNull()
   })
 
-  it('rejects non-positive and negative kg-and-piece quantities per dimension', () => {
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 0, quantityPieces: 3 })).toBe('Ingresa kilos y piezas mayores que cero.')
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: -1, quantityPieces: 3 })).toBe('Ingresa kilos y piezas mayores que cero.')
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: 0 })).toBe('Ingresa kilos y piezas mayores que cero.')
-    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: -2 })).toBe('Ingresa kilos y piezas mayores que cero.')
+  it('allows kg-and-piece products to sell kilos, pieces, or both, requiring equivalence only for pieces', () => {
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: 0, unitEquivalentId: undefined, equivalentFactor: undefined, equivalentUnitFrom: undefined, equivalentUnitTo: undefined })).toBeNull()
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 0, quantityPieces: 3 })).toBeNull()
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 0, quantityPieces: 3, unitEquivalentId: undefined })).toBe('El producto requiere una equivalencia activa entre kilos y piezas.')
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 0, quantityPieces: 0 })).toBe('Ingresa kilos, piezas o ambas cantidades.')
+    expect(getQuantityValidationError({ ...kgAndPieceItem, quantityKg: 2, quantityPieces: -2 })).toBe('Ingresa kilos, piezas o ambas cantidades.')
     expect(getQuantityValidationError(kgAndPieceItem)).toBeNull()
+  })
+
+  it('requires payment evidence only for non-cash methods that need reconciliation', () => {
+    const emptyReference = { bankName: '', referenceNumber: '', cardLastFour: '' }
+    expect(getPaymentReferenceValidationError('CASH', emptyReference)).toBeNull()
+    expect(getPaymentReferenceValidationError('TRANSFER', emptyReference)).toBe('Captura el banco y la referencia del pago.')
+    expect(getPaymentReferenceValidationError('CARD', { ...emptyReference, referenceNumber: 'AUTH-1', cardLastFour: '4242' })).toBeNull()
   })
 
   it('rejects cart items whose displayed stock belongs to another operational location', () => {
@@ -179,7 +188,6 @@ describe('POS sale payload', () => {
     ).toEqual({
       customerId: undefined,
       documentType: 'SIMPLE_NOTE',
-      discount: 0,
       initialPayment: {
         amount: 301.2,
         paymentMethod: 'CASH',

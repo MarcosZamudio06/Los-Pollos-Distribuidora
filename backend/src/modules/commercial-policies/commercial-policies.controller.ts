@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CommercialPoliciesService } from './commercial-policies.service';
-import { CreateCommercialPolicyDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
+import { CreateCommercialPolicyDto, CreateDiscountAuthorizationDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
 
 @Controller('commercial-policies')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,6 +22,12 @@ export class CommercialPoliciesController {
   @Roles('ADMIN')
   async create(@Body() body: CreateCommercialPolicyDto, @CurrentUser() currentUser: AuthenticatedUser) {
     return { success: true, message: 'Commercial policy created successfully', data: await this.service.create(body, currentUser) };
+  }
+
+  @Post(':policyId/discount-authorizations')
+  @Roles('ADMIN')
+  async authorizeDiscount(@Param('policyId') policyId: string, @Body() body: CreateDiscountAuthorizationDto, @CurrentUser() currentUser: AuthenticatedUser) {
+    return { success: true, message: 'Discount authorized successfully', data: await this.service.authorizeDiscount(policyId, body, currentUser) };
   }
 
   @Patch(':id')

@@ -78,7 +78,6 @@ describe('salesService TASK-055 contracts', () => {
       .mockResolvedValueOnce(okJson({ sale: { id: 'sale-1' } }))
       .mockResolvedValueOnce(okJson({ sale: { id: 'sale-1' } }))
     const payload = {
-      discount: 0,
       documentType: 'SIMPLE_NOTE' as const,
       items: [{ presentationType: 'CUT' as const, productId: 'product-1', quantityKg: 1, quantityPieces: 0, unit: 'KG' as const }],
       locationId: 'loc-1',
@@ -108,13 +107,13 @@ describe('salesService TASK-055 contracts', () => {
   it('envía cancelación con payload { reason, expectedVersion } e idempotencia', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(okJson({ sale: { id: 'sale-1', status: 'CANCELLED' } }))
 
-    await salesService.cancelSale('sale-1', { expectedVersion: 4, reason: 'Cliente canceló pedido' }, 'access-token')
+    await salesService.cancelSale('sale-1', { expectedVersion: 4, reason: 'Cliente canceló pedido' }, 'cancel-attempt-key', 'access-token')
 
     const request = lastRequest()
     expect(request.url).toBe('/api/sales/sale-1/cancel')
     expect(request.init?.method).toBe('POST')
     expect(JSON.parse(String(request.init?.body))).toEqual({ expectedVersion: 4, reason: 'Cliente canceló pedido' })
-    expect(new Headers(request.init?.headers).get('idempotency-key')).toBe('idempotency-test-key')
+    expect(new Headers(request.init?.headers).get('idempotency-key')).toBe('cancel-attempt-key')
   })
 
   it('expone estado no autorizado cuando la API responde 401', async () => {

@@ -28,6 +28,7 @@ type MockPrisma = {
   product: { findUnique: jest.Mock };
   customer: { findUnique: jest.Mock };
   commercialPolicy: { findFirst: jest.Mock };
+  discountAuthorization: { findFirst: jest.Mock; updateMany: jest.Mock };
   operationalLocation: { findUnique: jest.Mock };
   legalEntityOperationalLocation: { findFirst: jest.Mock };
   inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
@@ -56,6 +57,7 @@ function createPrisma(): MockPrisma {
     product: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
     commercialPolicy: { findFirst: jest.fn() },
+    discountAuthorization: { findFirst: jest.fn(), updateMany: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
     legalEntityOperationalLocation: { findFirst: jest.fn() },
     inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
@@ -158,6 +160,73 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
 }
 
 describe('SalesService', () => {
+  it.each([1, 50, 100])('rejects a seller attempt to submit a free %s%% discount before inventory is affected', async (discount) => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(
+      service.create(validCashSale({ discount }), seller(), `idem-free-discount-${discount}`),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'DISCOUNT_AMOUNT_FORBIDDEN' }) });
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('derives the discount from a seller-specific authorization and records its audit snapshot', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.discountAuthorization.findFirst.mockResolvedValue({
+      id: 'discount-auth-1',
+      commercialPolicyId: 'policy-1',
+      authorizedForUserId: 'seller-1',
+      maximumPercentage: decimal('10'),
+      reason: 'Damaged packaging',
+      evidence: 'Photo evidence: case-123',
+      expiresAt: new Date('2027-07-01T00:00:00.000Z'),
+      usedAt: null,
+      commercialPolicy: {
+        id: 'policy-1',
+        isActive: true,
+        effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+        effectiveTo: null,
+        maximumDiscountPercentage: decimal('15'),
+      },
+    });
+    prisma.discountAuthorization.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.create(validCashSale({ commercialPolicyId: 'policy-1', discountAuthorizationId: 'discount-auth-1', initialPayment: { amount: 225, paymentMethod: PaymentMethod.CASH } }), seller(), 'idem-authorized-discount');
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        discountAuthorizationId: 'discount-auth-1',
+        discountPercentage: 10,
+        discountEvidence: 'Photo evidence: case-123',
+        discount: 25,
+        total: 225,
+      }),
+    }));
+    expect(prisma.discountAuthorization.updateMany).toHaveBeenCalledWith({
+      where: { id: 'discount-auth-1', usedAt: null },
+      data: { usedAt: expect.any(Date) },
+    });
+  });
+
+  it('rejects a seller who attempts to use another seller authorization before inventory is affected', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.discountAuthorization.findFirst.mockResolvedValue({
+      id: 'discount-auth-1', commercialPolicyId: 'policy-1', authorizedForUserId: 'seller-2', maximumPercentage: decimal('10'), reason: 'Damaged packaging', evidence: 'Photo evidence', expiresAt: null, usedAt: null,
+      commercialPolicy: { id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01T00:00:00.000Z'), effectiveTo: null, maximumDiscountPercentage: decimal('15') },
+    });
+
+    await expect(
+      service.create(validCashSale({ commercialPolicyId: 'policy-1', discountAuthorizationId: 'discount-auth-1' }), seller(), 'idem-other-seller-discount'),
+    ).rejects.toThrow(new ForbiddenException('DISCOUNT_AUTHORIZATION_FORBIDDEN'));
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
   it('rejects a seller sale from a location other than their assigned location before preparing products', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
@@ -885,6 +954,8 @@ describe('SalesService', () => {
         initialPayment: {
           amount: 50,
           paymentMethod: PaymentMethod.TRANSFER,
+          bankName: 'Banco Norte',
+          referenceNumber: 'TRANSFER-001',
           paidAt: now.toISOString(),
         },
       }),
@@ -1108,6 +1179,8 @@ describe('SalesService', () => {
       tax: decimal('0'),
       total: decimal('250'),
       paymentType: SalePaymentType.CASH_SALE,
+      userId: 'seller-1',
+      locationId: 'loc-1',
       idempotencyPayloadHash: hashPayload(dto),
       items: [],
       payments: [{ id: 'payment-1', amount: decimal('250'), saleId: 'sale-1', accountReceivableId: null }],
@@ -1123,12 +1196,52 @@ describe('SalesService', () => {
     expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-1' }));
   });
 
+  it('rejects an idempotent replay when the actor cannot view the original sale', async () => {
+    const { service, prisma } = createService();
+    const dto = validCashSale();
+    prisma.sale.findUnique.mockResolvedValue({
+      id: 'sale-1', userId: 'seller-2', locationId: 'loc-1', idempotencyPayloadHash: hashPayload(dto),
+      items: [], payments: [], accountReceivable: null, billingRequests: [], inventoryMovements: [], documents: [],
+    });
+
+    await expect(service.create(dto, seller(), 'idem-sale-1')).rejects.toThrow(new ForbiddenException('SALE_NOT_AUTHORIZED'));
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('requires reconciliation evidence for non-cash initial payments', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(service.create(
+      validCashSale({ initialPayment: { amount: 250, paymentMethod: PaymentMethod.TRANSFER } }),
+      seller(),
+      'idem-transfer-without-evidence',
+    )).rejects.toThrow('Bank name and reference number are required');
+
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('persists bank, reference, and card evidence with the initial payment', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await service.create(
+      validCashSale({ initialPayment: { amount: 250, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' } }),
+      seller(),
+      'idem-card-evidence',
+    );
+
+    expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ referenceNumber: 'AUTH-123', cardLastFour: '4242', bankName: null }),
+    }));
+  });
+
   it('replays the administrative request created by an idempotent sale without duplicating it', async () => {
     const { service, prisma } = createService();
     const dto = validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true, billingRequest: { reason: 'Seguimiento' } });
     prisma.sale.findUnique.mockResolvedValue({
       id: 'sale-1', saleNumber: 'SALE-000001', subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
-      paymentType: SalePaymentType.CASH_SALE, idempotencyPayloadHash: hashPayload(dto), items: [], payments: [], accountReceivable: null,
+      paymentType: SalePaymentType.CASH_SALE, userId: 'seller-1', locationId: 'loc-1', idempotencyPayloadHash: hashPayload(dto), items: [], payments: [], accountReceivable: null,
       billingRequest: { id: 'billing-1', status: 'REQUESTED' }, inventoryMovements: [], documents: [],
     });
 
@@ -1287,6 +1400,21 @@ describe('SalesService', () => {
         }),
       }),
     );
+  });
+
+  it('allows KG_AND_PIECE products to sell kilograms without requiring an equivalence', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1', name: 'Whole chicken', sku: 'CHK-001', unit: ProductUnit.KG_AND_PIECE,
+      salePrice: decimal('80'), purchaseCost: decimal('50'), isActive: true, unitEquivalents: [],
+    });
+
+    await expect(service.create(
+      validCashSale({ initialPayment: { amount: 160, paymentMethod: PaymentMethod.CASH }, items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 2, quantityPieces: 0 }] }),
+      seller(),
+      'idem-kg-only',
+    )).resolves.toEqual(expect.objectContaining({ sale: expect.objectContaining({ id: 'sale-1' }) }));
   });
 
   it('rejects a sale item whose requested unit does not match the configured product unit', async () => {

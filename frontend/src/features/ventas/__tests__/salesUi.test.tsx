@@ -516,6 +516,25 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('disabled=""')
   })
 
+  it('reutiliza la clave idempotente al reintentar una cancelación fallida', async () => {
+    mockState.cancelSale.mutateAsync.mockRejectedValue(new Error('Error de red'))
+    vi.stubGlobal('crypto', { randomUUID: () => 'cancel-dialog-key' })
+    const { container, root } = await renderDom(<CancelSaleDialog onClose={() => undefined} sale={confirmedSale} />)
+
+    try {
+      await act(async () => { changeTextarea(container.querySelector('textarea') as HTMLTextAreaElement, 'Cliente canceló el pedido') })
+      await act(async () => { getButtonByText(container, 'Confirmar cancelación').click() })
+      await act(async () => { getButtonByText(container, 'Confirmar cancelación').click() })
+
+      expect(mockState.cancelSale.mutateAsync).toHaveBeenCalledTimes(2)
+      expect(mockState.cancelSale.mutateAsync).toHaveBeenNthCalledWith(1, expect.objectContaining({ idempotencyKey: 'cancel-dialog-key' }))
+      expect(mockState.cancelSale.mutateAsync).toHaveBeenNthCalledWith(2, expect.objectContaining({ idempotencyKey: 'cancel-dialog-key' }))
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('renderiza unidades en español en el ticket sin filtrar enums crudos', () => {
     const html = renderToStaticMarkup(
       <TicketModal

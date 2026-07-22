@@ -238,6 +238,7 @@ Validaciones:
 - Bloquear si ventas, movimientos, pagos o caja carecen de ubicación.
 - Bloquear si datos asociados cambiaron durante la validación.
 - Bloquear con `CASH_COUNT_REQUIRED` si no existe efectivo contado.
+- Solo una validación sin errores actualiza `validatedVersion` y `validatedAt`; todo intento registra `lastValidationAttemptAt` sin marcar el cierre como validado.
 
 ## POST /api/point-of-sale-daily-closes/:id/cash-count
 

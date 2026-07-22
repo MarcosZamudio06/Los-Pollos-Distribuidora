@@ -1,6 +1,6 @@
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CommercialPoliciesService } from './commercial-policies.service';
-import { CreateCommercialPolicyDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
+import { CreateCommercialPolicyDto, CreateDiscountAuthorizationDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
 export declare class CommercialPoliciesController {
     private readonly service;
     constructor(service: CommercialPoliciesService);
@@ -19,6 +19,7 @@ export declare class CommercialPoliciesController {
                 overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
                 creditLimitBlockingMode: string | null;
                 allowAdministrativeOverride: boolean;
+                maximumDiscountPercentage: string;
                 isActive: boolean;
                 effectiveFrom: Date | null;
                 effectiveTo: Date | null;
@@ -43,6 +44,7 @@ export declare class CommercialPoliciesController {
             overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
+            maximumDiscountPercentage: string;
             isActive: boolean;
             effectiveFrom: Date | null;
             effectiveTo: Date | null;
@@ -50,6 +52,22 @@ export declare class CommercialPoliciesController {
             updatedByUserId: string;
             createdAt: Date;
             updatedAt: Date;
+        };
+    }>;
+    authorizeDiscount(policyId: string, body: CreateDiscountAuthorizationDto, currentUser: AuthenticatedUser): Promise<{
+        success: boolean;
+        message: string;
+        data: {
+            id: string;
+            createdAt: Date;
+            commercialPolicyId: string;
+            reason: string;
+            evidence: string;
+            authorizedForUserId: string | null;
+            maximumPercentage: import("@prisma/client/runtime/library").Decimal;
+            authorizedByUserId: string;
+            expiresAt: Date | null;
+            usedAt: Date | null;
         };
     }>;
     update(id: string, body: UpdateCommercialPolicyDto, currentUser: AuthenticatedUser): Promise<{
@@ -66,6 +84,7 @@ export declare class CommercialPoliciesController {
             overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
+            maximumDiscountPercentage: string;
             isActive: boolean;
             effectiveFrom: Date | null;
             effectiveTo: Date | null;
@@ -89,6 +108,7 @@ export declare class CommercialPoliciesController {
             overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
+            maximumDiscountPercentage: string;
             isActive: boolean;
             effectiveFrom: Date | null;
             effectiveTo: Date | null;

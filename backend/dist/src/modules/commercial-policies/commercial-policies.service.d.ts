@@ -1,6 +1,7 @@
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CreateCommercialPolicyDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
+import { CreateCommercialPolicyDto, CreateDiscountAuthorizationDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
 export declare class CommercialPoliciesService {
     private prisma;
     constructor(prisma: PrismaService);
@@ -16,6 +17,7 @@ export declare class CommercialPoliciesService {
             overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
             creditLimitBlockingMode: string | null;
             allowAdministrativeOverride: boolean;
+            maximumDiscountPercentage: string;
             isActive: boolean;
             effectiveFrom: Date | null;
             effectiveTo: Date | null;
@@ -36,6 +38,7 @@ export declare class CommercialPoliciesService {
         overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
         creditLimitBlockingMode: string | null;
         allowAdministrativeOverride: boolean;
+        maximumDiscountPercentage: string;
         isActive: boolean;
         effectiveFrom: Date | null;
         effectiveTo: Date | null;
@@ -55,6 +58,7 @@ export declare class CommercialPoliciesService {
         overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
         creditLimitBlockingMode: string | null;
         allowAdministrativeOverride: boolean;
+        maximumDiscountPercentage: string;
         isActive: boolean;
         effectiveFrom: Date | null;
         effectiveTo: Date | null;
@@ -74,6 +78,7 @@ export declare class CommercialPoliciesService {
         overdueBlockingMode: import("@prisma/client").$Enums.OverdueBlockingMode | null;
         creditLimitBlockingMode: string | null;
         allowAdministrativeOverride: boolean;
+        maximumDiscountPercentage: string;
         isActive: boolean;
         effectiveFrom: Date | null;
         effectiveTo: Date | null;
@@ -82,10 +87,23 @@ export declare class CommercialPoliciesService {
         createdAt: Date;
         updatedAt: Date;
     }>;
+    authorizeDiscount(policyId: string, dto: CreateDiscountAuthorizationDto, currentUser: AuthenticatedUser): Promise<{
+        id: string;
+        createdAt: Date;
+        commercialPolicyId: string;
+        reason: string;
+        evidence: string;
+        authorizedForUserId: string | null;
+        maximumPercentage: Prisma.Decimal;
+        authorizedByUserId: string;
+        expiresAt: Date | null;
+        usedAt: Date | null;
+    }>;
     private buildListWhere;
     private buildPagination;
     private normalizeMutationData;
     private findActivePolicy;
+    private assertPolicyIsEffective;
     private assertHistoricalConditionsAreNotOverwritten;
     private assertNoOpenPolicyDependencies;
     private parseDate;

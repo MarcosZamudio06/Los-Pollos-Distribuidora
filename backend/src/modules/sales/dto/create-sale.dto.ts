@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsEmpty, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod, ProductUnit, SaleChannel, SaleDocumentType, SalePaymentType } from '@prisma/client';
 
 export class CreateSaleInitialPaymentDto {
@@ -11,6 +11,20 @@ export class CreateSaleInitialPaymentDto {
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
 
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  bankName?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  referenceNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}$/)
+  cardLastFour?: string;
 }
 
 export class CreateSaleBillingRequestDto {
@@ -85,10 +99,13 @@ export class CreateSaleDto {
   initialPayment?: CreateSaleInitialPaymentDto;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  discount?: number;
+  @IsEmpty({ message: 'discount is not accepted; use discountAuthorizationId' })
+  discount?: never;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  discountAuthorizationId?: string;
 
   @IsOptional()
   @IsString()

@@ -1,5 +1,5 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { CustomerType, OverdueBlockingMode } from '@prisma/client';
 export { OverdueBlockingMode } from '@prisma/client';
 
@@ -87,6 +87,13 @@ export class CreateCommercialPolicyDto {
   allowAdministrativeOverride?: boolean;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  maximumDiscountPercentage?: number;
+
+  @IsOptional()
   @Transform(trimString)
   @IsString()
   effectiveFrom?: string;
@@ -102,3 +109,30 @@ export class CreateCommercialPolicyDto {
 }
 
 export class UpdateCommercialPolicyDto extends CreateCommercialPolicyDto {}
+
+export class CreateDiscountAuthorizationDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  authorizedForUserId?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  @Max(100)
+  maximumPercentage!: number;
+
+  @Transform(trimString)
+  @IsString()
+  @IsNotEmpty()
+  reason!: string;
+
+  @Transform(trimString)
+  @IsString()
+  @IsNotEmpty()
+  evidence!: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+}

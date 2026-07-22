@@ -17,9 +17,17 @@ export declare class CreateCommercialPolicyDto {
     overdueBlockingMode?: OverdueBlockingMode;
     creditLimitBlockingMode?: string;
     allowAdministrativeOverride?: boolean;
+    maximumDiscountPercentage?: number;
     effectiveFrom?: string;
     effectiveTo?: string | null;
     isActive?: boolean;
 }
 export declare class UpdateCommercialPolicyDto extends CreateCommercialPolicyDto {
+}
+export declare class CreateDiscountAuthorizationDto {
+    authorizedForUserId?: string;
+    maximumPercentage: number;
+    reason: string;
+    evidence: string;
+    expiresAt?: string;
 }

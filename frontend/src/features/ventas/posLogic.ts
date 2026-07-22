@@ -3,6 +3,7 @@ import type {
   CartItem,
   CreateSalePayload,
   CustomerOption,
+  InitialPaymentReference,
   PaymentMethod,
   PaymentType,
 } from './types'
@@ -54,9 +55,10 @@ export function getQuantityValidationError(item: CartItem) {
     return null
   }
 
-  if (item.quantityKg <= 0 || item.quantityPieces <= 0) return 'Ingresa kilos y piezas mayores que cero.'
+  if (item.quantityKg < 0 || item.quantityPieces < 0) return 'Ingresa kilos, piezas o ambas cantidades.'
+  if (item.quantityKg <= 0 && item.quantityPieces <= 0) return 'Ingresa kilos, piezas o ambas cantidades.'
   if (!Number.isInteger(item.quantityPieces)) return 'Las piezas deben ser un número entero.'
-  if (!item.unitEquivalentId || !item.equivalentFactor || !item.equivalentUnitFrom || !item.equivalentUnitTo) {
+  if (item.quantityPieces > 0 && (!item.unitEquivalentId || !item.equivalentFactor || !item.equivalentUnitFrom || !item.equivalentUnitTo)) {
     return 'El producto requiere una equivalencia activa entre kilos y piezas.'
   }
   if (item.quantityKg > item.availableKg) {
@@ -64,6 +66,20 @@ export function getQuantityValidationError(item: CartItem) {
   }
   if (item.quantityPieces > item.availablePieces) {
     return `La cantidad no puede exceder ${item.availablePieces} piezas disponibles en ${locationName}.`
+  }
+  return null
+}
+
+export function getPaymentReferenceValidationError(paymentMethod: PaymentMethod, paymentReference: InitialPaymentReference) {
+  const bankName = paymentReference.bankName.trim()
+  const referenceNumber = paymentReference.referenceNumber.trim()
+  const cardLastFour = paymentReference.cardLastFour.trim()
+
+  if ((paymentMethod === 'TRANSFER' || paymentMethod === 'DEPOSIT' || paymentMethod === 'CHECK') && (!bankName || !referenceNumber)) {
+    return 'Captura el banco y la referencia del pago.'
+  }
+  if (paymentMethod === 'CARD' && (!referenceNumber || !/^\d{4}$/.test(cardLastFour))) {
+    return 'Captura la autorización y los últimos cuatro dígitos de la tarjeta.'
   }
   return null
 }
@@ -155,12 +171,16 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
   const physicalFolio = input.physicalFolio.trim()
   const billingRequestReason = input.billingRequestReason?.trim()
   const billingRequestNotes = input.billingRequestNotes?.trim()
+  const paymentReference = input.paymentReference ?? { bankName: '', referenceNumber: '', cardLastFour: '' }
   const initialPaymentAmount = input.initialPaymentAmount ?? (input.paymentType === 'CASH_SALE' ? input.total : 0)
   const initialPayment =
     input.paymentMethod && initialPaymentAmount > 0
       ? {
           amount: roundMoney(initialPaymentAmount),
           paymentMethod: input.paymentMethod,
+          bankName: paymentReference.bankName.trim() || undefined,
+          referenceNumber: paymentReference.referenceNumber.trim() || undefined,
+          cardLastFour: paymentReference.cardLastFour.trim() || undefined,
         }
       : undefined
 
@@ -176,7 +196,6 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
       : undefined,
     paymentType: input.paymentType,
     initialPayment,
-    discount: 0,
     commercialPolicyId: input.customer?.commercialPolicyId ?? input.customer?.creditSummary?.commercialPolicyId ?? undefined,
     administrativeOverrideReason: input.administrativeOverrideReason?.trim() || undefined,
     items: input.cart.map((item) => ({

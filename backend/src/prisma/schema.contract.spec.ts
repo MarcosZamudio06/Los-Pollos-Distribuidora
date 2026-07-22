@@ -54,6 +54,8 @@ describe('Prisma schema contract', () => {
       'AccountReceivable',
       'Payment',
       'CommercialPolicy',
+      'DiscountAuthorization',
+      'BillingPolicy',
       'OperationalConfig',
       'DeliveryRoute',
       'DeliveryRoutePlanDraft',
@@ -70,6 +72,7 @@ describe('Prisma schema contract', () => {
       'LegalEntityOperationalLocation',
       'Invoice',
       'BillingRequestSaleDocument',
+      'BillingRequestSaleItem',
       'InvoiceSaleDocument',
       'InvoiceSaleItemApplication',
       'BillingDataRemediation',
@@ -77,7 +80,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(40);
+    expect(modelNames).toHaveLength(43);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');

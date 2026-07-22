@@ -15,6 +15,7 @@ function getExpectedVersion(sale: SaleDetail) {
 export function CancelSaleDialog({ onClose, sale }: CancelSaleDialogProps) {
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
   const cancelSale = useCancelSale(sale.id)
   const expectedVersion = getExpectedVersion(sale)
   const canSubmit = reason.trim().length > 0 && expectedVersion !== undefined && Number.isInteger(expectedVersion) && expectedVersion >= 0 && sale.status !== 'CANCELLED'
@@ -23,7 +24,7 @@ export function CancelSaleDialog({ onClose, sale }: CancelSaleDialogProps) {
     if (!canSubmit || expectedVersion === undefined) return
     setError(null)
     try {
-      await cancelSale.mutateAsync({ expectedVersion, reason: reason.trim() })
+      await cancelSale.mutateAsync({ idempotencyKey, payload: { expectedVersion, reason: reason.trim() } })
       onClose()
     } catch (caughtError) {
       setError(caughtError instanceof ApiClientError || caughtError instanceof Error ? caughtError.message : 'No se pudo cancelar la venta.')

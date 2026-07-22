@@ -129,6 +129,7 @@ enum PaymentMethod {
   TRANSFER
   DEPOSIT
   CARD
+  CHECK
   VOUCHER
   OTHER
 }
@@ -316,6 +317,8 @@ model User {
   createdDailyCloseLines          PointOfSaleDailyCloseLine[]
   cashMovements                   CashMovement[]
   capturedScaleTickets            ScaleTicketReference[]
+  issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
+  grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
 
   @@index([deactivatedByUserId])
   @@index([operationalLocationId])
@@ -498,6 +501,9 @@ model Sale {
   collectedByUserId                      String?
   routeId                                String?
   commercialPolicyId                     String?
+  discountAuthorizationId                String?                     @unique
+  discountPercentage                     Decimal                     @default(0) @db.Decimal(5, 2)
+  discountEvidence                       String?
   pointOfSaleDailyCloseId                String?
   collectionStatus                       CollectionStatus            @default(UNPAID)
   subtotal                               Decimal                     @db.Decimal(14, 2)
@@ -529,6 +535,7 @@ model Sale {
   cancelledBy                            User?                       @relation("SaleCancelledBy", fields: [cancelledByUserId], references: [id])
   route                                  DeliveryRoute?              @relation(fields: [routeId], references: [id])
   commercialPolicy                       CommercialPolicy?           @relation(fields: [commercialPolicyId], references: [id])
+  discountAuthorization                  DiscountAuthorization?      @relation(fields: [discountAuthorizationId], references: [id])
   pointOfSaleDailyClose                  PointOfSaleDailyClose?      @relation(fields: [pointOfSaleDailyCloseId], references: [id])
   items                                  SaleItem[]
   documents                              SaleDocument[]
@@ -773,6 +780,7 @@ model Payment {
   paymentMethod              PaymentMethod
   bankName                   String?
   referenceNumber            String?
+  cardLastFour               String?
   appliedDocumentId          String?
   appliedDocumentType        String?
   operationalLocationId      String?
@@ -869,6 +877,7 @@ model CommercialPolicy {
   overdueBlockingMode         OverdueBlockingMode?
   creditLimitBlockingMode     String?
   allowAdministrativeOverride Boolean              @default(false)
+  maximumDiscountPercentage  Decimal              @default(0) @db.Decimal(5, 2)
   isActive                    Boolean              @default(true)
   effectiveFrom               DateTime?
   effectiveTo                 DateTime?
@@ -881,6 +890,27 @@ model CommercialPolicy {
   customers                   Customer[]
   sales                       Sale[]
   accountReceivables          AccountReceivable[]
+  discountAuthorizations      DiscountAuthorization[]
+}
+
+model DiscountAuthorization {
+  id                  String            @id @default(cuid())
+  commercialPolicyId  String
+  authorizedForUserId String?
+  maximumPercentage   Decimal           @db.Decimal(5, 2)
+  reason              String
+  evidence            String
+  authorizedByUserId  String
+  expiresAt           DateTime?
+  usedAt              DateTime?
+  createdAt           DateTime          @default(now())
+  commercialPolicy    CommercialPolicy  @relation(fields: [commercialPolicyId], references: [id])
+  authorizedForUser   User?             @relation("DiscountAuthorizationAuthorizedFor", fields: [authorizedForUserId], references: [id])
+  authorizedByUser    User              @relation("DiscountAuthorizationAuthorizedBy", fields: [authorizedByUserId], references: [id])
+  sale                Sale?
+
+  @@index([commercialPolicyId, usedAt])
+  @@index([authorizedForUserId, usedAt])
 }
 
 model BillingPolicy {
@@ -1067,6 +1097,7 @@ model PointOfSaleDailyClose {
   status                 PointOfSaleDailyCloseStatus @default(DRAFT)
   version                Int                         @default(1)
   lastValidatedAt        DateTime?
+  lastValidationAttemptAt DateTime?
   validatedSourceVersion Int?
   openedByUserId         String
   reviewedByUserId       String?

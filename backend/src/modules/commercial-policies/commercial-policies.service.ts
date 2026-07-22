@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CreateCommercialPolicyDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
+import { CreateCommercialPolicyDto, CreateDiscountAuthorizationDto, ListCommercialPoliciesQueryDto, UpdateCommercialPolicyDto } from './dto';
 
 type CommercialPolicyRecord = Prisma.CommercialPolicyGetPayload<Record<string, never>>;
 type PolicyMutationDto = CreateCommercialPolicyDto | UpdateCommercialPolicyDto;
@@ -15,6 +15,7 @@ const HISTORICAL_POLICY_FIELDS: Array<keyof UpdateCommercialPolicyDto> = [
   'overdueBlockingMode',
   'creditLimitBlockingMode',
   'allowAdministrativeOverride',
+  'maximumDiscountPercentage',
   'effectiveFrom',
 ];
 
@@ -60,6 +61,32 @@ export class CommercialPoliciesService {
     return this.toResponse(policy);
   }
 
+  async authorizeDiscount(policyId: string, dto: CreateDiscountAuthorizationDto, currentUser: AuthenticatedUser) {
+    const policy = await this.findActivePolicy(policyId);
+    this.assertPolicyIsEffective(policy);
+    const maximumDiscountPercentage = Number(policy.maximumDiscountPercentage);
+    if (dto.maximumPercentage > maximumDiscountPercentage) {
+      throw new BadRequestException('Discount authorization exceeds the commercial policy maximum');
+    }
+
+    if (dto.authorizedForUserId) {
+      const user = await this.prisma.user.findUnique({ where: { id: dto.authorizedForUserId }, select: { id: true, isActive: true } });
+      if (!user?.isActive) throw new NotFoundException('Authorized seller not found');
+    }
+
+    return this.prisma.discountAuthorization.create({
+      data: {
+        commercialPolicyId: policy.id,
+        authorizedForUserId: dto.authorizedForUserId?.trim() || null,
+        maximumPercentage: dto.maximumPercentage,
+        reason: dto.reason.trim(),
+        evidence: dto.evidence.trim(),
+        expiresAt: dto.expiresAt ? this.parseDate(dto.expiresAt, 'expiresAt') : null,
+        authorizedByUserId: currentUser.id,
+      },
+    });
+  }
+
   private buildListWhere(query: ListCommercialPoliciesQueryDto): Prisma.CommercialPolicyWhereInput {
     const search = query.search?.trim();
     return {
@@ -80,6 +107,7 @@ export class CommercialPoliciesService {
     if (isCreate && !name) throw new BadRequestException('Policy name is required');
     if (dto.defaultCreditLimit !== undefined && dto.defaultCreditLimit < 0) throw new BadRequestException('Credit limit must be greater than or equal to zero');
     if (dto.defaultCreditDays !== undefined && dto.defaultCreditDays < 0) throw new BadRequestException('Credit days must be greater than or equal to zero');
+    if (dto.maximumDiscountPercentage !== undefined && dto.maximumDiscountPercentage > 100) throw new BadRequestException('Maximum discount percentage must not exceed 100');
 
     const overdueBlockingMode = dto.overdueBlockingMode?.trim();
     const creditLimitBlockingMode = dto.creditLimitBlockingMode?.trim();
@@ -109,6 +137,7 @@ export class CommercialPoliciesService {
       ...(dto.overdueBlockingMode !== undefined ? { overdueBlockingMode: overdueBlockingMode || null } : {}),
       ...(dto.creditLimitBlockingMode !== undefined ? { creditLimitBlockingMode: creditLimitBlockingMode || null } : {}),
       ...(dto.allowAdministrativeOverride !== undefined ? { allowAdministrativeOverride: dto.allowAdministrativeOverride } : {}),
+      ...(dto.maximumDiscountPercentage !== undefined ? { maximumDiscountPercentage: dto.maximumDiscountPercentage } : {}),
       ...(dto.effectiveFrom !== undefined ? { effectiveFrom } : {}),
       ...(dto.effectiveTo !== undefined ? { effectiveTo } : {}),
       ...(isActive !== undefined ? { isActive } : {}),
@@ -121,6 +150,13 @@ export class CommercialPoliciesService {
     const policy = (await this.prisma.commercialPolicy.findFirst({ where: { id, isActive: true } })) as CommercialPolicyRecord | null;
     if (!policy) throw new NotFoundException('Commercial policy not found');
     return policy;
+  }
+
+  private assertPolicyIsEffective(policy: CommercialPolicyRecord): void {
+    const now = new Date();
+    if (!policy.effectiveFrom || policy.effectiveFrom > now || (policy.effectiveTo && policy.effectiveTo <= now)) {
+      throw new BadRequestException('Commercial policy is not currently effective');
+    }
   }
 
   private async assertHistoricalConditionsAreNotOverwritten(id: string, dto: UpdateCommercialPolicyDto): Promise<void> {
@@ -162,6 +198,7 @@ export class CommercialPoliciesService {
       overdueBlockingMode: policy.overdueBlockingMode ?? undefined,
       creditLimitBlockingMode: policy.creditLimitBlockingMode ?? undefined,
       allowAdministrativeOverride: policy.allowAdministrativeOverride,
+      maximumDiscountPercentage: Number(policy.maximumDiscountPercentage),
       effectiveFrom: policy.effectiveFrom?.toISOString(),
       effectiveTo: policy.effectiveTo?.toISOString() ?? null,
       isActive: policy.isActive,
@@ -180,6 +217,7 @@ export class CommercialPoliciesService {
       overdueBlockingMode: policy.overdueBlockingMode,
       creditLimitBlockingMode: policy.creditLimitBlockingMode,
       allowAdministrativeOverride: policy.allowAdministrativeOverride,
+      maximumDiscountPercentage: policy.maximumDiscountPercentage?.toString() ?? '0',
       isActive: policy.isActive,
       effectiveFrom: policy.effectiveFrom,
       effectiveTo: policy.effectiveTo,

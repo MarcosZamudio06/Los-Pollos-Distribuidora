@@ -6,6 +6,7 @@ import {
   EquivalentStatus,
   InventoryMovementType,
   OperationalLocationType,
+  PaymentMethod,
   PaymentStatus,
   PointOfSaleDailyCloseStatus,
   Prisma,
@@ -70,6 +71,24 @@ type PreparedItem = {
   subtotal: number;
   equivalentFactor: number | null;
   roundingMode: string | null;
+};
+
+type DiscountAuthorization = {
+  id: string;
+  commercialPolicyId: string;
+  authorizedForUserId?: string | null;
+  maximumPercentage: DecimalLike;
+  reason: string;
+  evidence: string;
+  expiresAt?: Date | null;
+  usedAt?: Date | null;
+  commercialPolicy: {
+    id: string;
+    isActive: boolean;
+    effectiveFrom?: Date | null;
+    effectiveTo?: Date | null;
+    maximumDiscountPercentage: DecimalLike;
+  };
 };
 
 type CreatedPayment = Awaited<ReturnType<Prisma.TransactionClient['payment']['create']>>;
@@ -294,6 +313,7 @@ export class SalesService {
       throw new BadRequestException('Sale must contain at least one item');
     }
     this.assertOverrideIntent(dto, currentUser);
+    this.assertLocationAccess(dto, currentUser);
 
     const payloadHash = this.hashPayload(dto);
 
@@ -305,6 +325,7 @@ export class SalesService {
         });
 
         if (existingSale) {
+          this.assertIdempotentReplayAccess(existingSale, currentUser);
           if (existingSale.idempotencyPayloadHash !== payloadHash) {
             throw new ConflictException('Idempotency-Key was already used for a different sale payload');
           }
@@ -319,8 +340,6 @@ export class SalesService {
             documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
           };
         }
-        this.assertLocationAccess(dto, currentUser);
-
         const location = await tx.operationalLocation.findUnique({ where: { id: dto.locationId } });
         if (!location?.isActive) {
           throw new NotFoundException('Operational location not found');
@@ -340,10 +359,9 @@ export class SalesService {
 
         const preparedItems = await this.prepareItems(tx, dto.items);
         const subtotal = this.roundMoney(preparedItems.reduce((sum, item) => sum + item.subtotal, 0));
-        const discount = this.roundMoney(dto.discount ?? 0);
-        if (discount > subtotal) {
-          throw new BadRequestException('Discount cannot exceed subtotal');
-        }
+        const discountAuthorization = await this.resolveDiscountAuthorization(tx, dto, customer, currentUser);
+        const discountPercentage = discountAuthorization ? this.toNumber(discountAuthorization.maximumPercentage) : 0;
+        const discount = this.roundMoney(subtotal * discountPercentage / 100);
         const total = this.roundMoney(subtotal - discount);
         const initialPaymentAmount = this.roundMoney(dto.initialPayment?.amount ?? 0);
 
@@ -366,6 +384,14 @@ export class SalesService {
             policyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer.commercialPolicyId),
             overrideReason: dto.administrativeOverrideReason,
           });
+        }
+
+        if (discountAuthorization) {
+          const consumption = await tx.discountAuthorization.updateMany({
+            where: { id: discountAuthorization.id, usedAt: null },
+            data: { usedAt: new Date() },
+          });
+          if (consumption.count !== 1) throw new ConflictException('DISCOUNT_AUTHORIZATION_ALREADY_USED');
         }
 
         const inventoryChanges = await this.reserveInventory(tx, preparedItems, dto.locationId);
@@ -395,6 +421,9 @@ export class SalesService {
             physicalFolio: this.normalizeOptionalText(dto.physicalFolio),
             requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
             commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer?.commercialPolicyId),
+            discountAuthorizationId: discountAuthorization?.id ?? null,
+            discountPercentage,
+            discountEvidence: discountAuthorization?.evidence ?? null,
             idempotencyKey,
             idempotencyPayloadHash: payloadHash,
             administrativeOverrideReason: creditDecision?.overrideReason ?? null,
@@ -509,6 +538,9 @@ export class SalesService {
                 userId: currentUser.id,
                 amount: initialPaymentAmount,
                 paymentMethod: dto.initialPayment.paymentMethod,
+                bankName: this.normalizeOptionalText(dto.initialPayment.bankName),
+                referenceNumber: this.normalizeOptionalText(dto.initialPayment.referenceNumber),
+                cardLastFour: this.normalizeOptionalText(dto.initialPayment.cardLastFour),
                 operationalLocationId: dto.locationId,
                 status: PaymentStatus.APPLIED,
                 paidAt: new Date(),
@@ -610,6 +642,47 @@ export class SalesService {
     if (dto.paymentType !== SalePaymentType.CREDIT_SALE) {
       throw new BadRequestException({ code: 'CREDIT_OVERRIDE_NOT_APPLICABLE', message: 'Administrative override is not applicable to this sale' });
     }
+  }
+
+  private async resolveDiscountAuthorization(
+    tx: Prisma.TransactionClient,
+    dto: CreateSaleDto,
+    customer: CustomerCredit | null,
+    currentUser: Actor,
+  ): Promise<DiscountAuthorization | null> {
+    if (dto.discount !== undefined) {
+      throw new BadRequestException({ code: 'DISCOUNT_AMOUNT_FORBIDDEN', message: 'discount is not accepted; use a discount authorization' });
+    }
+    if (!dto.discountAuthorizationId) return null;
+
+    const authorization = (await tx.discountAuthorization.findFirst({
+      where: { id: dto.discountAuthorizationId, usedAt: null },
+      include: { commercialPolicy: true },
+    })) as DiscountAuthorization | null;
+    if (!authorization) {
+      throw new BadRequestException({ code: 'DISCOUNT_AUTHORIZATION_INVALID', message: 'Discount authorization is invalid or already used' });
+    }
+    if (authorization.expiresAt && authorization.expiresAt <= new Date()) {
+      throw new BadRequestException({ code: 'DISCOUNT_AUTHORIZATION_EXPIRED', message: 'Discount authorization has expired' });
+    }
+    if (currentUser.role === 'SELLER' && authorization.authorizedForUserId !== currentUser.id) {
+      throw new ForbiddenException('DISCOUNT_AUTHORIZATION_FORBIDDEN');
+    }
+
+    const commercialPolicyId = this.normalizeOptionalText(dto.commercialPolicyId ?? customer?.commercialPolicyId);
+    if (!commercialPolicyId || authorization.commercialPolicyId !== commercialPolicyId) {
+      throw new BadRequestException({ code: 'DISCOUNT_POLICY_MISMATCH', message: 'Discount authorization does not match the sale commercial policy' });
+    }
+    const policy = authorization.commercialPolicy;
+    if (!policy.isActive || !policy.effectiveFrom || policy.effectiveFrom > new Date() || (policy.effectiveTo && policy.effectiveTo <= new Date())) {
+      throw new BadRequestException({ code: 'DISCOUNT_POLICY_INACTIVE', message: 'Discount commercial policy is not currently active' });
+    }
+
+    const percentage = this.toNumber(authorization.maximumPercentage);
+    if (percentage <= 0 || percentage > this.toNumber(policy.maximumDiscountPercentage)) {
+      throw new BadRequestException({ code: 'DISCOUNT_PERCENTAGE_INVALID', message: 'Discount authorization exceeds the commercial policy maximum' });
+    }
+    return authorization;
   }
 
   private async withSerializableRetry<T>(operation: () => Promise<T>): Promise<T> {
@@ -876,6 +949,9 @@ export class SalesService {
     for (const item of items) {
       const quantityKg = this.roundQuantity(item.quantityKg ?? 0);
       const quantityPieces = item.quantityPieces ?? 0;
+      if (quantityKg < 0 || quantityPieces < 0) {
+        throw new BadRequestException('Sale item quantities cannot be negative');
+      }
       if (quantityKg <= 0 && quantityPieces <= 0) {
         throw new BadRequestException('Sale item quantity must be greater than 0');
       }
@@ -1069,6 +1145,12 @@ export class SalesService {
     }
   }
 
+  private assertIdempotentReplayAccess(sale: { userId?: string; locationId?: string }, currentUser: Actor) {
+    if (currentUser.role === 'ADMIN') return;
+    if (currentUser.role === 'SELLER' && sale.userId === currentUser.id) return;
+    throw new ForbiddenException('SALE_NOT_AUTHORIZED');
+  }
+
   private assertPaymentRules(dto: CreateSaleDto, customer: CustomerCredit | null, total: number, initialPaymentAmount: number) {
     if (initialPaymentAmount > total) {
       throw new BadRequestException('Initial payment cannot exceed sale total');
@@ -1076,6 +1158,21 @@ export class SalesService {
 
     if (dto.paymentType === SalePaymentType.CREDIT_SALE && !customer) {
       throw new BadRequestException('customerId is required for credit sales');
+    }
+
+    if (!dto.initialPayment) return;
+
+    const bankName = this.normalizeOptionalText(dto.initialPayment.bankName);
+    const referenceNumber = this.normalizeOptionalText(dto.initialPayment.referenceNumber);
+    const cardLastFour = this.normalizeOptionalText(dto.initialPayment.cardLastFour);
+    const method = dto.initialPayment.paymentMethod;
+
+    if ((method === PaymentMethod.TRANSFER || method === PaymentMethod.DEPOSIT || method === PaymentMethod.CHECK) && (!bankName || !referenceNumber)) {
+      throw new BadRequestException('Bank name and reference number are required for transfer, deposit, and check payments');
+    }
+
+    if ((method === PaymentMethod.CARD || method === PaymentMethod.VOUCHER) && (!referenceNumber || !/^\d{4}$/.test(cardLastFour ?? ''))) {
+      throw new BadRequestException('Authorization code and the last four card digits are required for card payments');
     }
 
   }

@@ -23,6 +23,7 @@ export function paymentMethodLabel(value?: PaymentMethod | string | null) {
     CASH: 'Efectivo',
     CARD: 'Tarjeta',
     TRANSFER: 'Transferencia',
+    DEPOSIT: 'Depósito',
     CHECK: 'Cheque',
   }
   return value && value in labels ? labels[value as Exclude<PaymentMethod, ''>] : 'Sin pago registrado'

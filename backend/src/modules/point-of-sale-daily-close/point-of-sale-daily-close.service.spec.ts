@@ -358,5 +358,23 @@ describe('PointOfSaleDailyCloseService', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContainEqual(expect.objectContaining({ code: 'CASH_COUNT_REQUIRED' }));
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastValidationAttemptAt: expect.any(Date), lastValidatedAt: null, validatedSourceVersion: null }),
+    }));
+  });
+
+  it('marks a source version as validated only after a successful validation', async () => {
+    const close = { id: 'close-1', operationalLocationId: 'loc-1', status: 'DRAFT', version: 4, sales: [], updatedAt: new Date() };
+    const recalculated = { ...close, lines: [], cashCountedTotal: 0, scaleDifferenceKg: 0, cashDifferenceTotal: 0 };
+    jest.spyOn(service as any, 'requireDraft').mockResolvedValue(close);
+    jest.spyOn(service as any, 'recalculate').mockResolvedValue(recalculated);
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue(recalculated);
+
+    const result = await service.validate('close-1', { id: 'seller-1', role: 'SELLER' } as never);
+
+    expect(result.valid).toBe(true);
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastValidationAttemptAt: expect.any(Date), lastValidatedAt: expect.any(Date), validatedSourceVersion: 4 }),
+    }));
   });
 });

@@ -140,7 +140,14 @@ export class PointOfSaleDailyCloseService {
       { code: 'SCALE_DIFFERENCE', value: Number(updated.scaleDifferenceKg), unit: 'kg' },
       { code: 'CASH_DIFFERENCE', value: Number(updated.cashDifferenceTotal), unit: 'MXN' },
     ].filter((item) => item.value !== 0);
-    const validated = await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { lastValidatedAt: new Date(), validatedSourceVersion: updated.version }, include: detailInclude });
+    const attemptedAt = new Date();
+    const validated = await this.prisma.pointOfSaleDailyClose.update({
+      where: { id },
+      data: errors.length === 0
+        ? { lastValidationAttemptAt: attemptedAt, lastValidatedAt: attemptedAt, validatedSourceVersion: updated.version }
+        : { lastValidationAttemptAt: attemptedAt, lastValidatedAt: null, validatedSourceVersion: null },
+      include: detailInclude,
+    });
     return {
       close: this.projectForRole(validated, user),
       valid: errors.length === 0,
