@@ -18,6 +18,7 @@ import {
   CreateScaleTicketDto,
   ListDailyCloseQueryDto,
   OpenDailyCloseDto,
+  RecordCashCountDto,
   ReasonedDailyCloseDto,
   VersionedDailyCloseDto,
 } from './dto';
@@ -75,6 +76,16 @@ export class PointOfSaleDailyCloseController {
     return this.response(
       'Scale ticket registered successfully',
       await this.service.addScaleTicket(id, dto, user),
+    );
+  }
+  @Post(':id/cash-count') @Roles('ADMIN', 'SELLER') async recordCashCount(
+    @Param('id') id: string,
+    @Body() dto: RecordCashCountDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Cash count recorded successfully',
+      await this.service.recordCashCount(id, dto, user),
     );
   }
   @Post(':id/validate') @Roles('ADMIN', 'SELLER') async validate(

@@ -500,7 +500,7 @@ Campos mínimos:
 - `totalInputKg`, `totalSoldKg`, `totalRemainingKg`, `totalShortageKg`, `totalSurplusKg`.
 - `scaleReportedKg`, `scaleDifferenceKg`.
 - `cashTotal`, `cardVoucherTotal`, `transferTotal`, `expenseTotal`, `grossSalesTotal`.
-- `netCashExpected`, `cashDifferenceTotal`.
+- `netCashExpected`, `cashCountedTotal`, `cashDifferenceTotal`.
 - `purchaseCostTotal`, `grossProfitTotal`, `netProfitTotal`.
 - `notes`, `reviewedAt`, `closedAt`, `cancelledAt`, `reopenedAt`, `reopenedReason`, `createdAt`, `updatedAt`.
 

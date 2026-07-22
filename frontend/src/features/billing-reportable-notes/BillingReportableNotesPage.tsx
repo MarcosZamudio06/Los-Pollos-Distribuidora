@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button, Card } from '@/components/ui'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { MiniAjaxSelect } from '@/components/shared/operational-catalogs'
+import { formatMoney as money } from '@/lib/money'
 import { useAuth } from '../auth'
 import { useBillingReport, useBillingReportDetail, useBillingRequestCommand } from './hooks'
 import { getDetailPropertyLabel } from './detailLabels'
@@ -12,7 +13,6 @@ import { areNotesCompatible, isRequestableNote } from './selection'
 import type { BillingReportFilters, BillingReportItem, BillingStatus } from './types'
 
 const field = 'h-11 rounded-xl border border-[color:var(--erp-border)] bg-white px-3 text-sm font-semibold outline-none focus:border-[var(--erp-brand-gold)] focus:ring-2 focus:ring-[rgba(214,155,45,.18)]'
-const money = (value: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value))
 const statusLabel: Record<BillingStatus, string> = { NOT_BILLABLE: 'No facturable', BILLABLE: 'Facturable', PENDING_INFORMATION: 'Información pendiente', REQUESTED: 'Solicitada', IN_PROCESS: 'En proceso', PARTIALLY_INVOICED: 'Facturada parcialmente', FULLY_INVOICED: 'Facturada', BLOCKED: 'Bloqueada', CANCELLED: 'Cancelada' }
 const statusTone: Record<BillingStatus, string> = { NOT_BILLABLE: 'bg-slate-100 text-slate-700', BILLABLE: 'bg-emerald-100 text-emerald-800', PENDING_INFORMATION: 'bg-amber-100 text-amber-800', REQUESTED: 'bg-blue-100 text-blue-800', IN_PROCESS: 'bg-indigo-100 text-indigo-800', PARTIALLY_INVOICED: 'bg-violet-100 text-violet-800', FULLY_INVOICED: 'bg-emerald-100 text-emerald-800', BLOCKED: 'bg-red-100 text-red-800', CANCELLED: 'bg-slate-200 text-slate-700' }
 const booleanFilter = (params: URLSearchParams, key: string) => params.has(key) ? params.get(key) === 'true' : undefined

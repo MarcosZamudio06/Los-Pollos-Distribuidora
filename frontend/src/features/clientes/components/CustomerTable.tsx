@@ -1,9 +1,10 @@
 import { Eye, Pencil, Power, Route, ShieldCheck, UserRound } from 'lucide-react'
 import type { Customer } from '../types'
 import { TablePagination, useTablePagination } from '../../../components/shared/table-pagination'
+import { formatMoney } from '../../../lib/money'
 
 function text(value: unknown) { return typeof value === 'string' && value.trim() ? value : '—' }
-function money(value: unknown) { return value === undefined || value === null ? '—' : Number(value).toLocaleString('es-MX', { currency: 'MXN', style: 'currency' }) }
+function money(value: unknown) { return value === undefined || value === null ? '—' : formatMoney(String(value)) }
 function policy(customer: Customer) { return typeof customer.commercialPolicy === 'string' ? customer.commercialPolicy : customer.commercialPolicy?.name ?? customer.commercialPolicyId ?? '—' }
 function route(customer: Customer) { return typeof customer.assignedRoute === 'string' ? customer.assignedRoute : customer.assignedRoute?.name ?? customer.assignedRouteId ?? '—' }
 function isActive(customer: Customer) { return customer.isActive ?? customer.active ?? true }

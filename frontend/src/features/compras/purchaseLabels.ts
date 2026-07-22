@@ -1,8 +1,8 @@
 import type { OperationalUnit, ProductPresentation } from '../inventario/types'
+import { formatMoney } from '../../lib/money'
 
 export function money(value?: number | string | null) {
-  const amount = Number(value ?? 0)
-  return new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' }).format(Number.isFinite(amount) ? amount : 0)
+  return formatMoney(value)
 }
 
 export function decimal(value?: number | string | null, digits = 3) {

@@ -355,6 +355,11 @@ Campos:
 - cancelledAt
 - cancelledByUserId
 - cancellationReason
+
+Reglas:
+
+- `saleNumber` es único y se genera desde una secuencia PostgreSQL atómica con formato `SALE-000001`.
+- La secuencia se inicializa por encima del mayor `saleNumber` numérico existente para conservar importaciones históricas y no depende del conteo ni de eliminaciones.
 - createdAt
 - updatedAt
 
@@ -1081,6 +1086,7 @@ Campos:
 - expenseTotal
 - grossSalesTotal
 - netCashExpected
+- cashCountedTotal
 - cashDifferenceTotal
 - purchaseCostTotal
 - grossProfitTotal
@@ -1103,11 +1109,12 @@ Estados:
 
 Reglas:
 
-- Solo un cierre no cancelado por `operationalLocationId` y `businessDate` mientras no se aprueben turnos o cajas múltiples.
+- Solo un cierre no cancelado por `operationalLocationId` y `businessDate` mientras no se aprueben turnos o cajas múltiples; PostgreSQL lo garantiza con un índice único parcial para registros cuyo estado sea distinto de `CANCELLED`.
 - Los totales se recalculan en backend y se guardan como snapshot auditable al revisar y cerrar.
 - Cerrar, cancelar o reabrir registra usuario, fecha, motivo y versión esperada.
 - Las transiciones que afecten asociaciones, snapshots o ajustes relacionados se ejecutan en transacción.
 - Una diferencia fuera de tolerancia no se oculta; genera advertencia o bloqueo según una política futura aún abierta.
+- `cashCountedTotal` es nulo hasta que se captura el efectivo físico; al capturarlo, `cashDifferenceTotal` se persiste como `cashCountedTotal - netCashExpected`.
 
 ### PointOfSaleDailyCloseLine
 

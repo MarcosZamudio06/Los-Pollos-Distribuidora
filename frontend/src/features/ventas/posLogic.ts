@@ -6,13 +6,9 @@ import type {
   PaymentMethod,
   PaymentType,
 } from './types'
+import { formatMoney } from '../../lib/money'
 
-export function toMoney(value: number | string | null | undefined) {
-  const numericValue = Number(value ?? 0)
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(
-    Number.isFinite(numericValue) ? numericValue : 0,
-  )
-}
+export { formatMoney as toMoney } from '../../lib/money'
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
@@ -103,7 +99,7 @@ export function getCreditRestriction(paymentType: PaymentType, customer: Custome
 
   const availableCredit = numberFrom(summary?.availableCredit ?? customer.creditLimit)
   if (availableCredit >= 0 && total > availableCredit) {
-    return `La venta excede el crédito disponible de ${toMoney(availableCredit)}.`
+    return `La venta excede el crédito disponible de ${formatMoney(availableCredit)}.`
   }
 
   return null

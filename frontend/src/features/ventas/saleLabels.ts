@@ -1,9 +1,9 @@
 import type { CollectionStatus, PaymentMethod, PaymentType, SaleChannel, SaleDocumentType, SaleStatus } from './types'
 import type { OperationalUnit } from '../inventario/types'
+import { formatMoney } from '../../lib/money'
 
 export function money(value: number | string | null | undefined) {
-  const numericValue = Number(value ?? 0)
-  return new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' }).format(Number.isFinite(numericValue) ? numericValue : 0)
+  return formatMoney(value)
 }
 
 export function dateTime(value?: string | null) {

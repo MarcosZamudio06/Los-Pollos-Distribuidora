@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = ("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 enum OperationalLocationType {
@@ -1086,7 +1086,8 @@ model PointOfSaleDailyClose {
   expenseTotal           Decimal                     @default(0) @db.Decimal(14, 2)
   grossSalesTotal        Decimal                     @default(0) @db.Decimal(14, 2)
   netCashExpected        Decimal                     @default(0) @db.Decimal(14, 2)
-  cashDifferenceTotal    Decimal                     @default(0) @db.Decimal(14, 2)
+  cashCountedTotal       Decimal?                    @db.Decimal(14, 2)
+  cashDifferenceTotal    Decimal?                    @db.Decimal(14, 2)
   purchaseCostTotal      Decimal                     @default(0) @db.Decimal(14, 2)
   grossProfitTotal       Decimal                     @default(0) @db.Decimal(14, 2)
   netProfitTotal         Decimal                     @default(0) @db.Decimal(14, 2)

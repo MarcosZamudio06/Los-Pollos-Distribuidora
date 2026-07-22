@@ -106,6 +106,7 @@ Validaciones:
 - No vender sin stock suficiente en la ubicación indicada.
 - No aceptar precios enviados por frontend como fuente de verdad.
 - Calcular precios, descuentos, subtotales y totales en backend.
+- Generar `saleNumber` en backend desde una secuencia atómica; no depende del conteo de ventas.
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
 - `quantityPieces` debe ser entero cuando aplique.
 - Venta de contado completamente pagada requiere `initialPayment` por el total o flujo equivalente de `Payment`.
@@ -129,6 +130,7 @@ Validaciones:
 - No se aceptan identificadores internos de solicitud escritos manualmente.
 - Descontar inventario, crear venta, items, pago inicial y cuenta por cobrar cuando aplique en una transacción.
 - Requerir idempotencia para creación de venta y pago inicial.
+- Reintentar conflictos únicos transitorios relacionados con `saleNumber`.
 
 ## POST /api/sales/:id/cancel
 

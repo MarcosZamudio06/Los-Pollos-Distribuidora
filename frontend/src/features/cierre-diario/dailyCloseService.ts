@@ -9,6 +9,7 @@ export const dailyCloseService = {
   open: async (body: { operationalLocationId: string; businessDate: string }, token: string | null) => (await apiClient.post<Envelope<DailyClose>, typeof body>('/point-of-sale-daily-closes', { body, headers: headers(token) })).data,
   expense: async (id: string, body: { amount: number; reason: string; reference?: string }, token: string | null) => (await apiClient.post<Envelope<DailyClose>, typeof body>(`/point-of-sale-daily-closes/${id}/expenses`, { body, headers: headers(token) })).data,
   ticket: async (id: string, body: { physicalFolio: string; capturedDate: string; weightKg?: number; pieceCount?: number; amount?: number }, token: string | null) => (await apiClient.post<Envelope<DailyClose>, typeof body>(`/point-of-sale-daily-closes/${id}/scale-tickets`, { body, headers: headers(token) })).data,
+  recordCashCount: async (id: string, body: { cashCountedTotal: number }, token: string | null) => (await apiClient.post<Envelope<DailyClose>, typeof body>(`/point-of-sale-daily-closes/${id}/cash-count`, { body, headers: headers(token) })).data,
   action: async (id: string, action: 'validate' | 'review' | 'close' | 'cancel' | 'reopen', body: Record<string, unknown>, token: string | null) => {
     const path = `/point-of-sale-daily-closes/${id}/${action}`
     const response = action === 'validate'

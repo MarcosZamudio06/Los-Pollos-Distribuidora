@@ -23,7 +23,7 @@ export type DailyClose = {
   operationalLocation: { id: string; name: string; code?: string | null }
   totalInputKg: string; totalSoldKg: string; totalRemainingKg: string; totalShortageKg: string; totalSurplusKg: string
   scaleReportedKg: string; scaleDifferenceKg: string; cashTotal: string; cardVoucherTotal: string; transferTotal: string
-  expenseTotal: string; grossSalesTotal: string; netCashExpected: string; cashDifferenceTotal: string; purchaseCostTotal: string
+  expenseTotal: string; grossSalesTotal: string; netCashExpected: string; cashCountedTotal: string | null; cashDifferenceTotal: string | null; purchaseCostTotal: string
   grossProfitTotal: string; netProfitTotal: string; lastValidatedAt?: string | null
   costQuality: CostQuality; dataAsOf: string
   cashMovements: Array<{ id: string; amount: string; reason: string; reference?: string | null; occurredAt: string }>

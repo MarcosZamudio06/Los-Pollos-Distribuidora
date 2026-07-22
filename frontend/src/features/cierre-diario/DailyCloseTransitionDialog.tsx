@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { ConfirmationDialog } from '../../components/shared/confirmation-dialog'
+import { formatMoney as money } from '../../lib/money'
 import { getDailyCloseTransitionCopy, type DailyCloseReportAction } from './dailyCloseTransition'
 import type { DailyClose } from './types'
+
 
 type DailyCloseTransitionDialogProps = {
   action: DailyCloseReportAction
@@ -29,6 +31,13 @@ export function DailyCloseTransitionDialog({ action, close, onCancel, onConfirm 
       <p><strong>Sucursal:</strong> {close.operationalLocation.name}</p>
       <p><strong>Fecha operativa:</strong> {date}</p>
       <p><strong>Versión del reporte:</strong> {close.version}</p>
+      {action === 'close' && (
+        <div className="mt-3 rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] p-3 text-sm">
+          <p><strong>Efectivo esperado:</strong> {money(close.netCashExpected)}</p>
+          <p><strong>Efectivo contado:</strong> {close.cashCountedTotal === null ? 'Pendiente de captura' : money(close.cashCountedTotal)}</p>
+          <p><strong>Diferencia de efectivo:</strong> {close.cashDifferenceTotal === null ? 'Pendiente de captura' : money(close.cashDifferenceTotal)}</p>
+        </div>
+      )}
       {copy.requiresReason && (
         <label className="mt-2 grid gap-2 font-bold text-[var(--erp-muted-foreground)]">
           Motivo de reapertura

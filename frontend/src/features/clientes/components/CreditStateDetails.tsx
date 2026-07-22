@@ -1,6 +1,7 @@
 import type { Customer, CustomerCreditSummary } from '../types'
+import { formatMoney } from '../../../lib/money'
 
-const money = (value: string | number | null | undefined) => Number(value ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+const money = formatMoney
 
 const statusLabels = { ACTIVE: 'Activo', BLOCKED: 'Bloqueado', SUSPENDED: 'Suspendido', WARNING: 'Advertencia' } as const
 const reasonLabels: Record<string, string> = {

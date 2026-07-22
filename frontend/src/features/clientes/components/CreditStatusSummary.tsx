@@ -1,11 +1,11 @@
 import type { ElementType } from 'react'
 import { AlertTriangle, Ban, CheckCircle2, CreditCard, WalletCards } from 'lucide-react'
 import type { Customer } from '../types'
+import { formatMoney } from '../../../lib/money'
 
 function toMoney(value: string | number | null | undefined) {
   if (value === undefined || value === null) return '—'
-  const amount = Number(value)
-  return amount.toLocaleString('es-MX', { currency: 'MXN', style: 'currency' })
+  return formatMoney(value)
 }
 
 function sumKnown(values: Array<string | number | null | undefined>) {

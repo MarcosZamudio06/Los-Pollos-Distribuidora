@@ -1,8 +1,8 @@
 import type { DeliveryOrderStatus, DeliveryRouteStatus, EvidenceType, PaymentMethod, RouteSettlementStatus } from './types'
+import { formatMoney } from '../../lib/money'
 
 export function money(value: number | string | null | undefined) {
-  const amount = Number(value ?? 0)
-  return new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' }).format(Number.isFinite(amount) ? amount : 0)
+  return formatMoney(value)
 }
 
 export function date(value: string | null | undefined) {

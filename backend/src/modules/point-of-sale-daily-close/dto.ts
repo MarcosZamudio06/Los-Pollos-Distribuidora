@@ -27,6 +27,10 @@ export class CreateExpenseDto {
   @IsOptional() @IsDateString() occurredAt?: string;
 }
 
+export class RecordCashCountDto {
+  @Type(() => Number) @IsNumber() @Min(0) cashCountedTotal!: number;
+}
+
 export class CreateScaleTicketDto {
   @IsString() @IsNotEmpty() physicalFolio!: string;
   @IsDateString() capturedDate!: string;

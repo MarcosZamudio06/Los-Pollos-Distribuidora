@@ -1379,6 +1379,7 @@ async function seedDailyCloses(prisma: PrismaClient, ctx: SeedContext, dailyClos
           expenseTotal: roundMoney(300 + index * 25),
           grossSalesTotal: roundMoney(9000 + index * 920),
           netCashExpected: roundMoney(7000 + index * 650),
+          cashCountedTotal: roundMoney(7000 + index * 650 + (index % 2 === 0 ? 0 : 35)),
           cashDifferenceTotal: roundMoney(index % 2 === 0 ? 0 : 35),
           purchaseCostTotal: roundMoney(5200 + index * 620),
           grossProfitTotal: roundMoney(3800 + index * 300),

@@ -597,8 +597,16 @@ export class SalesService {
       try {
         return await operation();
       } catch (error) {
-        if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2034')) throw error;
+        const serializationConflict = typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2034';
+        const saleNumberConflict = this.isSaleNumberUniqueConflict(error);
+        if (!serializationConflict && !saleNumberConflict) throw error;
         if (attempt === 3) {
+          if (saleNumberConflict) {
+            throw new ConflictException({
+              code: 'SALE_NUMBER_RETRY_EXHAUSTED',
+              message: 'Sale number could not be allocated after concurrent updates',
+            });
+          }
           throw new ConflictException({
             code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED',
             message: 'Credit decision could not be completed after concurrent updates',
@@ -1048,8 +1056,20 @@ export class SalesService {
   }
 
   private async nextSaleNumber(tx: Prisma.TransactionClient): Promise<string> {
-    const count = await tx.sale.count();
-    return `SALE-${String(count + 1).padStart(6, '0')}`;
+    const rows = await tx.$queryRawUnsafe<Array<{ value: bigint | number }>>(
+      'SELECT nextval(\'"Sale_saleNumber_seq"\') AS value',
+    );
+    return `SALE-${String(rows[0].value).padStart(6, '0')}`;
+  }
+
+  private isSaleNumberUniqueConflict(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false;
+    const prismaError = error as { code?: unknown; meta?: { target?: unknown } };
+    if (prismaError.code !== 'P2002') return false;
+    const target = prismaError.meta?.target;
+    return Array.isArray(target)
+      ? target.some((value) => String(value).includes('saleNumber'))
+      : String(target).includes('saleNumber');
   }
 
   private toSaleResponse(sale: { [key: string]: unknown; items?: Array<Record<string, unknown>> }) {

@@ -39,21 +39,36 @@ No incluye:
 
 El sistema debe permitir cierres únicamente para `OperationalLocation` activas y autorizadas como puntos externos o equivalentes aprobados.
 
+Para el MVP, los tipos autorizados son `BRANCH`, `MIXED` y `EXTERNAL_POINT_OF_SALE`. La validación ocurre en backend antes de crear el cierre; `SELLER` además debe estar asignado a la ubicación solicitada.
+
 #### Scenario: Ubicación inactiva
 
 - Dada una ubicación inactiva
 - Cuando un usuario intenta crear un cierre
 - Entonces el sistema rechaza la operación con `LOCATION_INACTIVE`.
 
+#### Scenario: Ubicación no habilitada para punto de venta
+
+- Dada una ubicación activa de tipo `WAREHOUSE` o `ROUTE_STOCK`
+- Cuando un usuario intenta crear un cierre
+- Entonces el sistema rechaza la operación con `LOCATION_NOT_POINT_OF_SALE`.
+
 ### Requirement: Borrador único por ubicación y fecha
 
-El sistema debe mantener un solo cierre no cancelado por ubicación y fecha mientras no exista una política de turnos o cajas múltiples.
+El sistema debe mantener un solo cierre no cancelado por ubicación y fecha mientras no exista una política de turnos o cajas múltiples. La base de datos debe imponer esta regla mediante un índice único parcial para estados distintos de `CANCELLED`; la API traduce el conflicto de unicidad al código de dominio.
 
 #### Scenario: Cierre duplicado
 
 - Dado un cierre no cancelado para la ubicación y fecha
 - Cuando se intenta crear otro
 - Entonces el sistema responde `DAILY_CLOSE_ALREADY_EXISTS`.
+
+#### Scenario: Aperturas simultáneas
+
+- Dadas dos solicitudes simultáneas para la misma ubicación y fecha sin cierre previo
+- Cuando ambas superan la consulta inicial de duplicados
+- Entonces la base de datos persiste solo un cierre no cancelado.
+- Y la otra solicitud responde `DAILY_CLOSE_ALREADY_EXISTS`.
 
 ### Requirement: Inventario por ubicación
 
@@ -98,6 +113,21 @@ El sistema debe comparar kilos recibidos, vendidos, reportados por báscula, sob
 ### Requirement: Conciliación de ingresos
 
 El sistema debe separar efectivo, boucher/tarjeta, transferencia, cobranza, otros ingresos y gastos.
+
+El cierre en borrador debe permitir a `ADMIN` y `SELLER` dentro de su ubicación capturar el efectivo físico contado. El backend debe persistirlo y calcular `cashDifferenceTotal = cashCountedTotal - netCashExpected`. Sin un conteo de efectivo, la validación no es satisfactoria y el cierre no puede avanzar a revisión. Una diferencia calculada se muestra sin compensarla ni aplicar tolerancias no aprobadas; `ADMIN` conserva la autorización de revisión y cierre.
+
+#### Scenario: Efectivo contado con faltante
+
+- Dado un cierre en borrador con efectivo esperado de 1,250.00 MXN
+- Cuando se registra efectivo contado de 1,200.00 MXN
+- Entonces se persiste `cashCountedTotal = 1200.00` y `cashDifferenceTotal = -50.00`.
+- Y la validación expone la diferencia sin ocultarla ni compensarla automáticamente.
+
+#### Scenario: Conteo pendiente
+
+- Dado un cierre en borrador sin efectivo contado
+- Cuando se valida o intenta revisar el cierre
+- Entonces se devuelve `CASH_COUNT_REQUIRED` y no se permite avanzar a `REVIEWED`.
 
 #### Scenario: Venta a crédito
 
@@ -154,6 +184,8 @@ Cerrar debe persistir estado, snapshot, responsable, fecha y auditoría en una t
 ### Requirement: Cancelación y reapertura administrativas
 
 Solo `ADMIN` puede cancelar o reabrir, siempre con motivo y sin revertir automáticamente ventas, pagos o inventario.
+
+Las únicas transiciones permitidas son `DRAFT -> REVIEWED`, `DRAFT -> CANCELLED`, `REVIEWED -> CLOSED`, `REVIEWED -> DRAFT`, `REVIEWED -> CANCELLED` y `CLOSED -> DRAFT`. `CANCELLED` es un estado final; cualquier otra transición se rechaza con `DAILY_CLOSE_INVALID_STATUS`.
 
 #### Scenario: Reapertura autorizada
 

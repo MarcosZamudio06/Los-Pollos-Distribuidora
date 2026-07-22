@@ -1,11 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PointOfSaleDailyCloseService } from './point-of-sale-daily-close.service';
 
 describe('PointOfSaleDailyCloseService', () => {
   const prisma = {
     user: { findUnique: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
-    pointOfSaleDailyClose: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+    pointOfSaleDailyClose: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     cashMovement: { create: jest.fn() },
     scaleTicketReference: { create: jest.fn() },
   };
@@ -19,11 +20,96 @@ describe('PointOfSaleDailyCloseService', () => {
       .rejects.toThrow(new BadRequestException('LOCATION_INACTIVE'));
   });
 
+  it('rejects opening a daily close for a location that is not a point of sale', async () => {
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-warehouse', isActive: true, type: 'WAREHOUSE' });
+
+    await expect(service.open(
+      { operationalLocationId: 'loc-warehouse', businessDate: '2026-07-17' },
+      { id: 'u1', role: 'ADMIN' } as never,
+    )).rejects.toThrow(new BadRequestException('LOCATION_NOT_POINT_OF_SALE'));
+
+    expect(prisma.pointOfSaleDailyClose.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects opening a close after the current operational day', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-22T01:00:00.000Z'));
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true, type: 'BRANCH' });
+
+    try {
+      await expect(service.open(
+        { operationalLocationId: 'loc-1', businessDate: '2026-07-22' },
+        { id: 'u1', role: 'ADMIN' } as never,
+      )).rejects.toThrow(new BadRequestException('DAILY_CLOSE_FUTURE_DATE'));
+
+      expect(prisma.pointOfSaleDailyClose.findFirst).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('rejects a duplicate non-cancelled close', async () => {
-    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true });
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true, type: 'BRANCH' });
     prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue({ id: 'close-1' });
     await expect(service.open({ operationalLocationId: 'loc-1', businessDate: '2026-07-17' }, { id: 'u1', role: 'ADMIN' } as never))
       .rejects.toThrow(new ConflictException('DAILY_CLOSE_ALREADY_EXISTS'));
+  });
+
+  it('maps a concurrent daily close insert conflict to the domain error', async () => {
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true, type: 'BRANCH' });
+    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
+    (prisma as any).$transaction = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      { code: 'P2002', clientVersion: '6.19.3' },
+    ));
+
+    await expect(service.open(
+      { operationalLocationId: 'loc-1', businessDate: '2026-07-17' },
+      { id: 'u1', role: 'ADMIN' } as never,
+    )).rejects.toThrow(new ConflictException('DAILY_CLOSE_ALREADY_EXISTS'));
+  });
+
+  it('rejects cancelling a closed daily close', async () => {
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      status: 'CLOSED',
+      sales: [],
+      updatedAt: new Date(),
+    });
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(service.cancel(
+      'close-1',
+      { version: 1, reason: 'Cancelar por error' },
+      { id: 'admin-1', role: 'ADMIN' } as never,
+    )).rejects.toThrow(new BadRequestException('DAILY_CLOSE_INVALID_STATUS'));
+
+    expect(prisma.pointOfSaleDailyClose.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('reopens a reviewed daily close to draft', async () => {
+    const reviewed = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      status: 'REVIEWED',
+      sales: [],
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(reviewed)
+      .mockResolvedValueOnce({ ...reviewed, status: 'DRAFT' });
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.reopen(
+      'close-1',
+      { version: 1, reason: 'Corregir conteo' },
+      { id: 'admin-1', role: 'ADMIN' } as never,
+    );
+
+    expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'REVIEWED' }),
+      data: expect.objectContaining({ status: 'DRAFT' }),
+    }));
   });
 
   it('syncs confirmed branch sales even when they are assigned to a route', async () => {
@@ -93,7 +179,7 @@ describe('PointOfSaleDailyCloseService', () => {
   });
 
   it('rejects a seller opening a close outside the assigned location', async () => {
-    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-other', isActive: true });
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-other', isActive: true, type: 'BRANCH' });
     prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-seller', isActive: true });
 
     await expect(
@@ -159,5 +245,73 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(collections).toHaveProperty('payments');
     expect(collections).not.toHaveProperty('inventoryMovements');
     expect(collections).not.toHaveProperty('purchaseCostTotal');
+  });
+
+  it('persists the cash difference from counted cash and expected cash', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      sales: [],
+      payments: [{ paymentMethod: 'CASH', amount: 120 }],
+      cashCountedTotal: 100,
+      updatedAt: new Date(),
+    };
+    const tx = {
+      sale: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      payment: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      inventoryMovement: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    };
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValueOnce(close).mockResolvedValueOnce(close);
+    (prisma as any).$transaction = jest.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue({ ...close, netCashExpected: 120, cashDifferenceTotal: -20 });
+
+    const result = await (service as any).recalculate('close-1');
+
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ netCashExpected: 120, cashDifferenceTotal: -20 }),
+    }));
+    expect(result.cashDifferenceTotal).toBe(-20);
+  });
+
+  it('requires counted cash before validation can succeed', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      version: 1,
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      sales: [],
+      payments: [],
+      cashCountedTotal: null,
+      updatedAt: new Date(),
+    };
+    const tx = {
+      sale: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      payment: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      inventoryMovement: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close);
+    (prisma as any).$transaction = jest.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
+    prisma.pointOfSaleDailyClose.update
+      .mockResolvedValueOnce({ ...close, netCashExpected: 0, cashDifferenceTotal: null })
+      .mockResolvedValueOnce(close);
+
+    const result = await service.validate('close-1', { id: 'seller-1', role: 'SELLER' } as never);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: 'CASH_COUNT_REQUIRED' }));
   });
 });

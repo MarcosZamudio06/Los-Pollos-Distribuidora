@@ -65,7 +65,7 @@ Body:
 
 Validaciones:
 
-- Ubicación requerida, activa y habilitada como punto externo.
+- Ubicación requerida, activa y de tipo `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`.
 - No crear un segundo cierre no cancelado para la misma ubicación y fecha.
 - `SELLER` solo puede crear dentro de su alcance.
 
@@ -232,6 +232,28 @@ Validaciones:
 - No aplicar tolerancias ni fórmulas no aprobadas.
 - Bloquear si ventas, movimientos, pagos o caja carecen de ubicación.
 - Bloquear si datos asociados cambiaron durante la validación.
+- Bloquear con `CASH_COUNT_REQUIRED` si no existe efectivo contado.
+
+## POST /api/point-of-sale-daily-closes/:id/cash-count
+
+Propósito: persistir el efectivo físico contado y recalcular la diferencia de efectivo.
+
+Permisos: `ADMIN`, `SELLER` dentro de su ubicación, solo en `DRAFT`.
+
+Body:
+
+```json
+{
+  "cashCountedTotal": 1200.00
+}
+```
+
+Validaciones:
+
+- `cashCountedTotal` debe ser mayor o igual a cero.
+- El backend persiste `cashDifferenceTotal = cashCountedTotal - netCashExpected`.
+- La diferencia se expone como advertencia; no se compensa ni se aplican tolerancias sin política aprobada.
+- La revisión y el cierre con diferencia permanecen autorizados exclusivamente para `ADMIN`.
 
 ## POST /api/point-of-sale-daily-closes/:id/review
 
@@ -296,6 +318,7 @@ Validaciones:
 
 - `LOCATION_REQUIRED`
 - `LOCATION_INACTIVE`
+- `LOCATION_NOT_POINT_OF_SALE`
 - `LOCATION_NOT_AUTHORIZED`
 - `DAILY_CLOSE_ALREADY_EXISTS`
 - `DAILY_CLOSE_INVALID_STATUS`
@@ -303,6 +326,7 @@ Validaciones:
 - `DAILY_CLOSE_UNVALIDATED`
 - `OPERATION_LOCATION_MISMATCH`
 - `OPERATION_WITHOUT_LOCATION`
+- `CASH_COUNT_REQUIRED`
 - `SCALE_TICKET_DUPLICATE_FOLIO`
 - `RECONCILIATION_BLOCKED`
 - `FORBIDDEN`

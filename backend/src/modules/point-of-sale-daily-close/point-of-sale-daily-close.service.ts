@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { PointOfSaleDailyCloseStatus, Prisma } from '@prisma/client';
+import { OperationalLocationType, PointOfSaleDailyCloseStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
-import { CreateExpenseDto, CreateScaleTicketDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, VersionedDailyCloseDto } from './dto';
+import { CreateExpenseDto, CreateScaleTicketDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, RecordCashCountDto, VersionedDailyCloseDto } from './dto';
 
 const detailInclude = {
   operationalLocation: { select: { id: true, name: true, code: true, type: true } },
@@ -14,6 +14,19 @@ const detailInclude = {
   payments: true,
   inventoryMovements: true,
 } satisfies Prisma.PointOfSaleDailyCloseInclude;
+
+const dailyCloseTransitions: Record<PointOfSaleDailyCloseStatus, readonly PointOfSaleDailyCloseStatus[]> = {
+  DRAFT: ['REVIEWED', 'CANCELLED'],
+  REVIEWED: ['CLOSED', 'DRAFT', 'CANCELLED'],
+  CLOSED: ['DRAFT'],
+  CANCELLED: [],
+};
+
+const dailyCloseLocationTypes = new Set<OperationalLocationType>([
+  OperationalLocationType.BRANCH,
+  OperationalLocationType.MIXED,
+  OperationalLocationType.EXTERNAL_POINT_OF_SALE,
+]);
 
 @Injectable()
 export class PointOfSaleDailyCloseService {
@@ -46,20 +59,30 @@ export class PointOfSaleDailyCloseService {
   }
 
   async open(dto: OpenDailyCloseDto, user: AuthenticatedUser) {
-    const location = await this.prisma.operationalLocation.findUnique({ where: { id: dto.operationalLocationId }, select: { id: true, isActive: true } });
+    const location = await this.prisma.operationalLocation.findUnique({ where: { id: dto.operationalLocationId }, select: { id: true, isActive: true, type: true } });
     if (!location?.isActive) throw new BadRequestException('LOCATION_INACTIVE');
+    if (!dailyCloseLocationTypes.has(location.type)) throw new BadRequestException('LOCATION_NOT_POINT_OF_SALE');
     await this.assertLocationAccess(dto.operationalLocationId, user);
     const businessDate = this.date(dto.businessDate);
+    if (businessDate > this.date(this.currentOperationalDate())) throw new BadRequestException('DAILY_CLOSE_FUTURE_DATE');
     const duplicate = await this.prisma.pointOfSaleDailyClose.findFirst({
       where: { operationalLocationId: dto.operationalLocationId, businessDate, status: { not: 'CANCELLED' } }, select: { id: true },
     });
     if (duplicate) throw new ConflictException('DAILY_CLOSE_ALREADY_EXISTS');
     const { from, to } = this.operationalDay(businessDate);
-    const created = await this.prisma.$transaction(async (tx) => {
-      const close = await tx.pointOfSaleDailyClose.create({ data: { operationalLocationId: dto.operationalLocationId, businessDate, openedByUserId: user.id, notes: dto.notes?.trim() || null } });
-      await this.syncOperations(tx, close.id, dto.operationalLocationId, from, to);
-      return close;
-    });
+    let created: { id: string };
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const close = await tx.pointOfSaleDailyClose.create({ data: { operationalLocationId: dto.operationalLocationId, businessDate, openedByUserId: user.id, notes: dto.notes?.trim() || null } });
+        await this.syncOperations(tx, close.id, dto.operationalLocationId, from, to);
+        return close;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('DAILY_CLOSE_ALREADY_EXISTS');
+      }
+      throw error;
+    }
     return this.projectForRole(await this.recalculate(created.id), user);
   }
 
@@ -91,11 +114,21 @@ export class PointOfSaleDailyCloseService {
     return this.projectForRole(await this.recalculate(id), user);
   }
 
+  async recordCashCount(id: string, dto: RecordCashCountDto, user: AuthenticatedUser) {
+    await this.requireDraft(id, user);
+    await this.prisma.pointOfSaleDailyClose.update({
+      where: { id },
+      data: { cashCountedTotal: dto.cashCountedTotal, version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null },
+    });
+    return this.projectForRole(await this.recalculate(id), user);
+  }
+
   async validate(id: string, user: AuthenticatedUser) {
     const close = await this.requireDraft(id, user);
     const updated = await this.recalculate(id);
     const errors: Array<{ code: string; message: string }> = [];
     if (updated.lines.some((line) => line.operationalLocationId !== close.operationalLocationId)) errors.push({ code: 'OPERATION_LOCATION_MISMATCH', message: 'Hay operaciones de otra ubicación.' });
+    if (updated.cashCountedTotal === null) errors.push({ code: 'CASH_COUNT_REQUIRED', message: 'Registra el efectivo contado antes de validar el cierre.' });
     const differences = [
       { code: 'SCALE_DIFFERENCE', value: Number(updated.scaleDifferenceKg), unit: 'kg' },
       { code: 'CASH_DIFFERENCE', value: Number(updated.cashDifferenceTotal), unit: 'MXN' },
@@ -113,24 +146,24 @@ export class PointOfSaleDailyCloseService {
     this.admin(user);
     const validation = await this.validate(id, user);
     if (!validation.valid) throw new BadRequestException({ message: 'DAILY_CLOSE_VALIDATION_FAILED', errors: validation.errors });
-    return this.transition(id, dto.version, 'DRAFT', { status: 'REVIEWED', reviewedByUserId: user.id, reviewedAt: new Date(), validatedSourceVersion: dto.version + 1 }, user);
+    return this.transition(id, dto.version, 'REVIEWED', { status: 'REVIEWED', reviewedByUserId: user.id, reviewedAt: new Date(), validatedSourceVersion: dto.version + 1 }, user);
   }
 
   async close(id: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
     const current = await this.requireCloseAccess(id, user);
     if (current.validatedSourceVersion !== current.version) throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
-    return this.transition(id, dto.version, 'REVIEWED', { status: 'CLOSED', closedByUserId: user.id, closedAt: new Date() }, user);
+    return this.transition(id, dto.version, 'CLOSED', { status: 'CLOSED', closedByUserId: user.id, closedAt: new Date() }, user);
   }
 
   async cancel(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    return this.transition(id, dto.version, undefined, { status: 'CANCELLED', cancelledByUserId: user.id, cancelledAt: new Date(), notes: `Cancelación: ${dto.reason.trim()}` }, user);
+    return this.transition(id, dto.version, 'CANCELLED', { status: 'CANCELLED', cancelledByUserId: user.id, cancelledAt: new Date(), notes: `Cancelación: ${dto.reason.trim()}` }, user);
   }
 
   async reopen(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    return this.transition(id, dto.version, 'CLOSED', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null }, user);
+    return this.transition(id, dto.version, 'DRAFT', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null }, user);
   }
 
   async refresh(id: string, user: AuthenticatedUser) {
@@ -163,7 +196,9 @@ export class PointOfSaleDailyCloseService {
     const data = {
       totalInputKg: kilos.totalInputKg, totalSoldKg: kilos.totalSoldKg, totalRemainingKg: byConcept('REMAINING_STOCK', 'quantityKg'), totalShortageKg: byConcept('SHORTAGE', 'quantityKg'), totalSurplusKg: byConcept('SURPLUS', 'quantityKg'),
       scaleReportedKg, scaleDifferenceKg: scaleReportedKg - kilos.totalSoldKg, cashTotal, cardVoucherTotal, transferTotal,
-      expenseTotal, grossSalesTotal, netCashExpected: cashTotal - cashExpenseTotal, purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
+      expenseTotal, grossSalesTotal, netCashExpected: cashTotal - cashExpenseTotal,
+      cashDifferenceTotal: close.cashCountedTotal === null ? null : Number(close.cashCountedTotal) - (cashTotal - cashExpenseTotal),
+      purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
     };
     const updated = await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data, include: detailInclude });
     return { ...updated, costQuality, dataAsOf: updated.updatedAt };
@@ -178,8 +213,10 @@ export class PointOfSaleDailyCloseService {
     await tx.inventoryMovement.updateMany({ where: { locationId, createdAt: { gte: from, lt: to }, type: { in: ['IN', 'PURCHASE', 'TRANSFER_IN'] }, pointOfSaleDailyCloseId: null }, data: { pointOfSaleDailyCloseId: closeId } });
   }
   private async bump(id: string) { await this.prisma.pointOfSaleDailyClose.update({ where: { id }, data: { version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null } }); }
-  private async transition(id: string, version: number, expected: PointOfSaleDailyCloseStatus | undefined, data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput, user: AuthenticatedUser) {
-    const result = await this.prisma.pointOfSaleDailyClose.updateMany({ where: { id, version, ...(expected ? { status: expected } : { status: { not: 'CANCELLED' } }) }, data: { ...data, version: { increment: 1 } } });
+  private async transition(id: string, version: number, target: PointOfSaleDailyCloseStatus, data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput, user: AuthenticatedUser) {
+    const current = await this.findClose(id);
+    if (!dailyCloseTransitions[current.status].includes(target)) throw new BadRequestException('DAILY_CLOSE_INVALID_STATUS');
+    const result = await this.prisma.pointOfSaleDailyClose.updateMany({ where: { id, version, status: current.status }, data: { ...data, version: { increment: 1 } } });
     if (!result.count) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
     return this.get(id, user);
   }
@@ -202,7 +239,7 @@ export class PointOfSaleDailyCloseService {
     const candidate = close as { sales?: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date };
     const result = { ...(Array.isArray(candidate.sales) ? this.withCostQuality(candidate as { sales: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date }) : candidate) } as Record<string, unknown>;
     if (user.role === 'WAREHOUSE') {
-      ['payments', 'cashMovements', 'sales', 'cashTotal', 'cardVoucherTotal', 'transferTotal', 'expenseTotal', 'grossSalesTotal', 'netCashExpected', 'cashDifferenceTotal', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality'].forEach((field) => delete result[field]);
+      ['payments', 'cashMovements', 'sales', 'cashTotal', 'cardVoucherTotal', 'transferTotal', 'expenseTotal', 'grossSalesTotal', 'netCashExpected', 'cashCountedTotal', 'cashDifferenceTotal', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality'].forEach((field) => delete result[field]);
       if (Array.isArray(result.lines)) result.lines = result.lines.map(({ amount, ...line }) => line);
       if (Array.isArray(result.scaleTicketReferences)) result.scaleTicketReferences = result.scaleTicketReferences.map(({ amount, unitPrice, ...ticket }) => ticket);
     }
@@ -214,6 +251,12 @@ export class PointOfSaleDailyCloseService {
   }
   private admin(user: AuthenticatedUser) { if (user.role !== 'ADMIN') throw new ForbiddenException('DAILY_CLOSE_ADMIN_REQUIRED'); }
   private date(value: string) { const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`); if (Number.isNaN(date.getTime())) throw new BadRequestException('INVALID_BUSINESS_DATE'); return date; }
+  private currentOperationalDate(now = new Date()) {
+    const timeZone = process.env.APP_TIMEZONE?.trim() || 'America/Mexico_City';
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  }
   private operationalDay(businessDate: Date) {
     const from = new Date(Date.UTC(businessDate.getUTCFullYear(), businessDate.getUTCMonth(), businessDate.getUTCDate(), 6));
     return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000) };

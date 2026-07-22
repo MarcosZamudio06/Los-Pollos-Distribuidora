@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Badge, Button, Card, ChartContainer, type ChartConfig } from '../../components/ui'
 import { canAccessWithRole, getKnownRole, getRoleLabel, ROUTE_ACCESS_ROLES, type KnownRole } from '../../components/layout/routeAccess'
 import { ApiClientError } from '../../lib/api'
+import { formatMoney } from '../../lib/money'
 import { useAuth } from '../auth'
 import { useDashboardReport } from '../reportes'
 import type { DashboardDeliverySummary, DashboardLowStockItem, DashboardReport, DashboardReportFilters, DashboardTopProduct } from '../reportes'
@@ -24,7 +25,6 @@ import {
 import { BadgeDollarSign, Boxes, CircleDollarSign, ClipboardList, PackageSearch, ReceiptText, Route, Truck } from 'lucide-react'
 import { CatalogSelect, useOperationalCatalog } from '../../components/shared/operational-catalogs'
 
-const moneyFormatter = new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' })
 const numberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
 const dateFormatter = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -53,10 +53,6 @@ const quickActions: QuickAction[] = [
   { label: 'Reparto / Rutas', roles: ROUTE_ACCESS_ROLES.deliveryRoutes, to: '/delivery-routes' },
   { label: 'Reportes', roles: ROUTE_ACCESS_ROLES.reports, to: '/reports' },
 ]
-
-function formatMoney(value?: number | null) {
-  return moneyFormatter.format(Number(value ?? 0))
-}
 
 function formatQuantity(value?: number | null) {
   return numberFormatter.format(Number(value ?? 0))

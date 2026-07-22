@@ -1,9 +1,10 @@
 import { ReceiptText } from 'lucide-react'
 import type { BillingSummary, CustomerCreditSummary } from '../types'
+import { formatMoney } from '../../../lib/money'
 
 function toMoney(value: string | number | null | undefined) {
   if (value === undefined || value === null) return '—'
-  return Number(value).toLocaleString('es-MX', { currency: 'MXN', style: 'currency' })
+  return formatMoney(value)
 }
 
 export function BillingSummaryCard({ billingSummary, creditSummary }: { billingSummary?: BillingSummary | null; creditSummary?: CustomerCreditSummary | null }) {

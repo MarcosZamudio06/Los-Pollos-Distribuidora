@@ -20,6 +20,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import { ApiClientError } from '../../lib/api'
+import { formatMoney } from '../../lib/money'
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Skeleton, Table, Td, Th } from '../../components/ui'
 import { useAuth } from '../auth'
 import {
@@ -43,7 +44,6 @@ import type {
 import { CatalogSelect, MiniAjaxSelect, useOperationalCatalog } from '../../components/shared/operational-catalogs'
 import { useRoutePlannerCatalog } from '../rutas-reparto/hooks'
 
-const moneyFormatter = new Intl.NumberFormat('es-MX', { currency: 'MXN', style: 'currency' })
 const numberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
 const dateTimeFormatter = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -112,10 +112,6 @@ const deliveryStatuses = [
 
 function today() {
   return new Date().toISOString().slice(0, 10)
-}
-
-function formatMoney(value?: number | null) {
-  return moneyFormatter.format(Number(value ?? 0))
 }
 
 function formatNumber(value?: number | null) {

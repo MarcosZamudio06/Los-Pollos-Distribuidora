@@ -23,6 +23,7 @@ const now = new Date('2026-06-21T10:00:00.000Z');
 
 type MockPrisma = {
   $transaction: jest.Mock;
+  $queryRawUnsafe: jest.Mock;
   product: { findUnique: jest.Mock };
   customer: { findUnique: jest.Mock };
   commercialPolicy: { findFirst: jest.Mock };
@@ -50,6 +51,7 @@ function hashPayload(payload: unknown): string {
 function createPrisma(): MockPrisma {
   const prisma: MockPrisma = {
     $transaction: jest.fn(async (callback) => callback(prisma)),
+    $queryRawUnsafe: jest.fn(),
     product: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
     commercialPolicy: { findFirst: jest.fn() },
@@ -98,6 +100,7 @@ function validCashSale(overrides: Record<string, unknown> = {}) {
 function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown> = {}) {
   prisma.sale.findUnique.mockResolvedValue(null);
   prisma.sale.count.mockResolvedValue(0);
+  prisma.$queryRawUnsafe.mockResolvedValue([{ value: 1 }]);
   prisma.operationalLocation.findUnique.mockResolvedValue({
     id: 'loc-1',
     name: 'Counter',
@@ -914,6 +917,31 @@ describe('SalesService', () => {
       response: expect.objectContaining({ code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED' }),
     });
     expect(exhausted.prisma.$transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('generates sale numbers from the PostgreSQL sequence', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.$queryRawUnsafe.mockResolvedValue([{ value: 42 }]);
+
+    const result = await service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'sequence-sale');
+
+    expect(result.sale.saleNumber).toBe('SALE-000042');
+    expect(prisma.$queryRawUnsafe).toHaveBeenCalledWith(
+      'SELECT nextval(\'"Sale_saleNumber_seq"\') AS value',
+    );
+  });
+
+  it('retries a unique conflict caused by saleNumber allocation', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.$transaction
+      .mockRejectedValueOnce({ code: 'P2002', meta: { target: ['saleNumber'] } })
+      .mockImplementationOnce(async (callback) => callback(prisma));
+
+    await expect(service.create(validCashSale(), { id: 'seller-1', role: 'SELLER' }, 'sequence-retry')).resolves.toBeDefined();
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 
   it('rejects insufficient stock at the discount location without creating sale records', async () => {
