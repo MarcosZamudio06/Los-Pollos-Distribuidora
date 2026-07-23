@@ -46,8 +46,8 @@ export const salesService = {
     })
     return unwrapItem(response)
   },
-  async getTicket(saleId: string, accessToken?: string | null) {
-    const response = await apiClient.get<ItemEnvelope<TicketData>>(`/sales/${saleId}/ticket`, {
+  async getTicket(saleId: string, documentId: string, accessToken?: string | null) {
+    const response = await apiClient.get<ItemEnvelope<TicketData>>(`/sales/${saleId}/documents/${documentId}/print`, {
       headers: authHeaders(accessToken),
     })
     return unwrapItem(response)

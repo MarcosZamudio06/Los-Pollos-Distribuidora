@@ -4,22 +4,22 @@ import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 
 describe('SalesController', () => {
-  it('allows ADMIN, SELLER, and COLLECTIONS to read sale tickets', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.getTicket)).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS']);
+  it('allows ADMIN, SELLER, and COLLECTIONS to print a sale document', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.getDocumentPrint)).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS']);
   });
 
-  it('passes current user to the sale ticket service', async () => {
-    const service = { getTicket: jest.fn().mockResolvedValue({ saleNumber: 'SALE-000001' }) } as unknown as jest.Mocked<SalesService>;
+  it('passes the exact sale document to the print service', async () => {
+    const service = { getDocumentPrint: jest.fn().mockResolvedValue({ ticketId: 'doc-1' }) } as unknown as jest.Mocked<SalesService>;
     const controller = new SalesController(service);
     const user = { id: 'seller-1', email: 'seller@example.com', name: 'Seller', role: 'SELLER', mustChangePassword: false };
 
-    const result = await controller.getTicket('sale-1', user);
+    const result = await controller.getDocumentPrint('sale-1', 'doc-1', user);
 
-    expect(service.getTicket).toHaveBeenCalledWith('sale-1', user);
+    expect(service.getDocumentPrint).toHaveBeenCalledWith('sale-1', 'doc-1', user);
     expect(result).toEqual({
       success: true,
-      message: 'Sale ticket retrieved successfully',
-      data: { saleNumber: 'SALE-000001' },
+      message: 'Sale document print data retrieved successfully',
+      data: { ticketId: 'doc-1' },
     });
   });
 

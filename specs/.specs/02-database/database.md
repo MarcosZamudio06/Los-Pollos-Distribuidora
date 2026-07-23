@@ -458,6 +458,7 @@ Campos:
 - deliveredByUserId
 - collectedByUserId
 - routeId
+- printTemplateVersion
 - customerSnapshot
 - productSnapshot
 - priceSnapshot
@@ -475,6 +476,7 @@ Notas:
 
 - `SaleDocument` modela la libreta documental de menudeo, reparto e institucional.
 - La nota sencilla, nota grande, ticket interno y comprobante operativo conservan folio, participantes y snapshots históricos.
+- `printTemplateVersion` identifica la plantilla con la que se emitió el documento. Una reimpresión usa exclusivamente los snapshots del `SaleDocument`, nunca datos actuales de cliente, producto, venta o precios.
 - `BillingRequest` modela por separado la solicitud administrativa de facturación y conserva la relación administrativa de cliente, venta y cuenta por cobrar cuando aplique.
 - El comprobante interno operativo se representa con `SaleDocument(documentType=INTERNAL_RECEIPT)` y no representa CFDI.
 
@@ -1120,6 +1122,29 @@ Reglas:
 - `cashCountedTotal` es nulo hasta que se captura el efectivo físico; al capturarlo, `cashDifferenceTotal` se persiste como `cashCountedTotal - netCashExpected`.
 - `lastValidatedAt` y `validatedSourceVersion` solo se conservan tras una validación sin errores; `lastValidationAttemptAt` registra cualquier intento, incluido uno fallido.
 
+### DailyCloseInventoryCount
+
+Captura física auditable por producto dentro de un cierre. No sustituye ni modifica `InventoryMovement` o `InventoryBalance`.
+
+Campos:
+
+- id
+- pointOfSaleDailyCloseId
+- productId
+- physicalQuantityKg
+- physicalQuantityPieces
+- reason
+- countedByUserId
+- createdAt
+- updatedAt
+
+Reglas:
+
+- Solo existe un conteo por producto y cierre.
+- Solo se crea, actualiza o elimina mientras el cierre está en `DRAFT` y el actor tiene acceso a la ubicación.
+- La existencia inicial, entradas, ventas del sistema, otras salidas, existencia teórica, sobrante y faltante se calculan en backend; no se reciben del cliente ni se persisten como ajuste de inventario.
+- La diferencia física se muestra sin compensación automática y requiere un flujo de ajuste autorizado independiente si debe afectar stock.
+
 ### PointOfSaleDailyCloseLine
 
 Campos:
@@ -1211,12 +1236,18 @@ Campos:
 - operationalLocationId
 - pointOfSaleDailyCloseId
 - saleId
+- saleDocumentId
 - physicalFolio
 - productId
 - weightKg
+- grossWeightKg
+- tareWeightKg
+- netWeightKg
 - pieceCount
 - unitPrice
 - amount
+- scaleDeviceId
+- captureSource (`MANUAL` o `HARDWARE`)
 - capturedByUserId
 - capturedAt
 - notes
@@ -1225,9 +1256,10 @@ Campos:
 
 Reglas:
 
-- Captura manual únicamente; no existe integración automática con báscula en el MVP.
+- La captura del MVP usa `captureSource=MANUAL`; el valor `HARDWARE` queda reservado para trazabilidad futura y no habilita integración automática con báscula.
 - No confirma venta, no genera movimiento de inventario y no es comprobante fiscal.
 - `physicalFolio` debe ser único por ubicación y fecha de negocio, salvo corrección auditada.
+- Si se asocia una venta, `saleId` y `saleDocumentId` deben corresponder a la misma venta, ubicación y documento `SCALE_TICKET`.
 
 ### Relaciones adicionales
 
@@ -1235,12 +1267,15 @@ Reglas:
 - OperationalLocation 1:N CashMovement
 - OperationalLocation 1:N ScaleTicketReference
 - PointOfSaleDailyClose 1:N PointOfSaleDailyCloseLine
+- PointOfSaleDailyClose 1:N DailyCloseInventoryCount
 - PointOfSaleDailyClose 1:N CashMovement
 - PointOfSaleDailyClose 1:N ScaleTicketReference
 - PointOfSaleDailyClose 1:N Sale mediante asociación opcional
 - PointOfSaleDailyClose 1:N Payment mediante ubicación y asociación de cierre
 - Sale 1:N ScaleTicketReference opcional
+- SaleDocument 1:N ScaleTicketReference opcional
 - Product 1:N PointOfSaleDailyCloseLine opcional
+- Product 1:N DailyCloseInventoryCount
 - Product 1:N ScaleTicketReference opcional
 - User 1:N PointOfSaleDailyClose por acciones auditables
 

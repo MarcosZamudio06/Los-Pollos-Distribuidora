@@ -80,7 +80,7 @@ type SaleDetailViewProps = {
   onCloseCancelDialog: () => void
   onCloseTicket: () => void
   onShowCancelDialog: () => void
-  onShowTicket: () => void
+  onShowTicket: (documentId: string) => void
   sale: SaleDetailAsyncState<SaleDetail>
   saleId?: string
   showCancelDialog: boolean
@@ -93,7 +93,8 @@ export function SaleDetailPage() {
   const { user } = useAuth()
   const sale = useSale(saleId)
   const documents = useSaleDocuments(saleId)
-  const ticket = useSaleTicket(saleId)
+  const [documentId, setDocumentId] = useState<string>()
+  const ticket = useSaleTicket(saleId, documentId)
   const [showTicket, setShowTicket] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const canCancel = user?.role === 'ADMIN' && sale.data?.status === 'CONFIRMED'
@@ -103,9 +104,9 @@ export function SaleDetailPage() {
       canCancel={canCancel}
       documents={documents}
       onCloseCancelDialog={() => setShowCancelDialog(false)}
-      onCloseTicket={() => setShowTicket(false)}
+      onCloseTicket={() => { setShowTicket(false); setDocumentId(undefined) }}
       onShowCancelDialog={() => setShowCancelDialog(true)}
-      onShowTicket={() => setShowTicket(true)}
+      onShowTicket={(nextDocumentId) => { setDocumentId(nextDocumentId); setShowTicket(true) }}
       sale={sale}
       saleId={saleId}
       showCancelDialog={showCancelDialog}
@@ -245,10 +246,7 @@ export function SaleDetailView({
                     <CardDescription>Acciones disponibles según el estado actual y permisos del usuario.</CardDescription>
                   </CardHeader>
                   <CardContent className="mt-4 grid gap-3">
-                    <Button disabled={ticket.isLoading} onClick={onShowTicket} variant="primary">
-                      <Printer className="h-4 w-4" />
-                      {ticket.isLoading ? 'Cargando documento...' : 'Reimprimir documento'}
-                    </Button>
+                    <p className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 text-sm text-[var(--erp-muted-foreground)]">Selecciona un documento interno para reimprimir exactamente su versión emitida.</p>
                     <Button disabled={!canCancel} onClick={onShowCancelDialog} variant="destructive">
                       <Ban className="h-4 w-4" />
                       Cancelar venta
@@ -293,6 +291,7 @@ export function SaleDetailView({
                     <p className="font-black">{documentTypeLabel(document.documentType)}</p>
                     <p className="mt-2 text-[var(--erp-muted-foreground)]">Folio: {document.physicalFolio ?? '—'} · Estado: {document.status ?? '—'}</p>
                     <p className="mt-1 flex items-center gap-2 text-[var(--erp-muted-foreground)]"><CalendarDays className="h-4 w-4" />Creado: {dateTime(document.createdAt)}</p>
+                    <Button className="mt-3" disabled={!document.id || ticket.isLoading} onClick={() => document.id && onShowTicket(document.id)} variant="secondary"><Printer className="h-4 w-4" />{ticket.isLoading ? 'Cargando documento...' : 'Reimprimir este documento'}</Button>
                   </article>
                 )) : <p className="rounded-2xl border border-dashed border-[color:var(--erp-border)] p-5 text-sm text-[var(--erp-muted-foreground)]">Sin documentos internos asociados en el detalle recibido.</p>}
               </CardContent>

@@ -168,12 +168,16 @@ Body:
 {
   "physicalFolio": "BAS-001",
   "saleId": "string opcional",
+  "saleDocumentId": "string opcional",
   "productId": "string opcional",
-  "weightKg": 1.735,
+  "grossWeightKg": 1.835,
+  "tareWeightKg": 0.100,
+  "netWeightKg": 1.735,
   "pieceCount": 0,
   "unitPrice": 49,
   "amount": 85.02,
-  "capturedAt": "2026-06-19T13:37:00-06:00",
+  "capturedDate": "2026-06-19",
+  "scaleDeviceId": "string opcional",
   "notes": "Captura manual"
 }
 ```
@@ -181,8 +185,9 @@ Body:
 Validaciones:
 
 - Solo captura manual; no aceptar payloads que pretendan representar sincronización de dispositivo.
+- Requiere el header `Idempotency-Key`; repetir la misma clave y payload devuelve el resultado previo sin crear otra referencia.
 - Folio único por ubicación y fecha, salvo corrección auditada.
-- La venta asociada debe pertenecer a la misma ubicación.
+- La venta y el documento asociado deben pertenecer a la misma ubicación, corresponder entre sí y el documento debe ser `SCALE_TICKET`.
 - `capturedDate` debe coincidir con `businessDate` del cierre.
 - Las correcciones históricas no se realizan en este endpoint; requieren un procedimiento administrativo separado y auditable.
 - No genera venta, movimiento de inventario o CFDI.
@@ -209,6 +214,7 @@ Body:
 Validaciones:
 
 - Solo `DRAFT`.
+- Requiere el header `Idempotency-Key`; repetir la misma clave y payload devuelve el resultado previo sin crear otro movimiento.
 - El backend asigna `pointOfSaleDailyCloseId` desde `:id`; el cliente no puede enviarlo ni reemplazarlo.
 - Monto mayor a cero, motivo y ubicación requeridos.
 - `CARD_VOUCHER` representa boucher/tarjeta y debe separarse de efectivo.
@@ -216,6 +222,12 @@ Validaciones:
 - No sustituye `Payment` para cobranza ni duplica el `paymentMethod` de una venta o pago aplicado.
 - `occurredAt` debe estar dentro del rango operativo del cierre: inclusivo desde el inicio y exclusivo en el siguiente inicio de jornada.
 - Las correcciones históricas no se realizan en este endpoint; requieren un procedimiento administrativo separado y auditable.
+
+## Atomicidad y snapshots
+
+- Las altas de gastos, referencias de báscula y conteos físicos ejecutan creación, versión, recálculo y evento de auditoría dentro de una sola transacción.
+- Las transiciones a `REVIEWED`, `CLOSED` o de vuelta a `DRAFT` por reapertura persisten un `DailyCloseSnapshot` inmutable con payload JSON, hash, versión fuente, actor y fecha.
+- Si falla el recálculo, el evento o el snapshot, toda la mutación revierte.
 
 ## POST /api/point-of-sale-daily-closes/:id/validate
 

@@ -33,12 +33,12 @@ export function useCreateSale() {
   })
 }
 
-export function useSaleTicket(saleId?: string) {
+export function useSaleTicket(saleId?: string, documentId?: string) {
   const { accessToken } = useAuth()
   return useQuery({
-    enabled: Boolean(saleId),
-    queryKey: ['sales', saleId, 'ticket'],
-    queryFn: () => salesService.getTicket(saleId as string, accessToken),
+    enabled: Boolean(saleId && documentId),
+    queryKey: ['sales', saleId, 'documents', documentId, 'print'],
+    queryFn: () => salesService.getTicket(saleId as string, documentId as string, accessToken),
   })
 }
 

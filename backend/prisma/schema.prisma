@@ -60,6 +60,11 @@ enum SaleDocumentType {
   INTERNAL_RECEIPT
 }
 
+enum ScaleTicketCaptureSource {
+  MANUAL
+  HARDWARE
+}
+
 enum BillingDeadlineBasis {
   ISSUED_AT
   DELIVERED_AT
@@ -196,6 +201,22 @@ enum PointOfSaleDailyCloseStatus {
   CANCELLED
 }
 
+enum DailyCloseSnapshotType {
+  REVIEWED
+  CLOSED
+  REOPENED
+}
+
+enum DailyCloseEventType {
+  CASH_COUNT_RECORDED
+  EXPENSE_RECORDED
+  INVENTORY_COUNT_CREATED
+  INVENTORY_COUNT_DELETED
+  INVENTORY_COUNT_UPDATED
+  SCALE_TICKET_RECORDED
+  STATUS_CHANGED
+}
+
 enum CostSnapshotSource {
   SALE_CONFIRMATION
   LEGACY_BACKFILL
@@ -315,6 +336,9 @@ model User {
   cancelledDailyCloses            PointOfSaleDailyClose[]      @relation("DailyCloseCancelledBy")
   reopenedDailyCloses             PointOfSaleDailyClose[]      @relation("DailyCloseReopenedBy")
   createdDailyCloseLines          PointOfSaleDailyCloseLine[]
+  countedDailyCloseInventories    DailyCloseInventoryCount[]   @relation("DailyCloseInventoryCountedBy")
+  dailyCloseEvents                DailyCloseEvent[]            @relation("DailyCloseEventCreatedBy")
+  dailyCloseSnapshots             DailyCloseSnapshot[]         @relation("DailyCloseSnapshotCreatedBy")
   cashMovements                   CashMovement[]
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
@@ -395,6 +419,7 @@ model Product {
   transferItems          InventoryTransferItem[]
   dailyCloseLines        PointOfSaleDailyCloseLine[]
   scaleTicketReferences  ScaleTicketReference[]
+  inventoryCounts        DailyCloseInventoryCount[]
 }
 
 model ProductUnitEquivalent {
@@ -598,6 +623,7 @@ model SaleDocument {
   deliveredByUserId             String?
   collectedByUserId             String?
   routeId                       String?
+  printTemplateVersion          Int                          @default(1)
   customerSnapshot              Json?
   productSnapshot               Json?
   priceSnapshot                 Json?
@@ -611,6 +637,7 @@ model SaleDocument {
   route                         DeliveryRoute?               @relation(fields: [routeId], references: [id])
   billingRequestDocuments       BillingRequestSaleDocument[]
   invoiceDocuments              InvoiceSaleDocument[]
+  scaleTicketReferences         ScaleTicketReference[]
 
   @@index([operationalLocationId, physicalFolio])
   @@index([documentType, status, createdAt])
@@ -1143,6 +1170,9 @@ model PointOfSaleDailyClose {
   lines                  PointOfSaleDailyCloseLine[]
   cashMovements          CashMovement[]
   scaleTicketReferences  ScaleTicketReference[]
+  inventoryCounts        DailyCloseInventoryCount[]
+  events                 DailyCloseEvent[]
+  snapshots              DailyCloseSnapshot[]
 
   @@unique([id, operationalLocationId])
   @@index([operationalLocationId, businessDate, status])
@@ -1176,6 +1206,26 @@ model PointOfSaleDailyCloseLine {
   @@index([pointOfSaleDailyCloseId, operationalLocationId])
 }
 
+model DailyCloseInventoryCount {
+  id                      String                @id @default(cuid())
+  pointOfSaleDailyCloseId String
+  productId               String
+  physicalQuantityKg      Decimal               @default(0) @db.Decimal(14, 3)
+  physicalQuantityPieces  Int                   @default(0)
+  reason                  String
+  countedByUserId         String
+  idempotencyKey          String?               @unique
+  idempotencyPayloadHash  String?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  pointOfSaleDailyClose   PointOfSaleDailyClose @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  product                 Product               @relation(fields: [productId], references: [id])
+  countedBy               User                  @relation("DailyCloseInventoryCountedBy", fields: [countedByUserId], references: [id])
+
+  @@unique([pointOfSaleDailyCloseId, productId])
+  @@index([productId])
+}
+
 model CashMovement {
   id                      String                 @id @default(cuid())
   operationalLocationId   String
@@ -1187,6 +1237,8 @@ model CashMovement {
   reference               String?
   occurredAt              DateTime
   userId                  String
+  idempotencyKey          String?                @unique
+  idempotencyPayloadHash  String?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   operationalLocation     OperationalLocation    @relation(fields: [operationalLocationId], references: [id])
@@ -1201,27 +1253,67 @@ model ScaleTicketReference {
   operationalLocationId   String
   pointOfSaleDailyCloseId String?
   saleId                  String?
+  saleDocumentId          String?
   physicalFolio           String
   capturedDate            DateTime                    @db.Date
   productId               String?
   weightKg                Decimal?                    @db.Decimal(14, 3)
+  grossWeightKg           Decimal?                    @db.Decimal(14, 3)
+  tareWeightKg            Decimal?                    @db.Decimal(14, 3)
+  netWeightKg             Decimal?                    @db.Decimal(14, 3)
   pieceCount              Int?
   unitPrice               Decimal?                    @db.Decimal(14, 2)
   amount                  Decimal?                    @db.Decimal(14, 2)
+  scaleDeviceId           String?
+  captureSource           ScaleTicketCaptureSource    @default(MANUAL)
   capturedByUserId        String
   capturedAt              DateTime
   notes                   String?
+  idempotencyKey          String?                      @unique
+  idempotencyPayloadHash  String?
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt
   operationalLocation     OperationalLocation         @relation(fields: [operationalLocationId], references: [id])
   pointOfSaleDailyClose   PointOfSaleDailyClose?      @relation(fields: [pointOfSaleDailyCloseId], references: [id])
   sale                    Sale?                       @relation(fields: [saleId], references: [id])
+  saleDocument            SaleDocument?               @relation(fields: [saleDocumentId], references: [id])
   product                 Product?                    @relation(fields: [productId], references: [id])
   capturedBy              User                        @relation(fields: [capturedByUserId], references: [id])
   dailyCloseLines         PointOfSaleDailyCloseLine[]
 
   @@unique([operationalLocationId, capturedDate, physicalFolio])
   @@index([operationalLocationId, capturedAt])
+  @@index([saleDocumentId])
+}
+
+model DailyCloseEvent {
+  id                      String              @id @default(cuid())
+  pointOfSaleDailyCloseId String
+  type                    DailyCloseEventType
+  payload                 Json
+  idempotencyKey          String?             @unique
+  createdByUserId         String
+  createdAt               DateTime            @default(now())
+  pointOfSaleDailyClose   PointOfSaleDailyClose @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  createdBy               User                @relation("DailyCloseEventCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([pointOfSaleDailyCloseId, createdAt])
+}
+
+model DailyCloseSnapshot {
+  id                      String                @id @default(cuid())
+  pointOfSaleDailyCloseId String
+  sourceVersion           Int
+  snapshotType            DailyCloseSnapshotType
+  payload                 Json
+  payloadHash             String
+  createdByUserId         String
+  createdAt               DateTime              @default(now())
+  pointOfSaleDailyClose   PointOfSaleDailyClose @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  createdBy               User                  @relation("DailyCloseSnapshotCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@unique([pointOfSaleDailyCloseId, sourceVersion, snapshotType])
+  @@index([pointOfSaleDailyCloseId, createdAt])
 }
 
 model LegalEntity {

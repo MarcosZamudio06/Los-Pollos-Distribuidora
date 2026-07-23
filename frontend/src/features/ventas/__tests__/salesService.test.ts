@@ -63,13 +63,13 @@ describe('salesService TASK-055 contracts', () => {
     expect(lastRequest().init?.method).toBe('GET')
   })
 
-  it('carga el ticket para reimpresión desde GET /api/sales/:id/ticket', async () => {
+  it('carga el documento exacto para reimpresión', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(okJson({ saleNumber: 'V-1', ticketNumber: 'T-1' }))
 
-    const ticket = await salesService.getTicket('sale-1', 'access-token')
+    const ticket = await salesService.getTicket('sale-1', 'doc-1', 'access-token')
 
     expect(ticket).toMatchObject({ saleNumber: 'V-1', ticketNumber: 'T-1' })
-    expect(lastRequest().url).toBe('/api/sales/sale-1/ticket')
+    expect(lastRequest().url).toBe('/api/sales/sale-1/documents/doc-1/print')
     expect(lastRequest().init?.method).toBe('GET')
   })
 

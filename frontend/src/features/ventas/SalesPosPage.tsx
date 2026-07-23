@@ -21,7 +21,7 @@ import {
 } from './components'
 import { useCreateSale, useSaleTicket } from './hooks'
 import { buildCreateSalePayload, calculateCartTotal, canConfirmSale, getLocationValidationError, getPaymentReferenceValidationError, getQuantityValidationError, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
-import type { CartItem, CustomerOption, InitialPaymentReference, PaymentMethod, PaymentType, ProductOption, SaleChannel, SaleDocumentType, TicketData } from './types'
+import type { CartItem, CustomerOption, InitialPaymentReference, PaymentMethod, PaymentType, ProductOption, SaleChannel, SaleDocumentType } from './types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
 
@@ -128,15 +128,6 @@ function getSubmitBlocker({
     : getSaleRestriction(paymentType, customer, calculateCartTotal(cart), paymentMethod, { isAdmin, overrideEnabled, overrideReason }) ?? 'La venta todavía no puede confirmarse.'
 }
 
-function saleResponseToTicketFallback(response: TicketData | null, locationId: string): TicketData | null {
-  if (!response) return null
-  return {
-    ...response,
-    locationId: response.locationId ?? locationId,
-    legend: response.legend ?? 'Comprobante interno sin validez fiscal.',
-  }
-}
-
 export function SalesPosPage() {
   const { user } = useAuth()
   const [locationId, setLocationId] = useState('')
@@ -158,14 +149,14 @@ export function SalesPosPage() {
   const [overrideEnabled, setOverrideEnabled] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
   const [confirmedSaleId, setConfirmedSaleId] = useState<string>()
-  const [ticketFallback, setTicketFallback] = useState<TicketData | null>(null)
+  const [confirmedDocumentId, setConfirmedDocumentId] = useState<string>()
   const [pendingSale, setPendingSale] = useState<{ payload: ReturnType<typeof buildCreateSalePayload>; idempotencyKey: string; customerName: string; locationName: string; paymentMethod: PaymentMethod; paymentType: PaymentType; documentType: SaleDocumentType; physicalFolio: string; requiresAdministrativeInvoice: boolean; locationId: string; total: number } | null>(null)
 
   const products = useProducts({ isActive: 'true', locationId, search: productSearch })
   const customers = useCustomers({ isActive: 'true', search: customerSearch })
   const locations = usePurchaseLocations('')
   const createSale = useCreateSale()
-  const ticket = useSaleTicket(confirmedSaleId)
+  const ticket = useSaleTicket(confirmedSaleId, confirmedDocumentId)
 
   const productOptions = useMemo(
     () => (products.data ?? []).map((product) => productToOption(product, locationId)).filter((product) => product.locationId === locationId),
@@ -241,28 +232,9 @@ export function SalesPosPage() {
       const response = await createSale.mutateAsync({ payload: pendingSale.payload, idempotencyKey: pendingSale.idempotencyKey })
       const sale = response.sale
       const saleId = sale?.id
+      const documentId = response.documents?.find((document) => document.documentType === pendingSale.documentType)?.id
       setConfirmedSaleId(saleId)
-      setTicketFallback(
-        saleResponseToTicketFallback(
-          {
-            ticketId: response.ticketId ?? saleId,
-            saleNumber: sale?.saleNumber,
-            documentType: pendingSale.documentType,
-            physicalFolio: pendingSale.physicalFolio.trim() || undefined,
-            requiresAdministrativeInvoice: pendingSale.requiresAdministrativeInvoice,
-            customerName: pendingSale.customerName,
-            locationId: pendingSale.locationId,
-            items: sale?.items,
-            total: sale?.total ?? pendingSale.total,
-            paymentType: pendingSale.paymentType,
-            collectionStatus: sale?.collectionStatus,
-            status: sale?.status,
-            billingRequest: response.billingRequest,
-            payments: response.payment ? [{ amount: response.payment.amount, paymentMethod: response.payment.paymentMethod }] : [],
-          },
-          pendingSale.locationId,
-        ),
-      )
+      setConfirmedDocumentId(documentId)
       setCart([])
       setSelectedCustomer(null)
       setPaymentType('CASH_SALE')
@@ -393,7 +365,7 @@ export function SalesPosPage() {
           </aside>
         </div>
       </section>
-      {(ticketFallback || ticket.data) && <TicketModal fallback={ticketFallback} isLoading={ticket.isLoading} onClose={() => { setConfirmedSaleId(undefined); setTicketFallback(null) }} ticket={ticket.data} />}
+      {confirmedDocumentId && <TicketModal isLoading={ticket.isLoading} onClose={() => { setConfirmedSaleId(undefined); setConfirmedDocumentId(undefined) }} ticket={ticket.data} />}
       <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique la venta antes de descontar inventario y registrar el cobro." isLoading={createSale.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingSale(null) }} open={Boolean(pendingSale)} title="Confirmar venta">
         <p><strong>Cliente:</strong> {pendingSale?.customerName}</p><p><strong>Sucursal:</strong> {pendingSale?.locationName}</p><p><strong>Total:</strong> {toMoney(pendingSale?.total ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingSale?.paymentMethod}</p>
         {pendingSale?.payload.administrativeOverrideReason && <p className="rounded-xl bg-amber-50 p-3 text-amber-900"><strong>Autorización administrativa:</strong> {pendingSale.payload.administrativeOverrideReason}</p>}

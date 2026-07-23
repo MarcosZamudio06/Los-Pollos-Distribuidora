@@ -175,29 +175,9 @@ Validaciones:
 - Requerir motivo.
 - Persistir actor, fecha, motivo e idempotencia de cancelación.
 
-## GET /api/sales/:id/ticket
+## Impresión de documentos
 
-Propósito: obtener datos del ticket o comprobante interno del MVP.
-
-Permisos: `ADMIN`, `SELLER` según alcance; `COLLECTIONS` lectura relacionada si aplica.
-
-Respuesta `data`:
-
-- `ticketId`, `ticketNumber`, `saleNumber`, `createdAt`.
-- `documentType`, `physicalFolio`, `requiresAdministrativeInvoice`.
-- `sellerName`, `customerName` si existe.
-- `locationId`, `locationName`.
-- `items[]`: producto, unidad, kilos, piezas, precio unitario, subtotal.
-- `subtotal`, `discount`, `tax`, `total`.
-- `paymentType`, `collectionStatus`, `status`.
-- `payments[]` opcional con `amount`, `paymentMethod`, `paidAt`, `saleId`, `accountReceivableId` cuando aplique.
-- Leyenda: comprobante interno sin validez fiscal.
-
-Validaciones:
-
-- No devolver campos de timbrado, UUID fiscal, PAC, cadena original, sello digital ni estado SAT.
-- No presentar el ticket como CFDI o factura fiscal.
-- `paymentMethod` siempre se deriva de `Payment`; no forma parte persistida de `Sale`.
+La impresión y reimpresión usa `GET /api/sales/:saleId/documents/:documentId/print`, definido en `sales-documents-api.md`. El endpoint carga el `SaleDocument` exacto y renderiza sus snapshots inmutables; no puede completar el documento con la venta, el cliente o los productos actuales.
 
 ## Extensión: documentos de venta
 

@@ -30,6 +30,8 @@ Modelar la libreta documental de menudeo, reparto e institucional sin mezclarla 
 - El folio físico debe ser único por serie o ubicación cuando aplique.
 - Nota sencilla, nota grande y comprobante interno no generan CFDI.
 - El documento debe conservar snapshots históricos de cliente, producto, precio y cantidades.
+- Una impresión o reimpresión debe cargar el `SaleDocument` exacto y renderizar sus snapshots inmutables, sin consultar los datos actuales del cliente, productos, precios ni venta para completarlo.
+- Cada documento emitido conserva la versión de su plantilla de impresión.
 - El documento puede registrar segunda vuelta de cobranza sin duplicar la venta.
 
 ## Permisos

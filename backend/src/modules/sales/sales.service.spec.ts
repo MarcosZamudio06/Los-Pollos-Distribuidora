@@ -33,7 +33,7 @@ type MockPrisma = {
   legalEntityOperationalLocation: { findFirst: jest.Mock };
   inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
   inventoryMovement: { create: jest.Mock };
-  saleDocument: { create: jest.Mock; findMany: jest.Mock };
+  saleDocument: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
   sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock };
   accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; update: jest.Mock };
@@ -62,7 +62,7 @@ function createPrisma(): MockPrisma {
     legalEntityOperationalLocation: { findFirst: jest.fn() },
     inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     inventoryMovement: { create: jest.fn() },
-    saleDocument: { create: jest.fn(), findMany: jest.fn() },
+    saleDocument: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn() },
     accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
@@ -619,6 +619,114 @@ describe('SalesService', () => {
     expect(ticket).not.toHaveProperty('digitalSeal');
   });
 
+  it('renders a requested document only from its immutable snapshots', async () => {
+    const { service, prisma } = createService();
+    prisma.saleDocument.findFirst.mockResolvedValue({
+      id: 'doc-large-1',
+      saleId: 'sale-1',
+      documentType: SaleDocumentType.LARGE_NOTE,
+      operationalLocationId: 'loc-1',
+      physicalFolio: 'N-100',
+      status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false,
+      printTemplateVersion: 1,
+      customerSnapshot: {
+        name: 'Cliente original',
+        commercialName: 'Comercial original',
+        customerNumber: 'C-100',
+        address: 'Dirección original 10',
+        phone: '229 000 0000',
+        taxId: 'XAXX010101000',
+        paymentTermsDays: 15,
+      },
+      productSnapshot: {
+        items: [{ name: 'Pollo original', sku: 'POL-100', unit: ProductUnit.KG, quantityKg: 2.5, quantityPieces: 0, unitPrice: 100, subtotal: 250 }],
+      },
+      priceSnapshot: {
+        subtotal: 250,
+        discount: 10,
+        tax: 0,
+        total: 240,
+        paid: 0,
+        outstanding: 240,
+        paymentType: SalePaymentType.CREDIT_SALE,
+        dueDate: '2026-07-06T10:00:00.000Z',
+      },
+      createdAt: now,
+      updatedAt: now,
+      scaleTicketReferences: [],
+    });
+
+    const ticket = await service.getDocumentPrint('sale-1', 'doc-large-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(prisma.sale.findFirst).not.toHaveBeenCalled();
+    expect(prisma.saleDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'doc-large-1', saleId: 'sale-1' }),
+    }));
+    expect(ticket).toMatchObject({
+      ticketId: 'doc-large-1',
+      documentType: SaleDocumentType.LARGE_NOTE,
+      customerName: 'Cliente original',
+      customerCommercialName: 'Comercial original',
+      customerAddress: 'Dirección original 10',
+      customerPhone: '229 000 0000',
+      customerTaxId: 'XAXX010101000',
+      customerCreditDays: 15,
+      subtotal: '250',
+      discount: '10',
+      total: '240',
+      paid: '0',
+      outstanding: '240',
+      dueDate: '2026-07-06T10:00:00.000Z',
+      templateVersion: 1,
+      items: [expect.objectContaining({ productName: 'Pollo original', sku: 'POL-100', unit: ProductUnit.KG, quantityKg: 2.5, unitPrice: 100, subtotal: 250 })],
+    });
+  });
+
+  it('returns captured scale evidence when reprinting a scale ticket', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 'sale-scale-1',
+      saleNumber: 'SALE-000010',
+      locationId: 'loc-1',
+      documentType: SaleDocumentType.SCALE_TICKET,
+      physicalFolio: 'BAS-001',
+      requiresAdministrativeInvoice: false,
+      subtotal: decimal('1062.5'), discount: decimal('0'), tax: decimal('0'), total: decimal('1062.5'),
+      paymentType: SalePaymentType.CASH_SALE, collectionStatus: CollectionStatus.PAID, status: SaleStatus.CONFIRMED,
+      customer: null,
+      user: { id: 'seller-1', name: 'Seller One' },
+      location: { id: 'loc-1', name: 'Sucursal Centro' },
+      documents: [
+        { id: 'doc-scale-1', documentType: SaleDocumentType.SCALE_TICKET, physicalFolio: 'BAS-001', createdAt: now },
+        { id: 'doc-receipt-1', documentType: SaleDocumentType.INTERNAL_RECEIPT, physicalFolio: 'BAS-001', createdAt: now },
+      ],
+      scaleTicketReferences: [{
+        saleDocumentId: 'doc-scale-1', physicalFolio: 'BAS-001', capturedAt: now,
+        grossWeightKg: decimal('26.2'), tareWeightKg: decimal('1.2'), netWeightKg: decimal('25'), weightKg: decimal('25'),
+        pieceCount: 14, unitPrice: decimal('42.5'), amount: decimal('1062.5'),
+        product: { name: 'Whole chicken', unit: ProductUnit.KG }, capturedBy: { name: 'Scale Operator' },
+      }],
+      payments: [],
+      items: [{ id: 'item-1', productId: 'product-1', productNameSnapshot: 'Whole chicken', unit: ProductUnit.KG, quantityKg: decimal('25'), quantityPieces: 14, unitPrice: decimal('42.5'), subtotal: decimal('1062.5') }],
+      createdAt: now,
+    });
+
+    const ticket = await service.getTicket('sale-scale-1', { id: 'admin-1', role: 'ADMIN' });
+
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({ scaleTicketReferences: expect.any(Object) }),
+    }));
+    expect(ticket).toEqual(expect.objectContaining({
+      documentType: SaleDocumentType.SCALE_TICKET,
+      scaleTicket: {
+        physicalFolio: 'BAS-001', capturedAt: now, productName: 'Whole chicken', productUnit: ProductUnit.KG,
+        grossWeightKg: '26.2', tareWeightKg: '1.2', netWeightKg: '25', pieceCount: 14,
+        unitPrice: '42.5', amount: '1062.5', operatorName: 'Scale Operator',
+      },
+    }));
+  });
+
   it('lists sale documents with the internal receipt structure and blocks out-of-scope access', async () => {
     const { service, prisma } = createService();
     prisma.sale.findFirst.mockResolvedValue({ id: 'sale-1' });
@@ -787,14 +895,15 @@ describe('SalesService', () => {
           status: SaleDocumentStatus.ISSUED,
           requiresAdministrativeInvoice: false,
           productSnapshot: expect.objectContaining({
-            items: [expect.objectContaining({ productId: 'product-1', productName: 'Chicken breast' })],
+            items: [expect.objectContaining({ productId: 'product-1', name: 'Chicken breast', sku: 'PCH-001' })],
           }),
           priceSnapshot: expect.objectContaining({
             subtotal: 250,
             discount: 0,
             total: 250,
+            paid: 250,
+            outstanding: 0,
             paymentType: SalePaymentType.CASH_SALE,
-            saleChannel: SaleChannel.COUNTER,
           }),
         }),
       }),

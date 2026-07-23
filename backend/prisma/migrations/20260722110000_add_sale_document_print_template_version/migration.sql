@@ -1,0 +1,2 @@
+ALTER TABLE "SaleDocument"
+ADD COLUMN "printTemplateVersion" INTEGER NOT NULL DEFAULT 1;

@@ -13,6 +13,7 @@ Incluye:
 - Asociación de ventas, pagos y movimientos existentes.
 - Captura manual de tickets, etiquetas y reportes de báscula.
 - Movimientos de caja y gastos.
+- Captura física de inventario por producto para conciliar el cierre.
 - Validación de kilos e ingresos y exposición de diferencias.
 - Snapshots auditables al revisar y cerrar.
 
@@ -92,13 +93,13 @@ El módulo debe distinguir ticket/etiqueta de báscula, nota simple, nota grande
 
 ### Requirement: Captura manual de báscula
 
-El módulo debe permitir capturar folio, producto, kilos, piezas, precio e importe de una referencia de báscula sin integración automática.
+El módulo debe permitir capturar folio, venta y documento de venta opcionales, producto, pesos bruto, tara y neto, piezas, precio e importe de una referencia de báscula sin integración automática. La referencia conserva `captureSource=MANUAL`; no habilita captura desde hardware durante el MVP.
 
 #### Scenario: Referencia capturada
 
 - Dado un cierre en borrador
 - Cuando `SELLER` registra una referencia válida
-- Entonces se conserva la captura y puede compararse con ventas, sin generar inventario ni una nueva venta.
+- Entonces se conserva la captura y puede compararse directamente con la venta y documento `SCALE_TICKET` asociados, sin generar inventario ni una nueva venta.
 
 ### Requirement: Conciliación de kilos
 
@@ -109,6 +110,25 @@ El sistema debe comparar kilos recibidos, vendidos, reportados por báscula, sob
 - Dados totales que no concilian
 - Cuando se valida el cierre
 - Entonces se devuelve la diferencia con origen y unidad, sin ocultarla ni compensarla automáticamente.
+
+### Requirement: Conteo físico de inventario por producto
+
+El cierre en borrador debe permitir a `ADMIN` y `SELLER` autorizados capturar, corregir y eliminar un conteo físico por producto. Cada conteo conserva producto, cantidades físicas en kilos y piezas, motivo, responsable y fechas de auditoría. La conciliación expone por producto la existencia inicial, entradas, ventas del sistema, otras salidas, existencia teórica, existencia física, sobrante y faltante.
+
+El conteo es evidencia de conciliación y no crea ni modifica `InventoryMovement`, `InventoryBalance` ni ventas. La existencia teórica se calcula con movimientos históricos de la ubicación y ventas confirmadas asociadas al cierre; toda diferencia permanece visible hasta que un flujo de ajuste autorizado la resuelva.
+
+#### Scenario: Faltante físico capturado
+
+- Dado un cierre en borrador con existencia teórica de 10.000 kg de un producto
+- Cuando el vendedor registra una existencia física de 8.500 kg con motivo
+- Entonces la conciliación muestra 1.500 kg de faltante y 0 kg de sobrante.
+- Y no se genera un movimiento de inventario implícito.
+
+#### Scenario: Conteo fuera del borrador
+
+- Dado un cierre revisado, cerrado o cancelado
+- Cuando se intenta crear, editar o eliminar un conteo físico
+- Entonces el sistema rechaza la operación con `DAILY_CLOSE_NOT_EDITABLE`.
 
 ### Requirement: Conciliación de ingresos
 
@@ -155,11 +175,30 @@ Todo pago de cobranza incluido debe conservar `Payment.accountReceivableId` requ
 
 Todo gasto debe registrarse como `CashMovement` con ubicación, importe, motivo, usuario y fecha.
 
+Cada alta de gasto, referencia de báscula o conteo físico requiere una clave de idempotencia única. El backend debe ejecutar la escritura, la invalidación de validación, el incremento de versión, el recálculo y el evento de auditoría en una sola transacción; si alguna etapa falla, no puede persistir una parte de la mutación.
+
 #### Scenario: Gasto sin motivo
 
 - Dado un cierre en borrador
 - Cuando se intenta registrar un gasto sin motivo
 - Entonces la API rechaza la operación.
+
+#### Scenario: Repetición de gasto
+
+- Dado un gasto registrado con una clave de idempotencia y el mismo payload
+- Cuando el cliente repite la solicitud
+- Entonces el sistema devuelve el cierre vigente sin crear otro gasto ni incrementar la versión.
+
+### Requirement: Snapshots inmutables de transición
+
+Al revisar, cerrar o reabrir, el sistema debe crear un `DailyCloseSnapshot` inmutable con la versión fuente, tipo de snapshot, payload serializado, hash, actor y fecha. El payload conserva las ventas, pagos, movimientos de inventario y caja, referencias de báscula, conteos físicos, diferencias y totales usados en la transición.
+
+#### Scenario: Cierre con evidencia completa
+
+- Dado un cierre revisado y validado
+- Cuando `ADMIN` lo cierra
+- Entonces el sistema guarda un snapshot `CLOSED` dentro de la misma transacción que la transición.
+- Y si no se puede guardar el snapshot o su evento de auditoría, el cierre conserva su estado previo.
 
 ### Requirement: Validación previa al cierre
 
@@ -170,6 +209,13 @@ El sistema debe recalcular totales y detectar operaciones sin ubicación, asocia
 - Dada una operación asociada sin `OperationalLocation`
 - Cuando se valida el cierre
 - Entonces se devuelve `OPERATION_WITHOUT_LOCATION` como error bloqueante.
+
+#### Scenario: Resultado de validación visible
+
+- Dado un cierre en borrador cuya validación devuelve `valid = false`
+- Cuando el usuario valida desde la UI
+- Entonces la pantalla conserva y muestra los bloqueantes, diferencias y advertencias devueltos o derivados del cierre.
+- Y no muestra el mensaje de éxito `Cierre validado`.
 
 ### Requirement: Cierre transaccional
 

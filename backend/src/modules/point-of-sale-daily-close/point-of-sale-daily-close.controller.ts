@@ -1,7 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
@@ -15,11 +18,13 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateExpenseDto,
+  CreateDailyCloseInventoryCountDto,
   CreateScaleTicketDto,
   ListDailyCloseQueryDto,
   OpenDailyCloseDto,
   RecordCashCountDto,
   ReasonedDailyCloseDto,
+  UpdateDailyCloseInventoryCountDto,
   VersionedDailyCloseDto,
 } from './dto';
 import { PointOfSaleDailyCloseService } from './point-of-sale-daily-close.service';
@@ -62,20 +67,24 @@ export class PointOfSaleDailyCloseController {
     @Param('id') id: string,
     @Body() dto: CreateExpenseDto,
     @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
     return this.response(
       'Expense registered successfully',
-      await this.service.addExpense(id, dto, user),
+      await this.service.addExpense(id, dto, user, idempotencyKey.trim()),
     );
   }
-  @Post(':id/scale-tickets') @Roles('ADMIN', 'SELLER') async ticket(
+  @Post(':id/scale-ticket-references') @Roles('ADMIN', 'SELLER') async ticket(
     @Param('id') id: string,
     @Body() dto: CreateScaleTicketDto,
     @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
     return this.response(
       'Scale ticket registered successfully',
-      await this.service.addScaleTicket(id, dto, user),
+      await this.service.addScaleTicket(id, dto, user, idempotencyKey.trim()),
     );
   }
   @Post(':id/cash-count') @Roles('ADMIN', 'SELLER') async recordCashCount(
@@ -86,6 +95,48 @@ export class PointOfSaleDailyCloseController {
     return this.response(
       'Cash count recorded successfully',
       await this.service.recordCashCount(id, dto, user),
+    );
+  }
+  @Get(':id/reconciliation') @Roles('ADMIN', 'SELLER', 'WAREHOUSE') async reconciliation(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Daily close inventory reconciliation retrieved successfully',
+      await this.service.getReconciliation(id, user),
+    );
+  }
+  @Post(':id/inventory-counts') @Roles('ADMIN', 'SELLER') async createInventoryCount(
+    @Param('id') id: string,
+    @Body() dto: CreateDailyCloseInventoryCountDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
+    return this.response(
+      'Daily close inventory count registered successfully',
+      await this.service.createInventoryCount(id, dto, user, idempotencyKey.trim()),
+    );
+  }
+  @Patch(':id/inventory-counts/:countId') @Roles('ADMIN', 'SELLER') async updateInventoryCount(
+    @Param('id') id: string,
+    @Param('countId') countId: string,
+    @Body() dto: UpdateDailyCloseInventoryCountDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Daily close inventory count updated successfully',
+      await this.service.updateInventoryCount(id, countId, dto, user),
+    );
+  }
+  @Delete(':id/inventory-counts/:countId') @Roles('ADMIN', 'SELLER') async deleteInventoryCount(
+    @Param('id') id: string,
+    @Param('countId') countId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Daily close inventory count deleted successfully',
+      await this.service.deleteInventoryCount(id, countId, user),
     );
   }
   @Post(':id/validate') @Roles('ADMIN', 'SELLER') async validate(

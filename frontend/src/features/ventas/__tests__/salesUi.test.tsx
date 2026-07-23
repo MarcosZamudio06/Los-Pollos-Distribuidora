@@ -398,7 +398,7 @@ describe('TASK-055 sales UI behavior', () => {
     )
 
     expect(html).toContain('Detalle de venta')
-    expect(html).toContain('Reimprimir documento')
+    expect(html).toContain('Reimprimir este documento')
     expect(html).toContain('Cancelar venta')
     expect(html).toContain('Documentos internos')
     expect(html).toContain('Nota sencilla')
@@ -473,6 +473,11 @@ describe('TASK-055 sales UI behavior', () => {
 
   it('abre el modal de ticket interno con un click real en la acción de reimpresión', async () => {
     mockState.sale = { data: confirmedSale, error: null, isLoading: false }
+    mockState.documents = {
+      data: { items: [{ createdAt: '2026-07-03T15:31:00.000Z', documentType: 'SIMPLE_NOTE', id: 'doc-1', physicalFolio: 'N-42', status: 'ISSUED' }] },
+      error: null,
+      isLoading: false,
+    }
     mockState.ticket = {
       data: { saleNumber: 'V-1001', total: 276, documentType: 'SIMPLE_NOTE', paymentType: 'CREDIT_SALE' },
       error: null,
@@ -488,7 +493,7 @@ describe('TASK-055 sales UI behavior', () => {
     )
 
     try {
-      const reprintButton = getButtonByText(container, 'Reimprimir documento')
+      const reprintButton = getButtonByText(container, 'Reimprimir este documento')
 
       expect(container.textContent).not.toContain('Ticket interno')
 
@@ -561,7 +566,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('ticket-print-content')
   })
 
-  it('renderiza los tres formatos documentales con sus prioridades y oculta un RFC inexistente', () => {
+  it('renderiza los cuatro formatos documentales con sus prioridades y oculta un RFC inexistente', () => {
     const baseTicket: TicketData = {
       createdAt: '2026-07-17T18:35:00.000Z',
       customerName: 'Pollería San José',
@@ -579,6 +584,22 @@ describe('TASK-055 sales UI behavior', () => {
     const largeWithoutTaxId = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'LARGE_NOTE', customerAddress: 'Av. Principal 123', customerPhone: '229 000 0000', customerCreditDays: 7 }} />)
     const largeWithTaxId = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'LARGE_NOTE', customerTaxId: 'XAXX010101000' }} />)
     const internal = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'INTERNAL_RECEIPT' }} />)
+    const scale = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{
+      ...baseTicket,
+      documentType: 'SCALE_TICKET',
+      scaleTicket: {
+        physicalFolio: 'BAS-001',
+        capturedAt: '2026-07-17T18:35:00.000Z',
+        productName: 'Pollo entero',
+        grossWeightKg: 26.2,
+        tareWeightKg: 1.2,
+        netWeightKg: 25,
+        pieceCount: 14,
+        unitPrice: 42.5,
+        amount: 1062.5,
+        operatorName: 'María López',
+      },
+    }} />)
 
     expect(simple).toContain('NOTA DE VENTA')
     expect(simple).toContain('Gracias por su compra')
@@ -592,5 +613,38 @@ describe('TASK-055 sales UI behavior', () => {
     expect(internal).toContain('Entregó')
     expect(internal).toContain('Autorizó')
     expect(internal).toContain('DOCUMENTO DE CONTROL INTERNO')
+    expect(scale).toContain('TICKET DE BÁSCULA')
+    expect(scale).toContain('Peso bruto')
+    expect(scale).toContain('26.2 kg')
+    expect(scale).toContain('Peso tara')
+    expect(scale).toContain('Peso neto')
+    expect(scale).toContain('25 kg')
+    expect(scale).toContain('María López')
+    expect(scale).toContain('receipt-format-scale')
+    expect(scale).not.toContain('Gracias por su compra')
+  })
+
+  it('no sustituye un pago inicial de cero por el total en un recibo interno de crédito', () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          documentType: 'INTERNAL_RECEIPT',
+          dueDate: '2026-07-30T10:00:00.000Z',
+          outstanding: 240,
+          paid: 0,
+          paymentType: 'CREDIT_SALE',
+          total: 240,
+        }}
+      />,
+    )
+
+    expect(html).toContain('Total de venta:')
+    expect(html).toContain('Pago recibido:')
+    expect(html).toContain('Saldo pendiente:')
+    expect(html).toContain('Fecha de vencimiento:')
+    expect(html).toContain('$0.00')
+    expect(html).toContain('$240.00')
   })
 })

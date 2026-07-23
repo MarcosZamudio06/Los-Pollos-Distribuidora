@@ -25,16 +25,17 @@ export class SalesController {
     };
   }
 
-  @Get(':id/ticket')
+  @Get(':saleId/documents/:documentId/print')
   @Roles('ADMIN', 'SELLER', 'COLLECTIONS')
-  async getTicket(
-    @Param('id') id: string,
+  async getDocumentPrint(
+    @Param('saleId') saleId: string,
+    @Param('documentId') documentId: string,
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     return {
       success: true,
-      message: 'Sale ticket retrieved successfully',
-      data: await this.salesService.getTicket(id, currentUser),
+      message: 'Sale document print data retrieved successfully',
+      data: await this.salesService.getDocumentPrint(saleId, documentId, currentUser),
     };
   }
 

@@ -134,7 +134,7 @@ export type CreateSaleResponse = {
   accountReceivable?: { id?: string; balance?: number | string; dueDate?: string } | null
   billingRequest?: { id?: string; status?: string } | null
   ticketId?: string | null
-  documents?: Array<{ id?: string; type?: string; status?: string }> | null
+  documents?: Array<{ id?: string; documentType?: SaleDocumentType | string; status?: string }> | null
 }
 
 export type TicketData = {
@@ -148,6 +148,8 @@ export type TicketData = {
   billingRequest?: { id?: string; status?: string } | null
   sellerName?: string
   customerName?: string | null
+  customerCommercialName?: string | null
+  customerNumber?: string | null
   customerAddress?: string | null
   customerPhone?: string | null
   customerTaxId?: string | null
@@ -157,6 +159,7 @@ export type TicketData = {
   items?: Array<{
     product?: string
     productName?: string
+    sku?: string | null
     unit?: string
     kilos?: number | string | null
     pieces?: number | string | null
@@ -169,10 +172,28 @@ export type TicketData = {
   discount?: number | string | null
   tax?: number | string | null
   total?: number | string | null
+  paid?: number | string | null
+  outstanding?: number | string | null
+  dueDate?: string | null
+  paymentMethod?: string | null
+  templateVersion?: number
   paymentType?: PaymentType | string
   collectionStatus?: string
   status?: string
   payments?: Array<{ amount?: number | string; paymentMethod?: string; paidAt?: string }>
+  scaleTicket?: {
+    physicalFolio?: string | null
+    capturedAt?: string | null
+    productName?: string | null
+    productUnit?: OperationalUnit | null
+    grossWeightKg?: number | string | null
+    tareWeightKg?: number | string | null
+    netWeightKg?: number | string | null
+    pieceCount?: number | null
+    unitPrice?: number | string | null
+    amount?: number | string | null
+    operatorName?: string | null
+  } | null
   legend?: string
 }
 
@@ -207,6 +228,10 @@ export type SaleListItem = {
   paymentsSummary?: PaymentsSummary
   deliveredByUserId?: string | null
   collectedByUserId?: string | null
+  printTemplateVersion?: number
+  customerSnapshot?: Record<string, unknown> | null
+  productSnapshot?: Record<string, unknown> | null
+  priceSnapshot?: Record<string, unknown> | null
   routeId?: string | null
   pointOfSaleDailyCloseId?: string | null
 }

@@ -64,6 +64,9 @@ describe('Prisma schema contract', () => {
       'RouteSettlement',
       'PointOfSaleDailyClose',
       'PointOfSaleDailyCloseLine',
+      'DailyCloseInventoryCount',
+      'DailyCloseEvent',
+      'DailyCloseSnapshot',
       'CashMovement',
       'ScaleTicketReference',
       'BillingRequest',
@@ -80,7 +83,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(43);
+    expect(modelNames).toHaveLength(46);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
@@ -139,6 +142,17 @@ describe('Prisma schema contract', () => {
     expect(scaleTicket).toContain(
       '@@unique([operationalLocationId, capturedDate, physicalFolio])',
     );
+  });
+
+  it('keeps scale ticket provenance and sale-document reconciliation fields', () => {
+    const scaleTicket = getModelBlock('ScaleTicketReference');
+
+    expect(scaleTicket).toMatch(/saleDocumentId\s+String\?/);
+    expect(scaleTicket).toMatch(/grossWeightKg\s+Decimal\?/);
+    expect(scaleTicket).toMatch(/tareWeightKg\s+Decimal\?/);
+    expect(scaleTicket).toMatch(/netWeightKg\s+Decimal\?/);
+    expect(scaleTicket).toMatch(/scaleDeviceId\s+String\?/);
+    expect(scaleTicket).toMatch(/captureSource\s+ScaleTicketCaptureSource\s+@default\(MANUAL\)/);
   });
 
   it('persists user access status fields with safe defaults and nullable deactivation audit', () => {

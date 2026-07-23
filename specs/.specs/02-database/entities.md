@@ -139,6 +139,10 @@ Validaciones:
 - `physicalFolio` requerido cuando aplique.
 - `status` requerido.
 - Debe conservar `customerSnapshot`, `productSnapshot`, `priceSnapshot` y cantidades capturadas para trazabilidad histórica.
+- `customerSnapshot` conserva `name`, `commercialName`, `customerNumber`, `address`, `phone`, `taxId` y `paymentTermsDays`.
+- Cada partida de `productSnapshot.items` conserva `name`, `sku`, `unit`, `quantityKg`, `quantityPieces`, `unitPrice` y `subtotal`.
+- `priceSnapshot` conserva `subtotal`, `discount`, `tax`, `total`, `paid` y `outstanding`; para crédito conserva también la fecha de vencimiento emitida.
+- La reimpresión identifica la plantilla mediante `printTemplateVersion` y no puede completar snapshots desde registros actuales.
 - Debe distinguir nota sencilla, nota grande y ticket/comprobante interno.
 
 Estados sugeridos:
@@ -520,6 +524,17 @@ Validaciones:
 - `INCOME` y `PROFIT` son snapshots derivados por el backend y no aceptan importes monetarios independientes.
 - Los importes de pagos y cobranza en `INCOME` se derivan exclusivamente de `Payment`; `CashMovement` solo aporta entradas, salidas o ajustes operativos separados. `PROFIT` se deriva de operaciones asociadas y fórmulas aprobadas.
 
+## DailyCloseInventoryCount
+
+Validaciones:
+
+- `pointOfSaleDailyCloseId`, `productId`, cantidades físicas, motivo y `countedByUserId` requeridos.
+- Un producto solo puede tener un conteo por cierre.
+- Kilos permiten decimales no negativos; piezas son enteras no negativas.
+- Solo se modifica durante `DRAFT`, por `ADMIN` o `SELLER` autorizado para la ubicación.
+- Es evidencia física de conciliación; no crea ni modifica movimientos o saldos de inventario.
+- La conciliación calcula en backend existencia inicial, entradas, ventas, otras salidas, existencia teórica, sobrante y faltante.
+
 ## CashMovement
 
 Validaciones:
@@ -541,7 +556,9 @@ Validaciones:
 - Es una captura manual; no implica integración automática con hardware.
 - `operationalLocationId`, `physicalFolio`, `capturedByUserId` y `capturedAt` requeridos.
 - Puede asociarse a una venta y a un cierre diario, pero no reemplaza a ninguno.
-- Debe conservar producto, kilos, piezas, precio e importe capturados cuando estén disponibles.
+- Cuando se asocia a una venta, conserva también su `SaleDocument` de tipo `SCALE_TICKET` para conciliación directa.
+- Debe conservar producto, pesos bruto, tara y neto, piezas, precio e importe capturados cuando estén disponibles.
+- La captura del MVP se identifica como `MANUAL`; `HARDWARE` es solo una procedencia reservada y no activa una integración de dispositivo.
 - Un folio no debe duplicarse dentro de la misma ubicación y fecha de negocio, salvo corrección auditada.
 - No genera movimientos de inventario ni CFDI.
 

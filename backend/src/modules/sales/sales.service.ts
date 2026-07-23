@@ -52,8 +52,12 @@ type SaleProduct = {
 type CustomerCredit = {
   id: string;
   name?: string | null;
+  commercialName?: string | null;
   customerNumber?: string | null;
   customerType?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  taxId?: string | null;
   isActive: boolean;
   creditStatus: CreditStatus;
   creditLimit?: DecimalLike;
@@ -160,6 +164,7 @@ type SaleDocumentListRecord = Record<string, unknown> & {
   deliveredByUserId?: string | null;
   collectedByUserId?: string | null;
   routeId?: string | null;
+  printTemplateVersion?: number;
   customerSnapshot?: Record<string, unknown> | null;
   productSnapshot?: Record<string, unknown> | null;
   priceSnapshot?: Record<string, unknown> | null;
@@ -167,11 +172,41 @@ type SaleDocumentListRecord = Record<string, unknown> & {
   updatedAt: Date;
 };
 
+type SaleDocumentPrintRecord = SaleDocumentListRecord & {
+  printTemplateVersion: number;
+  scaleTicketReferences?: Array<{
+    physicalFolio: string;
+    capturedAt: Date;
+    grossWeightKg?: DecimalLike;
+    tareWeightKg?: DecimalLike;
+    netWeightKg?: DecimalLike;
+    weightKg?: DecimalLike;
+    pieceCount?: number | null;
+    unitPrice?: DecimalLike;
+    amount?: DecimalLike;
+    capturedBy?: { name: string } | null;
+  }>;
+};
+
 type SaleTicketRecord = SaleListRecord & {
   user?: { id: string; name: string } | null;
   location?: { id: string; name: string } | null;
   documents?: Record<string, unknown>[];
   items?: Array<Record<string, unknown> & { productNameSnapshot?: string | null }>;
+  scaleTicketReferences?: Array<{
+    saleDocumentId?: string | null;
+    physicalFolio: string;
+    capturedAt: Date;
+    grossWeightKg?: DecimalLike;
+    tareWeightKg?: DecimalLike;
+    netWeightKg?: DecimalLike;
+    weightKg?: DecimalLike;
+    pieceCount?: number | null;
+    unitPrice?: DecimalLike;
+    amount?: DecimalLike;
+    product?: { name: string; unit: string } | null;
+    capturedBy?: { name: string } | null;
+  }>;
 };
 
 type SaleCancellationRecord = Record<string, unknown> & {
@@ -298,6 +333,13 @@ export class SalesService {
           orderBy: { paidAt: 'desc' },
         },
         items: true,
+        scaleTicketReferences: {
+          include: {
+            product: { select: { name: true, unit: true } },
+            capturedBy: { select: { name: true } },
+          },
+          orderBy: { capturedAt: 'desc' },
+        },
       },
     } as Prisma.SaleFindFirstArgs)) as SaleTicketRecord | null;
 
@@ -306,6 +348,28 @@ export class SalesService {
     }
 
     return this.toSaleTicket(sale);
+  }
+
+  async getDocumentPrint(saleId: string, documentId: string, currentUser: Actor) {
+    const document = (await this.prisma.saleDocument.findFirst({
+      where: {
+        id: documentId,
+        saleId,
+        sale: { is: this.buildVisibleSaleDetailWhere(saleId, currentUser) },
+      },
+      include: {
+        scaleTicketReferences: {
+          include: { capturedBy: { select: { name: true } } },
+          orderBy: { capturedAt: 'desc' },
+        },
+      },
+    } as Prisma.SaleDocumentFindFirstArgs)) as SaleDocumentPrintRecord | null;
+
+    if (!document) {
+      throw new NotFoundException('Sale document not found');
+    }
+
+    return this.toSaleDocumentPrint(document);
   }
 
   async create(dto: CreateSaleDto, currentUser: Actor, idempotencyKey: string) {
@@ -494,6 +558,10 @@ export class SalesService {
             },
           });
         }
+        const issuedAt = new Date();
+        const dueDate = outstandingAmount > 0 && customer
+          ? this.addDays(issuedAt, customer.creditDays ?? 0)
+          : null;
         const documentData = {
             saleId: sale.id,
             operationalLocationId: dto.locationId,
@@ -503,6 +571,7 @@ export class SalesService {
             deliveredByUserId: sale.deliveredByUserId ?? null,
             collectedByUserId: sale.collectedByUserId ?? null,
             routeId: sale.routeId ?? null,
+            printTemplateVersion: 1,
             ...(customer ? { customerSnapshot: this.buildCustomerSnapshot(customer) as Prisma.InputJsonValue } : {}),
             productSnapshot: this.buildProductSnapshot(preparedItems),
             priceSnapshot: this.buildPriceSnapshot({
@@ -510,10 +579,11 @@ export class SalesService {
               discount,
               tax: 0,
               total,
+              paid: initialPaymentAmount,
+              outstanding: outstandingAmount,
               paymentType: dto.paymentType,
-              saleChannel: dto.saleChannel,
-              physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
-              requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
+              paymentMethod: dto.initialPayment?.paymentMethod ?? null,
+              dueDate,
             }),
         };
         const requestedDocument = await tx.saleDocument.create({
@@ -559,7 +629,7 @@ export class SalesService {
                 originalAmount: outstandingAmount,
                 outstandingAmount,
                 saleDate: new Date(),
-                dueDate: this.addDays(new Date(), customer.creditDays ?? 0),
+                dueDate: dueDate as Date,
                 paymentTermsDays: customer.creditDays ?? 0,
                 commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId ?? customer.commercialPolicyId),
                 status: CollectionStatus.UNPAID,
@@ -1371,6 +1441,14 @@ export class SalesService {
   private toSaleTicket(sale: SaleTicketRecord) {
     const ticketDocument = this.findTicketDocument(sale.documents ?? []);
     const physicalFolio = (ticketDocument?.physicalFolio ?? sale.physicalFolio ?? null) as string | null;
+    const scaleDocument = (sale.documents ?? []).find(
+      (document) => document.documentType === SaleDocumentType.SCALE_TICKET,
+    );
+    const scaleReference = sale.documentType === SaleDocumentType.SCALE_TICKET
+      ? (sale.scaleTicketReferences ?? []).find((reference) => reference.saleDocumentId === scaleDocument?.id)
+        ?? sale.scaleTicketReferences?.[0]
+        ?? null
+      : null;
 
     return {
       ticketId: ticketDocument?.id ?? null,
@@ -1411,6 +1489,21 @@ export class SalesService {
         saleId: payment.saleId ?? null,
         accountReceivableId: payment.accountReceivableId ?? null,
       })),
+      ...(sale.documentType === SaleDocumentType.SCALE_TICKET ? {
+        scaleTicket: scaleReference ? {
+          physicalFolio: scaleReference.physicalFolio,
+          capturedAt: scaleReference.capturedAt,
+          productName: scaleReference.product?.name ?? null,
+          productUnit: scaleReference.product?.unit ?? null,
+          grossWeightKg: this.decimalToString(scaleReference.grossWeightKg),
+          tareWeightKg: this.decimalToString(scaleReference.tareWeightKg),
+          netWeightKg: this.decimalToString(scaleReference.netWeightKg ?? scaleReference.weightKg),
+          pieceCount: scaleReference.pieceCount ?? null,
+          unitPrice: this.decimalToString(scaleReference.unitPrice),
+          amount: this.decimalToString(scaleReference.amount),
+          operatorName: scaleReference.capturedBy?.name ?? null,
+        } : null,
+      } : {}),
       legend: 'Comprobante interno sin validez fiscal',
     };
   }
@@ -1473,8 +1566,13 @@ export class SalesService {
     return {
       id: customer.id,
       name: customer.name ?? null,
+      commercialName: customer.commercialName ?? null,
       customerNumber: customer.customerNumber ?? null,
       customerType: customer.customerType ?? null,
+      address: customer.address ?? null,
+      phone: customer.phone ?? null,
+      taxId: customer.taxId ?? null,
+      paymentTermsDays: customer.creditDays ?? null,
     };
   }
 
@@ -1482,8 +1580,8 @@ export class SalesService {
     return {
       items: items.map((item) => ({
         productId: item.product.id,
-        productName: item.product.name,
-        productSku: item.product.sku ?? null,
+        name: item.product.name,
+        sku: item.product.sku ?? null,
         unit: item.product.unit,
         quantityKg: item.quantityKg,
         quantityPieces: item.quantityPieces,
@@ -1500,21 +1598,101 @@ export class SalesService {
     discount: number;
     tax: number;
     total: number;
+    paid: number;
+    outstanding: number;
     paymentType: SalePaymentType;
-    saleChannel: SaleChannel;
-    physicalFolio: string | null;
-    requiresAdministrativeInvoice: boolean;
+    paymentMethod: PaymentMethod | null;
+    dueDate: Date | null;
   }) {
     return {
       subtotal: snapshot.subtotal,
       discount: snapshot.discount,
       tax: snapshot.tax,
       total: snapshot.total,
+      paid: snapshot.paid,
+      outstanding: snapshot.outstanding,
       paymentType: snapshot.paymentType,
-      saleChannel: snapshot.saleChannel,
-      physicalFolio: snapshot.physicalFolio,
-      requiresAdministrativeInvoice: snapshot.requiresAdministrativeInvoice,
+      paymentMethod: snapshot.paymentMethod,
+      dueDate: snapshot.dueDate?.toISOString() ?? null,
     };
+  }
+
+  private toSaleDocumentPrint(document: SaleDocumentPrintRecord) {
+    const customer = this.snapshotRecord(document.customerSnapshot);
+    const product = this.snapshotRecord(document.productSnapshot);
+    const price = this.snapshotRecord(document.priceSnapshot);
+    const items = Array.isArray(product?.items) ? product.items : [];
+    const firstItem = this.snapshotRecord(items[0]);
+    const scaleReference = document.scaleTicketReferences?.[0] ?? null;
+
+    return {
+      ticketId: document.id,
+      ticketNumber: document.physicalFolio ?? document.id,
+      createdAt: document.createdAt,
+      documentType: document.documentType,
+      physicalFolio: document.physicalFolio ?? null,
+      requiresAdministrativeInvoice: document.requiresAdministrativeInvoice,
+      templateVersion: document.printTemplateVersion,
+      customerName: this.snapshotString(customer, 'name'),
+      customerCommercialName: this.snapshotString(customer, 'commercialName'),
+      customerNumber: this.snapshotString(customer, 'customerNumber'),
+      customerAddress: this.snapshotString(customer, 'address'),
+      customerPhone: this.snapshotString(customer, 'phone'),
+      customerTaxId: this.snapshotString(customer, 'taxId'),
+      customerCreditDays: this.snapshotNumber(customer, 'paymentTermsDays'),
+      locationId: document.operationalLocationId ?? null,
+      items: items.map((item) => {
+        const snapshot = this.snapshotRecord(item);
+        return {
+          productName: this.snapshotString(snapshot, 'name') ?? this.snapshotString(snapshot, 'productName'),
+          sku: this.snapshotString(snapshot, 'sku') ?? this.snapshotString(snapshot, 'productSku'),
+          unit: this.snapshotString(snapshot, 'unit'),
+          quantityKg: this.snapshotNumber(snapshot, 'quantityKg'),
+          quantityPieces: this.snapshotNumber(snapshot, 'quantityPieces'),
+          unitPrice: this.snapshotNumber(snapshot, 'unitPrice'),
+          subtotal: this.snapshotNumber(snapshot, 'subtotal'),
+        };
+      }),
+      subtotal: this.decimalToString(this.snapshotNumber(price, 'subtotal')),
+      discount: this.decimalToString(this.snapshotNumber(price, 'discount')),
+      tax: this.decimalToString(this.snapshotNumber(price, 'tax')),
+      total: this.decimalToString(this.snapshotNumber(price, 'total')),
+      paid: this.decimalToString(this.snapshotNumber(price, 'paid')),
+      outstanding: this.decimalToString(this.snapshotNumber(price, 'outstanding')),
+      paymentType: this.snapshotString(price, 'paymentType'),
+      paymentMethod: this.snapshotString(price, 'paymentMethod'),
+      dueDate: this.snapshotString(price, 'dueDate'),
+      scaleTicket: document.documentType === SaleDocumentType.SCALE_TICKET && scaleReference ? {
+        physicalFolio: scaleReference.physicalFolio,
+        capturedAt: scaleReference.capturedAt,
+        productName: this.snapshotString(firstItem, 'name') ?? this.snapshotString(firstItem, 'productName'),
+        productUnit: this.snapshotString(firstItem, 'unit'),
+        grossWeightKg: this.decimalToString(scaleReference.grossWeightKg),
+        tareWeightKg: this.decimalToString(scaleReference.tareWeightKg),
+        netWeightKg: this.decimalToString(scaleReference.netWeightKg ?? scaleReference.weightKg),
+        pieceCount: scaleReference.pieceCount ?? null,
+        unitPrice: this.decimalToString(scaleReference.unitPrice),
+        amount: this.decimalToString(scaleReference.amount),
+        operatorName: scaleReference.capturedBy?.name ?? null,
+      } : null,
+      legend: 'Comprobante interno sin validez fiscal',
+    };
+  }
+
+  private snapshotRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  }
+
+  private snapshotString(snapshot: Record<string, unknown> | null, key: string): string | null {
+    const value = snapshot?.[key];
+    return typeof value === 'string' ? value : null;
+  }
+
+  private snapshotNumber(snapshot: Record<string, unknown> | null, key: string): number | string | null {
+    const value = snapshot?.[key];
+    return typeof value === 'number' || typeof value === 'string' ? value : null;
   }
 
   private toSaleDocumentResponse(document: SaleDocumentListRecord) {
@@ -1530,6 +1708,7 @@ export class SalesService {
       deliveredByUserId: document.deliveredByUserId ?? null,
       collectedByUserId: document.collectedByUserId ?? null,
       routeId: document.routeId ?? null,
+      printTemplateVersion: document.printTemplateVersion ?? 1,
       customerSnapshot: document.customerSnapshot ?? null,
       productSnapshot: document.productSnapshot ?? null,
       priceSnapshot: document.priceSnapshot ?? null,

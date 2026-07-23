@@ -397,7 +397,14 @@ function receiptNumber(data: TicketData) {
 }
 
 function receiptPaid(data: TicketData) {
+  if (data.paid !== undefined && data.paid !== null) return Number(data.paid)
   return data.payments?.reduce((total, payment) => total + Number(payment.amount ?? 0), 0) ?? 0
+}
+
+function receiptOutstanding(data: TicketData, paid: number) {
+  return data.outstanding !== undefined && data.outstanding !== null
+    ? Number(data.outstanding)
+    : Math.max(Number(data.total ?? 0) - paid, 0)
 }
 
 function ReceiptItems({ data, detailed = false }: { data: TicketData; detailed?: boolean }) {
@@ -428,7 +435,7 @@ function ReceiptItems({ data, detailed = false }: { data: TicketData; detailed?:
 
 function ReceiptTotals({ data, includeBalance = false }: { data: TicketData; includeBalance?: boolean }) {
   const paid = receiptPaid(data)
-  const balance = Math.max(Number(data.total ?? 0) - paid, 0)
+  const balance = receiptOutstanding(data, paid)
   return (
     <dl className="receipt-totals">
       <div><dt>Subtotal</dt><dd>{toMoney(data.subtotal)}</dd></div>
@@ -449,7 +456,7 @@ function SimpleNote({ data }: { data: TicketData }) {
       <div className="receipt-simple-head"><span>CANT.</span><span>PRODUCTO</span><span>IMPORTE</span></div>
       <ReceiptItems data={data} />
       <ReceiptTotals data={data} />
-      <dl className="receipt-payment"><div><dt>Pago: {paymentMethodLabel(data.payments?.[0]?.paymentMethod)}</dt><dd>{toMoney(paid)}</dd></div>{change > 0 && <div><dt>Cambio</dt><dd>{toMoney(change)}</dd></div>}</dl>
+      <dl className="receipt-payment"><div><dt>Pago: {paymentMethodLabel(data.paymentMethod ?? data.payments?.[0]?.paymentMethod)}</dt><dd>{toMoney(paid)}</dd></div>{change > 0 && <div><dt>Cambio</dt><dd>{toMoney(change)}</dd></div>}</dl>
       <footer className="receipt-footer"><strong>Gracias por su compra</strong><span>No es comprobante fiscal</span></footer>
     </div>
   )
@@ -470,19 +477,54 @@ function LargeNote({ data }: { data: TicketData }) {
 }
 
 function InternalReceipt({ data }: { data: TicketData }) {
-  const paid = receiptPaid(data) || Number(data.total ?? 0)
+  const paid = receiptPaid(data)
+  const outstanding = receiptOutstanding(data, paid)
   return (
     <div className="receipt-document receipt-format-internal">
       <header className="receipt-brand"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><div><strong>El Pollo de Los Pollos</strong><h2>RECIBO INTERNO</h2><span>NO VÁLIDO COMO COMPROBANTE FISCAL</span></div></header>
       <section className="receipt-section"><p><b>Folio:</b> {receiptNumber(data)}</p><p><b>Fecha:</b> {receiptDate(data.createdAt)}</p><p><b>Sucursal:</b> {data.locationName ?? data.locationId ?? '—'}</p></section>
-      <section className="receipt-section"><h3>TIPO DE MOVIMIENTO</h3><strong>Registro interno de venta</strong><p><b>Se recibió de:</b> {data.customerName ?? 'Público general'}</p><p className="receipt-amount"><b>Cantidad:</b> {toMoney(paid)}</p><p><b>Concepto:</b> Cobro de venta {data.saleNumber ?? receiptNumber(data)}</p><p><b>Referencia:</b> {receiptNumber(data)}</p></section>
+      <section className="receipt-section"><h3>TIPO DE MOVIMIENTO</h3><strong>Registro interno de venta</strong><p><b>Se recibió de:</b> {data.customerName ?? 'Público general'}</p><p><b>Total de venta:</b> {toMoney(data.total)}</p><p className="receipt-amount"><b>Pago recibido:</b> {toMoney(paid)}</p><p><b>Saldo pendiente:</b> {toMoney(outstanding)}</p>{data.paymentType === 'CREDIT_SALE' && <p><b>Fecha de vencimiento:</b> {data.dueDate ? receiptDate(data.dueDate) : '—'}</p>}<p><b>Concepto:</b> Cobro de venta {data.saleNumber ?? receiptNumber(data)}</p><p><b>Referencia:</b> {receiptNumber(data)}</p></section>
       <section className="receipt-signatures receipt-signatures-three"><span>Entregó: ______________</span><span>Recibió: ______________</span><span>Autorizó: ______________</span></section>
       <footer className="receipt-footer"><strong>DOCUMENTO DE CONTROL INTERNO</strong></footer>
     </div>
   )
 }
 
+function scaleQuantity(value: number | string | null | undefined, suffix: string) {
+  if (value === null || value === undefined) return '—'
+  return `${Number(value).toLocaleString('es-MX', { maximumFractionDigits: 3 })} ${suffix}`
+}
+
+function ScaleTicket({ data }: { data: TicketData }) {
+  const scale = data.scaleTicket
+  const productName = scale?.productName ?? data.items?.map((item) => item.productName ?? item.product).filter(Boolean).join(', ') ?? '—'
+  const netWeightKg = scale?.netWeightKg ?? data.items?.reduce((total, item) => total + Number(item.quantityKg ?? item.kilos ?? 0), 0)
+  const pieceCount = scale?.pieceCount ?? data.items?.reduce((total, item) => total + Number(item.quantityPieces ?? item.pieces ?? 0), 0)
+  const unit = scale?.productUnit ?? data.items?.[0]?.unit
+  const priceLabel = unit === 'PIECE' ? 'Precio por pieza' : unit === 'KG' ? 'Precio por kg' : 'Precio por kg o pieza'
+  const amount = scale?.amount ?? data.total
+
+  return (
+    <div className="receipt-document receipt-format-scale">
+      <header className="receipt-brand receipt-brand-centered"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><strong>El Pollo de Los Pollos</strong><span>{data.locationName ?? data.locationId ?? 'Punto de venta'}</span></header>
+      <section className="receipt-section"><h2>TICKET DE BÁSCULA</h2><p><b>Folio de báscula:</b> {scale?.physicalFolio ?? receiptNumber(data)}</p><p><b>Fecha y hora:</b> {receiptDate(scale?.capturedAt ?? data.createdAt)}</p><p><b>Producto:</b> {productName}</p></section>
+      <dl className="receipt-totals">
+        <div><dt>Peso bruto</dt><dd>{scaleQuantity(scale?.grossWeightKg, 'kg')}</dd></div>
+        <div><dt>Peso tara</dt><dd>{scaleQuantity(scale?.tareWeightKg, 'kg')}</dd></div>
+        <div><dt>Peso neto</dt><dd>{scaleQuantity(netWeightKg, 'kg')}</dd></div>
+        <div><dt>Piezas</dt><dd>{scaleQuantity(pieceCount, 'pzas')}</dd></div>
+        <div><dt>{priceLabel}</dt><dd>{toMoney(scale?.unitPrice ?? data.items?.[0]?.unitPrice)}</dd></div>
+        <div className="receipt-grand-total"><dt>IMPORTE</dt><dd>{toMoney(amount)}</dd></div>
+      </dl>
+      <section className="receipt-section"><p><b>Operador:</b> {scale?.operatorName ?? data.sellerName ?? '—'}</p><p><b>Punto de venta:</b> {data.locationName ?? data.locationId ?? '—'}</p></section>
+      <section className="receipt-signatures"><span>Firma o validación: ________________</span></section>
+      <footer className="receipt-footer"><strong>DOCUMENTO OPERATIVO DE BÁSCULA</strong><span>No es comprobante fiscal</span></footer>
+    </div>
+  )
+}
+
 function ReceiptDocument({ data }: { data: TicketData }) {
+  if (data.documentType === 'SCALE_TICKET') return <ScaleTicket data={data} />
   if (data.documentType === 'LARGE_NOTE') return <LargeNote data={data} />
   if (data.documentType === 'INTERNAL_RECEIPT') return <InternalReceipt data={data} />
   return <SimpleNote data={data} />
@@ -491,17 +533,17 @@ function ReceiptDocument({ data }: { data: TicketData }) {
 export function TicketModal({ fallback, isLoading, onClose, ticket }: TicketModalProps) {
   const portalReady = useSyncExternalStore(() => () => undefined, () => true, () => false)
   const data = ticket ?? fallback
-  if (!data) return null
+  if (!data && !isLoading) return null
   const modal = (
     <aside className="ticket-print-root fixed inset-0 z-40 grid place-items-center bg-black/55 p-3 sm:p-6">
-      <section className={`ticket-print-content max-h-[94vh] w-full overflow-y-auto bg-white text-[#171717] shadow-2xl sm:rounded-md ${data.documentType === 'SIMPLE_NOTE' ? 'max-w-[25rem]' : 'max-w-[52rem]'}`}>
+      <section className={`ticket-print-content max-h-[94vh] w-full overflow-y-auto bg-white text-[#171717] shadow-2xl sm:rounded-md ${data?.documentType === 'SIMPLE_NOTE' || data?.documentType === 'SCALE_TICKET' ? 'max-w-[25rem]' : 'max-w-[52rem]'}`}>
         <div className="ticket-actions sticky top-0 z-10 flex justify-end gap-5 border-b border-[#ececec] bg-white/95 px-6 py-4 backdrop-blur sm:px-10">
           <button className="text-sm font-bold text-[#292929] transition hover:text-black" onClick={() => window.print()} type="button">Imprimir</button>
           <button className="text-sm font-bold text-[#686868] transition hover:text-black" onClick={onClose} type="button">Cerrar</button>
         </div>
         <div className="p-5 sm:p-8">
           {isLoading && <p className="mb-4 rounded-lg bg-[#f5f3ee] p-3 text-sm font-bold text-[#39798b]">Cargando datos del documento...</p>}
-          <ReceiptDocument data={data} />
+          {data && <ReceiptDocument data={data} />}
         </div>
       </section>
     </aside>

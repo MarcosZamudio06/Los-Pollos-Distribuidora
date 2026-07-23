@@ -14,7 +14,26 @@ Respuesta `data.items[]`:
 
 - `id`, `saleId`, `documentType`, `physicalFolio`, `status`.
 - `requiresAdministrativeInvoice`, `operationalLocationId`, `routeId`.
-- `deliveredByUserId`, `collectedByUserId`, `createdAt`, `updatedAt`.
+- `deliveredByUserId`, `collectedByUserId`, `printTemplateVersion`, `createdAt`, `updatedAt`.
+
+## GET /api/sales/:saleId/documents/:documentId/print
+
+Propósito: obtener los datos inmutables para imprimir o reimprimir un documento específico.
+
+Permisos: `ADMIN`, `SELLER`, `COLLECTIONS` según alcance de la venta.
+
+Respuesta `data`:
+
+- Metadatos del `SaleDocument` solicitado: `ticketId`, `documentType`, `physicalFolio`, `createdAt`, `printTemplateVersion`.
+- Cliente desde `customerSnapshot`: `name`, `commercialName`, `customerNumber`, `address`, `phone`, `taxId`, `paymentTermsDays`.
+- Partidas desde `productSnapshot.items[]`: `name`, `sku`, `unit`, `quantityKg`, `quantityPieces`, `unitPrice`, `subtotal`.
+- Importes desde `priceSnapshot`: `subtotal`, `discount`, `tax`, `total`, `paid`, `outstanding` y fecha de vencimiento cuando aplique.
+
+Validaciones:
+
+- `documentId` debe pertenecer al `saleId` solicitado y respetar el alcance del actor.
+- No consultar ni completar el documento con datos actuales de `Customer`, `Product`, `Sale` o `SaleItem`.
+- No devolver campos de CFDI, SAT, PAC, UUID, cadena original o sello digital.
 
 ## POST /api/sales/:saleId/documents
 
