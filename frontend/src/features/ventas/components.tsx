@@ -2,8 +2,8 @@ import { AlertTriangle, CheckCircle2, PackageSearch, Search, ShoppingCart } from
 import { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
-import type { CartItem, CustomerOption, InitialPaymentReference, PaymentMethod, PaymentType, ProductOption, TicketData } from './types'
-import { calculateCartTotal, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
+import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, SalePaymentInput, TicketData } from './types'
+import { calculateCartTotal, calculateCashChange, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
 import { operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
 
 type ProductSearchProps = {
@@ -228,26 +228,25 @@ export function CustomerSelector({ customers, error, isLoading, onSearchChange, 
 }
 
 type PaymentMethodSelectorProps = {
-  initialPaymentAmount: number
-  onPaymentMethodChange: (method: PaymentMethod) => void
-  onInitialPaymentAmountChange: (amount: number) => void
   onPaymentTypeChange: (type: PaymentType) => void
-  onPaymentReferenceChange: (reference: InitialPaymentReference) => void
-  paymentMethod: PaymentMethod
-  paymentReference: InitialPaymentReference
+  onPaymentsChange: (payments: SalePaymentInput[]) => void
   paymentType: PaymentType
+  payments: SalePaymentInput[]
+  total: number
 }
 
 export function PaymentMethodSelector({
-  initialPaymentAmount,
-  onInitialPaymentAmountChange,
-  onPaymentMethodChange,
   onPaymentTypeChange,
-  onPaymentReferenceChange,
-  paymentMethod,
-  paymentReference,
+  onPaymentsChange,
   paymentType,
+  payments,
+  total,
 }: PaymentMethodSelectorProps) {
+  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0)
+  const updatePayment = (index: number, update: Partial<SalePaymentInput>) => {
+    onPaymentsChange(payments.map((payment, currentIndex) => currentIndex === index ? { ...payment, ...update } : payment))
+  }
+
   return (
     <section className={panelClass}>
       <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black tracking-[-0.04em]">Tipo de venta y pago</h2><AlertTriangle className="h-5 w-5 text-[var(--erp-brand-gold-deep)]" /></div>
@@ -255,38 +254,39 @@ export function PaymentMethodSelector({
         <button className={`rounded-xl px-4 py-3 font-black ${paymentType === 'CASH_SALE' ? 'bg-[var(--erp-foreground)] text-white' : 'bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
         <button className={`rounded-xl px-4 py-3 font-black ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--erp-foreground)] text-white' : 'bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
       </div>
-      <label className="mt-4 grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
-        Método del pago inicial
-        <select className={inputClass} onChange={(event) => onPaymentMethodChange(event.target.value as PaymentMethod)} value={paymentMethod}>
-          <option value="">No se recibe dinero ahora</option>
-          <option value="CASH">Efectivo</option>
-          <option value="CARD">Tarjeta</option>
-          <option value="TRANSFER">Transferencia</option>
-          <option value="DEPOSIT">Depósito</option>
-          <option value="CHECK">Cheque</option>
-        </select>
-      </label>
-      {(paymentMethod === 'TRANSFER' || paymentMethod === 'DEPOSIT' || paymentMethod === 'CHECK') && <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Banco<input className={inputClass} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, bankName: event.target.value })} value={paymentReference.bankName} /></label>
-        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">{paymentMethod === 'CHECK' ? 'Número de cheque' : 'Referencia'}<input className={inputClass} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, referenceNumber: event.target.value })} value={paymentReference.referenceNumber} /></label>
-      </div>}
-      {paymentMethod === 'CARD' && <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Autorización<input className={inputClass} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, referenceNumber: event.target.value })} value={paymentReference.referenceNumber} /></label>
-        <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Últimos cuatro dígitos<input className={inputClass} inputMode="numeric" maxLength={4} onChange={(event) => onPaymentReferenceChange({ ...paymentReference, cardLastFour: event.target.value.replace(/\D/g, '').slice(0, 4) })} value={paymentReference.cardLastFour} /></label>
-      </div>}
-      {paymentType === 'CREDIT_SALE' && (
-        <label className="mt-4 grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
-          Monto del pago inicial
-          <input
-            className={inputClass}
-            min="0"
-            onChange={(event) => onInitialPaymentAmountChange(Number(event.target.value))}
-            step="0.01"
-            type="number"
-            value={initialPaymentAmount}
-          />
-        </label>
-      )}
+      <div className="mt-4 grid gap-3">
+        <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-[var(--erp-muted-foreground)]">Pagos recibidos</p><span className="text-sm font-black text-[var(--erp-foreground)]">{toMoney(totalPaid)} / {toMoney(total)}</span></div>
+        {payments.map((payment, index) => (
+          <article className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] p-3" key={`${payment.paymentMethod}-${index}`}>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto]">
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Método
+                <select className={inputClass} onChange={(event) => updatePayment(index, { paymentMethod: event.target.value as PaymentMethod, cashTendered: undefined, bankName: '', referenceNumber: '', cardLastFour: '' })} value={payment.paymentMethod}>
+                  <option value="">Selecciona un método</option><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option><option value="DEPOSIT">Depósito</option><option value="CHECK">Cheque</option><option value="VOUCHER">Voucher</option><option value="OTHER">Otro</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Monto
+                <input className={inputClass} min="0.01" onChange={(event) => updatePayment(index, { amount: Number(event.target.value) })} step="0.01" type="number" value={payment.amount || ''} />
+              </label>
+              <button className="self-end rounded-xl px-3 py-3 text-sm font-black text-[var(--erp-danger)] hover:bg-white" onClick={() => onPaymentsChange(payments.filter((_, currentIndex) => currentIndex !== index))} type="button">Quitar</button>
+            </div>
+            {payment.paymentMethod === 'CASH' && <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Efectivo entregado
+                <input className={inputClass} min={payment.amount || 0.01} onChange={(event) => updatePayment(index, { cashTendered: event.target.value === '' ? undefined : Number(event.target.value) })} step="0.01" type="number" value={payment.cashTendered ?? ''} />
+              </label>
+              {payment.cashTendered !== undefined && payment.cashTendered >= payment.amount && <div className="grid content-end gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]"><span>Cambio</span><output className={`${inputClass} bg-[var(--erp-surface-elevated)]`}>{toMoney(calculateCashChange(payment.cashTendered, payment.amount))}</output></div>}
+            </div>}
+            {(payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT' || payment.paymentMethod === 'CHECK') && <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Banco<input className={inputClass} onChange={(event) => updatePayment(index, { bankName: event.target.value })} value={payment.bankName ?? ''} /></label>
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">{payment.paymentMethod === 'CHECK' ? 'Número de cheque' : 'Referencia'}<input className={inputClass} onChange={(event) => updatePayment(index, { referenceNumber: event.target.value })} value={payment.referenceNumber ?? ''} /></label>
+            </div>}
+            {(payment.paymentMethod === 'CARD' || payment.paymentMethod === 'VOUCHER') && <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Autorización<input className={inputClass} onChange={(event) => updatePayment(index, { referenceNumber: event.target.value })} value={payment.referenceNumber ?? ''} /></label>
+              <label className="grid gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">Últimos cuatro dígitos<input className={inputClass} inputMode="numeric" maxLength={4} onChange={(event) => updatePayment(index, { cardLastFour: event.target.value.replace(/\D/g, '').slice(0, 4) })} value={payment.cardLastFour ?? ''} /></label>
+            </div>}
+          </article>
+        ))}
+        <button className="rounded-xl border border-dashed border-[color:var(--erp-info)] px-4 py-3 text-sm font-black text-[var(--erp-info)]" onClick={() => onPaymentsChange([...payments, { amount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
+      </div>
       {paymentType === 'CREDIT_SALE' && <p className="mt-3 text-sm text-[var(--erp-muted-foreground)]">Las ventas a crédito generan cuentas por cobrar. La cobranza se mantiene en su propio flujo.</p>}
     </section>
   )
@@ -446,9 +446,25 @@ function ReceiptTotals({ data, includeBalance = false }: { data: TicketData; inc
   )
 }
 
+function receiptPaymentMethods(data: TicketData) {
+  if (data.payments && data.payments.length > 1) {
+    return data.payments.map((payment) => paymentMethodLabel(payment.paymentMethod)).join(' · ')
+  }
+  return paymentMethodLabel(data.paymentMethod ?? data.payments?.[0]?.paymentMethod)
+}
+
+function ReceiptCashEvidence({ data }: { data: TicketData }) {
+  const cashPayments = data.payments?.filter((payment) => payment.paymentMethod === 'CASH' && payment.cashTendered !== null && payment.cashTendered !== undefined && payment.changeGiven !== null && payment.changeGiven !== undefined) ?? []
+  if (cashPayments.length === 0) return null
+  return (
+    <dl className="receipt-payment">
+      {cashPayments.map((payment, index) => <div key={`cash-evidence-${index}`}><dt>Efectivo entregado</dt><dd>{toMoney(payment.cashTendered)}</dd><dt>Cambio</dt><dd>{toMoney(payment.changeGiven)}</dd></div>)}
+    </dl>
+  )
+}
+
 function SimpleNote({ data }: { data: TicketData }) {
   const paid = receiptPaid(data)
-  const change = Math.max(paid - Number(data.total ?? 0), 0)
   return (
     <div className="receipt-document receipt-format-simple">
       <header className="receipt-brand receipt-brand-centered"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><strong>El Pollo de Los Pollos</strong><span>{data.locationName ?? data.locationId ?? 'Punto de venta'}</span></header>
@@ -456,7 +472,8 @@ function SimpleNote({ data }: { data: TicketData }) {
       <div className="receipt-simple-head"><span>CANT.</span><span>PRODUCTO</span><span>IMPORTE</span></div>
       <ReceiptItems data={data} />
       <ReceiptTotals data={data} />
-      <dl className="receipt-payment"><div><dt>Pago: {paymentMethodLabel(data.paymentMethod ?? data.payments?.[0]?.paymentMethod)}</dt><dd>{toMoney(paid)}</dd></div>{change > 0 && <div><dt>Cambio</dt><dd>{toMoney(change)}</dd></div>}</dl>
+      <dl className="receipt-payment"><div><dt>Pago: {receiptPaymentMethods(data)}</dt><dd>{toMoney(paid)}</dd></div></dl>
+      <ReceiptCashEvidence data={data} />
       <footer className="receipt-footer"><strong>Gracias por su compra</strong><span>No es comprobante fiscal</span></footer>
     </div>
   )
@@ -470,6 +487,7 @@ function LargeNote({ data }: { data: TicketData }) {
       <section className="receipt-section"><h3>DATOS DEL CLIENTE</h3><p><b>Nombre:</b> {data.customerName ?? 'Público general'}</p>{data.customerAddress && <p><b>Dirección:</b> {data.customerAddress}</p>}{data.customerPhone && <p><b>Teléfono:</b> {data.customerPhone}</p>}{data.customerTaxId && <p><b>RFC:</b> {data.customerTaxId}</p>}<p><b>Condición:</b> {data.paymentType === 'CREDIT_SALE' ? `Crédito${data.customerCreditDays ? ` a ${data.customerCreditDays} días` : ''}` : 'Contado'}</p></section>
       <ReceiptItems data={data} detailed />
       <ReceiptTotals data={data} includeBalance />
+      <ReceiptCashEvidence data={data} />
       <section className="receipt-signatures"><span>Entregó: ______________</span><span>Recibió: ______________</span><span>Firma: ________________</span><span>Firma: _________________</span></section>
       <footer className="receipt-footer">Documento comercial no válido como comprobante fiscal</footer>
     </div>
@@ -484,6 +502,7 @@ function InternalReceipt({ data }: { data: TicketData }) {
       <header className="receipt-brand"><img alt="El Pollo de Los Pollos" src="/477123481_10232415903693976_8230121272963336539_n.svg" /><div><strong>El Pollo de Los Pollos</strong><h2>RECIBO INTERNO</h2><span>NO VÁLIDO COMO COMPROBANTE FISCAL</span></div></header>
       <section className="receipt-section"><p><b>Folio:</b> {receiptNumber(data)}</p><p><b>Fecha:</b> {receiptDate(data.createdAt)}</p><p><b>Sucursal:</b> {data.locationName ?? data.locationId ?? '—'}</p></section>
       <section className="receipt-section"><h3>TIPO DE MOVIMIENTO</h3><strong>Registro interno de venta</strong><p><b>Se recibió de:</b> {data.customerName ?? 'Público general'}</p><p><b>Total de venta:</b> {toMoney(data.total)}</p><p className="receipt-amount"><b>Pago recibido:</b> {toMoney(paid)}</p><p><b>Saldo pendiente:</b> {toMoney(outstanding)}</p>{data.paymentType === 'CREDIT_SALE' && <p><b>Fecha de vencimiento:</b> {data.dueDate ? receiptDate(data.dueDate) : '—'}</p>}<p><b>Concepto:</b> Cobro de venta {data.saleNumber ?? receiptNumber(data)}</p><p><b>Referencia:</b> {receiptNumber(data)}</p></section>
+      <ReceiptCashEvidence data={data} />
       <section className="receipt-signatures receipt-signatures-three"><span>Entregó: ______________</span><span>Recibió: ______________</span><span>Autorizó: ______________</span></section>
       <footer className="receipt-footer"><strong>DOCUMENTO DE CONTROL INTERNO</strong></footer>
     </div>

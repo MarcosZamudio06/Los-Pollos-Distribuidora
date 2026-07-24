@@ -692,6 +692,8 @@ Campos:
 - collectedByUserId
 - collectionPass
 - amount
+- cashTendered (opcional, solo efectivo físico recibido)
+- changeGiven (opcional, calculado en servidor)
 - paymentMethod
 - bankName
 - referenceNumber
@@ -715,11 +717,13 @@ Reglas:
 - `customerId` no es obligatorio universalmente: en cobranza se deriva de `AccountReceivable.customerId`; en contado inmediato se deriva de `Sale.customerId` cuando exista y puede ser nulo para público general.
 - Si `customerId` se persiste por trazabilidad, debe coincidir con la cuenta por cobrar o venta asociada y no constituye una fuente independiente.
 - Un pago no puede exceder el saldo pendiente salvo regla futura para anticipos o saldos a favor.
+- `cashTendered` solo se registra en pagos `CASH`; cuando existe es positivo, no menor que `amount` y `changeGiven` se calcula como `cashTendered - amount` con redondeo monetario.
 - Los cobros recibidos por chofer deben poder asociarse a liquidación de ruta cuando aplique.
 - Una segunda vuelta de cobranza debe poder conservarse con `collectionPass` y `collectedByUserId`.
 - Debe conservar banco, referencia y documento aplicado para auditoría administrativa.
 - Transferencias, depósitos y cheques requieren banco y referencia; tarjeta o voucher requieren autorización en `referenceNumber` y los últimos cuatro dígitos en `cardLastFour`.
 - `Payment` es la única fuente monetaria del sistema para dinero recibido.
+- Las agregaciones de venta, caja, cartera y reportes usan `Payment.amount`; el efectivo entregado y el cambio son evidencia del pago y no crean otro pago, reembolso o movimiento de caja.
 - Contraentrega no registra dinero hasta que exista `Payment`.
 
 Estados sugeridos:

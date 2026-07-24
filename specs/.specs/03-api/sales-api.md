@@ -52,11 +52,11 @@ Permisos: `ADMIN`, `SELLER`.
 
 Body importante:
 
-`initialPayment` es opcional cuando no se recibe dinero al confirmar la venta. Si se envía, requiere `amount` y `paymentMethod`; el backend asigna `paidAt`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`.
+`payments` es opcional cuando no se recibe dinero al confirmar la venta. Cada elemento requiere `amount` positivo y `paymentMethod`; el backend asigna `paidAt` a cada `Payment`. Para `CASH`, `cashTendered` es opcional y representa efectivo físico recibido: debe ser positivo y no menor que `amount`; el backend calcula y persiste `changeGiven`. El cliente no envía `changeGiven`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`. La suma de `payments[].amount` no puede superar el total de la venta.
 
 ```json
 {
-  "customerId": "string opcional para contado pagado al momento; requerido para crédito o contraentrega sin pago inicial",
+  "customerId": "string opcional para contado pagado al momento; requerido para crédito o contraentrega sin pagos",
   "locationId": "string",
   "saleChannel": "COUNTER",
   "documentType": "SIMPLE_NOTE",
@@ -67,12 +67,11 @@ Body importante:
     "notes": "Notas opcionales"
   },
   "paymentType": "CASH_SALE",
-  "initialPayment": {
-    "amount": 500,
-    "paymentMethod": "CARD",
-    "referenceNumber": "AUTH-123",
-    "cardLastFour": "4242"
-  },
+  "payments": [
+    { "amount": 500, "paymentMethod": "CASH", "cashTendered": 600 },
+    { "amount": 700, "paymentMethod": "TRANSFER", "bankName": "Banco Norte", "referenceNumber": "TRANSFER-001" },
+    { "amount": 300, "paymentMethod": "CARD", "referenceNumber": "AUTH-123", "cardLastFour": "4242" }
+  ],
   "discountAuthorizationId": "string opcional; autorización creada por ADMIN",
   "commercialPolicyId": "string opcional",
   "administrativeOverrideReason": "string opcional",
@@ -91,7 +90,7 @@ Body importante:
 Respuesta `data`:
 
 - `sale`: encabezado, items, totales calculados en backend y `locationId`.
-- `payment` cuando exista abono inicial o pago total.
+- `payments[]` cuando exista abono inicial o pago total.
 - `accountReceivable` cuando exista saldo pendiente.
 - `billingRequest` cuando se genere o relacione solicitud administrativa.
 - `inventoryMovements[]` generados.
@@ -115,15 +114,16 @@ Validaciones:
 - Generar `saleNumber` en backend desde una secuencia atómica; no depende del conteo de ventas.
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
 - `quantityPieces` debe ser entero cuando aplique.
-- Venta de contado completamente pagada requiere `initialPayment` por el total o flujo equivalente de `Payment`.
-- El pago inmediato de contado se registra como `Payment` asociado a `saleId`; no crea `AccountReceivable` artificial.
-- El pago inicial inmediato del POS siempre asigna `paidAt` en el servidor; no acepta una fecha del cliente.
-- Una venta de contado contraentrega puede confirmarse sin `initialPayment`; en ese momento no existe `Payment` ni `paymentMethod` recibido, pero requiere cliente registrado para conservar el saldo pendiente.
+- Venta de contado completamente pagada requiere que la suma de `payments[]` cubra el total o flujo equivalente de `Payment`.
+- Cada pago inmediato de contado se registra como un `Payment` asociado a `saleId`; no crea `AccountReceivable` artificial.
+- `payments[].amount` permanece como monto aplicado contable. `cashTendered` y `changeGiven` son evidencia individual del `Payment` en efectivo, no modifican el total aplicado ni generan pago, reembolso o movimiento de caja adicional.
+- Los pagos inmediatos del POS siempre asignan `paidAt` en el servidor; no aceptan una fecha del cliente.
+- Una venta de contado contraentrega puede confirmarse sin `payments`; en ese momento no existe `Payment` ni `paymentMethod` recibido, pero requiere cliente registrado para conservar el saldo pendiente.
 - Si la contraentrega deja saldo pendiente, debe generar `AccountReceivable` conforme al canon de todo saldo pendiente.
 - El pago posterior de contraentrega liquida saldo pendiente como cobranza y requiere `Payment.accountReceivableId`.
 - Venta a crédito requiere cliente registrado con crédito autorizado.
-- Venta a crédito sin pago inicial genera `AccountReceivable` por el total.
-- Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
+- Venta a crédito sin pagos genera `AccountReceivable` por el total.
+- Venta a crédito con uno o más abonos inmediatos genera un `Payment` por cada elemento y `AccountReceivable` por el saldo.
 - Rechazar venta a crédito si cliente está bloqueado por mora o excede límite sin autorización administrativa explícita.
 - La política enviada debe coincidir con la asignada al cliente y estar activa dentro de su vigencia.
 - `WARN_ONLY` permite confirmar y devuelve `creditWarnings[]`; `BLOCK_NEW_CREDIT` rechaza salvo override permitido.
@@ -135,8 +135,8 @@ Validaciones:
 - Si `requiresAdministrativeInvoice=true`, la venta solo genera relación administrativa; no emite CFDI.
 - Si `requiresAdministrativeInvoice=true`, `customerId` y `billingRequest.reason` son obligatorios; `billingRequest.notes` es opcional.
 - No se aceptan identificadores internos de solicitud escritos manualmente.
-- Descontar inventario, crear venta, items, pago inicial y cuenta por cobrar cuando aplique en una transacción.
-- Requerir idempotencia para creación de venta y pago inicial.
+- Descontar inventario, crear venta, items, pagos y cuenta por cobrar cuando aplique en una transacción.
+- Requerir idempotencia para creación de venta y sus pagos inmediatos.
 - Una repetición idempotente debe comprobar el permiso de lectura sobre la venta existente antes de responder. La clave queda ligada al usuario y ubicación persistidos por la venta.
 - Para `KG_AND_PIECE` se acepta kilo, pieza o ambos; la equivalencia activa solo es obligatoria cuando se capturan piezas para conversión.
 - Reintentar conflictos únicos transitorios relacionados con `saleNumber`.

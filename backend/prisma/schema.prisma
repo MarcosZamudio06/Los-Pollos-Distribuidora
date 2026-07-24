@@ -804,6 +804,8 @@ model Payment {
   collectedByUserId          String?
   collectionPass             Int?
   amount                     Decimal                @db.Decimal(14, 2)
+  cashTendered               Decimal?               @db.Decimal(14, 2)
+  changeGiven                Decimal?               @db.Decimal(14, 2)
   paymentMethod              PaymentMethod
   bankName                   String?
   referenceNumber            String?

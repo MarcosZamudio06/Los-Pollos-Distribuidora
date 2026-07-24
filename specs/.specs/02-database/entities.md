@@ -254,6 +254,8 @@ Validaciones:
 - `userId` requerido.
 - `amount` mayor a 0.
 - `paymentMethod` requerido.
+- `cashTendered` es evidencia opcional del efectivo físico recibido y solo es válido cuando `paymentMethod=CASH`; si existe debe ser positivo y no menor que `amount`.
+- `changeGiven` se calcula en servidor como `cashTendered - amount` redondeado a moneda y se conserva en el mismo `Payment`; no es una segunda fuente monetaria ni un pago adicional.
 - Cada pago de cobranza del MVP debe aplicarse exactamente a una cuenta por cobrar mediante `Payment.accountReceivableId`.
 - Una venta de contado completamente pagada no debe crear una cuenta por cobrar artificial solo para registrar el pago.
 - El pago no debe exceder el saldo pendiente salvo regla futura para anticipos o saldos a favor.
@@ -264,6 +266,7 @@ Validaciones:
 - Debe poder indicar `collectedByUserId` y `collectionPass` cuando exista segunda vuelta de cobranza.
 - Debe conservar estado para permitir cancelación o aplicación controlada sin eliminar historial.
 - Es la única fuente monetaria válida para efectivo, transferencia, depósito, tarjeta, voucher u otros cobros.
+- Los totales, caja, cartera, reportes y movimientos derivados de pagos usan exclusivamente `Payment.amount`; `cashTendered` y `changeGiven` no se agregan ni generan `CashMovement` o reembolso separados.
 
 Estados sugeridos:
 

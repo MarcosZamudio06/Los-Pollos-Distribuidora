@@ -15,6 +15,10 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
+export function calculateCashChange(cashTendered: number, amount: number) {
+  return roundMoney(cashTendered - amount)
+}
+
 export function itemQuantity(item: CartItem) {
   if (item.unit === 'KG') return item.quantityKg
   if (item.unit === 'PIECE') return item.quantityPieces
@@ -78,8 +82,40 @@ export function getPaymentReferenceValidationError(paymentMethod: PaymentMethod,
   if ((paymentMethod === 'TRANSFER' || paymentMethod === 'DEPOSIT' || paymentMethod === 'CHECK') && (!bankName || !referenceNumber)) {
     return 'Captura el banco y la referencia del pago.'
   }
-  if (paymentMethod === 'CARD' && (!referenceNumber || !/^\d{4}$/.test(cardLastFour))) {
+  if ((paymentMethod === 'CARD' || paymentMethod === 'VOUCHER') && (!referenceNumber || !/^\d{4}$/.test(cardLastFour))) {
     return 'Captura la autorización y los últimos cuatro dígitos de la tarjeta.'
+  }
+  return null
+}
+
+export function getPaymentsValidationError(
+  payments: BuildCreateSalePayloadInput['payments'],
+  total: number,
+) {
+  if (payments.some((payment) => !payment.paymentMethod || !Number.isFinite(payment.amount) || payment.amount <= 0)) {
+    return 'Captura un método y un monto mayor que cero para cada pago.'
+  }
+  const enteredPaid = roundMoney(payments.reduce((sum, payment) => sum + payment.amount, 0))
+  const paid = roundMoney(payments.reduce((sum, payment) => sum + roundMoney(payment.amount), 0))
+  if (paid !== enteredPaid) return 'Los montos de pago no pueden alterar el total al redondearse a centavos.'
+  if (paid > total) return 'El total recibido no puede exceder el total de la venta.'
+
+  for (const payment of payments) {
+    if (payment.cashTendered !== undefined) {
+      if (payment.paymentMethod !== 'CASH') return 'El efectivo entregado solo aplica a pagos en efectivo.'
+      if (!Number.isFinite(payment.cashTendered)) return 'El efectivo entregado no puede ser menor al monto aplicado.'
+      const cashTendered = roundMoney(payment.cashTendered)
+      const appliedAmount = roundMoney(payment.amount)
+      if (cashTendered <= 0 || cashTendered < appliedAmount) {
+        return 'El efectivo entregado no puede ser menor al monto aplicado.'
+      }
+    }
+    const referenceError = getPaymentReferenceValidationError(payment.paymentMethod, {
+      bankName: payment.bankName ?? '',
+      referenceNumber: payment.referenceNumber ?? '',
+      cardLastFour: payment.cardLastFour ?? '',
+    })
+    if (referenceError) return referenceError
   }
   return null
 }
@@ -134,11 +170,11 @@ export function getSaleRestriction(
   paymentType: PaymentType,
   customer: CustomerOption | null,
   total: number,
-  paymentMethod: PaymentMethod,
+  hasImmediatePayment: boolean,
   options: CreditRestrictionOptions = {},
 ) {
-  if (paymentType === 'CASH_SALE' && !paymentMethod && (!customer || customer.isActive === false || customer.active === false)) {
-    return 'Selecciona un cliente activo cuando no se capture pago inicial.'
+  if (paymentType === 'CASH_SALE' && !hasImmediatePayment && (!customer || customer.isActive === false || customer.active === false)) {
+    return 'Selecciona un cliente activo cuando no se capturen pagos.'
   }
 
   return getCreditRestriction(paymentType, customer, total, options)
@@ -171,18 +207,18 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
   const physicalFolio = input.physicalFolio.trim()
   const billingRequestReason = input.billingRequestReason?.trim()
   const billingRequestNotes = input.billingRequestNotes?.trim()
-  const paymentReference = input.paymentReference ?? { bankName: '', referenceNumber: '', cardLastFour: '' }
-  const initialPaymentAmount = input.initialPaymentAmount ?? (input.paymentType === 'CASH_SALE' ? input.total : 0)
-  const initialPayment =
-    input.paymentMethod && initialPaymentAmount > 0
-      ? {
-          amount: roundMoney(initialPaymentAmount),
-          paymentMethod: input.paymentMethod,
-          bankName: paymentReference.bankName.trim() || undefined,
-          referenceNumber: paymentReference.referenceNumber.trim() || undefined,
-          cardLastFour: paymentReference.cardLastFour.trim() || undefined,
-        }
-      : undefined
+  const payments = input.payments
+    .filter((payment): payment is typeof payment & { paymentMethod: Exclude<PaymentMethod, ''> } => Boolean(payment.paymentMethod) && payment.amount > 0)
+    .map((payment) => ({
+      amount: roundMoney(payment.amount),
+      paymentMethod: payment.paymentMethod,
+      ...(payment.paymentMethod === 'CASH' && payment.cashTendered !== undefined
+        ? { cashTendered: roundMoney(payment.cashTendered) }
+        : {}),
+      bankName: payment.bankName?.trim() || undefined,
+      referenceNumber: payment.referenceNumber?.trim() || undefined,
+      cardLastFour: payment.cardLastFour?.trim() || undefined,
+    }))
 
   return {
     customerId: input.customer?.id,
@@ -195,7 +231,7 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
       ? { reason: billingRequestReason, notes: billingRequestNotes || undefined }
       : undefined,
     paymentType: input.paymentType,
-    initialPayment,
+    payments: payments.length > 0 ? payments : undefined,
     commercialPolicyId: input.customer?.commercialPolicyId ?? input.customer?.creditSummary?.commercialPolicyId ?? undefined,
     administrativeOverrideReason: input.administrativeOverrideReason?.trim() || undefined,
     items: input.cart.map((item) => ({

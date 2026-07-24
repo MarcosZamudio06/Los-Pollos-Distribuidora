@@ -610,6 +610,8 @@ describe('SalesService', () => {
           paidAt: now,
           saleId: 'sale-1',
           accountReceivableId: null,
+          cashTendered: null,
+          changeGiven: null,
         },
       ],
       legend: 'Comprobante interno sin validez fiscal',
@@ -680,6 +682,132 @@ describe('SalesService', () => {
       dueDate: '2026-07-06T10:00:00.000Z',
       templateVersion: 1,
       items: [expect.objectContaining({ productName: 'Pollo original', sku: 'POL-100', unit: ProductUnit.KG, quantityKg: 2.5, unitPrice: 100, subtotal: 250 })],
+    });
+  });
+
+  it('returns every applied persisted payment when printing a split-payment sale document', async () => {
+    const { service, prisma } = createService();
+    prisma.saleDocument.findFirst.mockResolvedValue({
+      id: 'doc-split-1',
+      saleId: 'sale-split-1',
+      documentType: SaleDocumentType.INTERNAL_RECEIPT,
+      operationalLocationId: 'loc-1',
+      physicalFolio: 'T-200',
+      status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false,
+      printTemplateVersion: 1,
+      customerSnapshot: null,
+      productSnapshot: { items: [] },
+      priceSnapshot: {
+        subtotal: 250,
+        discount: 0,
+        tax: 0,
+        total: 250,
+        paid: 250,
+        outstanding: 0,
+        paymentType: SalePaymentType.CASH_SALE,
+        paymentMethod: null,
+        dueDate: null,
+      },
+      sale: {
+        payments: [
+          { amount: decimal('100'), paymentMethod: PaymentMethod.CASH, paidAt: new Date('2026-06-21T10:01:00.000Z'), status: PaymentStatus.APPLIED },
+          { amount: decimal('150'), paymentMethod: PaymentMethod.CARD, paidAt: new Date('2026-06-21T10:02:00.000Z'), status: PaymentStatus.APPLIED },
+        ],
+      },
+      createdAt: now,
+      updatedAt: now,
+      scaleTicketReferences: [],
+    });
+
+    const ticket = await service.getDocumentPrint('sale-split-1', 'doc-split-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(prisma.saleDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        sale: {
+          select: {
+            payments: {
+              where: { status: PaymentStatus.APPLIED },
+              orderBy: { paidAt: 'asc' },
+            },
+          },
+        },
+      }),
+    }));
+    expect(ticket).toMatchObject({
+      paymentMethod: null,
+      payments: [
+        { amount: '100', paymentMethod: PaymentMethod.CASH, paidAt: new Date('2026-06-21T10:01:00.000Z') },
+        { amount: '150', paymentMethod: PaymentMethod.CARD, paidAt: new Date('2026-06-21T10:02:00.000Z') },
+      ],
+    });
+  });
+
+  it('returns persisted cash tendered and change on printed payments without fabricating historical values', async () => {
+    const { service, prisma } = createService();
+    prisma.saleDocument.findFirst.mockResolvedValue({
+      id: 'doc-cash-change-1', saleId: 'sale-cash-change-1', documentType: SaleDocumentType.SIMPLE_NOTE,
+      operationalLocationId: 'loc-1', physicalFolio: 'T-202', status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false, printTemplateVersion: 1, customerSnapshot: null,
+      productSnapshot: { items: [] },
+      priceSnapshot: { subtotal: 187.5, discount: 0, tax: 0, total: 187.5, paid: 187.5, outstanding: 0, paymentType: SalePaymentType.CASH_SALE, paymentMethod: PaymentMethod.CASH, dueDate: null },
+      sale: {
+        payments: [
+          { amount: decimal('187.50'), paymentMethod: PaymentMethod.CASH, cashTendered: decimal('200'), changeGiven: decimal('12.50'), paidAt: now, status: PaymentStatus.APPLIED },
+          { amount: decimal('0.01'), paymentMethod: PaymentMethod.CASH, cashTendered: null, changeGiven: null, paidAt: now, status: PaymentStatus.APPLIED },
+        ],
+      },
+      createdAt: now, updatedAt: now, scaleTicketReferences: [],
+    });
+
+    const ticket = await service.getDocumentPrint('sale-cash-change-1', 'doc-cash-change-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(ticket.payments).toEqual([
+      expect.objectContaining({ amount: '187.5', cashTendered: '200', changeGiven: '12.5' }),
+      expect.objectContaining({ amount: '0.01', cashTendered: null, changeGiven: null }),
+    ]);
+  });
+
+  it('returns the persisted single payment when printing a one-payment sale document', async () => {
+    const { service, prisma } = createService();
+    const paidAt = new Date('2026-06-21T10:03:00.000Z');
+    prisma.saleDocument.findFirst.mockResolvedValue({
+      id: 'doc-single-1',
+      saleId: 'sale-single-1',
+      documentType: SaleDocumentType.INTERNAL_RECEIPT,
+      operationalLocationId: 'loc-1',
+      physicalFolio: 'T-201',
+      status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false,
+      printTemplateVersion: 1,
+      customerSnapshot: null,
+      productSnapshot: { items: [] },
+      priceSnapshot: {
+        subtotal: 250,
+        discount: 0,
+        tax: 0,
+        total: 250,
+        paid: 250,
+        outstanding: 0,
+        paymentType: SalePaymentType.CASH_SALE,
+        paymentMethod: PaymentMethod.TRANSFER,
+        dueDate: null,
+      },
+      sale: {
+        payments: [
+          { amount: decimal('250'), paymentMethod: PaymentMethod.TRANSFER, paidAt, status: PaymentStatus.APPLIED },
+        ],
+      },
+      createdAt: now,
+      updatedAt: now,
+      scaleTicketReferences: [],
+    });
+
+    const ticket = await service.getDocumentPrint('sale-single-1', 'doc-single-1', { id: 'seller-1', role: 'SELLER' });
+
+    expect(ticket).toMatchObject({
+      paymentMethod: PaymentMethod.TRANSFER,
+      payments: [{ amount: '250', paymentMethod: PaymentMethod.TRANSFER, paidAt }],
     });
   });
 
@@ -932,7 +1060,7 @@ describe('SalesService', () => {
     );
   });
 
-  it('uses the server timestamp for an immediate payment instead of the client supplied paidAt value', async () => {
+  it('supports the deprecated initialPayment contract and uses the server timestamp instead of client supplied paidAt', async () => {
     const { service, prisma } = createService();
     const serverPaidAt = new Date('2026-06-21T12:00:00.000Z');
     mockHappyPath(prisma);
@@ -957,6 +1085,159 @@ describe('SalesService', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('persists one payment per split payment item and settles the sale using their combined amount', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    const result = await service.create(
+      validCashSale({
+        initialPayment: undefined,
+        payments: [
+          { amount: 100, paymentMethod: PaymentMethod.CASH },
+          { amount: 100, paymentMethod: PaymentMethod.TRANSFER, bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' },
+          { amount: 50, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' },
+        ],
+      }),
+      seller(),
+      'idem-split-payment',
+    );
+
+    expect(prisma.payment.create).toHaveBeenCalledTimes(3);
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: expect.objectContaining({ saleId: 'sale-1', amount: 100, paymentMethod: PaymentMethod.CASH }) }));
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: expect.objectContaining({ saleId: 'sale-1', amount: 100, paymentMethod: PaymentMethod.TRANSFER, bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' }) }));
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(3, expect.objectContaining({ data: expect.objectContaining({ saleId: 'sale-1', amount: 50, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' }) }));
+    expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      payments: [
+        expect.objectContaining({ amount: '100', paymentMethod: PaymentMethod.CASH }),
+        expect.objectContaining({ amount: '100', paymentMethod: PaymentMethod.TRANSFER }),
+        expect.objectContaining({ amount: '50', paymentMethod: PaymentMethod.CARD }),
+      ],
+    }));
+  });
+
+  it('persists cash tendered and calculated change without creating an additional payment or inventory record', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1', name: 'Chicken breast', sku: 'PCH-001', unit: ProductUnit.KG,
+      salePrice: decimal('75'), purchaseCost: decimal('62.50'), isActive: true, unitEquivalents: [],
+    });
+
+    const result = await service.create(
+      validCashSale({
+        initialPayment: {
+          amount: 187.5,
+          paymentMethod: PaymentMethod.CASH,
+          cashTendered: 200,
+        } as never,
+      }),
+      seller(),
+      'idem-cash-tendered',
+    );
+
+    expect(prisma.payment.create).toHaveBeenCalledTimes(1);
+    expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        amount: 187.5,
+        paymentMethod: PaymentMethod.CASH,
+        cashTendered: 200,
+        changeGiven: 12.5,
+      }),
+    }));
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      payments: [expect.objectContaining({ amount: '187.5', cashTendered: '200', changeGiven: '12.5' })],
+    }));
+  });
+
+  it('preserves the accounting sum of split payment amounts while storing tender evidence only on cash', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await service.create(
+      validCashSale({
+        initialPayment: undefined,
+        payments: [
+          { amount: 100, paymentMethod: PaymentMethod.CASH, cashTendered: 120 } as never,
+          { amount: 150, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' },
+        ],
+      }),
+      seller(),
+      'idem-split-cash-tendered',
+    );
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ total: 250, collectionStatus: CollectionStatus.PAID }),
+    }));
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({ amount: 100, cashTendered: 120, changeGiven: 20 }),
+    }));
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: expect.objectContaining({ amount: 150, cashTendered: null, changeGiven: null }),
+    }));
+  });
+
+  it.each([
+    ['less than the applied amount', { amount: 250, paymentMethod: PaymentMethod.CASH, cashTendered: 249 }],
+    ['on a non-cash payment', { amount: 250, paymentMethod: PaymentMethod.CARD, cashTendered: 250, referenceNumber: 'AUTH-123', cardLastFour: '4242' }],
+  ])('rejects cash tendered %s before inventory, sale, or payment persistence', async (_case, payment) => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(service.create(
+      validCashSale({ initialPayment: payment as never }),
+      seller(),
+      `idem-invalid-cash-tendered-${_case}`,
+    )).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects split payments whose combined amount exceeds the backend sale total before inventory is affected', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(service.create(
+      validCashSale({
+        initialPayment: undefined,
+        payments: [
+          { amount: 200, paymentMethod: PaymentMethod.CASH },
+          { amount: 100, paymentMethod: PaymentMethod.CASH },
+        ],
+      }),
+      seller(),
+      'idem-split-payment-excess',
+    )).rejects.toThrow('Payment total cannot exceed sale total');
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-positive split payment item and mixed legacy and primary payment contracts', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(service.create(
+      validCashSale({ initialPayment: undefined, payments: [{ amount: 0, paymentMethod: PaymentMethod.CASH }] }),
+      seller(),
+      'idem-split-payment-zero',
+    )).rejects.toThrow('Each payment amount must be greater than zero');
+
+    await expect(service.create(
+      validCashSale({ payments: [{ amount: 250, paymentMethod: PaymentMethod.CASH }] }),
+      seller(),
+      'idem-split-payment-mixed-contract',
+    )).rejects.toThrow('payments and initialPayment cannot be sent together');
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
   it('does not duplicate the internal receipt when it is the requested document type', async () => {

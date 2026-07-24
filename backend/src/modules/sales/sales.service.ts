@@ -21,7 +21,7 @@ import {
 import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, ListSalesQueryDto } from './dto';
+import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, CreateSalePaymentDto, ListSalesQueryDto } from './dto';
 import { evaluateCreditDecision } from './credit-decision';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'operationalLocationId'>;
@@ -110,6 +110,8 @@ type MovementResponseInput = Record<string, unknown> & {
 
 type SalePaymentSummaryInput = {
   amount: DecimalLike;
+  cashTendered?: DecimalLike;
+  changeGiven?: DecimalLike;
   paymentMethod: string;
   paidAt?: Date | string | null;
   status?: PaymentStatus | string;
@@ -174,6 +176,9 @@ type SaleDocumentListRecord = Record<string, unknown> & {
 
 type SaleDocumentPrintRecord = SaleDocumentListRecord & {
   printTemplateVersion: number;
+  sale?: {
+    payments: SalePaymentSummaryInput[];
+  } | null;
   scaleTicketReferences?: Array<{
     physicalFolio: string;
     capturedAt: Date;
@@ -358,6 +363,14 @@ export class SalesService {
         sale: { is: this.buildVisibleSaleDetailWhere(saleId, currentUser) },
       },
       include: {
+        sale: {
+          select: {
+            payments: {
+              where: { status: PaymentStatus.APPLIED },
+              orderBy: { paidAt: 'asc' },
+            },
+          },
+        },
         scaleTicketReferences: {
           include: { capturedBy: { select: { name: true } } },
           orderBy: { capturedAt: 'desc' },
@@ -378,6 +391,7 @@ export class SalesService {
     }
     this.assertOverrideIntent(dto, currentUser);
     this.assertLocationAccess(dto, currentUser);
+    const payments = this.resolvePayments(dto);
 
     const payloadHash = this.hashPayload(dto);
 
@@ -397,6 +411,8 @@ export class SalesService {
           const existingBillingState = existingSale as unknown as SaleListRecord;
           return {
             sale: this.toSaleResponse(existingSale),
+            payments: existingSale.payments.map((payment) => this.toPaymentResponse(payment)),
+            // Deprecated compatibility field. New consumers must use payments.
             payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
             accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
             billingRequest: existingSale.billingRequests?.[0] ?? existingBillingState.billingRequest ?? null,
@@ -427,11 +443,11 @@ export class SalesService {
         const discountPercentage = discountAuthorization ? this.toNumber(discountAuthorization.maximumPercentage) : 0;
         const discount = this.roundMoney(subtotal * discountPercentage / 100);
         const total = this.roundMoney(subtotal - discount);
-        const initialPaymentAmount = this.roundMoney(dto.initialPayment?.amount ?? 0);
+        const totalPaid = this.roundMoney(payments.reduce((sum, payment) => sum + payment.amount, 0));
 
-        this.assertPaymentRules(dto, customer, total, initialPaymentAmount);
+        this.assertPaymentRules(dto, customer, total, payments, totalPaid);
 
-        const outstandingAmount = this.roundMoney(total - initialPaymentAmount);
+        const outstandingAmount = this.roundMoney(total - totalPaid);
         if (outstandingAmount > 0 && !customer) {
           throw new BadRequestException('customerId is required when sale leaves an outstanding balance');
         }
@@ -579,10 +595,10 @@ export class SalesService {
               discount,
               tax: 0,
               total,
-              paid: initialPaymentAmount,
+              paid: totalPaid,
               outstanding: outstandingAmount,
               paymentType: dto.paymentType,
-              paymentMethod: dto.initialPayment?.paymentMethod ?? null,
+              paymentMethod: payments.length === 1 ? payments[0].paymentMethod : null,
               dueDate,
             }),
         };
@@ -599,26 +615,30 @@ export class SalesService {
         );
 
         const inventoryMovements = await this.recordInventoryMovements(tx, inventoryChanges, dto.locationId, sale.id, currentUser.id);
-        const payment = dto.initialPayment
-          ? await tx.payment.create({
-              data: {
-                accountReceivableId: null,
-                saleId: sale.id,
-                customerId: dto.customerId ?? null,
-                userId: currentUser.id,
-                amount: initialPaymentAmount,
-                paymentMethod: dto.initialPayment.paymentMethod,
-                bankName: this.normalizeOptionalText(dto.initialPayment.bankName),
-                referenceNumber: this.normalizeOptionalText(dto.initialPayment.referenceNumber),
-                cardLastFour: this.normalizeOptionalText(dto.initialPayment.cardLastFour),
-                operationalLocationId: dto.locationId,
-                status: PaymentStatus.APPLIED,
-                paidAt: new Date(),
-                idempotencyKey,
-                idempotencyPayloadHash: payloadHash,
-              },
-            })
-          : null;
+        const createdPayments = await Promise.all(payments.map((payment, index) =>
+          tx.payment.create({
+            data: {
+              accountReceivableId: null,
+              saleId: sale.id,
+              customerId: dto.customerId ?? null,
+              userId: currentUser.id,
+              amount: payment.amount,
+              cashTendered: payment.cashTendered ?? null,
+              changeGiven: payment.cashTendered === undefined
+                ? null
+                : this.roundMoney(payment.cashTendered - payment.amount),
+              paymentMethod: payment.paymentMethod,
+              bankName: this.normalizeOptionalText(payment.bankName),
+              referenceNumber: this.normalizeOptionalText(payment.referenceNumber),
+              cardLastFour: this.normalizeOptionalText(payment.cardLastFour),
+              operationalLocationId: dto.locationId,
+              status: PaymentStatus.APPLIED,
+              paidAt: new Date(),
+              idempotencyKey: `${idempotencyKey}:${index}`,
+              idempotencyPayloadHash: this.hashPayload({ payloadHash, paymentIndex: index, payment }),
+            },
+          }),
+        ));
 
         const accountReceivable = outstandingAmount > 0 && customer
           ? await tx.accountReceivable.create({
@@ -688,7 +708,9 @@ export class SalesService {
 
         return {
           sale: this.toSaleResponse(sale),
-          payment: payment ? this.toPaymentResponse(payment) : null,
+          payments: createdPayments.map((payment) => this.toPaymentResponse(payment)),
+          // Deprecated compatibility field. New consumers must use payments.
+          payment: createdPayments[0] ? this.toPaymentResponse(createdPayments[0]) : null,
           accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
           billingRequest,
           inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
@@ -1221,30 +1243,60 @@ export class SalesService {
     throw new ForbiddenException('SALE_NOT_AUTHORIZED');
   }
 
-  private assertPaymentRules(dto: CreateSaleDto, customer: CustomerCredit | null, total: number, initialPaymentAmount: number) {
-    if (initialPaymentAmount > total) {
-      throw new BadRequestException('Initial payment cannot exceed sale total');
+  private resolvePayments(dto: CreateSaleDto): CreateSalePaymentDto[] {
+    if (dto.payments !== undefined && dto.initialPayment !== undefined) {
+      throw new BadRequestException('payments and initialPayment cannot be sent together');
+    }
+    const sourcePayments = dto.payments ?? (dto.initialPayment ? [dto.initialPayment] : []);
+    return sourcePayments.map((payment) => ({
+      ...payment,
+      amount: this.roundMoney(payment.amount),
+      ...(payment.cashTendered === undefined ? {} : { cashTendered: this.roundMoney(payment.cashTendered) }),
+    }));
+  }
+
+  private assertPaymentRules(
+    dto: CreateSaleDto,
+    customer: CustomerCredit | null,
+    total: number,
+    payments: CreateSalePaymentDto[],
+    totalPaid: number,
+  ) {
+    if (payments.some((payment) => !Number.isFinite(payment.amount) || payment.amount <= 0)) {
+      throw new BadRequestException('Each payment amount must be greater than zero');
+    }
+    if (totalPaid > total) {
+      throw new BadRequestException('Payment total cannot exceed sale total');
     }
 
     if (dto.paymentType === SalePaymentType.CREDIT_SALE && !customer) {
       throw new BadRequestException('customerId is required for credit sales');
     }
 
-    if (!dto.initialPayment) return;
+    for (const payment of payments) {
+      const bankName = this.normalizeOptionalText(payment.bankName);
+      const referenceNumber = this.normalizeOptionalText(payment.referenceNumber);
+      const cardLastFour = this.normalizeOptionalText(payment.cardLastFour);
+      const method = payment.paymentMethod;
+      const cashTendered = payment.cashTendered;
 
-    const bankName = this.normalizeOptionalText(dto.initialPayment.bankName);
-    const referenceNumber = this.normalizeOptionalText(dto.initialPayment.referenceNumber);
-    const cardLastFour = this.normalizeOptionalText(dto.initialPayment.cardLastFour);
-    const method = dto.initialPayment.paymentMethod;
+      if (cashTendered !== undefined) {
+        if (method !== PaymentMethod.CASH) {
+          throw new BadRequestException('cashTendered is only valid for cash payments');
+        }
+        if (!Number.isFinite(cashTendered) || cashTendered <= 0 || cashTendered < payment.amount) {
+          throw new BadRequestException('cashTendered must be positive and at least the applied payment amount');
+        }
+      }
 
-    if ((method === PaymentMethod.TRANSFER || method === PaymentMethod.DEPOSIT || method === PaymentMethod.CHECK) && (!bankName || !referenceNumber)) {
-      throw new BadRequestException('Bank name and reference number are required for transfer, deposit, and check payments');
+      if ((method === PaymentMethod.TRANSFER || method === PaymentMethod.DEPOSIT || method === PaymentMethod.CHECK) && (!bankName || !referenceNumber)) {
+        throw new BadRequestException('Bank name and reference number are required for transfer, deposit, and check payments');
+      }
+
+      if ((method === PaymentMethod.CARD || method === PaymentMethod.VOUCHER) && (!referenceNumber || !/^\d{4}$/.test(cardLastFour ?? ''))) {
+        throw new BadRequestException('Authorization code and the last four card digits are required for card payments');
+      }
     }
-
-    if ((method === PaymentMethod.CARD || method === PaymentMethod.VOUCHER) && (!referenceNumber || !/^\d{4}$/.test(cardLastFour ?? ''))) {
-      throw new BadRequestException('Authorization code and the last four card digits are required for card payments');
-    }
-
   }
 
   private async nextSaleNumber(tx: Prisma.TransactionClient): Promise<string> {
@@ -1484,6 +1536,8 @@ export class SalesService {
       status: sale.status,
       payments: (sale.payments ?? []).map((payment) => ({
         amount: this.decimalToString(payment.amount),
+        cashTendered: this.decimalToString(payment.cashTendered),
+        changeGiven: this.decimalToString(payment.changeGiven),
         paymentMethod: payment.paymentMethod,
         paidAt: payment.paidAt ?? null,
         saleId: payment.saleId ?? null,
@@ -1661,6 +1715,13 @@ export class SalesService {
       outstanding: this.decimalToString(this.snapshotNumber(price, 'outstanding')),
       paymentType: this.snapshotString(price, 'paymentType'),
       paymentMethod: this.snapshotString(price, 'paymentMethod'),
+      payments: (document.sale?.payments ?? []).map((payment) => ({
+        amount: this.decimalToString(payment.amount),
+        cashTendered: this.decimalToString(payment.cashTendered),
+        changeGiven: this.decimalToString(payment.changeGiven),
+        paymentMethod: payment.paymentMethod,
+        paidAt: payment.paidAt ?? null,
+      })),
       dueDate: this.snapshotString(price, 'dueDate'),
       scaleTicket: document.documentType === SaleDocumentType.SCALE_TICKET && scaleReference ? {
         physicalFolio: scaleReference.physicalFolio,
@@ -1718,7 +1779,12 @@ export class SalesService {
   }
 
   private toPaymentResponse(payment: CreatedPayment) {
-    return { ...payment, amount: this.decimalToString(payment.amount) };
+    return {
+      ...payment,
+      amount: this.decimalToString(payment.amount),
+      cashTendered: this.decimalToString(payment.cashTendered),
+      changeGiven: this.decimalToString(payment.changeGiven),
+    };
   }
 
   private toReceivableResponse(receivable: CreatedReceivable) {

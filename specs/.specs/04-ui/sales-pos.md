@@ -84,7 +84,7 @@ El backend es fuente de verdad para precios, descuentos, subtotales y totales.
 
 Debe enviar `POST /api/sales` con:
 
-- `customerId` opcional en contado pagado al momento; requerido en crédito y en contraentrega sin pago inicial porque deja saldo pendiente.
+- `customerId` opcional en contado pagado al momento; requerido en crédito y en contraentrega sin pagos porque deja saldo pendiente.
 - `locationId` requerido.
 - `paymentType`: `CASH_SALE` o `CREDIT_SALE`.
 - `saleChannel`.
@@ -92,7 +92,7 @@ Debe enviar `POST /api/sales` con:
 - `physicalFolio` cuando aplique.
 - `requiresAdministrativeInvoice`.
 - `billingRequestId` cuando exista.
-- `initialPayment.paymentMethod` requerido para contado completamente pagado o abono inicial.
+- `payments[]` con `amount`, `paymentMethod`, `cashTendered` opcional solo para efectivo y evidencia bancaria o de tarjeta cuando aplique para contado completamente pagado o abonos iniciales. El cliente no envía `changeGiven`.
 - `discount` si está autorizado.
 - `commercialPolicyId` cuando aplique.
 - `administrativeOverrideReason` solo si existe autorización explícita.
@@ -101,9 +101,10 @@ Debe enviar `POST /api/sales` con:
 Reglas de interpretación:
 
 - `paymentType` clasifica solo el tipo de venta: contado o crédito.
-- El método del pago inicial vive en `initialPayment.paymentMethod`, no en `Sale`.
-- Si la venta es de contado y se paga al momento, el sistema registra un `Payment` asociado a `saleId` sin crear una cuenta por cobrar artificial.
-- Una venta de contado contraentrega puede confirmarse sin `initialPayment` y sin seleccionar `paymentMethod`, pero requiere cliente registrado para crear la cuenta por cobrar del saldo pendiente.
+- Los métodos de pago viven en `payments[].paymentMethod`, no en `Sale`.
+- Si la venta es de contado y se paga al momento, el sistema registra un `Payment` por cada elemento de `payments[]` asociado a `saleId` sin crear una cuenta por cobrar artificial.
+- Cada fila `CASH` permite capturar «Efectivo entregado» distinto de su monto aplicado y muestra el «Cambio» calculado. Al cambiar la fila a otro método se limpia ese dato; los tickets muestran solo efectivo entregado y cambio persistidos, sin inventarlos para pagos históricos.
+- Una venta de contado contraentrega puede confirmarse sin `payments` y sin seleccionar un método, pero requiere cliente registrado para crear la cuenta por cobrar del saldo pendiente.
 - Si la contraentrega deja saldo pendiente, genera `AccountReceivable`; el pago posterior se registra como cobranza con `accountReceivableId` obligatorio.
 
 ## Venta a crédito
@@ -115,8 +116,8 @@ Cuando `paymentType=CREDIT_SALE`:
 - Debe bloquear confirmación si el cliente está bloqueado o excede límite, salvo autorización administrativa explícita.
 - Debe informar que la venta generará cuenta por cobrar.
 - No debe registrar pago de cobranza desde POS; cobranza vive en su flujo propio.
-- Debe permitir crédito sin pago inicial y crédito con abono inicial.
-- Debe permitir captura rápida tipo libreta para menudeo con cliente, folio, producto, kilos, precio, monto, entregado por, cobrado por y método del pago inicial cuando exista.
+- Debe permitir crédito sin pagos y crédito con uno o más abonos iniciales.
+- Debe permitir captura rápida tipo libreta para menudeo con cliente, folio, producto, kilos, precio, monto, entregado por, cobrado por y métodos de pago cuando existan.
 - Si la venta requiere solicitud administrativa, debe mostrarse como relación interna y no como CFDI.
 
 ## Solicitud administrativa
@@ -191,8 +192,8 @@ Toda vista debe contemplar:
 - Piezas deben ser enteras.
 - Requerir ubicación operativa de descuento.
 - Requerir cliente para venta a crédito.
-- Requerir cliente para contraentrega sin pago inicial.
-- Requerir método de pago únicamente cuando se capture `initialPayment`, ya sea pago inmediato de contado o abono inicial.
+- Requerir cliente para contraentrega sin pagos.
+- Requerir método y monto positivo para cada elemento de `payments[]`; la suma no puede superar el total de la venta.
 - Mostrar total actualizado como vista previa.
 - Deshabilitar botón mientras se confirma venta.
 - Mostrar errores del backend por stock insuficiente, crédito bloqueado, permisos o conflicto.

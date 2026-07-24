@@ -566,6 +566,27 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('ticket-print-content')
   })
 
+  it('muestra efectivo entregado y cambio persistidos sin inventar valores para pagos históricos', () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          documentType: 'SIMPLE_NOTE', total: 187.5,
+          payments: [
+            { amount: 187.5, paymentMethod: 'CASH', cashTendered: 200, changeGiven: 12.5 } as NonNullable<TicketData['payments']>[number] & { cashTendered: number; changeGiven: number },
+            { amount: 50, paymentMethod: 'CARD' },
+          ],
+        }}
+      />,
+    )
+
+    expect(html).toContain('Efectivo entregado')
+    expect(html).toContain('$200.00')
+    expect(html).toContain('Cambio')
+    expect(html).toContain('$12.50')
+  })
+
   it('renderiza los cuatro formatos documentales con sus prioridades y oculta un RFC inexistente', () => {
     const baseTicket: TicketData = {
       createdAt: '2026-07-17T18:35:00.000Z',
@@ -581,6 +602,11 @@ describe('TASK-055 sales UI behavior', () => {
     }
 
     const simple = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'SIMPLE_NOTE' }} />)
+    const splitSimple = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{
+      ...baseTicket,
+      documentType: 'SIMPLE_NOTE',
+      payments: [{ amount: 200, paymentMethod: 'CASH' }, { amount: 300, paymentMethod: 'CARD' }],
+    }} />)
     const largeWithoutTaxId = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'LARGE_NOTE', customerAddress: 'Av. Principal 123', customerPhone: '229 000 0000', customerCreditDays: 7 }} />)
     const largeWithTaxId = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'LARGE_NOTE', customerTaxId: 'XAXX010101000' }} />)
     const internal = renderToStaticMarkup(<TicketModal isLoading={false} onClose={() => undefined} ticket={{ ...baseTicket, documentType: 'INTERNAL_RECEIPT' }} />)
@@ -604,6 +630,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(simple).toContain('NOTA DE VENTA')
     expect(simple).toContain('Gracias por su compra')
     expect(simple).toContain('receipt-format-simple')
+    expect(splitSimple).toContain('Pago: Efectivo · Tarjeta')
     expect(largeWithoutTaxId).toContain('DATOS DEL CLIENTE')
     expect(largeWithoutTaxId).toContain('Crédito a 7 días')
     expect(largeWithoutTaxId).not.toContain('RFC:')

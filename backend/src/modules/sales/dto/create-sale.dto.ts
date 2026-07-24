@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import { IsArray, IsBoolean, IsEmpty, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod, ProductUnit, SaleChannel, SaleDocumentType, SalePaymentType } from '@prisma/client';
 
-export class CreateSaleInitialPaymentDto {
+export class CreateSalePaymentDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)
@@ -10,6 +10,12 @@ export class CreateSaleInitialPaymentDto {
 
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  cashTendered?: number;
 
   @IsOptional()
   @IsString()
@@ -26,6 +32,9 @@ export class CreateSaleInitialPaymentDto {
   @Matches(/^\d{4}$/)
   cardLastFour?: string;
 }
+
+/** @deprecated Use CreateSalePaymentDto through CreateSaleDto.payments instead. */
+export class CreateSaleInitialPaymentDto extends CreateSalePaymentDto {}
 
 export class CreateSaleBillingRequestDto {
   @IsString()
@@ -94,8 +103,15 @@ export class CreateSaleDto {
   paymentType!: SalePaymentType;
 
   @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateSalePaymentDto)
+  payments?: CreateSalePaymentDto[];
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => CreateSaleInitialPaymentDto)
+  /** @deprecated Send payments[] instead. This field remains temporarily for existing clients. */
   initialPayment?: CreateSaleInitialPaymentDto;
 
   @IsOptional()

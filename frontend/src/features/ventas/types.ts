@@ -2,11 +2,19 @@ import type { Customer, CustomerCreditSummary, CustomerType } from '../clientes/
 import type { OperationalUnit, ProductPresentation } from '../inventario/types'
 
 export type PaymentType = 'CASH_SALE' | 'CREDIT_SALE'
-export type PaymentMethod = '' | 'CASH' | 'CARD' | 'TRANSFER' | 'DEPOSIT' | 'CHECK'
+export type PaymentMethod = '' | 'CASH' | 'CARD' | 'TRANSFER' | 'DEPOSIT' | 'CHECK' | 'VOUCHER' | 'OTHER'
 export type InitialPaymentReference = {
   bankName: string
   referenceNumber: string
   cardLastFour: string
+}
+export type SalePaymentInput = {
+  amount: number
+  paymentMethod: PaymentMethod
+  cashTendered?: number
+  bankName?: string
+  referenceNumber?: string
+  cardLastFour?: string
 }
 export type SaleChannel = 'COUNTER' | 'EXTERNAL_POINT_OF_SALE' | 'ROUTE' | 'INSTITUTIONAL' | 'WHOLESALE'
 export type SaleDocumentType = 'SCALE_TICKET' | 'SIMPLE_NOTE' | 'LARGE_NOTE' | 'INTERNAL_RECEIPT'
@@ -79,13 +87,14 @@ export type CreateSalePayload = {
     notes?: string
   }
   paymentType: PaymentType
-  initialPayment?: {
+  payments?: Array<{
     amount: number
     paymentMethod: Exclude<PaymentMethod, ''>
+    cashTendered?: number
     bankName?: string
     referenceNumber?: string
     cardLastFour?: string
-  }
+  }>
   discountAuthorizationId?: string
   commercialPolicyId?: string
   administrativeOverrideReason?: string
@@ -99,10 +108,8 @@ export type BuildCreateSalePayloadInput = {
   cart: CartItem[]
   customer: CustomerOption | null
   documentType: SaleDocumentType
-  initialPaymentAmount?: number
   locationId: string
-  paymentMethod: PaymentMethod
-  paymentReference?: InitialPaymentReference
+  payments: SalePaymentInput[]
   paymentType: PaymentType
   physicalFolio: string
   requiresAdministrativeInvoice: boolean
@@ -180,7 +187,7 @@ export type TicketData = {
   paymentType?: PaymentType | string
   collectionStatus?: string
   status?: string
-  payments?: Array<{ amount?: number | string; paymentMethod?: string; paidAt?: string }>
+  payments?: Array<{ amount?: number | string; paymentMethod?: string; cashTendered?: number | string | null; changeGiven?: number | string | null; paidAt?: string }>
   scaleTicket?: {
     physicalFolio?: string | null
     capturedAt?: string | null

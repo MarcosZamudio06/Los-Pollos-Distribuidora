@@ -28,11 +28,12 @@ Respuesta `data`:
 - Cliente desde `customerSnapshot`: `name`, `commercialName`, `customerNumber`, `address`, `phone`, `taxId`, `paymentTermsDays`.
 - Partidas desde `productSnapshot.items[]`: `name`, `sku`, `unit`, `quantityKg`, `quantityPieces`, `unitPrice`, `subtotal`.
 - Importes desde `priceSnapshot`: `subtotal`, `discount`, `tax`, `total`, `paid`, `outstanding` y fecha de vencimiento cuando aplique.
+- `payments[]` aplicados asociados a la venta: `amount`, `paymentMethod`, `paidAt` y, para efectivo, `cashTendered` y `changeGiven` persistidos. Esta es la fuente monetaria para representar uno o varios métodos de pago al imprimir; no se deriva un método singular desde el snapshot ni se fabrica cambio para pagos históricos sin evidencia.
 
 Validaciones:
 
 - `documentId` debe pertenecer al `saleId` solicitado y respetar el alcance del actor.
-- No consultar ni completar el documento con datos actuales de `Customer`, `Product`, `Sale` o `SaleItem`.
+- No consultar ni completar el documento con datos actuales de `Customer`, `Product`, `Sale` o `SaleItem`; la única excepción son los `Payment` aplicados asociados a la venta, que se cargan como fuente monetaria persistida.
 - No devolver campos de CFDI, SAT, PAC, UUID, cadena original o sello digital.
 
 ## POST /api/sales/:saleId/documents
