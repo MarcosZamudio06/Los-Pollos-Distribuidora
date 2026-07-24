@@ -1,5 +1,10 @@
 export type DailyCloseStatus = 'DRAFT' | 'REVIEWED' | 'CLOSED' | 'CANCELLED'
 
+export type DailyCloseDifferenceScope = 'CASH' | 'SCALE' | 'INVENTORY' | 'SALES' | 'EXPENSES' | 'BILLING'
+export type DailyCloseDifferenceUnit = 'MXN' | 'KG' | 'PIECE'
+export type DailyCloseDifferenceType = 'SURPLUS' | 'SHORTAGE'
+export type DailyCloseDifferenceStatus = 'PENDING_JUSTIFICATION' | 'PENDING_AUTHORIZATION' | 'AUTHORIZED'
+
 export function canValidateDailyClose(status: DailyCloseStatus) {
   return status === 'DRAFT'
 }
@@ -29,9 +34,9 @@ export type DailyCloseSaleItem = {
   quantityPieces: number | null
   subtotal: string
   total: string
-  unitCostSnapshot: string
-  costSubtotalSnapshot: string
-  costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL'
+  unitCostSnapshot?: string
+  costSubtotalSnapshot?: string
+  costSnapshotSource?: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL'
 }
 
 export type DailyCloseSale = {
@@ -149,14 +154,39 @@ export type DailyCloseExcludedOperation = {
   occurredAt: string
 }
 
+export type DailyCloseActor = { id: string; name: string }
+
+export type DailyCloseDifference = {
+  id: string
+  code: string
+  referenceKey: string
+  scope: DailyCloseDifferenceScope
+  unit: DailyCloseDifferenceUnit
+  expectedValue: Quantity
+  recordedValue: Quantity | null
+  differenceValue: Quantity
+  differenceType: DailyCloseDifferenceType
+  status: DailyCloseDifferenceStatus
+  reason?: string | null
+  evidence?: string | null
+  product?: { id: string; name: string; sku?: string | null; unit?: string } | null
+  justifiedBy?: DailyCloseActor | null
+  justifiedAt?: string | null
+  authorizedBy?: DailyCloseActor | null
+  authorizedAt?: string | null
+}
+
 export type DailyClose = {
   id: string; operationalLocationId: string; businessDate: string; status: DailyCloseStatus; version: number
   operationalLocation: { id: string; name: string; code?: string | null }
+  openedBy?: DailyCloseActor | null
+  reviewedBy?: DailyCloseActor | null
+  closedBy?: DailyCloseActor | null
   totalInputKg: string; totalSoldKg: string; totalRemainingKg: string; totalShortageKg: string; totalSurplusKg: string
   scaleReportedKg: string; scaleDifferenceKg: string; cashTotal: string; cardVoucherTotal: string; transferTotal: string
-  expenseTotal: string; grossSalesTotal: string; netCashExpected: string; cashCountedTotal: string | null; cashDifferenceTotal: string | null; purchaseCostTotal: string
-  grossProfitTotal: string; netProfitTotal: string; lastValidatedAt?: string | null
-  costQuality: CostQuality; dataAsOf: string
+  expenseTotal: string; grossSalesTotal: string; netCashExpected: string; cashCountedTotal: string | null; cashDifferenceTotal: string | null; purchaseCostTotal?: string
+  grossProfitTotal?: string; netProfitTotal?: string; lastValidatedAt?: string | null
+  costQuality?: CostQuality; dataAsOf: string
   cashMovements?: Array<DailyCloseCashMovement>
   scaleTicketReferences?: Array<DailyCloseScaleTicketReference>
   sales?: Array<DailyCloseSale>
@@ -165,6 +195,8 @@ export type DailyClose = {
   inventoryMovements?: Array<DailyCloseInventoryMovement>
   lines?: Array<DailyCloseLine>
   excludedOperations?: Array<DailyCloseExcludedOperation>
+  differences?: Array<DailyCloseDifference>
+  unresolvedDifferenceCount?: number
 }
 
 export function dailyCloseArray<T>(value: Array<T> | undefined): Array<T> {
@@ -175,7 +207,17 @@ export type DailyCloseValidationResult = {
   close: DailyClose
   valid: boolean
   errors: Array<{ code: string; message: string }>
-  differences: Array<{ code: string; value: number; unit: string }>
+  differences: Array<{
+    code: string
+    value: number
+    unit: string
+    scope?: DailyCloseDifferenceScope
+    referenceKey?: string
+    expectedValue?: number
+    recordedValue?: number | null
+    differenceType?: DailyCloseDifferenceType
+    status?: DailyCloseDifferenceStatus
+  }>
 }
 
 type Quantity = number | string

@@ -28,7 +28,8 @@ Respuesta 200:
       "id": "string",
       "name": "Administrador",
       "email": "admin@example.com",
-      "role": "ADMIN"
+      "role": "ADMIN",
+      "operationalLocationId": "string"
     }
   }
 }
@@ -68,3 +69,7 @@ Descripción:
 Obtener usuario autenticado.
 
 Requiere autenticación.
+
+Para usuarios con ubicación operativa asignada, `data.user.operationalLocationId`
+identifica la ubicación desde la que deben operar el POS. El campo se omite si
+la cuenta no tiene una asignación vigente.

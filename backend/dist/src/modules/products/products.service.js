@@ -24,7 +24,7 @@ let ProductsService = class ProductsService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async findAll(query) {
+    async findAll(query, currentUser) {
         if (query.lowStock === true && !query.locationId) {
             throw new common_1.BadRequestException('locationId is required for lowStock filter');
         }
@@ -34,14 +34,16 @@ let ProductsService = class ProductsService {
             orderBy: { name: 'asc' },
             ...this.buildPagination(query),
         }));
-        const items = products.map((product) => this.toProductResponse(product));
+        const items = products.map((product) => this.toProductResponse(product, {
+            includePurchaseCost: currentUser.role !== 'SELLER',
+        }));
         return {
             items: query.lowStock === true
                 ? items.filter((item) => item.inventoryBalance?.isLowStock === true)
                 : items,
         };
     }
-    async findOne(id, query = {}) {
+    async findOne(id, query = {}, currentUser) {
         const includeBalances = query.includeBalances === true || !!query.locationId;
         const product = (await this.prisma.product.findUnique({
             where: { id },
@@ -61,7 +63,10 @@ let ProductsService = class ProductsService {
         if (!product) {
             throw new common_1.NotFoundException('Product not found');
         }
-        return this.toProductResponse(product, { includeBalances: true });
+        return this.toProductResponse(product, {
+            includeBalances: true,
+            includePurchaseCost: currentUser.role !== 'SELLER',
+        });
     }
     async create(dto) {
         this.assertValidCommercialData(dto);
@@ -283,13 +288,15 @@ let ProductsService = class ProductsService {
             categoryId: product.categoryId,
             presentationType: product.presentationType,
             salePrice: this.toNumber(product.salePrice),
-            purchaseCost: this.toNumber(product.purchaseCost),
             minStock: this.toNumber(product.minStock),
             unit: product.unit,
             pieceWeightEquivalent: this.toNullableNumber(product.pieceWeightEquivalent),
             equivalentPolicyStatus: product.equivalentPolicyStatus,
             isActive: product.isActive,
         };
+        if (options.includePurchaseCost !== false) {
+            response.purchaseCost = this.toNumber(product.purchaseCost);
+        }
         const balance = product.inventoryBalances?.[0];
         if (balance) {
             response.inventoryBalance = this.toInventoryBalanceResponse(balance);

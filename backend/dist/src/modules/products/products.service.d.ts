@@ -1,5 +1,6 @@
 import type { EquivalentStatus, ProductPresentationType, ProductUnit } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateProductDto, GetProductQueryDto, ListProductsQueryDto, UpdateProductDto } from './dto';
 type ProductResponse = {
     id: string;
@@ -9,7 +10,7 @@ type ProductResponse = {
     categoryId: string | null;
     presentationType: ProductPresentationType;
     salePrice: number;
-    purchaseCost: number;
+    purchaseCost?: number;
     minStock: number;
     unit: ProductUnit;
     pieceWeightEquivalent: number | null;
@@ -42,8 +43,8 @@ type ProductListResponse = {
 export declare class ProductsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    findAll(query: ListProductsQueryDto): Promise<ProductListResponse>;
-    findOne(id: string, query?: GetProductQueryDto): Promise<ProductResponse>;
+    findAll(query: ListProductsQueryDto, currentUser: Pick<AuthenticatedUser, 'role'>): Promise<ProductListResponse>;
+    findOne(id: string, query: GetProductQueryDto | undefined, currentUser: Pick<AuthenticatedUser, 'role'>): Promise<ProductResponse>;
     create(dto: CreateProductDto): Promise<ProductResponse>;
     update(id: string, dto: UpdateProductDto): Promise<ProductResponse>;
     deactivate(id: string): Promise<ProductResponse>;

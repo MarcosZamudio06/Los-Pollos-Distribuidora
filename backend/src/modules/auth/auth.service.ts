@@ -94,10 +94,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    return {
-      ...this.toAuthenticatedUser(user),
-      operationalLocationId: user.operationalLocationId,
-    };
+    return this.toAuthenticatedUser(user);
   }
 
   async changeOwnPassword(
@@ -170,6 +167,9 @@ export class AuthService {
       email: user.email,
       role: user.role.name,
       mustChangePassword: user.mustChangePassword,
+      ...(user.operationalLocationId
+        ? { operationalLocationId: user.operationalLocationId }
+        : {}),
     };
   }
 

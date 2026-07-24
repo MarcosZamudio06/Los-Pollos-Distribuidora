@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const roles_decorator_1 = require("../../common/decorators/roles.decorator");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../common/guards/roles.guard");
+const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const dto_1 = require("./dto");
 const locations_service_1 = require("./locations.service");
 let LocationsController = class LocationsController {
@@ -24,11 +25,11 @@ let LocationsController = class LocationsController {
     constructor(locationsService) {
         this.locationsService = locationsService;
     }
-    async findAll(query) {
+    async findAll(query, currentUser) {
         return {
             success: true,
             message: 'Locations retrieved successfully',
-            data: await this.locationsService.findAll(query),
+            data: await this.locationsService.findAll(currentUser, query),
         };
     }
     async findOne(id) {
@@ -65,8 +66,9 @@ __decorate([
     (0, common_1.Get)(),
     (0, roles_decorator_1.Roles)('ADMIN', 'WAREHOUSE', 'SELLER', 'DRIVER', 'COLLECTIONS'),
     __param(0, (0, common_1.Query)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [dto_1.ListLocationsQueryDto]),
+    __metadata("design:paramtypes", [dto_1.ListLocationsQueryDto, Object]),
     __metadata("design:returntype", Promise)
 ], LocationsController.prototype, "findAll", null);
 __decorate([

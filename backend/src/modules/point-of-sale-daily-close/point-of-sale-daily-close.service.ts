@@ -1,13 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { DailyCloseEventType, DailyCloseSnapshotType, OperationalLocationType, PaymentStatus, PointOfSaleDailyCloseStatus, Prisma, SaleDocumentType } from '@prisma/client';
+import { DailyCloseDifferenceScope, DailyCloseDifferenceStatus, DailyCloseDifferenceType, DailyCloseDifferenceUnit, DailyCloseEventType, DailyCloseSnapshotType, OperationalLocationType, PaymentStatus, PointOfSaleDailyCloseStatus, Prisma, SaleDocumentType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
-import { CreateDailyCloseInventoryCountDto, CreateExpenseDto, CreateScaleTicketDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, RecordCashCountDto, UpdateDailyCloseInventoryCountDto, VersionedDailyCloseDto } from './dto';
+import { CreateDailyCloseInventoryCountDto, CreateExpenseDto, CreateScaleTicketDto, JustifyDailyCloseDifferenceDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, RecordCashCountDto, UpdateDailyCloseInventoryCountDto, VersionedDailyCloseDto } from './dto';
 
 const detailInclude = {
   operationalLocation: { select: { id: true, name: true, code: true, type: true } },
+  openedBy: { select: { id: true, name: true } },
+  reviewedBy: { select: { id: true, name: true } },
+  closedBy: { select: { id: true, name: true } },
   cashMovements: { orderBy: { occurredAt: 'desc' as const } },
   scaleTicketReferences: { include: { product: { select: { id: true, name: true, sku: true } } }, orderBy: { capturedAt: 'desc' as const } },
   inventoryCounts: { include: { product: { select: { id: true, name: true, sku: true, unit: true } }, countedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' as const } },
@@ -22,6 +25,14 @@ const detailInclude = {
   },
   payments: true,
   inventoryMovements: { include: { product: { select: { id: true, name: true, sku: true } } } },
+  differences: {
+    include: {
+      product: { select: { id: true, name: true, sku: true, unit: true } },
+      justifiedBy: { select: { id: true, name: true } },
+      authorizedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: 'asc' as const },
+  },
 } satisfies Prisma.PointOfSaleDailyCloseInclude;
 
 const dailyCloseTransitions: Record<PointOfSaleDailyCloseStatus, readonly PointOfSaleDailyCloseStatus[]> = {
@@ -40,6 +51,16 @@ const dailyCloseLocationTypes = new Set<OperationalLocationType>([
 const appliedPaymentWhere = { status: PaymentStatus.APPLIED } as const;
 const decreaseMovementTypes = new Set(['OUT', 'SALE', 'CANCEL_PURCHASE', 'TRANSFER_OUT', 'SHRINKAGE']);
 type DailyCloseClient = Prisma.TransactionClient | PrismaService;
+type DifferenceDefinition = {
+  code: string;
+  referenceKey: string;
+  scope: DailyCloseDifferenceScope;
+  unit: DailyCloseDifferenceUnit;
+  expectedValue: number;
+  recordedValue: number;
+  differenceValue: number;
+  productId?: string;
+};
 
 @Injectable()
 export class PointOfSaleDailyCloseService {
@@ -213,6 +234,72 @@ export class PointOfSaleDailyCloseService {
     return this.projectForRole(updated, user);
   }
 
+  async justifyDifference(id: string, differenceId: string, dto: JustifyDailyCloseDifferenceDto, user: AuthenticatedUser) {
+    await this.requireDraft(id, user);
+    const reason = dto.reason.trim();
+    const evidence = dto.evidence.trim();
+    if (!reason) throw new BadRequestException('DAILY_CLOSE_DIFFERENCE_REASON_REQUIRED');
+    if (!evidence) throw new BadRequestException('DAILY_CLOSE_DIFFERENCE_EVIDENCE_REQUIRED');
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.pointOfSaleDailyClose.findUnique({ where: { id }, select: { version: true, status: true } });
+      if (!current || current.status !== PointOfSaleDailyCloseStatus.DRAFT) throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+      const difference = await tx.dailyCloseDifference.findFirst({ where: { id: differenceId, pointOfSaleDailyCloseId: id } });
+      if (!difference) throw new NotFoundException('DAILY_CLOSE_DIFFERENCE_NOT_FOUND');
+      if (Number(difference.differenceValue) === 0) throw new BadRequestException('DAILY_CLOSE_DIFFERENCE_ALREADY_RESOLVED');
+      if (current.version !== dto.version) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+
+      const versioned = await tx.pointOfSaleDailyClose.updateMany({
+        where: { id, version: dto.version, status: PointOfSaleDailyCloseStatus.DRAFT },
+        data: { version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null },
+      });
+      if (!versioned.count) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+      await tx.dailyCloseDifference.update({
+        where: { id: differenceId },
+        data: {
+          status: DailyCloseDifferenceStatus.PENDING_AUTHORIZATION,
+          reason,
+          evidence,
+          justifiedByUserId: user.id,
+          justifiedAt: new Date(),
+          authorizedByUserId: null,
+          authorizedAt: null,
+        },
+      });
+      await this.createEvent(tx, id, DailyCloseEventType.DIFFERENCE_JUSTIFIED, user.id, { differenceId, reason, evidence, sourceVersion: dto.version });
+      return this.findClose(id, tx);
+    });
+    return this.projectForRole(updated, user);
+  }
+
+  async authorizeDifference(id: string, differenceId: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
+    this.admin(user);
+    await this.requireDraft(id, user);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.pointOfSaleDailyClose.findUnique({ where: { id }, select: { version: true, status: true } });
+      if (!current || current.status !== PointOfSaleDailyCloseStatus.DRAFT) throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+      const difference = await tx.dailyCloseDifference.findFirst({ where: { id: differenceId, pointOfSaleDailyCloseId: id } });
+      if (!difference) throw new NotFoundException('DAILY_CLOSE_DIFFERENCE_NOT_FOUND');
+      if (difference.status !== DailyCloseDifferenceStatus.PENDING_AUTHORIZATION) throw new BadRequestException('DAILY_CLOSE_DIFFERENCE_NOT_READY_FOR_AUTHORIZATION');
+      if (Number(difference.differenceValue) === 0) throw new BadRequestException('DAILY_CLOSE_DIFFERENCE_ALREADY_RESOLVED');
+      if (current.version !== dto.version) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+
+      const versioned = await tx.pointOfSaleDailyClose.updateMany({
+        where: { id, version: dto.version, status: PointOfSaleDailyCloseStatus.DRAFT },
+        data: { version: { increment: 1 }, lastValidatedAt: null, validatedSourceVersion: null },
+      });
+      if (!versioned.count) throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+      await tx.dailyCloseDifference.update({
+        where: { id: differenceId },
+        data: { status: DailyCloseDifferenceStatus.AUTHORIZED, authorizedByUserId: user.id, authorizedAt: new Date() },
+      });
+      await this.createEvent(tx, id, DailyCloseEventType.DIFFERENCE_AUTHORIZED, user.id, { differenceId, sourceVersion: dto.version });
+      return this.findClose(id, tx);
+    });
+    return this.projectForRole(updated, user);
+  }
+
   async getReconciliation(id: string, user: AuthenticatedUser) {
     let close = await this.requireCloseAccess(id, user);
     if (close.status === 'DRAFT') close = await this.prisma.$transaction((tx) => this.recalculate(id, tx));
@@ -313,10 +400,33 @@ export class PointOfSaleDailyCloseService {
     const errors: Array<{ code: string; message: string }> = [];
     if (updated.lines.some((line) => line.operationalLocationId !== close.operationalLocationId)) errors.push({ code: 'OPERATION_LOCATION_MISMATCH', message: 'Hay operaciones de otra ubicación.' });
     if (updated.cashCountedTotal === null) errors.push({ code: 'CASH_COUNT_REQUIRED', message: 'Registra el efectivo contado antes de validar el cierre.' });
-    const differences = [
-      { code: 'SCALE_DIFFERENCE', value: Number(updated.scaleDifferenceKg), unit: 'kg' },
-      { code: 'CASH_DIFFERENCE', value: Number(updated.cashDifferenceTotal), unit: 'MXN' },
-    ].filter((item) => item.value !== 0);
+    const storedDifferences = ((updated as { differences?: Array<{
+      code: string;
+      scope: DailyCloseDifferenceScope;
+      unit: DailyCloseDifferenceUnit;
+      expectedValue: Prisma.Decimal;
+      recordedValue: Prisma.Decimal | null;
+      differenceValue: Prisma.Decimal;
+      differenceType: DailyCloseDifferenceType;
+      status: DailyCloseDifferenceStatus;
+      referenceKey: string;
+    }> }).differences ?? []).filter((difference) => Number(difference.differenceValue) !== 0);
+    const differences = storedDifferences.length > 0
+      ? storedDifferences.map((difference) => ({
+        code: difference.code,
+        scope: difference.scope,
+        referenceKey: difference.referenceKey,
+        value: Number(difference.differenceValue),
+        unit: difference.unit,
+        expectedValue: Number(difference.expectedValue),
+        recordedValue: difference.recordedValue === null ? null : Number(difference.recordedValue),
+        differenceType: difference.differenceType,
+        status: difference.status,
+      }))
+      : [
+        { code: 'SCALE_DIFFERENCE', value: Number(updated.scaleDifferenceKg), unit: 'kg' },
+        { code: 'CASH_DIFFERENCE', value: Number(updated.cashDifferenceTotal), unit: 'MXN' },
+      ].filter((item) => item.value !== 0);
     const attemptedAt = new Date();
     const validated = await tx.pointOfSaleDailyClose.update({
       where: { id },
@@ -329,7 +439,7 @@ export class PointOfSaleDailyCloseService {
       close: validated,
       valid: errors.length === 0,
       errors,
-      differences: user.role === 'WAREHOUSE' ? differences.filter((item) => item.unit === 'kg') : user.role === 'COLLECTIONS' ? differences.filter((item) => item.unit === 'MXN') : differences,
+      differences: user.role === 'WAREHOUSE' ? differences.filter((item) => item.unit === 'KG' || item.unit === 'kg') : user.role === 'COLLECTIONS' ? differences.filter((item) => item.unit === 'MXN') : differences,
     };
   }
 
@@ -400,8 +510,146 @@ export class PointOfSaleDailyCloseService {
       cashDifferenceTotal: close.cashCountedTotal === null ? null : Number(close.cashCountedTotal) - (cashTotal - cashExpenseTotal),
       purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
     };
+    await this.syncDifferences(client, id, this.buildDifferenceDefinitions({
+      cashExpected: cashTotal - cashExpenseTotal,
+      cashRecorded: close.cashCountedTotal === null ? null : Number(close.cashCountedTotal),
+      scaleExpected: kilos.totalSoldKg,
+      scaleRecorded: scaleReportedKg,
+      inventory: reconciliation.items,
+    }));
     const updated = await client.pointOfSaleDailyClose.update({ where: { id }, data, include: detailInclude });
     return { ...updated, costQuality, dataAsOf: updated.updatedAt };
+  }
+
+  private buildDifferenceDefinitions(input: {
+    cashExpected: number;
+    cashRecorded: number | null;
+    scaleExpected: number;
+    scaleRecorded: number;
+    inventory: Array<{
+      product: { id: string };
+      theoreticalQuantityKg: number;
+      physicalQuantityKg: number | null;
+      theoreticalQuantityPieces: number;
+      physicalQuantityPieces: number | null;
+    }>;
+  }): DifferenceDefinition[] {
+    const definitions: DifferenceDefinition[] = [];
+    const add = (definition: DifferenceDefinition) => {
+      if (definition.differenceValue !== 0) definitions.push(definition);
+    };
+
+    if (input.cashRecorded !== null) {
+      add({
+        code: 'CASH_DIFFERENCE',
+        referenceKey: 'CASH',
+        scope: DailyCloseDifferenceScope.CASH,
+        unit: DailyCloseDifferenceUnit.MXN,
+        expectedValue: input.cashExpected,
+        recordedValue: input.cashRecorded,
+        differenceValue: input.cashRecorded - input.cashExpected,
+      });
+    }
+    add({
+      code: 'SCALE_DIFFERENCE',
+      referenceKey: 'SCALE',
+      scope: DailyCloseDifferenceScope.SCALE,
+      unit: DailyCloseDifferenceUnit.KG,
+      expectedValue: input.scaleExpected,
+      recordedValue: input.scaleRecorded,
+      differenceValue: input.scaleRecorded - input.scaleExpected,
+    });
+
+    for (const item of input.inventory) {
+      if (item.physicalQuantityKg !== null) {
+        add({
+          code: 'INVENTORY_DIFFERENCE',
+          referenceKey: `${item.product.id}:KG`,
+          scope: DailyCloseDifferenceScope.INVENTORY,
+          unit: DailyCloseDifferenceUnit.KG,
+          expectedValue: item.theoreticalQuantityKg,
+          recordedValue: item.physicalQuantityKg,
+          differenceValue: item.physicalQuantityKg - item.theoreticalQuantityKg,
+          productId: item.product.id,
+        });
+      }
+      if (item.physicalQuantityPieces !== null) {
+        add({
+          code: 'INVENTORY_DIFFERENCE',
+          referenceKey: `${item.product.id}:PIECE`,
+          scope: DailyCloseDifferenceScope.INVENTORY,
+          unit: DailyCloseDifferenceUnit.PIECE,
+          expectedValue: item.theoreticalQuantityPieces,
+          recordedValue: item.physicalQuantityPieces,
+          differenceValue: item.physicalQuantityPieces - item.theoreticalQuantityPieces,
+          productId: item.product.id,
+        });
+      }
+    }
+    return definitions;
+  }
+
+  private async syncDifferences(client: DailyCloseClient, closeId: string, definitions: DifferenceDefinition[]) {
+    const previous = await client.dailyCloseDifference.findMany({
+      where: { pointOfSaleDailyCloseId: closeId },
+      select: { id: true, scope: true, referenceKey: true, expectedValue: true, recordedValue: true, differenceValue: true },
+    });
+    const activeKeys = new Set(definitions.map((definition) => `${definition.scope}:${definition.referenceKey}`));
+
+    for (const definition of definitions) {
+      const existing = previous.find((difference) => difference.scope === definition.scope && difference.referenceKey === definition.referenceKey);
+      const valuesChanged = existing !== undefined && (
+        Number(existing.expectedValue) !== definition.expectedValue
+        || Number(existing.recordedValue) !== definition.recordedValue
+        || Number(existing.differenceValue) !== definition.differenceValue
+      );
+      const differenceType = definition.differenceValue > 0 ? DailyCloseDifferenceType.SURPLUS : DailyCloseDifferenceType.SHORTAGE;
+      await client.dailyCloseDifference.upsert({
+        where: {
+          pointOfSaleDailyCloseId_scope_referenceKey: {
+            pointOfSaleDailyCloseId: closeId,
+            scope: definition.scope,
+            referenceKey: definition.referenceKey,
+          },
+        },
+        create: {
+          pointOfSaleDailyCloseId: closeId,
+          code: definition.code,
+          referenceKey: definition.referenceKey,
+          scope: definition.scope,
+          unit: definition.unit,
+          expectedValue: definition.expectedValue,
+          recordedValue: definition.recordedValue,
+          differenceValue: definition.differenceValue,
+          differenceType,
+          productId: definition.productId,
+        },
+        update: {
+          code: definition.code,
+          unit: definition.unit,
+          expectedValue: definition.expectedValue,
+          recordedValue: definition.recordedValue,
+          differenceValue: definition.differenceValue,
+          differenceType,
+          productId: definition.productId,
+          ...(valuesChanged ? {
+            status: DailyCloseDifferenceStatus.PENDING_JUSTIFICATION,
+            reason: null,
+            evidence: null,
+            justifiedByUserId: null,
+            justifiedAt: null,
+            authorizedByUserId: null,
+            authorizedAt: null,
+          } : {}),
+        },
+      });
+    }
+
+    for (const difference of previous) {
+      if (!activeKeys.has(`${difference.scope}:${difference.referenceKey}`) && Number(difference.differenceValue) !== 0) {
+        await client.dailyCloseDifference.update({ where: { id: difference.id }, data: { differenceValue: 0 } });
+      }
+    }
   }
 
   private async reconciliationForClose(close: { id: string; operationalLocationId: string; businessDate: Date; sales: Array<{ items: Array<{ productId: string; quantityKg: Prisma.Decimal | null; quantityPieces: number | null }> }> }, client: DailyCloseClient = this.prisma) {
@@ -586,14 +834,45 @@ export class PointOfSaleDailyCloseService {
   private projectForRole(close: object, user: AuthenticatedUser) {
     const candidate = close as { sales?: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date };
     const result = { ...(Array.isArray(candidate.sales) ? this.withCostQuality(candidate as { sales: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date }) : candidate) } as Record<string, unknown>;
+    if (Array.isArray(result.differences)) {
+      const differences = result.differences as Array<Record<string, unknown>>;
+      const visibleDifferences = user.role === 'WAREHOUSE'
+        ? differences.filter((difference) => difference.scope === DailyCloseDifferenceScope.INVENTORY)
+        : user.role === 'COLLECTIONS'
+          ? differences.filter((difference) => difference.scope === DailyCloseDifferenceScope.CASH)
+          : differences;
+      result.differences = visibleDifferences;
+      result.unresolvedDifferenceCount = visibleDifferences.filter((difference) => Number(difference.differenceValue) !== 0 && difference.status !== DailyCloseDifferenceStatus.AUTHORIZED).length;
+    } else {
+      result.unresolvedDifferenceCount = 0;
+    }
+    if (user.role === 'SELLER') {
+      ['purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality', 'profitSummary'].forEach((field) => delete result[field]);
+      if (Array.isArray(result.sales)) {
+        const sales = result.sales as Array<Record<string, unknown> & { items?: Array<Record<string, unknown>> }>;
+        result.sales = sales.map((sale) => ({
+          ...sale,
+          ...(Array.isArray(sale.items)
+            ? {
+                items: sale.items.map(({ unitCostSnapshot, costSubtotalSnapshot, costSnapshotSource, ...item }) => item),
+              }
+            : {}),
+        }));
+      }
+      if (Array.isArray(result.lines)) {
+        result.lines = (result.lines as Array<Record<string, unknown>>).filter(
+          (line) => line.section !== 'PROFIT' && line.conceptType !== 'NET_PROFIT',
+        );
+      }
+    }
     if (user.role === 'WAREHOUSE') {
-      ['payments', 'cashMovements', 'sales', 'cashTotal', 'cardVoucherTotal', 'transferTotal', 'expenseTotal', 'grossSalesTotal', 'netCashExpected', 'cashCountedTotal', 'cashDifferenceTotal', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality'].forEach((field) => delete result[field]);
+      ['payments', 'cashMovements', 'sales', 'cashTotal', 'cardVoucherTotal', 'transferTotal', 'expenseTotal', 'grossSalesTotal', 'netCashExpected', 'cashCountedTotal', 'cashDifferenceTotal', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality', 'profitSummary'].forEach((field) => delete result[field]);
       if (Array.isArray(result.lines)) result.lines = result.lines.map(({ amount, ...line }) => line);
       if (Array.isArray(result.scaleTicketReferences)) result.scaleTicketReferences = result.scaleTicketReferences.map(({ amount, unitPrice, ...ticket }) => ticket);
       if (Array.isArray(result.excludedOperations)) result.excludedOperations = result.excludedOperations.filter((operation) => (operation as { type: string }).type === 'SALE');
     }
     if (user.role === 'COLLECTIONS') {
-      ['inventoryMovements', 'lines', 'scaleTicketReferences', 'totalInputKg', 'totalSoldKg', 'totalRemainingKg', 'totalShortageKg', 'totalSurplusKg', 'scaleReportedKg', 'scaleDifferenceKg', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality'].forEach((field) => delete result[field]);
+      ['inventoryMovements', 'lines', 'scaleTicketReferences', 'totalInputKg', 'totalSoldKg', 'totalRemainingKg', 'totalShortageKg', 'totalSurplusKg', 'scaleReportedKg', 'scaleDifferenceKg', 'purchaseCostTotal', 'grossProfitTotal', 'netProfitTotal', 'costQuality', 'profitSummary'].forEach((field) => delete result[field]);
       if (Array.isArray(result.sales)) result.sales = result.sales.map(({ items, ...sale }) => sale);
       if (Array.isArray(result.excludedOperations)) result.excludedOperations = result.excludedOperations.filter((operation) => (operation as { type: string }).type === 'PAYMENT');
     }

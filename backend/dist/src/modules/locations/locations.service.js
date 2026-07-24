@@ -13,14 +13,15 @@ exports.LocationsService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../database/prisma.service");
+const SELLER_WITHOUT_LOCATION = '__seller_without_operational_location__';
 let LocationsService = class LocationsService {
     prisma;
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async findAll(query = {}) {
+    async findAll(currentUser, query = {}) {
         const locations = (await this.prisma.operationalLocation.findMany({
-            where: this.buildListWhere(query),
+            where: this.buildListWhere(query, currentUser),
             orderBy: { name: 'asc' },
             ...this.buildPagination(query),
         }));
@@ -103,10 +104,13 @@ let LocationsService = class LocationsService {
         await this.assertActiveLocation(originLocationId, 'New transfers');
         await this.assertActiveLocation(destinationLocationId, 'New transfers');
     }
-    buildListWhere(query) {
+    buildListWhere(query, currentUser) {
         const search = query.search?.trim();
         return {
             isActive: query.isActive ?? true,
+            ...(currentUser.role === 'SELLER'
+                ? { id: currentUser.operationalLocationId ?? SELLER_WITHOUT_LOCATION }
+                : {}),
             ...(query.type ? { type: query.type } : {}),
             ...(query.parentId ? { parentId: query.parentId } : {}),
             ...(search

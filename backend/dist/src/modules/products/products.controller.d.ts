@@ -1,9 +1,10 @@
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateProductDto, GetProductQueryDto, ListProductsQueryDto, UpdateProductDto } from './dto';
 import { ProductsService } from './products.service';
 export declare class ProductsController {
     private readonly productsService;
     constructor(productsService: ProductsService);
-    findAll(query: ListProductsQueryDto): Promise<{
+    findAll(query: ListProductsQueryDto, currentUser: AuthenticatedUser): Promise<{
         success: boolean;
         message: string;
         data: {
@@ -15,7 +16,7 @@ export declare class ProductsController {
                 categoryId: string | null;
                 presentationType: import("@prisma/client").ProductPresentationType;
                 salePrice: number;
-                purchaseCost: number;
+                purchaseCost?: number;
                 minStock: number;
                 unit: import("@prisma/client").ProductUnit;
                 pieceWeightEquivalent: number | null;
@@ -50,7 +51,7 @@ export declare class ProductsController {
             }[];
         };
     }>;
-    findOne(id: string, query: GetProductQueryDto): Promise<{
+    findOne(id: string, query: GetProductQueryDto, currentUser: AuthenticatedUser): Promise<{
         success: boolean;
         message: string;
         data: {
@@ -61,7 +62,7 @@ export declare class ProductsController {
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
             salePrice: number;
-            purchaseCost: number;
+            purchaseCost?: number;
             minStock: number;
             unit: import("@prisma/client").ProductUnit;
             pieceWeightEquivalent: number | null;
@@ -106,7 +107,7 @@ export declare class ProductsController {
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
             salePrice: number;
-            purchaseCost: number;
+            purchaseCost?: number;
             minStock: number;
             unit: import("@prisma/client").ProductUnit;
             pieceWeightEquivalent: number | null;
@@ -151,7 +152,7 @@ export declare class ProductsController {
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
             salePrice: number;
-            purchaseCost: number;
+            purchaseCost?: number;
             minStock: number;
             unit: import("@prisma/client").ProductUnit;
             pieceWeightEquivalent: number | null;
@@ -196,7 +197,7 @@ export declare class ProductsController {
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
             salePrice: number;
-            purchaseCost: number;
+            purchaseCost?: number;
             minStock: number;
             unit: import("@prisma/client").ProductUnit;
             pieceWeightEquivalent: number | null;

@@ -198,6 +198,15 @@ Toda vista debe contemplar:
 - Deshabilitar botón mientras se confirma venta.
 - Mostrar errores del backend por stock insuficiente, crédito bloqueado, permisos o conflicto.
 
+## Contexto derivado del usuario — P1-3
+
+- `SELLER` debe recibir y usar `operationalLocationId` como ubicación inicial del POS.
+- El selector de ubicación se muestra preseleccionado y bloqueado para `SELLER`; no se deben ofrecer ubicaciones de almacén ni `ROUTE_STOCK` en el POS fijo.
+- `ADMIN` puede cambiar entre ubicaciones activas de tipo `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`, con una advertencia visible indicando que el cambio modifica la fuente de inventario y vacía el carrito.
+- Los canales se derivan del tipo de ubicación: `BRANCH` y `MIXED` permiten `COUNTER`, `INSTITUTIONAL` y `WHOLESALE`; `EXTERNAL_POINT_OF_SALE` permite `EXTERNAL_POINT_OF_SALE` y `COUNTER`, con `EXTERNAL_POINT_OF_SALE` como canal inicial.
+- `ROUTE` no se ofrece desde el POS fijo; las ventas de ruta requieren el flujo específico sobre `ROUTE_STOCK`.
+- Cuando una ubicación solo admite un canal, el canal se selecciona automáticamente y no se edita.
+
 ## Después de confirmar
 
 - Mostrar modal de venta exitosa.
@@ -228,3 +237,14 @@ La consulta y reapertura de documentos debe ocurrir dentro de la misma venta, si
 - Asociar una venta al cierre no permite cambiar su ubicación, fecha, items, pago o movimiento de inventario.
 - La UI debe advertir si la venta aún no está asociada al cierre, sin bloquear el reporte operativo casi en tiempo real.
 - Las ventas a crédito se muestran separadas de efectivo; solo pagos aplicados pueden aparecer como ingreso de cobranza.
+
+## Rediseño de velocidad POS
+
+- La superficie de caja debe organizar productos, carrito/captura y cobro en tres zonas compactas; en escritorio cada zona usa scroll interno para evitar navegación vertical innecesaria.
+- El buscador debe recibir autofocus al abrir el POS y después de una lectura válida. `Enter` debe intentar resolver el valor exacto por `sku`, compatible con lectores que funcionan como teclado.
+- La UI debe ofrecer una vista de productos frecuentes recientes de la sesión y vistas rápidas por categoría sin presentar datos locales como frecuencia histórica global.
+- El carrito debe exponer kilos, piezas, stock por ubicación, precio de referencia e importe por partida. Un teclado numérico contextual puede editar la cantidad del renglón activo; los kilos aceptan decimales y las piezas no.
+- Deben existir las acciones `Nueva venta`, pantalla completa y los atajos `F2` búsqueda, `F4` cliente, `F6` pago, `F8` confirmación y `F9` nueva venta.
+- La cabecera debe informar ubicación, operador, conexión, estado de impresora y estado de báscula sin simular hardware no integrado. El MVP muestra impresora no configurada y báscula de captura manual cuando no exista contrato de dispositivo.
+- La confirmación debe mostrar cliente, sucursal, productos, kilos, piezas, subtotal, descuento autorizado, total, pagos, saldo pendiente de la venta, saldo histórico del cliente cuando exista, documento, folio, canal, solicitud administrativa y motivo de autorización cuando aplique.
+- `Nueva venta` debe solicitar confirmación si existe captura, y la confirmación de registro debe permanecer protegida contra doble clic y conservar la clave de idempotencia para reintentos después de error.

@@ -11,6 +11,7 @@ import type {
   ProductUnit,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateProductDto,
   GetProductQueryDto,
@@ -76,7 +77,7 @@ type ProductResponse = {
   categoryId: string | null;
   presentationType: ProductPresentationType;
   salePrice: number;
-  purchaseCost: number;
+  purchaseCost?: number;
   minStock: number;
   unit: ProductUnit;
   pieceWeightEquivalent: number | null;
@@ -114,7 +115,10 @@ type ProductMutationDto = CreateProductDto | UpdateProductDto;
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: ListProductsQueryDto): Promise<ProductListResponse> {
+  async findAll(
+    query: ListProductsQueryDto,
+    currentUser: Pick<AuthenticatedUser, 'role'>,
+  ): Promise<ProductListResponse> {
     if (query.lowStock === true && !query.locationId) {
       throw new BadRequestException(
         'locationId is required for lowStock filter',
@@ -128,7 +132,9 @@ export class ProductsService {
       ...this.buildPagination(query),
     })) as ProductRecord[];
 
-    const items = products.map((product) => this.toProductResponse(product));
+    const items = products.map((product) => this.toProductResponse(product, {
+      includePurchaseCost: currentUser.role !== 'SELLER',
+    }));
 
     return {
       items:
@@ -141,6 +147,7 @@ export class ProductsService {
   async findOne(
     id: string,
     query: GetProductQueryDto = {},
+    currentUser: Pick<AuthenticatedUser, 'role'>,
   ): Promise<ProductResponse> {
     const includeBalances =
       query.includeBalances === true || !!query.locationId;
@@ -164,7 +171,10 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    return this.toProductResponse(product, { includeBalances: true });
+    return this.toProductResponse(product, {
+      includeBalances: true,
+      includePurchaseCost: currentUser.role !== 'SELLER',
+    });
   }
 
   async create(dto: CreateProductDto): Promise<ProductResponse> {
@@ -440,7 +450,7 @@ export class ProductsService {
 
   private toProductResponse(
     product: ProductRecord,
-    options: { includeBalances?: boolean } = {},
+    options: { includeBalances?: boolean; includePurchaseCost?: boolean } = {},
   ): ProductResponse {
     const response: ProductResponse = {
       id: product.id,
@@ -450,7 +460,6 @@ export class ProductsService {
       categoryId: product.categoryId,
       presentationType: product.presentationType,
       salePrice: this.toNumber(product.salePrice),
-      purchaseCost: this.toNumber(product.purchaseCost),
       minStock: this.toNumber(product.minStock),
       unit: product.unit,
       pieceWeightEquivalent: this.toNullableNumber(
@@ -459,6 +468,10 @@ export class ProductsService {
       equivalentPolicyStatus: product.equivalentPolicyStatus,
       isActive: product.isActive,
     };
+
+    if (options.includePurchaseCost !== false) {
+      response.purchaseCost = this.toNumber(product.purchaseCost);
+    }
 
     const balance = product.inventoryBalances?.[0];
     if (balance) {

@@ -14,6 +14,7 @@ const authenticatedUser = {
   name: 'Development Admin',
   email: 'dev.admin@pollos.local',
   role: 'ADMIN',
+  operationalLocationId: 'location-1',
   mustChangePassword: false,
 };
 

@@ -16,6 +16,11 @@ export class VersionedDailyCloseDto {
   @Type(() => Number) @IsInt() @Min(1) version!: number;
 }
 
+export class JustifyDailyCloseDifferenceDto extends VersionedDailyCloseDto {
+  @IsString() @IsNotEmpty() reason!: string;
+  @IsString() @IsNotEmpty() evidence!: string;
+}
+
 export class ReasonedDailyCloseDto extends VersionedDailyCloseDto {
   @IsString() @IsNotEmpty() reason!: string;
 }

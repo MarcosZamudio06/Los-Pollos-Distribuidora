@@ -12,6 +12,8 @@ import {
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateLocationDto,
   ListLocationsQueryDto,
@@ -26,11 +28,14 @@ export class LocationsController {
 
   @Get()
   @Roles('ADMIN', 'WAREHOUSE', 'SELLER', 'DRIVER', 'COLLECTIONS')
-  async findAll(@Query() query: ListLocationsQueryDto) {
+  async findAll(
+    @Query() query: ListLocationsQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Locations retrieved successfully',
-      data: await this.locationsService.findAll(query),
+      data: await this.locationsService.findAll(currentUser, query),
     };
   }
 

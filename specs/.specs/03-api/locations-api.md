@@ -92,6 +92,7 @@ Validaciones:
 ## Uso en cierres diarios
 
 - `GET /api/locations` permite a `SELLER`, `WAREHOUSE` y `COLLECTIONS` consultar puntos externos dentro de su alcance operativo.
+- En `GET /api/locations`, `SELLER` solo recibe su ubicación operativa asignada; si no tiene asignación, recibe una lista vacía. `ADMIN` conserva el catálogo activo para seleccionar una ubicación compatible.
 - Crear un cierre diario requiere una ubicación activa de tipo `EXTERNAL_POINT_OF_SALE` o una ubicación equivalente autorizada por negocio.
 - Cambiar el tipo de una ubicación no puede invalidar cierres, ventas, movimientos o pagos históricos.
 - El modelo final de jerarquía matriz-sucursal-almacén permanece abierto; este tipo no obliga a usar `parentId`.

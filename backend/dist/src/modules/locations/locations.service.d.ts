@@ -1,5 +1,6 @@
 import type { OperationalLocationType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateLocationDto, ListLocationsQueryDto, UpdateLocationDto } from './dto';
 type LocationRecord = {
     id: string;
@@ -25,10 +26,11 @@ type LocationResponse = Omit<LocationRecord, 'latitude' | 'longitude'> & {
 type LocationListResponse = {
     items: LocationResponse[];
 };
+type LocationListActor = Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>;
 export declare class LocationsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    findAll(query?: ListLocationsQueryDto): Promise<LocationListResponse>;
+    findAll(currentUser: LocationListActor, query?: ListLocationsQueryDto): Promise<LocationListResponse>;
     findOne(id: string): Promise<LocationResponse>;
     create(dto: CreateLocationDto): Promise<LocationResponse>;
     update(id: string, dto: UpdateLocationDto): Promise<LocationResponse>;

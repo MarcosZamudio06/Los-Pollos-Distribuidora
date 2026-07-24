@@ -1058,6 +1058,9 @@ describe('SalesService', () => {
         ],
       }),
     );
+    expect(result.sale.items[0]).not.toHaveProperty('unitCostSnapshot');
+    expect(result.sale.items[0]).not.toHaveProperty('costSubtotalSnapshot');
+    expect(result.sale.items[0]).not.toHaveProperty('costSnapshotSource');
   });
 
   it('supports the deprecated initialPayment contract and uses the server timestamp instead of client supplied paidAt', async () => {
@@ -1085,6 +1088,23 @@ describe('SalesService', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('keeps cost snapshots in the sale response for ADMIN', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    const result = await service.create(
+      validCashSale(),
+      { id: 'admin-1', role: 'ADMIN', operationalLocationId: null },
+      'idem-admin-costs',
+    );
+
+    expect(result.sale.items[0]).toEqual(expect.objectContaining({
+      unitCostSnapshot: '62.5',
+      costSubtotalSnapshot: '156.25',
+      costSnapshotSource: 'SALE_CONFIRMATION',
+    }));
   });
 
   it('persists one payment per split payment item and settles the sale using their combined amount', async () => {

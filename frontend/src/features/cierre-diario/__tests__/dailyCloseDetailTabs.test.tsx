@@ -15,7 +15,7 @@ const close: DailyClose = {
   cashMovements: [{ id: 'expense-1', amount: '80', type: 'EXPENSE', movementChannel: 'CASH', reason: 'Hielo para mostrador', reference: 'T-22', occurredAt: '2026-07-22T13:00:00.000Z' }],
   scaleTicketReferences: [{ id: 'scale-1', physicalFolio: 'B-100', saleId: 'sale-1', weightKg: '19.5', grossWeightKg: '20', tareWeightKg: '0.5', netWeightKg: '19.5', pieceCount: 1, amount: '2400', captureSource: 'MANUAL', product: { name: 'Pollo entero' } }],
   inventoryMovements: [{ id: 'movement-1', productId: 'product-1', type: 'TRANSFER_IN', quantityKg: '30', quantityPieces: 0, previousQuantityKg: '0', newQuantityKg: '30', reason: 'Resurtido', referenceType: 'TRANSFER', referenceId: 'transfer-1', createdAt: '2026-07-22T08:00:00.000Z', product: { id: 'product-1', name: 'Pollo entero', sku: 'POL-001' } }],
-  lines: [{ id: 'line-1', section: 'INCOME', conceptType: 'TRANSFER_INCOME', quantityKg: null, quantityPieces: null, amount: '12500', notes: 'SPEI-123', createdAt: '2026-07-22T12:05:00.000Z' }],
+  lines: [{ id: 'line-1', section: 'INCOME', conceptType: 'TRANSFER_INCOME', quantityKg: null, quantityPieces: null, amount: '12500', notes: 'SPEI-123', createdAt: '2026-07-22T12:05:00.000Z' }, { id: 'line-profit', section: 'PROFIT', conceptType: 'NET_PROFIT', quantityKg: null, quantityPieces: null, amount: '5120', notes: 'Administrativo', createdAt: '2026-07-22T12:05:00.000Z' }],
   excludedOperations: [{ id: 'excluded-1', type: 'PAYMENT', reference: 'RUTA-123', amount: '500', reason: 'Pago asociado a una ruta pendiente de liquidación.', occurredAt: '2026-07-22T13:30:00.000Z' }],
 }
 
@@ -72,5 +72,12 @@ describe('daily close operational detail tabs', () => {
     } finally {
       await act(async () => root.unmount())
     }
+  })
+
+  it('does not render profit lines for a seller projection', () => {
+    const html = renderToStaticMarkup(<DailyCloseDetailTabs activeTab="differences" canEditInventory={false} canViewFinancials canViewInventory canViewProfit={false} close={close} inventoryReconciliation={null} onDeleteInventoryCount={vi.fn()} onSaveInventoryCount={vi.fn()} onTabChange={vi.fn()} products={[]} validationResult={null} />)
+
+    expect(html).not.toContain('Utilidad neta')
+    expect(html).not.toContain('Administrativo')
   })
 })

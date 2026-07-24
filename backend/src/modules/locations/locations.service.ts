@@ -12,6 +12,7 @@ import {
   RouteSettlementStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateLocationDto,
   ListLocationsQueryDto,
@@ -38,16 +39,20 @@ type LocationListResponse = { items: LocationResponse[] };
 
 type LocationMutationDto = CreateLocationDto | UpdateLocationDto;
 type LocationMutationData = Pick<LocationRecord, 'name' | 'code' | 'type' | 'parentId' | 'address' | 'isActive'>;
+type LocationListActor = Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>;
+
+const SELLER_WITHOUT_LOCATION = '__seller_without_operational_location__';
 
 @Injectable()
 export class LocationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(
+    currentUser: LocationListActor,
     query: ListLocationsQueryDto = {},
   ): Promise<LocationListResponse> {
     const locations = (await this.prisma.operationalLocation.findMany({
-      where: this.buildListWhere(query),
+      where: this.buildListWhere(query, currentUser),
       orderBy: { name: 'asc' },
       ...this.buildPagination(query),
     })) as LocationRecord[];
@@ -158,11 +163,15 @@ export class LocationsService {
 
   private buildListWhere(
     query: ListLocationsQueryDto,
+    currentUser: LocationListActor,
   ): Prisma.OperationalLocationWhereInput {
     const search = query.search?.trim();
 
     return {
       isActive: query.isActive ?? true,
+      ...(currentUser.role === 'SELLER'
+        ? { id: currentUser.operationalLocationId ?? SELLER_WITHOUT_LOCATION }
+        : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.parentId ? { parentId: query.parentId } : {}),
       ...(search

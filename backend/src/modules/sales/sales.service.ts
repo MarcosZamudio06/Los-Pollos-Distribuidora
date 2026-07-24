@@ -410,7 +410,7 @@ export class SalesService {
 
           const existingBillingState = existingSale as unknown as SaleListRecord;
           return {
-            sale: this.toSaleResponse(existingSale),
+            sale: this.toSaleResponse(existingSale, currentUser),
             payments: existingSale.payments.map((payment) => this.toPaymentResponse(payment)),
             // Deprecated compatibility field. New consumers must use payments.
             payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
@@ -707,7 +707,7 @@ export class SalesService {
         }
 
         return {
-          sale: this.toSaleResponse(sale),
+          sale: this.toSaleResponse(sale, currentUser),
           payments: createdPayments.map((payment) => this.toPaymentResponse(payment)),
           // Deprecated compatibility field. New consumers must use payments.
           payment: createdPayments[0] ? this.toPaymentResponse(createdPayments[0]) : null,
@@ -888,7 +888,7 @@ export class SalesService {
           }
 
           return {
-            sale: this.toSaleResponse(sale),
+            sale: this.toSaleResponse(sale, currentUser),
             inventoryMovements: (sale.inventoryMovements ?? []).map((movement) => this.toMovementResponse(movement)),
             accountReceivable: sale.accountReceivable ? this.toReceivableRecordResponse(sale.accountReceivable) : null,
           };
@@ -934,7 +934,7 @@ export class SalesService {
         }
 
         return {
-          sale: this.toSaleResponse(cancelledSale as UpdatedSale & { items?: Array<Record<string, unknown>> }),
+          sale: this.toSaleResponse(cancelledSale as UpdatedSale & { items?: Array<Record<string, unknown>> }, currentUser),
           inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
           accountReceivable: accountReceivable ? this.toReceivableRecordResponse(accountReceivable as Record<string, unknown>) : null,
         };
@@ -1316,7 +1316,10 @@ export class SalesService {
       : String(target).includes('saleNumber');
   }
 
-  private toSaleResponse(sale: { [key: string]: unknown; items?: Array<Record<string, unknown>> }) {
+  private toSaleResponse(
+    sale: { [key: string]: unknown; items?: Array<Record<string, unknown>> },
+    currentUser: Actor,
+  ) {
     const creditDecision = sale.creditDecisionSnapshot as Record<string, unknown> | null | undefined;
     return {
       ...sale,
@@ -1325,18 +1328,24 @@ export class SalesService {
       discount: this.decimalToString(sale.discount),
       tax: this.decimalToString(sale.tax),
       total: this.decimalToString(sale.total),
-      items: sale.items?.map((item) => ({
-        ...item,
-        quantity: this.decimalToString(item.quantity),
-        quantityKg: this.decimalToString(item.quantityKg),
-        unitPrice: this.decimalToString(item.unitPrice),
-        unitPriceSnapshot: this.decimalToString(item.unitPriceSnapshot),
-        quantitySnapshot: this.decimalToString(item.quantitySnapshot),
-        appliedEquivalentFactor: this.decimalToString(item.appliedEquivalentFactor),
-        subtotal: this.decimalToString(item.subtotal),
-        unitCostSnapshot: this.decimalToString(item.unitCostSnapshot),
-        costSubtotalSnapshot: this.decimalToString(item.costSubtotalSnapshot),
-      })) ?? [],
+      items: sale.items?.map((item) => {
+        const projectedItem = {
+          ...item,
+          quantity: this.decimalToString(item.quantity),
+          quantityKg: this.decimalToString(item.quantityKg),
+          unitPrice: this.decimalToString(item.unitPrice),
+          unitPriceSnapshot: this.decimalToString(item.unitPriceSnapshot),
+          quantitySnapshot: this.decimalToString(item.quantitySnapshot),
+          appliedEquivalentFactor: this.decimalToString(item.appliedEquivalentFactor),
+          subtotal: this.decimalToString(item.subtotal),
+          unitCostSnapshot: this.decimalToString(item.unitCostSnapshot),
+          costSubtotalSnapshot: this.decimalToString(item.costSubtotalSnapshot),
+          costSnapshotSource: item.costSnapshotSource,
+        };
+        if (currentUser.role !== 'SELLER') return projectedItem;
+        const { unitCostSnapshot, costSubtotalSnapshot, costSnapshotSource, ...visibleItem } = projectedItem;
+        return visibleItem;
+      }) ?? [],
     };
   }
 

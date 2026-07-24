@@ -15,6 +15,7 @@ describe('PointOfSaleDailyCloseService', () => {
     payment: { findMany: jest.fn(), updateMany: jest.fn() },
     inventoryMovement: { findMany: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
     dailyCloseInventoryCount: { create: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    dailyCloseDifference: { findMany: jest.fn(), findFirst: jest.fn(), upsert: jest.fn(), update: jest.fn() },
     dailyCloseEvent: { create: jest.fn() },
     dailyCloseSnapshot: { create: jest.fn() },
     product: { findUnique: jest.fn() },
@@ -27,6 +28,8 @@ describe('PointOfSaleDailyCloseService', () => {
     jest.clearAllMocks();
     prisma.inventoryMovement.findMany.mockResolvedValue([]);
     prisma.dailyCloseInventoryCount.findMany.mockResolvedValue([]);
+    prisma.dailyCloseDifference.findMany.mockResolvedValue([]);
+    prisma.dailyCloseDifference.findFirst.mockResolvedValue(null);
     prisma.sale.findMany.mockResolvedValue([]);
     prisma.payment.findMany.mockResolvedValue([]);
     prisma.cashMovement.findUnique.mockResolvedValue(null);
@@ -289,17 +292,23 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(result).toEqual([expect.objectContaining({ id: 'close-1', operationalLocationId: 'loc-seller' })]);
   });
 
-  it('projects only inventory to WAREHOUSE and only financial data to COLLECTIONS', async () => {
+  it('projects seller data without costs or utility while preserving role-specific projections', async () => {
     const close = {
       id: 'close-1',
       operationalLocationId: 'loc-1',
       status: 'DRAFT',
       updatedAt: new Date(),
-      sales: [],
+      sales: [{
+        id: 'sale-1',
+        items: [{ unitCostSnapshot: 70, costSubtotalSnapshot: 70, costSnapshotSource: 'SALE_CONFIRMATION' }],
+      }],
       payments: [{ id: 'payment-1' }],
       cashMovements: [{ id: 'cash-1' }],
       inventoryMovements: [{ id: 'movement-1' }],
-      lines: [{ id: 'line-1', amount: 100 }],
+      lines: [
+        { id: 'line-income', section: 'INCOME', conceptType: 'CASH_INCOME', amount: 100 },
+        { id: 'line-profit', section: 'PROFIT', conceptType: 'NET_PROFIT', amount: 10 },
+      ],
       scaleTicketReferences: [{ id: 'ticket-1', amount: 100, unitPrice: 50, weightKg: 2 }],
       purchaseCostTotal: 80,
       grossProfitTotal: 20,
@@ -324,6 +333,7 @@ describe('PointOfSaleDailyCloseService', () => {
 
     const warehouse = await service.get('close-1', { id: 'warehouse-1', role: 'WAREHOUSE' } as never);
     const collections = await service.get('close-1', { id: 'collections-1', role: 'COLLECTIONS' } as never);
+    const seller = await service.get('close-1', { id: 'seller-1', role: 'SELLER' } as never);
 
     expect(warehouse).toHaveProperty('inventoryMovements');
     expect(warehouse).not.toHaveProperty('payments');
@@ -331,6 +341,17 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(collections).toHaveProperty('payments');
     expect(collections).not.toHaveProperty('inventoryMovements');
     expect(collections).not.toHaveProperty('purchaseCostTotal');
+    expect(seller).toHaveProperty('sales');
+    expect(seller).toHaveProperty('payments');
+    expect(seller).toHaveProperty('cashDifferenceTotal');
+    expect(seller).not.toHaveProperty('purchaseCostTotal');
+    expect(seller).not.toHaveProperty('grossProfitTotal');
+    expect(seller).not.toHaveProperty('netProfitTotal');
+    expect(seller).not.toHaveProperty('costQuality');
+    expect(seller.sales?.[0].items?.[0]).not.toHaveProperty('unitCostSnapshot');
+    expect(seller.sales?.[0].items?.[0]).not.toHaveProperty('costSubtotalSnapshot');
+    expect(seller.sales?.[0].items?.[0]).not.toHaveProperty('costSnapshotSource');
+    expect(seller.lines).toEqual([expect.objectContaining({ id: 'line-income' })]);
   });
 
   it('reports route payments and unconfirmed sales as excluded operations', async () => {
@@ -447,6 +468,70 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ lastValidationAttemptAt: expect.any(Date), lastValidatedAt: expect.any(Date), validatedSourceVersion: 4 }),
     }));
+  });
+
+  it('builds explicit cash, scale, and inventory difference definitions', () => {
+    const definitions = (service as any).buildDifferenceDefinitions({
+      cashExpected: 100,
+      cashRecorded: 80,
+      scaleExpected: 20,
+      scaleRecorded: 21.5,
+      inventory: [{
+        product: { id: 'product-1' },
+        theoreticalQuantityKg: 10,
+        physicalQuantityKg: 8.5,
+        theoreticalQuantityPieces: 2,
+        physicalQuantityPieces: 3,
+      }],
+    });
+
+    expect(definitions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'CASH_DIFFERENCE', expectedValue: 100, recordedValue: 80, differenceValue: -20, referenceKey: 'CASH' }),
+      expect.objectContaining({ code: 'SCALE_DIFFERENCE', expectedValue: 20, recordedValue: 21.5, differenceValue: 1.5, referenceKey: 'SCALE' }),
+      expect.objectContaining({ code: 'INVENTORY_DIFFERENCE', expectedValue: 10, recordedValue: 8.5, differenceValue: -1.5, referenceKey: 'product-1:KG' }),
+      expect.objectContaining({ code: 'INVENTORY_DIFFERENCE', expectedValue: 2, recordedValue: 3, differenceValue: 1, referenceKey: 'product-1:PIECE' }),
+    ]));
+  });
+
+  it('justifies a difference with evidence and invalidates the close version', async () => {
+    const close = { id: 'close-1', operationalLocationId: 'loc-1', status: 'DRAFT', version: 3, sales: [], updatedAt: new Date() };
+    const difference = { id: 'difference-1', pointOfSaleDailyCloseId: 'close-1', differenceValue: -20, status: 'PENDING_JUSTIFICATION' };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce({ version: 3, status: 'DRAFT' })
+      .mockResolvedValueOnce({ ...close, version: 4 });
+    prisma.dailyCloseDifference.findFirst.mockResolvedValue(difference);
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.justifyDifference('close-1', 'difference-1', { version: 3, reason: 'Conteo validado con encargado', evidence: 'Folio CAJA-22' }, { id: 'seller-1', role: 'SELLER' } as never);
+
+    expect(prisma.dailyCloseDifference.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'difference-1' },
+      data: expect.objectContaining({ status: 'PENDING_AUTHORIZATION', reason: 'Conteo validado con encargado', evidence: 'Folio CAJA-22', justifiedByUserId: 'seller-1' }),
+    }));
+    expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'close-1', version: 3, status: 'DRAFT' },
+    }));
+    expect(prisma.dailyCloseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'DIFFERENCE_JUSTIFIED' }) }));
+  });
+
+  it('authorizes a justified difference only as an administrator', async () => {
+    const close = { id: 'close-1', operationalLocationId: 'loc-1', status: 'DRAFT', version: 4, sales: [], updatedAt: new Date() };
+    const difference = { id: 'difference-1', pointOfSaleDailyCloseId: 'close-1', differenceValue: 12, status: 'PENDING_AUTHORIZATION' };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce({ version: 4, status: 'DRAFT' })
+      .mockResolvedValueOnce({ ...close, version: 5 });
+    prisma.dailyCloseDifference.findFirst.mockResolvedValue(difference);
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.authorizeDifference('close-1', 'difference-1', { version: 4 }, { id: 'admin-1', role: 'ADMIN' } as never);
+
+    expect(prisma.dailyCloseDifference.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'difference-1' },
+      data: expect.objectContaining({ status: 'AUTHORIZED', authorizedByUserId: 'admin-1' }),
+    }));
+    expect(prisma.dailyCloseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'DIFFERENCE_AUTHORIZED' }) }));
   });
 
   it('commits an expense, version bump, recalculation, and audit event in one transaction', async () => {

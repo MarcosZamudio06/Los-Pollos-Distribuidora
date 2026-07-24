@@ -86,6 +86,8 @@ Respuesta `data.items[]`:
 - Identidad, ubicación, fecha, estado y responsables.
 - Totales de kilos, ventas, ingresos, gastos, utilidad y diferencias.
 - `warningCount`, `lastValidatedAt`, `createdAt`, `updatedAt`.
+- La proyección de `SELLER` conserva ventas, pagos, gastos, efectivo contado y diferencias de caja, pero omite `purchaseCostTotal`, `grossProfitTotal`, `netProfitTotal`, `costQuality` y cualquier otro dato de costo o utilidad.
+- `WAREHOUSE` recibe únicamente la proyección autorizada de inventario y kilos; `COLLECTIONS` recibe únicamente la proyección autorizada de cobranza e ingresos; `ADMIN` recibe los totales financieros completos.
 
 ## GET /api/point-of-sale-daily-closes/:id
 
@@ -99,6 +101,9 @@ Respuesta `data`:
 - Auditoría de transiciones.
 
 El backend debe ocultar secciones no autorizadas por rol.
+En particular, para `SELLER` debe omitir los snapshots de costo dentro de `sales[].items[]`, las líneas de sección `PROFIT` y los conceptos de utilidad. La omisión debe ocurrir también en `refresh` y en la respuesta de `validate`, no solo en la UI.
+
+`data.differences[]` conserva para cada diferencia `code`, `scope`, `referenceKey`, `unit`, `expectedValue`, `recordedValue`, `differenceValue`, `differenceType`, `status`, `reason`, `evidence`, `justifiedBy`, `justifiedAt`, `authorizedBy` y `authorizedAt`. La respuesta también incluye `openedBy`, `reviewedBy`, `closedBy` y `unresolvedDifferenceCount` cuando el rol tenga acceso a la proyección.
 
 ## POST /api/point-of-sale-daily-closes/:id/lines
 
@@ -243,6 +248,8 @@ Respuesta `data`:
 - `profitSummary`: compra, venta, utilidad bruta y neta.
 - `warnings[]`, `blockingErrors[]`, `validatedVersion`, `validatedAt`.
 
+La respuesta de `SELLER` debe excluir `profitSummary` y cualquier campo de costo o utilidad del cierre; conserva únicamente la información de ingresos y diferencias de caja autorizada para su operación.
+
 Validaciones:
 
 - No ocultar diferencias.
@@ -251,6 +258,34 @@ Validaciones:
 - Bloquear si datos asociados cambiaron durante la validación.
 - Bloquear con `CASH_COUNT_REQUIRED` si no existe efectivo contado.
 - Solo una validación sin errores actualiza `validatedVersion` y `validatedAt`; todo intento registra `lastValidationAttemptAt` sin marcar el cierre como validado.
+
+## PATCH /api/point-of-sale-daily-closes/:id/differences/:differenceId/justify
+
+Propósito: registrar el motivo y la evidencia textual de una diferencia activa.
+
+Permisos: `ADMIN` o `SELLER` dentro de su ubicación.
+
+Body:
+
+```json
+{
+  "version": 4,
+  "reason": "Conteo validado con encargado",
+  "evidence": "Folio CAJA-22"
+}
+```
+
+La operación solo admite cierres `DRAFT`, incrementa la versión, invalida la validación vigente y registra `DIFFERENCE_JUSTIFIED` en una transacción.
+
+## PATCH /api/point-of-sale-daily-closes/:id/differences/:differenceId/authorize
+
+Propósito: autorizar una diferencia previamente justificada.
+
+Permisos: `ADMIN`.
+
+Body: `{"version": 4}`.
+
+La operación solo admite una diferencia `PENDING_AUTHORIZATION`, incrementa la versión, invalida la validación vigente y registra `DIFFERENCE_AUTHORIZED` en una transacción. No modifica operaciones fuente.
 
 ## POST /api/point-of-sale-daily-closes/:id/cash-count
 
@@ -348,6 +383,11 @@ Validaciones:
 - `SCALE_TICKET_DUPLICATE_FOLIO`
 - `RECONCILIATION_BLOCKED`
 - `FORBIDDEN`
+- `DAILY_CLOSE_DIFFERENCE_NOT_FOUND`
+- `DAILY_CLOSE_DIFFERENCE_REASON_REQUIRED`
+- `DAILY_CLOSE_DIFFERENCE_EVIDENCE_REQUIRED`
+- `DAILY_CLOSE_DIFFERENCE_ALREADY_RESOLVED`
+- `DAILY_CLOSE_DIFFERENCE_NOT_READY_FOR_AUTHORIZATION`
 
 ## Decisiones abiertas
 

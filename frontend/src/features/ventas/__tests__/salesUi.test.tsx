@@ -86,6 +86,12 @@ function changeTextarea(textarea: HTMLTextAreaElement, value: string) {
   textarea.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+function changeInput(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 async function renderDom(element: React.ReactElement): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -169,7 +175,89 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Resumen sticky')
     expect(html).toContain('Selecciona una ubicación operativa')
     expect(html).toContain('Mostrador · MOST')
+    expect(html).toContain('ADMIN puede cambiar la ubicación')
+    expect(html).toContain('Nueva venta')
+    expect(html).toContain('Frecuentes recientes')
+    expect(html).toContain('Impresora: no configurada')
+    expect(html).toContain('Báscula: captura manual')
+    expect(html).toContain('Teclado numérico')
+    expect(html).toContain('F2 buscar')
     expect(html).toContain('Confirmar venta')
+  })
+
+  it('enfoca la búsqueda con F2 y conserva controles de operación rápida', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const search = container.querySelector('#pos-product-search')
+      expect(search).toBeInstanceOf(HTMLInputElement)
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true })) })
+      expect(document.activeElement).toBe(search)
+      expect(container.querySelector('[aria-label="Teclado numérico"]')).toBeTruthy()
+      expect(container.querySelector('button[aria-label="Activar pantalla completa"]')).toBeTruthy()
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('agrega un producto al leer su SKU y presionar Enter', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      const search = container.querySelector('#pos-product-search')
+      expect(search).toBeInstanceOf(HTMLInputElement)
+      await act(async () => {
+        changeInput(search as HTMLInputElement, 'POL-1')
+        search?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+      expect(container.textContent).toContain('1 en carrito')
+      expect(container.textContent).toContain('Agregado: Pollo entero')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('deriva la ubicación y el canal inicial para SELLER y bloquea ubicaciones no válidas', async () => {
+    mockState.auth = { user: { role: 'SELLER', operationalLocationId: 'loc-ext' } } as typeof mockState.auth
+    mockState.locations = {
+      data: [
+        { id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' },
+        { id: 'loc-ext', name: 'Punto externo', code: 'EXT', type: 'EXTERNAL_POINT_OF_SALE' },
+        { id: 'loc-route', name: 'Ruta Norte', code: 'RUTA', type: 'ROUTE_STOCK' },
+      ],
+      error: null,
+      isLoading: false,
+    }
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      const channelSelect = container.querySelector('select[aria-label="Canal de venta"]')
+
+      expect(locationSelect.value).toBe('loc-ext')
+      expect(locationSelect.disabled).toBe(true)
+      expect(channelSelect).toBeInstanceOf(HTMLSelectElement)
+      expect((channelSelect as HTMLSelectElement).value).toBe('EXTERNAL_POINT_OF_SALE')
+      expect((channelSelect as HTMLSelectElement).disabled).toBe(false)
+      expect(Array.from((channelSelect as HTMLSelectElement).options).map((option) => option.value)).toContain('COUNTER')
+      expect(Array.from((channelSelect as HTMLSelectElement).options).map((option) => option.value)).not.toContain('ROUTE')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
   })
 
   it('muestra advertencia, mora y política sin presentar WARN_ONLY como bloqueo', () => {
@@ -221,6 +309,8 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { changeTextarea(container.querySelector('textarea[name="credit-override-reason"]') as HTMLTextAreaElement, 'Autorizado por dirección') })
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       expect(document.body.textContent).toContain('Autorización administrativa')
+      expect(document.body.textContent).toContain('Saldo pendiente de esta venta')
+      expect(document.body.textContent).toContain('Solicitud administrativa')
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
       expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección' }) }))

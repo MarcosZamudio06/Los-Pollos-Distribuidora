@@ -1,9 +1,10 @@
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateLocationDto, ListLocationsQueryDto, UpdateLocationDto } from './dto';
 import { LocationsService } from './locations.service';
 export declare class LocationsController {
     private readonly locationsService;
     constructor(locationsService: LocationsService);
-    findAll(query: ListLocationsQueryDto): Promise<{
+    findAll(query: ListLocationsQueryDto, currentUser: AuthenticatedUser): Promise<{
         success: boolean;
         message: string;
         data: {

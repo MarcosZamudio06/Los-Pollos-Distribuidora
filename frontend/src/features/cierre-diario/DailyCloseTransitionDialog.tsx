@@ -16,6 +16,9 @@ export function DailyCloseTransitionDialog({ action, close, onCancel, onConfirm 
   const [reason, setReason] = useState('')
   const copy = getDailyCloseTransitionCopy(action)
   const date = close.businessDate.slice(0, 10)
+  const billableNotes = (close.sales ?? []).filter((sale) => sale.requiresAdministrativeInvoice || (sale.billingRequests?.length ?? 0) > 0).length
+  const unresolvedDifferences = (close.differences ?? []).filter((difference) => Number(difference.differenceValue) !== 0 && difference.status !== 'AUTHORIZED').length
+  const kilograms = (value: string | number) => `${Number(value).toFixed(3)} kg`
 
   return (
     <ConfirmationDialog
@@ -32,10 +35,19 @@ export function DailyCloseTransitionDialog({ action, close, onCancel, onConfirm 
       <p><strong>Fecha operativa:</strong> {date}</p>
       <p><strong>Versión del reporte:</strong> {close.version}</p>
       {action === 'close' && (
-        <div className="mt-3 rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] p-3 text-sm">
+        <div className="mt-3 grid gap-3 rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] p-3 text-sm sm:grid-cols-2">
+          <p><strong>Kilos vendidos:</strong> {kilograms(close.totalSoldKg)}</p>
+          <p><strong>Kilos en báscula:</strong> {kilograms(close.scaleReportedKg)}</p>
+          <p><strong>Inventario teórico:</strong> {kilograms(close.totalRemainingKg)}</p>
+          <p><strong>Gastos:</strong> {money(close.expenseTotal)}</p>
+          <p><strong>Ventas:</strong> {money(close.grossSalesTotal)} ({close.sales?.length ?? 0})</p>
+          <p><strong>Notas facturables:</strong> {billableNotes}</p>
           <p><strong>Efectivo esperado:</strong> {money(close.netCashExpected)}</p>
           <p><strong>Efectivo contado:</strong> {close.cashCountedTotal === null ? 'Pendiente de captura' : money(close.cashCountedTotal)}</p>
           <p><strong>Diferencia de efectivo:</strong> {close.cashDifferenceTotal === null ? 'Pendiente de captura' : money(close.cashDifferenceTotal)}</p>
+          <p><strong>Diferencias sin resolver:</strong> {unresolvedDifferences}</p>
+          <p><strong>Sobrante de inventario:</strong> {kilograms(close.totalSurplusKg)}</p>
+          <p><strong>Faltante de inventario:</strong> {kilograms(close.totalShortageKg)}</p>
         </div>
       )}
       {copy.requiresReason && (

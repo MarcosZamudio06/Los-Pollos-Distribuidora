@@ -278,6 +278,8 @@
 }
 
 @theme {
+  --font-sans: var(--pos-body);
+  --font-mono: var(--pos-mono);
   --color-background: var(--erp-background);
   --color-foreground: var(--erp-foreground);
   --color-card: var(--erp-surface);
@@ -332,6 +334,19 @@
     --erp-shadow: 0 24px 80px rgba(17, 24, 21, 0.08);
     --erp-shadow-elevated: 0 18px 60px rgba(17, 24, 21, 0.11);
     --erp-ring: rgba(214, 155, 45, 0.34);
+
+    /* POS tokens: a cold prep surface, steel dividers and one red action. */
+    --pos-porcelain: #f5f7f4;
+    --pos-steel: #d7e0dd;
+    --pos-ink: #17211e;
+    --pos-red: #b62a22;
+    --pos-red-dark: #8f201b;
+    --pos-amber: #e9a72f;
+    --pos-green: #23715a;
+    --pos-muted: #60706b;
+    --pos-display: 'Arial Narrow', 'Roboto Condensed', Impact, sans-serif;
+    --pos-body: 'Atkinson Hyperlegible', 'Trebuchet MS', Inter, ui-sans-serif, system-ui, sans-serif;
+    --pos-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   }
 
   * {
@@ -391,6 +406,17 @@
     outline: 2px solid var(--erp-brand-gold);
     outline-offset: 2px;
     box-shadow: 0 0 0 4px var(--erp-ring);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
   }
 
   ::-webkit-scrollbar {

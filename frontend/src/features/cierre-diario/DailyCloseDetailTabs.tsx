@@ -3,6 +3,7 @@ import { AlertTriangle, Banknote, Scale } from 'lucide-react'
 import { Table, Td, Th } from '../../components/ui/table'
 import { formatMoney as money } from '../../lib/money'
 import { DailyCloseInventoryReconciliation } from './DailyCloseInventoryReconciliation'
+import { DailyCloseDifferenceList } from './DailyCloseDifferenceList'
 import { DailyCloseValidationPanel } from './DailyCloseValidationPanel'
 import type { DailyClose, DailyCloseInventoryReconciliation as InventoryReconciliation, DailyCloseValidationResult } from './types'
 
@@ -15,6 +16,9 @@ type DailyCloseDetailTabsProps = {
   canEditInventory: boolean
   canViewFinancials: boolean
   canViewInventory: boolean
+  canViewProfit?: boolean
+  canEditDifferences?: boolean
+  canAuthorizeDifferences?: boolean
   close: DailyClose
   inventoryReconciliation: InventoryReconciliation | null
   onDeleteInventoryCount: (countId: string) => void
@@ -24,7 +28,11 @@ type DailyCloseDetailTabsProps = {
   validationResult: DailyCloseValidationResult | null
   cashCountForm?: ReactNode
   expenseForm?: ReactNode
+  includeExpensesInCash?: boolean
   scaleTicketForm?: ReactNode
+  showNavigation?: boolean
+  onJustifyDifference?: (differenceId: string, reason: string, evidence: string) => Promise<void>
+  onAuthorizeDifference?: (differenceId: string) => Promise<void>
 }
 
 const documentTypeLabels: Record<string, string> = {
@@ -117,7 +125,7 @@ function SalesAndDocuments({ close }: { close: DailyClose }) {
   </div>
 }
 
-function CashAndPayments({ close, cashCountForm, paymentMethods }: { close: DailyClose; cashCountForm?: ReactNode; paymentMethods: string[] | null }) {
+function CashAndPayments({ close, cashCountForm, expenseForm, includeExpenses = false, paymentMethods }: { close: DailyClose; cashCountForm?: ReactNode; expenseForm?: ReactNode; includeExpenses?: boolean; paymentMethods: string[] | null }) {
   const payments = (close.payments ?? []).filter((payment) => !paymentMethods || paymentMethods.includes(payment.paymentMethod))
   const paymentDescription = paymentMethods ? `Pagos aplicados de ${paymentMethods.map((method) => paymentMethodLabels[method] ?? method).join(' y ')} que componen el total seleccionado.` : 'Pagos aplicados asociados al cierre. Cada pago de cobranza conserva una sola cuenta por cobrar.'
   return <div className="space-y-4">
@@ -125,6 +133,7 @@ function CashAndPayments({ close, cashCountForm, paymentMethods }: { close: Dail
       <Table className="min-w-[900px]"><thead><tr><Th>Método</Th><Th>Referencia</Th><Th>Venta</Th><Th>Cuenta por cobrar</Th><Th>Estado</Th><Th className="text-right">Importe</Th><Th>Fecha</Th></tr></thead><tbody>{payments.length === 0 ? <EmptyTable colSpan={7} message="No hay pagos aplicados en este cierre." /> : payments.map((payment) => <tr key={payment.id}><Td>{paymentMethodLabels[payment.paymentMethod] ?? payment.paymentMethod}</Td><Td>{payment.referenceNumber || 'Sin referencia'}</Td><Td>{shortId(payment.saleId)}</Td><Td>{shortId(payment.accountReceivableId)}</Td><Td>{payment.status}</Td><Td className="text-right font-bold tabular-nums">{money(payment.amount)}</Td><Td>{dateTime(payment.paidAt)}</Td></tr>)}</tbody></Table>
     </TableSection>
     {cashCountForm}
+    {includeExpenses && <Expenses close={close} expenseForm={expenseForm} />}
   </div>
 }
 
@@ -155,10 +164,11 @@ function InventoryEntries({ close }: { close: DailyClose }) {
   </TableSection>
 }
 
-function Differences({ close, validationResult }: { close: DailyClose; validationResult: DailyCloseValidationResult | null }) {
-  const lines = close.lines ?? []
+function Differences({ canAuthorizeDifferences, canEditDifferences, canViewProfit, close, onAuthorizeDifference, onJustifyDifference, validationResult }: { canAuthorizeDifferences: boolean; canEditDifferences: boolean; canViewProfit: boolean; close: DailyClose; onAuthorizeDifference: (differenceId: string) => Promise<void>; onJustifyDifference: (differenceId: string, reason: string, evidence: string) => Promise<void>; validationResult: DailyCloseValidationResult | null }) {
+  const lines = (close.lines ?? []).filter((line) => canViewProfit || (line.section !== 'PROFIT' && line.conceptType !== 'NET_PROFIT'))
   return <div className="space-y-4">
-    {validationResult ? <DailyCloseValidationPanel result={validationResult} /> : <article className="flex gap-3 rounded-2xl border border-amber-400 bg-amber-50 p-5 text-amber-950"><AlertTriangle className="shrink-0" /><div><h3 className="font-bold">Validación pendiente</h3><p className="mt-1 text-sm">Ejecuta la validación para registrar bloqueantes, diferencias y advertencias.</p></div></article>}
+    {validationResult ? <DailyCloseValidationPanel canViewProfit={canViewProfit} result={validationResult} /> : <article className="flex gap-3 rounded-2xl border border-amber-400 bg-amber-50 p-5 text-amber-950"><AlertTriangle className="shrink-0" /><div><h3 className="font-bold">Validación pendiente</h3><p className="mt-1 text-sm">Ejecuta la validación para registrar bloqueantes, diferencias y advertencias.</p></div></article>}
+    <DailyCloseDifferenceList canAuthorize={canAuthorizeDifferences} canEdit={canEditDifferences} differences={close.differences ?? []} onAuthorize={onAuthorizeDifference} onJustify={onJustifyDifference} />
     <TableSection description="Líneas que componen los totales y diferencias de la conciliación." title="Composición de diferencias">
       <Table className="min-w-[850px]"><thead><tr><Th>Sección</Th><Th>Concepto</Th><Th>Producto</Th><Th className="text-right">Kilos</Th><Th className="text-right">Piezas</Th><Th className="text-right">Importe</Th><Th>Notas</Th></tr></thead><tbody>{lines.length === 0 ? <EmptyTable colSpan={7} message="No hay líneas operativas registradas para este cierre." /> : lines.map((line) => <tr key={line.id}><Td>{line.section}</Td><Td>{lineConceptLabels[line.conceptType] ?? line.conceptType}</Td><Td>{line.product?.name ?? 'No aplica'}</Td><Td className="text-right tabular-nums">{line.quantityKg === null || line.quantityKg === undefined ? 'No aplica' : kilograms(line.quantityKg)}</Td><Td className="text-right tabular-nums">{line.quantityPieces ?? 'No aplica'}</Td><Td className="text-right tabular-nums">{line.amount === null || line.amount === undefined ? 'No aplica' : money(line.amount)}</Td><Td>{line.notes || 'Sin notas'}</Td></tr>)}</tbody></Table>
     </TableSection>
@@ -177,6 +187,7 @@ function Audit({ close }: { close: DailyClose }) {
 
 export function DailyCloseDetailTabs(props: DailyCloseDetailTabsProps) {
   const { activeTab, canEditInventory, canViewFinancials, canViewInventory, close, inventoryReconciliation, onDeleteInventoryCount, onSaveInventoryCount, onTabChange, products, validationResult } = props
+  const canViewProfit = props.canViewProfit ?? close.costQuality !== undefined
   const [paymentMethods, setPaymentMethods] = useState<string[] | null>(null)
   const tabs: Tab[] = [
     { id: 'summary', label: 'Resumen', visible: true },
@@ -195,17 +206,17 @@ export function DailyCloseDetailTabs(props: DailyCloseDetailTabsProps) {
   }
 
   return <section className="space-y-4">
-    <div aria-label="Secciones del cierre" className="overflow-x-auto rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-2" role="tablist">
+    {props.showNavigation !== false && <div aria-label="Secciones del cierre" className="overflow-x-auto rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-2" role="tablist">
       <div className="flex min-w-max gap-1">{visibleTabs.map((tab) => <button aria-controls={`daily-close-panel-${tab.id}`} aria-selected={activeTab === tab.id} className={`rounded-xl px-4 py-2.5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--erp-brand-red)] ${activeTab === tab.id ? 'bg-[var(--erp-brand-red)] text-white shadow-sm' : 'text-[var(--erp-muted-foreground)] hover:bg-[var(--erp-surface-muted)] hover:text-[var(--erp-foreground)]'}`} id={`daily-close-tab-${tab.id}`} key={tab.id} onClick={() => navigate(tab.id)} role="tab" type="button">{tab.label}</button>)}</div>
-    </div>
+    </div>}
     <div aria-labelledby={`daily-close-tab-${activeTab}`} id={`daily-close-panel-${activeTab}`} role="tabpanel">
       {activeTab === 'summary' && <div className="grid gap-4 lg:grid-cols-2"><article className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5"><h3 className="flex items-center gap-2 font-bold"><Banknote size={18} /> Ventas e ingresos</h3><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Selecciona un total para revisar las operaciones que lo componen.</p><div className="mt-4 grid grid-cols-2 gap-3 text-sm"><SummaryMetric label="Ventas del día" onClick={() => navigate('sales')} value={money(close.grossSalesTotal)} /><SummaryMetric label="Efectivo recibido" onClick={() => navigate('cash', ['CASH'])} value={money(close.cashTotal)} /><SummaryMetric label="Vouchers y tarjetas" onClick={() => navigate('cash', ['CARD', 'VOUCHER'])} value={money(close.cardVoucherTotal)} /><SummaryMetric label="Transferencias y depósitos" onClick={() => navigate('cash', ['TRANSFER', 'DEPOSIT'])} value={money(close.transferTotal)} /><SummaryMetric label="Gastos" onClick={() => navigate('expenses')} value={money(close.expenseTotal)} /><SummaryMetric label="Diferencia de efectivo" onClick={() => navigate('differences')} value={close.cashDifferenceTotal === null ? 'Pendiente de captura' : money(close.cashDifferenceTotal)} /></div></article><article className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5"><h3 className="flex items-center gap-2 font-bold"><Scale size={18} /> Producto e inventario</h3><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Kilos conciliados por entradas, ventas, báscula y conteo físico.</p><div className="mt-4 grid grid-cols-2 gap-3 text-sm"><SummaryMetric label="Kilos recibidos" onClick={() => navigate('inventory')} value={kilograms(close.totalInputKg)} /><SummaryMetric label="Kilos vendidos" onClick={() => navigate('sales')} value={kilograms(close.totalSoldKg)} /><SummaryMetric label="Reportados en báscula" onClick={() => navigate('scale')} value={kilograms(close.scaleReportedKg)} /><SummaryMetric label="Diferencia de báscula" onClick={() => navigate('differences')} value={kilograms(close.scaleDifferenceKg)} /><SummaryMetric label="Existencia restante" onClick={() => navigate('inventory')} value={kilograms(close.totalRemainingKg)} /><SummaryMetric label="Faltante / sobrante" onClick={() => navigate('differences')} value={`${kilograms(close.totalShortageKg)} / ${kilograms(close.totalSurplusKg)}`} /></div></article></div>}
       {activeTab === 'inventory' && <div className="space-y-4"><InventoryEntries close={close} /><DailyCloseInventoryReconciliation canEdit={canEditInventory} onDelete={onDeleteInventoryCount} onSave={onSaveInventoryCount} products={products} reconciliation={inventoryReconciliation} /></div>}
       {activeTab === 'sales' && <SalesAndDocuments close={close} />}
-      {activeTab === 'cash' && <CashAndPayments cashCountForm={props.cashCountForm} close={close} paymentMethods={paymentMethods} />}
+      {activeTab === 'cash' && <CashAndPayments cashCountForm={props.cashCountForm} close={close} expenseForm={props.expenseForm} includeExpenses={props.includeExpensesInCash} paymentMethods={paymentMethods} />}
       {activeTab === 'expenses' && <Expenses close={close} expenseForm={props.expenseForm} />}
       {activeTab === 'scale' && <ScaleTickets close={close} scaleTicketForm={props.scaleTicketForm} />}
-      {activeTab === 'differences' && <Differences close={close} validationResult={validationResult} />}
+      {activeTab === 'differences' && <Differences canAuthorizeDifferences={props.canAuthorizeDifferences ?? false} canEditDifferences={props.canEditDifferences ?? false} canViewProfit={canViewProfit} close={close} onAuthorizeDifference={props.onAuthorizeDifference ?? (async () => undefined)} onJustifyDifference={props.onJustifyDifference ?? (async () => undefined)} validationResult={validationResult} />}
       {activeTab === 'audit' && <Audit close={close} />}
     </div>
   </section>

@@ -9,6 +9,8 @@ import {
   getLocationValidationError,
   getPaymentsValidationError,
   getPaymentReferenceValidationError,
+  getPosLocationOptions,
+  getSaleChannelsForLocation,
   getSaleRestriction,
 } from '../posLogic'
 import type { CartItem, CustomerOption } from '../types'
@@ -86,6 +88,26 @@ const activeCustomer: CustomerOption = {
 }
 
 describe('POS cart calculations and validation', () => {
+  it('derives fixed POS channels from the operational location type', () => {
+    expect(getSaleChannelsForLocation('BRANCH')).toEqual(['COUNTER', 'INSTITUTIONAL', 'WHOLESALE'])
+    expect(getSaleChannelsForLocation('MIXED')).toEqual(['COUNTER', 'INSTITUTIONAL', 'WHOLESALE'])
+    expect(getSaleChannelsForLocation('EXTERNAL_POINT_OF_SALE')).toEqual(['EXTERNAL_POINT_OF_SALE', 'COUNTER'])
+    expect(getSaleChannelsForLocation('ROUTE_STOCK')).toEqual([])
+    expect(getSaleChannelsForLocation('WAREHOUSE')).toEqual([])
+  })
+
+  it('keeps SELLER location options restricted to the assigned fixed POS location', () => {
+    const locations = [
+      { id: 'loc-counter', name: 'Mostrador', type: 'BRANCH' as const, isActive: true },
+      { id: 'loc-ext', name: 'Punto externo', type: 'EXTERNAL_POINT_OF_SALE' as const, isActive: true },
+      { id: 'loc-route', name: 'Ruta Norte', type: 'ROUTE_STOCK' as const, isActive: true },
+    ]
+
+    expect(getPosLocationOptions(locations, 'SELLER', 'loc-counter')).toEqual([locations[0]])
+    expect(getPosLocationOptions(locations, 'SELLER', undefined)).toEqual([])
+    expect(getPosLocationOptions(locations, 'ADMIN')).toEqual(locations.slice(0, 2))
+  })
+
   it('calculates a real-time total using kg and piece quantities without sending it as source of truth', () => {
     expect(calculateCartTotal([kgItem, pieceItem])).toBe(577.2)
   })

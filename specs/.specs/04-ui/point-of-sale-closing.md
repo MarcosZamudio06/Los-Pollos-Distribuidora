@@ -26,11 +26,12 @@ Permitir capturar, revisar y conciliar la operación diaria de un punto externo 
 
 1. Seleccionar `OperationalLocation` y fecha de negocio.
 2. Abrir o crear el cierre `DRAFT`.
-3. Revisar operaciones detectadas y asociar ventas, pagos y movimientos válidos.
-4. Capturar referencias manuales de báscula y gastos.
-5. Completar entradas, salidas y existencia restante.
-6. Ejecutar validación y revisar diferencias.
-7. Enviar a revisión y cerrar con permisos administrativos.
+3. Verificar operaciones: ventas, pagos, documentos y notas facturables.
+4. Conciliar inventario: entradas, existencia teórica y conteo físico.
+5. Revisar báscula: folios, kilos e importes registrados.
+6. Contar caja: efectivo, pagos y gastos.
+7. Revisar diferencias, capturar motivo y evidencia, y solicitar autorización cuando aplique.
+8. Firmar y cerrar con permisos administrativos.
 
 ## Encabezado
 
@@ -42,6 +43,7 @@ Debe mostrar:
 - Usuario que abrió, revisó y cerró.
 - Última validación y versión.
 - Metadatos de frescura de los datos operativos.
+- `Caja/turno: Cierre único diario`; no se modelan múltiples cajas o turnos en el MVP.
 
 La selección se limita a ubicaciones activas dentro del alcance del usuario. No debe ofrecer stock global.
 
@@ -126,6 +128,8 @@ Debe mostrar dos grupos de diferencias:
 
 Las diferencias se muestran con valor, unidad, origen y severidad. La UI no las oculta ni compensa. Si no existe tolerancia aprobada, debe indicarlo.
 
+Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante o faltante, motivo, evidencia, usuario que justificó y administrador que autorizó. Las diferencias autorizadas continúan visibles y las pendientes se contabilizan en el resumen final.
+
 ## Acciones y RBAC
 
 | Acción | ADMIN | SELLER | WAREHOUSE | COLLECTIONS |
@@ -167,6 +171,7 @@ Las diferencias se muestran con valor, unidad, origen y severidad. La UI no las 
 - Las secciones deben usar encabezados semánticos y tablas con etiquetas.
 - Las diferencias no pueden depender solo del color.
 - Los diálogos de cierre, cancelación y reapertura deben resumir impacto, motivo y versión.
+- El diálogo final de cierre debe mostrar kilos, báscula, inventario, gastos, ventas, notas facturables, efectivo y diferencias sin resolver.
 - La línea de tiempo de auditoría debe permitir verificar quién realizó cada transición.
 
 ## Decisiones abiertas

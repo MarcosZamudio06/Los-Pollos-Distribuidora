@@ -43,6 +43,7 @@ export type CustomerOption = Pick<
 export type ProductOption = {
   id: string
   name: string
+  categoryName?: string | null
   sku?: string | null
   presentationType: ProductPresentation
   unit: OperationalUnit

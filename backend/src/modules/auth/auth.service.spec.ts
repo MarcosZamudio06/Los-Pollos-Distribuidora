@@ -116,6 +116,21 @@ describe('AuthService', () => {
     expect(result.user).not.toHaveProperty('passwordHash');
   });
 
+  it('includes the assigned operational location in the authenticated session', async () => {
+    const { service } = createService(
+      createUser({ operationalLocationId: 'location-1' }),
+    );
+
+    const result = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+
+    expect(result.user).toEqual(
+      expect.objectContaining({ operationalLocationId: 'location-1' }),
+    );
+  });
+
   it('uses configured token expiration windows when present in the environment', async () => {
     const previousAccessExpires = process.env.JWT_ACCESS_EXPIRES_IN;
     const previousRefreshExpires = process.env.JWT_REFRESH_EXPIRES_IN;

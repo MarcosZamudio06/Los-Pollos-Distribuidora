@@ -9,9 +9,11 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateProductDto,
   GetProductQueryDto,
@@ -27,21 +29,28 @@ export class ProductsController {
 
   @Get()
   @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
-  async findAll(@Query() query: ListProductsQueryDto) {
+  async findAll(
+    @Query() query: ListProductsQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Products retrieved successfully',
-      data: await this.productsService.findAll(query),
+      data: await this.productsService.findAll(query, currentUser),
     };
   }
 
   @Get(':id')
   @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
-  async findOne(@Param('id') id: string, @Query() query: GetProductQueryDto) {
+  async findOne(
+    @Param('id') id: string,
+    @Query() query: GetProductQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Product retrieved successfully',
-      data: await this.productsService.findOne(id, query),
+      data: await this.productsService.findOne(id, query, currentUser),
     };
   }
 

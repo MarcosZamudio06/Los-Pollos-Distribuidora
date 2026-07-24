@@ -209,12 +209,40 @@ enum DailyCloseSnapshotType {
 
 enum DailyCloseEventType {
   CASH_COUNT_RECORDED
+  DIFFERENCE_AUTHORIZED
+  DIFFERENCE_JUSTIFIED
   EXPENSE_RECORDED
   INVENTORY_COUNT_CREATED
   INVENTORY_COUNT_DELETED
   INVENTORY_COUNT_UPDATED
   SCALE_TICKET_RECORDED
   STATUS_CHANGED
+}
+
+enum DailyCloseDifferenceScope {
+  CASH
+  SCALE
+  INVENTORY
+  SALES
+  EXPENSES
+  BILLING
+}
+
+enum DailyCloseDifferenceUnit {
+  MXN
+  KG
+  PIECE
+}
+
+enum DailyCloseDifferenceType {
+  SURPLUS
+  SHORTAGE
+}
+
+enum DailyCloseDifferenceStatus {
+  PENDING_JUSTIFICATION
+  PENDING_AUTHORIZATION
+  AUTHORIZED
 }
 
 enum CostSnapshotSource {
@@ -339,6 +367,8 @@ model User {
   countedDailyCloseInventories    DailyCloseInventoryCount[]   @relation("DailyCloseInventoryCountedBy")
   dailyCloseEvents                DailyCloseEvent[]            @relation("DailyCloseEventCreatedBy")
   dailyCloseSnapshots             DailyCloseSnapshot[]         @relation("DailyCloseSnapshotCreatedBy")
+  justifiedDailyCloseDifferences  DailyCloseDifference[]       @relation("DailyCloseDifferenceJustifiedBy")
+  authorizedDailyCloseDifferences DailyCloseDifference[]       @relation("DailyCloseDifferenceAuthorizedBy")
   cashMovements                   CashMovement[]
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
@@ -420,6 +450,7 @@ model Product {
   dailyCloseLines        PointOfSaleDailyCloseLine[]
   scaleTicketReferences  ScaleTicketReference[]
   inventoryCounts        DailyCloseInventoryCount[]
+  dailyCloseDifferences  DailyCloseDifference[]
 }
 
 model ProductUnitEquivalent {
@@ -1173,6 +1204,7 @@ model PointOfSaleDailyClose {
   cashMovements          CashMovement[]
   scaleTicketReferences  ScaleTicketReference[]
   inventoryCounts        DailyCloseInventoryCount[]
+  differences            DailyCloseDifference[]
   events                 DailyCloseEvent[]
   snapshots              DailyCloseSnapshot[]
 
@@ -1225,6 +1257,37 @@ model DailyCloseInventoryCount {
   countedBy               User                  @relation("DailyCloseInventoryCountedBy", fields: [countedByUserId], references: [id])
 
   @@unique([pointOfSaleDailyCloseId, productId])
+  @@index([productId])
+}
+
+model DailyCloseDifference {
+  id                      String                       @id @default(cuid())
+  pointOfSaleDailyCloseId String
+  code                    String
+  referenceKey            String
+  scope                   DailyCloseDifferenceScope
+  unit                    DailyCloseDifferenceUnit
+  expectedValue           Decimal                      @db.Decimal(14, 3)
+  recordedValue           Decimal?                     @db.Decimal(14, 3)
+  differenceValue         Decimal                      @db.Decimal(14, 3)
+  differenceType          DailyCloseDifferenceType
+  status                  DailyCloseDifferenceStatus   @default(PENDING_JUSTIFICATION)
+  reason                  String?
+  evidence                String?
+  productId               String?
+  justifiedByUserId       String?
+  justifiedAt             DateTime?
+  authorizedByUserId      String?
+  authorizedAt            DateTime?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  pointOfSaleDailyClose   PointOfSaleDailyClose        @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  product                 Product?                     @relation(fields: [productId], references: [id])
+  justifiedBy             User?                        @relation("DailyCloseDifferenceJustifiedBy", fields: [justifiedByUserId], references: [id])
+  authorizedBy            User?                        @relation("DailyCloseDifferenceAuthorizedBy", fields: [authorizedByUserId], references: [id])
+
+  @@unique([pointOfSaleDailyCloseId, scope, referenceKey])
+  @@index([pointOfSaleDailyCloseId, status])
   @@index([productId])
 }
 

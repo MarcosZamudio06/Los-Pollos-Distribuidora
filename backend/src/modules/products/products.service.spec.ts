@@ -303,7 +303,7 @@ describe('ProductsService', () => {
       locationId: 'location-1',
       lowStock: true,
       isActive: true,
-    });
+    }, { role: 'ADMIN' });
 
     expect(prisma.product.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -326,9 +326,29 @@ describe('ProductsService', () => {
     ]);
     expect(result.items[0]).not.toHaveProperty('stock');
 
-    await expect(service.findAll({ lowStock: true })).rejects.toBeInstanceOf(
+    await expect(service.findAll({ lowStock: true }, { role: 'ADMIN' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it('omits purchase cost from product reads for SELLER', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([createProduct()]);
+
+    const result = await service.findAll({ isActive: true }, { role: 'SELLER' });
+
+    expect(result.items[0]).not.toHaveProperty('purchaseCost');
+    expect(result.items[0]).toEqual(expect.objectContaining({ salePrice: 120 }));
+  });
+
+  it('omits purchase cost from product detail reads for SELLER', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findUnique.mockResolvedValue(createProduct());
+
+    const result = await service.findOne('product-1', {}, { role: 'SELLER' });
+
+    expect(result).not.toHaveProperty('purchaseCost');
+    expect(result).toEqual(expect.objectContaining({ id: 'product-1', salePrice: 120 }));
   });
 
   it('soft-deletes products and blocks inactive products from future sales', async () => {

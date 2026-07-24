@@ -27,6 +27,8 @@ Respuesta `data.items[]`:
 - `isActive`.
 - `inventoryBalance` opcional: `locationId`, `quantityKg`, `quantityPieces`, `minQuantityKg`, `minQuantityPieces`, `isLowStock`.
 
+La respuesta para `SELLER` omite `purchaseCost`; puede consultar el precio de venta y la disponibilidad operativa necesaria para el POS, pero no el costo de compra.
+
 Validaciones:
 
 - No devolver un campo `stock` global como disponibilidad operativa.
@@ -48,6 +50,8 @@ Respuesta `data`:
 - Campos del producto.
 - `balances[]`: `locationId`, `locationName`, `quantityKg`, `quantityPieces`, `minQuantityKg`, `minQuantityPieces`, `isLowStock`.
 - `activeEquivalences[]`: `id`, `unitFrom`, `unitTo`, `factor`, `roundingMode`, `effectiveFrom`.
+
+Para `SELLER`, `purchaseCost` también debe omitirse en el detalle del producto.
 
 ## POST /api/products
 

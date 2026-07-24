@@ -1,0 +1,48 @@
+import { CalendarDays, Clock3, GitBranch, Hash, UserRound, type LucideIcon } from 'lucide-react'
+import type { DailyClose } from './types'
+
+const statusLabel: Record<DailyClose['status'], string> = {
+  DRAFT: 'Borrador',
+  REVIEWED: 'Revisado',
+  CLOSED: 'Cerrado',
+  CANCELLED: 'Cancelado',
+}
+
+function date(value: string) {
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value.slice(0, 10)}T12:00:00`))
+}
+
+function time(value: string) {
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+}
+
+function HeaderValue({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return <div className="min-w-0 border-l border-[var(--erp-border)] pl-4 first:border-l-0 first:pl-0">
+    <dt className="flex items-center gap-1.5 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]"><Icon size={13} /> {label}</dt>
+    <dd className="mt-1 truncate text-sm font-bold text-[var(--erp-foreground)]">{value}</dd>
+  </div>
+}
+
+export function DailyCloseHeader({ close }: { close: DailyClose }) {
+  return <header className="sticky top-2 z-20 overflow-hidden rounded-2xl border border-[var(--erp-border)] bg-[color:var(--erp-surface-elevated)]/95 p-4 shadow-md backdrop-blur-md">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[var(--erp-brand-red)]">Control de jornada</p>
+        <h2 className="mt-1 truncate text-xl font-black tracking-tight">{close.operationalLocation.name}</h2>
+        <p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">Cierre único diario · {close.operationalLocation.code ?? 'Sin código de sucursal'}</p>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+        <HeaderValue icon={GitBranch} label="Sucursal" value={close.operationalLocation.name} />
+        <HeaderValue icon={CalendarDays} label="Fecha operativa" value={date(close.businessDate)} />
+        <HeaderValue icon={Hash} label="Caja/turno" value="Cierre único diario" />
+        <HeaderValue icon={UserRound} label="Responsable" value={close.openedBy?.name ?? 'No disponible'} />
+        <HeaderValue icon={GitBranch} label="Estado" value={statusLabel[close.status]} />
+        <HeaderValue icon={Clock3} label="Última actualización" value={time(close.dataAsOf)} />
+      </dl>
+    </div>
+    <div className="mt-3 flex items-center justify-between border-t border-[var(--erp-border)] pt-3 text-xs text-[var(--erp-muted-foreground)]">
+      <span>Los datos se consultan por ubicación y fecha, sin mezclar stock global.</span>
+      <strong className="font-bold text-[var(--erp-foreground)]">Versión {close.version}</strong>
+    </div>
+  </header>
+}

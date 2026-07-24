@@ -6,10 +6,36 @@ import type {
   InitialPaymentReference,
   PaymentMethod,
   PaymentType,
+  SaleChannel,
 } from './types'
+import type { OperationalLocation } from '../compras/types'
 import { formatMoney } from '../../lib/money'
 
 export { formatMoney as toMoney } from '../../lib/money'
+
+const POS_LOCATION_TYPES = new Set(['BRANCH', 'MIXED', 'EXTERNAL_POINT_OF_SALE'])
+const SALE_CHANNELS_BY_LOCATION_TYPE: Record<string, readonly SaleChannel[]> = {
+  BRANCH: ['COUNTER', 'INSTITUTIONAL', 'WHOLESALE'],
+  MIXED: ['COUNTER', 'INSTITUTIONAL', 'WHOLESALE'],
+  EXTERNAL_POINT_OF_SALE: ['EXTERNAL_POINT_OF_SALE', 'COUNTER'],
+}
+const NO_SALE_CHANNELS: readonly SaleChannel[] = []
+
+export function getPosLocationOptions(
+  locations: OperationalLocation[],
+  role?: string | null,
+  assignedLocationId?: string | null,
+) {
+  const posLocations = locations.filter((location) => location.isActive !== false && POS_LOCATION_TYPES.has(location.type))
+
+  if (role !== 'SELLER') return posLocations
+  if (!assignedLocationId) return []
+  return posLocations.filter((location) => location.id === assignedLocationId)
+}
+
+export function getSaleChannelsForLocation(locationType?: string | null): readonly SaleChannel[] {
+  return locationType ? SALE_CHANNELS_BY_LOCATION_TYPE[locationType] ?? NO_SALE_CHANNELS : NO_SALE_CHANNELS
+}
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100

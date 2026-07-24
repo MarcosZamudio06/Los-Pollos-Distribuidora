@@ -14,6 +14,14 @@ const geospatialRoutesMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260714120000_add_geospatial_route_planning/migration.sql',
 );
+const productBarcodeMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260724190000_add_product_barcode/migration.sql',
+);
+const dailyCloseDifferenceMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260724200000_add_daily_close_differences/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -65,6 +73,7 @@ describe('Prisma schema contract', () => {
       'PointOfSaleDailyClose',
       'PointOfSaleDailyCloseLine',
       'DailyCloseInventoryCount',
+      'DailyCloseDifference',
       'DailyCloseEvent',
       'DailyCloseSnapshot',
       'CashMovement',
@@ -83,7 +92,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(46);
+    expect(modelNames).toHaveLength(47);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
@@ -141,6 +150,36 @@ describe('Prisma schema contract', () => {
     expect(scaleTicket).toContain('@db.Date');
     expect(scaleTicket).toContain(
       '@@unique([operationalLocationId, capturedDate, physicalFolio])',
+    );
+  });
+
+  it('persists structured daily-close differences with justification and authorization actors', () => {
+    const difference = getModelBlock('DailyCloseDifference');
+    const migrationSql = readFileSync(dailyCloseDifferenceMigrationSqlPath, 'utf8');
+
+    expect(difference).toMatch(/expectedValue\s+Decimal/);
+    expect(difference).toMatch(/recordedValue\s+Decimal\?/);
+    expect(difference).toMatch(/differenceValue\s+Decimal/);
+    expect(difference).toMatch(/differenceType\s+DailyCloseDifferenceType/);
+    expect(difference).toMatch(/reason\s+String\?/);
+    expect(difference).toMatch(/evidence\s+String\?/);
+    expect(difference).toMatch(/justifiedByUserId\s+String\?/);
+    expect(difference).toMatch(/authorizedByUserId\s+String\?/);
+    expect(difference).toContain('@@unique([pointOfSaleDailyCloseId, scope, referenceKey])');
+    expect(migrationSql).toContain('CREATE TABLE "DailyCloseDifference"');
+    expect(migrationSql).toContain('DailyCloseDifference_pointOfSaleDailyCloseId_scope_referenceKey_key');
+  });
+
+  it('keeps the product barcode field synchronized with its database migration', () => {
+    const product = getModelBlock('Product');
+    const migrationSql = readFileSync(productBarcodeMigrationSqlPath, 'utf8');
+
+    expect(product).toMatch(/barcode\s+String\?\s+@unique/);
+    expect(migrationSql).toContain(
+      'ALTER TABLE "Product" ADD COLUMN "barcode" TEXT',
+    );
+    expect(migrationSql).toContain(
+      'CREATE UNIQUE INDEX "Product_barcode_key" ON "Product"("barcode")',
     );
   });
 

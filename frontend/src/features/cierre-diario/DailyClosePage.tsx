@@ -11,7 +11,8 @@ import { useAuth } from '../auth'
 import { usePurchaseLocations } from '../compras/hooks'
 import { locationTypeLabel } from '../compras/purchaseLabels'
 import { useProducts } from '../inventario/hooks/useProducts'
-import { DailyCloseDetailTabs, type DailyCloseTab } from './DailyCloseDetailTabs'
+import { DailyCloseGuidedFlow, type DailyCloseStepId } from './DailyCloseGuidedFlow'
+import { DailyCloseHeader } from './DailyCloseHeader'
 import { DailyCloseTransitionDialog } from './DailyCloseTransitionDialog'
 import { dailyCloseService } from './dailyCloseService'
 import type { DailyCloseReportAction } from './dailyCloseTransition'
@@ -33,7 +34,7 @@ export function DailyClosePage() {
   const [inventoryReconciliation, setInventoryReconciliation] = useState<InventoryReconciliation | null>(null)
   const [validationResult, setValidationResult] = useState<DailyCloseValidationResult | null>(null)
   const [reportAction, setReportAction] = useState<DailyCloseReportAction | null>(null)
-  const [activeTab, setActiveTab] = useState<DailyCloseTab>('summary')
+  const [activeStep, setActiveStep] = useState<DailyCloseStepId>('operations')
   const locations = usePurchaseLocations()
   const closeLocations = useMemo(() => (locations.data ?? []).filter((location) => canUseLocationForDailyClose(location.type)), [locations.data])
   const canViewInventory = user?.role !== 'COLLECTIONS'
@@ -41,9 +42,9 @@ export function DailyClosePage() {
   const canEditDraft = user?.role === 'ADMIN' || user?.role === 'SELLER'
   const products = useProducts({ isActive: 'true', locationId: selected?.operationalLocationId ?? '' })
 
-  const selectClose = useCallback(async (close: Pick<DailyClose, 'id' | 'status'>) => {
+  const selectClose = useCallback(async (close: Pick<DailyClose, 'id' | 'status'>, resetStep = false) => {
     setValidationResult(null)
-    setActiveTab('summary')
+    if (resetStep) setActiveStep('operations')
     const detail = canAutoRefreshDailyClose(close.status)
       ? await dailyCloseService.refresh(close.id, accessToken)
       : await dailyCloseService.get(close.id, accessToken)
@@ -73,7 +74,7 @@ export function DailyClosePage() {
       .then(async (data) => {
         if (!active) return
         setItems(data)
-        if (data[0]) await selectClose(data[0])
+        if (data[0]) await selectClose(data[0], true)
         else { setSelected(null); setInventoryReconciliation(null) }
       })
       .catch((error: unknown) => { if (active) toast.error(error instanceof Error ? error.message : 'No fue posible cargar los cierres.') })
@@ -134,13 +135,21 @@ export function DailyClosePage() {
     if (!selected || !window.confirm('¿Eliminar este conteo físico?')) return
     void run(() => dailyCloseService.deleteInventoryCount(selected.id, countId, accessToken), 'Conteo físico eliminado.')
   }
+  const justifyDifference = async (differenceId: string, reason: string, evidence: string) => {
+    if (!selected) return
+    await run(() => dailyCloseService.justifyDifference(selected.id, differenceId, { version: selected.version, reason, evidence }, accessToken), 'Diferencia justificada.')
+  }
+  const authorizeDifference = async (differenceId: string) => {
+    if (!selected) return
+    await run(() => dailyCloseService.authorizeDifference(selected.id, differenceId, { version: selected.version }, accessToken), 'Diferencia autorizada.')
+  }
   const validate = async () => {
     if (!selected || !canValidateDailyClose(selected.status)) return
     try {
       const result = await dailyCloseService.validate(selected.id, accessToken)
       setValidationResult(result)
       setSelected(result.close)
-      setActiveTab('differences')
+      setActiveStep('differences')
       if (result.valid) toast.success('Cierre validado.')
       else toast.error('La validación detectó bloqueantes.')
     } catch (error) {
@@ -150,7 +159,11 @@ export function DailyClosePage() {
   const transition = (action: 'validate' | 'review' | 'close' | 'cancel' | 'reopen') => {
     if (action === 'validate') { void validate(); return }
     if (!selected) return
-    if (action === 'close' || action === 'reopen') { setReportAction(action); return }
+    if (action === 'close' || action === 'reopen') {
+      if (action === 'close') setActiveStep('signoff')
+      setReportAction(action)
+      return
+    }
     const reason = action === 'cancel' ? window.prompt('Motivo para cancelar el cierre:') : undefined
     if (action === 'cancel' && !reason?.trim()) return
     void run(() => dailyCloseService.action(selected.id, action, { version: selected.version, ...(reason ? { reason } : {}) }, accessToken), 'Estado del cierre actualizado.')
@@ -167,9 +180,9 @@ export function DailyClosePage() {
   const scaleTicketForm = editable ? <form className="space-y-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={addTicket}><h3 className="font-bold">Capturar referencia de báscula</h3><Input required onChange={(event) => setTicket({ ...ticket, physicalFolio: event.target.value })} placeholder="Folio físico" value={ticket.physicalFolio} /><div className="grid grid-cols-3 gap-2"><Input min="0" onChange={(event) => setTicket({ ...ticket, weightKg: event.target.value })} placeholder="Kilos" step="0.001" type="number" value={ticket.weightKg} /><Input min="0" onChange={(event) => setTicket({ ...ticket, pieceCount: event.target.value })} placeholder="Piezas" type="number" value={ticket.pieceCount} /><Input min="0" onChange={(event) => setTicket({ ...ticket, amount: event.target.value })} placeholder="Importe" step="0.01" type="number" value={ticket.amount} /></div><Button type="submit">Guardar referencia</Button></form> : undefined
 
   return <PageContainer className="space-y-6">
-    <header className="relative overflow-hidden rounded-[1.75rem] border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-6 shadow-sm"><div className="absolute inset-y-0 left-0 w-2 bg-[var(--erp-brand-red)]" /><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--erp-brand-red)]">Mesa de conciliación</p><h1 className="mt-2 text-3xl font-black tracking-tight">Cierre diario de punto de venta</h1><p className="mt-2 max-w-2xl text-sm text-[var(--erp-muted-foreground)]">Consulta el detalle operativo que compone cada total, sin ocultar diferencias.</p></div><form className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_160px_auto]" onSubmit={open}><Select aria-label="Ubicación operativa" disabled={locations.isLoading} onChange={(event) => setLocationId(event.target.value)} value={locationId}><option value="">{locations.isLoading ? 'Cargando ubicaciones...' : 'Selecciona punto de venta'}</option>{closeLocations.map((location) => <option key={location.id} value={location.id}>{location.name} · {locationTypeLabel(location.type)}</option>)}</Select><Input aria-label="Fecha operativa" max={today} onChange={(event) => setBusinessDate(event.target.value)} type="date" value={businessDate} /><Button disabled={locations.isLoading || closeLocations.length === 0} type="submit"><Plus size={16} /> Abrir cierre</Button></form></div></header>
-    <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]"><aside className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-3"><div className="mb-3 flex items-center justify-between px-2"><h2 className="font-bold">Jornadas</h2><Button onClick={() => void load()} size="sm" variant="ghost"><RefreshCw size={15} /></Button></div>{loading ? <p className="p-3 text-sm">Cargando...</p> : items.length === 0 ? <p className="p-3 text-sm text-[var(--erp-muted-foreground)]">Aún no hay cierres.</p> : items.map((item) => <button className={`mb-2 w-full rounded-xl border p-3 text-left transition ${selected?.id === item.id ? 'border-[var(--erp-brand-red)] bg-[var(--erp-surface-muted)]' : 'border-transparent hover:bg-[var(--erp-surface-muted)]'}`} key={item.id} onClick={() => void selectClose(item)} type="button"><span className="block font-semibold">{item.operationalLocation.name}</span><span className="mt-1 flex justify-between text-xs text-[var(--erp-muted-foreground)]"><span>{item.businessDate.slice(0, 10)}</span><span>{statusLabel[item.status]}</span></span></button>)}</aside>
-      {!selected ? <section className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-[var(--erp-border)]"><p className="text-[var(--erp-muted-foreground)]">Abre o selecciona un cierre para comenzar.</p></section> : <section className="space-y-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{selected.operationalLocation.name}</h2><p className="text-sm text-[var(--erp-muted-foreground)]">Versión {selected.version} · {statusLabel[selected.status]} · Actualizado {new Date(selected.dataAsOf).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p></div><div className="flex flex-wrap gap-2">{canAutoRefreshDailyClose(selected.status) && <Button onClick={() => void selectClose(selected)} variant="ghost"><RefreshCw size={16} /> Actualizar</Button>}{canEditDraft && canValidateDailyClose(selected.status) && <Button onClick={() => transition('validate')} variant="secondary"><ClipboardCheck size={16} /> Validar</Button>}{user?.role === 'ADMIN' && selected.status === 'DRAFT' && <Button onClick={() => transition('review')}>Marcar revisado</Button>}{user?.role === 'ADMIN' && selected.status === 'REVIEWED' && <Button onClick={() => transition('close')}><CheckCircle2 size={16} /> Cerrar jornada</Button>}{user?.role === 'ADMIN' && selected.status === 'CLOSED' && <Button onClick={() => transition('reopen')} variant="secondary">Reabrir</Button>}{user?.role === 'ADMIN' && selected.status !== 'CANCELLED' && <Button onClick={() => transition('cancel')} variant="destructive">Cancelar</Button>}</div></div><DailyCloseDetailTabs activeTab={activeTab} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} cashCountForm={cashCountForm} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onDeleteInventoryCount={deleteInventoryCount} onSaveInventoryCount={saveInventoryCount} onTabChange={setActiveTab} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} /></section>}
+    <header className="relative overflow-hidden rounded-[1.75rem] border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-6 shadow-sm"><div className="absolute inset-y-0 left-0 w-2 bg-[var(--erp-brand-red)]" /><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--erp-brand-red)]">Mesa de conciliación</p><h1 className="mt-2 text-3xl font-black tracking-tight">Cierre diario de punto de venta</h1><p className="mt-2 max-w-2xl text-sm text-[var(--erp-muted-foreground)]">Sigue el proceso de seis pasos y conserva visibles todas las diferencias.</p></div><form className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_160px_auto]" onSubmit={open}><Select aria-label="Ubicación operativa" disabled={locations.isLoading} onChange={(event) => setLocationId(event.target.value)} value={locationId}><option value="">{locations.isLoading ? 'Cargando ubicaciones...' : 'Selecciona punto de venta'}</option>{closeLocations.map((location) => <option key={location.id} value={location.id}>{location.name} · {locationTypeLabel(location.type)}</option>)}</Select><Input aria-label="Fecha operativa" max={today} onChange={(event) => setBusinessDate(event.target.value)} type="date" value={businessDate} /><Button disabled={locations.isLoading || closeLocations.length === 0} type="submit"><Plus size={16} /> Abrir cierre</Button></form></div></header>
+    <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]"><aside className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-3"><div className="mb-3 flex items-center justify-between px-2"><h2 className="font-bold">Jornadas</h2><Button onClick={() => void load()} size="sm" variant="ghost"><RefreshCw size={15} /></Button></div>{loading ? <p className="p-3 text-sm">Cargando...</p> : items.length === 0 ? <p className="p-3 text-sm text-[var(--erp-muted-foreground)]">Aún no hay cierres.</p> : items.map((item) => <button className={`mb-2 w-full rounded-xl border p-3 text-left transition ${selected?.id === item.id ? 'border-[var(--erp-brand-red)] bg-[var(--erp-surface-muted)]' : 'border-transparent hover:bg-[var(--erp-surface-muted)]'}`} key={item.id} onClick={() => void selectClose(item, true)} type="button"><span className="block font-semibold">{item.operationalLocation.name}</span><span className="mt-1 flex justify-between text-xs text-[var(--erp-muted-foreground)]"><span>{item.businessDate.slice(0, 10)}</span><span>{statusLabel[item.status]}</span></span></button>)}</aside>
+      {!selected ? <section className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-[var(--erp-border)]"><p className="text-[var(--erp-muted-foreground)]">Abre o selecciona un cierre para comenzar.</p></section> : <section className="space-y-5"><DailyCloseHeader close={selected} /><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-[var(--erp-muted-foreground)]">Las acciones administrativas respetan la versión y la validación vigente.</p></div><div className="flex flex-wrap gap-2">{canAutoRefreshDailyClose(selected.status) && <Button onClick={() => void selectClose(selected)} variant="ghost"><RefreshCw size={16} /> Actualizar</Button>}{canEditDraft && canValidateDailyClose(selected.status) && <Button onClick={() => transition('validate')} variant="secondary"><ClipboardCheck size={16} /> Validar</Button>}{user?.role === 'ADMIN' && selected.status === 'DRAFT' && <Button onClick={() => transition('review')}>Marcar revisado</Button>}{user?.role === 'ADMIN' && selected.status === 'REVIEWED' && <Button onClick={() => transition('close')}><CheckCircle2 size={16} /> Cerrar jornada</Button>}{user?.role === 'ADMIN' && selected.status === 'CLOSED' && <Button onClick={() => transition('reopen')} variant="secondary">Reabrir</Button>}{user?.role === 'ADMIN' && selected.status !== 'CANCELLED' && <Button onClick={() => transition('cancel')} variant="destructive">Cancelar</Button>}</div></div><DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={user?.role === 'ADMIN' && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} /></section>}
     </div>
     {selected && reportAction && <DailyCloseTransitionDialog action={reportAction} close={selected} onCancel={() => setReportAction(null)} onConfirm={confirmReportTransition} />}
   </PageContainer>

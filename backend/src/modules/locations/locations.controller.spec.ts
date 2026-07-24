@@ -28,6 +28,7 @@ const sellerUser = {
   name: 'Seller User',
   email: 'seller@pollos.local',
   role: 'SELLER',
+  operationalLocationId: 'location-1',
   mustChangePassword: false,
 };
 
@@ -137,6 +138,7 @@ describe('LocationsController API', () => {
       });
 
     expect(locationsService.findAll).toHaveBeenCalledWith(
+      sellerUser,
       expect.objectContaining({
         page: 1,
         limit: 10,

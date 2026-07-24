@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsController = void 0;
 const common_1 = require("@nestjs/common");
+const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const roles_decorator_1 = require("../../common/decorators/roles.decorator");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../common/guards/roles.guard");
@@ -24,18 +25,18 @@ let ProductsController = class ProductsController {
     constructor(productsService) {
         this.productsService = productsService;
     }
-    async findAll(query) {
+    async findAll(query, currentUser) {
         return {
             success: true,
             message: 'Products retrieved successfully',
-            data: await this.productsService.findAll(query),
+            data: await this.productsService.findAll(query, currentUser),
         };
     }
-    async findOne(id, query) {
+    async findOne(id, query, currentUser) {
         return {
             success: true,
             message: 'Product retrieved successfully',
-            data: await this.productsService.findOne(id, query),
+            data: await this.productsService.findOne(id, query, currentUser),
         };
     }
     async create(body) {
@@ -65,8 +66,9 @@ __decorate([
     (0, common_1.Get)(),
     (0, roles_decorator_1.Roles)('ADMIN', 'WAREHOUSE', 'SELLER'),
     __param(0, (0, common_1.Query)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [dto_1.ListProductsQueryDto]),
+    __metadata("design:paramtypes", [dto_1.ListProductsQueryDto, Object]),
     __metadata("design:returntype", Promise)
 ], ProductsController.prototype, "findAll", null);
 __decorate([
@@ -74,8 +76,9 @@ __decorate([
     (0, roles_decorator_1.Roles)('ADMIN', 'WAREHOUSE', 'SELLER'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Query)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.GetProductQueryDto]),
+    __metadata("design:paramtypes", [String, dto_1.GetProductQueryDto, Object]),
     __metadata("design:returntype", Promise)
 ], ProductsController.prototype, "findOne", null);
 __decorate([

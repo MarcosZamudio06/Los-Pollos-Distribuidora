@@ -265,6 +265,32 @@ Los reportes de punto de venta deben incluir `generatedAt`, `dataAsOf`, `freshne
 - Cuando se consulta el reporte diario
 - Entonces las operaciones confirmadas recientes siguen visibles y el reporte identifica el estado del cierre.
 
+### Requirement: Diferencias estructuradas y trazables
+
+Toda diferencia monetaria o de cantidad detectada durante el recálculo debe conservarse como un registro asociado al cierre, con valor esperado, valor registrado, diferencia, unidad, tipo (`SURPLUS` o `SHORTAGE`), motivo, evidencia textual, usuario que justificó y administrador que autorizó cuando aplique. La evidencia MVP es una referencia textual a un folio, nota o documento; la carga binaria de archivos queda fuera de este cambio.
+
+Una justificación debe invalidar la validación vigente, incrementar la versión del cierre y registrar un evento auditable. Solo `ADMIN` puede autorizar una diferencia justificada. Autorizar no crea movimientos de inventario, caja o ventas ni compensa automáticamente la diferencia. Las diferencias autorizadas permanecen visibles, pero no cuentan como pendientes de resolución.
+
+#### Scenario: Diferencia justificada
+
+- Dado un cierre en borrador con una diferencia de efectivo o kilos
+- Cuando un usuario autorizado registra motivo y evidencia
+- Entonces el sistema conserva los valores esperado, registrado y diferencia junto con el usuario que justificó
+- Y obliga a validar nuevamente el cierre.
+
+#### Scenario: Diferencia autorizada
+
+- Dada una diferencia justificada
+- Cuando `ADMIN` la autoriza con la versión vigente
+- Entonces se conserva el administrador y la fecha de autorización
+- Y no se modifica automáticamente la operación fuente.
+
+### Requirement: Proceso guiado de cierre
+
+La UI debe presentar el cierre como un proceso secuencial de seis pasos: verificar operaciones, conciliar inventario, revisar báscula, contar caja, revisar diferencias, y firmar y cerrar. La cabecera del cierre permanece visible durante el proceso y muestra sucursal, fecha operativa, `Caja/turno: Cierre único diario`, responsable, estado, última actualización y versión.
+
+El diálogo final debe mostrar kilos, báscula, inventario, gastos, ventas, notas facturables, efectivo y diferencias sin resolver antes de confirmar la transición.
+
 ## RBAC
 
 - `ADMIN`: acceso completo, revisión, cierre, cancelación y reapertura.
@@ -272,6 +298,15 @@ Los reportes de punto de venta deben incluir `generatedAt`, `dataAsOf`, `freshne
 - `WAREHOUSE`: consulta entradas, traspasos y kilos para conciliación.
 - `COLLECTIONS`: consulta pagos e ingresos autorizados; no modifica inventario.
 - `CASHIER`: decisión abierta, no forma parte del MVP.
+
+Los costos de compra, la utilidad bruta, la utilidad neta, la calidad del costo y los snapshots de costo son información administrativa. El backend no debe enviarlos a `SELLER`, incluidos los costos anidados en partidas de venta, las líneas `PROFIT` y las respuestas de validación o actualización del cierre. `SELLER` conserva acceso a sus ventas, pagos, efectivo contado y diferencias de caja autorizadas.
+
+#### Scenario: Vendedor sin costos ni utilidad
+
+- Dado un cierre con costos, utilidad y partidas de venta con snapshots de costo
+- Cuando `SELLER` consulta, actualiza o valida el cierre
+- Entonces la respuesta no contiene costos de compra, utilidad bruta, utilidad neta, calidad del costo ni snapshots de costo
+- Y conserva las ventas, pagos, efectivo contado y diferencias de caja permitidas.
 
 ## Requisitos no funcionales
 

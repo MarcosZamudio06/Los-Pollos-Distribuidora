@@ -20,6 +20,7 @@ import {
   CreateExpenseDto,
   CreateDailyCloseInventoryCountDto,
   CreateScaleTicketDto,
+  JustifyDailyCloseDifferenceDto,
   ListDailyCloseQueryDto,
   OpenDailyCloseDto,
   RecordCashCountDto,
@@ -95,6 +96,28 @@ export class PointOfSaleDailyCloseController {
     return this.response(
       'Cash count recorded successfully',
       await this.service.recordCashCount(id, dto, user),
+    );
+  }
+  @Patch(':id/differences/:differenceId/justify') @Roles('ADMIN', 'SELLER') async justifyDifference(
+    @Param('id') id: string,
+    @Param('differenceId') differenceId: string,
+    @Body() dto: JustifyDailyCloseDifferenceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Daily close difference justified successfully',
+      await this.service.justifyDifference(id, differenceId, dto, user),
+    );
+  }
+  @Patch(':id/differences/:differenceId/authorize') @Roles('ADMIN') async authorizeDifference(
+    @Param('id') id: string,
+    @Param('differenceId') differenceId: string,
+    @Body() dto: VersionedDailyCloseDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Daily close difference authorized successfully',
+      await this.service.authorizeDifference(id, differenceId, dto, user),
     );
   }
   @Get(':id/reconciliation') @Roles('ADMIN', 'SELLER', 'WAREHOUSE') async reconciliation(

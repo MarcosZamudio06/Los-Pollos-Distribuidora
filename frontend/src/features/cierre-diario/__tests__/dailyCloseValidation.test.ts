@@ -27,5 +27,6 @@ describe('daily close validation contract', () => {
 
     expect(validationDifferences(result).map((item) => item.code)).toEqual(['SCALE_DIFFERENCE', 'SHORTAGE', 'SURPLUS'])
     expect(validationWarnings(close).map((item) => item.code)).toEqual(['ESTIMATED_COST', 'MISSING_FOLIO_V-100', 'INCOMPLETE_SCALE_REFERENCE_ticket-1'])
+    expect(validationWarnings(close, false).map((item) => item.code)).toEqual(['MISSING_FOLIO_V-100', 'INCOMPLETE_SCALE_REFERENCE_ticket-1'])
   })
 })

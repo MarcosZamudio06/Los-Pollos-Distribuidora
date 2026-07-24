@@ -44,6 +44,8 @@ Respuesta `data`:
 - `customer`, `commercialPolicy`, `accountReceivable`, `billingRequest`, `ticket` y `documents[]` cuando existan.
 - `inventoryMovements[]` relacionados.
 
+La respuesta de `SELLER` no incluye `unitCostSnapshot`, `costSubtotalSnapshot` ni `costSnapshotSource`. El backend debe aplicar esta proyección también a la respuesta de creación, reintento idempotente y cancelación; `ADMIN` conserva los campos administrativos completos.
+
 ## POST /api/sales
 
 Propósito: crear y confirmar venta de contado o crédito.
@@ -96,6 +98,8 @@ Respuesta `data`:
 - `inventoryMovements[]` generados.
 - `ticketId` o referencia de ticket interno si se genera en la confirmación.
 - `documents[]` cuando el flujo genere nota o documento operativo.
+
+Cuando el actor sea `SELLER`, los snapshots de costo no se devuelven dentro de `sale.items[]`, aunque se persistan internamente para cálculos, auditoría y cierres administrativos.
 
 Validaciones:
 

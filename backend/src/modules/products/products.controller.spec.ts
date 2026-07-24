@@ -154,6 +154,7 @@ describe('ProductsController API', () => {
         unit: ProductUnit.KG,
         isActive: true,
       }),
+      warehouseUser,
     );
   });
 
