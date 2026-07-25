@@ -95,7 +95,7 @@ export function ProductSearch({
           {locationDisabled && <span className="text-[0.68rem] font-semibold normal-case tracking-normal text-[var(--pos-green)]">La ubicación se deriva de tu usuario.</span>}
         </label>
         <div className="relative">
-          <label className="sr-only" htmlFor="pos-product-search">Búsqueda de productos por SKU o código</label>
+          <label className="sr-only" htmlFor="pos-product-search">Búsqueda de productos por código de barras, SKU o nombre</label>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--pos-muted)]" />
           <input
             autoComplete="off"
@@ -105,7 +105,7 @@ export function ProductSearch({
             inputMode="search"
             onChange={(event) => { setActiveView('all'); onSearchChange(event.target.value) }}
             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); onSearchSubmit(search) } }}
-            placeholder="Escanea SKU o busca producto"
+            placeholder="Escanea código de barras o busca producto"
             ref={searchInputRef}
             value={search}
           />
@@ -142,7 +142,7 @@ export function ProductSearch({
                 <div className="min-w-0">
                   <p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-[var(--pos-red)]">{product.presentationType} · {product.unit}</p>
                   <h3 className="truncate text-base font-bold tracking-[-0.02em]">{product.name}</h3>
-                  <p className="font-mono text-[0.68rem] text-[var(--pos-muted)]">SKU {product.sku ?? '—'} · {toMoney(product.salePrice)}</p>
+                  <p className="font-mono text-[0.68rem] text-[var(--pos-muted)]">Código {product.barcode ?? '—'} · SKU {product.sku ?? '—'} · {toMoney(product.salePrice)}</p>
                   <p className="mt-1 text-xs font-bold text-[var(--pos-ink)]">
                     {product.locationName ?? product.locationId}: {product.availableKg} kg · {product.availablePieces} piezas
                   </p>

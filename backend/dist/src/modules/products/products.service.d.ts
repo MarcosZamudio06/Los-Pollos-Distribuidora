@@ -6,6 +6,7 @@ type ProductResponse = {
     id: string;
     name: string;
     sku: string | null;
+    barcode: string | null;
     description: string | null;
     categoryId: string | null;
     presentationType: ProductPresentationType;

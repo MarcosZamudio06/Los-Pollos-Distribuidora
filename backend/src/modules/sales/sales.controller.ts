@@ -4,7 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelSaleDto, CreateSaleDto, ListSalesQueryDto } from './dto';
+import { CancelSaleDto, CreateSaleDto, ListSalesQueryDto, VoidSaleDto } from './dto';
 import { SalesService } from './sales.service';
 
 @Controller('sales')
@@ -49,6 +49,19 @@ export class SalesController {
       success: true,
       message: 'Sale documents retrieved successfully',
       data: await this.salesService.findDocuments(saleId, currentUser),
+    };
+  }
+
+  @Get(':id/void-preview')
+  @Roles('ADMIN')
+  async voidPreview(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Sale void preview retrieved successfully',
+      data: await this.salesService.getVoidPreview(id, currentUser),
     };
   }
 
@@ -103,6 +116,29 @@ export class SalesController {
       success: true,
       message: 'Sale cancelled successfully',
       data: await this.salesService.cancel(id, body, currentUser, idempotencyKey.trim()),
+    };
+  }
+
+  @Post(':id/void')
+  @Roles('ADMIN')
+  async voidSale(
+    @Param('id') id: string,
+    @Body() body: VoidSaleDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    if (!body.reason?.trim()) {
+      throw new BadRequestException('reason is required');
+    }
+
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
+
+    return {
+      success: true,
+      message: 'Sale voided successfully',
+      data: await this.salesService.voidSale(id, body, currentUser, idempotencyKey.trim()),
     };
   }
 }

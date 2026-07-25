@@ -73,6 +73,8 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 
 - Dado un carrito vacío, cuando se confirma venta, entonces el sistema muestra error y no crea venta.
 - Dado una venta de contado válida con stock suficiente en la ubicación indicada, cuando se confirma, entonces crea venta, items, movimientos de inventario, descuenta saldo por ubicación y registra método de pago.
+- Dado una venta `CASH_SALE` sin pagos o con pagos cuya suma sea menor al total, cuando se confirma, entonces se rechaza aunque exista un cliente activo y no crea venta, movimientos ni cuenta por cobrar.
+- Dado un pago parcial de una venta, cuando se confirma, entonces el operador debe cambiar explícitamente a `CREDIT_SALE` y se ejecutan las validaciones de límite, mora y bloqueo crediticio.
 - Dado una venta a crédito válida para cliente autorizado, cuando se confirma, entonces crea venta, items, movimientos de inventario y una cuenta por cobrar asociada.
 - Dado una venta a crédito sin cliente, cuando se confirma, entonces se rechaza.
 - Dado un cliente bloqueado por mora o límite excedido, cuando se intenta venta a crédito sin autorización administrativa explícita, entonces se rechaza.
@@ -83,6 +85,10 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado una venta ya cancelada, cuando se intenta cancelar otra vez, entonces se rechaza.
 - Dado una venta con pagos aplicados, cuando se intenta cancelar sin reversa o reembolso auditable, entonces se rechaza.
 - Dado una venta asociada a cierre POS cerrado o liquidación cerrada, cuando se intenta cancelar, entonces se exige reapertura versionada antes de continuar.
+- Dado una venta cobrada confirmada, cuando ADMIN consulta la vista previa de “Anular venta”, entonces ve pagos a revertir, inventario a restaurar, cuenta por cobrar, documentos afectados, motivo y usuario autorizador.
+- Dado una vista previa sin bloqueadores y un motivo válido, cuando ADMIN confirma “Anular venta”, entonces se revierten pagos, se cancela la venta, se restaura inventario, se actualiza cartera y se cancelan documentos internos de forma transaccional.
+- Dado un reintento de “Anular venta” con la misma `Idempotency-Key`, cuando el payload coincide, entonces devuelve el resultado original sin duplicar reversas ni movimientos.
+- Dado un fallo al aplicar cualquier efecto de “Anular venta”, cuando termina la operación, entonces no quedan pagos, inventario, cartera o documentos parcialmente modificados.
 - Pendiente/condicional: las pruebas de descuentos y autorizaciones comerciales específicas quedan condicionadas a la política comercial final aprobada.
 
 ## Ticket interno del MVP

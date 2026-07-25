@@ -55,6 +55,7 @@ Cada resultado debe mostrar:
 
 - Nombre.
 - SKU.
+- Código de barras.
 - Presentación.
 - Unidad operativa.
 - Precio de referencia.
@@ -62,6 +63,8 @@ Cada resultado debe mostrar:
 - Piezas disponibles en la ubicación.
 - Indicador de bajo stock.
 - Estado de equivalencia cuando aplique.
+
+La lectura del buscador debe intentar coincidencia exacta por código de barras antes de SKU y nombre.
 
 No debe mostrar stock global como fuente de disponibilidad.
 
@@ -84,7 +87,7 @@ El backend es fuente de verdad para precios, descuentos, subtotales y totales.
 
 Debe enviar `POST /api/sales` con:
 
-- `customerId` opcional en contado pagado al momento; requerido en crédito y en contraentrega sin pagos porque deja saldo pendiente.
+- `customerId` opcional en contado completamente pagado; requerido en crédito.
 - `locationId` requerido.
 - `paymentType`: `CASH_SALE` o `CREDIT_SALE`.
 - `saleChannel`.
@@ -92,7 +95,7 @@ Debe enviar `POST /api/sales` con:
 - `physicalFolio` cuando aplique.
 - `requiresAdministrativeInvoice`.
 - `billingRequestId` cuando exista.
-- `payments[]` con `amount`, `paymentMethod`, `cashTendered` opcional solo para efectivo y evidencia bancaria o de tarjeta cuando aplique para contado completamente pagado o abonos iniciales. El cliente no envía `changeGiven`.
+- `payments[]` con `amount`, `paymentMethod`, `cashTendered` opcional solo para efectivo y evidencia bancaria o de tarjeta cuando aplique para contado completamente pagado o abonos iniciales. El cliente no envía `changeGiven`. En `CASH_SALE`, la suma debe igualar el total.
 - `discount` si está autorizado.
 - `commercialPolicyId` cuando aplique.
 - `administrativeOverrideReason` solo si existe autorización explícita.
@@ -104,8 +107,7 @@ Reglas de interpretación:
 - Los métodos de pago viven en `payments[].paymentMethod`, no en `Sale`.
 - Si la venta es de contado y se paga al momento, el sistema registra un `Payment` por cada elemento de `payments[]` asociado a `saleId` sin crear una cuenta por cobrar artificial.
 - Cada fila `CASH` permite capturar «Efectivo entregado» distinto de su monto aplicado y muestra el «Cambio» calculado. Al cambiar la fila a otro método se limpia ese dato; los tickets muestran solo efectivo entregado y cambio persistidos, sin inventarlos para pagos históricos.
-- Una venta de contado contraentrega puede confirmarse sin `payments` y sin seleccionar un método, pero requiere cliente registrado para crear la cuenta por cobrar del saldo pendiente.
-- Si la contraentrega deja saldo pendiente, genera `AccountReceivable`; el pago posterior se registra como cobranza con `accountReceivableId` obligatorio.
+- Una venta de contado sin pagos o con pagos parciales no puede confirmarse; la UI debe indicar que el operador debe completar el pago o cambiar explícitamente a venta a crédito.
 
 ## Venta a crédito
 
@@ -165,6 +167,9 @@ No debe usar textos, campos ni acciones de CFDI, SAT, timbrado, PAC o factura fi
 - Seleccionar método de pago.
 - Confirmar venta.
 - Ver o imprimir ticket interno.
+- Iniciar la operación administrativa “Anular venta” desde el detalle de una venta confirmada.
+- Consultar antes de confirmar los pagos a revertir, inventario a restaurar, cuenta por cobrar y documentos internos a cancelar.
+- Mostrar el motivo obligatorio, el usuario `ADMIN` autorizador, la versión y los bloqueos por cierre o liquidación cerrados.
 
 ## Permisos
 
@@ -192,11 +197,13 @@ Toda vista debe contemplar:
 - Piezas deben ser enteras.
 - Requerir ubicación operativa de descuento.
 - Requerir cliente para venta a crédito.
-- Requerir cliente para contraentrega sin pagos.
+- Requerir pagos cuya suma sea igual al total para venta de contado.
 - Requerir método y monto positivo para cada elemento de `payments[]`; la suma no puede superar el total de la venta.
 - Mostrar total actualizado como vista previa.
 - Deshabilitar botón mientras se confirma venta.
 - Mostrar errores del backend por stock insuficiente, crédito bloqueado, permisos o conflicto.
+- No confirmar “Anular venta” si la vista previa contiene bloqueadores o falta motivo.
+- Reintentar una anulación debe conservar la misma `Idempotency-Key` y no duplicar efectos.
 
 ## Contexto derivado del usuario — P1-3
 

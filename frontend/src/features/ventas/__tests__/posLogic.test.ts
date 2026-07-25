@@ -220,10 +220,13 @@ describe('POS credit restrictions', () => {
 })
 
 describe('POS sale-level restrictions', () => {
-  it('requires a registered customer when a cash sale is delivered without payments', () => {
-    expect(getSaleRestriction('CASH_SALE', null, 100, false)).toBe('Selecciona un cliente activo cuando no se capturen pagos.')
-    expect(getSaleRestriction('CASH_SALE', activeCustomer, 100, false)).toBeNull()
-    expect(getSaleRestriction('CASH_SALE', null, 100, true)).toBeNull()
+  it('requires cash sales to be fully paid and directs partial payments to credit', () => {
+    const message = 'La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.'
+
+    expect(getSaleRestriction('CASH_SALE', null, 100, 0)).toBe(message)
+    expect(getSaleRestriction('CASH_SALE', activeCustomer, 100, 50)).toBe(message)
+    expect(getSaleRestriction('CASH_SALE', null, 100, 100)).toBeNull()
+    expect(getSaleRestriction('CASH_SALE', activeCustomer, 100, 100)).toBeNull()
   })
 })
 

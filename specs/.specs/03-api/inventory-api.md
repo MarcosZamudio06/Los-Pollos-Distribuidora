@@ -20,7 +20,7 @@ Query:
 
 Respuesta `data.items[]`:
 
-- `id`, `name`, `sku`, `description`, `categoryId`.
+- `id`, `name`, `sku`, `barcode`, `description`, `categoryId`.
 - `presentationType`.
 - `salePrice`, `purchaseCost`, `minStock`.
 - `unit`, `pieceWeightEquivalent`, `equivalentPolicyStatus`.
@@ -33,6 +33,7 @@ Validaciones:
 
 - No devolver un campo `stock` global como disponibilidad operativa.
 - Si `lowStock=true`, `locationId` es requerido.
+- Cuando se envía `search`, buscar primero coincidencia exacta por `barcode`, después coincidencia exacta por `sku` y finalmente coincidencia parcial por `name`.
 
 ## GET /api/products/:id
 

@@ -39,6 +39,7 @@ const productResponse = {
   id: 'product-1',
   name: 'Pechuga de pollo',
   sku: 'PECH-001',
+  barcode: '7501234567890',
   description: 'Pechuga por kilogramo',
   categoryId: 'category-1',
   presentationType: ProductPresentationType.CUT,

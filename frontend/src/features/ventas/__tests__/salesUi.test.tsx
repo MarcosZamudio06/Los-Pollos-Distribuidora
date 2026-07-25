@@ -9,13 +9,15 @@ import { Cart, CustomerSelector, SaleSummary, TicketModal } from '../components'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
 import { SalesPosPage } from '../SalesPosPage'
-import type { SaleDetail, TicketData } from '../types'
+import type { SaleDetail, SaleVoidPreview, TicketData } from '../types'
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const mockState = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } },
   cancelSale: { isPending: false, mutateAsync: vi.fn() },
+  voidPreview: { data: null as SaleVoidPreview | null, error: null, isLoading: false },
+  voidSale: { isPending: false, mutateAsync: vi.fn() },
   documents: { data: { items: [] as Array<{ createdAt?: string; documentType?: string; id?: string; physicalFolio?: string; status?: string }> }, error: null, isLoading: false },
   createSale: { isPending: false, mutateAsync: vi.fn() },
   customers: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false },
@@ -31,6 +33,8 @@ vi.mock('sonner', () => ({ toast: mockState.toast }))
 
 vi.mock('../hooks', () => ({
   useCancelSale: () => mockState.cancelSale,
+  useSaleVoidPreview: () => mockState.voidPreview,
+  useVoidSale: () => mockState.voidSale,
   useCreateSale: () => mockState.createSale,
   useSale: () => mockState.sale,
   useSaleDocuments: () => mockState.documents,
@@ -125,6 +129,8 @@ describe('TASK-055 sales UI behavior', () => {
   beforeEach(() => {
     mockState.auth = { user: { role: 'ADMIN' } }
     mockState.cancelSale = { isPending: false, mutateAsync: vi.fn() }
+    mockState.voidPreview = { data: null, error: null, isLoading: false }
+    mockState.voidSale = { isPending: false, mutateAsync: vi.fn() }
     mockState.createSale = { isPending: false, mutateAsync: vi.fn() }
     mockState.customers = { data: [], error: null, isLoading: false }
     mockState.documents = { data: { items: [] }, error: null, isLoading: false }
@@ -230,6 +236,35 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
+  it('agrega un producto al leer su código de barras y presionar Enter', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', barcode: '7501234567890', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      const search = container.querySelector('#pos-product-search')
+      expect(search).toBeInstanceOf(HTMLInputElement)
+      await act(async () => {
+        changeInput(search as HTMLInputElement, '7501234567890')
+        search?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+      expect(container.textContent).toContain('1 en carrito')
+      expect(container.textContent).toContain('Agregado: Pollo entero')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('deriva la ubicación y el canal inicial para SELLER y bloquea ubicaciones no válidas', async () => {
     mockState.auth = { user: { role: 'SELLER', operationalLocationId: 'loc-ext' } } as typeof mockState.auth
     mockState.locations = {
@@ -320,6 +355,26 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
+  it('bloquea una venta de contado sin pago aunque exista un cliente activo', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
+    mockState.customers = { data: [{ id: 'customer-1', name: 'Restaurante Norte', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', isActive: true, creditSummary: { availableCredit: 3200, creditLimit: 5000, outstandingAmount: 1800 } }], error: null, isLoading: false }
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
+      await act(async () => { getButtonByText(container, 'Agregar').click(); getButtonByText(container, 'Restaurante Norte').click() })
+
+      const confirmButton = getButtonByText(container, 'Confirmar venta')
+      expect(confirmButton.disabled).toBe(true)
+      expect(container.textContent).toContain('La venta de contado debe liquidarse completamente')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('no expone autorización de crédito a SELLER', async () => {
     mockState.auth = { user: { role: 'SELLER' } }
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', type: 'BRANCH' }], error: null, isLoading: false }
@@ -372,6 +427,7 @@ describe('TASK-055 sales UI behavior', () => {
       })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
       await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
+      await act(async () => { getButtonByText(container, 'Agregar pago').click() })
 
       expect(container.textContent).toContain('$5,000.00')
       expect(container.textContent).toContain('$3,200.00')
@@ -420,6 +476,7 @@ describe('TASK-055 sales UI behavior', () => {
       })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
       await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
+      await act(async () => { getButtonByText(container, 'Agregar pago').click() })
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
@@ -489,7 +546,7 @@ describe('TASK-055 sales UI behavior', () => {
 
     expect(html).toContain('Detalle de venta')
     expect(html).toContain('Reimprimir este documento')
-    expect(html).toContain('Cancelar venta')
+    expect(html).toContain('Anular venta')
     expect(html).toContain('Documentos internos')
     expect(html).toContain('Nota sencilla')
     expect(html).toContain('Estado: ISSUED')
@@ -605,25 +662,69 @@ describe('TASK-055 sales UI behavior', () => {
   it('muestra UX bloqueante cuando falta la versión requerida para cancelar', () => {
     const html = renderToStaticMarkup(<CancelSaleDialog onClose={() => undefined} sale={{ ...confirmedSale, version: undefined }} />)
 
-    expect(html).toContain('Cancelación auditada')
-    expect(html).toContain('no incluye la versión de concurrencia requerida por la API')
-    expect(html).toContain('Confirmar cancelación')
+    expect(html).toContain('Operación administrativa')
+    expect(html).toContain('No se encontró la versión de concurrencia requerida para confirmar la anulación.')
+    expect(html).toContain('Confirmar anulación')
     expect(html).toContain('disabled=""')
   })
 
-  it('reutiliza la clave idempotente al reintentar una cancelación fallida', async () => {
-    mockState.cancelSale.mutateAsync.mockRejectedValue(new Error('Error de red'))
+  it('muestra el impacto completo de la anulación antes de confirmarla', () => {
+    mockState.voidPreview = {
+      data: {
+        canExecute: true,
+        blockers: [],
+        authorization: { requiredRole: 'ADMIN', authorizedBy: { id: 'admin-1', name: 'Admin', role: 'ADMIN' } },
+        sale: { id: 'sale-1', saleNumber: 'V-1001', status: 'CONFIRMED', version: 4, total: 276, collectionStatus: 'PARTIALLY_PAID' },
+        payments: [{ id: 'payment-1', amount: 100, paymentMethod: 'CASH', status: 'APPLIED', version: 2 }],
+        inventory: [{ productId: 'prod-1', productName: 'Pollo entero', quantityKg: 2.5, quantityPieces: 0, locationId: 'loc-counter' }],
+        accountReceivable: { id: 'ar-1', originalAmount: 276, outstandingAmount: 176, status: 'PARTIALLY_PAID' },
+        documents: [{ id: 'doc-1', documentType: 'SIMPLE_NOTE', physicalFolio: 'N-42', status: 'ISSUED', willCancel: true }],
+        billingRequest: { id: 'billing-1', status: 'IN_REVIEW', willCancel: true },
+      },
+      error: null,
+      isLoading: false,
+    }
+
+    const html = renderToStaticMarkup(<CancelSaleDialog onClose={() => undefined} sale={confirmedSale} />)
+
+    expect(html).toContain('Pago que será revertido')
+    expect(html).toContain('Inventario que será restaurado')
+    expect(html).toContain('Cuenta por cobrar afectada')
+    expect(html).toContain('Documentos que quedarán cancelados')
+    expect(html).toContain('Usuario autorizador:')
+    expect(html).toContain('Cliente devolvió el pedido y se verificó el efectivo.')
+    expect(html).toContain('N-42')
+    expect(html).toContain('billing-1')
+  })
+
+  it('reutiliza la clave idempotente al reintentar una anulación fallida', async () => {
+    mockState.voidPreview = {
+      data: {
+        canExecute: true,
+        blockers: [],
+        authorization: { requiredRole: 'ADMIN', authorizedBy: { id: 'admin-1', name: 'Admin', role: 'ADMIN' } },
+        sale: { id: 'sale-1', saleNumber: 'V-1001', status: 'CONFIRMED', version: 4, total: 276, collectionStatus: 'UNPAID' },
+        payments: [],
+        inventory: [],
+        accountReceivable: null,
+        documents: [],
+        billingRequest: null,
+      },
+      error: null,
+      isLoading: false,
+    }
+    mockState.voidSale.mutateAsync.mockRejectedValue(new Error('Error de red'))
     vi.stubGlobal('crypto', { randomUUID: () => 'cancel-dialog-key' })
     const { container, root } = await renderDom(<CancelSaleDialog onClose={() => undefined} sale={confirmedSale} />)
 
     try {
       await act(async () => { changeTextarea(container.querySelector('textarea') as HTMLTextAreaElement, 'Cliente canceló el pedido') })
-      await act(async () => { getButtonByText(container, 'Confirmar cancelación').click() })
-      await act(async () => { getButtonByText(container, 'Confirmar cancelación').click() })
+      await act(async () => { getButtonByText(container, 'Confirmar anulación').click() })
+      await act(async () => { getButtonByText(container, 'Confirmar anulación').click() })
 
-      expect(mockState.cancelSale.mutateAsync).toHaveBeenCalledTimes(2)
-      expect(mockState.cancelSale.mutateAsync).toHaveBeenNthCalledWith(1, expect.objectContaining({ idempotencyKey: 'cancel-dialog-key' }))
-      expect(mockState.cancelSale.mutateAsync).toHaveBeenNthCalledWith(2, expect.objectContaining({ idempotencyKey: 'cancel-dialog-key' }))
+      expect(mockState.voidSale.mutateAsync).toHaveBeenCalledTimes(2)
+      expect(mockState.voidSale.mutateAsync).toHaveBeenNthCalledWith(1, expect.objectContaining({ idempotencyKey: 'cancel-dialog-key' }))
+      expect(mockState.voidSale.mutateAsync).toHaveBeenNthCalledWith(2, expect.objectContaining({ idempotencyKey: 'cancel-dialog-key' }))
     } finally {
       await act(async () => { root.unmount() })
       container.remove()

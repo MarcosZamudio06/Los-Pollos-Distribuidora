@@ -113,7 +113,9 @@ export function createApiClient(baseUrl = getDefaultApiBaseUrl()) {
       if (
         response.status === 401 &&
         authorization !== null &&
-        /^Bearer\s+\S+/i.test(authorization)
+        /^Bearer\s+\S+/i.test(authorization) &&
+        typeof window !== 'undefined' &&
+        typeof CustomEvent !== 'undefined'
       ) {
         const failedAccessToken = authorization.replace(/^Bearer\s+/i, '')
 

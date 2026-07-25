@@ -20,7 +20,7 @@ import {
   TicketModal,
 } from './components'
 import { useCreateSale, useSaleTicket } from './hooks'
-import { buildCreateSalePayload, calculateCartTotal, calculateItemSubtotal, canConfirmSale, getLocationValidationError, getPaymentsValidationError, getPosLocationOptions, getQuantityValidationError, getSaleChannelsForLocation, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
+import { buildCreateSalePayload, calculateCartTotal, calculateItemSubtotal, calculatePaymentsTotal, canConfirmSale, getLocationValidationError, getPaymentsValidationError, getPosLocationOptions, getQuantityValidationError, getSaleChannelsForLocation, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
 import type { CartItem, CustomerOption, PaymentType, ProductOption, SaleChannel, SaleDocumentType, SalePaymentInput } from './types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
@@ -35,6 +35,15 @@ function asNumber(value: string | number | null | undefined) {
   return Number.isFinite(numericValue) ? numericValue : 0
 }
 
+function findProductByLookup(products: ProductOption[], value: string) {
+  const normalizedValue = value.trim().toLowerCase()
+  if (!normalizedValue) return undefined
+
+  return products.find((product) => product.barcode?.trim().toLowerCase() === normalizedValue)
+    ?? products.find((product) => product.sku?.trim().toLowerCase() === normalizedValue)
+    ?? products.find((product) => product.name.trim().toLowerCase() === normalizedValue)
+}
+
 function productToOption(product: Product, locationId: string): ProductOption {
   const balance = product.inventoryBalance ?? product.locationBalance ?? product.balances?.[0]
   const equivalent = product.activeEquivalences?.[0]
@@ -43,6 +52,7 @@ function productToOption(product: Product, locationId: string): ProductOption {
     name: product.name,
     categoryName: typeof product.category === 'object' && product.category ? product.category.name : typeof product.category === 'string' ? product.category : null,
     sku: product.sku,
+    barcode: product.barcode,
     presentationType: product.presentationType ?? product.presentation ?? 'CUT',
     unit: product.unit ?? product.operationalUnit ?? 'KG',
     salePrice: asNumber(product.salePrice),
@@ -147,14 +157,15 @@ function getSubmitBlocker({
   const total = calculateCartTotal(cart)
   const paymentsError = payments.length > 0 ? getPaymentsValidationError(payments, total) : null
   if (paymentsError) return paymentsError
+  const saleRestriction = getSaleRestriction(paymentType, customer, total, calculatePaymentsTotal(payments), { isAdmin, overrideEnabled, overrideReason })
   return canConfirmSale({
     cart,
-    creditRestriction: getSaleRestriction(paymentType, customer, total, payments.length > 0, { isAdmin, overrideEnabled, overrideReason }),
+    creditRestriction: saleRestriction,
     isSubmitting: submitting,
     locationId,
   })
     ? null
-    : getSaleRestriction(paymentType, customer, total, payments.length > 0, { isAdmin, overrideEnabled, overrideReason }) ?? 'La venta todavía no puede confirmarse.'
+    : saleRestriction ?? 'La venta todavía no puede confirmarse.'
 }
 
 export function SalesPosPage() {
@@ -230,7 +241,7 @@ export function SalesPosPage() {
   useEffect(() => {
     const pendingScan = pendingScanRef.current
     if (!pendingScan) return
-    const match = productOptions.find((product) => product.sku?.trim().toLowerCase() === pendingScan || product.name.trim().toLowerCase() === pendingScan)
+    const match = findProductByLookup(productOptions, pendingScan)
     if (!match) return
     pendingScanRef.current = null
     handleAddProduct(match)
@@ -332,7 +343,7 @@ export function SalesPosPage() {
   function handleProductSearchSubmit(value: string) {
     const normalizedValue = value.trim().toLowerCase()
     if (!normalizedValue) return
-    const match = productOptions.find((product) => product.sku?.trim().toLowerCase() === normalizedValue || product.name.trim().toLowerCase() === normalizedValue)
+    const match = findProductByLookup(productOptions, normalizedValue)
     if (!match) {
       pendingScanRef.current = normalizedValue
       setScanStatus(`Buscando el código ${value.trim()}...`)

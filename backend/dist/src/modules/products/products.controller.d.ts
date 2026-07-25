@@ -12,6 +12,7 @@ export declare class ProductsController {
                 id: string;
                 name: string;
                 sku: string | null;
+                barcode: string | null;
                 description: string | null;
                 categoryId: string | null;
                 presentationType: import("@prisma/client").ProductPresentationType;
@@ -58,6 +59,7 @@ export declare class ProductsController {
             id: string;
             name: string;
             sku: string | null;
+            barcode: string | null;
             description: string | null;
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
@@ -103,6 +105,7 @@ export declare class ProductsController {
             id: string;
             name: string;
             sku: string | null;
+            barcode: string | null;
             description: string | null;
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
@@ -148,6 +151,7 @@ export declare class ProductsController {
             id: string;
             name: string;
             sku: string | null;
+            barcode: string | null;
             description: string | null;
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;
@@ -193,6 +197,7 @@ export declare class ProductsController {
             id: string;
             name: string;
             sku: string | null;
+            barcode: string | null;
             description: string | null;
             categoryId: string | null;
             presentationType: import("@prisma/client").ProductPresentationType;

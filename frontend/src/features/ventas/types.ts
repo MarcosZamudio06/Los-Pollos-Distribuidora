@@ -45,6 +45,7 @@ export type ProductOption = {
   name: string
   categoryName?: string | null
   sku?: string | null
+  barcode?: string | null
   presentationType: ProductPresentation
   unit: OperationalUnit
   salePrice: number
@@ -315,4 +316,69 @@ export type ListSalesFilters = {
 export type CancelSalePayload = {
   reason: string
   expectedVersion: number
+}
+
+export type SaleVoidPreview = {
+  canExecute: boolean
+  blockers: Array<{ code: string; message: string }>
+  authorization: {
+    requiredRole: string
+    authorizedBy: { id: string; name?: string | null; role: string }
+  }
+  sale: {
+    id: string
+    saleNumber?: string
+    status?: string
+    version: number
+    total?: number | string | null
+    collectionStatus?: string
+  }
+  payments: Array<{
+    id: string
+    amount?: number | string | null
+    paymentMethod?: string
+    status?: string
+    paidAt?: string | null
+    version?: number
+  }>
+  inventory: Array<{
+    productId: string
+    productName?: string | null
+    unit?: string | null
+    quantityKg?: number | string | null
+    quantityPieces?: number | null
+    locationId: string
+  }>
+  accountReceivable: {
+    id: string
+    originalAmount?: number | string | null
+    outstandingAmount?: number | string | null
+    status?: string
+  } | null
+  documents: Array<{
+    id: string
+    documentType?: string
+    physicalFolio?: string | null
+    status?: string
+    willCancel: boolean
+  }>
+  billingRequest: {
+    id: string
+    status?: string
+    willCancel: boolean
+  } | null
+}
+
+export type VoidSaleResponse = {
+  sale?: SaleDetail
+  payments?: Array<Record<string, unknown>>
+  inventoryMovements?: Array<Record<string, unknown>>
+  accountReceivable?: Record<string, unknown> | null
+  documents?: SaleDocument[]
+  billingRequest?: Record<string, unknown> | null
+  authorization?: {
+    authorizedBy: { id: string; name?: string | null; role: string }
+    reason: string
+    authorizedAt: string
+  }
 }

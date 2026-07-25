@@ -247,11 +247,11 @@ export function SaleDetailView({
                   </CardHeader>
                   <CardContent className="mt-4 grid gap-3">
                     <p className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 text-sm text-[var(--erp-muted-foreground)]">Selecciona un documento interno para reimprimir exactamente su versión emitida.</p>
-                    <Button disabled={!canCancel} onClick={onShowCancelDialog} variant="destructive">
-                      <Ban className="h-4 w-4" />
-                      Cancelar venta
-                    </Button>
-                    {!canCancel && <p className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 text-sm text-[var(--erp-muted-foreground)]">Solo ADMIN puede cancelar ventas confirmadas y la API validará pagos, cierres y liquidaciones.</p>}
+                      <Button disabled={!canCancel} onClick={onShowCancelDialog} variant="destructive">
+                        <Ban className="h-4 w-4" />
+                       Anular venta
+                      </Button>
+                    {!canCancel && <p className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 text-sm text-[var(--erp-muted-foreground)]">Solo ADMIN puede anular ventas confirmadas; la vista previa validará pagos, cierres y liquidaciones.</p>}
                   </CardContent>
                 </Card>
 

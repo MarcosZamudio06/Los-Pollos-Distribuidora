@@ -41,6 +41,10 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
+export function calculatePaymentsTotal(payments: BuildCreateSalePayloadInput['payments']) {
+  return roundMoney(payments.reduce((sum, payment) => sum + roundMoney(payment.amount), 0))
+}
+
 export function calculateCashChange(cashTendered: number, amount: number) {
   return roundMoney(cashTendered - amount)
 }
@@ -122,7 +126,7 @@ export function getPaymentsValidationError(
     return 'Captura un método y un monto mayor que cero para cada pago.'
   }
   const enteredPaid = roundMoney(payments.reduce((sum, payment) => sum + payment.amount, 0))
-  const paid = roundMoney(payments.reduce((sum, payment) => sum + roundMoney(payment.amount), 0))
+  const paid = calculatePaymentsTotal(payments)
   if (paid !== enteredPaid) return 'Los montos de pago no pueden alterar el total al redondearse a centavos.'
   if (paid > total) return 'El total recibido no puede exceder el total de la venta.'
 
@@ -196,17 +200,18 @@ export function getSaleRestriction(
   paymentType: PaymentType,
   customer: CustomerOption | null,
   total: number,
-  hasImmediatePayment: boolean,
+  totalPaid: number,
   options: CreditRestrictionOptions = {},
 ) {
-  if (paymentType === 'CASH_SALE' && !hasImmediatePayment && (!customer || customer.isActive === false || customer.active === false)) {
-    return 'Selecciona un cliente activo cuando no se capturen pagos.'
+  if (paymentType === 'CASH_SALE' && roundMoney(totalPaid) !== roundMoney(total)) {
+    return 'La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.'
   }
 
   return getCreditRestriction(paymentType, customer, total, options)
 }
 
 const CREDIT_ERROR_MESSAGES: Record<string, string> = {
+  CASH_SALE_REQUIRES_FULL_PAYMENT: 'La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.',
   CREDIT_ADMINISTRATIVELY_BLOCKED: 'El crédito del cliente está bloqueado administrativamente.',
   CREDIT_CONCURRENCY_RETRY_EXHAUSTED: 'El crédito cambió durante la venta. Actualiza el cliente e inténtalo nuevamente.',
   CREDIT_LIMIT_EXCEEDED: 'La venta excede el límite de crédito disponible del cliente.',

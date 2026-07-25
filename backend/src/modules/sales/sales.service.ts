@@ -1,10 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  AgingStatus,
   BillingRequestStatus,
   CollectionStatus,
   CreditStatus,
   EquivalentStatus,
   InventoryMovementType,
+  InvoiceStatus,
   OperationalLocationType,
   PaymentMethod,
   PaymentStatus,
@@ -17,14 +19,16 @@ import {
   SaleDocumentType,
   SalePaymentType,
   SaleStatus,
+  type AccountReceivable,
+  type Payment,
 } from '@prisma/client';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, CreateSalePaymentDto, ListSalesQueryDto } from './dto';
+import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, CreateSalePaymentDto, ListSalesQueryDto, VoidSaleDto } from './dto';
 import { evaluateCreditDecision } from './credit-decision';
 
-type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'operationalLocationId'>;
+type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'operationalLocationId'> & Partial<Pick<AuthenticatedUser, 'name'>>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
 type SaleProductUnitEquivalent = {
@@ -224,16 +228,30 @@ type SaleCancellationRecord = Record<string, unknown> & {
   cancellationPayloadHash?: string | null;
   collectionStatus?: CollectionStatus;
   paymentType: SalePaymentType;
-  pointOfSaleDailyClose?: { status: PointOfSaleDailyCloseStatus } | null;
-  payments?: Array<{ id: string; status: PaymentStatus; accountReceivableId?: string | null; saleId?: string | null }>;
-  route?: { settlement?: { status: RouteSettlementStatus } | null } | null;
+  pointOfSaleDailyClose?: { id?: string; status: PointOfSaleDailyCloseStatus; version?: number; businessDate?: Date } | null;
+  payments?: Array<Payment & { version: number }>;
+  route?: { id?: string; name?: string; settlement?: { id?: string; status: RouteSettlementStatus; version?: number } | null } | null;
   inventoryMovements?: Array<Record<string, unknown>>;
+  documents?: Array<SaleDocumentListRecord & {
+    invoiceDocuments?: Array<{
+      id: string;
+      reversedAt?: Date | null;
+      invoice?: { id: string; status: InvoiceStatus } | null;
+    }>;
+  }>;
+  billingRequests?: Array<{
+    id: string;
+    status: BillingRequestStatus;
+    version: number;
+    reason?: string | null;
+    notes?: string | null;
+  }>;
   accountReceivable?: (Record<string, unknown> & {
     id: string;
     originalAmount: DecimalLike;
     outstandingAmount: DecimalLike;
     status: CollectionStatus;
-    payments?: Array<{ id: string; status: PaymentStatus; accountReceivableId?: string | null }>;
+    payments?: Array<Payment & { version: number }>;
   }) | null;
   items?: Array<{
     id: string;
@@ -241,8 +259,58 @@ type SaleCancellationRecord = Record<string, unknown> & {
     quantity?: DecimalLike;
     quantityKg?: DecimalLike;
     quantityPieces?: number | null;
+    productNameSnapshot?: string | null;
+    unit?: ProductUnit;
   }>;
 };
+
+type SaleVoidBlocker = {
+  code: string;
+  message: string;
+};
+
+type SaleVoidPreviewRecord = SaleCancellationRecord & {
+  saleNumber: string;
+  total: DecimalLike;
+};
+
+const saleVoidInclude = {
+  items: true,
+  payments: { orderBy: { paidAt: 'asc' as const } },
+  accountReceivable: {
+    include: {
+      payments: { orderBy: { paidAt: 'asc' as const } },
+    },
+  },
+  pointOfSaleDailyClose: {
+    select: { id: true, status: true, version: true, businessDate: true },
+  },
+  route: {
+    select: {
+      id: true,
+      name: true,
+      settlement: { select: { id: true, status: true, version: true } },
+    },
+  },
+  documents: {
+    orderBy: { createdAt: 'asc' as const },
+    include: {
+      invoiceDocuments: {
+        where: { reversedAt: null },
+        include: { invoice: { select: { id: true, status: true } } },
+      },
+    },
+  },
+  billingRequests: {
+    orderBy: { requestedAt: 'desc' as const },
+    take: 1,
+    select: { id: true, status: true, version: true, reason: true, notes: true },
+  },
+  inventoryMovements: {
+    where: { type: InventoryMovementType.CANCEL_SALE },
+    orderBy: { createdAt: 'asc' as const },
+  },
+} satisfies Prisma.SaleInclude;
 
 const saleChannelLocationTypes: Record<SaleChannel, ReadonlySet<OperationalLocationType>> = {
   [SaleChannel.COUNTER]: new Set([
@@ -575,7 +643,7 @@ export class SalesService {
           });
         }
         const issuedAt = new Date();
-        const dueDate = outstandingAmount > 0 && customer
+        const dueDate = dto.paymentType === SalePaymentType.CREDIT_SALE && outstandingAmount > 0 && customer
           ? this.addDays(issuedAt, customer.creditDays ?? 0)
           : null;
         const documentData = {
@@ -640,7 +708,7 @@ export class SalesService {
           }),
         ));
 
-        const accountReceivable = outstandingAmount > 0 && customer
+        const accountReceivable = dto.paymentType === SalePaymentType.CREDIT_SALE && outstandingAmount > 0 && customer
           ? await tx.accountReceivable.create({
               data: {
                 customerId: customer.id,
@@ -837,6 +905,263 @@ export class SalesService {
     };
   }
 
+  async getVoidPreview(id: string, currentUser: Actor) {
+    this.assertVoidAdmin(currentUser);
+
+    const sale = (await this.prisma.sale.findFirst({
+      where: { id },
+      include: saleVoidInclude,
+    } as Prisma.SaleFindFirstArgs)) as SaleVoidPreviewRecord | null;
+
+    if (!sale) {
+      throw new NotFoundException('Sale not found');
+    }
+
+    return this.toVoidPreview(sale, currentUser);
+  }
+
+  async voidSale(id: string, dto: VoidSaleDto, currentUser: Actor, idempotencyKey: string) {
+    const reason = dto.reason?.trim();
+    if (!reason) {
+      throw new BadRequestException('reason is required');
+    }
+
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
+
+    if (dto.expectedVersion === undefined || dto.expectedVersion === null) {
+      throw new BadRequestException('expectedVersion is required');
+    }
+
+    this.assertVoidAdmin(currentUser);
+
+    const payloadHash = this.hashPayload({
+      operation: 'VOID_SALE',
+      saleId: id,
+      reason,
+      expectedVersion: dto.expectedVersion,
+      authorizedByUserId: currentUser.id,
+    });
+
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const existing = (await tx.sale.findFirst({
+            where: { cancellationIdempotencyKey: idempotencyKey },
+            include: saleVoidInclude,
+          } as Prisma.SaleFindFirstArgs)) as SaleVoidPreviewRecord | null;
+
+          if (existing) {
+            this.assertSameIdempotencyPayload(
+              existing.cancellationPayloadHash,
+              payloadHash,
+              'Idempotency-Key was already used for a different sale void payload',
+            );
+
+            return this.buildVoidResponse(
+              existing,
+              currentUser,
+              this.getVoidPayments(existing).filter((payment) => payment.status === PaymentStatus.CANCELLED),
+              existing.inventoryMovements ?? [],
+              existing.accountReceivable as AccountReceivable | null,
+              existing.documents ?? [],
+              existing.billingRequests?.[0] ?? null,
+              reason,
+              existing.cancelledAt instanceof Date ? existing.cancelledAt : new Date(),
+            );
+          }
+
+          const sale = (await tx.sale.findFirst({
+            where: { id },
+            include: saleVoidInclude,
+          } as Prisma.SaleFindFirstArgs)) as SaleVoidPreviewRecord | null;
+
+          if (!sale) {
+            throw new NotFoundException('Sale not found');
+          }
+
+          if (sale.status === SaleStatus.CANCELLED) {
+            throw new BadRequestException('Sale is already cancelled');
+          }
+
+          if (sale.version !== dto.expectedVersion) {
+            throw new ConflictException('Sale version does not match expectedVersion');
+          }
+
+          const blockers = this.getVoidBlockers(sale);
+          if (blockers.length) {
+            throw new BadRequestException({
+              code: 'SALE_VOID_BLOCKED',
+              message: blockers.map((blocker) => blocker.message).join(' '),
+              blockers,
+            });
+          }
+
+          const voidedAt = new Date();
+          const cancelledPayments: Payment[] = [];
+
+          for (const payment of this.getVoidPayments(sale)) {
+            if (payment.status === PaymentStatus.CANCELLED) continue;
+
+            const paymentCancellationKey = `${idempotencyKey}:payment:${payment.id}`;
+            const paymentPayloadHash = this.hashPayload({
+              operation: 'VOID_SALE_PAYMENT',
+              saleId: id,
+              paymentId: payment.id,
+              reason,
+              authorizedByUserId: currentUser.id,
+            });
+            const updatedPayment = await tx.payment.updateMany({
+              where: { id: payment.id, status: payment.status, version: payment.version },
+              data: {
+                status: PaymentStatus.CANCELLED,
+                cancelledAt: voidedAt,
+                cancelledByUserId: currentUser.id,
+                cancellationReason: reason,
+                cancellationIdempotencyKey: paymentCancellationKey,
+                cancellationPayloadHash: paymentPayloadHash,
+                version: { increment: 1 },
+              },
+            });
+
+            if (updatedPayment.count !== 1) {
+              throw new ConflictException('A payment changed before the sale could be voided');
+            }
+
+            cancelledPayments.push({
+              ...payment,
+              status: PaymentStatus.CANCELLED,
+              cancelledAt: voidedAt,
+              cancelledByUserId: currentUser.id,
+              cancellationReason: reason,
+              cancellationIdempotencyKey: paymentCancellationKey,
+              cancellationPayloadHash: paymentPayloadHash,
+              version: payment.version + 1,
+            });
+          }
+
+          const accountReceivable = sale.accountReceivable
+            ? await tx.accountReceivable.update({
+                where: { id: sale.accountReceivable.id },
+                data: {
+                  outstandingAmount: 0,
+                  status: CollectionStatus.CANCELLED,
+                  cancelledAt: voidedAt,
+                  paidAt: null,
+                  lastPaymentDate: null,
+                  daysOverdue: 0,
+                  agingStatus: AgingStatus.CURRENT,
+                },
+              })
+            : null;
+
+          const inventoryMovements = await this.restoreSaleInventory(tx, sale, currentUser.id, reason);
+
+          const documentsToCancel = (sale.documents ?? []).filter(
+            (document) => document.status !== SaleDocumentStatus.CANCELLED,
+          );
+          if (documentsToCancel.length) {
+            await tx.saleDocument.updateMany({
+              where: { saleId: sale.id, status: { not: SaleDocumentStatus.CANCELLED } },
+              data: { status: SaleDocumentStatus.CANCELLED },
+            });
+          }
+          const cancelledDocuments = (sale.documents ?? []).map((document) => document.status === SaleDocumentStatus.CANCELLED
+            ? document
+            : { ...document, status: SaleDocumentStatus.CANCELLED, updatedAt: voidedAt });
+
+          const currentBillingRequest = sale.billingRequests?.[0] ?? null;
+          let billingRequest = currentBillingRequest;
+          if (currentBillingRequest && (currentBillingRequest.status === BillingRequestStatus.REQUESTED || currentBillingRequest.status === BillingRequestStatus.IN_REVIEW)) {
+            await tx.billingRequestHistory.create({
+              data: {
+                billingRequestId: currentBillingRequest.id,
+                fromStatus: currentBillingRequest.status,
+                toStatus: BillingRequestStatus.CANCELLED,
+                changedByUserId: currentUser.id,
+                reason,
+              },
+            });
+            billingRequest = await tx.billingRequest.update({
+              where: { id: currentBillingRequest.id, version: currentBillingRequest.version },
+              data: {
+                status: BillingRequestStatus.CANCELLED,
+                reviewedByUserId: currentUser.id,
+                reviewedAt: voidedAt,
+                reason,
+                version: { increment: 1 },
+              },
+            });
+          }
+
+          const updated = await tx.sale.updateMany({
+            where: { id: sale.id, status: SaleStatus.CONFIRMED, version: dto.expectedVersion },
+            data: {
+              status: SaleStatus.CANCELLED,
+              collectionStatus: CollectionStatus.CANCELLED,
+              cancelledAt: voidedAt,
+              cancelledByUserId: currentUser.id,
+              cancellationReason: reason,
+              cancellationIdempotencyKey: idempotencyKey,
+              cancellationPayloadHash: payloadHash,
+              version: { increment: 1 },
+            },
+          });
+          if (updated.count !== 1) {
+            throw new ConflictException('Sale was modified before it could be voided');
+          }
+
+          const cancelledSale = (await tx.sale.findUnique({
+            where: { id: sale.id },
+            include: { items: true },
+          })) as SaleCancellationRecord | null;
+          if (!cancelledSale) {
+            throw new NotFoundException('Sale not found after void');
+          }
+
+          await tx.billingAuditLog.create({
+            data: {
+              actorUserId: currentUser.id,
+              action: 'SALE_VOIDED',
+              entityType: 'Sale',
+              entityId: sale.id,
+              before: { status: sale.status, collectionStatus: sale.collectionStatus, version: sale.version },
+              after: { status: SaleStatus.CANCELLED, collectionStatus: CollectionStatus.CANCELLED, version: sale.version + 1 },
+              reason,
+              correlationId: idempotencyKey,
+              context: {
+                paymentIds: cancelledPayments.map((payment) => payment.id),
+                inventoryMovementIds: inventoryMovements.map((movement) => movement.id),
+                saleDocumentIds: documentsToCancel.map((document) => document.id),
+                accountReceivableId: accountReceivable?.id ?? null,
+                billingRequestId: billingRequest?.id ?? null,
+              },
+            },
+          });
+
+          return this.buildVoidResponse(
+            cancelledSale,
+            currentUser,
+            cancelledPayments,
+            inventoryMovements,
+            accountReceivable,
+            cancelledDocuments,
+            billingRequest,
+            reason,
+            voidedAt,
+          );
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (this.isVoidIdempotencyRaceError(error)) {
+        return this.resolveVoidReplay(idempotencyKey, payloadHash, currentUser, reason);
+      }
+      throw error;
+    }
+  }
+
   async cancel(id: string, dto: CancelSaleDto, currentUser: Actor, idempotencyKey: string) {
     const reason = dto.reason?.trim();
     if (!reason) {
@@ -941,6 +1266,189 @@ export class SalesService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  private assertVoidAdmin(currentUser: Actor): void {
+    if (currentUser.role !== 'ADMIN') {
+      throw new ForbiddenException('Only ADMIN can void sales');
+    }
+  }
+
+  private getVoidBlockers(sale: SaleVoidPreviewRecord): SaleVoidBlocker[] {
+    const blockers: SaleVoidBlocker[] = [];
+
+    if (sale.status === SaleStatus.CANCELLED) {
+      blockers.push({ code: 'SALE_ALREADY_CANCELLED', message: 'La venta ya está cancelada.' });
+    } else if (sale.status !== SaleStatus.CONFIRMED) {
+      blockers.push({ code: 'SALE_NOT_CONFIRMED', message: 'Solo se pueden anular ventas confirmadas.' });
+    }
+
+    if (sale.pointOfSaleDailyClose?.status === PointOfSaleDailyCloseStatus.CLOSED) {
+      blockers.push({
+        code: 'DAILY_CLOSE_REOPEN_REQUIRED',
+        message: 'La venta pertenece a un cierre POS cerrado; reabre el cierre con control de versión antes de anularla.',
+      });
+    }
+
+    if (sale.route?.settlement?.status === RouteSettlementStatus.CLOSED) {
+      blockers.push({
+        code: 'ROUTE_SETTLEMENT_REOPEN_REQUIRED',
+        message: 'La venta pertenece a una liquidación de ruta cerrada; reabre la liquidación con auditoría antes de anularla.',
+      });
+    }
+
+    const activeInvoice = (sale.documents ?? [])
+      .flatMap((document) => document.invoiceDocuments ?? [])
+      .find((application) => application.invoice?.status === InvoiceStatus.ACTIVE);
+    if (activeInvoice) {
+      blockers.push({
+        code: 'INVOICE_CANCELLATION_REQUIRED',
+        message: 'Existe una factura externa activa relacionada; cancélala desde facturación antes de anular la venta.',
+      });
+    }
+
+    return blockers;
+  }
+
+  private toVoidPreview(sale: SaleVoidPreviewRecord, currentUser: Actor) {
+    const blockers = this.getVoidBlockers(sale);
+    const activePayments = this.getVoidPayments(sale).filter((payment) => payment.status !== PaymentStatus.CANCELLED);
+    const activeDocuments = (sale.documents ?? []).filter((document) => document.status !== SaleDocumentStatus.CANCELLED);
+    const billingRequest = sale.billingRequests?.[0] ?? null;
+
+    return {
+      canExecute: blockers.length === 0,
+      blockers,
+      authorization: {
+        requiredRole: 'ADMIN',
+        authorizedBy: { id: currentUser.id, name: currentUser.name ?? null, role: currentUser.role },
+      },
+      sale: {
+        id: sale.id,
+        saleNumber: sale.saleNumber,
+        status: sale.status,
+        version: sale.version,
+        total: this.decimalToString(sale.total),
+        collectionStatus: sale.collectionStatus,
+      },
+      payments: activePayments.map((payment) => ({
+        id: payment.id,
+        amount: this.decimalToString(payment.amount),
+        paymentMethod: payment.paymentMethod,
+        status: payment.status,
+        paidAt: payment.paidAt,
+        version: payment.version,
+      })),
+      inventory: (sale.items ?? []).map((item) => ({
+        productId: item.productId,
+        productName: item.productNameSnapshot ?? item.productId,
+        unit: item.unit ?? null,
+        quantityKg: this.decimalToString(item.quantityKg),
+        quantityPieces: item.quantityPieces ?? 0,
+        locationId: sale.locationId,
+      })),
+      accountReceivable: sale.accountReceivable ? {
+        id: sale.accountReceivable.id,
+        originalAmount: this.decimalToString(sale.accountReceivable.originalAmount),
+        outstandingAmount: this.decimalToString(sale.accountReceivable.outstandingAmount),
+        status: sale.accountReceivable.status,
+      } : null,
+      documents: (sale.documents ?? []).map((document) => ({
+        id: document.id,
+        documentType: document.documentType,
+        physicalFolio: document.physicalFolio ?? null,
+        status: document.status,
+        willCancel: activeDocuments.some((activeDocument) => activeDocument.id === document.id),
+      })),
+      billingRequest: billingRequest ? {
+        id: billingRequest.id,
+        status: billingRequest.status,
+        willCancel: billingRequest.status === BillingRequestStatus.REQUESTED || billingRequest.status === BillingRequestStatus.IN_REVIEW,
+      } : null,
+    };
+  }
+
+  private buildVoidResponse(
+    sale: SaleCancellationRecord,
+    currentUser: Actor,
+    payments: Payment[],
+    inventoryMovements: Array<Record<string, unknown>>,
+    accountReceivable: AccountReceivable | null,
+    documents: Array<SaleDocumentListRecord & { status: SaleDocumentStatus }>,
+    billingRequest: Record<string, unknown> | null,
+    reason: string,
+    voidedAt: Date,
+  ) {
+    return {
+      sale: this.toSaleResponse(sale, currentUser),
+      payments: payments.map((payment) => this.toPaymentResponse(payment)),
+      inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
+      accountReceivable: accountReceivable ? this.toReceivableRecordResponse(accountReceivable as unknown as Record<string, unknown>) : null,
+      documents: documents.map((document) => this.toSaleDocumentResponse(document)),
+      billingRequest,
+      authorization: {
+        authorizedBy: { id: currentUser.id, name: currentUser.name ?? null, role: currentUser.role },
+        reason,
+        authorizedAt: voidedAt,
+      },
+    };
+  }
+
+  private getVoidPayments(sale: SaleVoidPreviewRecord): Array<Payment & { version: number }> {
+    const payments = [
+      ...(sale.payments ?? []),
+      ...(sale.accountReceivable?.payments ?? []),
+    ];
+    return Array.from(new Map(payments.map((payment) => [payment.id, payment])).values());
+  }
+
+  private async resolveVoidReplay(
+    idempotencyKey: string,
+    payloadHash: string,
+    currentUser: Actor,
+    reason: string,
+  ) {
+    const existing = (await this.prisma.sale.findFirst({
+      where: { cancellationIdempotencyKey: idempotencyKey },
+      include: saleVoidInclude,
+    } as Prisma.SaleFindFirstArgs)) as SaleVoidPreviewRecord | null;
+
+    if (!existing) {
+      throw new ConflictException('Concurrent sale void is still in progress; retry with the same Idempotency-Key');
+    }
+
+    this.assertSameIdempotencyPayload(
+      existing.cancellationPayloadHash,
+      payloadHash,
+      'Idempotency-Key was already used for a different sale void payload',
+    );
+
+    return this.buildVoidResponse(
+      existing,
+      currentUser,
+      this.getVoidPayments(existing).filter((payment) => payment.status === PaymentStatus.CANCELLED),
+      existing.inventoryMovements ?? [],
+      existing.accountReceivable as AccountReceivable | null,
+      existing.documents ?? [],
+      existing.billingRequests?.[0] ?? null,
+      reason,
+      existing.cancelledAt instanceof Date ? existing.cancelledAt : new Date(),
+    );
+  }
+
+  private isVoidIdempotencyRaceError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      ((error as { code?: unknown }).code === 'P2002' || (error as { code?: unknown }).code === 'P2034')
+    );
+  }
+
+  private assertSameIdempotencyPayload(existingHash: unknown, expectedHash: string, message: string): void {
+    if (existingHash !== expectedHash) {
+      throw new ConflictException(message);
+    }
   }
 
   private buildCancellationScopeWhere(id: string, currentUser: Actor): Prisma.SaleWhereInput {
@@ -1267,6 +1775,13 @@ export class SalesService {
     }
     if (totalPaid > total) {
       throw new BadRequestException('Payment total cannot exceed sale total');
+    }
+
+    if (dto.paymentType === SalePaymentType.CASH_SALE && totalPaid !== total) {
+      throw new BadRequestException({
+        code: 'CASH_SALE_REQUIRES_FULL_PAYMENT',
+        message: 'Cash sales must be fully paid before confirmation; change the sale type to credit to record a partial payment',
+      });
     }
 
     if (dto.paymentType === SalePaymentType.CREDIT_SALE && !customer) {
@@ -1787,7 +2302,7 @@ export class SalesService {
     };
   }
 
-  private toPaymentResponse(payment: CreatedPayment) {
+  private toPaymentResponse(payment: CreatedPayment | Payment) {
     return {
       ...payment,
       amount: this.decimalToString(payment.amount),
@@ -1796,7 +2311,7 @@ export class SalesService {
     };
   }
 
-  private toReceivableResponse(receivable: CreatedReceivable) {
+  private toReceivableResponse(receivable: CreatedReceivable | AccountReceivable) {
     return {
       ...receivable,
       originalAmount: this.decimalToString(receivable.originalAmount),

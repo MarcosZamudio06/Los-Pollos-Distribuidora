@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api'
-import type { CancelSalePayload, CreateSalePayload, CreateSaleResponse, ListSalesFilters, SaleDetail, SaleDocument, SaleListItem, TicketData } from './types'
+import type { CancelSalePayload, CreateSalePayload, CreateSaleResponse, ListSalesFilters, SaleDetail, SaleDocument, SaleListItem, SaleVoidPreview, TicketData, VoidSaleResponse } from './types'
 
 type ApiEnvelope<T> = { success?: boolean; message?: string; data?: T }
 type ItemEnvelope<T> = ApiEnvelope<T> | T
@@ -58,8 +58,21 @@ export const salesService = {
     })
     return unwrapItem(response)
   },
+  async getVoidPreview(saleId: string, accessToken?: string | null) {
+    const response = await apiClient.get<ItemEnvelope<SaleVoidPreview>>(`/sales/${saleId}/void-preview`, {
+      headers: authHeaders(accessToken),
+    })
+    return unwrapItem(response)
+  },
   async cancelSale(saleId: string, payload: CancelSalePayload, idempotencyKey: string, accessToken?: string | null) {
     const response = await apiClient.post<ItemEnvelope<{ sale?: SaleDetail; inventoryMovements?: Array<Record<string, unknown>>; accountReceivable?: Record<string, unknown> | null }>, CancelSalePayload>(`/sales/${saleId}/cancel`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    })
+    return unwrapItem(response)
+  },
+  async voidSale(saleId: string, payload: CancelSalePayload, idempotencyKey: string, accessToken?: string | null) {
+    const response = await apiClient.post<ItemEnvelope<VoidSaleResponse>, CancelSalePayload>(`/sales/${saleId}/void`, {
       body: payload,
       headers: authHeaders(accessToken, idempotencyKey),
     })

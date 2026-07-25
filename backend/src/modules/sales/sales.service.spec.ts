@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
+  BillingRequestStatus,
   CollectionStatus,
   CreditStatus,
   InventoryMovementType,
@@ -33,13 +34,15 @@ type MockPrisma = {
   legalEntityOperationalLocation: { findFirst: jest.Mock };
   inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
   inventoryMovement: { create: jest.Mock };
-  saleDocument: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
+  saleDocument: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
   sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
-  payment: { create: jest.Mock; findFirst: jest.Mock };
+  payment: { create: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock };
   accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; update: jest.Mock };
-  billingRequest: { create: jest.Mock };
+  billingRequest: { create: jest.Mock; update: jest.Mock };
+  billingRequestHistory: { create: jest.Mock };
   billingRequestSaleDocument: { create: jest.Mock };
   billingDataRemediation: { upsert: jest.Mock };
+  billingAuditLog: { create: jest.Mock };
 };
 
 function decimal(value: string | number): Prisma.Decimal {
@@ -62,13 +65,15 @@ function createPrisma(): MockPrisma {
     legalEntityOperationalLocation: { findFirst: jest.fn() },
     inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     inventoryMovement: { create: jest.fn() },
-    saleDocument: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
+    saleDocument: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
-    payment: { create: jest.fn(), findFirst: jest.fn() },
+    payment: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() },
     accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
-    billingRequest: { create: jest.fn() },
+    billingRequest: { create: jest.fn(), update: jest.fn() },
+    billingRequestHistory: { create: jest.fn() },
     billingRequestSaleDocument: { create: jest.fn() },
     billingDataRemediation: { upsert: jest.fn() },
+    billingAuditLog: { create: jest.fn() },
   };
   return prisma;
 }
@@ -157,6 +162,63 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
   prisma.billingRequest.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-1', createdAt: now, updatedAt: now, requestedAt: now, reviewedAt: null, reviewedByUserId: null, status: 'REQUESTED', ...data }));
   prisma.billingRequestSaleDocument.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-doc-1', createdAt: now, updatedAt: now, ...data }));
   Object.assign(prisma.sale.create, saleOverrides);
+}
+
+function voidSaleRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'sale-void-1',
+    saleNumber: 'SALE-VOID-0001',
+    userId: 'seller-1',
+    locationId: 'loc-1',
+    status: SaleStatus.CONFIRMED,
+    version: 4,
+    collectionStatus: CollectionStatus.PAID,
+    paymentType: SalePaymentType.CASH_SALE,
+    total: decimal('250'),
+    subtotal: decimal('250'),
+    discount: decimal('0'),
+    tax: decimal('0'),
+    pointOfSaleDailyClose: null,
+    route: null,
+    payments: [{
+      id: 'payment-void-1',
+      accountReceivableId: null,
+      saleId: 'sale-void-1',
+      customerId: null,
+      userId: 'seller-1',
+      amount: decimal('250'),
+      paymentMethod: PaymentMethod.CASH,
+      paidAt: now,
+      status: PaymentStatus.APPLIED,
+      version: 2,
+    }],
+    accountReceivable: null,
+    items: [{
+      id: 'item-void-1',
+      productId: 'product-1',
+      productNameSnapshot: 'Chicken breast',
+      unit: ProductUnit.KG,
+      quantity: decimal('2.500'),
+      quantityKg: decimal('2.500'),
+      quantityPieces: 0,
+    }],
+    documents: [{
+      id: 'document-void-1',
+      saleId: 'sale-void-1',
+      documentType: SaleDocumentType.SIMPLE_NOTE,
+      operationalLocationId: 'loc-1',
+      pointOfSaleDailyCloseId: null,
+      physicalFolio: 'N-VOID-1',
+      status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false,
+      createdAt: now,
+      updatedAt: now,
+      invoiceDocuments: [],
+    }],
+    billingRequests: [],
+    inventoryMovements: [],
+    ...overrides,
+  };
 }
 
 describe('SalesService', () => {
@@ -1390,6 +1452,34 @@ describe('SalesService', () => {
     expect(result.accountReceivable).toEqual(expect.objectContaining({ outstandingAmount: '200' }));
   });
 
+  it.each([
+    ['no payment', undefined],
+    ['partial payment', { amount: 100, paymentMethod: PaymentMethod.CASH }],
+  ])('rejects a cash sale with an active customer when it is %s', async (_caseName, initialPayment) => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+      isActive: true,
+      creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'),
+      creditDays: 15,
+    });
+
+    await expect(
+      service.create(
+        validCashSale({ customerId: 'customer-1', initialPayment }),
+        seller(),
+        `idem-cash-not-fully-paid-${_caseName.replace(' ', '-')}`,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CASH_SALE_REQUIRES_FULL_PAYMENT' }),
+    });
+
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
+  });
+
   it('persists the evaluated credit decision snapshot and returns policy warnings', async () => {
     jest.useFakeTimers().setSystemTime(now);
     const { service, prisma } = createService();
@@ -1712,7 +1802,7 @@ describe('SalesService', () => {
     );
   });
 
-  it('allows registered cash contraentrega to create an account receivable without requiring active credit', async () => {
+  it('rejects cash contraentrega instead of creating an account receivable', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.customer.findUnique.mockResolvedValue({
@@ -1723,16 +1813,16 @@ describe('SalesService', () => {
       creditDays: 7,
     });
 
-    const result = await service.create(
+    await expect(service.create(
       validCashSale({ customerId: 'customer-1', initialPayment: undefined }),
       seller(),
       'idem-contraentrega',
-    );
+    )).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CASH_SALE_REQUIRES_FULL_PAYMENT' }),
+    });
 
-    expect(prisma.accountReceivable.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ customerId: 'customer-1', outstandingAmount: 250 }) }),
-    );
-    expect(result.accountReceivable).toEqual(expect.objectContaining({ outstandingAmount: '250' }));
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
   });
 
   it('converts KG_AND_PIECE pieces to canonical kilograms for pricing while preserving both inventory quantities', async () => {
@@ -1889,6 +1979,152 @@ describe('SalesService', () => {
     prisma.operationalLocation.findUnique.mockResolvedValue(null);
 
     await expect(service.create(validCashSale(), seller(), 'idem-missing-location')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('previews an administrative void with payments, inventory, receivable, documents, and authorizer', async () => {
+    const { service, prisma } = createService();
+    const sale = voidSaleRecord({
+      payments: [{ ...voidSaleRecord().payments[0], amount: decimal('100'), accountReceivableId: 'ar-void-1' }],
+      accountReceivable: {
+        id: 'ar-void-1',
+        originalAmount: decimal('250'),
+        outstandingAmount: decimal('150'),
+        status: CollectionStatus.PARTIALLY_PAID,
+        payments: [],
+      },
+      paymentType: SalePaymentType.CREDIT_SALE,
+      collectionStatus: CollectionStatus.PARTIALLY_PAID,
+      billingRequests: [{ id: 'billing-void-1', status: BillingRequestStatus.REQUESTED, version: 1, reason: 'Control interno', notes: null }],
+    });
+    prisma.sale.findFirst.mockResolvedValue(sale);
+
+    const result = await service.getVoidPreview('sale-void-1', { id: 'admin-1', name: 'Admin', role: 'ADMIN' });
+
+    expect(result.canExecute).toBe(true);
+    expect(result.authorization.authorizedBy).toEqual({ id: 'admin-1', name: 'Admin', role: 'ADMIN' });
+    expect(result.payments).toEqual([expect.objectContaining({ id: 'payment-void-1', amount: '100', version: 2 })]);
+    expect(result.inventory).toEqual([expect.objectContaining({ productName: 'Chicken breast', quantityKg: '2.5', locationId: 'loc-1' })]);
+    expect(result.accountReceivable).toEqual(expect.objectContaining({ id: 'ar-void-1', outstandingAmount: '150' }));
+    expect(result.documents).toEqual([expect.objectContaining({ id: 'document-void-1', willCancel: true })]);
+    expect(result.billingRequest).toEqual(expect.objectContaining({ id: 'billing-void-1', willCancel: true }));
+  });
+
+  it('previews a closed POS daily close as an explicit reopening blocker', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue(voidSaleRecord({ pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.CLOSED } }));
+
+    const result = await service.getVoidPreview('sale-void-1', { id: 'admin-1', role: 'ADMIN' });
+
+    expect(result.canExecute).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'DAILY_CLOSE_REOPEN_REQUIRED' }),
+    ]));
+  });
+
+  it('previews a closed route settlement as an explicit reopening blocker', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue(voidSaleRecord({ route: { settlement: { status: RouteSettlementStatus.CLOSED } } }));
+
+    const result = await service.getVoidPreview('sale-void-1', { id: 'admin-1', role: 'ADMIN' });
+
+    expect(result.canExecute).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'ROUTE_SETTLEMENT_REOPEN_REQUIRED' }),
+    ]));
+  });
+
+  it('voids a paid sale atomically, cancels its payment and document, restores stock, and updates receivable', async () => {
+    const { service, prisma } = createService();
+    const payment = { ...voidSaleRecord().payments[0], accountReceivableId: 'ar-void-1', amount: decimal('100') };
+    const sale = voidSaleRecord({
+      payments: [payment],
+      paymentType: SalePaymentType.CREDIT_SALE,
+      collectionStatus: CollectionStatus.PARTIALLY_PAID,
+      accountReceivable: {
+        id: 'ar-void-1',
+        originalAmount: decimal('250'),
+        outstandingAmount: decimal('150'),
+        status: CollectionStatus.PARTIALLY_PAID,
+        payments: [payment],
+      },
+      billingRequests: [{ id: 'billing-void-1', status: BillingRequestStatus.IN_REVIEW, version: 2, reason: 'Control interno', notes: null }],
+    });
+    const cancelledSale = { ...sale, status: SaleStatus.CANCELLED, collectionStatus: CollectionStatus.CANCELLED, version: 5, items: sale.items };
+    prisma.sale.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(sale);
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+    prisma.inventoryBalance.update.mockResolvedValue({ productId: 'product-1', locationId: 'loc-1', quantityKg: decimal('10'), quantityPieces: 0 });
+    prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'void-movement-1', createdAt: now, ...data }));
+    prisma.accountReceivable.update.mockResolvedValue({ id: 'ar-void-1', originalAmount: decimal('250'), outstandingAmount: decimal('0'), status: CollectionStatus.CANCELLED });
+    prisma.saleDocument.updateMany.mockResolvedValue({ count: 1 });
+    prisma.billingRequestHistory.create.mockResolvedValue({ id: 'billing-history-void-1' });
+    prisma.billingRequest.update.mockResolvedValue({ id: 'billing-void-1', status: BillingRequestStatus.CANCELLED, version: 3 });
+    prisma.sale.updateMany.mockResolvedValue({ count: 1 });
+    prisma.sale.findUnique.mockResolvedValue(cancelledSale);
+    prisma.billingAuditLog.create.mockResolvedValue({ id: 'audit-void-1' });
+
+    const result = await service.voidSale(
+      'sale-void-1',
+      { reason: 'Cliente devolvió el pedido', expectedVersion: 4 },
+      { id: 'admin-1', name: 'Admin', role: 'ADMIN' },
+      'void-key-1',
+    );
+
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'payment-void-1', status: PaymentStatus.APPLIED, version: 2 },
+      data: expect.objectContaining({ status: PaymentStatus.CANCELLED, cancelledByUserId: 'admin-1', cancellationReason: 'Cliente devolvió el pedido' }),
+    }));
+    expect(prisma.accountReceivable.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'ar-void-1' },
+      data: expect.objectContaining({ outstandingAmount: 0, status: CollectionStatus.CANCELLED, daysOverdue: 0, agingStatus: 'CURRENT' }),
+    }));
+    expect(prisma.saleDocument.updateMany).toHaveBeenCalledWith({
+      where: { saleId: 'sale-void-1', status: { not: SaleDocumentStatus.CANCELLED } },
+      data: { status: SaleDocumentStatus.CANCELLED },
+    });
+    expect(prisma.billingRequestHistory.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ toStatus: BillingRequestStatus.CANCELLED, changedByUserId: 'admin-1' }) }));
+    expect(prisma.billingAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'SALE_VOIDED', reason: 'Cliente devolvió el pedido', correlationId: 'void-key-1' }) }));
+    expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-void-1', status: SaleStatus.CANCELLED }));
+    expect(result.payments).toEqual([expect.objectContaining({ id: 'payment-void-1', status: PaymentStatus.CANCELLED })]);
+    expect(result.documents).toEqual([expect.objectContaining({ id: 'document-void-1', status: SaleDocumentStatus.CANCELLED })]);
+  });
+
+  it('replays an administrative void without duplicating effects', async () => {
+    const { service, prisma } = createService();
+    const dto = { reason: 'Cliente devolvió el pedido', expectedVersion: 4 };
+    const existing = voidSaleRecord({
+      status: SaleStatus.CANCELLED,
+      version: 5,
+      cancellationIdempotencyKey: 'void-key-replay',
+      cancellationPayloadHash: hashPayload({ operation: 'VOID_SALE', saleId: 'sale-void-1', ...dto, authorizedByUserId: 'admin-1' }),
+      payments: [{ ...voidSaleRecord().payments[0], status: PaymentStatus.CANCELLED, version: 3 }],
+      documents: [{ ...voidSaleRecord().documents[0], status: SaleDocumentStatus.CANCELLED }],
+    });
+    prisma.sale.findFirst.mockResolvedValue(existing);
+
+    const result = await service.voidSale('sale-void-1', dto, { id: 'admin-1', role: 'ADMIN' }, 'void-key-replay');
+
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.sale.updateMany).not.toHaveBeenCalled();
+    expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-void-1', status: SaleStatus.CANCELLED }));
+  });
+
+  it('stops the administrative void before inventory or sale changes when a payment version is stale', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(voidSaleRecord());
+    prisma.payment.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.voidSale(
+      'sale-void-1',
+      { reason: 'Revisión autorizada', expectedVersion: 4 },
+      { id: 'admin-1', role: 'ADMIN' },
+      'void-key-stale-payment',
+    )).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.saleDocument.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.updateMany).not.toHaveBeenCalled();
   });
 
   it('cancels a confirmed sale, restores stock at the original location, and records cancel-sale movements', async () => {

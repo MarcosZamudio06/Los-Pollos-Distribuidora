@@ -48,6 +48,8 @@
 - `agingStatus` clasifica únicamente la antigüedad o mora de una cuenta por cobrar: vigente, por vencer o vencida. No es un tipo ni un estado operativo de `Sale`.
 - `paymentMethod` pertenece exclusivamente a `Payment`; `Sale` no lo persiste. Cuando se muestre junto a una venta, debe derivarse de sus pagos relacionados.
 - Una venta a crédito requiere cliente registrado y autorización de crédito vigente.
+- Una venta de contado (`CASH_SALE`) solo puede confirmarse cuando la suma de sus pagos aplicados iguala el total de la venta; no puede dejar saldo pendiente ni crear una cuenta por cobrar.
+- Un pago parcial requiere cambiar explícitamente `paymentType` a `CREDIT_SALE`, sujeto a las validaciones de límite, mora y bloqueo crediticio.
 - No se debe permitir una venta a crédito si el cliente está bloqueado por mora o excede su límite de crédito, salvo autorización administrativa explícita.
 - El sistema debe calcular importes a partir de precios autorizados; los descuentos requieren autorización conforme a rol o política del negocio.
 - La venta debe conservar `saleChannel`, `documentType`, folio físico cuando aplique, y quién entregó o cobró cuando el flujo lo requiera.

@@ -28,12 +28,53 @@ let ProductsService = class ProductsService {
         if (query.lowStock === true && !query.locationId) {
             throw new common_1.BadRequestException('locationId is required for lowStock filter');
         }
-        const products = (await this.prisma.product.findMany({
-            where: this.buildListWhere(query),
-            include: this.buildListInclude(query.locationId),
-            orderBy: { name: 'asc' },
-            ...this.buildPagination(query),
-        }));
+        const search = query.search?.trim();
+        const where = this.buildListWhere(query);
+        const include = this.buildListInclude(query.locationId);
+        let products;
+        if (search) {
+            const exactBarcode = (await this.prisma.product.findFirst({
+                where: {
+                    ...where,
+                    barcode: { equals: search, mode: 'insensitive' },
+                },
+                include,
+            }));
+            if (exactBarcode) {
+                products = [exactBarcode];
+            }
+            else {
+                const exactSku = (await this.prisma.product.findFirst({
+                    where: {
+                        ...where,
+                        sku: { equals: search, mode: 'insensitive' },
+                    },
+                    include,
+                }));
+                if (exactSku) {
+                    products = [exactSku];
+                }
+                else {
+                    products = (await this.prisma.product.findMany({
+                        where: {
+                            ...where,
+                            name: { contains: search, mode: 'insensitive' },
+                        },
+                        include,
+                        orderBy: { name: 'asc' },
+                        ...this.buildPagination(query),
+                    }));
+                }
+            }
+        }
+        else {
+            products = (await this.prisma.product.findMany({
+                where,
+                include,
+                orderBy: { name: 'asc' },
+                ...this.buildPagination(query),
+            }));
+        }
         const items = products.map((product) => this.toProductResponse(product, {
             includePurchaseCost: currentUser.role !== 'SELLER',
         }));
@@ -167,7 +208,6 @@ let ProductsService = class ProductsService {
         }
     }
     buildListWhere(query) {
-        const search = query.search?.trim();
         return {
             isActive: query.isActive ?? true,
             ...(query.categoryId ? { categoryId: query.categoryId } : {}),
@@ -175,15 +215,6 @@ let ProductsService = class ProductsService {
                 ? { presentationType: query.presentationType }
                 : {}),
             ...(query.unit ? { unit: query.unit } : {}),
-            ...(search
-                ? {
-                    OR: [
-                        { name: { contains: search, mode: 'insensitive' } },
-                        { sku: { contains: search, mode: 'insensitive' } },
-                        { description: { contains: search, mode: 'insensitive' } },
-                    ],
-                }
-                : {}),
         };
     }
     buildListInclude(locationId) {
@@ -284,6 +315,7 @@ let ProductsService = class ProductsService {
             id: product.id,
             name: product.name,
             sku: product.sku,
+            barcode: product.barcode,
             description: product.description,
             categoryId: product.categoryId,
             presentationType: product.presentationType,

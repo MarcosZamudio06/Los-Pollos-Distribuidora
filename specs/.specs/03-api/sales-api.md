@@ -54,11 +54,11 @@ Permisos: `ADMIN`, `SELLER`.
 
 Body importante:
 
-`payments` es opcional cuando no se recibe dinero al confirmar la venta. Cada elemento requiere `amount` positivo y `paymentMethod`; el backend asigna `paidAt` a cada `Payment`. Para `CASH`, `cashTendered` es opcional y representa efectivo físico recibido: debe ser positivo y no menor que `amount`; el backend calcula y persiste `changeGiven`. El cliente no envía `changeGiven`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`. La suma de `payments[].amount` no puede superar el total de la venta.
+`payments` es opcional cuando una venta a crédito no recibe abono inicial. Cada elemento requiere `amount` positivo y `paymentMethod`; el backend asigna `paidAt` a cada `Payment`. Para `CASH`, `cashTendered` es opcional y representa efectivo físico recibido: debe ser positivo y no menor que `amount`; el backend calcula y persiste `changeGiven`. El cliente no envía `changeGiven`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`. La suma de `payments[].amount` no puede superar el total de la venta y, para `CASH_SALE`, debe ser exactamente igual.
 
 ```json
 {
-  "customerId": "string opcional para contado pagado al momento; requerido para crédito o contraentrega sin pagos",
+  "customerId": "string opcional para contado pagado al momento; requerido para crédito",
   "locationId": "string",
   "saleChannel": "COUNTER",
   "documentType": "SIMPLE_NOTE",
@@ -118,13 +118,11 @@ Validaciones:
 - Generar `saleNumber` en backend desde una secuencia atómica; no depende del conteo de ventas.
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
 - `quantityPieces` debe ser entero cuando aplique.
-- Venta de contado completamente pagada requiere que la suma de `payments[]` cubra el total o flujo equivalente de `Payment`.
+- Venta de contado requiere que exista al menos un pago y que la suma de `payments[]` sea exactamente igual al total calculado por backend.
 - Cada pago inmediato de contado se registra como un `Payment` asociado a `saleId`; no crea `AccountReceivable` artificial.
+- Una venta de contado sin pagos o con pagos parciales se rechaza, aunque tenga cliente registrado; para conservar un saldo pendiente el operador debe cambiar explícitamente `paymentType` a `CREDIT_SALE`.
 - `payments[].amount` permanece como monto aplicado contable. `cashTendered` y `changeGiven` son evidencia individual del `Payment` en efectivo, no modifican el total aplicado ni generan pago, reembolso o movimiento de caja adicional.
 - Los pagos inmediatos del POS siempre asignan `paidAt` en el servidor; no aceptan una fecha del cliente.
-- Una venta de contado contraentrega puede confirmarse sin `payments`; en ese momento no existe `Payment` ni `paymentMethod` recibido, pero requiere cliente registrado para conservar el saldo pendiente.
-- Si la contraentrega deja saldo pendiente, debe generar `AccountReceivable` conforme al canon de todo saldo pendiente.
-- El pago posterior de contraentrega liquida saldo pendiente como cobranza y requiere `Payment.accountReceivableId`.
 - Venta a crédito requiere cliente registrado con crédito autorizado.
 - Venta a crédito sin pagos genera `AccountReceivable` por el total.
 - Venta a crédito con uno o más abonos inmediatos genera un `Payment` por cada elemento y `AccountReceivable` por el saldo.
@@ -133,8 +131,7 @@ Validaciones:
 - `WARN_ONLY` permite confirmar y devuelve `creditWarnings[]`; `BLOCK_NEW_CREDIT` rechaza salvo override permitido.
 - El override requiere `ADMIN`, motivo no vacío y `allowAdministrativeOverride=true`; no puede omitir `BLOCKED` o `SUSPENDED` administrativo.
 - La venta conserva `creditDecisionSnapshot` y `creditDecisionEvaluatedAt` para auditoría.
-- Los rechazos exponen códigos estables: `CREDIT_ADMINISTRATIVELY_BLOCKED`, `CREDIT_OVERDUE_BLOCKED`, `CREDIT_LIMIT_EXCEEDED`, `CREDIT_POLICY_MISMATCH` y códigos `CREDIT_OVERRIDE_*`.
-- Contraentrega no registra dinero recibido hasta que exista `Payment`.
+- Los rechazos exponen códigos estables: `CASH_SALE_REQUIRES_FULL_PAYMENT`, `CREDIT_ADMINISTRATIVELY_BLOCKED`, `CREDIT_OVERDUE_BLOCKED`, `CREDIT_LIMIT_EXCEEDED`, `CREDIT_POLICY_MISMATCH` y códigos `CREDIT_OVERRIDE_*`.
 - `Payment` es la única fuente monetaria del flujo; `Sale` no persiste `paymentMethod`.
 - Si `requiresAdministrativeInvoice=true`, la venta solo genera relación administrativa; no emite CFDI.
 - Si `requiresAdministrativeInvoice=true`, `customerId` y `billingRequest.reason` son obligatorios; `billingRequest.notes` es opcional.
@@ -173,11 +170,64 @@ Validaciones:
 - Si la venta tiene pagos aplicados, requerir reversa o reembolso auditable antes de cancelar.
 - Si la venta está asociada a un cierre POS cerrado, requerir reapertura versionada antes de cancelar.
 - Si la venta está asociada a una liquidación cerrada, requerir reapertura versionada antes de cancelar.
-- Si la venta fue a crédito o tiene saldo pendiente, ajustar o cancelar la cuenta por cobrar relacionada.
+- Si la venta fue a crédito, ajustar o cancelar la cuenta por cobrar relacionada.
 - Registrar movimientos de inventario.
 - Ejecutar en transacción.
 - Requerir motivo.
 - Persistir actor, fecha, motivo e idempotencia de cancelación.
+
+## GET /api/sales/:id/void-preview
+
+Propósito: preparar la operación administrativa “Anular venta” sin modificar datos.
+
+Permisos: `ADMIN`.
+
+La respuesta debe incluir, con datos vigentes y la versión de la venta:
+
+- Pagos no cancelados que serán revertidos, incluyendo monto, método y versión.
+- Partidas e inventario que será restaurado en la ubicación original.
+- Cuenta por cobrar afectada y saldo actual.
+- `SaleDocument` relacionados y cuáles quedarán cancelados.
+- Solicitud administrativa relacionada cuando exista.
+- `blockers[]` con códigos estables para venta no confirmada, cierre POS cerrado, liquidación de ruta cerrada o factura externa activa.
+- Usuario ADMIN que autorizará la operación.
+
+La vista previa no cancela pagos, no modifica inventario y no cambia estados.
+
+## POST /api/sales/:id/void
+
+Propósito: anular administrativamente una venta cobrada o abonada y coordinar sus efectos operativos en una sola transacción serializable.
+
+Permisos: `ADMIN`.
+
+Body importante:
+
+```json
+{
+  "reason": "Cliente devolvió el pedido y se verificó el efectivo",
+  "expectedVersion": 4
+}
+```
+
+La operación debe:
+
+- Cancelar lógicamente cada `Payment` no cancelado de la venta, conservando actor, fecha, motivo y una clave derivada de idempotencia.
+- Cancelar o actualizar la `AccountReceivable` relacionada y el `collectionStatus` de la venta.
+- Restaurar el inventario en la misma ubicación de origen y registrar movimientos `CANCEL_SALE`.
+- Marcar como `CANCELLED` los `SaleDocument` internos relacionados sin eliminar snapshots.
+- Cancelar una `BillingRequest` en estado `REQUESTED` o `IN_REVIEW`, conservando su historial.
+- Registrar auditoría con antes, después, motivo, actor, correlación y efectos afectados.
+- Persistir la venta como `CANCELLED` solamente si todos los efectos anteriores concluyen.
+
+Validaciones:
+
+- Requiere motivo, `expectedVersion` y `Idempotency-Key`.
+- Solo puede ejecutar `ADMIN` y sobre una venta `CONFIRMED`.
+- Una venta asociada a cierre POS o liquidación de ruta `CLOSED` requiere reapertura versionada antes de ejecutar; la anulación no reabre cierres automáticamente.
+- Una factura externa activa relacionada requiere cancelarse desde facturación antes de anular la venta.
+- Reintentar la misma clave y payload devuelve el resultado persistido sin duplicar reversas, movimientos o documentos cancelados.
+- Reutilizar la clave con otro payload responde conflicto.
+- Un fallo en cualquier efecto revierte toda la transacción y conserva la venta en su estado anterior.
 
 ## Impresión de documentos
 

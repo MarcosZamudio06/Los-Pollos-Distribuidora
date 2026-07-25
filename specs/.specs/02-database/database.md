@@ -411,6 +411,8 @@ Notas:
 - `paymentMethod` no pertenece a `Sale`; pertenece a `Payment`.
 - Una venta de contado completamente pagada puede no generar `AccountReceivable`.
 - Una venta de contado completamente pagada debe conservar su `Payment` asociado a `Sale`, sin crear una cuenta por cobrar artificial.
+- `CASH_SALE` requiere que la suma de pagos aplicados sea exactamente igual al total de la venta; el saldo pendiente no es válido para este tipo.
+- Los pagos parciales solo pueden confirmarse como `CREDIT_SALE`, después de evaluar la política de crédito aplicable.
 - Una venta a crédito sin pago genera `AccountReceivable` por el total.
 - Una venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo pendiente.
 

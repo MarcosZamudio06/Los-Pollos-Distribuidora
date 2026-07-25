@@ -34,6 +34,7 @@ type ProductRecord = {
   id: string;
   name: string;
   sku: string | null;
+  barcode: string | null;
   description: string | null;
   categoryId: string | null;
   presentationType: ProductPresentationType;
@@ -73,6 +74,7 @@ type ProductResponse = {
   id: string;
   name: string;
   sku: string | null;
+  barcode: string | null;
   description: string | null;
   categoryId: string | null;
   presentationType: ProductPresentationType;
@@ -125,12 +127,53 @@ export class ProductsService {
       );
     }
 
-    const products = (await this.prisma.product.findMany({
-      where: this.buildListWhere(query),
-      include: this.buildListInclude(query.locationId),
-      orderBy: { name: 'asc' },
-      ...this.buildPagination(query),
-    })) as ProductRecord[];
+    const search = query.search?.trim();
+    const where = this.buildListWhere(query);
+    const include = this.buildListInclude(query.locationId);
+    let products: ProductRecord[];
+
+    if (search) {
+      const exactBarcode = (await this.prisma.product.findFirst({
+        where: {
+          ...where,
+          barcode: { equals: search, mode: 'insensitive' },
+        },
+        include,
+      })) as ProductRecord | null;
+
+      if (exactBarcode) {
+        products = [exactBarcode];
+      } else {
+        const exactSku = (await this.prisma.product.findFirst({
+          where: {
+            ...where,
+            sku: { equals: search, mode: 'insensitive' },
+          },
+          include,
+        })) as ProductRecord | null;
+
+        if (exactSku) {
+          products = [exactSku];
+        } else {
+          products = (await this.prisma.product.findMany({
+            where: {
+              ...where,
+              name: { contains: search, mode: 'insensitive' },
+            },
+            include,
+            orderBy: { name: 'asc' },
+            ...this.buildPagination(query),
+          })) as ProductRecord[];
+        }
+      }
+    } else {
+      products = (await this.prisma.product.findMany({
+        where,
+        include,
+        orderBy: { name: 'asc' },
+        ...this.buildPagination(query),
+      })) as ProductRecord[];
+    }
 
     const items = products.map((product) => this.toProductResponse(product, {
       includePurchaseCost: currentUser.role !== 'SELLER',
@@ -291,8 +334,6 @@ export class ProductsService {
   private buildListWhere(
     query: ListProductsQueryDto,
   ): Prisma.ProductWhereInput {
-    const search = query.search?.trim();
-
     return {
       isActive: query.isActive ?? true,
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
@@ -300,15 +341,6 @@ export class ProductsService {
         ? { presentationType: query.presentationType }
         : {}),
       ...(query.unit ? { unit: query.unit } : {}),
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { sku: { contains: search, mode: 'insensitive' } },
-              { description: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
     };
   }
 
@@ -456,6 +488,7 @@ export class ProductsService {
       id: product.id,
       name: product.name,
       sku: product.sku,
+      barcode: product.barcode,
       description: product.description,
       categoryId: product.categoryId,
       presentationType: product.presentationType,

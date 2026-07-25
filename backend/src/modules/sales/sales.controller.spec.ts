@@ -74,4 +74,46 @@ describe('SalesController', () => {
     expect(service.cancel).not.toHaveBeenCalled();
   });
 
+  it('restricts administrative sale voiding and preview to ADMIN only', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.voidPreview)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata(ROLES_KEY, SalesController.prototype.voidSale)).toEqual(['ADMIN']);
+  });
+
+  it('returns the administrative void preview', async () => {
+    const service = { getVoidPreview: jest.fn().mockResolvedValue({ canExecute: true }) } as unknown as jest.Mocked<SalesService>;
+    const controller = new SalesController(service);
+    const user = { id: 'admin-1', email: 'a@example.com', name: 'Admin', role: 'ADMIN', mustChangePassword: false };
+
+    await expect(controller.voidPreview('sale-1', user)).resolves.toEqual({
+      success: true,
+      message: 'Sale void preview retrieved successfully',
+      data: { canExecute: true },
+    });
+    expect(service.getVoidPreview).toHaveBeenCalledWith('sale-1', user);
+  });
+
+  it('passes the administrative void command and idempotency key to the service', async () => {
+    const service = { voidSale: jest.fn().mockResolvedValue({ sale: { id: 'sale-1', status: 'CANCELLED' } }) } as unknown as jest.Mocked<SalesService>;
+    const controller = new SalesController(service);
+    const user = { id: 'admin-1', email: 'a@example.com', name: 'Admin', role: 'ADMIN', mustChangePassword: false };
+    const body = { reason: 'Cliente devolvió el pedido', expectedVersion: 4 };
+
+    await expect(controller.voidSale('sale-1', body, user, 'void-key-1')).resolves.toEqual({
+      success: true,
+      message: 'Sale voided successfully',
+      data: { sale: { id: 'sale-1', status: 'CANCELLED' } },
+    });
+    expect(service.voidSale).toHaveBeenCalledWith('sale-1', body, user, 'void-key-1');
+  });
+
+  it('requires reason and Idempotency-Key for administrative voiding', async () => {
+    const service = { voidSale: jest.fn() } as unknown as jest.Mocked<SalesService>;
+    const controller = new SalesController(service);
+    const user = { id: 'admin-1', email: 'a@example.com', name: 'Admin', role: 'ADMIN', mustChangePassword: false };
+
+    await expect(controller.voidSale('sale-1', { reason: ' ', expectedVersion: 4 }, user, 'void-key-1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.voidSale('sale-1', { reason: 'Cliente devolvió', expectedVersion: 4 }, user, '  ')).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.voidSale).not.toHaveBeenCalled();
+  });
+
 });

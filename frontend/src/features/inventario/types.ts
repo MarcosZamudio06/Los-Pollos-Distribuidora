@@ -53,6 +53,7 @@ export type Product = {
   id: string
   name: string
   sku?: string | null
+  barcode?: string | null
   description?: string | null
   category?: { id: string; name: string } | string | null
   categoryId?: string | null

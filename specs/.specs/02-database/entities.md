@@ -110,6 +110,8 @@ Validaciones:
 - Debe conservar `deliveredByUserId`, `collectedByUserId`, `routeId` y `requiresAdministrativeInvoice` cuando el flujo lo requiera.
 - `Payment` es la única fuente monetaria de dinero recibido.
 - Venta de contado completamente pagada no requiere `AccountReceivable`.
+- `CASH_SALE` debe tener pagos aplicados por el total exacto de la venta; no puede conservar saldo pendiente.
+- Los pagos parciales requieren `paymentType=CREDIT_SALE` y la evaluación de crédito correspondiente.
 - Venta a crédito sin pago inicial genera `AccountReceivable` por el total.
 - Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
 - Contraentrega no es dinero recibido hasta registrar `Payment`.

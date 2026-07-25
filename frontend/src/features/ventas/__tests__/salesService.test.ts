@@ -104,6 +104,16 @@ describe('salesService TASK-055 contracts', () => {
     expect(lastRequest().init?.method).toBe('GET')
   })
 
+  it('consulta la vista previa administrativa de anulación', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(okJson({ canExecute: true, blockers: [], payments: [], inventory: [], documents: [] }))
+
+    await salesService.getVoidPreview('sale-1', 'access-token')
+
+    expect(lastRequest().url).toBe('/api/sales/sale-1/void-preview')
+    expect(lastRequest().init?.method).toBe('GET')
+    expect(new Headers(lastRequest().init?.headers).get('authorization')).toBe('Bearer access-token')
+  })
+
   it('envía cancelación con payload { reason, expectedVersion } e idempotencia', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(okJson({ sale: { id: 'sale-1', status: 'CANCELLED' } }))
 
@@ -114,6 +124,18 @@ describe('salesService TASK-055 contracts', () => {
     expect(request.init?.method).toBe('POST')
     expect(JSON.parse(String(request.init?.body))).toEqual({ expectedVersion: 4, reason: 'Cliente canceló pedido' })
     expect(new Headers(request.init?.headers).get('idempotency-key')).toBe('cancel-attempt-key')
+  })
+
+  it('envía la anulación administrativa con una clave idempotente única', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(okJson({ sale: { id: 'sale-1', status: 'CANCELLED' }, payments: [], documents: [] }))
+
+    await salesService.voidSale('sale-1', { expectedVersion: 4, reason: 'Cliente devolvió pedido' }, 'void-attempt-key', 'access-token')
+
+    const request = lastRequest()
+    expect(request.url).toBe('/api/sales/sale-1/void')
+    expect(request.init?.method).toBe('POST')
+    expect(JSON.parse(String(request.init?.body))).toEqual({ expectedVersion: 4, reason: 'Cliente devolvió pedido' })
+    expect(new Headers(request.init?.headers).get('idempotency-key')).toBe('void-attempt-key')
   })
 
   it('expone estado no autorizado cuando la API responde 401', async () => {

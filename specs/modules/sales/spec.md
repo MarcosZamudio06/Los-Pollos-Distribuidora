@@ -39,10 +39,14 @@ Registrar ventas de contado, crédito, abonadas y atrasadas con inventario por u
 - `Payment` es la única fuente monetaria de dinero recibido.
 - Toda venta con saldo pendiente requiere trazabilidad de cuenta por cobrar.
 - Venta de contado pagada completamente puede no generar cuenta por cobrar.
+- `CASH_SALE` solo puede confirmarse cuando `totalPagado === totalVenta`; no admite saldo pendiente ni cuenta por cobrar.
+- Un pago parcial debe cambiar explícitamente el tipo de venta a `CREDIT_SALE` para activar la evaluación de crédito y generar la cuenta por cobrar correspondiente.
 - Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
 - Nota sencilla, nota grande y ticket interno no son CFDI; la solicitud administrativa se maneja aparte como `BillingRequest`.
 - Entregar y cobrar pueden ser usuarios distintos.
 - No cancelar venta con pagos aplicados, cierre POS cerrado o liquidación cerrada sin reversa o reapertura auditable.
+- La operación administrativa `Anular venta` coordina la reversa de pagos, la cancelación de la venta, la restauración de inventario, la actualización de cartera y la invalidación de documentos internos de forma transaccional e idempotente.
+- `Anular venta` requiere vista previa del impacto, motivo y autorización de `ADMIN`; no reabre automáticamente cierres POS ni liquidaciones de ruta cerrados.
 
 ## Permisos
 

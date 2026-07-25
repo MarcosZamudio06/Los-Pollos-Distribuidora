@@ -16,6 +16,7 @@ type ProductRecord = {
   id: string;
   name: string;
   sku: string | null;
+  barcode: string | null;
   description: string | null;
   categoryId: string | null;
   presentationType: ProductPresentationType;
@@ -62,6 +63,7 @@ function createProduct(overrides: Partial<ProductRecord> = {}): ProductRecord {
     id: 'product-1',
     name: 'Pechuga de pollo',
     sku: 'PECH-001',
+    barcode: null,
     description: 'Pechuga por kilogramo',
     categoryId: 'category-1',
     presentationType: ProductPresentationType.CUT,
@@ -329,6 +331,54 @@ describe('ProductsService', () => {
     await expect(service.findAll({ lowStock: true }, { role: 'ADMIN' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it('returns the barcode and prioritizes an exact barcode match for POS searches', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findFirst.mockResolvedValue(
+      createProduct({ id: 'barcode-product', barcode: '7501234567890' }),
+    );
+
+    const result = await service.findAll({ search: '7501234567890', isActive: true }, { role: 'SELLER' });
+
+    expect(prisma.product.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        barcode: { equals: '7501234567890', mode: 'insensitive' },
+      }),
+    }));
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 'barcode-product', barcode: '7501234567890' }),
+    ]);
+  });
+
+  it('falls back from exact SKU to partial name search in the documented order', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(createProduct({ sku: 'PECH-001' }));
+
+    const skuResult = await service.findAll({ search: 'PECH-001', isActive: true }, { role: 'SELLER' });
+
+    expect(prisma.product.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({
+        sku: { equals: 'PECH-001', mode: 'insensitive' },
+      }),
+    }));
+    expect(skuResult.items).toEqual([expect.objectContaining({ sku: 'PECH-001' })]);
+
+    prisma.product.findFirst.mockReset();
+    prisma.product.findFirst.mockResolvedValue(null);
+    prisma.product.findMany.mockResolvedValue([createProduct()]);
+
+    const nameResult = await service.findAll({ search: 'pechuga', isActive: true }, { role: 'SELLER' });
+
+    expect(prisma.product.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        name: { contains: 'pechuga', mode: 'insensitive' },
+      }),
+    }));
+    expect(nameResult.items).toEqual([expect.objectContaining({ name: 'Pechuga de pollo' })]);
   });
 
   it('omits purchase cost from product reads for SELLER', async () => {

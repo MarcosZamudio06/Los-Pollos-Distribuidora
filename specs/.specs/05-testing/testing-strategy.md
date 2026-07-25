@@ -80,6 +80,8 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Calcular subtotal, descuento y total en backend.
 - Ignorar precios enviados por frontend como fuente de verdad.
 - Crear venta de contado con método de pago.
+- Rechazar `CASH_SALE` sin pagos o con pagos parciales, incluso cuando exista un cliente activo, sin crear venta ni cuenta por cobrar.
+- Requerir cambio explícito a `CREDIT_SALE` para confirmar pagos parciales y ejecutar la evaluación de crédito.
 - Crear venta a crédito con cliente autorizado y cuenta por cobrar.
 - Rechazar venta a crédito sin cliente.
 - Rechazar venta a crédito con cliente bloqueado o límite excedido sin autorización administrativa explícita.
@@ -88,6 +90,10 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Rechazar doble cancelación.
 - Bloquear cancelación si existen pagos aplicados hasta registrar reversa o reembolso auditable.
 - Bloquear cancelación si la venta pertenece a un cierre POS cerrado o liquidación cerrada hasta reapertura versionada.
+- Verificar la vista previa administrativa de anulación con pagos, inventario, cartera, documentos, motivo y usuario autorizador.
+- Verificar que `POST /sales/:id/void` revierta pagos, restaure inventario, cancele cartera y documentos en una sola transacción.
+- Verificar que un fallo intermedio de la anulación no deje efectos parciales.
+- Verificar idempotencia de la anulación completa y conflicto cuando se reutiliza la clave con otro payload.
 - Verificar idempotencia en creación de venta, pago inicial y cancelación.
 - Pendiente/condicional: descuentos, override administrativo y selección automática de ubicación dependen de política comercial final.
 
