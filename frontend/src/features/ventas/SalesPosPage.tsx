@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Keyboard, MapPin, Maximize2, Minimize2, Printer, ReceiptText, Ruler, ShieldCheck, Wifi, WifiOff } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { MapPin, Maximize2, Minimize2, ShieldCheck, Wifi, WifiOff } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useOpenCashSession } from '../cierre-diario/hooks'
 import { useCustomers } from '../clientes/hooks/useCustomers'
@@ -15,14 +15,17 @@ import {
   ConfirmSaleButton,
   CustomerSelector,
   NumericPad,
-  PaymentMethodSelector,
+  PaymentEntryControl,
+  PaymentTypeControl,
   ProductSearch,
+  ScanCommandBar,
+  SaleRegisteredScreen,
   SaleSummary,
   TicketModal,
 } from './components'
 import { useCreateSale, useSaleTicket } from './hooks'
 import { buildCreateSalePayload, calculateCartTotal, calculateItemSubtotal, calculatePaymentsTotal, canConfirmSale, getLocationValidationError, getPaymentsValidationError, getPosLocationOptions, getQuantityValidationError, getSaleChannelsForLocation, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
-import type { CartItem, CustomerOption, PaymentType, ProductOption, SaleChannel, SaleDocumentType, SalePaymentInput } from './types'
+import type { CartItem, CreateSaleResponse, CustomerOption, PaymentType, ProductOption, SaleChannel, SaleDocumentType, SalePaymentInput, TicketData } from './types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
 import { documentTypeLabel, paymentMethodLabel, paymentTypeLabel, saleChannelLabel } from './saleLabels'
@@ -117,7 +120,18 @@ type PendingSale = {
   total: number
 }
 
+type ConfirmedSale = {
+  documentId?: string
+  fallbackTicket: TicketData
+  saleId: string
+  saleNumber: string
+  customerName: string
+  total: number
+}
+
 type ScanFeedbackTone = 'success' | 'attention' | 'warning'
+
+const OFFLINE_SALE_BLOCKER = 'Sin conexión. La venta no se registrará sin conexión.'
 
 function getSubmitBlocker({
   cart,
@@ -134,6 +148,7 @@ function getSubmitBlocker({
   saleChannel,
   allowedSaleChannels,
   cashSessionId,
+  isOnline,
 }: {
   cart: CartItem[]
   customer: CustomerOption | null
@@ -149,9 +164,11 @@ function getSubmitBlocker({
   saleChannel: SaleChannel
   allowedSaleChannels: readonly SaleChannel[]
   cashSessionId?: string | null
+  isOnline: boolean
 }) {
   if (!locationId) return 'Selecciona una ubicación operativa.'
   if (!allowedSaleChannels.includes(saleChannel)) return 'Selecciona un canal válido para la ubicación operativa.'
+  if (!isOnline) return OFFLINE_SALE_BLOCKER
   if ((paymentType === 'CASH_SALE' || payments.some((payment) => payment.paymentMethod === 'CASH')) && !cashSessionId) return 'Abre una sesión de caja antes de registrar ventas de contado o pagos en efectivo.'
   if (cart.length === 0) return 'Agrega al menos un producto.'
   const locationError = getLocationValidationError(cart, locationId)
@@ -174,8 +191,68 @@ function getSubmitBlocker({
     : saleRestriction ?? 'La venta todavía no puede confirmarse.'
 }
 
+function buildProvisionalTicket(response: CreateSaleResponse, pendingSale: PendingSale, sellerName?: string | null): TicketData {
+  const sale = response.sale
+  const saleItems = sale?.items ?? []
+  const items = saleItems.length > 0
+    ? saleItems.map((item, index) => ({
+      productName: item.productName ?? item.productNameSnapshot ?? pendingSale.cart[index]?.name,
+      sku: item.sku ?? pendingSale.cart[index]?.sku,
+      unit: item.unit ?? pendingSale.cart[index]?.unit,
+      quantityKg: item.quantityKg ?? pendingSale.cart[index]?.quantityKg,
+      quantityPieces: item.quantityPieces ?? pendingSale.cart[index]?.quantityPieces,
+      unitPrice: item.unitPrice ?? pendingSale.cart[index]?.unitPrice,
+      subtotal: item.subtotal ?? (pendingSale.cart[index] ? calculateItemSubtotal(pendingSale.cart[index]) : undefined),
+    }))
+    : pendingSale.cart.map((item) => ({
+      productName: item.name,
+      sku: item.sku,
+      unit: item.unit,
+      quantityKg: item.quantityKg,
+      quantityPieces: item.quantityPieces,
+      unitPrice: item.unitPrice,
+      subtotal: calculateItemSubtotal(item),
+    }))
+  const payments = response.payments ?? (response.payment ? [response.payment] : [])
+  const paid = payments.reduce((sum, payment) => sum + asNumber(payment.amount), 0)
+  const total = asNumber(sale?.total ?? pendingSale.total)
+
+  return {
+    ticketId: response.ticketId ?? undefined,
+    ticketNumber: pendingSale.physicalFolio || sale?.saleNumber || response.ticketId || undefined,
+    saleNumber: sale?.saleNumber,
+    createdAt: sale?.createdAt,
+    documentType: sale?.documentType ?? pendingSale.documentType,
+    physicalFolio: pendingSale.physicalFolio || null,
+    requiresAdministrativeInvoice: pendingSale.requiresAdministrativeInvoice,
+    sellerName: sellerName ?? undefined,
+    customerName: sale?.customerName ?? pendingSale.customerName,
+    locationId: sale?.locationId ?? pendingSale.locationId,
+    locationName: pendingSale.locationName,
+    items,
+    subtotal: sale?.subtotal ?? total,
+    discount: sale?.discount ?? 0,
+    tax: sale?.tax ?? 0,
+    total,
+    paid,
+    outstanding: response.accountReceivable?.balance ?? response.accountReceivable?.outstandingAmount ?? Math.max(total - paid, 0),
+    dueDate: response.accountReceivable?.dueDate ?? null,
+    paymentType: sale?.paymentType ?? pendingSale.paymentType,
+    collectionStatus: sale?.collectionStatus,
+    status: sale?.status,
+    payments: payments.map((payment) => ({
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      cashTendered: payment.cashTendered,
+      changeGiven: payment.changeGiven,
+      paidAt: payment.paidAt ?? undefined,
+    })),
+  }
+}
+
 export function SalesPosPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const isAdmin = user?.role === 'ADMIN'
   const isSeller = user?.role === 'SELLER'
   const [adminLocationId, setAdminLocationId] = useState('')
@@ -191,6 +268,7 @@ export function SalesPosPage() {
   const [requiresAdministrativeInvoice, setRequiresAdministrativeInvoice] = useState(false)
   const [billingRequestReason, setBillingRequestReason] = useState('')
   const [billingRequestNotes, setBillingRequestNotes] = useState('')
+  const [showAdvancedSaleFields, setShowAdvancedSaleFields] = useState(false)
   const [backendError, setBackendError] = useState<string | null>(null)
   const [overrideEnabled, setOverrideEnabled] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
@@ -204,8 +282,8 @@ export function SalesPosPage() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine)
   const [fullscreenError, setFullscreenError] = useState<string | null>(null)
-  const [confirmedSaleId, setConfirmedSaleId] = useState<string>()
-  const [confirmedDocumentId, setConfirmedDocumentId] = useState<string>()
+  const [confirmedSale, setConfirmedSale] = useState<ConfirmedSale | null>(null)
+  const [showTicket, setShowTicket] = useState(false)
   const [pendingSale, setPendingSale] = useState<PendingSale | null>(null)
   const pageRef = useRef<HTMLElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -231,7 +309,7 @@ export function SalesPosPage() {
   const products = useProducts({ isActive: 'true', locationId: selectedLocation?.id ?? '', search: productSearch })
   const customers = useCustomers({ isActive: 'true', search: customerSearch })
   const createSale = useCreateSale()
-  const ticket = useSaleTicket(confirmedSaleId, confirmedDocumentId)
+  const ticket = useSaleTicket(confirmedSale?.saleId, confirmedSale?.documentId)
   const openCashSession = useOpenCashSession(locationId)
   const requiresCashSession = paymentType === 'CASH_SALE' || payments.some((payment) => payment.paymentMethod === 'CASH')
   const cashSessionId = requiresCashSession ? openCashSession.data?.id : undefined
@@ -248,7 +326,7 @@ export function SalesPosPage() {
   const total = calculateCartTotal(cart)
   const activeCartItem = cart.find((item) => item.productId === activeCartItemId) ?? null
   const canOverrideCredit = Boolean(paymentType === 'CREDIT_SALE' && isAdmin && selectedCustomer?.creditSummary?.effectiveCreditStatus === 'BLOCKED' && selectedCustomer.creditSummary.canAdministrativeOverride && !selectedCustomer.creditSummary.blockingReasons?.includes('CREDIT_ADMINISTRATIVELY_BLOCKED'))
-  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId })
+  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId, isOnline })
 
   useEffect(() => {
     cartRef.current = cart
@@ -457,10 +535,16 @@ export function SalesPosPage() {
     setRequiresAdministrativeInvoice(false)
     setBillingRequestReason('')
     setBillingRequestNotes('')
+    setShowAdvancedSaleFields(false)
     setBackendError(null)
     setScanStatus(null)
     setScanFeedbackTone('success')
     resetOverride()
+  }
+
+  function clearConfirmedSale() {
+    setShowTicket(false)
+    setConfirmedSale(null)
   }
 
   function handleRemoveProduct(productId: string) {
@@ -479,27 +563,30 @@ export function SalesPosPage() {
 
   function handleNewSale() {
     if (pendingSale) return
+    if (confirmedSale) {
+      clearConfirmedSale()
+      clearSaleDraft()
+      window.setTimeout(() => searchInputRef.current?.focus(), 0)
+      return
+    }
     if (hasDraftChanges()) {
       setShowNewSaleDialog(true)
       return
     }
     clearSaleDraft()
-    setConfirmedSaleId(undefined)
-    setConfirmedDocumentId(undefined)
     window.setTimeout(() => searchInputRef.current?.focus(), 0)
   }
 
   function confirmNewSale() {
     clearSaleDraft()
-    setConfirmedSaleId(undefined)
-    setConfirmedDocumentId(undefined)
+    clearConfirmedSale()
     setShowNewSaleDialog(false)
     window.setTimeout(() => searchInputRef.current?.focus(), 0)
   }
 
   function handleConfirmSale() {
     if (pendingSale || createSale.isPending) return
-    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId })
+    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId, isOnline })
     if (blocker) return
     setBackendError(null)
     setPendingSale({
@@ -520,13 +607,29 @@ export function SalesPosPage() {
 
   async function confirmRegistration() {
     if (!pendingSale || createSale.isPending) return
+    if (!isOnline) {
+      setBackendError(OFFLINE_SALE_BLOCKER)
+      return
+    }
     try {
       const response = await createSale.mutateAsync({ payload: pendingSale.payload, idempotencyKey: pendingSale.idempotencyKey })
       const sale = response.sale
       const saleId = sale?.id
-      const documentId = response.documents?.find((document) => document.documentType === pendingSale.documentType)?.id
-      setConfirmedSaleId(saleId)
-      setConfirmedDocumentId(documentId)
+      if (!saleId) {
+        setBackendError('La venta fue procesada, pero la respuesta no incluyó su identificador. Revisa el historial antes de reintentar.')
+        return
+      }
+      const documentId = response.documents?.find((document) => document.documentType === pendingSale.documentType)?.id ?? response.ticketId ?? undefined
+      const fallbackTicket = buildProvisionalTicket(response, pendingSale, user?.name)
+      setConfirmedSale({
+        documentId,
+        fallbackTicket,
+        saleId,
+        saleNumber: sale?.saleNumber ?? saleId,
+        customerName: sale?.customerName ?? pendingSale.customerName,
+        total: asNumber(sale?.total ?? pendingSale.total),
+      })
+      setShowTicket(false)
       clearSaleDraft()
       setPendingSale(null)
       toast.success('Venta registrada correctamente.')
@@ -536,6 +639,16 @@ export function SalesPosPage() {
     } catch (error) {
       setBackendError(getSaleErrorMessage(error))
     }
+  }
+
+  function handleRetryPrint() {
+    setShowTicket(true)
+    if (confirmedSale?.documentId) void ticket.refetch()
+  }
+
+  function handleOpenHistory() {
+    clearConfirmedSale()
+    navigate('/sales/history')
   }
 
   async function toggleFullscreen() {
@@ -599,6 +712,18 @@ export function SalesPosPage() {
   const pendingPaid = pendingSale?.payments.reduce((sum, payment) => sum + payment.amount, 0) ?? 0
   const pendingOutstanding = Math.max((pendingSale?.total ?? 0) - pendingPaid, 0)
   const pendingCustomerBalance = pendingSale?.customer?.creditSummary?.outstandingAmount
+  const ticketLoading = Boolean(ticket.isLoading || ticket.isFetching)
+  const printStatus = confirmedSale
+    ? ticketLoading
+      ? 'loading'
+      : ticket.data
+        ? 'ready'
+        : ticket.error
+          ? 'error'
+          : confirmedSale.documentId
+            ? 'loading'
+            : 'unavailable'
+    : undefined
 
   if (!canAccessPos(user?.role)) {
     return (
@@ -613,78 +738,60 @@ export function SalesPosPage() {
   }
 
   return (
-    <main className="min-h-[calc(100dvh-4.5rem)] bg-[var(--pos-porcelain)] font-[var(--pos-body)] text-[var(--pos-ink)] fullscreen:min-h-screen" ref={pageRef}>
-      <section className="mx-auto flex min-h-[calc(100dvh-4.5rem)] max-w-[1680px] flex-col gap-3 p-3 xl:h-[calc(100dvh-4.5rem)] xl:max-h-[calc(100dvh-4.5rem)] xl:overflow-hidden fullscreen:min-h-screen fullscreen:h-screen fullscreen:max-h-screen">
-        <header className="shrink-0 rounded-2xl border border-[var(--pos-steel)] bg-white px-4 py-3 shadow-[0_10px_28px_rgba(23,33,30,0.06)] sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--pos-red)]">Ventas POS / caja</p>
-              <h1 className="mt-1 font-[var(--pos-display)] text-2xl font-bold uppercase tracking-[-0.02em] sm:text-3xl">Punto de venta empresarial</h1>
-              <p className="mt-1 hidden max-w-2xl text-xs text-[var(--pos-muted)] sm:block">Registra la venta completa desde una sola superficie: producto, cantidad, documento y cobro.</p>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="rounded-xl bg-[var(--pos-ink)] px-4 py-2 text-right text-white">
-                <span className="block font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-amber)]">Total en vivo</span>
-                <span className="block font-[var(--pos-display)] text-3xl font-bold leading-none tracking-[-0.02em]">{toMoney(total)}</span>
-              </div>
-              <button aria-keyshortcuts="F9" className="rounded-xl border border-[var(--pos-red)] px-3 py-2.5 text-sm font-black text-[var(--pos-red)] transition hover:bg-[rgba(182,42,34,0.08)]" onClick={handleNewSale} type="button">Nueva venta <span className="font-mono text-[0.65rem]">F9</span></button>
-              <button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Activar pantalla completa'} className="rounded-xl border border-[var(--pos-steel)] p-2.5 text-[var(--pos-muted)] transition hover:border-[var(--pos-green)] hover:text-[var(--pos-green)]" onClick={() => void toggleFullscreen()} type="button">{isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}</button>
-            </div>
-          </div>
-           <div className="mt-3 grid gap-2 border-t border-[var(--pos-steel)] pt-3 text-xs sm:grid-cols-2 lg:grid-cols-5" aria-label="Estado operativo del POS">
-             <div className="flex min-w-0 items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-[var(--pos-green)]" /><span className="truncate"><strong className="font-bold">Ubicación:</strong> {locationLabel(selectedLocation)}</span></div>
-             <div className="flex min-w-0 items-center gap-2"><ShieldCheck className={`h-4 w-4 shrink-0 ${openCashSession.data ? 'text-[var(--pos-green)]' : 'text-[var(--pos-red)]'}`} /><span className="truncate"><strong className="font-bold">Caja:</strong> {openCashSession.data ? `${openCashSession.data.terminalIdentifier} · ${locationLabel(selectedLocation)}` : 'Sin sesión abierta'}</span></div>
-             <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 shrink-0 text-[var(--pos-green)]" /><span><strong className="font-bold">Cajero:</strong> {openCashSession.data?.openedBy?.name ?? user?.name ?? 'No disponible'}</span></div>
-             <div className={`flex items-center gap-2 font-bold ${isOnline ? 'text-[var(--pos-green)]' : 'text-[var(--pos-red)]'}`}>{isOnline ? <Wifi className="h-4 w-4 shrink-0" /> : <WifiOff className="h-4 w-4 shrink-0" />}<span>{isOnline ? 'Conectado' : 'Sin conexión'}</span></div>
-             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.65rem] text-[var(--pos-muted)]"><span className="inline-flex items-center gap-1"><Printer className="h-3.5 w-3.5" /> Impresora: no configurada</span><span className="inline-flex items-center gap-1"><Ruler className="h-3.5 w-3.5" /> Báscula: captura manual</span></div>
-           </div>
-           {locationId && <div className={`mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-xs ${openCashSession.data ? 'border-[rgba(35,113,90,0.25)] bg-[rgba(35,113,90,0.08)] text-[var(--pos-green)]' : 'border-[rgba(182,42,34,0.25)] bg-[rgba(182,42,34,0.08)] text-[var(--pos-red)]'}`} role="status">
-             {openCashSession.isLoading ? <span className="font-bold">Consultando la sesión de caja...</span> : openCashSession.data ? <span><strong className="font-black">Turno abierto:</strong> {openCashSession.data.openedAt ? new Date(openCashSession.data.openedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'hora no disponible'} · Fondo inicial {toMoney(openCashSession.data.initialCashFund)}</span> : <span><strong className="font-black">No hay una caja abierta para esta ubicación.</strong> Las ventas de contado permanecerán bloqueadas.</span>}
-             {!openCashSession.data && <Link className="font-black underline underline-offset-2" to="/daily-close">Abrir caja</Link>}
-           </div>}
-          {fullscreenError && <p className="mt-2 text-xs font-bold text-[var(--pos-red)]" role="status">{fullscreenError}</p>}
+    <main className="relative min-h-[calc(100dvh-4.5rem)] bg-[var(--pos-porcelain)] font-[var(--pos-body)] text-[var(--pos-ink)] fullscreen:min-h-screen" ref={pageRef}>
+      <section className="mx-auto flex min-h-[calc(100dvh-4.5rem)] w-full max-w-[1680px] flex-col border-x border-[var(--pos-steel)] bg-white fullscreen:min-h-screen">
+        <header className="flex h-[52px] shrink-0 items-center border-b border-[var(--pos-steel)] px-3 text-xs" aria-label="Estado operativo del POS">
+          <label className="flex min-w-0 items-center gap-2 border-r border-[var(--pos-steel)] pr-3"><MapPin className="h-4 w-4 shrink-0 text-[var(--pos-green)]" /><span className="sr-only">Ubicación operativa</span><select className="min-w-0 max-w-48 truncate bg-transparent font-bold outline-none" disabled={isSeller} onChange={(event) => handleLocationChange(event.target.value)} value={locationId}><option value="">Selecciona ubicación</option>{locationOptions.map((location) => <option key={location.id} value={location.id}>{location.name}{location.code ? ` · ${location.code}` : ''}</option>)}</select></label>
+          <div className={`ml-3 flex min-w-0 items-center gap-1.5 font-bold ${openCashSession.data ? 'text-[var(--pos-ink)]' : 'text-[var(--pos-red)]'}`}><ShieldCheck className="h-4 w-4 shrink-0" /><span className="truncate">{openCashSession.isLoading ? 'Consultando caja' : openCashSession.data?.terminalIdentifier ?? 'Caja sin abrir'}</span>{!openCashSession.data && <Link className="ml-1 shrink-0 underline underline-offset-2" to="/daily-close">Abrir caja</Link>}</div>
+          <span className="mx-3 hidden h-4 border-l border-[var(--pos-steel)] lg:block" /><span className="hidden truncate font-medium lg:block">{openCashSession.data?.openedBy?.name ?? user?.name ?? 'Sin cajero'}</span>
+          <span className="ml-auto hidden font-[var(--pos-mono)] text-[0.68rem] text-[var(--pos-muted)] xl:inline">{new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className={`ml-3 inline-flex items-center gap-1.5 font-bold ${isOnline ? 'text-[var(--pos-green)]' : 'text-[var(--pos-red)]'}`}>{isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}<span className="hidden sm:inline">{isOnline ? 'En línea' : 'Sin conexión'}</span></span>
+          <button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Activar pantalla completa'} className="ml-3 p-2 text-[var(--pos-muted)] transition hover:text-[var(--pos-ink)]" onClick={() => void toggleFullscreen()} type="button">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
+          <button aria-keyshortcuts="F9" className="ml-1 h-9 border-l border-[var(--pos-steel)] pl-3 text-xs font-bold text-[#1D5FD1] transition hover:text-[var(--pos-ink)]" onClick={handleNewSale} type="button">Nueva venta <span className="font-[var(--pos-mono)]">F9</span></button>
+          {fullscreenError && <p className="sr-only" role="status">{fullscreenError}</p>}
+          <p className="sr-only">Impresora: no configurada. Báscula: captura manual.</p>
         </header>
 
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(360px,1.2fr)] xl:grid-cols-[minmax(245px,0.76fr)_minmax(360px,1.2fr)_minmax(320px,0.84fr)] xl:overflow-hidden">
-          <section className="min-h-[32rem] min-w-0 xl:min-h-0 xl:h-full">
-            <ProductSearch error={products.error} frequentProducts={frequentProducts} isLoading={products.isLoading} locationDisabled={isSeller} locationWarning={isAdmin ? 'ADMIN puede cambiar la ubicación, pero el cambio modifica la fuente de inventario y vacía el carrito actual.' : undefined} locations={locationOptions} locationsError={locations.error} locationsLoading={locations.isLoading} locationId={locationId} onAdd={handleAddProduct} onLocationChange={handleLocationChange} onSearchChange={setProductSearch} onSearchSubmit={handleProductSearchSubmit} products={productOptions} searchInputRef={searchInputRef} search={productSearch} />
-            {scanStatus && <p className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${scanFeedbackTone === 'success' ? 'border-[rgba(35,113,90,0.25)] bg-[rgba(35,113,90,0.08)] text-[var(--pos-green)]' : scanFeedbackTone === 'attention' ? 'border-[rgba(233,167,47,0.35)] bg-[rgba(233,167,47,0.14)] text-[#7d5a12]' : 'border-[rgba(182,42,34,0.25)] bg-[rgba(182,42,34,0.08)] text-[var(--pos-red)]'}`} role="status" aria-live="polite"><span aria-hidden="true">{scanFeedbackTone === 'success' ? '✓' : scanFeedbackTone === 'attention' ? '◉' : '!'}</span>{scanStatus}</p>}
-          </section>
+        <ScanCommandBar onSearchChange={setProductSearch} onSearchSubmit={handleProductSearchSubmit} search={productSearch} searchInputRef={searchInputRef} />
+        {scanStatus && <p className={`shrink-0 border-b px-4 py-1.5 text-xs font-bold ${scanFeedbackTone === 'success' ? 'border-[rgba(35,113,90,0.25)] bg-[rgba(35,113,90,0.08)] text-[var(--pos-green)]' : scanFeedbackTone === 'attention' ? 'border-[rgba(233,167,47,0.35)] bg-[rgba(233,167,47,0.14)] text-[#7d5a12]' : 'border-[rgba(182,42,34,0.25)] bg-[rgba(182,42,34,0.08)] text-[var(--pos-red)]'}`} role="status" aria-live="polite">{scanStatus}</p>}
 
-          <section className="flex min-h-[34rem] min-w-0 flex-col gap-3 xl:min-h-0" aria-label="Carrito y captura de cantidades">
-            <Cart activeItemId={activeCartItemId} items={cart} onActivate={handleCartActivate} onQuantityChange={handleQuantityChange} onQuantityFocus={handleQuantityFocus} onRemove={handleRemoveProduct} />
-            <NumericPad allowDecimal={activeQuantityField === 'kg'} disabled={!activeCartItem} label={activeCartItem ? `${activeCartItem.name} · ${activeQuantityField === 'kg' ? 'kilos' : 'piezas'}` : 'Selecciona kilos o piezas'} onChange={handleKeypadInput} onClear={handleKeypadClear} onDelete={handleKeypadDelete} value={keypadValue} />
-          </section>
+        <div className="grid min-h-0 flex-1 grid-cols-[38fr_62fr] overflow-hidden">
+          <section className="min-w-0 border-r border-[var(--pos-steel)]" aria-label="Resultados de productos"><ProductSearch error={products.error} frequentProducts={frequentProducts} isLoading={products.isLoading} locationDisabled={isSeller} locations={locationOptions} locationsError={locations.error} locationsLoading={locations.isLoading} locationId={locationId} onAdd={handleAddProduct} onLocationChange={handleLocationChange} products={productOptions} search={productSearch} showLocationSelector={false} /></section>
+          <section className="relative flex min-w-0 flex-col" aria-label="Carrito y captura de cantidades"><Cart activeItemId={activeCartItemId} items={cart} onActivate={handleCartActivate} onQuantityChange={handleQuantityChange} onQuantityFocus={handleQuantityFocus} onRemove={handleRemoveProduct} />{activeCartItem && <div className="absolute bottom-3 right-3 z-10 w-52 shadow-[0_18px_36px_rgba(23,33,30,0.18)]"><NumericPad allowDecimal={activeQuantityField === 'kg'} disabled={!activeCartItem} label={`${activeCartItem.name} · ${activeQuantityField === 'kg' ? 'kilos' : 'piezas'}`} onChange={handleKeypadInput} onClear={handleKeypadClear} onDelete={handleKeypadDelete} value={keypadValue} /></div>}</section>
+        </div>
 
-          <aside className="min-h-[34rem] min-w-0 space-y-3 lg:col-span-2 xl:col-span-1 xl:min-h-0 xl:overflow-y-auto xl:pr-1" aria-label="Cobro y confirmación de venta">
-            <section className="rounded-2xl border border-[var(--pos-ink)] bg-[var(--pos-ink)] p-4 text-white shadow-[0_18px_36px_rgba(23,33,30,0.18)]">
-              <div className="flex items-start justify-between gap-4"><div><span className="sr-only">Resumen sticky</span><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.18em] text-[var(--pos-amber)]">Cobro actual</p><h2 className="mt-1 font-[var(--pos-display)] text-4xl font-bold leading-none tracking-[-0.02em]">{toMoney(total)}</h2><p className="mt-2 text-xs text-white/65">{cart.length} partidas · {paymentTypeLabel(paymentType)}</p></div><ReceiptText className="h-6 w-6 text-[var(--pos-amber)]" /></div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/15 pt-3 text-xs"><span className="text-white/65">{cart.length} en carrito</span><strong className="text-right font-mono">{formatQuantity(cart.reduce((sum, item) => sum + item.quantityKg, 0))} kg · {cart.reduce((sum, item) => sum + item.quantityPieces, 0)} pzas</strong></div>
-            </section>
-            <CustomerSelector customers={customerOptions} error={customers.error} isLoading={customers.isLoading} onSearchChange={setCustomerSearch} onSelect={handleCustomerSelect} search={customerSearch} searchInputRef={customerSearchRef} selectedCustomer={selectedCustomer} />
-            <PaymentMethodSelector onPaymentTypeChange={(type) => { setPaymentType(type); resetOverride() }} onPaymentsChange={setPayments} panelRef={paymentPanelRef} paymentType={paymentType} payments={payments} total={total} />
-            <section className="rounded-2xl border border-[var(--pos-steel)] bg-white p-4 shadow-[0_12px_30px_rgba(23,33,30,0.06)]">
-              <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Control documental</p><h2 className="mt-1 font-[var(--pos-display)] text-xl font-bold uppercase tracking-[-0.02em]">Documento de venta</h2></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">{documentTypeLabel(documentType)}</span></div>
+        <details className="absolute right-3 top-[60px] z-40" onToggle={(event) => setShowAdvancedSaleFields(event.currentTarget.open)} open={showAdvancedSaleFields || Boolean(canOverrideCredit || requiresAdministrativeInvoice)}>
+          <summary className="h-11 cursor-pointer list-none border border-[var(--pos-steel)] bg-white px-3 leading-[2.75rem] text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)]">Opciones de venta</summary>
+          <div className="absolute right-0 top-full mt-2 grid w-[min(96vw,58rem)] gap-3 border border-[var(--pos-steel)] bg-white p-3 shadow-[0_18px_40px_rgba(23,33,30,0.16)] lg:grid-cols-3">
+            <section className="rounded-xl border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] p-3">
+              <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Control documental</p><h2 className="mt-1 font-[var(--pos-display)] text-lg font-bold uppercase tracking-[-0.02em]">Documento de venta</h2></div></div>
               <p className="mt-2 text-xs text-[var(--pos-muted)]">Comprobante interno del MVP. No es factura fiscal.</p>
               <div className="mt-3 grid gap-2">
-                <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Canal de venta<select aria-label="Canal de venta" className="rounded-xl border border-[var(--pos-steel)] bg-white px-3 py-2.5 text-sm font-semibold text-[var(--pos-ink)] disabled:cursor-not-allowed disabled:bg-[var(--pos-porcelain)]" disabled={!selectedLocation || allowedSaleChannels.length <= 1} onChange={(event) => setSelectedSaleChannel(event.target.value as SaleChannel)} value={saleChannel}>{!selectedLocation && <option value="COUNTER">Selecciona una ubicación</option>}{allowedSaleChannels.map((channel) => <option key={channel} value={channel}>{saleChannelLabel(channel)}</option>)}</select></label>
-                {selectedLocation && allowedSaleChannels.length === 1 && <p className="rounded-xl bg-[rgba(35,113,90,0.08)] p-2.5 text-xs font-bold text-[var(--pos-green)]">El canal se deriva automáticamente de la ubicación.</p>}
-                {!selectedLocation && <p className="rounded-xl bg-[rgba(233,167,47,0.16)] p-2.5 text-xs font-bold text-[#7d5a12]">Selecciona una ubicación operativa para conocer los canales válidos.</p>}
-                <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Tipo de documento<select aria-label="Tipo de documento" className="rounded-xl border border-[var(--pos-steel)] bg-white px-3 py-2.5 text-sm font-semibold text-[var(--pos-ink)]" onChange={(event) => setDocumentType(event.target.value as SaleDocumentType)} value={documentType}><option value="SCALE_TICKET">Ticket de báscula</option><option value="SIMPLE_NOTE">Nota sencilla</option><option value="LARGE_NOTE">Nota grande</option><option value="INTERNAL_RECEIPT">Comprobante interno</option></select></label>
-                <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Folio físico<input className="rounded-xl border border-[var(--pos-steel)] bg-white px-3 py-2.5 text-sm font-semibold text-[var(--pos-ink)]" onChange={(event) => setPhysicalFolio(event.target.value)} placeholder="Cuando aplique" value={physicalFolio} /></label>
+                <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Canal de venta<select aria-label="Canal de venta" className="rounded-lg border border-[var(--pos-steel)] bg-white px-3 py-2 text-sm font-semibold text-[var(--pos-ink)] disabled:cursor-not-allowed disabled:bg-[var(--pos-porcelain)]" disabled={!selectedLocation || allowedSaleChannels.length <= 1} onChange={(event) => setSelectedSaleChannel(event.target.value as SaleChannel)} value={saleChannel}>{!selectedLocation && <option value="COUNTER">Selecciona una ubicación</option>}{allowedSaleChannels.map((channel) => <option key={channel} value={channel}>{saleChannelLabel(channel)}</option>)}</select></label>
+                {selectedLocation && allowedSaleChannels.length === 1 && <p className="rounded-lg bg-[rgba(35,113,90,0.08)] p-2 text-xs font-bold text-[var(--pos-green)]">El canal se deriva automáticamente de la ubicación.</p>}
+                {!selectedLocation && <p className="rounded-lg bg-[rgba(233,167,47,0.16)] p-2 text-xs font-bold text-[#7d5a12]">Selecciona una ubicación operativa para conocer los canales válidos.</p>}
+                <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Tipo de documento<select aria-label="Tipo de documento" className="rounded-lg border border-[var(--pos-steel)] bg-white px-3 py-2 text-sm font-semibold text-[var(--pos-ink)]" onChange={(event) => setDocumentType(event.target.value as SaleDocumentType)} value={documentType}><option value="SCALE_TICKET">Ticket de báscula</option><option value="SIMPLE_NOTE">Nota sencilla</option><option value="LARGE_NOTE">Nota grande</option><option value="INTERNAL_RECEIPT">Comprobante interno</option></select></label>
+                <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Folio físico<input className="rounded-lg border border-[var(--pos-steel)] bg-white px-3 py-2 text-sm font-semibold text-[var(--pos-ink)]" onChange={(event) => setPhysicalFolio(event.target.value)} placeholder="Cuando aplique" value={physicalFolio} /></label>
               </div>
             </section>
             <BillingRequestPanel hasCustomer={Boolean(selectedCustomer)} notes={billingRequestNotes} onNotesChange={setBillingRequestNotes} onReasonChange={setBillingRequestReason} onRequiresAdministrativeInvoiceChange={setRequiresAdministrativeInvoice} reason={billingRequestReason} requiresAdministrativeInvoice={requiresAdministrativeInvoice} />
-            {canOverrideCredit && <section className="rounded-2xl border border-[rgba(233,167,47,0.55)] bg-[rgba(233,167,47,0.12)] p-4 text-[#5b4310] shadow-[0_10px_24px_rgba(23,33,30,0.05)]"><label className="flex items-start gap-3 text-sm font-black"><input checked={overrideEnabled} name="credit-override" onChange={(event) => { setOverrideEnabled(event.target.checked); if (!event.target.checked) setOverrideReason('') }} type="checkbox" /><span>Autorizar excepción de crédito<span className="mt-1 block text-xs font-semibold text-[#7d5a12]">Solo ADMIN puede continuar y el motivo quedará registrado.</span></span></label>{overrideEnabled && <label className="mt-3 grid gap-1.5 text-xs font-black">Motivo obligatorio<textarea className="min-h-20 rounded-xl border border-[rgba(233,167,47,0.55)] bg-white px-3 py-2.5 font-normal outline-none focus:ring-2 focus:ring-[rgba(233,167,47,0.35)]" name="credit-override-reason" onChange={(event) => setOverrideReason(event.target.value)} placeholder="Describe quién autorizó y por qué" value={overrideReason} /></label>}</section>}
-            <SaleSummary cart={cart} creditOptions={{ isAdmin, overrideEnabled, overrideReason }} customer={selectedCustomer} paymentType={paymentType} />
-            {backendError && <p role="alert" className="rounded-xl border border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] p-3 text-xs font-bold text-[var(--pos-red)]">{backendError}</p>}
-            <ConfirmSaleButton buttonRef={confirmButtonRef} disabledReason={submitBlocker} isSubmitting={createSale.isPending} onConfirm={handleConfirmSale} />
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pb-2 font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]"><span className="inline-flex items-center gap-1"><Keyboard className="h-3.5 w-3.5" /> F2 buscar · F4 cliente · F6 pago · F8 confirmar</span><span>{isOnline ? 'Listo para registrar' : 'Requiere conexión'}</span></div>
-          </aside>
-        </div>
+            {canOverrideCredit && <section className="rounded-xl border border-[rgba(233,167,47,0.55)] bg-[rgba(233,167,47,0.12)] p-3 text-[#5b4310] shadow-[0_10px_24px_rgba(23,33,30,0.05)]"><label className="flex items-start gap-3 text-sm font-black"><input checked={overrideEnabled} name="credit-override" onChange={(event) => { setOverrideEnabled(event.target.checked); if (!event.target.checked) setOverrideReason('') }} type="checkbox" /><span>Autorizar excepción de crédito<span className="mt-1 block text-xs font-semibold text-[#7d5a12]">Solo ADMIN puede continuar y el motivo quedará registrado.</span></span></label>{overrideEnabled && <label className="mt-3 grid gap-1.5 text-xs font-black">Motivo obligatorio<textarea className="min-h-20 rounded-lg border border-[rgba(233,167,47,0.55)] bg-white px-3 py-2.5 font-normal outline-none focus:ring-2 focus:ring-[rgba(233,167,47,0.35)]" name="credit-override-reason" onChange={(event) => setOverrideReason(event.target.value)} placeholder="Describe quién autorizó y por qué" value={overrideReason} /></label>}</section>}
+          </div>
+        </details>
+
+        <footer className="z-20 h-36 shrink-0 overflow-hidden border-t-2 border-[var(--pos-ink)] bg-white" aria-label="Confirmación de venta">
+          <div className="grid h-full grid-cols-2 grid-rows-2 divide-x divide-y divide-[var(--pos-steel)] xl:grid-cols-[27fr_23fr_20fr_30fr] xl:grid-rows-1 xl:divide-y-0">
+            <CustomerSelector compact customers={customerOptions} error={customers.error} isLoading={customers.isLoading} onSearchChange={setCustomerSearch} onSelect={handleCustomerSelect} search={customerSearch} searchInputRef={customerSearchRef} selectedCustomer={selectedCustomer} />
+            <PaymentTypeControl compact onPaymentTypeChange={(type) => { setPaymentType(type); resetOverride() }} paymentType={paymentType} />
+            <PaymentEntryControl compact onPaymentsChange={setPayments} panelRef={paymentPanelRef} payments={payments} total={total} />
+            <div className="grid min-w-0 grid-cols-[1fr_1.1fr] gap-3 p-3"><SaleSummary compact cart={cart} creditOptions={{ isAdmin, overrideEnabled, overrideReason }} customer={selectedCustomer} paymentType={paymentType} /><ConfirmSaleButton buttonRef={confirmButtonRef} compact disabledReason={submitBlocker} isSubmitting={createSale.isPending} onConfirm={handleConfirmSale} total={total} /></div>
+          </div>
+          {backendError && <p role="alert" className="absolute bottom-36 left-0 right-0 border-t border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] px-3 py-2 text-xs font-bold text-[var(--pos-red)]">{backendError}</p>}
+        </footer>
       </section>
-      {confirmedDocumentId && <TicketModal isLoading={ticket.isLoading} onClose={() => { setConfirmedSaleId(undefined); setConfirmedDocumentId(undefined) }} ticket={ticket.data} />}
-      <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique la venta antes de descontar inventario y registrar el cobro." isLoading={createSale.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingSale(null) }} open={Boolean(pendingSale)} title="Confirmar venta">
+      {confirmedSale && <SaleRegisteredScreen customerName={confirmedSale.customerName} onNewSale={handleNewSale} onOpenHistory={handleOpenHistory} onRetryPrint={handleRetryPrint} printStatus={printStatus} saleNumber={confirmedSale.saleNumber} total={confirmedSale.total} />}
+      {confirmedSale && showTicket && <TicketModal fallback={ticketLoading ? undefined : confirmedSale.fallbackTicket} isLoading={ticketLoading} isProvisional={!ticketLoading && !ticket.data} onClose={() => setShowTicket(false)} ticket={ticket.data} />}
+      <ConfirmationDialog confirmDisabled={!isOnline} confirmLabel="Confirmar registro" description={isOnline ? 'Verifique la venta antes de descontar inventario y registrar el cobro.' : OFFLINE_SALE_BLOCKER} isLoading={createSale.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingSale(null) }} open={Boolean(pendingSale)} title="Confirmar venta">
         {pendingSale && <div className="grid gap-4">
           <div className="grid gap-2 sm:grid-cols-2"><p><strong>Cliente:</strong> {pendingSale.customerName}</p><p><strong>Sucursal:</strong> {pendingSale.locationName}</p><p><strong>Documento:</strong> {documentTypeLabel(pendingSale.documentType)}</p><p><strong>Folio:</strong> {pendingSale.physicalFolio || 'Sin folio físico'}</p><p><strong>Canal:</strong> {saleChannelLabel(pendingSale.saleChannel)}</p><p><strong>Tipo:</strong> {paymentTypeLabel(pendingSale.paymentType)}</p></div>
           <div className="overflow-x-auto rounded-xl border border-[var(--pos-steel)] bg-white"><table className="w-full min-w-[500px] text-left text-xs"><thead className="border-b border-[var(--pos-steel)] bg-[var(--pos-porcelain)] font-mono uppercase tracking-[0.08em] text-[var(--pos-muted)]"><tr><th className="px-3 py-2">Producto</th><th className="px-3 py-2">Kilos</th><th className="px-3 py-2">Piezas</th><th className="px-3 py-2 text-right">P. unitario</th><th className="px-3 py-2 text-right">Importe</th></tr></thead><tbody>{pendingSale.cart.map((item) => <tr className="border-b border-[var(--pos-steel)] last:border-0" key={item.productId}><td className="px-3 py-2 font-bold">{item.name}</td><td className="px-3 py-2 font-mono">{item.quantityKg ? formatQuantity(item.quantityKg) : '—'}</td><td className="px-3 py-2 font-mono">{item.quantityPieces ? formatQuantity(item.quantityPieces) : '—'}</td><td className="px-3 py-2 text-right font-mono">{toMoney(item.unitPrice)}</td><td className="px-3 py-2 text-right font-mono font-bold">{toMoney(calculateItemSubtotal(item))}</td></tr>)}</tbody></table></div>

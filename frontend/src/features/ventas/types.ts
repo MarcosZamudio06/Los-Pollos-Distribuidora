@@ -126,6 +126,12 @@ export type CreateSaleResponse = {
   sale?: {
     id: string
     saleNumber?: string
+    createdAt?: string
+    customerName?: string | null
+    documentType?: SaleDocumentType | string
+    subtotal?: number | string
+    discount?: number | string
+    tax?: number | string
     total?: number | string
     paymentType?: PaymentType | string
     collectionStatus?: string
@@ -133,6 +139,8 @@ export type CreateSaleResponse = {
     locationId?: string
     items?: Array<{
       productName?: string
+      productNameSnapshot?: string
+      sku?: string | null
       unit?: string
       quantityKg?: number | string | null
       quantityPieces?: number | string | null
@@ -141,8 +149,9 @@ export type CreateSaleResponse = {
     }>
     creditWarnings?: string[]
   }
-  payment?: { id?: string; amount?: number | string; paymentMethod?: string } | null
-  accountReceivable?: { id?: string; balance?: number | string; dueDate?: string } | null
+  payment?: { id?: string; amount?: number | string; paymentMethod?: string; cashTendered?: number | string | null; changeGiven?: number | string | null; paidAt?: string | null } | null
+  payments?: Array<{ id?: string; amount?: number | string; paymentMethod?: string; cashTendered?: number | string | null; changeGiven?: number | string | null; paidAt?: string | null }>
+  accountReceivable?: { id?: string; balance?: number | string; outstandingAmount?: number | string; dueDate?: string } | null
   billingRequest?: { id?: string; status?: string } | null
   ticketId?: string | null
   documents?: Array<{ id?: string; documentType?: SaleDocumentType | string; status?: string }> | null

@@ -335,18 +335,26 @@
     --erp-shadow-elevated: 0 18px 60px rgba(17, 24, 21, 0.11);
     --erp-ring: rgba(214, 155, 45, 0.34);
 
-    /* POS tokens: a cold prep surface, steel dividers and one red action. */
-    --pos-porcelain: #f5f7f4;
-    --pos-steel: #d7e0dd;
-    --pos-ink: #17211e;
-    --pos-red: #b62a22;
+    /* POS tokens: dense, daylight-readable transactional surfaces. */
+    --pos-porcelain: #f5f6f3;
+    --pos-surface: #ffffff;
+    --pos-surface-secondary: #eef1ed;
+    --pos-steel: #d7ddd8;
+    --pos-ink: #161a18;
+    --pos-muted: #59635d;
+    --pos-action: #123d32;
+    --pos-neutral: #1d5fd1;
+    --pos-success: #167552;
+    --pos-warning: #a15c00;
+    --pos-error: #b42318;
+    --pos-focus: #2563eb;
+    --pos-red: var(--pos-error);
     --pos-red-dark: #8f201b;
-    --pos-amber: #e9a72f;
-    --pos-green: #23715a;
-    --pos-muted: #60706b;
-    --pos-display: 'Arial Narrow', 'Roboto Condensed', Impact, sans-serif;
-    --pos-body: 'Atkinson Hyperlegible', 'Trebuchet MS', Inter, ui-sans-serif, system-ui, sans-serif;
-    --pos-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    --pos-amber: var(--pos-warning);
+    --pos-green: var(--pos-success);
+    --pos-display: Inter, ui-sans-serif, system-ui, sans-serif;
+    --pos-body: Inter, ui-sans-serif, system-ui, sans-serif;
+    --pos-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   }
 
   * {

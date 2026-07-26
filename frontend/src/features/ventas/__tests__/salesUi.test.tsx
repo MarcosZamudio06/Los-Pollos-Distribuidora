@@ -26,7 +26,7 @@ const mockState = vi.hoisted(() => ({
   products: { data: [] as Array<Record<string, unknown>>, error: null, isLoading: false, refetch: vi.fn() },
   sale: { data: null as SaleDetail | null, error: null, isLoading: false },
   sales: { data: { items: [] as SaleDetail[] }, error: null, isLoading: false },
-  ticket: { data: undefined as TicketData | undefined, error: null, isLoading: false },
+  ticket: { data: undefined as TicketData | undefined, error: null as unknown, isLoading: false, refetch: vi.fn() },
   toast: { success: vi.fn(), warning: vi.fn() },
 }))
 
@@ -77,6 +77,10 @@ function renderWithRouter(element: React.ReactElement, initialEntry = '/sales/hi
 }
 
 function getButtonByText(container: HTMLElement, text: string): HTMLButtonElement {
+  if (text === 'Confirmar venta') {
+    const confirmButton = container.querySelector('button[aria-keyshortcuts="F8"]')
+    if (confirmButton instanceof HTMLButtonElement) return confirmButton
+  }
   const button = Array.from(container.querySelectorAll('button')).find((candidate) => candidate.textContent?.includes(text))
   if (!(button instanceof HTMLButtonElement)) throw new Error(`Button not found: ${text}`)
   return button
@@ -144,7 +148,7 @@ describe('TASK-055 sales UI behavior', () => {
     mockState.products = { data: [], error: null, isLoading: false, refetch: vi.fn() }
     mockState.sale = { data: null, error: null, isLoading: false }
     mockState.sales = { data: { items: [] }, error: null, isLoading: false }
-    mockState.ticket = { data: undefined, error: null, isLoading: false }
+    mockState.ticket = { data: undefined, error: null, isLoading: false, refetch: vi.fn() }
     mockState.toast.success.mockReset()
     mockState.toast.warning.mockReset()
   })
@@ -176,10 +180,14 @@ describe('TASK-055 sales UI behavior', () => {
 
     const html = renderWithRouter(<SalesPosPage />, '/sales')
 
-    expect(html).toContain('Punto de venta empresarial')
+    expect(html).toContain('Escáner y búsqueda')
+    expect(html).toContain('h-[52px]')
+    expect(html).toContain('h-16')
+    expect(html).toContain('grid-cols-[38fr_62fr]')
+    expect(html).toContain('h-36')
     expect(html).toContain('Total en vivo')
     expect(html).toContain('Ubicación operativa')
-    expect(html).toContain('Buscador de productos')
+    expect(html).toContain('Resultados')
     expect(html).toContain('Carrito')
     expect(html).toContain('Cliente')
     expect(html).toContain('Tipo de venta y pago')
@@ -187,14 +195,13 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Resumen sticky')
     expect(html).toContain('Selecciona una ubicación operativa')
     expect(html).toContain('Mostrador · MOST')
-    expect(html).toContain('ADMIN puede cambiar la ubicación')
     expect(html).toContain('Nueva venta')
     expect(html).toContain('Frecuentes recientes')
     expect(html).toContain('Impresora: no configurada')
     expect(html).toContain('Báscula: captura manual')
-    expect(html).toContain('Teclado numérico')
-    expect(html).toContain('F2 buscar')
-    expect(html).toContain('Confirmar venta')
+    expect(html).not.toContain('Teclado numérico')
+    expect(html).toContain('Listo · F2')
+    expect(html).toContain('Agrega productos')
   })
 
   it('enfoca la búsqueda con F2 y conserva controles de operación rápida', async () => {
@@ -205,7 +212,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect(search).toBeInstanceOf(HTMLInputElement)
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true })) })
       expect(document.activeElement).toBe(search)
-      expect(container.querySelector('[aria-label="Teclado numérico"]')).toBeTruthy()
+      expect(container.querySelector('[aria-label="Teclado numérico"]')).toBeNull()
       expect(container.querySelector('button[aria-label="Activar pantalla completa"]')).toBeTruthy()
     } finally {
       await act(async () => { root.unmount() })
@@ -360,7 +367,7 @@ describe('TASK-055 sales UI behavior', () => {
 
       expect((container.querySelector('input[aria-label="Kilos capturados de Pechuga"]') as HTMLInputElement).value).toBe('1')
       expect(container.textContent).toContain('Captura el peso de Pechuga')
-      expect(Array.from(container.querySelectorAll('article')).some((article) => article.className.includes('border-[var(--pos-green)]'))).toBe(true)
+      expect(Array.from(container.querySelectorAll('tr')).some((row) => row.className.includes('shadow-[inset_3px_0_0_var(--pos-green)]'))).toBe(true)
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -533,6 +540,32 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
+  it('bloquea la confirmación cuando el POS está sin conexión y explica que la venta no se registrará', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+      await act(async () => {
+        Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false })
+        window.dispatchEvent(new Event('offline'))
+      })
+
+      const confirmButton = getButtonByText(container, 'Confirmar venta')
+      expect(confirmButton.disabled).toBe(true)
+      expect(container.textContent).toContain('Sin conexión. La venta no se registrará sin conexión.')
+      expect(mockState.createSale.mutateAsync).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
+      window.dispatchEvent(new Event('online'))
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('no expone autorización de crédito a SELLER', async () => {
     mockState.auth = { user: { role: 'SELLER' } }
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', type: 'BRANCH' }], error: null, isLoading: false }
@@ -602,6 +635,63 @@ describe('TASK-055 sales UI behavior', () => {
       expect(container.textContent).toContain('Crédito disponible—')
       expect(container.textContent).toContain('Saldo pendiente—')
       expect(getSelectByLabelText(container, 'Ubicación operativa').value).toBe('loc-counter')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('conserva una pantalla de venta registrada y usa impresión provisional si falla el documento', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    mockState.customers = {
+      data: [{ id: 'customer-1', name: 'Restaurante Norte', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', isActive: true, creditSummary: { availableCredit: 3200, outstandingAmount: 1800 } }],
+      error: null,
+      isLoading: false,
+    }
+    mockState.createSale.mutateAsync.mockResolvedValue({
+      sale: {
+        id: 'sale-1', saleNumber: 'V-1001', documentType: 'SIMPLE_NOTE', paymentType: 'CREDIT_SALE', status: 'CONFIRMED',
+        subtotal: '92.00', total: '92.00', items: [{ productName: 'Pollo entero', unit: 'PIECE', quantityKg: 0, quantityPieces: 1, unitPrice: '92.00', subtotal: '92.00' }],
+      },
+      documents: [{ id: 'doc-1', documentType: 'SIMPLE_NOTE' }],
+    })
+    mockState.ticket = { data: undefined, error: new Error('Documento temporalmente no disponible'), isLoading: false, refetch: vi.fn() }
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
+      await act(async () => { getButtonByText(container, 'Agregar').click(); getButtonByText(container, 'Restaurante Norte').click(); getButtonByText(container, 'Venta a crédito').click() })
+      await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
+      await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
+
+      expect(document.body.textContent).toContain('Venta registrada')
+      expect(document.body.textContent).toContain('V-1001')
+      expect(document.body.textContent).toContain('$92.00')
+      expect(document.body.textContent).toContain('Restaurante Norte')
+      expect(document.body.textContent).toContain('Reintentar impresión')
+      expect(document.body.textContent).toContain('Abrir historial')
+      expect(document.body.textContent).toContain('Nueva venta')
+      expect(document.body.textContent).toContain('No se pudo consultar el documento')
+
+      await act(async () => { getButtonByText(document.body, 'Reintentar impresión').click() })
+      expect(mockState.ticket.refetch).toHaveBeenCalledTimes(1)
+      expect(document.body.textContent).toContain('Impresión provisional')
+      expect(document.body.textContent).toContain('NOTA DE VENTA')
+      expect(document.body.textContent).toContain('Pollo entero')
+
+      await act(async () => { getButtonByText(document.body, 'Cerrar').click() })
+      expect(document.body.textContent).toContain('Venta registrada')
+      await act(async () => { getButtonByText(document.body, 'Nueva venta').click() })
+      expect(document.body.textContent).not.toContain('Venta registrada')
+      expect(container.textContent).toContain('0 partidas')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -787,6 +877,7 @@ describe('TASK-055 sales UI behavior', () => {
       data: { saleNumber: 'V-1001', total: 276, documentType: 'SIMPLE_NOTE', paymentType: 'CREDIT_SALE' },
       error: null,
       isLoading: false,
+      refetch: vi.fn(),
     }
 
     const { container, root } = await renderDom(

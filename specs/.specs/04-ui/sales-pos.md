@@ -23,6 +23,8 @@ Pantallas y componentes requeridos:
 
 ## Layout sugerido
 
+La arquitectura obligatoria de la superficie de caja, su máquina de estados y los flujos de teclado están definidos en `specs/.specs/04-ui/sales-pos-transaction-architecture.md`. Sus dimensiones y reglas de interacción sustituyen este layout sugerido cuando exista diferencia.
+
 Sección izquierda:
 
 - Selector o indicador de ubicación operativa de descuento.
@@ -218,11 +220,11 @@ Toda vista debe contemplar:
 
 ## Después de confirmar
 
-- Mostrar modal de venta exitosa.
+- Mostrar una franja no bloqueante de venta registrada con folio y acceso a impresión; no abrir un modal de éxito en el camino estándar.
 - Permitir ver o imprimir ticket interno.
 - Permitir abrir la consulta de documentos de la venta desde el mismo POS.
 - Permitir reabrir un documento cancelado sin salir a un flujo paralelo.
-- Limpiar carrito.
+- Limpiar carrito y devolver el foco al escáner para la siguiente venta.
 - Actualizar disponibilidad de productos de la ubicación afectada.
 
 ## Extensión: venta en punto externo
@@ -251,11 +253,11 @@ La consulta y reapertura de documentos debe ocurrir dentro de la misma venta, si
 
 ## Rediseño de velocidad POS
 
-- La superficie de caja debe organizar productos, carrito/captura y cobro en tres zonas compactas; en escritorio cada zona usa scroll interno para evitar navegación vertical innecesaria.
+- La superficie de caja se organiza en barra operativa de 52 px, escáner de 64 px, workspace 38/62 de resultados y carrito, y dock de cobro de 144 px. En escritorio cada zona con contenido variable usa scroll interno para evitar navegación vertical innecesaria.
 - El buscador debe recibir autofocus al abrir el POS y después de una lectura válida. `Enter` debe intentar resolver el valor exacto por `sku`, compatible con lectores que funcionan como teclado.
 - La UI debe ofrecer una vista de productos frecuentes recientes de la sesión y vistas rápidas por categoría sin presentar datos locales como frecuencia histórica global.
 - El carrito debe exponer kilos, piezas, stock por ubicación, precio de referencia e importe por partida. Un teclado numérico contextual puede editar la cantidad del renglón activo; los kilos aceptan decimales y las piezas no.
 - Deben existir las acciones `Nueva venta`, pantalla completa y los atajos `F2` búsqueda, `F4` cliente, `F6` pago, `F8` confirmación y `F9` nueva venta.
 - La cabecera debe informar ubicación, operador, conexión, estado de impresora y estado de báscula sin simular hardware no integrado. El MVP muestra impresora no configurada y báscula de captura manual cuando no exista contrato de dispositivo.
-- La confirmación debe mostrar cliente, sucursal, productos, kilos, piezas, subtotal, descuento autorizado, total, pagos, saldo pendiente de la venta, saldo histórico del cliente cuando exista, documento, folio, canal, solicitud administrativa y motivo de autorización cuando aplique.
-- `Nueva venta` debe solicitar confirmación si existe captura, y la confirmación de registro debe permanecer protegida contra doble clic y conservar la clave de idempotencia para reintentos después de error.
+- Antes de confirmar, el dock y carrito deben mantener visible cliente, sucursal, productos, kilos, piezas, subtotal, descuento autorizado, total, pagos, saldo pendiente de la venta, saldo histórico del cliente cuando exista, documento, folio, canal, solicitud administrativa y motivo de autorización cuando aplique. `F8` registra directamente desde el estado listo, sin una segunda pantalla de revisión.
+- `Nueva venta` debe solicitar confirmación si existe captura. El envío se protege contra doble clic y conserva la clave de idempotencia para reintentos después de error; una incertidumbre de red debe verificarse con esa misma clave antes de reintentar.
