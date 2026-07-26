@@ -73,6 +73,8 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 
 - Dado un carrito vacío, cuando se confirma venta, entonces el sistema muestra error y no crea venta.
 - Dado una venta de contado válida con stock suficiente en la ubicación indicada, cuando se confirma, entonces crea venta, items, movimientos de inventario, descuenta saldo por ubicación y registra método de pago.
+- Dado una ubicación sin sesión de caja abierta, cuando se intenta una venta de contado, entonces responde `CASH_SESSION_REQUIRED` o `CASH_SESSION_NOT_OPEN` y no persiste ningún efecto.
+- Dado una sesión de caja abierta con terminal, cajero, hora y fondo inicial, cuando se confirma una venta de contado, entonces `Sale.pointOfSaleDailyCloseId` y sus `Payment.pointOfSaleDailyCloseId` quedan persistidos directamente.
 - Dado una venta `CASH_SALE` sin pagos o con pagos cuya suma sea menor al total, cuando se confirma, entonces se rechaza aunque exista un cliente activo y no crea venta, movimientos ni cuenta por cobrar.
 - Dado un pago parcial de una venta, cuando se confirma, entonces el operador debe cambiar explícitamente a `CREDIT_SALE` y se ejecutan las validaciones de límite, mora y bloqueo crediticio.
 - Dado una venta a crédito válida para cliente autorizado, cuando se confirma, entonces crea venta, items, movimientos de inventario y una cuenta por cobrar asociada.
@@ -113,6 +115,7 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado una cuenta por cobrar vigente, cuando se registra pago parcial válido, entonces disminuye saldo pendiente y marca estado parcialmente pagado cuando aplique.
 - Dado una cuenta por cobrar vigente, cuando se registra pago total válido, entonces saldo pendiente queda en cero y estado pagado.
 - Dado un pago de cobranza del MVP, cuando se registra, entonces `Payment.accountReceivableId` es requerido y el pago se aplica a exactamente una cuenta por cobrar.
+- Dado un pago de cobranza en efectivo en una ubicación fija, cuando se registra sin sesión abierta, entonces se rechaza y no modifica el saldo de la cuenta por cobrar.
 - Dado una venta de contado completamente pagada, cuando se registra el pago inicial, entonces el `Payment` queda asociado a la venta sin crear una cuenta por cobrar artificial.
 - Dado dinero recibido en el sistema, cuando se audita la fuente monetaria, entonces solo `Payment` puede ser fuente de verdad y cualquier total en reparto o liquidación debe ser derivado.
 - Dado un pago mayor al saldo pendiente, cuando no existe regla futura explícita para anticipos o saldos a favor, entonces se rechaza.

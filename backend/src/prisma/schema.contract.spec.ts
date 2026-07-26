@@ -22,6 +22,10 @@ const dailyCloseDifferenceMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260724200000_add_daily_close_differences/migration.sql',
 );
+const cashSessionMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260725100000_add_cash_session_fields/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -141,6 +145,24 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toMatch(
       /CREATE UNIQUE INDEX[\s\S]*WHERE\s+"status"\s*<>\s*'CANCELLED'/i,
     );
+  });
+
+  it('persists an explicit cash session on the daily close', () => {
+    const dailyClose = getModelBlock('PointOfSaleDailyClose');
+    const cashMovement = getModelBlock('CashMovement');
+    const migrationSql = readFileSync(cashSessionMigrationSqlPath, 'utf8');
+
+    expect(schema).toContain('enum CashSessionStatus');
+    expect(dailyClose).toMatch(/cashSessionStatus\s+CashSessionStatus/);
+    expect(dailyClose).toMatch(/terminalIdentifier\s+String/);
+    expect(dailyClose).toMatch(/openedAt\s+DateTime/);
+    expect(dailyClose).toMatch(/initialCashFund\s+Decimal/);
+    expect(dailyClose).toMatch(/initialCashIn\s+Decimal/);
+    expect(dailyClose).toMatch(/initialCashOut\s+Decimal/);
+    expect(cashMovement).toMatch(/isOpening\s+Boolean/);
+    expect(migrationSql).toContain('CREATE TYPE "CashSessionStatus" AS ENUM');
+    expect(migrationSql).toContain('ADD COLUMN "terminalIdentifier" TEXT');
+    expect(migrationSql).toContain('ADD COLUMN "isOpening" BOOLEAN');
   });
 
   it('keeps scale ticket folio unique per location and date', () => {

@@ -7,7 +7,7 @@ describe('PointOfSaleDailyCloseService', () => {
   const prisma = {
     user: { findUnique: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
-    pointOfSaleDailyClose: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+    pointOfSaleDailyClose: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     cashMovement: { create: jest.fn(), findUnique: jest.fn() },
     scaleTicketReference: { create: jest.fn(), findUnique: jest.fn() },
     sale: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
@@ -63,6 +63,7 @@ describe('PointOfSaleDailyCloseService', () => {
   it('rejects opening a close after the current operational day', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-22T01:00:00.000Z'));
     prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true, type: 'BRANCH' });
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-1', isActive: true });
 
     try {
       await expect(service.open(
@@ -95,6 +96,35 @@ describe('PointOfSaleDailyCloseService', () => {
       { operationalLocationId: 'loc-1', businessDate: '2026-07-17' },
       { id: 'u1', role: 'ADMIN' } as never,
     )).rejects.toThrow(new ConflictException('DAILY_CLOSE_ALREADY_EXISTS'));
+  });
+
+  it('opens a cash session with terminal, fund and opening movements', async () => {
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true, type: 'BRANCH' });
+    prisma.user.findUnique.mockResolvedValue({ operationalLocationId: 'loc-1', isActive: true });
+    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
+    prisma.pointOfSaleDailyClose.create.mockResolvedValue({ id: 'close-1' });
+    jest.spyOn(service as any, 'syncOperations').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'recalculate').mockResolvedValue({ id: 'close-1', updatedAt: new Date() });
+
+    await service.open(
+      { operationalLocationId: 'loc-1', businessDate: '2026-07-17', terminalIdentifier: 'Caja 01', initialCashFund: 1500, initialCashIn: 100, initialCashOut: 25 },
+      { id: 'cashier-1', role: 'SELLER' } as never,
+    );
+
+    expect(prisma.pointOfSaleDailyClose.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        terminalIdentifier: 'Caja 01',
+        initialCashFund: 1500,
+        initialCashIn: 100,
+        initialCashOut: 25,
+        cashSessionStatus: 'OPEN',
+        openedByUserId: 'cashier-1',
+        openedAt: expect.any(Date),
+      }),
+    }));
+    expect(prisma.cashMovement.create).toHaveBeenCalledTimes(2);
+    expect(prisma.cashMovement.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: expect.objectContaining({ type: 'CASH_IN', amount: 100, isOpening: true, pointOfSaleDailyCloseId: 'close-1' }) }));
+    expect(prisma.cashMovement.create).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: expect.objectContaining({ type: 'CASH_OUT', amount: 25, isOpening: true, pointOfSaleDailyCloseId: 'close-1' }) }));
   });
 
   it('rejects cancelling a closed daily close', async () => {

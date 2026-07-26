@@ -80,6 +80,8 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Calcular subtotal, descuento y total en backend.
 - Ignorar precios enviados por frontend como fuente de verdad.
 - Crear venta de contado con método de pago.
+- Rechazar venta de contado sin sesión `PointOfSaleDailyClose` abierta y verificar que no persista efectos parciales.
+- Verificar que la venta y sus pagos inmediatos conserven `pointOfSaleDailyCloseId` desde la confirmación.
 - Rechazar `CASH_SALE` sin pagos o con pagos parciales, incluso cuando exista un cliente activo, sin crear venta ni cuenta por cobrar.
 - Requerir cambio explícito a `CREDIT_SALE` para confirmar pagos parciales y ejecutar la evaluación de crédito.
 - Crear venta a crédito con cliente autorizado y cuenta por cobrar.
@@ -121,6 +123,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Cancelar pago conservando historial y recalculando saldo.
 - Verificar idempotencia en registro y cancelación de pagos.
 - Distinguir pagos de cuentas por cobrar frente a ventas de contado.
+- Rechazar pagos de cobranza en efectivo sin sesión abierta en la ubicación fija y verificar que el saldo no cambie.
 
 ### Compras
 

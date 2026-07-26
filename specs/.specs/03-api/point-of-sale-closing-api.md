@@ -44,6 +44,8 @@ CLOSED -> DRAFT        solo ADMIN mediante reapertura auditada
 
 No se elimina físicamente un cierre. Cancelar o reabrir requiere motivo y control de versión.
 
+`DRAFT` con `cashSessionStatus=OPEN` representa una caja abierta. `CLOSED` representa una sesión que ya no acepta ventas ni pagos en efectivo; la reapertura administrativa vuelve a abrir la sesión.
+
 Headers recomendados en comandos críticos:
 
 - `Idempotency-Key`
@@ -60,6 +62,10 @@ Body:
 {
   "operationalLocationId": "string",
   "businessDate": "2026-06-19",
+  "terminalIdentifier": "Caja 01",
+  "initialCashFund": 1500.00,
+  "initialCashIn": 0,
+  "initialCashOut": 0,
   "notes": "string opcional"
 }
 ```
@@ -69,6 +75,9 @@ Validaciones:
 - Ubicación requerida, activa y de tipo `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`.
 - No crear un segundo cierre no cancelado para la misma ubicación y fecha.
 - `SELLER` solo puede crear dentro de su alcance.
+- `terminalIdentifier` identifica la terminal; `openedByUserId` y `openedAt` se asignan desde el actor y el servidor.
+- `initialCashFund`, `initialCashIn` e `initialCashOut` son montos no negativos; el retiro inicial no puede superar el fondo más el depósito inicial.
+- La apertura crea los `CashMovement` iniciales correspondientes con `isOpening=true` y los asocia al cierre dentro de la misma transacción.
 
 ## GET /api/point-of-sale-daily-closes
 
@@ -104,6 +113,8 @@ El backend debe ocultar secciones no autorizadas por rol.
 En particular, para `SELLER` debe omitir los snapshots de costo dentro de `sales[].items[]`, las líneas de sección `PROFIT` y los conceptos de utilidad. La omisión debe ocurrir también en `refresh` y en la respuesta de `validate`, no solo en la UI.
 
 `data.differences[]` conserva para cada diferencia `code`, `scope`, `referenceKey`, `unit`, `expectedValue`, `recordedValue`, `differenceValue`, `differenceType`, `status`, `reason`, `evidence`, `justifiedBy`, `justifiedAt`, `authorizedBy` y `authorizedAt`. La respuesta también incluye `openedBy`, `reviewedBy`, `closedBy` y `unresolvedDifferenceCount` cuando el rol tenga acceso a la proyección.
+
+La respuesta incluye `cashSessionStatus`, `terminalIdentifier`, `openedAt`, `cashSessionClosedAt`, `initialCashFund`, `initialCashIn` e `initialCashOut`.
 
 ## POST /api/point-of-sale-daily-closes/:id/lines
 
@@ -156,6 +167,7 @@ Validaciones:
 
 - Todas las operaciones deben pertenecer a la misma `OperationalLocation` y fecha de negocio.
 - Una venta o movimiento no puede pertenecer a dos cierres no cancelados.
+- Las ventas de contado y pagos en efectivo deben llegar ya asociados al cierre mediante `pointOfSaleDailyCloseId`; no dependen de esta asociación posterior.
 - Todo pago de cobranza conserva `accountReceivableId` obligatorio y una sola cuenta por cobrar.
 - Un pago inmediato de contado puede asociarse al cierre mediante `saleId` sin `AccountReceivable`.
 - `cashMovementIds` no forma parte de este contrato: los movimientos de caja del MVP se crean mediante el endpoint anidado `/:id/cash-movements` y quedan asociados al cierre desde su creación.
@@ -380,6 +392,11 @@ Validaciones:
 - `OPERATION_LOCATION_MISMATCH`
 - `OPERATION_WITHOUT_LOCATION`
 - `CASH_COUNT_REQUIRED`
+- `INITIAL_CASH_AMOUNT_INVALID`
+- `INITIAL_CASH_OUT_EXCEEDS_AVAILABLE`
+- `CASH_SESSION_REQUIRED`
+- `CASH_SESSION_NOT_OPEN`
+- `CASH_SESSION_LOCATION_MISMATCH`
 - `SCALE_TICKET_DUPLICATE_FOLIO`
 - `RECONCILIATION_BLOCKED`
 - `FORBIDDEN`
@@ -391,7 +408,7 @@ Validaciones:
 
 ## Decisiones abiertas
 
-- Cierre único por día frente a turnos o cajas múltiples.
+- El MVP conserva un cierre/sesión único por día y ubicación; múltiples turnos o cajas requieren una ampliación explícita.
 - Tolerancias de peso y dinero y si bloquean o solo advierten.
 - Fórmulas oficiales de costo y utilidad.
 - Catálogo final de conceptos, métodos y bancos.

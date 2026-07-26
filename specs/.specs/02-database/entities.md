@@ -476,6 +476,7 @@ Campos y validaciones adicionales:
 - `documentType` requerido para distinguir `SCALE_TICKET`, `SIMPLE_NOTE`, `LARGE_NOTE` e `INTERNAL_RECEIPT`.
 - `physicalFolio` opcional y requerido cuando la política del documento físico lo indique.
 - `pointOfSaleDailyCloseId` opcional hasta que la venta se asocie a un cierre.
+- Una venta de contado no puede confirmarse sin una sesión de caja abierta y debe persistir `pointOfSaleDailyCloseId` desde su creación.
 - La solicitud administrativa se modela con `billingRequestId` y `requiresAdministrativeInvoice`; no habilita CFDI, SAT, PAC ni timbrado.
 - Una referencia de báscula nunca sustituye la confirmación de la venta ni su movimiento de inventario.
 
@@ -485,6 +486,7 @@ Validaciones adicionales:
 
 - `operationalLocationId` debe registrarse cuando el pago se recibe en un punto de venta fijo.
 - `pointOfSaleDailyCloseId` es opcional hasta asociar el pago a un cierre.
+- Un pago en efectivo recibido en una ubicación fija requiere una sesión abierta y debe persistir `pointOfSaleDailyCloseId` desde su creación; los cobros en ruta permanecen bajo `RouteSettlement`.
 - Todo pago de cobranza incluido en un cierre conserva `accountReceivableId` obligatorio y aplica a una sola cuenta por cobrar.
 - Un pago inmediato de contado puede asociarse al cierre mediante `saleId` sin `AccountReceivable`.
 - Los cobros en ruta conservan su relación con ruta o liquidación y no se incorporan automáticamente al cierre fijo.
@@ -495,6 +497,8 @@ Validaciones:
 
 - `operationalLocationId` requerido y debe corresponder a una ubicación activa al crear el borrador.
 - `businessDate` requerido.
+- `terminalIdentifier`, `openedAt`, `openedByUserId`, `cashSessionStatus`, `initialCashFund`, `initialCashIn` e `initialCashOut` describen la sesión monetaria de la caja.
+- `cashSessionStatus=OPEN` solo permite operaciones monetarias mientras `status=DRAFT`; `CLOSED` bloquea nuevas ventas y pagos.
 - La combinación de ubicación y fecha debe ser única para cierres no cancelados mientras no se apruebe soporte por turno o caja.
 - `status` requerido: `DRAFT`, `REVIEWED`, `CLOSED` o `CANCELLED`.
 - `openedByUserId` requerido; `closedByUserId` requerido al cerrar.
@@ -508,6 +512,7 @@ Campos mínimos:
 - `id`, `operationalLocationId`, `businessDate`, `status`.
 - `version`, `lastValidatedAt`, `validatedSourceVersion` para control de concurrencia y vigencia de la conciliación.
 - `openedByUserId`, `reviewedByUserId`, `closedByUserId`, `cancelledByUserId`, `reopenedByUserId`.
+- `terminalIdentifier`, `openedAt`, `cashSessionStatus`, `cashSessionClosedAt`, `initialCashFund`, `initialCashIn`, `initialCashOut`.
 - `totalInputKg`, `totalSoldKg`, `totalRemainingKg`, `totalShortageKg`, `totalSurplusKg`.
 - `scaleReportedKg`, `scaleDifferenceKg`.
 - `cashTotal`, `cardVoucherTotal`, `transferTotal`, `expenseTotal`, `grossSalesTotal`.
@@ -546,6 +551,7 @@ Validaciones:
 
 - `operationalLocationId` requerido.
 - `pointOfSaleDailyCloseId` es opcional fuera de un cierre. El endpoint anidado del cierre lo asigna desde `:id` al crear el movimiento y el cliente no puede reemplazarlo.
+- `isOpening=true` identifica el depósito o retiro creado durante la apertura; no debe confundirse con un gasto posterior.
 - El flujo anidado del MVP crea el movimiento ya asociado; no requiere `cashMovementIds` en el contrato de asociaciones.
 - `type` requerido: `EXPENSE`, `CASH_IN`, `CASH_OUT` o `ADJUSTMENT`.
 - `amount` mayor a cero.

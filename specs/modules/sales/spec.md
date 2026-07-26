@@ -40,6 +40,8 @@ Registrar ventas de contado, crédito, abonadas y atrasadas con inventario por u
 - Toda venta con saldo pendiente requiere trazabilidad de cuenta por cobrar.
 - Venta de contado pagada completamente puede no generar cuenta por cobrar.
 - `CASH_SALE` solo puede confirmarse cuando `totalPagado === totalVenta`; no admite saldo pendiente ni cuenta por cobrar.
+- Una venta de contado requiere una sesión de caja abierta en la ubicación y conserva su `pointOfSaleDailyCloseId` desde la confirmación.
+- Si un pago inicial de una venta a crédito usa `CASH`, también requiere una sesión abierta y conserva la misma referencia directa en `Sale` y `Payment`.
 - Un pago parcial debe cambiar explícitamente el tipo de venta a `CREDIT_SALE` para activar la evaluación de crédito y generar la cuenta por cobrar correspondiente.
 - Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
 - Nota sencilla, nota grande y ticket interno no son CFDI; la solicitud administrativa se maneja aparte como `BillingRequest`.

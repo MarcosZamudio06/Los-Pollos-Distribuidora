@@ -1052,6 +1052,7 @@ Notas:
 - `OperationalLocation.type` admite `EXTERNAL_POINT_OF_SALE` y `ROUTE_STOCK`; ambas ubicaciones deben estar activas para nuevas operaciones.
 - `Sale` agrega `saleChannel`, `documentType`, `physicalFolio` opcional y `pointOfSaleDailyCloseId` opcional.
 - `Payment` agrega `operationalLocationId` cuando el cobro se recibe en una ubicación fija y `pointOfSaleDailyCloseId` opcional al asociarlo. `accountReceivableId` permanece requerido para cobranza o saldo pendiente; el contado inmediato puede asociarse a `saleId` sin `AccountReceivable` artificial.
+- Una venta de contado o un pago en efectivo de una ubicación fija requiere una sesión abierta y persiste directamente `pointOfSaleDailyCloseId`; el cierre no debe descubrir esas operaciones posteriormente por fecha.
 - `InventoryMovement` puede referenciar `pointOfSaleDailyCloseId` solo para trazabilidad de un ajuste autorizado; el cierre no crea movimientos implícitos.
 - `SaleDocument` concentra nota sencilla, nota grande y ticket/comprobante interno.
 - La solicitud administrativa de factura se modela con `billingRequestId` y `requiresAdministrativeInvoice`, no como un valor de `Sale.documentType`.
@@ -1075,6 +1076,13 @@ Campos:
 - operationalLocationId
 - businessDate
 - status
+- cashSessionStatus
+- terminalIdentifier
+- openedAt
+- cashSessionClosedAt
+- initialCashFund
+- initialCashIn
+- initialCashOut
 - version
 - lastValidatedAt
 - lastValidationAttemptAt
@@ -1121,6 +1129,8 @@ Estados:
 Reglas:
 
 - Solo un cierre no cancelado por `operationalLocationId` y `businessDate` mientras no se aprueben turnos o cajas múltiples; PostgreSQL lo garantiza con un índice único parcial para registros cuyo estado sea distinto de `CANCELLED`.
+- En el MVP, `PointOfSaleDailyClose` es también la sesión de caja: `cashSessionStatus=OPEN` y `status=DRAFT` permiten operaciones monetarias; cerrar o cancelar cambia la sesión a `CLOSED`.
+- `openedByUserId` es el cajero responsable del turno y `openedAt` es la hora de apertura del servidor. `initialCashFund`, `initialCashIn` e `initialCashOut` forman el efectivo de apertura esperado.
 - Los totales se recalculan en backend y se guardan como snapshot auditable al revisar y cerrar.
 - Cerrar, cancelar o reabrir registra usuario, fecha, motivo y versión esperada.
 - Las transiciones que afecten asociaciones, snapshots o ajustes relacionados se ejecutan en transacción.
@@ -1214,6 +1224,7 @@ Campos:
 - amount
 - reason
 - reference
+- isOpening
 - occurredAt
 - userId
 - createdAt
@@ -1230,6 +1241,7 @@ Reglas:
 
 - `operationalLocationId`, `type`, `amount`, `reason`, `occurredAt` y `userId` son requeridos.
 - `pointOfSaleDailyCloseId` es opcional para movimientos capturados fuera de un cierre. Al crear un movimiento mediante el endpoint anidado del cierre, el backend lo asigna desde el cierre padre y no acepta que el cliente lo reemplace.
+- `isOpening=true` identifica el depósito o retiro inicial creado junto con la apertura de la sesión; el fondo inicial permanece en `PointOfSaleDailyClose.initialCashFund`.
 - El flujo anidado del MVP no requiere una asociación posterior mediante `cashMovementIds`; el movimiento nace vinculado al cierre.
 - `movementChannel` clasifica el medio operativo de la entrada/salida de caja (`CASH`, `CARD_VOUCHER`, `TRANSFER`, `DEPOSIT`, `OTHER`) sin sustituir el `paymentMethod` de `Payment`.
 - Un `CashMovement` no sustituye a `Payment`, no registra cobranza por sí mismo y no permite pagos sin `accountReceivableId` cuando el flujo sea de cobranza.

@@ -21,16 +21,16 @@ En escritorio, la vista utiliza el alto disponible y tres zonas con scroll inter
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Sucursal · Caja · Vendedor       Online   Impresora   Báscula          Total │
+│ Sucursal · Caja · Vendedor       Online   Impresora   Báscula         Total │
 ├────────────────────────┬───────────────────────────────┬────────────────────┤
-│ PRODUCTOS              │ RIEL DE DESPACHO             │ COBRO              │
-│ [Escanea SKU / busca]  │ Producto · kilos · piezas    │ Cliente            │
-│ Frecuentes recientes   │ Producto · kilos · piezas    │ Contado / crédito  │
-│ Todos · categorías     │                               │ Pagos / cambio     │
-│ resultados compactos   │ Teclado numérico contextual  │ Documento / folio  │
-│                        │                               │ Solicitud admin.   │
-│                        │                               │ TOTAL · CONFIRMAR  │
-├────────────────────────┴───────────────────────────────┴────────────────────┤
+│ PRODUCTOS              │ RIEL DE DESPACHO             │ COBRO               │
+│ [Escanea SKU / busca]  │ Producto · kilos · piezas    │ Cliente             │
+│ Frecuentes recientes   │ Producto · kilos · piezas    │ Contado / crédito   │
+│ Todos · categorías     │                              │ Pagos / cambio      │
+│ resultados compactos   │ Teclado numérico contextual  │ Documento / folio   │
+│                        │                              │ Solicitud admin.    │
+│                        │                              │ TOTAL · CONFIRMAR   │
+├────────────────────────┴──────────────────────────────┴──────────────────── ┤
 │ F2 Buscar · F4 Cliente · F6 Pago · F8 Confirmar · F9 Nueva venta            │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

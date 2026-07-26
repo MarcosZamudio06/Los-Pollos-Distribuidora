@@ -89,6 +89,7 @@ Debe enviar `POST /api/sales` con:
 
 - `customerId` opcional en contado completamente pagado; requerido en crédito.
 - `locationId` requerido.
+- `pointOfSaleDailyCloseId` de la sesión abierta cuando se registra contado o cualquier pago en efectivo.
 - `paymentType`: `CASH_SALE` o `CREDIT_SALE`.
 - `saleChannel`.
 - `documentType`.
@@ -108,6 +109,7 @@ Reglas de interpretación:
 - Si la venta es de contado y se paga al momento, el sistema registra un `Payment` por cada elemento de `payments[]` asociado a `saleId` sin crear una cuenta por cobrar artificial.
 - Cada fila `CASH` permite capturar «Efectivo entregado» distinto de su monto aplicado y muestra el «Cambio» calculado. Al cambiar la fila a otro método se limpia ese dato; los tickets muestran solo efectivo entregado y cambio persistidos, sin inventarlos para pagos históricos.
 - Una venta de contado sin pagos o con pagos parciales no puede confirmarse; la UI debe indicar que el operador debe completar el pago o cambiar explícitamente a venta a crédito.
+- Antes de confirmar una venta de contado, la UI debe consultar la sesión abierta de la ubicación y mostrar terminal, cajero, hora de apertura y fondo inicial. Si no existe, debe bloquear la confirmación y ofrecer abrir la caja.
 
 ## Venta a crédito
 
@@ -240,9 +242,11 @@ La consulta y reapertura de documentos debe ocurrir dentro de la misma venta, si
 
 ## Integración con cierre diario
 
-- Una venta confirmada puede mostrar el cierre `DRAFT` de la ubicación y fecha, si existe.
+- Una venta de contado solo puede confirmarse con el cierre `DRAFT` de la ubicación en sesión `cashSessionStatus=OPEN`.
+- La cabecera debe mostrar `Caja/terminal`, ubicación, cajero, turno abierto, fondo inicial y estado de la sesión; no debe usar el nombre o rol del usuario como valor de caja.
+- La apertura ocurre desde el flujo de caja/cierre diario con terminal, fondo inicial, depósito y retiro inicial; las horas se muestran con el timestamp del servidor.
 - Asociar una venta al cierre no permite cambiar su ubicación, fecha, items, pago o movimiento de inventario.
-- La UI debe advertir si la venta aún no está asociada al cierre, sin bloquear el reporte operativo casi en tiempo real.
+- La venta y sus pagos inmediatos quedan asociados desde `POST /api/sales`; no dependen de una asociación posterior por ubicación y rango de fechas.
 - Las ventas a crédito se muestran separadas de efectivo; solo pagos aplicados pueden aparecer como ingreso de cobranza.
 
 ## Rediseño de velocidad POS

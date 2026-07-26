@@ -134,6 +134,8 @@
 - Los cobros de cuentas por cobrar deben distinguirse de ventas de contado del día para fines de corte y reporte.
 - Los cobros recibidos por chofer deben considerarse dentro de la liquidación de ruta antes de integrarse al corte correspondiente.
 - Los abonos y transferencias/depositos deben conservar su origen operativo antes de consolidarse en caja o cobranza.
+- Una venta de contado o cualquier pago en efectivo recibido en un punto fijo requiere una sesión de caja abierta. La operación conserva directamente `pointOfSaleDailyCloseId`; no espera una asociación posterior por fecha.
+- La sesión de caja debe conservar terminal, cajero responsable, hora de apertura, estado, fondo inicial y depósitos o retiros iniciales trazables.
 
 ## 6.1 Facturación y comprobantes
 
@@ -176,6 +178,8 @@
 ## 8.1 Cierre diario de punto de venta
 
 - Debe existir como dominio separado de `RouteSettlement` y asociarse a una `OperationalLocation` y una fecha de negocio.
+- En el MVP, el borrador de `PointOfSaleDailyClose` también representa la sesión monetaria abierta de esa ubicación: `cashSessionStatus=OPEN` permite vender y `CLOSED` bloquea nuevas operaciones.
+- La apertura de caja debe recibir `terminalIdentifier`, `initialCashFund`, `initialCashIn` e `initialCashOut`, conservar `openedAt` y usar `openedByUserId` como cajero responsable del turno.
 - Solo puede existir un cierre diario no cancelado por ubicación y fecha, salvo decisión posterior que autorice turnos o múltiples cajas.
 - Debe iniciar en `DRAFT`; puede pasar a `REVIEWED`, `CLOSED` o `CANCELLED` conforme a permisos.
 - No puede cerrarse si alguna venta, movimiento de inventario, movimiento de caja o pago incluido carece de ubicación operativa trazable.
@@ -209,7 +213,7 @@
 
 - Definir tolerancias y escalamiento para diferencias de peso y dinero.
 - Definir fórmulas oficiales de costo y utilidad.
-- Definir si el cierre es único por día o por turno/caja.
+- El MVP conserva una sesión/cierre único por ubicación y fecha; soportar múltiples turnos o cajas requiere una ampliación explícita de unicidad y asociaciones.
 - Definir catálogo final de gastos, entradas, salidas y otros conceptos.
 - Definir política de reapertura y bloqueo de periodos ya revisados.
 

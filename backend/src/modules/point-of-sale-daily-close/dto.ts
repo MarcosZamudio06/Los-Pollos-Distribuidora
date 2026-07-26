@@ -4,6 +4,10 @@ import { IsDateString, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsSt
 export class OpenDailyCloseDto {
   @IsString() @IsNotEmpty() operationalLocationId!: string;
   @IsDateString() businessDate!: string;
+  @IsOptional() @IsString() @IsNotEmpty() terminalIdentifier?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashFund?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashIn?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashOut?: number;
   @IsOptional() @IsString() notes?: string;
 }
 

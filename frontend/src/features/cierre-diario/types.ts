@@ -1,4 +1,5 @@
 export type DailyCloseStatus = 'DRAFT' | 'REVIEWED' | 'CLOSED' | 'CANCELLED'
+export type CashSessionStatus = 'OPEN' | 'CLOSED'
 
 export type DailyCloseDifferenceScope = 'CASH' | 'SCALE' | 'INVENTORY' | 'SALES' | 'EXPENSES' | 'BILLING'
 export type DailyCloseDifferenceUnit = 'MXN' | 'KG' | 'PIECE'
@@ -178,6 +179,9 @@ export type DailyCloseDifference = {
 
 export type DailyClose = {
   id: string; operationalLocationId: string; businessDate: string; status: DailyCloseStatus; version: number
+  cashSessionStatus: CashSessionStatus; terminalIdentifier: string; openedAt: string; cashSessionClosedAt?: string | null
+  initialCashFund: string; initialCashIn: string; initialCashOut: string
+  notes?: string | null
   operationalLocation: { id: string; name: string; code?: string | null }
   openedBy?: DailyCloseActor | null
   reviewedBy?: DailyCloseActor | null

@@ -4,7 +4,7 @@ import { validationDifferences, validationWarnings } from '../DailyCloseValidati
 import type { DailyClose, DailyCloseValidationResult } from '../types'
 
 const close = {
-  id: 'close-1', operationalLocationId: 'location-1', businessDate: '2026-07-22', status: 'DRAFT', version: 1,
+  id: 'close-1', operationalLocationId: 'location-1', businessDate: '2026-07-22', status: 'DRAFT', cashSessionStatus: 'OPEN', terminalIdentifier: 'Caja 01', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', initialCashIn: '0', initialCashOut: '0', version: 1,
   operationalLocation: { id: 'location-1', name: 'Sucursal Centro' }, totalInputKg: '10', totalSoldKg: '5', totalRemainingKg: '5', totalShortageKg: '1.5', totalSurplusKg: '0.25',
   scaleReportedKg: '4', scaleDifferenceKg: '-1', cashTotal: '100', cardVoucherTotal: '0', transferTotal: '0', expenseTotal: '0', grossSalesTotal: '100', netCashExpected: '100', cashCountedTotal: null, cashDifferenceTotal: null, purchaseCostTotal: '60', grossProfitTotal: '40', netProfitTotal: '40', lastValidatedAt: null, costQuality: 'ESTIMATED', dataAsOf: '2026-07-22T12:00:00.000Z',
   cashMovements: [], scaleTicketReferences: [{ id: 'ticket-1', physicalFolio: 'B-10', weightKg: null, pieceCount: null }], sales: [{ saleNumber: 'V-100', physicalFolio: null, documentType: 'SIMPLE_NOTE' }],

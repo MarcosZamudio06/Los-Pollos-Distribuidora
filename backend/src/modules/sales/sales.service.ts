@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import {
   AgingStatus,
   BillingRequestStatus,
+  CashSessionStatus,
   CollectionStatus,
   CreditStatus,
   EquivalentStatus,
@@ -494,6 +495,7 @@ export class SalesService {
         }
 
         this.assertLocationMatchesSaleChannel(dto, location.type);
+        const cashSessionId = await this.resolveCashSession(tx, dto, payments, location.id);
 
         const customer = dto.customerId
           ? ((await tx.customer.findUnique({ where: { id: dto.customerId } })) as CustomerCredit | null)
@@ -562,6 +564,7 @@ export class SalesService {
             customerId: dto.customerId ?? null,
             userId: currentUser.id,
             locationId: dto.locationId,
+            pointOfSaleDailyCloseId: cashSessionId,
             saleChannel: dto.saleChannel,
             documentType: dto.documentType,
             currencyCode: 'MXN',
@@ -649,6 +652,7 @@ export class SalesService {
         const documentData = {
             saleId: sale.id,
             operationalLocationId: dto.locationId,
+            pointOfSaleDailyCloseId: cashSessionId,
             physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
             status: SaleDocumentStatus.ISSUED,
             requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
@@ -700,6 +704,7 @@ export class SalesService {
               referenceNumber: this.normalizeOptionalText(payment.referenceNumber),
               cardLastFour: this.normalizeOptionalText(payment.cardLastFour),
               operationalLocationId: dto.locationId,
+              pointOfSaleDailyCloseId: cashSessionId,
               status: PaymentStatus.APPLIED,
               paidAt: new Date(),
               idempotencyKey: `${idempotencyKey}:${index}`,
@@ -1734,6 +1739,41 @@ export class SalesService {
     if (!saleChannelLocationTypes[dto.saleChannel].has(locationType)) {
       throw new BadRequestException(`${dto.saleChannel} sales cannot use a ${locationType} location`);
     }
+  }
+
+  private async resolveCashSession(
+    tx: Prisma.TransactionClient,
+    dto: CreateSaleDto,
+    payments: CreateSalePaymentDto[],
+    locationId: string,
+  ): Promise<string | null> {
+    const requiresSession = dto.paymentType === SalePaymentType.CASH_SALE
+      || payments.some((payment) => payment.paymentMethod === PaymentMethod.CASH);
+    if (!dto.pointOfSaleDailyCloseId && !requiresSession) return null;
+
+    const session = dto.pointOfSaleDailyCloseId
+      ? await tx.pointOfSaleDailyClose.findUnique({
+          where: { id: dto.pointOfSaleDailyCloseId },
+          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
+        })
+      : await tx.pointOfSaleDailyClose.findFirst({
+          where: { operationalLocationId: locationId, status: PointOfSaleDailyCloseStatus.DRAFT, cashSessionStatus: CashSessionStatus.OPEN },
+          orderBy: { openedAt: 'desc' },
+          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
+        });
+    if (!session || session.operationalLocationId !== locationId) {
+      throw new BadRequestException({
+        code: dto.pointOfSaleDailyCloseId ? 'CASH_SESSION_LOCATION_MISMATCH' : 'CASH_SESSION_REQUIRED',
+        message: dto.pointOfSaleDailyCloseId ? 'The cash session does not belong to the sale location' : 'An open cash session is required before registering a cash sale or cash payment',
+      });
+    }
+    if (session.status !== PointOfSaleDailyCloseStatus.DRAFT || session.cashSessionStatus !== CashSessionStatus.OPEN) {
+      throw new BadRequestException({
+        code: 'CASH_SESSION_NOT_OPEN',
+        message: 'The selected cash session is not open for sales',
+      });
+    }
+    return session.id;
   }
 
   private assertLocationAccess(dto: CreateSaleDto, currentUser: Actor) {

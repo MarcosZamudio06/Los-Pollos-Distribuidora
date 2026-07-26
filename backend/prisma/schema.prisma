@@ -201,6 +201,11 @@ enum PointOfSaleDailyCloseStatus {
   CANCELLED
 }
 
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
 enum DailyCloseSnapshotType {
   REVIEWED
   CLOSED
@@ -607,6 +612,7 @@ model Sale {
   @@index([locationId, createdAt])
   @@index([customerId, collectionStatus])
   @@index([legalEntityId, currencyCode, createdAt])
+  @@index([pointOfSaleDailyCloseId, createdAt])
 }
 
 model SaleItem {
@@ -873,6 +879,7 @@ model Payment {
   @@index([accountReceivableId, paidAt])
   @@index([saleId, paidAt])
   @@index([operationalLocationId, paidAt])
+  @@index([pointOfSaleDailyCloseId, paidAt])
   @@index([cancelledByUserId])
 }
 
@@ -1155,6 +1162,13 @@ model PointOfSaleDailyClose {
   operationalLocationId  String
   businessDate           DateTime                    @db.Date
   status                 PointOfSaleDailyCloseStatus @default(DRAFT)
+  cashSessionStatus      CashSessionStatus           @default(OPEN)
+  terminalIdentifier     String                      @default("Caja 01")
+  openedAt               DateTime                    @default(now())
+  cashSessionClosedAt    DateTime?
+  initialCashFund        Decimal                     @default(0) @db.Decimal(14, 2)
+  initialCashIn          Decimal                     @default(0) @db.Decimal(14, 2)
+  initialCashOut         Decimal                     @default(0) @db.Decimal(14, 2)
   version                Int                         @default(1)
   lastValidatedAt        DateTime?
   lastValidationAttemptAt DateTime?
@@ -1300,6 +1314,7 @@ model CashMovement {
   amount                  Decimal                @db.Decimal(14, 2)
   reason                  String
   reference               String?
+  isOpening               Boolean                @default(false)
   occurredAt              DateTime
   userId                  String
   idempotencyKey          String?                @unique
@@ -1311,6 +1326,7 @@ model CashMovement {
   user                    User                   @relation(fields: [userId], references: [id])
 
   @@index([operationalLocationId, occurredAt])
+  @@index([pointOfSaleDailyCloseId, occurredAt])
 }
 
 model ScaleTicketReference {

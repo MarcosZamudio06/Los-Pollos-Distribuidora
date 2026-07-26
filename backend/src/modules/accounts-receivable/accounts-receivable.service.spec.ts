@@ -28,6 +28,7 @@ type MockPrisma = {
   };
   payment: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
   sale: { findUnique: jest.Mock; update: jest.Mock };
+  pointOfSaleDailyClose: { findUnique: jest.Mock; findFirst: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -95,8 +96,12 @@ function createPrisma(): MockPrisma {
     },
     payment: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
     sale: {
-      findUnique: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({ locationId: 'loc-1' }),
       update: jest.fn().mockResolvedValue(undefined),
+    },
+    pointOfSaleDailyClose: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue({ id: 'close-1', operationalLocationId: 'loc-1', status: 'DRAFT', cashSessionStatus: 'OPEN' }),
     },
     $transaction: jest.fn(async (callback) => callback(prisma)),
   };
@@ -225,6 +230,24 @@ describe('AccountsReceivableService', () => {
         }),
       }),
     );
+  });
+
+  it('rejects a cash collection payment when the sale location has no open cash session', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
+    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        { accountReceivableId: 'ar-1', amount: 100, paymentMethod: PaymentMethod.CASH },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-payment-no-cash-session',
+      ),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SESSION_REQUIRED' }) });
+
+    expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
   it('marks a receivable paid when the collection payment clears the full balance', async () => {

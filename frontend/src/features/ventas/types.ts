@@ -80,6 +80,7 @@ export type CreateSaleItemPayload = {
 export type CreateSalePayload = {
   customerId?: string
   locationId: string
+  pointOfSaleDailyCloseId?: string
   saleChannel: SaleChannel
   documentType: SaleDocumentType
   physicalFolio?: string
@@ -111,6 +112,7 @@ export type BuildCreateSalePayloadInput = {
   customer: CustomerOption | null
   documentType: SaleDocumentType
   locationId: string
+  pointOfSaleDailyCloseId?: string
   payments: SalePaymentInput[]
   paymentType: PaymentType
   physicalFolio: string

@@ -28,6 +28,7 @@ export function useRegisterReceivablePayment(accountReceivableId?: string) {
       accountsReceivableService.registerPayment(accountReceivableId as string, values, accessToken),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['accounts-receivable'] })
+      void queryClient.invalidateQueries({ queryKey: ['daily-close'] })
       void queryClient.setQueryData(['accounts-receivable', result.accountReceivable.id], result.accountReceivable)
     },
   })

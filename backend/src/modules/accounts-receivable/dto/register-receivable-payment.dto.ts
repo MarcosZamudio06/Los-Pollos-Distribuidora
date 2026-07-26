@@ -41,6 +41,11 @@ export class RegisterReceivablePaymentDto {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  pointOfSaleDailyCloseId?: string;
+
+  @IsOptional()
+  @IsString()
   collectedByUserId?: string;
 
   @IsOptional()

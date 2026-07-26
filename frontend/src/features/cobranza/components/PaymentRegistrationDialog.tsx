@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { CircleDollarSign, X } from 'lucide-react'
 import { useRegisterReceivablePayment } from '../hooks/useAccountsReceivable'
+import { useOpenCashSession } from '../../cierre-diario/hooks'
+import { Link } from 'react-router-dom'
 import { formatMoney, toNumber } from './formatters'
 import type { AccountReceivable, PaymentMethod } from '../types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
@@ -17,6 +19,7 @@ const fieldClass = 'h-11 rounded-xl border border-[color:var(--erp-border)] bg-w
 export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrationDialogProps) {
   const outstandingAmount = toNumber(account.outstandingAmount)
   const registerPayment = useRegisterReceivablePayment(account.id)
+  const openCashSession = useOpenCashSession(account.saleLocationId ?? undefined)
   const [amount, setAmount] = useState(String(outstandingAmount))
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH')
   const [bankName, setBankName] = useState('')
@@ -32,10 +35,11 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
       ? 'El monto no puede exceder el saldo pendiente mostrado.'
       : null
   const cannotPay = account.status === 'PAID' || account.status === 'CANCELLED'
+  const cashSessionError = paymentMethod === 'CASH' && !openCashSession.data
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (amountError || cannotPay) return
+    if (amountError || cannotPay || cashSessionError) return
     setPendingPayment({
       accountReceivableId: account.id,
       amount: numericAmount,
@@ -45,6 +49,7 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
       appliedDocumentId,
       appliedDocumentType: appliedDocumentId ? 'INTERNAL_DOCUMENT' : undefined,
       collectionPass: collectionPass ? Number(collectionPass) : undefined,
+      pointOfSaleDailyCloseId: paymentMethod === 'CASH' ? openCashSession.data?.id : undefined,
       paidAt: paidAt ? new Date(`${paidAt}T00:00:00`).toISOString() : undefined,
     })
   }
@@ -76,6 +81,7 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
         </div>
         <div className="p-6">
           {cannotPay && <p role="alert" className="mb-4 rounded-2xl bg-[rgba(157,45,36,0.10)] p-4 text-sm font-semibold text-[var(--erp-danger)]">No se pueden registrar pagos sobre cuentas pagadas o canceladas.</p>}
+          {cashSessionError && <p role="alert" className="mb-4 rounded-2xl bg-[rgba(157,45,36,0.10)] p-4 text-sm font-semibold text-[var(--erp-danger)]">Abre una caja en la ubicación de la venta antes de registrar un pago en efectivo. <Link className="underline" to="/daily-close">Abrir caja</Link></p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-2 text-sm font-semibold">Monto<input className={fieldClass} min="0.01" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
             <label className="grid gap-2 text-sm font-semibold">Método<select className={fieldClass} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>{paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
@@ -89,12 +95,12 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
           {registerPayment.error && <p role="alert" className="mt-4 text-sm font-semibold text-[var(--erp-danger)]">{registerPayment.error instanceof Error ? registerPayment.error.message : 'No se pudo registrar el pago.'}</p>}
           <div className="mt-6 flex flex-wrap justify-end gap-3">
             <button className="inline-flex h-11 items-center justify-center rounded-xl border border-[color:var(--erp-border)] bg-white px-5 text-sm font-semibold transition hover:border-[var(--erp-brand-gold)] hover:bg-[var(--erp-surface-muted)]" onClick={onClose} type="button">Cancelar</button>
-            <button className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--erp-charcoal)] px-5 text-sm font-black text-white transition hover:bg-[var(--erp-graphite)] disabled:opacity-50" disabled={Boolean(amountError) || cannotPay || registerPayment.isPending} type="submit">{registerPayment.isPending ? 'Registrando...' : 'Registrar pago'}</button>
+            <button className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--erp-charcoal)] px-5 text-sm font-black text-white transition hover:bg-[var(--erp-graphite)] disabled:opacity-50" disabled={Boolean(amountError) || cannotPay || cashSessionError || openCashSession.isLoading || registerPayment.isPending} type="submit">{registerPayment.isPending ? 'Registrando...' : 'Registrar pago'}</button>
           </div>
         </div>
       </form>
       <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique el pago antes de aplicarlo a la cuenta por cobrar." isLoading={registerPayment.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingPayment(null) }} open={Boolean(pendingPayment)} title="Confirmar registro de pago">
-        <p><strong>Cliente:</strong> {account.customerName ?? account.customerId}</p><p><strong>Monto:</strong> {formatMoney(pendingPayment?.amount ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}</p><p><strong>Fecha:</strong> {pendingPayment?.paidAt ? new Date(pendingPayment.paidAt).toLocaleDateString('es-MX') : '—'}</p>
+        <p><strong>Cliente:</strong> {account.customerName ?? account.customerId}</p><p><strong>Monto:</strong> {formatMoney(pendingPayment?.amount ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}</p><p><strong>Caja:</strong> {openCashSession.data?.terminalIdentifier ?? 'No seleccionada'}</p><p><strong>Fecha:</strong> {pendingPayment?.paidAt ? new Date(pendingPayment.paidAt).toLocaleDateString('es-MX') : '—'}</p>
         {registerPayment.error && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{registerPayment.error instanceof Error ? registerPayment.error.message : 'No se pudo registrar el pago.'}</p>}
       </ConfirmationDialog>
     </div>

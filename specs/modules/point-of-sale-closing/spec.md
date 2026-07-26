@@ -71,6 +71,33 @@ El sistema debe mantener un solo cierre no cancelado por ubicación y fecha mien
 - Entonces la base de datos persiste solo un cierre no cancelado.
 - Y la otra solicitud responde `DAILY_CLOSE_ALREADY_EXISTS`.
 
+### Requirement: Sesión monetaria de caja
+
+El borrador del cierre representa también la sesión monetaria operativa del punto de venta. La apertura debe conservar `terminalIdentifier`, `openedByUserId` como cajero responsable, `openedAt`, `cashSessionStatus`, `initialCashFund`, `initialCashIn` e `initialCashOut`. Los depósitos y retiros iniciales se registran como `CashMovement` trazables.
+
+Mientras `cashSessionStatus=OPEN` y el cierre está en `DRAFT`, la sesión puede recibir ventas y pagos. Al cerrar o cancelar el cierre, la sesión pasa a `CLOSED`; una reapertura administrativa vuelve a `OPEN`.
+
+#### Scenario: Apertura con fondo y terminal
+
+- Dada una ubicación activa autorizada
+- Cuando el cajero abre `Caja 01` con fondo inicial de 1,500.00 MXN y hora de apertura del servidor
+- Entonces la respuesta conserva terminal, cajero, fondo, estado abierto y hora de apertura
+- Y cualquier depósito o retiro inicial queda asociado al mismo cierre sin depender de una conciliación posterior.
+
+#### Scenario: Venta sin sesión
+
+- Dada una venta de contado o un pago en efectivo sin una sesión abierta en la ubicación
+- Cuando se intenta confirmar la operación
+- Entonces el backend responde `CASH_SESSION_REQUIRED` o `CASH_SESSION_NOT_OPEN`
+- Y no crea venta, pago, movimiento de inventario ni cuenta por cobrar.
+
+#### Scenario: Asociación directa
+
+- Dada una sesión abierta
+- Cuando se confirma una venta de contado o un pago en efectivo
+- Entonces `Sale.pointOfSaleDailyCloseId` y `Payment.pointOfSaleDailyCloseId` conservan directamente el identificador de la sesión
+- Y el cierre no necesita descubrir esa operación después por rango de fechas.
+
 ### Requirement: Inventario por ubicación
 
 Toda venta, entrada, salida, ajuste o traspaso conciliado debe pertenecer a la misma ubicación del cierre.

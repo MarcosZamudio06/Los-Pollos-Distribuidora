@@ -80,6 +80,11 @@ export class CreateSaleDto {
   @IsNotEmpty()
   locationId!: string;
 
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  pointOfSaleDailyCloseId?: string;
+
   @IsEnum(SaleChannel)
   saleChannel!: SaleChannel;
 

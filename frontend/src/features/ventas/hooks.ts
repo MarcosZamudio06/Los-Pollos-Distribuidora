@@ -29,6 +29,7 @@ export function useCreateSale() {
       void queryClient.invalidateQueries({ queryKey: ['products'] })
       void queryClient.invalidateQueries({ queryKey: ['inventory-balances'] })
       void queryClient.invalidateQueries({ queryKey: ['sales'] })
+      void queryClient.invalidateQueries({ queryKey: ['daily-close'] })
     },
   })
 }

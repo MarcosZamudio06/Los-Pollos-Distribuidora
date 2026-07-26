@@ -60,6 +60,7 @@ Body importante:
 {
   "customerId": "string opcional para contado pagado al momento; requerido para crédito",
   "locationId": "string",
+  "pointOfSaleDailyCloseId": "string opcional; requerido o resuelto a una sesión abierta para contado/efectivo",
   "saleChannel": "COUNTER",
   "documentType": "SIMPLE_NOTE",
   "physicalFolio": "string opcional",
@@ -106,6 +107,7 @@ Validaciones:
 - Debe contener al menos un item.
 - `paymentType` clasifica solo el tipo de venta (`CASH_SALE` o `CREDIT_SALE`); no representa mora, abonos ni envejecimiento.
 - `locationId` requerido como ubicación operativa de descuento.
+- `pointOfSaleDailyCloseId` puede enviarse para seleccionar la sesión; si no se envía en una operación de contado o con efectivo, el backend debe resolver una sesión abierta de la misma ubicación. Si no existe, rechaza con `CASH_SESSION_REQUIRED`.
 - `saleChannel` y `documentType` requeridos para distinguir el flujo documental.
 - `SELLER` solo puede usar su ubicación operativa asignada; `ADMIN` puede usar cualquier ubicación activa compatible.
 - La compatibilidad canal-ubicación es: `COUNTER` con `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`; `EXTERNAL_POINT_OF_SALE` con `EXTERNAL_POINT_OF_SALE`; `ROUTE` con `ROUTE_STOCK`; `INSTITUTIONAL` y `WHOLESALE` con `BRANCH` o `MIXED`.
@@ -119,6 +121,8 @@ Validaciones:
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
 - `quantityPieces` debe ser entero cuando aplique.
 - Venta de contado requiere que exista al menos un pago y que la suma de `payments[]` sea exactamente igual al total calculado por backend.
+- La venta de contado requiere una sesión con `cashSessionStatus=OPEN` y `status=DRAFT`; la venta y cada pago inmediato conservan directamente `pointOfSaleDailyCloseId`.
+- Un abono inicial en efectivo de una venta a crédito usa la misma regla de sesión y asociación directa. Los cobros en ruta se mantienen en `RouteSettlement`.
 - Cada pago inmediato de contado se registra como un `Payment` asociado a `saleId`; no crea `AccountReceivable` artificial.
 - Una venta de contado sin pagos o con pagos parciales se rechaza, aunque tenga cliente registrado; para conservar un saldo pendiente el operador debe cambiar explícitamente `paymentType` a `CREDIT_SALE`.
 - `payments[].amount` permanece como monto aplicado contable. `cashTendered` y `changeGiven` son evidencia individual del `Payment` en efectivo, no modifican el total aplicado ni generan pago, reembolso o movimiento de caja adicional.
@@ -131,7 +135,7 @@ Validaciones:
 - `WARN_ONLY` permite confirmar y devuelve `creditWarnings[]`; `BLOCK_NEW_CREDIT` rechaza salvo override permitido.
 - El override requiere `ADMIN`, motivo no vacío y `allowAdministrativeOverride=true`; no puede omitir `BLOCKED` o `SUSPENDED` administrativo.
 - La venta conserva `creditDecisionSnapshot` y `creditDecisionEvaluatedAt` para auditoría.
-- Los rechazos exponen códigos estables: `CASH_SALE_REQUIRES_FULL_PAYMENT`, `CREDIT_ADMINISTRATIVELY_BLOCKED`, `CREDIT_OVERDUE_BLOCKED`, `CREDIT_LIMIT_EXCEEDED`, `CREDIT_POLICY_MISMATCH` y códigos `CREDIT_OVERRIDE_*`.
+- Los rechazos exponen códigos estables: `CASH_SALE_REQUIRES_FULL_PAYMENT`, `CASH_SESSION_REQUIRED`, `CASH_SESSION_NOT_OPEN`, `CASH_SESSION_LOCATION_MISMATCH`, `CREDIT_ADMINISTRATIVELY_BLOCKED`, `CREDIT_OVERDUE_BLOCKED`, `CREDIT_LIMIT_EXCEEDED`, `CREDIT_POLICY_MISMATCH` y códigos `CREDIT_OVERRIDE_*`.
 - `Payment` es la única fuente monetaria del flujo; `Sale` no persiste `paymentMethod`.
 - Si `requiresAdministrativeInvoice=true`, la venta solo genera relación administrativa; no emite CFDI.
 - Si `requiresAdministrativeInvoice=true`, `customerId` y `billingRequest.reason` son obligatorios; `billingRequest.notes` es opcional.

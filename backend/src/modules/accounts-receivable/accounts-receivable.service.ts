@@ -2,9 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from 'crypto';
 import {
   BillingRequestStatus,
+  CashSessionStatus,
   CollectionStatus,
   CreditStatus,
   PaymentStatus,
+  PointOfSaleDailyCloseStatus,
   Prisma,
   SalePaymentType,
   SaleStatus,
@@ -137,6 +139,8 @@ export class AccountsReceivableService {
         }
 
         this.assertReceivableCanReceivePayment(receivable);
+        const sale = await tx.sale.findUnique({ where: { id: receivable.saleId }, select: { locationId: true } });
+        const cashSessionId = await this.resolveCashSession(tx, dto, sale?.locationId ?? null);
 
         const outstandingAmount = this.toNumber(receivable.outstandingAmount);
         if (dto.amount > outstandingAmount) {
@@ -165,6 +169,8 @@ export class AccountsReceivableService {
             appliedDocumentType: this.normalizeOptionalText(dto.appliedDocumentType),
             routeId: this.normalizeOptionalText(dto.routeId),
             routeSettlementId: this.normalizeOptionalText(dto.routeSettlementId),
+            operationalLocationId: sale?.locationId ?? null,
+            pointOfSaleDailyCloseId: cashSessionId,
             status: PaymentStatus.APPLIED,
             paidAt,
             idempotencyKey,
@@ -342,6 +348,39 @@ export class AccountsReceivableService {
     }
   }
 
+  private async resolveCashSession(
+    tx: Prisma.TransactionClient,
+    dto: RegisterReceivablePaymentDto,
+    locationId: string | null,
+  ): Promise<string | null> {
+    if (dto.routeId || dto.routeSettlementId) return null;
+    if (!dto.pointOfSaleDailyCloseId && dto.paymentMethod !== 'CASH') return null;
+    if (!locationId) throw new BadRequestException('PAYMENT_LOCATION_REQUIRED');
+    const session = dto.pointOfSaleDailyCloseId
+      ? await tx.pointOfSaleDailyClose.findUnique({
+          where: { id: dto.pointOfSaleDailyCloseId },
+          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
+        })
+      : await tx.pointOfSaleDailyClose.findFirst({
+          where: { operationalLocationId: locationId, status: PointOfSaleDailyCloseStatus.DRAFT, cashSessionStatus: CashSessionStatus.OPEN },
+          orderBy: { openedAt: 'desc' },
+          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
+        });
+    if (!session || session.operationalLocationId !== locationId) {
+      throw new BadRequestException({
+        code: dto.pointOfSaleDailyCloseId ? 'CASH_SESSION_LOCATION_MISMATCH' : 'CASH_SESSION_REQUIRED',
+        message: dto.pointOfSaleDailyCloseId ? 'The cash session does not belong to the payment location' : 'An open cash session is required before registering a cash payment',
+      });
+    }
+    if (session.status !== PointOfSaleDailyCloseStatus.DRAFT || session.cashSessionStatus !== CashSessionStatus.OPEN) {
+      throw new BadRequestException({
+        code: 'CASH_SESSION_NOT_OPEN',
+        message: 'The selected cash session is not open for payments',
+      });
+    }
+    return session.id;
+  }
+
   private assertEligibleCreditSale(sale: CreditSaleRecord): void {
     if (sale.paymentType !== SalePaymentType.CREDIT_SALE) {
       throw new BadRequestException('Only credit sales can create accounts receivable');
@@ -399,6 +438,7 @@ export class AccountsReceivableService {
       customerName: receivable.customer?.name,
       saleId: receivable.saleId,
       saleNumber: receivable.sale?.saleNumber,
+      saleLocationId: receivable.sale?.locationId ?? null,
       billingRequestId: receivable.billingRequestId,
       billingRequestStatus: receivable.billingRequest?.status ?? null,
       originalAmount: this.toMoneyString(receivable.originalAmount),
@@ -434,6 +474,8 @@ export class AccountsReceivableService {
       appliedDocumentType: payment.appliedDocumentType,
       routeId: payment.routeId,
       routeSettlementId: payment.routeSettlementId,
+      operationalLocationId: payment.operationalLocationId,
+      pointOfSaleDailyCloseId: payment.pointOfSaleDailyCloseId,
       collectedByUserId: payment.collectedByUserId,
       collectionPass: payment.collectionPass,
       status: payment.status,
@@ -458,6 +500,7 @@ export class AccountsReceivableService {
       appliedDocumentType: this.normalizeOptionalText(dto.appliedDocumentType),
       routeId: this.normalizeOptionalText(dto.routeId),
       routeSettlementId: this.normalizeOptionalText(dto.routeSettlementId),
+      ...(dto.pointOfSaleDailyCloseId ? { pointOfSaleDailyCloseId: this.normalizeOptionalText(dto.pointOfSaleDailyCloseId) } : {}),
       collectedByUserId: dto.collectedByUserId ?? userId,
       collectionPass: dto.collectionPass ?? null,
       paidAt: dto.paidAt ?? null,

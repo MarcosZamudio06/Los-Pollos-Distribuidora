@@ -15,6 +15,7 @@ import type { SaleDetail, SaleVoidPreview, TicketData } from '../types'
 
 const mockState = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } },
+  cashSession: { data: { id: 'close-1', terminalIdentifier: 'Caja 01', cashSessionStatus: 'OPEN', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', openedBy: { id: 'admin-1', name: 'Admin' } }, isLoading: false },
   cancelSale: { isPending: false, mutateAsync: vi.fn() },
   voidPreview: { data: null as SaleVoidPreview | null, error: null, isLoading: false },
   voidSale: { isPending: false, mutateAsync: vi.fn() },
@@ -44,6 +45,10 @@ vi.mock('../hooks', () => ({
 
 vi.mock('../../auth', () => ({
   useAuth: () => mockState.auth,
+}))
+
+vi.mock('../../cierre-diario/hooks', () => ({
+  useOpenCashSession: () => mockState.cashSession,
 }))
 
 vi.mock('../../inventario/hooks/useProducts', () => ({
@@ -128,6 +133,7 @@ const confirmedSale: SaleDetail = {
 describe('TASK-055 sales UI behavior', () => {
   beforeEach(() => {
     mockState.auth = { user: { role: 'ADMIN' } }
+    mockState.cashSession = { data: { id: 'close-1', terminalIdentifier: 'Caja 01', cashSessionStatus: 'OPEN', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', openedBy: { id: 'admin-1', name: 'Admin' } }, isLoading: false }
     mockState.cancelSale = { isPending: false, mutateAsync: vi.fn() }
     mockState.voidPreview = { data: null, error: null, isLoading: false }
     mockState.voidSale = { isPending: false, mutateAsync: vi.fn() }
@@ -236,6 +242,35 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
+  it('bloquea el escaneo de un producto sin existencia y muestra la sucursal', async () => {
+    mockState.locations = { data: [{ id: 'loc-center', name: 'Sucursal Centro', code: 'CENTRO', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-empty', name: 'Pollo entero', sku: 'POL-EMPTY', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-center', locationName: 'Sucursal Centro', quantityKg: 0, quantityPieces: 0 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-center'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      const search = container.querySelector('#pos-product-search') as HTMLInputElement
+      await act(async () => {
+        changeInput(search, 'POL-EMPTY')
+        search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+
+      expect(container.textContent).toContain('Producto sin existencia en Sucursal Centro.')
+      expect(container.textContent).toContain('0 en carrito')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('agrega un producto al leer su código de barras y presionar Enter', async () => {
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = {
@@ -259,6 +294,109 @@ describe('TASK-055 sales UI behavior', () => {
       })
       expect(container.textContent).toContain('1 en carrito')
       expect(container.textContent).toContain('Agregado: Pollo entero')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('incrementa una pieza cada vez que el lector repite el mismo producto y emite feedback sonoro', async () => {
+    const createOscillator = vi.fn(() => ({ connect: vi.fn(), frequency: { setValueAtTime: vi.fn() }, start: vi.fn(), stop: vi.fn(), onended: null }))
+    const createGain = vi.fn(() => ({ connect: vi.fn(), gain: { exponentialRampToValueAtTime: vi.fn(), setValueAtTime: vi.fn() } }))
+    vi.stubGlobal('AudioContext', vi.fn(function () { return { close: vi.fn(), createGain, createOscillator, currentTime: 0, destination: {}, resume: vi.fn().mockResolvedValue(undefined), state: 'running' } }))
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', barcode: '7501234567890', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      const search = container.querySelector('#pos-product-search') as HTMLInputElement
+      await act(async () => {
+        for (let index = 0; index < 2; index += 1) {
+          changeInput(search, '7501234567890')
+          search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        }
+      })
+
+      expect((container.querySelector('input[aria-label="Piezas capturadas de Pollo entero"]') as HTMLInputElement).value).toBe('2')
+      expect(container.textContent).toContain('Incrementado: Pollo entero (2 piezas)')
+      expect(createOscillator).toHaveBeenCalledTimes(2)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('selecciona un producto por kilogramo repetido y solicita capturar el peso sin alterar la cantidad', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-2', name: 'Pechuga', sku: 'PECH-1', barcode: '7501234567891', presentationType: 'CUT', unit: 'KG', salePrice: 120, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 10, quantityPieces: 0 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      const search = container.querySelector('#pos-product-search') as HTMLInputElement
+      await act(async () => {
+        for (let index = 0; index < 2; index += 1) {
+          changeInput(search, '7501234567891')
+          search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        }
+      })
+
+      expect((container.querySelector('input[aria-label="Kilos capturados de Pechuga"]') as HTMLInputElement).value).toBe('1')
+      expect(container.textContent).toContain('Captura el peso de Pechuga')
+      expect(Array.from(container.querySelectorAll('article')).some((article) => article.className.includes('border-[var(--pos-green)]'))).toBe(true)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('incrementa piezas para un producto mixto cuando la unidad activa de su línea es piezas', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-3', name: 'Pierna y muslo', sku: 'MIX-1', barcode: '7501234567892', presentationType: 'CUT', unit: 'KG_AND_PIECE', salePrice: 80, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 10, quantityPieces: 8 }, activeEquivalences: [{ id: 'eq-1', factor: 0.8, unitFrom: 'PIECE', unitTo: 'KG' }] }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => {
+        locationSelect.value = 'loc-counter'
+        locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      const search = container.querySelector('#pos-product-search') as HTMLInputElement
+      await act(async () => {
+        changeInput(search, '7501234567892')
+        search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+      const piecesInput = container.querySelector('input[aria-label="Piezas capturadas de Pierna y muslo"]') as HTMLInputElement
+      await act(async () => { piecesInput.focus() })
+      await act(async () => {
+        changeInput(search, '7501234567892')
+        search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+
+      expect(piecesInput.value).toBe('1')
+      expect((container.querySelector('input[aria-label="Kilos capturados de Pierna y muslo"]') as HTMLInputElement).value).toBe('1')
+      expect(container.textContent).toContain('Incrementado: Pierna y muslo (1 pieza)')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -348,7 +486,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect(document.body.textContent).toContain('Solicitud administrativa')
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
-      expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección' }) }))
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección', pointOfSaleDailyCloseId: undefined }) }))
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -369,6 +507,26 @@ describe('TASK-055 sales UI behavior', () => {
       const confirmButton = getButtonByText(container, 'Confirmar venta')
       expect(confirmButton.disabled).toBe(true)
       expect(container.textContent).toContain('La venta de contado debe liquidarse completamente')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('bloquea el POS de contado cuando no existe una sesión de caja abierta', async () => {
+    mockState.cashSession = { data: null, isLoading: false } as unknown as typeof mockState.cashSession
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+
+      expect(getButtonByText(container, 'Confirmar venta').disabled).toBe(true)
+      expect(container.textContent).toContain('Abre una sesión de caja antes de registrar ventas de contado')
+      expect(container.textContent).toContain('Abrir caja')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()

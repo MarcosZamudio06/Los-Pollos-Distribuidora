@@ -22,6 +22,7 @@ export type AccountReceivable = {
   customerCreditStatus?: CreditStatus | null
   saleId?: string | null
   saleNumber?: string | null
+  saleLocationId?: string | null
   billingRequestId?: string | null
   billingRequestStatus?: string | null
   originalAmount: string | number
@@ -55,6 +56,8 @@ export type ReceivablePayment = {
   appliedDocumentType?: string | null
   routeId?: string | null
   routeSettlementId?: string | null
+  operationalLocationId?: string | null
+  pointOfSaleDailyCloseId?: string | null
   collectedByUserId?: string | null
   collectionPass?: number | null
   status: string
@@ -91,6 +94,7 @@ export type ReceivablePaymentFormValues = {
   appliedDocumentId?: string
   appliedDocumentType?: string
   collectionPass?: number
+  pointOfSaleDailyCloseId?: string
   paidAt?: string
 }
 

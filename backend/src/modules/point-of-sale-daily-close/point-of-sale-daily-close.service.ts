@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { DailyCloseDifferenceScope, DailyCloseDifferenceStatus, DailyCloseDifferenceType, DailyCloseDifferenceUnit, DailyCloseEventType, DailyCloseSnapshotType, OperationalLocationType, PaymentStatus, PointOfSaleDailyCloseStatus, Prisma, SaleDocumentType } from '@prisma/client';
+import { CashSessionStatus, DailyCloseDifferenceScope, DailyCloseDifferenceStatus, DailyCloseDifferenceType, DailyCloseDifferenceUnit, DailyCloseEventType, DailyCloseSnapshotType, OperationalLocationType, PaymentStatus, PointOfSaleDailyCloseStatus, Prisma, SaleDocumentType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
@@ -76,7 +76,10 @@ export class PointOfSaleDailyCloseService {
         ...(locationId ? { operationalLocationId: locationId } : query.operationalLocationId ? { operationalLocationId: query.operationalLocationId } : {}),
         ...(query.businessDate ? { businessDate: this.date(query.businessDate) } : {}),
       },
-      include: { operationalLocation: { select: { id: true, name: true, code: true } } },
+      include: {
+        operationalLocation: { select: { id: true, name: true, code: true } },
+        openedBy: { select: { id: true, name: true } },
+      },
       orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
     });
     return closes.map((close) => this.projectForRole(close, user));
@@ -99,6 +102,12 @@ export class PointOfSaleDailyCloseService {
     await this.assertLocationAccess(dto.operationalLocationId, user);
     const businessDate = this.date(dto.businessDate);
     if (businessDate > this.date(this.currentOperationalDate())) throw new BadRequestException('DAILY_CLOSE_FUTURE_DATE');
+    const initialCashFund = this.money(dto.initialCashFund);
+    const initialCashIn = this.money(dto.initialCashIn);
+    const initialCashOut = this.money(dto.initialCashOut);
+    if (initialCashOut > initialCashFund + initialCashIn) throw new BadRequestException('INITIAL_CASH_OUT_EXCEEDS_AVAILABLE');
+    const terminalIdentifier = dto.terminalIdentifier?.trim() || 'Caja 01';
+    const openedAt = new Date();
     const duplicate = await this.prisma.pointOfSaleDailyClose.findFirst({
       where: { operationalLocationId: dto.operationalLocationId, businessDate, status: { not: 'CANCELLED' } }, select: { id: true },
     });
@@ -107,7 +116,50 @@ export class PointOfSaleDailyCloseService {
     let created: { id: string };
     try {
       created = await this.prisma.$transaction(async (tx) => {
-        const close = await tx.pointOfSaleDailyClose.create({ data: { operationalLocationId: dto.operationalLocationId, businessDate, openedByUserId: user.id, notes: dto.notes?.trim() || null } });
+        const close = await tx.pointOfSaleDailyClose.create({ data: {
+          operationalLocationId: dto.operationalLocationId,
+          businessDate,
+          openedByUserId: user.id,
+          cashSessionStatus: CashSessionStatus.OPEN,
+          terminalIdentifier,
+          openedAt,
+          initialCashFund,
+          initialCashIn,
+          initialCashOut,
+          notes: dto.notes?.trim() || null,
+        } });
+        if (initialCashIn > 0) {
+          await tx.cashMovement.create({ data: {
+            operationalLocationId: dto.operationalLocationId,
+            pointOfSaleDailyCloseId: close.id,
+            type: 'CASH_IN',
+            movementChannel: 'CASH',
+            amount: initialCashIn,
+            reason: 'Depósito inicial de apertura',
+            reference: terminalIdentifier,
+            isOpening: true,
+            occurredAt: openedAt,
+            userId: user.id,
+            idempotencyKey: `${close.id}:opening-cash-in`,
+            idempotencyPayloadHash: this.hashPayload({ closeId: close.id, type: 'CASH_IN', amount: initialCashIn }),
+          } });
+        }
+        if (initialCashOut > 0) {
+          await tx.cashMovement.create({ data: {
+            operationalLocationId: dto.operationalLocationId,
+            pointOfSaleDailyCloseId: close.id,
+            type: 'CASH_OUT',
+            movementChannel: 'CASH',
+            amount: initialCashOut,
+            reason: 'Retiro inicial de apertura',
+            reference: terminalIdentifier,
+            isOpening: true,
+            occurredAt: openedAt,
+            userId: user.id,
+            idempotencyKey: `${close.id}:opening-cash-out`,
+            idempotencyPayloadHash: this.hashPayload({ closeId: close.id, type: 'CASH_OUT', amount: initialCashOut }),
+          } });
+        }
         await this.syncOperations(tx, close.id, dto.operationalLocationId, from, to);
         return this.recalculate(close.id, tx);
       });
@@ -458,17 +510,19 @@ export class PointOfSaleDailyCloseService {
     this.admin(user);
     const current = await this.requireCloseAccess(id, user);
     if (current.validatedSourceVersion !== current.version) throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
-    return this.transition(id, dto.version, 'CLOSED', { status: 'CLOSED', closedByUserId: user.id, closedAt: new Date() }, user);
+    const closedAt = new Date();
+    return this.transition(id, dto.version, 'CLOSED', { status: 'CLOSED', cashSessionStatus: CashSessionStatus.CLOSED, cashSessionClosedAt: closedAt, closedByUserId: user.id, closedAt }, user);
   }
 
   async cancel(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    return this.transition(id, dto.version, 'CANCELLED', { status: 'CANCELLED', cancelledByUserId: user.id, cancelledAt: new Date(), notes: `Cancelación: ${dto.reason.trim()}` }, user);
+    const cancelledAt = new Date();
+    return this.transition(id, dto.version, 'CANCELLED', { status: 'CANCELLED', cashSessionStatus: CashSessionStatus.CLOSED, cashSessionClosedAt: cancelledAt, cancelledByUserId: user.id, cancelledAt, notes: `Cancelación: ${dto.reason.trim()}` }, user);
   }
 
   async reopen(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
-    return this.transition(id, dto.version, 'DRAFT', { status: 'DRAFT', reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null }, user);
+    return this.transition(id, dto.version, 'DRAFT', { status: 'DRAFT', cashSessionStatus: CashSessionStatus.OPEN, cashSessionClosedAt: null, reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null }, user);
   }
 
   async refresh(id: string, user: AuthenticatedUser) {
@@ -499,6 +553,9 @@ export class PointOfSaleDailyCloseService {
     const transferTotal = sum(appliedPayments.filter((payment) => payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT').map((payment) => payment.amount));
     const { purchaseCostTotal, costQuality } = calculateDailyCloseCost(close.sales);
     const cashExpenseTotal = sum(close.cashMovements.filter((movement) => movement.type === 'EXPENSE' && movement.movementChannel === 'CASH').map((movement) => movement.amount));
+    const openingCash = Number(close.initialCashFund ?? 0) + Number(close.initialCashIn ?? 0) - Number(close.initialCashOut ?? 0);
+    const cashInTotal = sum(close.cashMovements.filter((movement) => movement.type === 'CASH_IN' && !movement.isOpening).map((movement) => movement.amount));
+    const cashOutTotal = sum(close.cashMovements.filter((movement) => (movement.type === 'CASH_OUT' || movement.type === 'ADJUSTMENT') && !movement.isOpening).map((movement) => movement.amount));
     const reconciliation = await this.reconciliationForClose(close, client);
     const data = {
       totalInputKg: kilos.totalInputKg, totalSoldKg: kilos.totalSoldKg,
@@ -506,12 +563,12 @@ export class PointOfSaleDailyCloseService {
       totalShortageKg: reconciliation.items.reduce((total, item) => total + item.shortageQuantityKg, 0),
       totalSurplusKg: reconciliation.items.reduce((total, item) => total + item.surplusQuantityKg, 0),
       scaleReportedKg, scaleDifferenceKg: scaleReportedKg - kilos.totalSoldKg, cashTotal, cardVoucherTotal, transferTotal,
-      expenseTotal, grossSalesTotal, netCashExpected: cashTotal - cashExpenseTotal,
-      cashDifferenceTotal: close.cashCountedTotal === null ? null : Number(close.cashCountedTotal) - (cashTotal - cashExpenseTotal),
+      expenseTotal, grossSalesTotal, netCashExpected: openingCash + cashTotal + cashInTotal - cashOutTotal - cashExpenseTotal,
+      cashDifferenceTotal: close.cashCountedTotal === null ? null : Number(close.cashCountedTotal) - (openingCash + cashTotal + cashInTotal - cashOutTotal - cashExpenseTotal),
       purchaseCostTotal, grossProfitTotal: grossSalesTotal - purchaseCostTotal, netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
     };
     await this.syncDifferences(client, id, this.buildDifferenceDefinitions({
-      cashExpected: cashTotal - cashExpenseTotal,
+      cashExpected: openingCash + cashTotal + cashInTotal - cashOutTotal - cashExpenseTotal,
       cashRecorded: close.cashCountedTotal === null ? null : Number(close.cashCountedTotal),
       scaleExpected: kilos.totalSoldKg,
       scaleRecorded: scaleReportedKg,
@@ -786,6 +843,11 @@ export class PointOfSaleDailyCloseService {
   }
   private isIdempotencyRaceError(error: unknown) {
     return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === 'P2002' || error.code === 'P2034');
+  }
+  private money(value?: number) {
+    const amount = value ?? 0;
+    if (!Number.isFinite(amount) || amount < 0) throw new BadRequestException('INITIAL_CASH_AMOUNT_INVALID');
+    return Math.round((amount + Number.EPSILON) * 100) / 100;
   }
   private assertSameIdempotencyPayload(existingHash: string | null | undefined, expectedHash: string) {
     if (existingHash !== expectedHash) throw new ConflictException('IDEMPOTENCY_CONFLICT');
