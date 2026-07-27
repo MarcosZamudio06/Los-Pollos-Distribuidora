@@ -416,6 +416,71 @@
     box-shadow: 0 0 0 4px var(--erp-ring);
   }
 
+  [data-pos-shell] :focus-visible {
+    outline-color: var(--pos-focus);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--pos-focus) 20%, transparent);
+  }
+
+  @keyframes pos-cart-row-added {
+    from {
+      background-color: rgba(35, 113, 90, 0.18);
+    }
+
+    to {
+      background-color: transparent;
+    }
+  }
+
+  @keyframes pos-total-updated {
+    from {
+      color: var(--pos-success);
+      opacity: 0.72;
+    }
+
+    to {
+      color: currentColor;
+      opacity: 1;
+    }
+  }
+
+  @keyframes pos-surface-enter {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes pos-drawer-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .pos-cart-row-added {
+    animation: pos-cart-row-added 500ms ease-out;
+  }
+
+  .pos-total-updated {
+    animation: pos-total-updated 140ms ease-out;
+  }
+
+  .pos-modal-enter {
+    animation: pos-surface-enter 160ms ease-out;
+  }
+
+  details[open] > .pos-drawer-enter {
+    animation: pos-drawer-enter 200ms ease-out;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

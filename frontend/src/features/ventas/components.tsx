@@ -1,9 +1,9 @@
 import { AlertTriangle, Barcode, CheckCircle2, PackageSearch, ShoppingCart, Trash2 } from 'lucide-react'
-import { useState, useSyncExternalStore, type RefObject } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
-import type { CartItem, CustomerOption, PaymentMethod, PaymentType, ProductOption, SalePaymentInput, TicketData } from './types'
-import { calculateCartTotal, calculateCashChange, calculateItemSubtotal, getCreditRestriction, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
+import type { CartItem, CustomerOption, PaymentMethod, PaymentType, PosTransactionState, ProductOption, SalePaymentInput, TicketData } from './types'
+import { calculateCartTotal, calculateCashChange, calculateItemSubtotal, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
 import { operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
 
 type ProductSearchProps = {
@@ -30,6 +30,10 @@ function errorMessage(error: unknown, fallback: string): string {
 
 const panelClass = 'border border-[var(--pos-steel)] bg-white'
 const inputClass = 'h-11 rounded-lg border border-[var(--pos-steel)] bg-white px-3 text-[var(--pos-ink)] outline-none transition focus:border-[var(--pos-focus)] focus:ring-2 focus:ring-[rgba(37,99,235,0.18)]'
+
+export function OperationalBar({ children }: { children: ReactNode }) {
+  return <header className="flex h-[52px] shrink-0 items-center border-b border-[var(--pos-steel)] px-3 text-xs" aria-label="Estado operativo del POS">{children}</header>
+}
 
 function effectiveCreditLabel(customer: CustomerOption) {
   const status = customer.creditSummary?.effectiveCreditStatus ?? customer.effectiveCreditStatus
@@ -141,13 +145,15 @@ export function ProductSearch({
       )}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[34rem] border-collapse text-left">
-          <thead className="sticky top-0 z-10 h-9 bg-[var(--pos-porcelain)] font-[var(--pos-mono)] text-[0.62rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]"><tr><th className="px-3">Producto</th><th>Unidad</th><th className="text-right">Precio</th><th className="text-right">Existencia</th><th className="w-20 px-3 text-right">Acción</th></tr></thead>
+          <caption className="sr-only">Productos disponibles en la ubicación operativa seleccionada</caption>
+          <thead className="sticky top-0 z-10 h-9 bg-[var(--pos-porcelain)] font-[var(--pos-mono)] text-[0.62rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]"><tr><th className="px-3" scope="col">Producto</th><th scope="col">SKU</th><th scope="col">Unidad</th><th className="text-right" scope="col">Precio</th><th className="text-right" scope="col">Existencia</th><th className="w-20 px-3 text-right" scope="col">Acción</th></tr></thead>
           <tbody>
         {visibleProducts.map((product) => {
           const hasNoStock = product.availableKg <= 0 && product.availablePieces <= 0
           return (
             <tr className="h-[52px] border-b border-[var(--pos-steel)] transition hover:bg-[var(--pos-porcelain)]" key={product.id}>
-              <td className="max-w-0 px-3"><p className="truncate text-sm font-bold">{product.name}</p><p className="truncate font-[var(--pos-mono)] text-[0.65rem] text-[var(--pos-muted)]">{product.sku ?? product.barcode ?? 'Sin código'}</p></td>
+               <td className="max-w-0 px-3"><p className="truncate text-sm font-bold">{product.name}</p>{product.isLowStock && <p className="text-[0.62rem] font-bold text-[var(--pos-warning)]">Stock bajo</p>}</td>
+               <td className="font-[var(--pos-mono)] text-[0.65rem] text-[var(--pos-muted)]">{product.sku ?? product.barcode ?? 'Sin código'}</td>
               <td className="font-[var(--pos-mono)] text-xs font-bold">{product.unit}</td><td className="text-right font-[var(--pos-mono)] text-sm font-bold">{toMoney(product.salePrice)}</td>
               <td className={`text-right font-[var(--pos-mono)] text-xs font-bold ${hasNoStock ? 'text-[var(--pos-red)]' : product.isLowStock ? 'text-[#7d5a12]' : 'text-[var(--pos-muted)]'}`}>{hasNoStock ? 'Sin stock' : `${product.availableKg} kg · ${product.availablePieces} pz`}</td>
               <td className="px-3 text-right"><button className="h-9 border border-[var(--pos-ink)] px-2 text-xs font-bold text-[var(--pos-ink)] transition hover:bg-[var(--pos-ink)] hover:text-white disabled:cursor-not-allowed disabled:border-[var(--pos-steel)] disabled:text-[var(--pos-muted)]" disabled={!locationId || product.locationId !== locationId || hasNoStock} onClick={() => onAdd(product)} type="button">Agregar</button></td>
@@ -159,6 +165,10 @@ export function ProductSearch({
       </div>
     </section>
   )
+}
+
+export function ProductResultsTable(props: ProductSearchProps) {
+  return <ProductSearch {...props} />
 }
 
 type CartProps = {
@@ -179,7 +189,8 @@ export function Cart({ activeItemId, items, onActivate, onQuantityChange, onQuan
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[42rem] border-collapse text-left">
-            <thead className="sticky top-0 z-10 h-9 bg-[var(--pos-porcelain)] font-[var(--pos-mono)] text-[0.62rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]"><tr><th className="px-3">Producto</th><th>Cantidad</th><th className="text-right">Precio</th><th className="text-right">Importe</th><th className="w-10" /></tr></thead>
+            <caption className="sr-only">Partidas activas de la venta</caption>
+            <thead className="sticky top-0 z-10 h-9 bg-[var(--pos-porcelain)] font-[var(--pos-mono)] text-[0.62rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]"><tr><th className="px-3" scope="col">Producto</th><th scope="col">Cantidad</th><th className="text-right" scope="col">Precio</th><th className="text-right" scope="col">Importe</th><th className="w-10" scope="col"><span className="sr-only">Acciones</span></th></tr></thead>
             <tbody>
            {items.map((item) => {
             const validation = getQuantityValidationError(item)
@@ -214,6 +225,10 @@ export function Cart({ activeItemId, items, onActivate, onQuantityChange, onQuan
   )
 }
 
+export function CartPanel(props: CartProps) {
+  return <Cart {...props} />
+}
+
 type NumericPadProps = {
   disabled?: boolean
   label: string
@@ -235,7 +250,7 @@ export function NumericPad({ allowDecimal = true, disabled = false, label, onCha
         <button className="rounded-lg bg-white/10 py-2.5 font-mono text-lg font-bold transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={() => onChange('0')} type="button">0</button>
         <button aria-label="Borrar último dígito" className="rounded-lg bg-[rgba(233,167,47,0.24)] py-2.5 font-mono text-lg font-bold text-[var(--pos-amber)] transition hover:bg-[rgba(233,167,47,0.34)] disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onDelete} type="button">←</button>
       </div>
-      <button className="mt-1.5 w-full rounded-lg border border-white/20 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClear} type="button">Limpiar entrada</button>
+      <button className="mt-1.5 min-h-11 w-full rounded-lg border border-white/20 px-2 text-xs font-bold uppercase tracking-[0.14em] text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClear} type="button">Limpiar entrada</button>
     </section>
   )
 }
@@ -253,22 +268,23 @@ type CustomerSelectorProps = {
 }
 
 export function CustomerSelector({ customers, compact = false, error, isLoading, onSearchChange, onSelect, search, searchInputRef, selectedCustomer }: CustomerSelectorProps) {
+  const errorId = 'customer-search-error'
   return (
     <section className={compact ? 'min-w-0 overflow-auto p-3' : panelClass}>
       <div className="flex items-center justify-between gap-3"><div><p className={`${compact ? 'text-[0.6rem]' : 'text-[0.62rem]'} font-mono font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]`}>Cliente</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Cliente</h2></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F4</span></div>
-      <input aria-label="Buscar cliente registrado" className={`${inputClass} mt-2 w-full ${compact ? 'px-2.5 py-2 text-sm' : ''}`} onChange={(event) => onSearchChange(event.target.value)} placeholder="Público general o cliente registrado" ref={searchInputRef} value={search} />
+      <input aria-describedby={error ? errorId : undefined} aria-label="Buscar cliente registrado" className={`${inputClass} mt-2 w-full ${compact ? 'px-2.5 py-2 text-sm' : ''}`} onChange={(event) => onSearchChange(event.target.value)} placeholder="Público general o cliente registrado" ref={searchInputRef} value={search} />
       {isLoading && <p className="mt-3 text-xs font-bold text-[var(--pos-green)]">Cargando clientes...</p>}
-      {Boolean(error) && <p role="alert" className="mt-3 text-xs font-bold text-[var(--pos-red)]">{errorMessage(error, 'La búsqueda de clientes falló.')}</p>}
+      {Boolean(error) && <p className="mt-3 text-xs font-bold text-[var(--pos-red)]" id={errorId} role="alert">{errorMessage(error, 'La búsqueda de clientes falló.')}</p>}
       {selectedCustomer && (
-        <article className={`${compact ? 'mt-2 p-2' : 'mt-3 p-3'} rounded-xl bg-[var(--pos-ink)] text-white`}>
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{selectedCustomer.name}</p><p className="font-mono text-[0.65rem] text-white/65">{selectedCustomer.customerType} · {selectedCustomer.creditStatus ?? 'Estado sin dato'}</p></div><span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[0.65rem] font-bold">{effectiveCreditLabel(selectedCustomer)}</span></div>
-          <div className={`${compact ? 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5' : 'mt-2 grid gap-1'} text-xs text-white/75`}><p>Vencido {toMoney(selectedCustomer.creditSummary?.overdueAmount)}</p><p>{selectedCustomer.creditSummary?.maximumDaysOverdue ?? selectedCustomer.creditSummary?.daysOverdue ?? 0} días de atraso</p><p className={compact ? 'hidden' : undefined}>{overduePolicyLabel(selectedCustomer)}</p></div>
-          <button className="mt-1 text-xs font-bold text-[var(--pos-amber)]" onClick={() => onSelect(null)} type="button">Limpiar cliente</button>
+        <article className={`${compact ? 'mt-2 px-2 py-1.5' : 'mt-3 px-3 py-2'} border-l-2 border-[var(--pos-action)] bg-[var(--pos-surface-secondary)] text-[var(--pos-ink)]`}>
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{selectedCustomer.name}</p><p className="font-mono text-[0.65rem] text-[var(--pos-muted)]">{selectedCustomer.customerType} · {selectedCustomer.creditStatus ?? 'Estado sin dato'}</p></div><span className="shrink-0 px-2 py-1 text-[0.65rem] font-bold text-[var(--pos-action)]">{effectiveCreditLabel(selectedCustomer)}</span></div>
+          <div className={`${compact ? 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5' : 'mt-2 grid gap-1'} text-xs text-[var(--pos-muted)]`}><p>Vencido {toMoney(selectedCustomer.creditSummary?.overdueAmount)}</p><p>{selectedCustomer.creditSummary?.maximumDaysOverdue ?? selectedCustomer.creditSummary?.daysOverdue ?? 0} días de atraso</p><p className={compact ? 'hidden' : undefined}>{overduePolicyLabel(selectedCustomer)}</p></div>
+          <button className="mt-1 inline-flex h-11 items-center text-xs font-bold text-[var(--pos-amber)]" onClick={() => onSelect(null)} type="button">Limpiar cliente</button>
         </article>
       )}
       <div className={`${compact ? 'mt-2 max-h-24 gap-1.5' : 'mt-3 max-h-40 gap-2'} grid overflow-auto`}>
         {customers.map((customer) => (
-          <button className={`${compact ? 'rounded-lg p-2' : 'rounded-xl p-2.5'} border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] text-left transition hover:border-[var(--pos-green)] disabled:opacity-50`} disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
+          <button className={`${compact ? 'rounded-lg p-2' : 'rounded-xl p-2.5'} min-h-11 border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] text-left transition hover:border-[var(--pos-green)] disabled:opacity-50`} disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
             <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-bold">{customer.name}</span><span className="text-[0.65rem] font-bold text-[var(--pos-muted)]">{effectiveCreditLabel(customer)}</span></span>
             <span className="text-xs text-[var(--pos-muted)]">{customer.customerType} · {customer.creditSummary?.availableCredit !== undefined ? `Disponible ${toMoney(customer.creditSummary.availableCredit)}` : customer.creditLimit !== undefined && customer.creditLimit !== null ? `Límite ${toMoney(customer.creditLimit)}` : 'Límite —'}</span>
           </button>
@@ -289,8 +305,8 @@ export function PaymentTypeControl({ compact = false, onPaymentTypeChange, payme
     <section className={compact ? 'min-w-0 overflow-auto p-3' : panelClass}>
       <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Condición de pago</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Contado / Crédito</h2><span className="sr-only">Tipo de venta y pago</span></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F6</span></div>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
-        <button aria-pressed={paymentType === 'CASH_SALE'} className={`rounded-lg px-2 py-2 text-xs font-black transition ${paymentType === 'CASH_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
-        <button aria-pressed={paymentType === 'CREDIT_SALE'} className={`rounded-lg px-2 py-2 text-xs font-black transition ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
+        <button aria-pressed={paymentType === 'CASH_SALE'} className={`min-h-11 rounded-lg px-2 text-xs font-black transition ${paymentType === 'CASH_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
+        <button aria-pressed={paymentType === 'CREDIT_SALE'} className={`min-h-11 rounded-lg px-2 text-xs font-black transition ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
       </div>
       <span className="sr-only">Venta de contado Venta a crédito</span>
     </section>
@@ -316,7 +332,7 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
       <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-amber)]">Pago</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Pago recibido</h2></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">{toMoney(totalPaid)} / {toMoney(total)}</span></div>
       <div className="mt-2 grid gap-2">
         {payments.map((payment, index) => (
-          <article className={`${compact ? 'rounded-lg p-2' : 'rounded-xl p-3'} border border-[var(--pos-steel)] bg-[var(--pos-porcelain)]`} key={`${payment.paymentMethod}-${index}`}>
+          <article className={`${compact ? 'px-2 py-1.5' : 'px-3 py-2'} border-l-2 border-[var(--pos-steel)] bg-[var(--pos-surface-secondary)]`} key={`${payment.paymentMethod}-${index}`}>
             <div className={`${compact ? 'grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto]' : 'grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto]'}`}>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Método
                 <select className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} onChange={(event) => updatePayment(index, { paymentMethod: event.target.value as PaymentMethod, cashTendered: undefined, bankName: '', referenceNumber: '', cardLastFour: '' })} value={payment.paymentMethod}>
@@ -326,7 +342,7 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Monto
                 <input className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} min="0.01" onChange={(event) => updatePayment(index, { amount: Number(event.target.value) })} step="0.01" type="number" value={payment.amount || ''} />
               </label>
-              <button className="self-end rounded-lg px-2 py-2 text-xs font-black text-[var(--pos-red)] hover:bg-white" onClick={() => onPaymentsChange(payments.filter((_, currentIndex) => currentIndex !== index))} type="button">Quitar</button>
+              <button className="h-11 self-end rounded-lg px-2 text-xs font-black text-[var(--pos-red)] hover:bg-white" onClick={() => onPaymentsChange(payments.filter((_, currentIndex) => currentIndex !== index))} type="button">Quitar</button>
             </div>
             {payment.paymentMethod === 'CASH' && <div className={`${compact ? 'mt-2' : 'mt-3'} grid gap-2 sm:grid-cols-2`}>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Efectivo entregado
@@ -344,7 +360,7 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
             </div>}
           </article>
         ))}
-        <button className={`${compact ? 'rounded-lg px-2 py-2 text-xs' : 'rounded-xl px-4 py-2.5 text-sm'} border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)]`} onClick={() => onPaymentsChange([...payments, { amount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
+        <button className={`${compact ? 'rounded-lg px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)]`} onClick={() => onPaymentsChange([...payments, { amount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
       </div>
     </section>
   )
@@ -423,16 +439,27 @@ type SaleSummaryProps = {
   cart: CartItem[]
   compact?: boolean
   creditOptions?: CreditRestrictionOptions
+  creditRestriction?: string | null
   customer: CustomerOption | null
   paymentType: PaymentType
 }
 
-export function SaleSummary({ cart, compact = false, creditOptions, customer, paymentType }: SaleSummaryProps) {
+export function SaleSummary({ cart, compact = false, creditOptions, creditRestriction, customer, paymentType }: SaleSummaryProps) {
   const total = calculateCartTotal(cart)
-  const creditRestriction = getCreditRestriction(paymentType, customer, total, creditOptions)
+  const previousTotal = useRef(total)
+  const [isTotalUpdating, setIsTotalUpdating] = useState(false)
+
+  useEffect(() => {
+    if (previousTotal.current === total) return
+    previousTotal.current = total
+    setIsTotalUpdating(true)
+    const timer = window.setTimeout(() => setIsTotalUpdating(false), 140)
+    return () => window.clearTimeout(timer)
+  }, [total])
+
   return (
     <section className={compact ? 'min-w-0' : panelClass}>
-      <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-green)]">Total</p><h2 className={`${compact ? 'mt-1 text-[2rem]' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase leading-none tracking-[-0.03em]`}>{toMoney(total)}</h2><span className="sr-only">Total en vivo Resumen sticky Resumen de la venta</span></div><CheckCircle2 className="h-5 w-5 text-[var(--pos-green)]" /></div>
+      <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-green)]">Total</p><output aria-atomic="true" aria-live="polite" className={`${compact ? 'mt-1 text-[2rem]' : 'mt-1 text-xl'} ${isTotalUpdating ? 'pos-total-updated' : ''} block font-[var(--pos-display)] font-bold uppercase leading-none tracking-[-0.03em]`}>{toMoney(total)}</output><span className="sr-only">Total en vivo Resumen sticky Resumen de la venta</span></div><CheckCircle2 className="h-5 w-5 text-[var(--pos-green)]" /></div>
       <details className="mt-2 text-xs">
         <summary className="cursor-pointer font-bold text-[var(--pos-muted)]">Ver validación · {cart.length} partidas</summary>
         <dl className="mt-2 grid gap-1.5 border-t border-[var(--pos-steel)] pt-2">
@@ -462,28 +489,107 @@ type ConfirmSaleButtonProps = {
   isSubmitting: boolean
   onConfirm: () => void
   total?: number
+  pendingAmount?: number
+  transactionState?: PosTransactionState
   buttonRef?: RefObject<HTMLButtonElement | null>
 }
 
-export function ConfirmSaleButton({ buttonRef, compact = false, disabledReason, isSubmitting, onConfirm, total }: ConfirmSaleButtonProps) {
-  const actionLabel = isSubmitting
-    ? 'Procesando...'
-    : disabledReason?.includes('producto')
-      ? 'Agrega productos'
-      : disabledReason?.includes('cliente') || disabledReason?.includes('crédito')
+export function ConfirmSaleButton({ buttonRef, compact = false, disabledReason, isSubmitting, onConfirm, pendingAmount, total, transactionState }: ConfirmSaleButtonProps) {
+  const actionLabel = transactionState === 'EMPTY'
+    ? 'Agrega productos'
+    : transactionState === 'CART_ACTIVE'
+      ? 'Registra el pago'
+    : transactionState === 'WEIGHT_PENDING'
+      ? 'Captura el peso'
+      : transactionState === 'CUSTOMER_REQUIRED'
         ? 'Selecciona cliente'
-        : disabledReason?.includes('pago') || disabledReason?.includes('liquidarse')
-          ? 'Registra el pago'
-          : total !== undefined
-            ? `Cobrar ${toMoney(total)} · F8`
-            : 'Confirmar venta · F8'
+        : transactionState === 'CREDIT_BLOCKED'
+          ? 'Crédito no disponible'
+          : transactionState === 'PAYMENT_PENDING'
+            ? pendingAmount && pendingAmount > 0 ? `Pendiente: ${toMoney(pendingAmount)}` : 'Registra el pago'
+            : transactionState === 'PROCESSING' || isSubmitting
+              ? 'Procesando...'
+              : transactionState === 'SUCCESS'
+                ? 'Venta registrada'
+                : transactionState === 'BLOCKED'
+                  ? 'Resolver incidencia'
+                  : disabledReason?.includes('producto')
+                    ? 'Agrega productos'
+                    : disabledReason?.includes('cliente') || disabledReason?.includes('crédito')
+                      ? 'Selecciona cliente'
+                      : disabledReason?.includes('pago') || disabledReason?.includes('liquidarse')
+                        ? 'Registra el pago'
+                        : total !== undefined
+                          ? `Cobrar ${toMoney(total)} · F8`
+                          : 'Confirmar venta · F8'
   return (
     <div className="grid gap-2">
-      <button aria-keyshortcuts="F8" className={`${compact ? 'h-14 rounded-lg px-3' : 'rounded-xl px-4 py-3.5'} bg-[var(--pos-red)] text-sm font-black text-white shadow-[0_12px_26px_rgba(182,42,34,0.24)] transition hover:bg-[var(--pos-red-dark)] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.40)] disabled:shadow-none`} disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} ref={buttonRef} type="button">
+      <button aria-describedby={disabledReason ? 'checkout-blocker' : undefined} aria-keyshortcuts="F8" aria-live="polite" className={`${compact ? 'h-14 rounded-lg px-3' : 'rounded-xl px-4 py-3.5'} bg-[var(--pos-action)] text-sm font-black text-white shadow-[0_12px_26px_rgba(18,61,50,0.24)] transition hover:bg-[#0d2e25] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.40)] disabled:shadow-none`} disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} ref={buttonRef} type="button">
         {actionLabel}
       </button>
-      {disabledReason && <p className="text-[0.68rem] font-bold leading-tight text-[var(--pos-red)]">{disabledReason}</p>}
+      {disabledReason && <p className="text-[0.68rem] font-bold leading-tight text-[var(--pos-red)]" id="checkout-blocker" role="status">{disabledReason}</p>}
     </div>
+  )
+}
+
+type CheckoutDockProps = {
+  cart: CartItem[]
+  confirmButtonRef?: RefObject<HTMLButtonElement | null>
+  creditOptions?: CreditRestrictionOptions
+  customerSearch: string
+  customerSearchRef?: RefObject<HTMLInputElement | null>
+  customers: CustomerOption[]
+  customersError: unknown
+  customersLoading: boolean
+  disabledReason?: string | null
+  isSubmitting: boolean
+  onConfirm: () => void
+  onCustomerSearchChange: (search: string) => void
+  onCustomerSelect: (customer: CustomerOption | null) => void
+  onPaymentTypeChange: (type: PaymentType) => void
+  onPaymentsChange: (payments: SalePaymentInput[]) => void
+  paymentPanelRef?: RefObject<HTMLElement | null>
+  paymentType: PaymentType
+  payments: SalePaymentInput[]
+  selectedCustomer: CustomerOption | null
+  total: number
+  transactionState: PosTransactionState
+}
+
+export function CheckoutDock({
+  cart,
+  confirmButtonRef,
+  creditOptions,
+  customerSearch,
+  customerSearchRef,
+  customers,
+  customersError,
+  customersLoading,
+  disabledReason,
+  isSubmitting,
+  onConfirm,
+  onCustomerSearchChange,
+  onCustomerSelect,
+  onPaymentTypeChange,
+  onPaymentsChange,
+  paymentPanelRef,
+  paymentType,
+  payments,
+  selectedCustomer,
+  total,
+  transactionState,
+}: CheckoutDockProps) {
+  const pendingAmount = Math.max(total - payments.reduce((sum, payment) => sum + payment.amount, 0), 0)
+
+  return (
+    <footer className="z-20 h-36 shrink-0 overflow-hidden border-t-2 border-[var(--pos-ink)] bg-white" aria-label="Confirmación de venta">
+      <div className="grid h-full grid-cols-2 grid-rows-2 divide-x divide-y divide-[var(--pos-steel)] xl:grid-cols-[27fr_23fr_20fr_30fr] xl:grid-rows-1 xl:divide-y-0">
+        <CustomerSelector compact customers={customers} error={customersError} isLoading={customersLoading} onSearchChange={onCustomerSearchChange} onSelect={onCustomerSelect} search={customerSearch} searchInputRef={customerSearchRef} selectedCustomer={selectedCustomer} />
+        <PaymentTypeControl compact onPaymentTypeChange={onPaymentTypeChange} paymentType={paymentType} />
+        <PaymentEntryControl compact onPaymentsChange={onPaymentsChange} panelRef={paymentPanelRef} payments={payments} total={total} />
+        <div className="grid min-w-0 grid-cols-[1fr_1.1fr] gap-3 p-3"><SaleSummary compact cart={cart} creditOptions={creditOptions} customer={selectedCustomer} paymentType={paymentType} /><ConfirmSaleButton buttonRef={confirmButtonRef} compact disabledReason={disabledReason} isSubmitting={isSubmitting} onConfirm={onConfirm} pendingAmount={pendingAmount} total={total} transactionState={transactionState} /></div>
+      </div>
+    </footer>
   )
 }
 
@@ -507,11 +613,11 @@ type SaleRegisteredScreenProps = {
 
 export function SaleRegisteredScreen({ customerName, onNewSale, onOpenHistory, onRetryPrint, saleNumber, total, printStatus = 'ready' }: SaleRegisteredScreenProps) {
   return (
-    <aside className="fixed inset-0 z-30 grid place-items-center bg-[rgba(23,33,30,0.62)] p-4 sm:p-6" role="dialog" aria-label="Venta registrada">
+    <aside aria-labelledby="sale-registered-title" aria-modal="true" className="fixed inset-0 z-30 grid place-items-center bg-[rgba(23,33,30,0.62)] p-4 sm:p-6" role="dialog">
       <section className="w-full max-w-xl overflow-hidden rounded-[1.75rem] border border-[var(--pos-steel)] bg-white shadow-[0_28px_80px_rgba(23,33,30,0.28)]">
         <header className="bg-[var(--pos-ink)] p-6 text-white sm:p-8">
           <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--pos-amber)]">Resultado de la operación</p>
-          <h2 className="mt-2 font-[var(--pos-display)] text-3xl font-bold uppercase tracking-[-0.03em]">Venta registrada</h2>
+          <h2 className="mt-2 font-[var(--pos-display)] text-3xl font-bold uppercase tracking-[-0.03em]" id="sale-registered-title">Venta registrada</h2>
           <p className="mt-2 text-sm text-white/70">La venta quedó confirmada. Puedes imprimir el comprobante interno o continuar con la siguiente operación.</p>
         </header>
         <div className="grid gap-5 p-6 sm:p-8">
@@ -701,7 +807,7 @@ export function TicketModal({ fallback, isLoading, isProvisional = false, onClos
   const data = ticket ?? fallback
   if (!data && !isLoading) return null
   const modal = (
-    <aside className="ticket-print-root fixed inset-0 z-40 grid place-items-center bg-black/55 p-3 sm:p-6">
+    <aside aria-label="Documento de venta" aria-modal="true" className="ticket-print-root pos-modal-enter fixed inset-0 z-40 grid place-items-center bg-black/55 p-3 sm:p-6" role="dialog">
       <section className={`ticket-print-content max-h-[94vh] w-full overflow-y-auto bg-white text-[#171717] shadow-2xl sm:rounded-md ${data?.documentType === 'SIMPLE_NOTE' || data?.documentType === 'SCALE_TICKET' ? 'max-w-[25rem]' : 'max-w-[52rem]'}`}>
         <div className="ticket-actions sticky top-0 z-10 flex justify-end gap-5 border-b border-[#ececec] bg-white/95 px-6 py-4 backdrop-blur sm:px-10">
           <button className="text-sm font-bold text-[#292929] transition hover:text-black" onClick={() => window.print()} type="button">Imprimir</button>

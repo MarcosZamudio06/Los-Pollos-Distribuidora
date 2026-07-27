@@ -38,7 +38,7 @@ export function ConfirmationDialog({ open, title, description, confirmLabel, can
 
   return (
     <AlertDialog open={open} onOpenChange={(next) => { if (!loading) onOpenChange(next) }}>
-      <AlertDialogContent onEscapeKeyDown={(event) => { if (loading) event.preventDefault() }}>
+        <AlertDialogContent className="pos-modal-enter" onEscapeKeyDown={(event) => { if (loading) event.preventDefault() }}>
         <AlertDialogHeader>
           <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]"><ShieldCheck className="h-5 w-5" /></span>
           <AlertDialogTitle>{title}</AlertDialogTitle>

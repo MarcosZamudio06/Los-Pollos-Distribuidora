@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { MapPin, Maximize2, Minimize2, ShieldCheck, Wifi, WifiOff } from 'lucide-react'
 import { useAuth } from '../auth'
@@ -11,24 +11,22 @@ import { useProducts } from '../inventario/hooks/useProducts'
 import type { Product } from '../inventario/types'
 import {
   BillingRequestPanel,
-  Cart,
-  ConfirmSaleButton,
-  CustomerSelector,
   NumericPad,
-  PaymentEntryControl,
-  PaymentTypeControl,
-  ProductSearch,
-  ScanCommandBar,
   SaleRegisteredScreen,
-  SaleSummary,
   TicketModal,
 } from './components'
 import { useCreateSale, useSaleTicket } from './hooks'
-import { buildCreateSalePayload, calculateCartTotal, calculateItemSubtotal, calculatePaymentsTotal, canConfirmSale, getLocationValidationError, getPaymentsValidationError, getPosLocationOptions, getQuantityValidationError, getSaleChannelsForLocation, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
-import type { CartItem, CreateSaleResponse, CustomerOption, PaymentType, ProductOption, SaleChannel, SaleDocumentType, SalePaymentInput, TicketData } from './types'
+import { buildCreateSalePayload, calculateCartTotal, calculateItemSubtotal, calculatePaymentsTotal, canConfirmSale, getCreditRestriction, getLocationValidationError, getPaymentsValidationError, getPosLocationOptions, getQuantityValidationError, getSaleChannelsForLocation, getSaleErrorMessage, getSaleRestriction, toMoney } from './posLogic'
+import { CartPanel } from './pos/CartPanel'
+import { CheckoutDock } from './pos/CheckoutDock'
+import { OperationalBar } from './pos/OperationalBar'
+import { ProductResultsTable } from './pos/ProductResultsTable'
+import { ScanCommandBar } from './pos/ScanCommandBar'
+import type { CartItem, CreateSaleResponse, CustomerOption, PaymentType, PosTransactionState, ProductOption, SaleChannel, SaleDocumentType, SalePaymentInput, TicketData } from './types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
 import { documentTypeLabel, paymentMethodLabel, paymentTypeLabel, saleChannelLabel } from './saleLabels'
+import { finishPosMeasurement, startPosMeasurement } from './posPerformance'
 
 function canAccessPos(role?: string | null) {
   return role === 'ADMIN' || role === 'SELLER'
@@ -191,6 +189,42 @@ function getSubmitBlocker({
     : saleRestriction ?? 'La venta todavía no puede confirmarse.'
 }
 
+function getPosTransactionState({
+  cart,
+  isOnline,
+  isSubmitting,
+  paymentType,
+  payments,
+  selectedCustomer,
+  submitBlocker,
+  total,
+}: {
+  cart: CartItem[]
+  isOnline: boolean
+  isSubmitting: boolean
+  paymentType: PaymentType
+  payments: SalePaymentInput[]
+  selectedCustomer: CustomerOption | null
+  submitBlocker: string | null
+  total: number
+}): PosTransactionState {
+  if (isSubmitting) return 'PROCESSING'
+  if (!isOnline) return 'BLOCKED'
+  if (cart.length === 0) return 'EMPTY'
+
+  const quantityError = cart.map(getQuantityValidationError).find(Boolean)
+  if (quantityError) return quantityError.includes('Ingresa') ? 'WEIGHT_PENDING' : 'BLOCKED'
+  if ((paymentType === 'CREDIT_SALE' || submitBlocker?.includes('solicitud administrativa')) && !selectedCustomer) return 'CUSTOMER_REQUIRED'
+  if (submitBlocker?.includes('crédito')) return 'CREDIT_BLOCKED'
+
+  const paid = calculatePaymentsTotal(payments)
+  if (paymentType === 'CASH_SALE' && payments.length === 0) return 'CART_ACTIVE'
+  if (paymentType === 'CASH_SALE' && paid < total) return 'PAYMENT_PENDING'
+  if (submitBlocker?.includes('pago') || submitBlocker?.includes('liquidarse')) return 'PAYMENT_PENDING'
+  if (submitBlocker) return 'BLOCKED'
+  return 'READY_TO_CHARGE'
+}
+
 function buildProvisionalTicket(response: CreateSaleResponse, pendingSale: PendingSale, sellerName?: string | null): TicketData {
   const sale = response.sale
   const saleItems = sale?.items ?? []
@@ -278,6 +312,7 @@ export function SalesPosPage() {
   const [keypadValue, setKeypadValue] = useState('')
   const [scanStatus, setScanStatus] = useState<string | null>(null)
   const [scanFeedbackTone, setScanFeedbackTone] = useState<ScanFeedbackTone>('success')
+  const [recentlyAddedProductId, setRecentlyAddedProductId] = useState<string>()
   const [showNewSaleDialog, setShowNewSaleDialog] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine)
@@ -292,9 +327,9 @@ export function SalesPosPage() {
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const pendingScanRef = useRef<string | null>(null)
   const cartRef = useRef<CartItem[]>([])
-  const scanAudioContextRef = useRef<AudioContext | null>(null)
 
   const contextLocationId = isSeller ? user?.operationalLocationId ?? '' : adminLocationId
+  const deferredProductSearch = useDeferredValue(productSearch)
   const locations = usePurchaseLocations('')
   const locationOptions = useMemo(
     () => getPosLocationOptions(locations.data ?? [], user?.role, user?.operationalLocationId),
@@ -306,7 +341,8 @@ export function SalesPosPage() {
   const saleChannel = selectedSaleChannel && allowedSaleChannels.includes(selectedSaleChannel)
     ? selectedSaleChannel
     : allowedSaleChannels[0] ?? 'COUNTER'
-  const products = useProducts({ isActive: 'true', locationId: selectedLocation?.id ?? '', search: productSearch })
+  const productFilters = useMemo(() => ({ isActive: 'true', locationId: selectedLocation?.id ?? '', search: deferredProductSearch }), [deferredProductSearch, selectedLocation?.id])
+  const products = useProducts(productFilters)
   const customers = useCustomers({ isActive: 'true', search: customerSearch })
   const createSale = useCreateSale()
   const ticket = useSaleTicket(confirmedSale?.saleId, confirmedSale?.documentId)
@@ -323,51 +359,56 @@ export function SalesPosPage() {
     [recentProducts, selectedLocation?.id],
   )
   const customerOptions = useMemo(() => (customers.data ?? []).map(customerToOption), [customers.data])
-  const total = calculateCartTotal(cart)
-  const activeCartItem = cart.find((item) => item.productId === activeCartItemId) ?? null
-  const canOverrideCredit = Boolean(paymentType === 'CREDIT_SALE' && isAdmin && selectedCustomer?.creditSummary?.effectiveCreditStatus === 'BLOCKED' && selectedCustomer.creditSummary.canAdministrativeOverride && !selectedCustomer.creditSummary.blockingReasons?.includes('CREDIT_ADMINISTRATIVELY_BLOCKED'))
-  const submitBlocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId, isOnline })
+  const total = useMemo(() => calculateCartTotal(cart), [cart])
+  const activeCartItem = useMemo(() => cart.find((item) => item.productId === activeCartItemId) ?? null, [activeCartItemId, cart])
+  const canOverrideCredit = useMemo(() => Boolean(paymentType === 'CREDIT_SALE' && isAdmin && selectedCustomer?.creditSummary?.effectiveCreditStatus === 'BLOCKED' && selectedCustomer.creditSummary.canAdministrativeOverride && !selectedCustomer.creditSummary.blockingReasons?.includes('CREDIT_ADMINISTRATIVELY_BLOCKED')), [isAdmin, paymentType, selectedCustomer])
+  const creditOptions = useMemo(() => ({ isAdmin, overrideEnabled, overrideReason }), [isAdmin, overrideEnabled, overrideReason])
+  const creditRestriction = useMemo(() => getCreditRestriction(paymentType, selectedCustomer, total, creditOptions), [creditOptions, paymentType, selectedCustomer, total])
+  const submitBlocker = useMemo(() => getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId, isOnline }), [allowedSaleChannels, billingRequestReason, cart, cashSessionId, createSale.isPending, isAdmin, isOnline, locationId, overrideEnabled, overrideReason, paymentType, payments, requiresAdministrativeInvoice, saleChannel, selectedCustomer])
+  const transactionState = useMemo(() => getPosTransactionState({ cart, isOnline, isSubmitting: createSale.isPending, paymentType, payments, selectedCustomer, submitBlocker, total }), [cart, createSale.isPending, isOnline, paymentType, payments, selectedCustomer, submitBlocker, total])
 
   useEffect(() => {
     cartRef.current = cart
+    finishPosMeasurement('cart-update')
   }, [cart])
 
-  useEffect(() => () => {
-    void scanAudioContextRef.current?.close()
+  useEffect(() => {
+    if (scanStatus) finishPosMeasurement('scan-feedback', 150)
+  }, [scanStatus])
+
+  useEffect(() => {
+    if (deferredProductSearch === productSearch && !products.isFetching) finishPosMeasurement('search')
+  }, [deferredProductSearch, productSearch, products.isFetching])
+
+  useEffect(() => {
+    if (pendingSale) finishPosMeasurement('checkout')
+  }, [pendingSale])
+
+  useEffect(() => {
+    if (ticket.data || ticket.error) finishPosMeasurement('print')
+  }, [ticket.data, ticket.error])
+
+  const commitCart = useCallback((nextCart: CartItem[]) => {
+    cartRef.current = nextCart
+    startPosMeasurement('cart-update')
+    setCart(nextCart)
   }, [])
 
-  function playScanSound(tone: ScanFeedbackTone) {
-    if (typeof window === 'undefined') return
-    const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
-    const AudioContextConstructor = window.AudioContext ?? audioWindow.webkitAudioContext ?? globalThis.AudioContext
-    if (!AudioContextConstructor) return
-
-    try {
-      const context = scanAudioContextRef.current ?? new AudioContextConstructor()
-      scanAudioContextRef.current = context
-      if (context.state === 'suspended') void context.resume().catch(() => undefined)
-      const oscillator = context.createOscillator()
-      const gain = context.createGain()
-      const now = context.currentTime
-      const frequency = tone === 'success' ? 880 : tone === 'attention' ? 520 : 220
-      oscillator.frequency.setValueAtTime(frequency, now)
-      gain.gain.setValueAtTime(0.0001, now)
-      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09)
-      oscillator.connect(gain)
-      gain.connect(context.destination)
-      oscillator.start(now)
-      oscillator.stop(now + 0.1)
-    } catch {
-      // Audio feedback is progressive enhancement; scanning must still work silently.
-    }
-  }
+  const handleProductSearchChange = useCallback((search: string) => {
+    startPosMeasurement('search')
+    setProductSearch(search)
+  }, [])
 
   function showScanFeedback(message: string, tone: ScanFeedbackTone) {
     setScanStatus(message)
     setScanFeedbackTone(tone)
-    playScanSound(tone)
   }
+
+  useEffect(() => {
+    if (!recentlyAddedProductId) return
+    const timer = window.setTimeout(() => setRecentlyAddedProductId(undefined), 500)
+    return () => window.clearTimeout(timer)
+  }, [recentlyAddedProductId])
 
   useEffect(() => {
     const pendingScan = pendingScanRef.current
@@ -389,14 +430,14 @@ export function SalesPosPage() {
     setSelectedCustomer(customer)
     resetOverride()
     setBackendError(null)
+    window.setTimeout(() => searchInputRef.current?.focus(), 0)
   }
 
   function handleLocationChange(nextLocationId: string) {
     if (isSeller) return
     setAdminLocationId(nextLocationId)
     pendingScanRef.current = null
-    cartRef.current = []
-    setCart([])
+    commitCart([])
     setActiveCartItemId(undefined)
     setProductSearch('')
     setScanStatus(null)
@@ -427,9 +468,9 @@ export function SalesPosPage() {
         quantityPieces: product.unit === 'PIECE' ? Math.min(1, product.availablePieces) : 0,
       }
       const nextCart = [...cartRef.current, nextItem]
-      cartRef.current = nextCart
-      setCart(nextCart)
+      commitCart(nextCart)
       setKeypadValue(String(scanField === 'pieces' ? nextItem.quantityPieces : nextItem.quantityKg))
+      setRecentlyAddedProductId(product.id)
       showScanFeedback(`Agregado: ${product.name}`, 'success')
       return
     }
@@ -443,9 +484,9 @@ export function SalesPosPage() {
       }
       const nextPieces = existing.quantityPieces + 1
       const nextCart = cartRef.current.map((item) => item.productId === product.id ? { ...item, quantityPieces: nextPieces } : item)
-      cartRef.current = nextCart
-      setCart(nextCart)
+      commitCart(nextCart)
       setKeypadValue(String(nextPieces))
+      setRecentlyAddedProductId(product.id)
       showScanFeedback(`Incrementado: ${product.name} (${formatQuantity(nextPieces)} ${nextPieces === 1 ? 'pieza' : 'piezas'})`, 'success')
       return
     }
@@ -454,26 +495,25 @@ export function SalesPosPage() {
     showScanFeedback(`Captura el peso de ${product.name}`, 'attention')
   }
 
-  function handleQuantityChange(productId: string, quantityKg: number, quantityPieces: number) {
+  const handleQuantityChange = useCallback((productId: string, quantityKg: number, quantityPieces: number) => {
     const nextCart = cartRef.current.map((item) => (item.productId === productId ? { ...item, quantityKg, quantityPieces } : item))
-    cartRef.current = nextCart
-    setCart(nextCart)
+    commitCart(nextCart)
     if (productId === activeCartItemId) setKeypadValue(String(activeQuantityField === 'kg' ? quantityKg || '' : quantityPieces || ''))
-  }
+  }, [activeCartItemId, activeQuantityField, commitCart])
 
-  function handleQuantityFocus(productId: string, field: 'kg' | 'pieces') {
+  const handleQuantityFocus = useCallback((productId: string, field: 'kg' | 'pieces') => {
     setActiveCartItemId(productId)
     setActiveQuantityField(field)
-    const item = cart.find((current) => current.productId === productId)
+    const item = cartRef.current.find((current) => current.productId === productId)
     const value = field === 'kg' ? item?.quantityKg : item?.quantityPieces
     setKeypadValue(value ? String(value) : '')
-  }
+  }, [])
 
-  function handleCartActivate(productId: string) {
-    const item = cart.find((current) => current.productId === productId)
+  const handleCartActivate = useCallback((productId: string) => {
+    const item = cartRef.current.find((current) => current.productId === productId)
     const field = item?.unit === 'PIECE' ? 'pieces' : 'kg'
     handleQuantityFocus(productId, field)
-  }
+  }, [handleQuantityFocus])
 
   function handleKeypadInput(key: string) {
     if (!activeCartItem || (key === '.' && activeQuantityField === 'pieces')) return
@@ -506,6 +546,7 @@ export function SalesPosPage() {
   function handleProductSearchSubmit(value: string) {
     const normalizedValue = value.trim().toLowerCase()
     if (!normalizedValue) return
+    startPosMeasurement('scan-feedback')
     const match = findProductByLookup(productOptions, normalizedValue)
     if (!match) {
       pendingScanRef.current = normalizedValue
@@ -520,8 +561,7 @@ export function SalesPosPage() {
 
   function clearSaleDraft() {
     pendingScanRef.current = null
-    cartRef.current = []
-    setCart([])
+    commitCart([])
     setActiveCartItemId(undefined)
     setKeypadValue('')
     setSelectedCustomer(null)
@@ -539,6 +579,7 @@ export function SalesPosPage() {
     setBackendError(null)
     setScanStatus(null)
     setScanFeedbackTone('success')
+    setRecentlyAddedProductId(undefined)
     resetOverride()
   }
 
@@ -547,14 +588,17 @@ export function SalesPosPage() {
     setConfirmedSale(null)
   }
 
-  function handleRemoveProduct(productId: string) {
+  const handleRemoveProduct = useCallback((productId: string) => {
     const nextCart = cartRef.current.filter((item) => item.productId !== productId)
-    cartRef.current = nextCart
-    setCart(nextCart)
-    if (productId === activeCartItemId) {
-      setActiveCartItemId(undefined)
-      setKeypadValue('')
-    }
+    commitCart(nextCart)
+    setActiveCartItemId((activeItemId) => activeItemId === productId ? undefined : activeItemId)
+    setKeypadValue((value) => activeCartItemId === productId ? '' : value)
+    window.setTimeout(() => searchInputRef.current?.focus(), 0)
+  }, [activeCartItemId, commitCart])
+
+  function handleProductResultAdd(product: ProductOption) {
+    handleAddProduct(product)
+    window.setTimeout(() => searchInputRef.current?.focus(), 0)
   }
 
   function hasDraftChanges() {
@@ -586,8 +630,8 @@ export function SalesPosPage() {
 
   function handleConfirmSale() {
     if (pendingSale || createSale.isPending) return
-    const blocker = getSubmitBlocker({ cart, customer: selectedCustomer, locationId, payments, paymentType, submitting: createSale.isPending, requiresAdministrativeInvoice, billingRequestReason, isAdmin, overrideEnabled, overrideReason, saleChannel, allowedSaleChannels, cashSessionId, isOnline })
-    if (blocker) return
+    if (submitBlocker) return
+    startPosMeasurement('checkout')
     setBackendError(null)
     setPendingSale({
       idempotencyKey: crypto.randomUUID(),
@@ -611,12 +655,14 @@ export function SalesPosPage() {
       setBackendError(OFFLINE_SALE_BLOCKER)
       return
     }
+    startPosMeasurement('checkout-registration')
     try {
       const response = await createSale.mutateAsync({ payload: pendingSale.payload, idempotencyKey: pendingSale.idempotencyKey })
       const sale = response.sale
       const saleId = sale?.id
       if (!saleId) {
         setBackendError('La venta fue procesada, pero la respuesta no incluyó su identificador. Revisa el historial antes de reintentar.')
+        finishPosMeasurement('checkout-registration')
         return
       }
       const documentId = response.documents?.find((document) => document.documentType === pendingSale.documentType)?.id ?? response.ticketId ?? undefined
@@ -635,13 +681,16 @@ export function SalesPosPage() {
       toast.success('Venta registrada correctamente.')
       if ((response.creditWarnings ?? sale?.creditWarnings ?? []).includes('CREDIT_OVERDUE_WARNING')) toast.warning('Venta registrada con advertencia por saldo vencido.')
       if ((response.creditWarnings ?? sale?.creditWarnings ?? []).includes('CREDIT_OVERRIDE_APPLIED')) toast.warning('Venta registrada con autorización administrativa de crédito.')
+      finishPosMeasurement('checkout-registration')
       void products.refetch()
     } catch (error) {
       setBackendError(getSaleErrorMessage(error))
+      finishPosMeasurement('checkout-registration')
     }
   }
 
   function handleRetryPrint() {
+    startPosMeasurement('print')
     setShowTicket(true)
     if (confirmedSale?.documentId) void ticket.refetch()
   }
@@ -650,6 +699,16 @@ export function SalesPosPage() {
     clearConfirmedSale()
     navigate('/sales/history')
   }
+
+  useEffect(() => {
+    if (!confirmedSale) return
+    const timer = window.setTimeout(() => {
+      clearConfirmedSale()
+      clearSaleDraft()
+      searchInputRef.current?.focus()
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [confirmedSale])
 
   async function toggleFullscreen() {
     if (!document.fullscreenEnabled) {
@@ -738,31 +797,31 @@ export function SalesPosPage() {
   }
 
   return (
-    <main className="relative min-h-[calc(100dvh-4.5rem)] bg-[var(--pos-porcelain)] font-[var(--pos-body)] text-[var(--pos-ink)] fullscreen:min-h-screen" ref={pageRef}>
+    <main className="relative min-h-[calc(100dvh-4.5rem)] bg-[var(--pos-porcelain)] font-[var(--pos-body)] text-[var(--pos-ink)] fullscreen:min-h-screen" data-pos-shell ref={pageRef}>
       <section className="mx-auto flex min-h-[calc(100dvh-4.5rem)] w-full max-w-[1680px] flex-col border-x border-[var(--pos-steel)] bg-white fullscreen:min-h-screen">
-        <header className="flex h-[52px] shrink-0 items-center border-b border-[var(--pos-steel)] px-3 text-xs" aria-label="Estado operativo del POS">
+        <OperationalBar>
           <label className="flex min-w-0 items-center gap-2 border-r border-[var(--pos-steel)] pr-3"><MapPin className="h-4 w-4 shrink-0 text-[var(--pos-green)]" /><span className="sr-only">Ubicación operativa</span><select className="min-w-0 max-w-48 truncate bg-transparent font-bold outline-none" disabled={isSeller} onChange={(event) => handleLocationChange(event.target.value)} value={locationId}><option value="">Selecciona ubicación</option>{locationOptions.map((location) => <option key={location.id} value={location.id}>{location.name}{location.code ? ` · ${location.code}` : ''}</option>)}</select></label>
           <div className={`ml-3 flex min-w-0 items-center gap-1.5 font-bold ${openCashSession.data ? 'text-[var(--pos-ink)]' : 'text-[var(--pos-red)]'}`}><ShieldCheck className="h-4 w-4 shrink-0" /><span className="truncate">{openCashSession.isLoading ? 'Consultando caja' : openCashSession.data?.terminalIdentifier ?? 'Caja sin abrir'}</span>{!openCashSession.data && <Link className="ml-1 shrink-0 underline underline-offset-2" to="/daily-close">Abrir caja</Link>}</div>
-          <span className="mx-3 hidden h-4 border-l border-[var(--pos-steel)] lg:block" /><span className="hidden truncate font-medium lg:block">{openCashSession.data?.openedBy?.name ?? user?.name ?? 'Sin cajero'}</span>
+          <span className="mx-3 hidden h-4 border-l border-[var(--pos-steel)] xl:block" /><span className="hidden truncate font-medium xl:block">{openCashSession.data?.openedBy?.name ?? user?.name ?? 'Sin cajero'}</span>
           <span className="ml-auto hidden font-[var(--pos-mono)] text-[0.68rem] text-[var(--pos-muted)] xl:inline">{new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
           <span className={`ml-3 inline-flex items-center gap-1.5 font-bold ${isOnline ? 'text-[var(--pos-green)]' : 'text-[var(--pos-red)]'}`}>{isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}<span className="hidden sm:inline">{isOnline ? 'En línea' : 'Sin conexión'}</span></span>
-          <button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Activar pantalla completa'} className="ml-3 p-2 text-[var(--pos-muted)] transition hover:text-[var(--pos-ink)]" onClick={() => void toggleFullscreen()} type="button">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
-          <button aria-keyshortcuts="F9" className="ml-1 h-9 border-l border-[var(--pos-steel)] pl-3 text-xs font-bold text-[#1D5FD1] transition hover:text-[var(--pos-ink)]" onClick={handleNewSale} type="button">Nueva venta <span className="font-[var(--pos-mono)]">F9</span></button>
+          <button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Activar pantalla completa'} className="ml-3 inline-grid h-11 w-11 place-items-center text-[var(--pos-muted)] transition hover:text-[var(--pos-ink)]" onClick={() => void toggleFullscreen()} type="button">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
+          <button aria-keyshortcuts="F9" className="ml-1 h-11 border-l border-[var(--pos-steel)] pl-3 text-xs font-bold text-[#1D5FD1] transition hover:text-[var(--pos-ink)]" onClick={handleNewSale} type="button">Nueva venta <span className="font-[var(--pos-mono)]">F9</span></button>
           {fullscreenError && <p className="sr-only" role="status">{fullscreenError}</p>}
           <p className="sr-only">Impresora: no configurada. Báscula: captura manual.</p>
-        </header>
+        </OperationalBar>
 
-        <ScanCommandBar onSearchChange={setProductSearch} onSearchSubmit={handleProductSearchSubmit} search={productSearch} searchInputRef={searchInputRef} />
+        <ScanCommandBar onSearchChange={handleProductSearchChange} onSearchSubmit={handleProductSearchSubmit} search={productSearch} searchInputRef={searchInputRef} />
         {scanStatus && <p className={`shrink-0 border-b px-4 py-1.5 text-xs font-bold ${scanFeedbackTone === 'success' ? 'border-[rgba(35,113,90,0.25)] bg-[rgba(35,113,90,0.08)] text-[var(--pos-green)]' : scanFeedbackTone === 'attention' ? 'border-[rgba(233,167,47,0.35)] bg-[rgba(233,167,47,0.14)] text-[#7d5a12]' : 'border-[rgba(182,42,34,0.25)] bg-[rgba(182,42,34,0.08)] text-[var(--pos-red)]'}`} role="status" aria-live="polite">{scanStatus}</p>}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[38fr_62fr] overflow-hidden">
-          <section className="min-w-0 border-r border-[var(--pos-steel)]" aria-label="Resultados de productos"><ProductSearch error={products.error} frequentProducts={frequentProducts} isLoading={products.isLoading} locationDisabled={isSeller} locations={locationOptions} locationsError={locations.error} locationsLoading={locations.isLoading} locationId={locationId} onAdd={handleAddProduct} onLocationChange={handleLocationChange} products={productOptions} search={productSearch} showLocationSelector={false} /></section>
-          <section className="relative flex min-w-0 flex-col" aria-label="Carrito y captura de cantidades"><Cart activeItemId={activeCartItemId} items={cart} onActivate={handleCartActivate} onQuantityChange={handleQuantityChange} onQuantityFocus={handleQuantityFocus} onRemove={handleRemoveProduct} />{activeCartItem && <div className="absolute bottom-3 right-3 z-10 w-52 shadow-[0_18px_36px_rgba(23,33,30,0.18)]"><NumericPad allowDecimal={activeQuantityField === 'kg'} disabled={!activeCartItem} label={`${activeCartItem.name} · ${activeQuantityField === 'kg' ? 'kilos' : 'piezas'}`} onChange={handleKeypadInput} onClear={handleKeypadClear} onDelete={handleKeypadDelete} value={keypadValue} /></div>}</section>
+        <div className="grid min-h-0 flex-1 grid-cols-[40fr_60fr] overflow-hidden xl:grid-cols-[38fr_62fr]">
+          <section className="min-w-0 border-r border-[var(--pos-steel)]" aria-label="Resultados de productos"><ProductResultsTable error={products.error} frequentProducts={frequentProducts} isLoading={products.isLoading} locationDisabled={isSeller} locations={locationOptions} locationsError={locations.error} locationsLoading={locations.isLoading} locationId={locationId} onAdd={handleProductResultAdd} onLocationChange={handleLocationChange} products={productOptions} search={deferredProductSearch} showLocationSelector={false} /></section>
+          <section className="relative flex min-w-0 flex-col" aria-label="Carrito y captura de cantidades"><CartPanel activeItemId={activeCartItemId} highlightedItemId={recentlyAddedProductId} items={cart} onActivate={handleCartActivate} onQuantityChange={handleQuantityChange} onQuantityFocus={handleQuantityFocus} onRemove={handleRemoveProduct} />{activeCartItem && <div className="absolute bottom-3 right-3 z-10 w-52 shadow-[0_18px_36px_rgba(23,33,30,0.18)]"><NumericPad allowDecimal={activeQuantityField === 'kg'} disabled={!activeCartItem} label={`${activeCartItem.name} · ${activeQuantityField === 'kg' ? 'kilos' : 'piezas'}`} onChange={handleKeypadInput} onClear={handleKeypadClear} onDelete={handleKeypadDelete} value={keypadValue} /></div>}</section>
         </div>
 
         <details className="absolute right-3 top-[60px] z-40" onToggle={(event) => setShowAdvancedSaleFields(event.currentTarget.open)} open={showAdvancedSaleFields || Boolean(canOverrideCredit || requiresAdministrativeInvoice)}>
           <summary className="h-11 cursor-pointer list-none border border-[var(--pos-steel)] bg-white px-3 leading-[2.75rem] text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)]">Opciones de venta</summary>
-          <div className="absolute right-0 top-full mt-2 grid w-[min(96vw,58rem)] gap-3 border border-[var(--pos-steel)] bg-white p-3 shadow-[0_18px_40px_rgba(23,33,30,0.16)] lg:grid-cols-3">
+          <div className="pos-drawer-enter absolute right-0 top-full mt-2 grid w-[min(96vw,58rem)] gap-3 border border-[var(--pos-steel)] bg-white p-3 shadow-[0_18px_40px_rgba(23,33,30,0.16)] lg:grid-cols-3">
             <section className="rounded-xl border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] p-3">
               <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Control documental</p><h2 className="mt-1 font-[var(--pos-display)] text-lg font-bold uppercase tracking-[-0.02em]">Documento de venta</h2></div></div>
               <p className="mt-2 text-xs text-[var(--pos-muted)]">Comprobante interno del MVP. No es factura fiscal.</p>
@@ -779,15 +838,8 @@ export function SalesPosPage() {
           </div>
         </details>
 
-        <footer className="z-20 h-36 shrink-0 overflow-hidden border-t-2 border-[var(--pos-ink)] bg-white" aria-label="Confirmación de venta">
-          <div className="grid h-full grid-cols-2 grid-rows-2 divide-x divide-y divide-[var(--pos-steel)] xl:grid-cols-[27fr_23fr_20fr_30fr] xl:grid-rows-1 xl:divide-y-0">
-            <CustomerSelector compact customers={customerOptions} error={customers.error} isLoading={customers.isLoading} onSearchChange={setCustomerSearch} onSelect={handleCustomerSelect} search={customerSearch} searchInputRef={customerSearchRef} selectedCustomer={selectedCustomer} />
-            <PaymentTypeControl compact onPaymentTypeChange={(type) => { setPaymentType(type); resetOverride() }} paymentType={paymentType} />
-            <PaymentEntryControl compact onPaymentsChange={setPayments} panelRef={paymentPanelRef} payments={payments} total={total} />
-            <div className="grid min-w-0 grid-cols-[1fr_1.1fr] gap-3 p-3"><SaleSummary compact cart={cart} creditOptions={{ isAdmin, overrideEnabled, overrideReason }} customer={selectedCustomer} paymentType={paymentType} /><ConfirmSaleButton buttonRef={confirmButtonRef} compact disabledReason={submitBlocker} isSubmitting={createSale.isPending} onConfirm={handleConfirmSale} total={total} /></div>
-          </div>
+        <CheckoutDock cart={cart} confirmButtonRef={confirmButtonRef} creditOptions={creditOptions} creditRestriction={creditRestriction} customerSearch={customerSearch} customerSearchRef={customerSearchRef} customers={customerOptions} customersError={customers.error} customersLoading={customers.isLoading} disabledReason={submitBlocker} isSubmitting={createSale.isPending} onConfirm={handleConfirmSale} onCustomerSearchChange={setCustomerSearch} onCustomerSelect={handleCustomerSelect} onPaymentTypeChange={(type) => { setPaymentType(type); resetOverride() }} onPaymentsChange={setPayments} paymentPanelRef={paymentPanelRef} paymentType={paymentType} payments={payments} selectedCustomer={selectedCustomer} total={total} transactionState={transactionState} />
           {backendError && <p role="alert" className="absolute bottom-36 left-0 right-0 border-t border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] px-3 py-2 text-xs font-bold text-[var(--pos-red)]">{backendError}</p>}
-        </footer>
       </section>
       {confirmedSale && <SaleRegisteredScreen customerName={confirmedSale.customerName} onNewSale={handleNewSale} onOpenHistory={handleOpenHistory} onRetryPrint={handleRetryPrint} printStatus={printStatus} saleNumber={confirmedSale.saleNumber} total={confirmedSale.total} />}
       {confirmedSale && showTicket && <TicketModal fallback={ticketLoading ? undefined : confirmedSale.fallbackTicket} isLoading={ticketLoading} isProvisional={!ticketLoading && !ticket.data} onClose={() => setShowTicket(false)} ticket={ticket.data} />}
@@ -803,6 +855,12 @@ export function SalesPosPage() {
       <ConfirmationDialog confirmLabel="Iniciar nueva venta" description="La captura actual se eliminará y no podrá recuperarse." onConfirm={confirmNewSale} onOpenChange={setShowNewSaleDialog} open={showNewSaleDialog} title="¿Iniciar nueva venta?">
         <p>Se borrarán productos, cliente, pagos, folio y solicitud administrativa de esta captura.</p>
       </ConfirmationDialog>
+      <aside className="fixed inset-0 z-50 hidden items-center justify-center bg-[var(--pos-porcelain)] p-6 max-[1023px]:flex" role="status">
+        <section className="max-w-md border border-[var(--pos-steel)] bg-white p-6 text-center">
+          <h2 className="text-xl font-bold">Resolución no compatible</h2>
+          <p className="mt-3 text-sm text-[var(--pos-muted)]">El POS operativo requiere una resolución mínima de 1024 × 768 px para mantener visibles el carrito, total y cobro.</p>
+        </section>
+      </aside>
     </main>
   )
 }

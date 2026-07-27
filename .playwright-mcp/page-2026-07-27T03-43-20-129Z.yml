@@ -1,0 +1,25 @@
+- generic [ref=f1e2]:
+  - main [ref=f1e673]:
+    - generic [ref=f1e674]:
+      - generic [ref=f1e679]:
+        - generic [ref=f1e680]: Acceso operativo
+        - heading "Control diario para una operación sin puntos ciegos." [level=1] [ref=f1e684]
+        - paragraph [ref=f1e685]: Ventas, inventario, cobranza y reparto bajo una sesión segura del ERP.
+      - article [ref=f1e688]:
+        - generic [ref=f1e691]:
+          - paragraph [ref=f1e697]: Iniciar sesión
+          - heading "Identifica tu turno" [level=2] [ref=f1e698]
+          - paragraph [ref=f1e699]: Usa tu correo interno. El sistema validará tu estado activo y permisos.
+          - generic [ref=f1e700]:
+            - generic [ref=f1e701]:
+              - text: Correo
+              - textbox "Correo" [invalid] [ref=f1e703]: dev.admin@pollos.local
+            - generic [ref=f1e704]:
+              - text: Contraseña
+              - generic [ref=f1e705]:
+                - textbox "Contraseña Mostrar contraseña" [invalid] [ref=f1e706]: DevOnly-ChangeMe-2026!
+                - button "Mostrar contraseña" [ref=f1e707]
+          - alert [ref=f1e712]:
+            - generic [ref=f1e715]: Revisa tu correo y contraseña. Si el usuario está inactivo, pide reactivación a un ADMIN.
+          - button "Entrar al sistema" [ref=f1e711]
+  - region "Notifications alt+T"

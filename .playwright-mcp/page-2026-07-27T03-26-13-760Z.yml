@@ -1,0 +1,23 @@
+- generic [ref=f1e2]:
+  - main [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - generic [ref=f1e9]:
+        - generic [ref=f1e10]: Acceso operativo
+        - heading "Control diario para una operación sin puntos ciegos." [level=1] [ref=f1e14]
+        - paragraph [ref=f1e15]: Ventas, inventario, cobranza y reparto bajo una sesión segura del ERP.
+      - article [ref=f1e18]:
+        - generic [ref=f1e21]:
+          - paragraph [ref=f1e27]: Iniciar sesión
+          - heading "Identifica tu turno" [level=2] [ref=f1e28]
+          - paragraph [ref=f1e29]: Usa tu correo interno. El sistema validará tu estado activo y permisos.
+          - generic [ref=f1e30]:
+            - generic [ref=f1e31]:
+              - text: Correo
+              - textbox "Correo" [ref=f1e33]
+            - generic [ref=f1e34]:
+              - text: Contraseña
+              - generic [ref=f1e35]:
+                - textbox "Contraseña Mostrar contraseña" [ref=f1e36]
+                - button "Mostrar contraseña" [ref=f1e37]
+          - button "Entrar al sistema" [ref=f1e41]
+  - region "Notifications alt+T"

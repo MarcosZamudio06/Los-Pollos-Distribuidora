@@ -5,7 +5,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancelSaleDialog } from '../CancelSaleDialog'
-import { Cart, CustomerSelector, SaleSummary, TicketModal } from '../components'
+import { ConfirmSaleButton, CustomerSelector, SaleSummary, TicketModal } from '../components'
+import { CartPanel as Cart } from '../pos/CartPanel'
+import { ProductResultsTable } from '../pos/ProductResultsTable'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
 import { SalesPosPage } from '../SalesPosPage'
@@ -183,7 +185,8 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Escáner y búsqueda')
     expect(html).toContain('h-[52px]')
     expect(html).toContain('h-16')
-    expect(html).toContain('grid-cols-[38fr_62fr]')
+    expect(html).toContain('grid-cols-[40fr_60fr]')
+    expect(html).toContain('xl:grid-cols-[38fr_62fr]')
     expect(html).toContain('h-36')
     expect(html).toContain('Total en vivo')
     expect(html).toContain('Ubicación operativa')
@@ -202,6 +205,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).not.toContain('Teclado numérico')
     expect(html).toContain('Listo · F2')
     expect(html).toContain('Agrega productos')
+    expect(html).toContain('Resolución no compatible')
   })
 
   it('enfoca la búsqueda con F2 y conserva controles de operación rápida', async () => {
@@ -214,6 +218,56 @@ describe('TASK-055 sales UI behavior', () => {
       expect(document.activeElement).toBe(search)
       expect(container.querySelector('[aria-label="Teclado numérico"]')).toBeNull()
       expect(container.querySelector('button[aria-label="Activar pantalla completa"]')).toBeTruthy()
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('dirige F4, F6, F8 y F9 al paso operacional correspondiente', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', bubbles: true })) })
+      expect(document.activeElement).toBe(container.querySelector('input[aria-label="Buscar cliente registrado"]'))
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', bubbles: true })) })
+      expect(document.activeElement).toBe(container.querySelector('[data-pos-payment] button'))
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', bubbles: true })) })
+      expect(document.body.textContent).toContain('¿Iniciar nueva venta?')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('abre la confirmación con F8 cuando la venta está lista para cobrar', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
+      await act(async () => { getButtonByText(container, 'Agregar pago').click() })
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8', bubbles: true })) })
+
+      expect(document.body.textContent).toContain('Confirmar venta')
+      expect(document.body.textContent).toContain('Saldo pendiente de esta venta')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -307,10 +361,7 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
-  it('incrementa una pieza cada vez que el lector repite el mismo producto y emite feedback sonoro', async () => {
-    const createOscillator = vi.fn(() => ({ connect: vi.fn(), frequency: { setValueAtTime: vi.fn() }, start: vi.fn(), stop: vi.fn(), onended: null }))
-    const createGain = vi.fn(() => ({ connect: vi.fn(), gain: { exponentialRampToValueAtTime: vi.fn(), setValueAtTime: vi.fn() } }))
-    vi.stubGlobal('AudioContext', vi.fn(function () { return { close: vi.fn(), createGain, createOscillator, currentTime: 0, destination: {}, resume: vi.fn().mockResolvedValue(undefined), state: 'running' } }))
+  it('incrementa una pieza cada vez que el lector repite el mismo producto y resalta la partida', async () => {
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = {
       data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', barcode: '7501234567890', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
@@ -335,7 +386,7 @@ describe('TASK-055 sales UI behavior', () => {
 
       expect((container.querySelector('input[aria-label="Piezas capturadas de Pollo entero"]') as HTMLInputElement).value).toBe('2')
       expect(container.textContent).toContain('Incrementado: Pollo entero (2 piezas)')
-      expect(createOscillator).toHaveBeenCalledTimes(2)
+      expect(container.querySelector('.pos-cart-row-added')?.textContent).toContain('Pollo entero')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -582,10 +633,50 @@ describe('TASK-055 sales UI behavior', () => {
   })
 
   it('deja vacíos kilos y piezas del carrito cuando su valor es cero', () => {
-    const html = renderToStaticMarkup(<Cart items={[{ availableKg: 10, availablePieces: 10, id: 'prod-1', locationId: 'loc-counter', name: 'Pollo mixto', presentationType: 'WHOLE', productId: 'prod-1', quantityKg: 0, quantityPieces: 0, salePrice: 100, unit: 'KG_AND_PIECE', unitPrice: 100 }]} onQuantityChange={() => undefined} onRemove={() => undefined} />)
+    const html = renderToStaticMarkup(<Cart highlightedItemId="prod-1" items={[{ availableKg: 10, availablePieces: 10, id: 'prod-1', locationId: 'loc-counter', name: 'Pollo mixto', presentationType: 'WHOLE', productId: 'prod-1', quantityKg: 0, quantityPieces: 0, salePrice: 100, unit: 'KG_AND_PIECE', unitPrice: 100 }]} onQuantityChange={() => undefined} onRemove={() => undefined} />)
 
     expect(html.match(/value="0"/g)).toBeNull()
     expect(html).toContain('value=""')
+    expect(html).not.toContain('Stock 10')
+    expect(html).toContain('aria-describedby="cart-validation-prod-1"')
+    expect(html).toContain('id="cart-validation-prod-1"')
+    expect(html).toContain('h-11 w-20')
+    expect(html).toContain('h-11 w-11')
+    expect(html).toContain('pos-cart-row-added')
+  })
+
+  it('virtualiza resultados de productos solo cuando el catálogo supera el umbral operativo', () => {
+    const products = Array.from({ length: 101 }, (_, index) => ({ availableKg: 10, availablePieces: 10, id: `prod-${index}`, locationId: 'loc-counter', name: `Producto ${index}`, presentationType: 'WHOLE' as const, productId: `prod-${index}`, quantityKg: 0, quantityPieces: 0, salePrice: 100, unit: 'PIECE' as const, unitPrice: 100 }))
+    const html = renderToStaticMarkup(<ProductResultsTable error={null} frequentProducts={[]} isLoading={false} locationId="loc-counter" locations={[]} locationsError={null} locationsLoading={false} onAdd={() => undefined} onLocationChange={() => undefined} products={products} search="" showLocationSelector={false} />)
+
+    expect(html).toContain('Producto 0')
+    expect(html).not.toContain('Producto 100')
+    expect(html).toContain('aria-hidden="true"')
+  })
+
+  it('anuncia cada estado del CTA y asocia su bloqueo visible', () => {
+    const cases = [
+      ['EMPTY', 'Agrega productos'],
+      ['CART_ACTIVE', 'Registra el pago'],
+      ['WEIGHT_PENDING', 'Captura el peso'],
+      ['CUSTOMER_REQUIRED', 'Selecciona cliente'],
+      ['CREDIT_BLOCKED', 'Crédito no disponible'],
+      ['PAYMENT_PENDING', 'Pendiente: $10.00'],
+      ['READY_TO_CHARGE', 'Cobrar $10.00 · F8'],
+      ['PROCESSING', 'Procesando...'],
+      ['SUCCESS', 'Venta registrada'],
+      ['BLOCKED', 'Resolver incidencia'],
+    ] as const
+
+    for (const [transactionState, label] of cases) {
+      const html = renderToStaticMarkup(<ConfirmSaleButton disabledReason={transactionState === 'BLOCKED' ? 'Resuelve la incidencia.' : undefined} isSubmitting={false} onConfirm={() => undefined} pendingAmount={10} total={10} transactionState={transactionState} />)
+      expect(html).toContain(label)
+      expect(html).toContain('aria-live="polite"')
+    }
+
+    const blocked = renderToStaticMarkup(<ConfirmSaleButton disabledReason="Registra el pago pendiente." isSubmitting={false} onConfirm={() => undefined} total={10} transactionState="PAYMENT_PENDING" />)
+    expect(blocked).toContain('aria-describedby="checkout-blocker"')
+    expect(blocked).toContain('id="checkout-blocker"')
   })
 
   it('limpia el cliente del resumen y conserva la ubicación después de registrar una venta', async () => {

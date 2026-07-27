@@ -2,6 +2,7 @@ import type { Customer, CustomerCreditSummary, CustomerType } from '../clientes/
 import type { OperationalUnit, ProductPresentation } from '../inventario/types'
 
 export type PaymentType = 'CASH_SALE' | 'CREDIT_SALE'
+export type PosTransactionState = 'EMPTY' | 'CART_ACTIVE' | 'WEIGHT_PENDING' | 'CUSTOMER_REQUIRED' | 'CREDIT_BLOCKED' | 'PAYMENT_PENDING' | 'READY_TO_CHARGE' | 'PROCESSING' | 'SUCCESS' | 'BLOCKED'
 export type PaymentMethod = '' | 'CASH' | 'CARD' | 'TRANSFER' | 'DEPOSIT' | 'CHECK' | 'VOUCHER' | 'OTHER'
 export type InitialPaymentReference = {
   bankName: string
