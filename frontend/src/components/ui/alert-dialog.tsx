@@ -13,8 +13,12 @@ export function AlertDialogOverlay({ className, ...props }: ComponentProps<typeo
   return <AlertDialogPrimitive.Overlay className={cn('fixed inset-0 z-[70] bg-[rgba(17,24,21,0.62)] backdrop-blur-sm', className)} {...props} />
 }
 
-export function AlertDialogContent({ className, ...props }: ComponentProps<typeof AlertDialogPrimitive.Content>) {
-  return <AlertDialogPortal><AlertDialogOverlay /><AlertDialogPrimitive.Content className={cn('fixed left-1/2 top-1/2 z-[71] grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 rounded-[1.5rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-2xl outline-none', className)} {...props} /></AlertDialogPortal>
+type AlertDialogContentProps = ComponentProps<typeof AlertDialogPrimitive.Content> & {
+  container?: Element | DocumentFragment | null
+}
+
+export function AlertDialogContent({ className, container, ...props }: AlertDialogContentProps) {
+  return <AlertDialogPortal container={container}><AlertDialogOverlay /><AlertDialogPrimitive.Content className={cn('fixed left-1/2 top-1/2 z-[71] grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 rounded-[1.5rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-2xl outline-none', className)} {...props} /></AlertDialogPortal>
 }
 
 export function AlertDialogHeader({ className, ...props }: ComponentProps<'div'>) { return <div className={cn('grid gap-2', className)} {...props} /> }

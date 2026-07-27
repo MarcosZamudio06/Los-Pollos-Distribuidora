@@ -336,6 +336,7 @@ describe('TASK-055 sales UI behavior', () => {
 
       expect(document.body.textContent).toContain('Confirmar venta')
       expect(document.body.textContent).toContain('Saldo pendiente de esta venta')
+      expect(container.querySelector('[data-pos-shell] [role="alertdialog"]')).toBeTruthy()
     } finally {
       await act(async () => { root.unmount() })
       container.remove()

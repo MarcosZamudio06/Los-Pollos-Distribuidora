@@ -4,6 +4,8 @@ import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
+type AlertDialogContainer = Element | DocumentFragment | null
+
 type ConfirmationDialogProps = {
   open: boolean
   title: string
@@ -12,12 +14,13 @@ type ConfirmationDialogProps = {
   cancelLabel?: string
   isLoading?: boolean
   confirmDisabled?: boolean
+  container?: AlertDialogContainer
   onOpenChange: (open: boolean) => void
   onConfirm: () => void | Promise<void>
   children?: ReactNode
 }
 
-export function ConfirmationDialog({ open, title, description, confirmLabel, cancelLabel = 'Regresar y editar', isLoading = false, confirmDisabled = false, onOpenChange, onConfirm, children }: ConfirmationDialogProps) {
+export function ConfirmationDialog({ open, title, description, confirmLabel, cancelLabel = 'Regresar y editar', isLoading = false, confirmDisabled = false, container, onOpenChange, onConfirm, children }: ConfirmationDialogProps) {
   const submittingRef = useRef(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const loading = isLoading || isConfirming
@@ -38,7 +41,7 @@ export function ConfirmationDialog({ open, title, description, confirmLabel, can
 
   return (
     <AlertDialog open={open} onOpenChange={(next) => { if (!loading) onOpenChange(next) }}>
-        <AlertDialogContent className="pos-modal-enter" onEscapeKeyDown={(event) => { if (loading) event.preventDefault() }}>
+        <AlertDialogContent className="pos-modal-enter" container={container} onEscapeKeyDown={(event) => { if (loading) event.preventDefault() }}>
         <AlertDialogHeader>
           <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]"><ShieldCheck className="h-5 w-5" /></span>
           <AlertDialogTitle>{title}</AlertDialogTitle>

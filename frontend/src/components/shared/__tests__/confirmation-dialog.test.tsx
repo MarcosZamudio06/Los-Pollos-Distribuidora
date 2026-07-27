@@ -52,4 +52,15 @@ describe('ConfirmationDialog', () => {
     expect(document.body.textContent).toContain('Confirmar registro')
     expect(button?.disabled).toBe(false)
   })
+
+  it('monta el diálogo dentro del contenedor indicado para funcionar en pantalla completa', async () => {
+    const fullscreenContainer = document.createElement('main')
+    document.body.appendChild(fullscreenContainer)
+
+    await renderDialog({ container: fullscreenContainer })
+
+    const dialog = fullscreenContainer.querySelector('[role="alertdialog"]')
+    expect(dialog).toBeTruthy()
+    expect(dialog?.closest('main')).toBe(fullscreenContainer)
+  })
 })
