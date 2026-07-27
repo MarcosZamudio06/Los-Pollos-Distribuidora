@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancelSaleDialog } from '../CancelSaleDialog'
 import { ConfirmSaleButton, CustomerSelector, SaleSummary, TicketModal } from '../components'
 import { CartPanel as Cart } from '../pos/CartPanel'
+import { selectCheckoutVisualState } from '../pos/CheckoutDock'
 import { ProductResultsTable } from '../pos/ProductResultsTable'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
@@ -99,6 +100,23 @@ function getConditionButton(container: HTMLElement, label: string): HTMLButtonEl
   return button
 }
 
+function getPosPrimaryAction(container: HTMLElement): HTMLButtonElement {
+  const button = container.querySelector('button[data-pos-primary-action]')
+  if (!(button instanceof HTMLButtonElement)) throw new Error('POS primary action not found')
+  return button
+}
+
+async function openPaymentCapture(container: HTMLElement) {
+  const button = container.querySelector('[aria-label="Resumen de pago"] button[aria-controls="pos-payment-entry"]')
+  if (!(button instanceof HTMLButtonElement)) throw new Error('Payment summary button not found')
+  await act(async () => { button.click() })
+}
+
+async function addPosPayment(container: HTMLElement) {
+  await openPaymentCapture(container)
+  await act(async () => { getButtonByText(container, 'Agregar pago').click() })
+}
+
 function getSelectByLabelText(container: HTMLElement, text: string): HTMLSelectElement {
   const label = Array.from(container.querySelectorAll('label')).find((candidate) => candidate.textContent?.includes(text))
   const select = label?.querySelector('select')
@@ -170,6 +188,27 @@ describe('TASK-055 sales UI behavior', () => {
     vi.unstubAllGlobals()
   })
 
+  it('selecciona un único estado visual del dock según la prioridad operacional', () => {
+    const state = (transactionState: Parameters<typeof selectCheckoutVisualState>[0]['transactionState'], disabledReason = '', payments: Parameters<typeof selectCheckoutVisualState>[0]['payments'] = []) => selectCheckoutVisualState({ disabledReason, payments, transactionState })
+
+    expect(state('PROCESSING', 'Selecciona una ubicación operativa.')).toMatchObject({ kind: 'LOCATION_REQUIRED' })
+    expect(state('READY_TO_CHARGE', 'Abre una sesión de caja antes de registrar ventas de contado o pagos en efectivo.')).toMatchObject({ kind: 'CASH_CLOSED' })
+    expect(state('READY_TO_CHARGE', 'Producto sin existencia en Mostrador.')).toMatchObject({ kind: 'STOCK_INSUFFICIENT' })
+    expect(state('EMPTY', 'Sin conexión. La venta no se registrará sin conexión.')).toMatchObject({ kind: 'CART_EMPTY' })
+    expect(state('WEIGHT_PENDING')).toMatchObject({ kind: 'WEIGHT_PENDING' })
+    expect(state('CUSTOMER_REQUIRED')).toMatchObject({ kind: 'CUSTOMER_REQUIRED' })
+    expect(state('CREDIT_BLOCKED', 'La venta excede el crédito disponible de $10.00.')).toMatchObject({ kind: 'CREDIT_UNVALIDATED' })
+    expect(state('CREDIT_BLOCKED', 'El crédito del cliente está bloqueado.')).toMatchObject({ kind: 'CREDIT_BLOCKED' })
+    expect(state('CREDIT_BLOCKED', 'Solo un administrador puede autorizar esta excepción de crédito.')).toMatchObject({ kind: 'SUPERVISOR_REQUIRED' })
+    expect(state('CART_ACTIVE')).toMatchObject({ kind: 'PAYMENT_NOT_STARTED' })
+    expect(state('PAYMENT_PENDING', '', [{ amount: 10, paymentMethod: 'CASH' }])).toMatchObject({ kind: 'PAYMENT_PARTIAL' })
+    expect(state('READY_TO_CHARGE')).toMatchObject({ kind: 'READY_TO_CHARGE' })
+    expect(state('PROCESSING')).toMatchObject({ kind: 'PROCESSING' })
+    expect(state('SUCCESS')).toMatchObject({ kind: 'SALE_REGISTERED' })
+    expect(state('SUCCESS', 'Ticket impreso.')).toMatchObject({ kind: 'TICKET_PRINTED' })
+    expect(state('BLOCKED', 'Sin conexión. La venta no se registrará sin conexión.')).toMatchObject({ kind: 'OFFLINE' })
+  })
+
 
   it('renderiza POS empresarial para ADMIN y mantiene estados operativos visibles', () => {
     mockState.auth = { user: { role: 'ADMIN' } }
@@ -199,7 +238,13 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('grid-cols-[40fr_60fr]')
     expect(html).toContain('xl:grid-cols-[38fr_62fr]')
     expect(html).toContain('h-40')
+    expect(html).toContain('h-60')
+    expect(html).toContain('min-[1024px]:grid-cols-[20fr_13fr_22fr]')
+    expect(html).toContain('min-[1024px]:grid-rows-2')
+    expect(html).toContain('min-[1024px]:grid-cols-[20fr_34fr_46fr]')
     expect(html).toContain('min-[1440px]:grid-cols-[20fr_13fr_22fr_45fr]')
+    expect(html).toContain('Total de la venta')
+    expect(html).toContain('text-[clamp(2rem,3.2vw,3rem)]')
     expect(html).toContain('Total en vivo')
     expect(html).toContain('Ubicación operativa')
     expect(html).toContain('Resultados')
@@ -207,7 +252,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Cliente')
     expect(html).toContain('Condición comercial')
     expect(html).toContain('Documento de venta')
-    expect(html).toContain('Resumen de venta')
+    expect(html).toContain('Resumen de transacción')
     expect(html).toContain('Selecciona una ubicación operativa')
     expect(html).toContain('Mostrador · MOST')
     expect(html).toContain('Nueva venta')
@@ -250,11 +295,18 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', bubbles: true })) })
-      expect(container.querySelector('[role="dialog"]')).toBeTruthy()
+      const customerDialog = container.querySelector('[role="dialog"]')
+      expect(customerDialog).toBeTruthy()
+      expect(customerDialog?.className).toContain('min-[1440px]:absolute')
+      expect(customerDialog?.className).not.toContain('min-[1280px]')
+      expect(customerDialog?.getAttribute('aria-modal')).toBe('true')
       expect(container.textContent).toContain('Seleccionar cliente')
+      await act(async () => { customerDialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+      expect(container.querySelector('[role="dialog"]')).toBeNull()
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', bubbles: true })) })
       expect(document.activeElement).toBe(container.querySelector('[data-pos-payment] button'))
+      expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true')
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', bubbles: true })) })
       expect(document.body.textContent).toContain('¿Iniciar nueva venta?')
@@ -276,7 +328,10 @@ describe('TASK-055 sales UI behavior', () => {
     try {
       const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
-      await act(async () => { getButtonByText(container, 'Agregar pago').click() })
+      await addPosPayment(container)
+      expect(container.textContent).toContain('Efectivo $92.00')
+      expect(container.textContent).toContain('Pagado')
+      expect(container.textContent).toContain('Cambio')
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8', bubbles: true })) })
 
       expect(document.body.textContent).toContain('Confirmar venta')
@@ -432,6 +487,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect((container.querySelector('input[aria-label="Kilos capturados de Pechuga"]') as HTMLInputElement).value).toBe('1')
       expect(container.textContent).toContain('Captura el peso de Pechuga')
       expect(Array.from(container.querySelectorAll('tr')).some((row) => row.className.includes('shadow-[inset_3px_0_0_var(--pos-green)]'))).toBe(true)
+      expect(container.querySelector('[aria-label="Total de la venta"]')?.textContent).toContain('1 partida · 1 kg')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -559,8 +615,10 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { getButtonByText(container, 'Agregar').click() })
       await selectPosCustomer(container, 'Restaurante Norte')
 
-      const confirmButton = getButtonByText(container, 'Confirmar venta')
-      expect(confirmButton.disabled).toBe(true)
+      const primaryAction = getPosPrimaryAction(container)
+      expect(primaryAction.disabled).toBe(false)
+      expect(primaryAction.getAttribute('aria-keyshortcuts')).toBe('F8')
+      expect(primaryAction.textContent).toContain('Registrar pago')
       expect(container.textContent).toContain('La venta de contado debe liquidarse completamente')
     } finally {
       await act(async () => { root.unmount() })
@@ -579,7 +637,10 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
 
-      expect(getButtonByText(container, 'Confirmar venta').disabled).toBe(true)
+      const primaryAction = getPosPrimaryAction(container)
+      expect(primaryAction.disabled).toBe(true)
+      expect(primaryAction.getAttribute('aria-keyshortcuts')).toBeNull()
+      expect(primaryAction.textContent).toContain('Abre una sesión de caja antes de registrar ventas de contado')
       expect(container.textContent).toContain('Abre una sesión de caja antes de registrar ventas de contado')
       expect(container.textContent).toContain('Abrir caja')
     } finally {
@@ -602,8 +663,8 @@ describe('TASK-055 sales UI behavior', () => {
         window.dispatchEvent(new Event('offline'))
       })
 
-      const confirmButton = getButtonByText(container, 'Confirmar venta')
-      expect(confirmButton.disabled).toBe(true)
+      const primaryAction = getPosPrimaryAction(container)
+      expect(primaryAction.disabled).toBe(true)
       expect(container.textContent).toContain('Sin conexión. La venta no se registrará sin conexión.')
       expect(mockState.createSale.mutateAsync).not.toHaveBeenCalled()
     } finally {
@@ -707,22 +768,19 @@ describe('TASK-055 sales UI behavior', () => {
       })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
       await selectPosCustomer(container, 'Restaurante Norte')
-      await act(async () => { getButtonByText(container, 'Agregar pago').click() })
+      await addPosPayment(container)
 
-      expect(container.textContent).toContain('$5,000.00')
-      expect(container.textContent).toContain('$3,200.00')
+      expect(container.textContent).toContain('Subtotal $92.00')
 
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
       expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
       expect(mockState.toast.warning).toHaveBeenCalledWith('Venta registrada con advertencia por saldo vencido.')
-      expect(container.textContent).toContain('0 partidas')
-      expect(container.textContent).not.toContain('$5,000.00')
+      expect(container.textContent).toContain('0 en carrito')
+      expect(container.textContent).toContain('Subtotal $0.00')
       expect(container.textContent).not.toContain('Limpiar cliente')
-      expect(container.textContent).toContain('Límite de crédito—')
-      expect(container.textContent).toContain('Crédito disponible—')
-      expect(container.textContent).toContain('Saldo pendiente—')
+      expect(container.textContent).toContain('Público general')
       expect(getSelectByLabelText(container, 'Ubicación operativa').value).toBe('loc-counter')
     } finally {
       await act(async () => { root.unmount() })
@@ -760,6 +818,7 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { getButtonByText(container, 'Agregar').click() })
       await selectPosCustomer(container, 'Restaurante Norte')
       await act(async () => { getConditionButton(container, 'Crédito').click() })
+      expect(container.textContent).toContain('Venta a crédito sin pago inmediato')
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
@@ -782,7 +841,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect(document.body.textContent).toContain('Venta registrada')
       await act(async () => { getButtonByText(document.body, 'Nueva venta').click() })
       expect(document.body.textContent).not.toContain('Venta registrada')
-      expect(container.textContent).toContain('0 partidas')
+      expect(container.textContent).toContain('0 en carrito')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -815,7 +874,7 @@ describe('TASK-055 sales UI behavior', () => {
       })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
       await selectPosCustomer(container, 'Restaurante Norte')
-      await act(async () => { getButtonByText(container, 'Agregar pago').click() })
+      await addPosPayment(container)
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
@@ -824,8 +883,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect(mockState.createSale.mutateAsync).toHaveBeenNthCalledWith(1, expect.objectContaining({ idempotencyKey: 'sale-attempt-key' }))
       expect(mockState.createSale.mutateAsync).toHaveBeenNthCalledWith(2, expect.objectContaining({ idempotencyKey: 'sale-attempt-key' }))
       expect(container.textContent).toContain('1 en carrito')
-      expect(container.textContent).toContain('$5,000.00')
-      expect(container.textContent).toContain('$3,200.00')
+      expect(container.textContent).toContain('Subtotal $92.00')
       expect(container.textContent).toContain('WHOLESALE · Crédito disponible')
       expect(document.body.textContent).toContain('No se pudo registrar la venta')
       expect(locationSelect.value).toBe('loc-counter')
