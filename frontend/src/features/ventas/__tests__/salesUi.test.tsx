@@ -88,6 +88,17 @@ function getButtonByText(container: HTMLElement, text: string): HTMLButtonElemen
   return button
 }
 
+async function selectPosCustomer(container: HTMLElement, customerName: string) {
+  await act(async () => { getButtonByText(container, 'Público general').click() })
+  await act(async () => { getButtonByText(container, customerName).click() })
+}
+
+function getConditionButton(container: HTMLElement, label: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll('button[role="radio"]')).find((candidate) => candidate.textContent === label)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Condition button not found: ${label}`)
+  return button
+}
+
 function getSelectByLabelText(container: HTMLElement, text: string): HTMLSelectElement {
   const label = Array.from(container.querySelectorAll('label')).find((candidate) => candidate.textContent?.includes(text))
   const select = label?.querySelector('select')
@@ -187,15 +198,16 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('h-16')
     expect(html).toContain('grid-cols-[40fr_60fr]')
     expect(html).toContain('xl:grid-cols-[38fr_62fr]')
-    expect(html).toContain('h-36')
+    expect(html).toContain('h-40')
+    expect(html).toContain('min-[1440px]:grid-cols-[20fr_13fr_22fr_45fr]')
     expect(html).toContain('Total en vivo')
     expect(html).toContain('Ubicación operativa')
     expect(html).toContain('Resultados')
     expect(html).toContain('Carrito')
     expect(html).toContain('Cliente')
-    expect(html).toContain('Tipo de venta y pago')
+    expect(html).toContain('Condición comercial')
     expect(html).toContain('Documento de venta')
-    expect(html).toContain('Resumen sticky')
+    expect(html).toContain('Resumen de venta')
     expect(html).toContain('Selecciona una ubicación operativa')
     expect(html).toContain('Mostrador · MOST')
     expect(html).toContain('Nueva venta')
@@ -238,7 +250,8 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', bubbles: true })) })
-      expect(document.activeElement).toBe(container.querySelector('input[aria-label="Buscar cliente registrado"]'))
+      expect(container.querySelector('[role="dialog"]')).toBeTruthy()
+      expect(container.textContent).toContain('Seleccionar cliente')
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', bubbles: true })) })
       expect(document.activeElement).toBe(container.querySelector('[data-pos-payment] button'))
@@ -515,36 +528,19 @@ describe('TASK-055 sales UI behavior', () => {
     expect(summary).not.toContain('Crédito bloqueado')
   })
 
-  it('permite a ADMIN autorizar un bloqueo de mora con motivo explícito y lo envía en la venta', async () => {
+  it('deshabilita Crédito cuando el cliente tiene un bloqueo de mora', async () => {
     mockState.auth = { user: { role: 'ADMIN' } }
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
     mockState.customers = { data: [{ id: 'customer-1', name: 'Restaurante Norte', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', commercialPolicyId: 'policy-1', isActive: true, creditSummary: { effectiveCreditStatus: 'BLOCKED', isBlockedForCredit: true, blockingReason: 'Saldo vencido', blockingReasons: ['CREDIT_OVERDUE_BLOCKED'], canAdministrativeOverride: true, overdueAmount: 800, maximumDaysOverdue: 8, availableCredit: 3000 } }], error: null, isLoading: false }
-    mockState.createSale.mutateAsync.mockResolvedValue({ sale: { id: 'sale-1', items: [], total: 92, paymentType: 'CREDIT_SALE', status: 'CONFIRMED' } })
-
     const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
     try {
       const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
-      await act(async () => { getButtonByText(container, 'Agregar').click(); getButtonByText(container, 'Restaurante Norte').click(); getButtonByText(container, 'Venta a crédito').click() })
-
-      expect(container.textContent).toContain('Autorizar excepción de crédito')
-      const overrideCheckbox = container.querySelector('input[name="credit-override"]') as HTMLInputElement
-      await act(async () => { overrideCheckbox.click() })
-      const reason = container.querySelector('textarea[name="credit-override-reason"]') as HTMLTextAreaElement
-      await act(async () => { changeTextarea(reason, 'Autorizado por dirección') })
-      await act(async () => { getButtonByText(container, 'Venta de contado').click(); getButtonByText(container, 'Venta a crédito').click() })
-      expect((container.querySelector('input[name="credit-override"]') as HTMLInputElement).checked).toBe(false)
-      expect(container.querySelector('textarea[name="credit-override-reason"]')).toBeNull()
-      await act(async () => { (container.querySelector('input[name="credit-override"]') as HTMLInputElement).click() })
-      await act(async () => { changeTextarea(container.querySelector('textarea[name="credit-override-reason"]') as HTMLTextAreaElement, 'Autorizado por dirección') })
-      await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
-      expect(document.body.textContent).toContain('Autorización administrativa')
-      expect(document.body.textContent).toContain('Saldo pendiente de esta venta')
-      expect(document.body.textContent).toContain('Solicitud administrativa')
-      await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
-
-      expect(mockState.createSale.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ administrativeOverrideReason: 'Autorizado por dirección', pointOfSaleDailyCloseId: undefined }) }))
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+      await selectPosCustomer(container, 'Restaurante Norte')
+      expect(getConditionButton(container, 'Crédito').disabled).toBe(true)
+      expect(container.textContent).toContain('Crédito bloqueado.')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -560,7 +556,8 @@ describe('TASK-055 sales UI behavior', () => {
     try {
       const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
-      await act(async () => { getButtonByText(container, 'Agregar').click(); getButtonByText(container, 'Restaurante Norte').click() })
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+      await selectPosCustomer(container, 'Restaurante Norte')
 
       const confirmButton = getButtonByText(container, 'Confirmar venta')
       expect(confirmButton.disabled).toBe(true)
@@ -623,9 +620,10 @@ describe('TASK-055 sales UI behavior', () => {
     mockState.customers = { data: [{ id: 'customer-1', name: 'Cliente bloqueado', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', isActive: true, creditSummary: { effectiveCreditStatus: 'BLOCKED', isBlockedForCredit: true, blockingReason: 'Saldo vencido', blockingReasons: ['CREDIT_OVERDUE_BLOCKED'], canAdministrativeOverride: true } }], error: null, isLoading: false }
     const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
     try {
-      await act(async () => { getButtonByText(container, 'Cliente bloqueado').click(); getButtonByText(container, 'Venta a crédito').click() })
+      await selectPosCustomer(container, 'Cliente bloqueado')
+      expect(getConditionButton(container, 'Crédito').disabled).toBe(true)
       expect(container.textContent).not.toContain('Autorizar excepción de crédito')
-      expect(container.textContent).toContain('Saldo vencido')
+      expect(container.textContent).toContain('Supervisor requerido para autorizar crédito.')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -708,7 +706,7 @@ describe('TASK-055 sales UI behavior', () => {
         locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
       })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
-      await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
+      await selectPosCustomer(container, 'Restaurante Norte')
       await act(async () => { getButtonByText(container, 'Agregar pago').click() })
 
       expect(container.textContent).toContain('$5,000.00')
@@ -759,7 +757,9 @@ describe('TASK-055 sales UI behavior', () => {
     try {
       const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
       await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })) })
-      await act(async () => { getButtonByText(container, 'Agregar').click(); getButtonByText(container, 'Restaurante Norte').click(); getButtonByText(container, 'Venta a crédito').click() })
+      await act(async () => { getButtonByText(container, 'Agregar').click() })
+      await selectPosCustomer(container, 'Restaurante Norte')
+      await act(async () => { getConditionButton(container, 'Crédito').click() })
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
 
@@ -814,7 +814,7 @@ describe('TASK-055 sales UI behavior', () => {
         locationSelect.dispatchEvent(new Event('change', { bubbles: true }))
       })
       await act(async () => { getButtonByText(container, 'Agregar').click() })
-      await act(async () => { getButtonByText(container, 'Restaurante Norte').click() })
+      await selectPosCustomer(container, 'Restaurante Norte')
       await act(async () => { getButtonByText(container, 'Agregar pago').click() })
       await act(async () => { getButtonByText(container, 'Confirmar venta').click() })
       await act(async () => { getButtonByText(document.body, 'Confirmar registro').click() })
@@ -826,7 +826,7 @@ describe('TASK-055 sales UI behavior', () => {
       expect(container.textContent).toContain('1 en carrito')
       expect(container.textContent).toContain('$5,000.00')
       expect(container.textContent).toContain('$3,200.00')
-      expect(container.textContent).toContain('Limpiar cliente')
+      expect(container.textContent).toContain('WHOLESALE · Crédito disponible')
       expect(document.body.textContent).toContain('No se pudo registrar la venta')
       expect(locationSelect.value).toBe('loc-counter')
     } finally {

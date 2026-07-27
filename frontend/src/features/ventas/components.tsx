@@ -270,7 +270,7 @@ type CustomerSelectorProps = {
 export function CustomerSelector({ customers, compact = false, error, isLoading, onSearchChange, onSelect, search, searchInputRef, selectedCustomer }: CustomerSelectorProps) {
   const errorId = 'customer-search-error'
   return (
-    <section className={compact ? 'min-w-0 overflow-auto p-3' : panelClass}>
+    <section className={compact ? 'min-w-0 overflow-x-hidden overflow-y-auto p-3' : panelClass}>
       <div className="flex items-center justify-between gap-3"><div><p className={`${compact ? 'text-[0.6rem]' : 'text-[0.62rem]'} font-mono font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]`}>Cliente</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Cliente</h2></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F4</span></div>
       <input aria-describedby={error ? errorId : undefined} aria-label="Buscar cliente registrado" className={`${inputClass} mt-2 w-full ${compact ? 'px-2.5 py-2 text-sm' : ''}`} onChange={(event) => onSearchChange(event.target.value)} placeholder="Público general o cliente registrado" ref={searchInputRef} value={search} />
       {isLoading && <p className="mt-3 text-xs font-bold text-[var(--pos-green)]">Cargando clientes...</p>}
@@ -284,7 +284,7 @@ export function CustomerSelector({ customers, compact = false, error, isLoading,
       )}
       <div className={`${compact ? 'mt-2 max-h-24 gap-1.5' : 'mt-3 max-h-40 gap-2'} grid overflow-auto`}>
         {customers.map((customer) => (
-          <button className={`${compact ? 'rounded-lg p-2' : 'rounded-xl p-2.5'} min-h-11 border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] text-left transition hover:border-[var(--pos-green)] disabled:opacity-50`} disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
+          <button className={`${compact ? 'border-x-0 border-t-0 border-b p-2' : 'rounded-xl p-2.5'} min-h-11 border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] text-left transition hover:border-[var(--pos-green)] disabled:opacity-50`} disabled={customer.isActive === false || customer.active === false} key={customer.id} onClick={() => onSelect(customer)} type="button">
             <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-bold">{customer.name}</span><span className="text-[0.65rem] font-bold text-[var(--pos-muted)]">{effectiveCreditLabel(customer)}</span></span>
             <span className="text-xs text-[var(--pos-muted)]">{customer.customerType} · {customer.creditSummary?.availableCredit !== undefined ? `Disponible ${toMoney(customer.creditSummary.availableCredit)}` : customer.creditLimit !== undefined && customer.creditLimit !== null ? `Límite ${toMoney(customer.creditLimit)}` : 'Límite —'}</span>
           </button>
@@ -302,11 +302,11 @@ type PaymentTypeControlProps = {
 
 export function PaymentTypeControl({ compact = false, onPaymentTypeChange, paymentType }: PaymentTypeControlProps) {
   return (
-    <section className={compact ? 'min-w-0 overflow-auto p-3' : panelClass}>
+    <section className={compact ? 'min-w-0 overflow-x-hidden overflow-y-auto p-3' : panelClass}>
       <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Condición de pago</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Contado / Crédito</h2><span className="sr-only">Tipo de venta y pago</span></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F6</span></div>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
-        <button aria-pressed={paymentType === 'CASH_SALE'} className={`min-h-11 rounded-lg px-2 text-xs font-black transition ${paymentType === 'CASH_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
-        <button aria-pressed={paymentType === 'CREDIT_SALE'} className={`min-h-11 rounded-lg px-2 text-xs font-black transition ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
+        <button aria-pressed={paymentType === 'CASH_SALE'} className={`min-h-11 ${compact ? 'rounded-none' : 'rounded-lg'} px-2 text-xs font-black transition ${paymentType === 'CASH_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
+        <button aria-pressed={paymentType === 'CREDIT_SALE'} className={`min-h-11 ${compact ? 'rounded-none' : 'rounded-lg'} px-2 text-xs font-black transition ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
       </div>
       <span className="sr-only">Venta de contado Venta a crédito</span>
     </section>
@@ -328,7 +328,7 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
   }
 
   return (
-    <section className={compact ? 'min-w-0 overflow-auto p-3' : panelClass} data-pos-payment ref={panelRef}>
+    <section className={compact ? 'min-w-0 overflow-x-hidden overflow-y-auto p-3' : panelClass} data-pos-payment ref={panelRef}>
       <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-amber)]">Pago</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Pago recibido</h2></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">{toMoney(totalPaid)} / {toMoney(total)}</span></div>
       <div className="mt-2 grid gap-2">
         {payments.map((payment, index) => (
@@ -360,7 +360,7 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
             </div>}
           </article>
         ))}
-        <button className={`${compact ? 'rounded-lg px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)]`} onClick={() => onPaymentsChange([...payments, { amount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
+        <button className={`${compact ? 'rounded-none px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)]`} onClick={() => onPaymentsChange([...payments, { amount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
       </div>
     </section>
   )
@@ -441,11 +441,15 @@ type SaleSummaryProps = {
   creditOptions?: CreditRestrictionOptions
   creditRestriction?: string | null
   customer: CustomerOption | null
+  payments?: SalePaymentInput[]
   paymentType: PaymentType
+  summaryOnly?: boolean
 }
 
-export function SaleSummary({ cart, compact = false, creditOptions, creditRestriction, customer, paymentType }: SaleSummaryProps) {
+export function SaleSummary({ cart, compact = false, creditOptions, creditRestriction, customer, payments = [], paymentType, summaryOnly = false }: SaleSummaryProps) {
   const total = calculateCartTotal(cart)
+  const paid = payments.reduce((sum, payment) => sum + payment.amount, 0)
+  const pending = Math.max(total - paid, 0)
   const previousTotal = useRef(total)
   const [isTotalUpdating, setIsTotalUpdating] = useState(false)
 
@@ -456,6 +460,21 @@ export function SaleSummary({ cart, compact = false, creditOptions, creditRestri
     const timer = window.setTimeout(() => setIsTotalUpdating(false), 140)
     return () => window.clearTimeout(timer)
   }, [total])
+
+  if (compact && summaryOnly) {
+    return (
+      <section className="min-w-0 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3"><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-green)]">Resumen de venta</p><span className="shrink-0 font-mono text-[0.68rem] font-bold text-[var(--pos-muted)]">{cart.length} partidas</span></div>
+        <dl className="mt-2 grid grid-cols-3 divide-x divide-[var(--pos-steel)] text-xs">
+          <div className="min-w-0 pr-3"><dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-[var(--pos-muted)]">Condición</dt><dd className="mt-0.5 truncate font-bold">{paymentTypeLabel(paymentType)}</dd></div>
+          <div className="min-w-0 px-3"><dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-[var(--pos-muted)]">Pagado</dt><dd className="mt-0.5 truncate font-mono font-bold">{toMoney(paid)}</dd></div>
+          <div className="min-w-0 pl-3"><dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-[var(--pos-muted)]">Pendiente</dt><dd className="mt-0.5 truncate font-mono font-bold">{toMoney(pending)}</dd></div>
+        </dl>
+        <span className="sr-only">{`Límite de crédito${customer ? toMoney(customer.creditSummary?.creditLimit ?? customer.creditLimit) : '—'} Crédito disponible${customer?.creditSummary?.availableCredit !== undefined ? toMoney(customer.creditSummary.availableCredit) : '—'} Saldo pendiente${customer?.creditSummary?.outstandingAmount !== undefined ? toMoney(customer.creditSummary.outstandingAmount) : '—'}`}</span>
+        {creditRestriction && <p className="mt-2 truncate text-[0.68rem] font-bold text-[var(--pos-red)]" role="alert">{creditRestriction}</p>}
+      </section>
+    )
+  }
 
   return (
     <section className={compact ? 'min-w-0' : panelClass}>
@@ -524,7 +543,7 @@ export function ConfirmSaleButton({ buttonRef, compact = false, disabledReason, 
                           : 'Confirmar venta · F8'
   return (
     <div className="grid gap-2">
-      <button aria-describedby={disabledReason ? 'checkout-blocker' : undefined} aria-keyshortcuts="F8" aria-live="polite" className={`${compact ? 'h-14 rounded-lg px-3' : 'rounded-xl px-4 py-3.5'} bg-[var(--pos-action)] text-sm font-black text-white shadow-[0_12px_26px_rgba(18,61,50,0.24)] transition hover:bg-[#0d2e25] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.40)] disabled:shadow-none`} disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} ref={buttonRef} type="button">
+      <button aria-describedby={disabledReason ? 'checkout-blocker' : undefined} aria-keyshortcuts="F8" aria-live="polite" className={`${compact ? 'h-14 rounded-none px-3 shadow-none' : 'rounded-xl px-4 py-3.5 shadow-[0_12px_26px_rgba(18,61,50,0.24)]'} bg-[var(--pos-action)] text-sm font-black text-white transition hover:bg-[#0d2e25] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.40)] disabled:shadow-none`} disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} ref={buttonRef} type="button">
         {actionLabel}
       </button>
       {disabledReason && <p className="text-[0.68rem] font-bold leading-tight text-[var(--pos-red)]" id="checkout-blocker" role="status">{disabledReason}</p>}
