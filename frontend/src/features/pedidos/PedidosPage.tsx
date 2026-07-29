@@ -154,19 +154,21 @@ export function PedidosPage() {
           </div>
         </header>
 
-        <Card className="p-5">
-          <CardHeader className="gap-2">
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]"><Store className="h-4 w-4" /> Sucursal operativa</div>
-            <CardDescription>Las ventas nuevas se acumulan hasta la siguiente limpieza programada de la sucursal activa.</CardDescription>
-          </CardHeader>
-          <CardContent className="mt-4">
-            <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Ubicación
+        <Card className="rounded-xl p-3.5 sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+            <CardHeader className="min-w-0 flex-1 gap-1">
+              <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]"><Store className="h-4 w-4" /> Sucursal operativa</div>
+              <CardDescription className="leading-5">Las ventas nuevas se acumulan hasta la siguiente limpieza programada de la sucursal activa.</CardDescription>
+            </CardHeader>
+            <CardContent className="w-full lg:w-80 lg:shrink-0">
+              <label className="grid gap-1.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Ubicación
               <Select disabled={user?.role !== 'ADMIN' || locations.isLoading} onChange={(event) => setSelectedLocationId(event.target.value)} value={activeLocationId}>
                 {user?.role === 'ADMIN' && <option value="">Selecciona una sucursal</option>}
                 {user?.role === 'ADMIN' ? (locations.data ?? []).map((location) => <option key={location.id} value={location.id}>{location.name}</option>) : <option value={activeLocationId}>{selectedLocation?.name ?? user?.operationalLocationId ?? 'Sin ubicación asignada'}</option>}
               </Select>
-            </label>
-          </CardContent>
+              </label>
+            </CardContent>
+          </div>
         </Card>
 
         {!canShowOrders && <p role="alert" className="rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-5 text-sm font-bold text-[var(--erp-danger)]">Selecciona una sucursal para consultar pedidos.</p>}
