@@ -42,31 +42,33 @@ function OrderCard({ order, isLatest }: { order: SaleOrder; isLatest: boolean })
     <article className={`group relative w-full overflow-hidden rounded-[1.35rem] border ${isLatest ? 'border-[rgba(47,111,115,0.24)] bg-[var(--erp-surface-elevated)] shadow-[var(--erp-shadow-elevated)]' : 'border-[color:var(--erp-border)] bg-white shadow-sm'}`}>
       <div className="absolute inset-y-0 left-0 w-1 bg-[var(--erp-brand-gold)]" />
       {isLatest && <div className="flex items-center justify-between gap-3 border-b border-[color:var(--erp-border)] bg-[rgba(47,111,115,0.05)] px-5 py-2 md:px-7"><span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-info)]">Última venta</span><Badge className="gap-1.5 px-2 py-0.5" tone="green"><CircleCheck className="h-3.5 w-3.5" />Confirmada</Badge></div>}
-      <div className="grid gap-5 p-5 pl-6 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,2fr)_auto] md:items-center md:p-7 md:pl-8">
-        <div className="min-w-0 md:border-r md:border-[color:var(--erp-border)] md:pr-6">
+      <div className="grid gap-4 p-4 pl-5 md:grid-cols-2 md:gap-4 md:p-6 md:pl-7 lg:grid-cols-[minmax(14rem,0.85fr)_minmax(0,2.3fr)_minmax(11rem,0.75fr)] lg:gap-5 lg:pl-7">
+        <section aria-label="Venta y cliente" className="min-w-0 md:order-1 md:border-r md:border-[color:var(--erp-border)] md:pr-5 lg:order-none lg:pr-6">
           <div className="min-w-0">
-            <p className="font-mono text-2xl font-black tracking-[-0.05em] text-[var(--erp-foreground)]">{order.saleNumber}</p>
+            <p className="font-mono text-2xl font-black tabular-nums tracking-[-0.05em] text-[var(--erp-foreground)]">{order.saleNumber}</p>
             <p className="mt-2 text-base font-bold text-[var(--erp-muted-foreground)]">{order.customer?.name ?? 'Público general'}</p>
             {!isLatest && <Badge className="mt-4" tone="green">Confirmada</Badge>}
           </div>
-        </div>
+        </section>
 
-        <ul className="grid gap-2.5" aria-label="Productos del pedido">
-          {order.items.map((item) => (
-            <li className="flex items-start justify-between gap-4 text-base" key={item.id}>
-              <span className="min-w-0 font-bold text-[var(--erp-foreground)]">{item.productName}</span>
-              <span className="shrink-0 font-mono font-black tabular-nums text-[var(--erp-info)]">{formatQuantity(item)}</span>
-            </li>
-          ))}
-        </ul>
+        <section aria-label="Productos del pedido" className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 md:order-3 md:col-span-2 lg:order-none lg:col-span-1">
+          <ul className="grid gap-2">
+            {order.items.map((item) => (
+              <li className="flex items-baseline justify-between gap-3 border-b border-[color:var(--erp-border)] pb-2 text-sm last:border-0 last:pb-0 md:text-base" key={item.id}>
+                <span className="min-w-0 font-bold text-[var(--erp-foreground)]">{item.productName}</span>
+                <span className="shrink-0 text-right font-mono font-black tabular-nums text-[var(--erp-info)]">{formatQuantity(item)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
 
-        <div className="flex items-end justify-between gap-5 border-t border-dashed border-[color:var(--erp-border)] pt-4 md:block md:border-l md:border-t-0 md:border-dashed md:pl-6 md:pt-0 md:text-right">
+        <section aria-label="Resumen del pedido" className="flex items-end justify-between gap-4 border-t border-dashed border-[color:var(--erp-border)] pt-3 md:order-2 md:row-start-1 md:border-t-0 md:pl-5 md:pt-0 md:text-right lg:order-none lg:row-auto lg:border-l lg:border-dashed lg:pl-6">
           <div>
             <time className="block text-lg font-black tabular-nums text-[var(--erp-foreground)]">{formatTime(order.createdAt)}</time>
             <span className="mt-1 block text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">Total</span>
           </div>
           <span className="mt-1 text-2xl font-black tracking-[-0.05em] tabular-nums text-[var(--erp-foreground)]">{money(order.total)}</span>
-        </div>
+        </section>
       </div>
     </article>
   )
