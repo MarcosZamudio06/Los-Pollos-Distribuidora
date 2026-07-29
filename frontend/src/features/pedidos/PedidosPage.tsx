@@ -37,16 +37,17 @@ function formatQuantity(item: SaleOrder['items'][number]) {
   return values.join(' + ') || 'Sin cantidad'
 }
 
-function OrderCard({ order }: { order: SaleOrder }) {
+function OrderCard({ order, isLatest }: { order: SaleOrder; isLatest: boolean }) {
   return (
-    <article className="group relative w-full overflow-hidden rounded-[1.35rem] border border-[color:var(--erp-border)] bg-white shadow-sm">
+    <article className={`group relative w-full overflow-hidden rounded-[1.35rem] border ${isLatest ? 'border-[rgba(47,111,115,0.24)] bg-[var(--erp-surface-elevated)] shadow-[var(--erp-shadow-elevated)]' : 'border-[color:var(--erp-border)] bg-white shadow-sm'}`}>
       <div className="absolute inset-y-0 left-0 w-1 bg-[var(--erp-brand-gold)]" />
+      {isLatest && <div className="flex items-center justify-between gap-3 border-b border-[color:var(--erp-border)] bg-[rgba(47,111,115,0.05)] px-5 py-2 md:px-7"><span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-info)]">Última venta</span><Badge className="gap-1.5 px-2 py-0.5" tone="green"><CircleCheck className="h-3.5 w-3.5" />Confirmada</Badge></div>}
       <div className="grid gap-5 p-5 pl-6 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,2fr)_auto] md:items-center md:p-7 md:pl-8">
         <div className="min-w-0 md:border-r md:border-[color:var(--erp-border)] md:pr-6">
           <div className="min-w-0">
             <p className="font-mono text-2xl font-black tracking-[-0.05em] text-[var(--erp-foreground)]">{order.saleNumber}</p>
             <p className="mt-2 text-base font-bold text-[var(--erp-muted-foreground)]">{order.customer?.name ?? 'Público general'}</p>
-            <Badge className="mt-4" tone="green">Confirmada</Badge>
+            {!isLatest && <Badge className="mt-4" tone="green">Confirmada</Badge>}
           </div>
         </div>
 
@@ -177,7 +178,7 @@ export function PedidosPage() {
 
         {canShowOrders && !ordersQuery.isLoading && !ordersQuery.error && (
           <section aria-label="Ventas recientes del día" className="grid gap-4">
-            {orders.map((order) => <OrderCard key={order.id} order={order} />)}
+            {orders.map((order, index) => <OrderCard key={order.id} isLatest={index === 0} order={order} />)}
             {orders.length === 0 && <div className="grid min-h-64 place-items-center rounded-[1.5rem] border border-dashed border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-8 text-center"><div><Boxes className="mx-auto h-8 w-8 text-[var(--erp-brand-gold-deep)]" /><p className="mt-4 font-black">No hay ventas confirmadas hoy</p><p className="mt-2 max-w-md text-sm text-[var(--erp-muted-foreground)]">Las nuevas ventas de esta sucursal aparecerán aquí automáticamente.</p></div></div>}
           </section>
         )}
