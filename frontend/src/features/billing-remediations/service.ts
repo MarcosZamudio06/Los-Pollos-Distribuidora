@@ -9,5 +9,5 @@ export function buildBillingRemediationsPath(filters: BillingRemediationFilters)
 }
 export const billingRemediationsService = {
   list: (filters: BillingRemediationFilters, token?: string | null) => apiClient.get<BillingRemediationsList>(buildBillingRemediationsPath(filters), { headers: auth(token) }),
-  resolve: ({ id, ...body }: ResolveBillingRemediationInput, token?: string | null) => apiClient.post(`/billing/remediations/${id}/resolve`, { body, headers: auth(token) }),
+  resolve: ({ id, idempotencyKey, ...body }: ResolveBillingRemediationInput, token?: string | null) => apiClient.post(`/billing/remediations/${id}/resolve`, { body, headers: { ...auth(token), 'Idempotency-Key': idempotencyKey } }),
 }

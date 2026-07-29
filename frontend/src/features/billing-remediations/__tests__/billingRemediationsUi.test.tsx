@@ -2,8 +2,9 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
-import { BillingRemediationsPage } from '../BillingRemediationsPage'
-import { buildBillingRemediationsPath } from '../service'
+import { ApiClientError } from '@/lib/api'
+import { BillingRemediationsPage, getRemediationErrorDetails } from '../BillingRemediationsPage'
+import { billingRemediationsService, buildBillingRemediationsPath } from '../service'
 
 vi.mock('../hooks', () => ({
   useBillingRemediations: () => ({
@@ -22,5 +23,37 @@ describe('billing remediations UI contracts', () => {
     expect(html).toContain('V-1001')
     expect(html).toContain('Asignar entidad legal')
     expect(html).toContain('validará nuevamente')
+  })
+
+  it('sends concurrency tokens and an idempotency key when resolving', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ id: 'rem-1' }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    await billingRemediationsService.resolve({
+      id: 'rem-1', idempotencyKey: 'resolve-key-1', expectedRemediationVersion: 2, expectedSaleVersion: 7,
+      expectedDocumentVersions: [{ saleDocumentId: 'document-1', expectedVersion: 3 }], reason: 'Correction',
+    }, 'access-token')
+
+    const [, request] = fetchMock.mock.calls[0]
+    expect(new Headers(request?.headers).get('idempotency-key')).toBe('resolve-key-1')
+    expect(request?.body).toBe(JSON.stringify({
+      expectedRemediationVersion: 2, expectedSaleVersion: 7,
+      expectedDocumentVersions: [{ saleDocumentId: 'document-1', expectedVersion: 3 }], reason: 'Correction',
+    }))
+    fetchMock.mockRestore()
+  })
+
+  it('exposes canonical consistency findings as actionable messages', () => {
+    const error = new ApiClientError('La venta conserva inconsistencias monetarias y no puede cerrarse.', 409, {
+      code: 'SALE_CONSISTENCY_VALIDATION_FAILED',
+      findings: [
+        { code: 'ITEM_TOTALS_MISMATCH', message: 'Las partidas no coinciden con la cabecera.' },
+        { code: 'RECEIVABLE_BALANCE_MISMATCH', message: 'La cuenta por cobrar no coincide.' },
+      ],
+    })
+
+    expect(getRemediationErrorDetails(error)).toEqual([
+      'Las partidas no coinciden con la cabecera.',
+      'La cuenta por cobrar no coincide.',
+    ])
   })
 })

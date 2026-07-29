@@ -1326,5 +1326,8 @@ Esta extensión permite persistir `LegalEntity`, `Invoice`, `BillingRequestSaleD
 - Los índices cubren emisor, moneda, documento, estado, fecha, cliente, ubicación, vendedor, ruta, solicitud, factura, UUID y tablas puente.
 - La migración sigue expand–backfill–validate–contract. Datos ambiguos se exportan para remediación y nunca se infieren automáticamente.
 - `PaymentAllocation` permanece fuera del modelo activo.
+- `SaleItem` y `SaleDocument` incorporan `version` para escrituras optimistas de remediación.
+- `BillingDataRemediation` incorpora `version`, `resolutionIdempotencyKey` único y `resolutionPayloadHash`; una resolución condiciona la escritura por versión y conserva la clave para replay seguro.
+- Una migración de backfill crea o reabre `INVALID_SALE_TOTAL` cuando cualquier partida incumple su ecuación o base gravable, o cuando las sumas de partidas no coinciden con subtotal, descuento, impuesto, base gravable y total de la venta.
 
 La estructura e invariantes están en `specs/modules/billing-reportable-notes/spec.md`.

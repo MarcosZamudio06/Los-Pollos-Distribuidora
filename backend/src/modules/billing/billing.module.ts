@@ -8,10 +8,12 @@ import { InvoiceCancellationController } from './invoice-cancellation.controller
 import { InvoiceCancellationService } from './invoice-cancellation.service';
 import { BillingRemediationController } from './billing-remediation.controller';
 import { BillingRemediationService } from './billing-remediation.service';
+import { RemediationImpactAnalyzer } from './remediation-impact-analyzer';
+import { SaleConsistencyValidator } from './sale-consistency-validator';
 
 @Module({
   imports: [PrismaModule, AuthModule],
   controllers: [BillingReportController, InvoiceCancellationController, BillingRemediationController],
-  providers: [BillingReportService, BillingReportExporter, InvoiceCancellationService, BillingRemediationService],
+  providers: [BillingReportService, BillingReportExporter, InvoiceCancellationService, BillingRemediationService, RemediationImpactAnalyzer, SaleConsistencyValidator],
 })
 export class BillingModule {}

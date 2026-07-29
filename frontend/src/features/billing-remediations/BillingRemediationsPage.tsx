@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, LoaderCircle, Search } from 'lucide-react'
 import { Button, Card } from '@/components/ui'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
+import { ApiClientError } from '@/lib/api'
 import { useAuth } from '../auth'
 import { useBillingRemediations, useResolveBillingRemediation } from './hooks'
 import type { BillingRemediationFilters, BillingRemediationItem, BillingRemediationStatus } from './types'
@@ -13,6 +14,10 @@ const codeLabels: Record<string, string> = {
   AMBIGUOUS_SALE_DOCUMENT: 'Resolver documentos ambiguos',
   UNALLOCATED_ITEM_AMOUNTS: 'Distribuir importes legacy',
   INVALID_SALE_TOTAL: 'Corregir totales inválidos',
+}
+export function getRemediationErrorDetails(error: unknown): string[] {
+  if (!(error instanceof ApiClientError) || typeof error.payload !== 'object' || !error.payload || !Array.isArray(error.payload.findings)) return []
+  return error.payload.findings.map((finding) => finding.message).filter(Boolean)
 }
 function parseFilters(params: URLSearchParams): BillingRemediationFilters { return { page: Number(params.get('page') || 1), limit: 25, status: (params.get('status') || 'OPEN') as BillingRemediationStatus, code: params.get('code') || '', search: params.get('search') || '' } }
 
@@ -26,11 +31,13 @@ export function BillingRemediationsPage() {
   const [reason, setReason] = useState('')
   const [applyCorrection, setApplyCorrection] = useState(true)
   const [correction, setCorrection] = useState<Record<string, string>>({})
+  const [idempotencyKey, setIdempotencyKey] = useState('')
   const canResolve = user?.role === 'ADMIN'
 
   function update(next: Partial<BillingRemediationFilters>) { const merged = { ...filters, ...next, page: next.page ?? 1 }; const nextParams = new URLSearchParams(); Object.entries(merged).forEach(([key, value]) => { if (value !== undefined && value !== '') nextParams.set(key, String(value)) }); setParams(nextParams) }
   function open(item: BillingRemediationItem) {
     setSelected(item); setReason(''); setApplyCorrection(true)
+    setIdempotencyKey(crypto.randomUUID())
     setCorrection(item.code === 'INVALID_SALE_TOTAL' && item.sale ? { subtotal: item.sale.subtotal, discount: item.sale.discount, tax: item.sale.tax, total: item.sale.total } : Object.fromEntries((item.code === 'UNALLOCATED_ITEM_AMOUNTS' ? item.sale?.items ?? [] : []).flatMap((line) => [['subtotal:'+line.id, line.subtotal], ['discount:'+line.id, line.discount], ['tax:'+line.id, line.tax], ['total:'+line.id, line.total]])))
   }
   function buildCorrection() {
@@ -38,12 +45,24 @@ export function BillingRemediationsPage() {
     if (selected.code === 'MISSING_LEGAL_ENTITY_MAPPING') return correction.legalEntityId ? { legalEntityId: correction.legalEntityId } : undefined
     if (selected.code === 'AMBIGUOUS_SALE_DOCUMENT') return correction.selectedSaleDocumentId ? { selectedSaleDocumentId: correction.selectedSaleDocumentId } : undefined
     if (selected.code === 'INVALID_SALE_TOTAL') return { subtotal: correction.subtotal, discount: correction.discount, tax: correction.tax, total: correction.total }
-    if (selected.code === 'UNALLOCATED_ITEM_AMOUNTS') return { items: (selected.sale?.items ?? []).map((line) => ({ saleItemId: line.id, subtotal: correction['subtotal:'+line.id], discount: correction['discount:'+line.id], tax: correction['tax:'+line.id], total: correction['total:'+line.id] })) }
+    if (selected.code === 'UNALLOCATED_ITEM_AMOUNTS') return { items: (selected.sale?.items ?? []).map((line) => ({ saleItemId: line.id, expectedVersion: line.version, subtotal: correction['subtotal:'+line.id], discount: correction['discount:'+line.id], tax: correction['tax:'+line.id], total: correction['total:'+line.id] })) }
     return undefined
   }
   async function resolve() {
-    if (!selected || !reason.trim()) return
-    await command.mutateAsync({ id: selected.id, expectedUpdatedAt: selected.updatedAt, reason: reason.trim(), correction: buildCorrection() })
+    if (!selected?.sale || !reason.trim() || !idempotencyKey) return
+    await command.mutateAsync({
+      id: selected.id,
+      idempotencyKey,
+      expectedRemediationVersion: selected.version,
+      expectedSaleVersion: selected.sale.version,
+      expectedDocumentVersions: selected.code === 'AMBIGUOUS_SALE_DOCUMENT'
+        ? selected.sale.documents
+          .filter((document) => document.status !== 'CANCELLED' && document.documentType === selected.sale?.documentType)
+          .map((document) => ({ saleDocumentId: document.id, expectedVersion: document.version }))
+        : [],
+      reason: reason.trim(),
+      correction: buildCorrection(),
+    })
     setSelected(undefined)
   }
 
@@ -58,7 +77,7 @@ export function BillingRemediationsPage() {
       <div className="flex items-center justify-between border-t border-[color:var(--erp-border)] p-4"><Button disabled={filters.page <= 1} onClick={() => update({ page: filters.page - 1 })} variant="outline">Anterior</Button><span className="text-sm font-bold">Página {query.data?.pagination.page ?? 1} de {Math.max(query.data?.pagination.totalPages ?? 1, 1)}</span><Button disabled={filters.page >= (query.data?.pagination.totalPages ?? 1)} onClick={() => update({ page: filters.page + 1 })} variant="outline">Siguiente</Button></div>
     </Card>
   </div><ConfirmationDialog confirmDisabled={!reason.trim()} confirmLabel="Validar y resolver" description="La operación corregirá los datos seleccionados y volverá a evaluar la inconsistencia dentro de la misma transacción. Si continúa presente, no se guardará ningún cambio." isLoading={command.isPending} onConfirm={resolve} onOpenChange={(open) => { if (!open) setSelected(undefined) }} open={Boolean(selected)} title="Resolver inconsistencia de datos">
-    {selected && <div className="grid gap-4"><div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><p>No es un cierre administrativo. La resolución depende de que la validación contable posterior sea satisfactoria.</p></div><label className="flex items-center gap-2 font-bold"><input checked={applyCorrection} onChange={(event) => setApplyCorrection(event.target.checked)} type="checkbox" />Aplicar corrección desde esta bandeja</label>{applyCorrection && <CorrectionFields correction={correction} item={selected} legalEntities={query.data?.legalEntities ?? []} onChange={(key, value) => setCorrection((current) => ({ ...current, [key]: value }))} />}<label className="grid gap-2 font-bold">Motivo de resolución<textarea autoFocus className={`${field} min-h-24 py-3`} onChange={(event) => setReason(event.target.value)} value={reason} /></label>{command.error && <p className="font-bold text-[var(--erp-danger)]">{command.error.message}</p>}</div>}
+    {selected && <div className="grid gap-4"><div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><p>No es un cierre administrativo. La resolución depende de que la validación contable posterior sea satisfactoria.</p></div><label className="flex items-center gap-2 font-bold"><input checked={applyCorrection} onChange={(event) => setApplyCorrection(event.target.checked)} type="checkbox" />Aplicar corrección desde esta bandeja</label>{applyCorrection && <CorrectionFields correction={correction} item={selected} legalEntities={query.data?.legalEntities ?? []} onChange={(key, value) => setCorrection((current) => ({ ...current, [key]: value }))} />}<label className="grid gap-2 font-bold">Motivo de resolución<textarea autoFocus className={`${field} min-h-24 py-3`} onChange={(event) => setReason(event.target.value)} value={reason} /></label>{command.error && <RemediationCommandError error={command.error} />}</div>}
   </ConfirmationDialog></main>
 }
 
@@ -70,3 +89,8 @@ function CorrectionFields({ item, correction, legalEntities, onChange }: { item:
   return <p>Este código solo admite validar una corrección realizada previamente.</p>
 }
 function AmountFields({ correction, onChange }: { correction: Record<string, string>; onChange: (key: string, value: string) => void }) { return <div className="grid grid-cols-2 gap-2">{[['subtotal','Subtotal'],['discount','Descuento'],['tax','Impuesto'],['total','Total']].map(([key, label]) => <label className="grid gap-1 text-xs font-bold" key={key}>{label}<input className={field} min="0" onChange={(event) => onChange(key, event.target.value)} step="0.01" type="number" value={correction[key] ?? ''} /></label>)}</div> }
+
+function RemediationCommandError({ error }: { error: Error }) {
+  const details = getRemediationErrorDetails(error)
+  return <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-[var(--erp-danger)]" role="alert"><p className="font-black">{error.message}</p>{details.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{details.map((detail) => <li key={detail}>{detail}</li>)}</ul>}</div>
+}

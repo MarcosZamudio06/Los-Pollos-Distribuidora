@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -20,7 +20,8 @@ export class BillingRemediationController {
 
   @Post(':id/resolve')
   @Roles('ADMIN')
-  resolve(@Param('id') id: string, @Body() body: ResolveBillingRemediationDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.resolve(id, body, user);
+  async resolve(@Param('id') id: string, @Body() body: ResolveBillingRemediationDto, @CurrentUser() user: AuthenticatedUser, @Headers('idempotency-key') idempotencyKey?: string) {
+    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
+    return this.service.resolve(id, body, user, idempotencyKey.trim());
   }
 }

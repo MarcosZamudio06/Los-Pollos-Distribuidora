@@ -115,6 +115,7 @@ Validaciones:
 - Venta a crédito sin pago inicial genera `AccountReceivable` por el total.
 - Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
 - Contraentrega no es dinero recibido hasta registrar `Payment`.
+- `version` se incrementa en toda corrección de remediación y permite condicionar la escritura al snapshot leído.
 
 ## SaleItem
 
@@ -130,6 +131,7 @@ Validaciones:
 - No aceptar precios calculados por frontend como fuente de verdad.
 - La política exacta de redondeo queda pendiente de decisión de negocio.
 - Si se aplica equivalencia kilo-pieza, debe registrar `unitEquivalentId` o el factor aplicado para preservar el cálculo histórico.
+- `version` se incrementa en toda corrección monetaria de la partida.
 
 ## SaleDocument
 
@@ -146,6 +148,7 @@ Validaciones:
 - `priceSnapshot` conserva `subtotal`, `discount`, `tax`, `total`, `paid` y `outstanding`; para crédito conserva también la fecha de vencimiento emitida.
 - La reimpresión identifica la plantilla mediante `printTemplateVersion` y no puede completar snapshots desde registros actuales.
 - Debe distinguir nota sencilla, nota grande y ticket/comprobante interno.
+- `version` se incrementa al cancelar lógicamente un documento durante una remediación.
 
 Estados sugeridos:
 

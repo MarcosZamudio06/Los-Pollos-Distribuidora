@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsISO8601, IsNotEmpty, IsNumberString, IsObject, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsNotEmpty, IsNumberString, IsObject, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 
 export class BillingRemediationQueryDto {
   @IsOptional() @IsIn(['OPEN', 'RESOLVED', 'ALL']) status: 'OPEN' | 'RESOLVED' | 'ALL' = 'OPEN';
@@ -11,10 +11,16 @@ export class BillingRemediationQueryDto {
 
 export class BillingRemediationItemCorrectionDto {
   @IsString() @IsNotEmpty() saleItemId!: string;
+  @IsInt() @Min(1) expectedVersion!: number;
   @IsNumberString() subtotal!: string;
   @IsNumberString() discount!: string;
   @IsNumberString() tax!: string;
   @IsNumberString() total!: string;
+}
+
+export class BillingRemediationDocumentVersionDto {
+  @IsString() @IsNotEmpty() saleDocumentId!: string;
+  @IsInt() @Min(1) expectedVersion!: number;
 }
 
 export class BillingRemediationCorrectionDto {
@@ -28,7 +34,9 @@ export class BillingRemediationCorrectionDto {
 }
 
 export class ResolveBillingRemediationDto {
-  @IsISO8601() expectedUpdatedAt!: string;
+  @IsInt() @Min(1) expectedRemediationVersion!: number;
+  @IsInt() @Min(1) expectedSaleVersion!: number;
+  @IsArray() @ValidateNested({ each: true }) @Type(() => BillingRemediationDocumentVersionDto) expectedDocumentVersions!: BillingRemediationDocumentVersionDto[];
   @IsString() @IsNotEmpty() reason!: string;
   @IsOptional() @IsObject() @ValidateNested() @Type(() => BillingRemediationCorrectionDto) correction?: BillingRemediationCorrectionDto;
 }
