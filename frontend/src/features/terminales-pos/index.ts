@@ -1,0 +1,1 @@
+export { PosTerminalsPage } from './PosTerminalsPage'

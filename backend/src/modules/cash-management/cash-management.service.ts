@@ -97,7 +97,7 @@ export class CashManagementService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRawUnsafe(
+        await tx.$executeRawUnsafe(
           'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
           `daily-close:${terminal.operationalLocationId}:${dto.businessDate.slice(0, 10)}`,
         );

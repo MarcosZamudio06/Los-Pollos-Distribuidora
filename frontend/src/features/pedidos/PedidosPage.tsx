@@ -7,7 +7,7 @@ import { useAuth } from '../auth'
 import { usePurchaseLocations } from '../compras/hooks'
 import { money } from '../ventas/saleLabels'
 import { useBranchOrders } from './hooks'
-import { latestOrder } from './orderUtils'
+import { mergeOrders } from './orderUtils'
 import type { BranchOrderFilters } from './ordersService'
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting'
@@ -83,7 +83,7 @@ export function PedidosPage() {
 
   const activeLocationId = user?.role === 'ADMIN' ? selectedLocationId : user?.operationalLocationId ?? ''
   const activeFilters = useMemo<BranchOrderFilters | null>(
-    () => activeLocationId ? { ...dayRange, limit: 1, locationId: activeLocationId } : null,
+    () => activeLocationId ? { ...dayRange, limit: 2, locationId: activeLocationId } : null,
     [activeLocationId, dayRange],
   )
   const ordersQuery = useBranchOrders(activeFilters)
@@ -116,7 +116,7 @@ export function PedidosPage() {
       onOrderCreated: (order) => {
         if (order.location.id !== activeLocationId) return
         queryClient.setQueryData<{ items: SaleOrder[] }>(['branch-orders', activeFilters], (current) => ({
-          items: latestOrder(current?.items ?? [], [order]),
+          items: mergeOrders(current?.items ?? [], [order]),
         }))
       },
       onReconnecting: () => setConnectionStatus('reconnecting'),
@@ -136,17 +136,17 @@ export function PedidosPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8" ref={pageRef}>
-      <section className="mx-auto grid max-w-[96rem] gap-5">
-        <header className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white p-6 shadow-[var(--erp-shadow-elevated)] sm:p-7">
+    <main className="min-h-screen bg-[var(--erp-background)] px-3 py-4 text-[var(--erp-foreground)] sm:px-4 lg:px-6" ref={pageRef}>
+      <section className="mx-auto grid max-w-[96rem] gap-3">
+        <header className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white p-4 shadow-[var(--erp-shadow-elevated)] sm:p-5">
           <div className="pointer-events-none absolute right-[-3rem] top-[-3rem] h-44 w-44 rounded-full border-[20px] border-[rgba(214,155,45,0.14)]" />
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="relative flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(47,111,115,0.18)] bg-[rgba(47,111,115,0.08)] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]"><Activity className="h-4 w-4" /> Operación en vivo</div>
-              <h1 className="mt-4 text-3xl font-black tracking-[-0.06em] sm:text-4xl">Pedidos de sucursal</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Monitor de la última venta confirmada hoy. Se sincroniza cada 10 minutos y cambia de inmediato al llegar una venta nueva.</p>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(47,111,115,0.18)] bg-[rgba(47,111,115,0.08)] px-2.5 py-0.5 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]"><Activity className="h-4 w-4" /> Operación en vivo</div>
+              <h1 className="mt-3 text-3xl font-black tracking-[-0.06em] sm:text-4xl">Pedidos de sucursal</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-5 text-[var(--erp-muted-foreground)]">Las ventas confirmadas aparecen al instante durante el intervalo. Cada 10 minutos, REST limpia la bandeja y conserva las dos más recientes.</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Badge className="w-fit" tone={status.tone}>{connectionStatus === 'connected' ? <CircleCheck className="h-3.5 w-3.5" /> : <CircleAlert className="h-3.5 w-3.5" />}{status.label}</Badge>
               <Button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'} className="size-10 p-0" onClick={() => void toggleFullscreen()} size="sm" variant="outline">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
             </div>
@@ -156,7 +156,7 @@ export function PedidosPage() {
         <Card className="p-5">
           <CardHeader className="gap-2">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]"><Store className="h-4 w-4" /> Sucursal operativa</div>
-            <CardDescription>La pantalla conserva una sola venta confirmada del día para la sucursal activa.</CardDescription>
+            <CardDescription>Las ventas nuevas se acumulan hasta la siguiente limpieza programada de la sucursal activa.</CardDescription>
           </CardHeader>
           <CardContent className="mt-4">
             <label className="grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">Ubicación
@@ -173,9 +173,9 @@ export function PedidosPage() {
         {canShowOrders && ordersQuery.error && <p role="alert" className="rounded-2xl border border-[rgba(157,45,36,0.20)] bg-[rgba(157,45,36,0.08)] p-5 text-sm font-bold text-[var(--erp-danger)]">No se pudieron cargar los pedidos de esta sucursal.</p>}
 
         {canShowOrders && !ordersQuery.isLoading && !ordersQuery.error && (
-          <section aria-label="Última venta del día" className="w-full">
+          <section aria-label="Ventas recientes del día" className="grid gap-4">
             {orders.map((order) => <OrderCard key={order.id} order={order} />)}
-            {orders.length === 0 && <div className="grid min-h-64 place-items-center rounded-[1.5rem] border border-dashed border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-8 text-center"><div><Boxes className="mx-auto h-8 w-8 text-[var(--erp-brand-gold-deep)]" /><p className="mt-4 font-black">No hay ventas confirmadas hoy</p><p className="mt-2 max-w-md text-sm text-[var(--erp-muted-foreground)]">La última venta de esta sucursal aparecerá aquí automáticamente.</p></div></div>}
+            {orders.length === 0 && <div className="grid min-h-64 place-items-center rounded-[1.5rem] border border-dashed border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-8 text-center"><div><Boxes className="mx-auto h-8 w-8 text-[var(--erp-brand-gold-deep)]" /><p className="mt-4 font-black">No hay ventas confirmadas hoy</p><p className="mt-2 max-w-md text-sm text-[var(--erp-muted-foreground)]">Las nuevas ventas de esta sucursal aparecerán aquí automáticamente.</p></div></div>}
           </section>
         )}
       </section>

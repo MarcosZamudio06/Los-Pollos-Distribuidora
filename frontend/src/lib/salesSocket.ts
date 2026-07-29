@@ -42,6 +42,11 @@ function getSocketOrigin() {
   return new URL(apiBaseUrl).origin
 }
 
+export function getSalesSocketUrl() {
+  const origin = getSocketOrigin()
+  return origin ? `${origin}/sales` : '/sales'
+}
+
 class SalesSocketClient {
   private socket: SalesSocket | null = null
   private locationId: string | null = null
@@ -79,12 +84,13 @@ class SalesSocketClient {
   private getSocket(): SalesSocket {
     if (this.socket) return this.socket
 
-    this.socket = io(getSocketOrigin(), {
+    this.socket = io(getSalesSocketUrl(), {
       autoConnect: false,
       path: '/api/socket.io',
       reconnection: true,
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 10_000,
+      transports: ['websocket', 'polling'],
     })
     return this.socket
   }

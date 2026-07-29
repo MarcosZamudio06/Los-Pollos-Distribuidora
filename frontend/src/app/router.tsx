@@ -23,6 +23,7 @@ import { BillingReportableNotesPage } from '../features/billing-reportable-notes
 import { BillingRemediationsPage } from '../features/billing-remediations'
 import { DailyClosePage } from '../features/cierre-diario'
 import { PedidosPage } from '../features/pedidos'
+import { PosTerminalsPage } from '../features/terminales-pos'
 
 export function AppRouter() {
   return (
@@ -198,6 +199,14 @@ export function AppRouter() {
           element={
             <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
               <EmployeesPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/admin/cash-terminals"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.cashTerminals}>
+              <PosTerminalsPage />
             </RoleRoute>
           }
         />

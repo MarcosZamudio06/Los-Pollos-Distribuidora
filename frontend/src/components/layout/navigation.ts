@@ -39,6 +39,7 @@ export type NavigationItemKey =
   | 'reports'
   | 'daily-close'
   | 'employees'
+  | 'cash-terminals'
 
 export type NavigationItem = {
   key: NavigationItemKey
@@ -254,6 +255,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Empleados',
     section: 'admin',
     to: '/admin/employees',
+  },
+  {
+    activePaths: ['/admin/cash-terminals'],
+    allowedRoles: ROUTE_ACCESS_ROLES.cashTerminals,
+    routeAccessKey: 'cashTerminals',
+    description: 'Dispositivos de caja',
+    icon: Settings,
+    key: 'cash-terminals',
+    label: 'Terminales POS',
+    section: 'admin',
+    to: '/admin/cash-terminals',
   },
 ]
 

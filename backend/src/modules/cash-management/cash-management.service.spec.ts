@@ -6,7 +6,7 @@ import { CashManagementService } from './cash-management.service';
 function createPrisma() {
   const prisma = {
     $transaction: jest.fn(async (callback: (tx: unknown) => unknown) => callback(prisma)),
-    $queryRawUnsafe: jest.fn(),
+    $executeRawUnsafe: jest.fn(),
     cashTerminal: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     cashShift: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     cashMovement: { aggregate: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
@@ -39,6 +39,10 @@ describe('CashManagementService', () => {
 
     await service.openShift({ terminalId: 'terminal-2', deviceId: 'device-2', businessDate: '2026-07-27', initialCashFund: 500 }, cashier);
 
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close:loc-1:2026-07-27',
+    );
     expect(prisma.cashShift.create).toHaveBeenCalledWith({ data: expect.objectContaining({ terminalId: 'terminal-2', pointOfSaleDailyCloseId: 'close-1', cashierUserId: 'cashier-1' }), include: expect.any(Object) });
     expect(prisma.pointOfSaleDailyClose.create).not.toHaveBeenCalled();
   });
