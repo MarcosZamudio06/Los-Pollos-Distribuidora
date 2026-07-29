@@ -139,15 +139,16 @@ export function PedidosPage() {
     <main className="min-h-screen bg-[var(--erp-background)] px-3 py-4 text-[var(--erp-foreground)] sm:px-4 lg:px-6" ref={pageRef}>
       <section className="mx-auto grid max-w-[96rem] gap-3">
         <header className="relative overflow-hidden rounded-[2rem] border border-[color:var(--erp-border)] bg-white p-4 shadow-[var(--erp-shadow-elevated)] sm:p-5">
-          <div className="pointer-events-none absolute right-[-3rem] top-[-3rem] h-44 w-44 rounded-full border-[20px] border-[rgba(214,155,45,0.14)]" />
-          <div className="relative flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
+          <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
+            <div className="min-w-0 flex-1">
               <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(47,111,115,0.18)] bg-[rgba(47,111,115,0.08)] px-2.5 py-0.5 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]"><Activity className="h-4 w-4" /> Operación en vivo</div>
-              <h1 className="mt-3 text-3xl font-black tracking-[-0.06em] sm:text-4xl">Pedidos de sucursal</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-5 text-[var(--erp-muted-foreground)]">Las ventas confirmadas aparecen al instante durante el intervalo. Cada 10 minutos, REST limpia la bandeja y conserva las dos más recientes.</p>
+              <div className="mt-2 flex flex-col gap-1.5 lg:flex-row lg:items-baseline lg:gap-4">
+                <h1 className="shrink-0 text-3xl font-black tracking-[-0.06em] sm:text-4xl">Pedidos de sucursal</h1>
+                <p className="max-w-2xl text-sm leading-5 text-[var(--erp-muted-foreground)]">Las ventas confirmadas aparecen al instante durante el intervalo. Cada 10 minutos, REST limpia la bandeja y conserva las dos más recientes.</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className="w-fit" tone={status.tone}>{connectionStatus === 'connected' ? <CircleCheck className="h-3.5 w-3.5" /> : <CircleAlert className="h-3.5 w-3.5" />}{status.label}</Badge>
+            <div className="flex shrink-0 items-center gap-2 lg:pl-2">
+              <Badge aria-live="polite" className="w-fit gap-1.5 whitespace-nowrap font-black" tone={status.tone}>{connectionStatus === 'connected' ? <CircleCheck className="h-3.5 w-3.5" /> : <CircleAlert className="h-3.5 w-3.5" />}{status.label}</Badge>
               <Button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'} className="size-10 p-0" onClick={() => void toggleFullscreen()} size="sm" variant="outline">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
             </div>
           </div>
