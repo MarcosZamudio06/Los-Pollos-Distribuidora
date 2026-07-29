@@ -43,7 +43,7 @@ Debe mostrar:
 - Usuario que abrió, revisó y cerró.
 - Última validación y versión.
 - Metadatos de frescura de los datos operativos.
-- `Caja/turno: Cierre único diario`; no se modelan múltiples cajas o turnos en el MVP.
+- `Sucursal`, `Terminal`, `Turno` y `Cierre diario` se muestran como niveles separados. El cierre lista cada terminal y sus turnos con cajero, estado, fondo, ventas, movimientos, conteo y diferencia.
 
 La selección se limita a ubicaciones activas dentro del alcance del usuario. No debe ofrecer stock global.
 
@@ -176,7 +176,7 @@ Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante 
 
 ## Decisiones abiertas
 
-- Cierre único por día frente a turnos o cajas múltiples.
+- Catálogo administrado de terminales y registro controlado de dispositivos.
 - Tolerancias y severidades de diferencias.
 - Fórmula oficial de utilidad y utilidad por pollo.
 - Catálogo final de gastos y otros conceptos.

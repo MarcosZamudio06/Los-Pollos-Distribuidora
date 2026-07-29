@@ -46,6 +46,16 @@ export class RegisterReceivablePaymentDto {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  cashShiftId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
   collectedByUserId?: string;
 
   @IsOptional()

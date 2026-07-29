@@ -12,6 +12,14 @@ const detailInclude = {
   reviewedBy: { select: { id: true, name: true } },
   closedBy: { select: { id: true, name: true } },
   cashMovements: { orderBy: { occurredAt: 'desc' as const } },
+  cashShifts: {
+    include: {
+      terminal: { select: { id: true, code: true, name: true } },
+      cashier: { select: { id: true, name: true } },
+      closedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { openedAt: 'asc' as const },
+  },
   scaleTicketReferences: { include: { product: { select: { id: true, name: true, sku: true } } }, orderBy: { capturedAt: 'desc' as const } },
   inventoryCounts: { include: { product: { select: { id: true, name: true, sku: true, unit: true } }, countedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' as const } },
   lines: { include: { product: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' as const } },
@@ -175,10 +183,15 @@ export class PointOfSaleDailyCloseService {
   async addExpense(id: string, dto: CreateExpenseDto, user: AuthenticatedUser, idempotencyKey: string) {
     const close = await this.requireDraft(id, user);
     if (!dto.reason.trim()) throw new BadRequestException('EXPENSE_REASON_REQUIRED');
+    const shift = await this.prisma.cashShift.findUnique({ where: { id: dto.cashShiftId }, include: { terminal: true } });
+    if (!shift || shift.pointOfSaleDailyCloseId !== id) throw new BadRequestException('CASH_SHIFT_NOT_FOUND');
+    if (shift.status !== 'OPEN') throw new ConflictException('CASH_SHIFT_NOT_OPEN');
+    if (shift.cashierUserId !== user.id && user.role !== 'ADMIN') throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
+    if (!shift.terminal.isActive || shift.terminal.deviceId !== dto.deviceId.trim()) throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
     const { from, to } = this.operationalDay(close.businessDate);
     if (occurredAt < from || occurredAt >= to) throw new BadRequestException('EXPENSE_OUTSIDE_OPERATIONAL_DAY');
-    const payloadHash = this.hashPayload({ closeId: id, amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt: occurredAt.toISOString(), userId: user.id });
+    const payloadHash = this.hashPayload({ closeId: id, cashShiftId: shift.id, amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt: occurredAt.toISOString(), userId: user.id });
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.cashMovement.findUnique({ where: { idempotencyKey } });
@@ -187,7 +200,7 @@ export class PointOfSaleDailyCloseService {
           return this.findClose(id, tx);
         }
         const movement = await tx.cashMovement.create({ data: {
-          operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, type: 'EXPENSE', movementChannel: 'CASH',
+          operationalLocationId: close.operationalLocationId, pointOfSaleDailyCloseId: id, cashShiftId: shift.id, type: 'EXPENSE', movementChannel: 'CASH',
           amount: dto.amount, reason: dto.reason.trim(), reference: dto.reference?.trim() || null, occurredAt, userId: user.id,
           idempotencyKey, idempotencyPayloadHash: payloadHash,
         }});
@@ -509,6 +522,8 @@ export class PointOfSaleDailyCloseService {
   async close(id: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
     this.admin(user);
     const current = await this.requireCloseAccess(id, user);
+    const openShiftCount = await this.prisma.cashShift.count({ where: { pointOfSaleDailyCloseId: id, status: 'OPEN' } });
+    if (openShiftCount > 0) throw new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS');
     if (current.validatedSourceVersion !== current.version) throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
     const closedAt = new Date();
     return this.transition(id, dto.version, 'CLOSED', { status: 'CLOSED', cashSessionStatus: CashSessionStatus.CLOSED, cashSessionClosedAt: closedAt, closedByUserId: user.id, closedAt }, user);
@@ -896,6 +911,13 @@ export class PointOfSaleDailyCloseService {
   private projectForRole(close: object, user: AuthenticatedUser) {
     const candidate = close as { sales?: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date };
     const result = { ...(Array.isArray(candidate.sales) ? this.withCostQuality(candidate as { sales: Array<{ items: Array<{ costSnapshotSource: 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL' }> }>; updatedAt: Date }) : candidate) } as Record<string, unknown>;
+    if (user.role !== 'ADMIN' && Array.isArray(result.sales)) {
+      result.sales = (result.sales as Array<Record<string, unknown>>).map((sale) => {
+        const visibleSale = { ...sale };
+        delete visibleSale.deviceId;
+        return visibleSale;
+      });
+    }
     if (Array.isArray(result.differences)) {
       const differences = result.differences as Array<Record<string, unknown>>;
       const visibleDifferences = user.role === 'WAREHOUSE'

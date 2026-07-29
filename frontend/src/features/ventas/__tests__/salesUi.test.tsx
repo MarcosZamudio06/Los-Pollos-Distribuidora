@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, createRef, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -7,18 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancelSaleDialog } from '../CancelSaleDialog'
 import { ConfirmSaleButton, CustomerSelector, SaleSummary, TicketModal } from '../components'
 import { CartPanel as Cart } from '../pos/CartPanel'
-import { selectCheckoutVisualState } from '../pos/CheckoutDock'
+import { CheckoutDock, selectCheckoutVisualState } from '../pos/CheckoutDock'
 import { ProductResultsTable } from '../pos/ProductResultsTable'
 import { SaleDetailPage } from '../SaleDetailPage'
 import { SalesHistoryPage } from '../SalesHistoryPage'
 import { SalesPosPage } from '../SalesPosPage'
-import type { SaleDetail, SaleVoidPreview, TicketData } from '../types'
+import type { SaleDetail, SalePaymentInput, SaleVoidPreview, TicketData } from '../types'
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const mockState = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } },
-  cashSession: { data: { id: 'close-1', terminalIdentifier: 'Caja 01', cashSessionStatus: 'OPEN', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', openedBy: { id: 'admin-1', name: 'Admin' } }, isLoading: false },
+  cashSession: { data: { id: 'shift-1', terminalId: 'terminal-1', operationalLocationId: 'loc-counter', pointOfSaleDailyCloseId: 'close-1', cashierUserId: 'admin-1', businessDate: '2026-07-22', status: 'OPEN', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', initialCashIn: '0', initialCashOut: '0', terminal: { id: 'terminal-1', operationalLocationId: 'loc-counter', code: 'C01', name: 'Caja 01', deviceId: 'device-1', isActive: true }, cashier: { id: 'admin-1', name: 'Admin' } }, isLoading: false },
   cancelSale: { isPending: false, mutateAsync: vi.fn() },
   voidPreview: { data: null as SaleVoidPreview | null, error: null, isLoading: false },
   voidSale: { isPending: false, mutateAsync: vi.fn() },
@@ -114,7 +114,6 @@ async function openPaymentCapture(container: HTMLElement) {
 
 async function addPosPayment(container: HTMLElement) {
   await openPaymentCapture(container)
-  await act(async () => { getButtonByText(container, 'Agregar pago').click() })
 }
 
 function getSelectByLabelText(container: HTMLElement, text: string): HTMLSelectElement {
@@ -168,7 +167,7 @@ const confirmedSale: SaleDetail = {
 describe('TASK-055 sales UI behavior', () => {
   beforeEach(() => {
     mockState.auth = { user: { role: 'ADMIN' } }
-    mockState.cashSession = { data: { id: 'close-1', terminalIdentifier: 'Caja 01', cashSessionStatus: 'OPEN', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', openedBy: { id: 'admin-1', name: 'Admin' } }, isLoading: false }
+    mockState.cashSession = { data: { id: 'shift-1', terminalId: 'terminal-1', operationalLocationId: 'loc-counter', pointOfSaleDailyCloseId: 'close-1', cashierUserId: 'admin-1', businessDate: '2026-07-22', status: 'OPEN', openedAt: '2026-07-22T08:03:00.000Z', initialCashFund: '1500', initialCashIn: '0', initialCashOut: '0', terminal: { id: 'terminal-1', operationalLocationId: 'loc-counter', code: 'C01', name: 'Caja 01', deviceId: 'device-1', isActive: true }, cashier: { id: 'admin-1', name: 'Admin' } }, isLoading: false }
     mockState.cancelSale = { isPending: false, mutateAsync: vi.fn() }
     mockState.voidPreview = { data: null, error: null, isLoading: false }
     mockState.voidSale = { isPending: false, mutateAsync: vi.fn() }
@@ -182,6 +181,7 @@ describe('TASK-055 sales UI behavior', () => {
     mockState.ticket = { data: undefined, error: null, isLoading: false, refetch: vi.fn() }
     mockState.toast.success.mockReset()
     mockState.toast.warning.mockReset()
+    window.localStorage.clear()
   })
 
   afterEach(() => {
@@ -192,7 +192,7 @@ describe('TASK-055 sales UI behavior', () => {
     const state = (transactionState: Parameters<typeof selectCheckoutVisualState>[0]['transactionState'], disabledReason = '', payments: Parameters<typeof selectCheckoutVisualState>[0]['payments'] = []) => selectCheckoutVisualState({ disabledReason, payments, transactionState })
 
     expect(state('PROCESSING', 'Selecciona una ubicación operativa.')).toMatchObject({ kind: 'LOCATION_REQUIRED' })
-    expect(state('READY_TO_CHARGE', 'Abre una sesión de caja antes de registrar ventas de contado o pagos en efectivo.')).toMatchObject({ kind: 'CASH_CLOSED' })
+    expect(state('READY_TO_CHARGE', 'Abre un turno de caja en esta terminal antes de registrar ventas.')).toMatchObject({ kind: 'CASH_CLOSED' })
     expect(state('READY_TO_CHARGE', 'Producto sin existencia en Mostrador.')).toMatchObject({ kind: 'STOCK_INSUFFICIENT' })
     expect(state('EMPTY', 'Sin conexión. La venta no se registrará sin conexión.')).toMatchObject({ kind: 'CART_EMPTY' })
     expect(state('WEIGHT_PENDING')).toMatchObject({ kind: 'WEIGHT_PENDING' })
@@ -239,12 +239,13 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('xl:grid-cols-[38fr_62fr]')
     expect(html).toContain('h-40')
     expect(html).toContain('h-60')
+    expect(html).toContain('grid-rows-3')
+    expect(html).toContain('gap-px')
     expect(html).toContain('min-[1024px]:grid-cols-[20fr_13fr_22fr]')
     expect(html).toContain('min-[1024px]:grid-rows-2')
-    expect(html).toContain('min-[1024px]:grid-cols-[20fr_34fr_46fr]')
-    expect(html).toContain('min-[1440px]:grid-cols-[20fr_13fr_22fr_45fr]')
+    expect(html).toContain('min-[1440px]:grid-cols-[20fr_13fr_22fr_20fr_25fr]')
     expect(html).toContain('Total de la venta')
-    expect(html).toContain('text-[clamp(2rem,3.2vw,3rem)]')
+    expect(html).toContain('text-[clamp(2.25rem,3.2vw,3rem)]')
     expect(html).toContain('Total en vivo')
     expect(html).toContain('Ubicación operativa')
     expect(html).toContain('Resultados')
@@ -253,6 +254,7 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('Condición comercial')
     expect(html).toContain('Documento de venta')
     expect(html).toContain('Resumen de transacción')
+    expect(html).toContain('Resumen de transacción y total')
     expect(html).toContain('Selecciona una ubicación operativa')
     expect(html).toContain('Mostrador · MOST')
     expect(html).toContain('Nueva venta')
@@ -281,13 +283,18 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
-  it('dirige F4, F6, F8 y F9 al paso operacional correspondiente', async () => {
+  it('dirige F4, F6, F7, F8 y F9 al paso operacional correspondiente', async () => {
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = {
       data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }],
       error: null,
       isLoading: false,
       refetch: vi.fn(),
+    }
+    mockState.customers = {
+      data: [{ id: 'customer-1', name: 'Restaurante Norte', customerNumber: 'C-001', customerType: 'WHOLESALE', creditStatus: 'ACTIVE', isActive: true, creditSummary: { effectiveCreditStatus: 'ACTIVE', availableCredit: 3200 } }],
+      error: null,
+      isLoading: false,
     }
     const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
     try {
@@ -300,16 +307,165 @@ describe('TASK-055 sales UI behavior', () => {
       expect(customerDialog?.className).toContain('min-[1440px]:absolute')
       expect(customerDialog?.className).not.toContain('min-[1280px]')
       expect(customerDialog?.getAttribute('aria-modal')).toBe('true')
+      expect(customerDialog?.getAttribute('aria-labelledby')).toBe('pos-customer-selection-title')
+      expect(customerDialog?.textContent).toContain('Directorio de clientes · F4')
+      expect(customerDialog?.textContent).toContain('Busca por nombre, número o razón social.')
+      expect(customerDialog?.textContent).toContain('Restaurante Norte')
+      expect(customerDialog?.textContent).toContain('C-001')
+      expect(customerDialog?.textContent).toContain('Disponible $3,200.00')
       expect(container.textContent).toContain('Seleccionar cliente')
+      expect(container.querySelector('[aria-label="Teclado numérico"]')).toBeNull()
       await act(async () => { customerDialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
       expect(container.querySelector('[role="dialog"]')).toBeNull()
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', bubbles: true })) })
-      expect(document.activeElement).toBe(container.querySelector('[data-pos-payment] button'))
+      expect(document.activeElement).toBe(container.querySelector('input[aria-label="Efectivo entregado del pago 1"]'))
       expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true')
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F7', bubbles: true })) })
+      expect(document.activeElement).toBe(container.querySelector('[aria-label="Condición comercial"] [role="radio"]'))
+      expect(container.querySelector('[aria-label="Condición comercial"]')?.getAttribute('aria-keyshortcuts')).toBe('F7')
+      expect(container.querySelector('[aria-label="Resumen de pago"] button')?.getAttribute('aria-keyshortcuts')).toBe('F6')
+      expect(container.querySelector('[aria-label="Resumen de pago"] button')?.getAttribute('title')).toContain('F6')
 
       await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', bubbles: true })) })
       expect(document.body.textContent).toContain('¿Iniciar nueva venta?')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('mantiene F6 exclusivo para Pago y asigna F7 a Condición', async () => {
+    const conditionPanelRef = createRef<HTMLElement>()
+    const paymentPanelRef = createRef<HTMLElement>()
+    const customerSearchRef = createRef<HTMLInputElement>()
+    const { container, root } = await renderDom(
+      <CheckoutDock
+        cart={[]}
+        conditionPanelRef={conditionPanelRef}
+        customerSearch=""
+        customerSearchRef={customerSearchRef}
+        customers={[]}
+        customersError={null}
+        customersLoading={false}
+        isSubmitting={false}
+        onConfirm={() => undefined}
+        onCustomerSearchChange={() => undefined}
+        onCustomerSelect={() => undefined}
+        onPaymentTypeChange={() => undefined}
+        onPaymentsChange={() => undefined}
+        paymentPanelRef={paymentPanelRef}
+        paymentType="CASH_SALE"
+        payments={[]}
+        selectedCustomer={null}
+        total={100}
+        transactionState="CART_ACTIVE"
+      />,
+    )
+
+    try {
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F7', bubbles: true })) })
+      expect(document.activeElement).toBe(container.querySelector('[aria-label="Condición comercial"] [role="radio"]'))
+      expect(container.querySelector('[aria-label="Condición comercial"]')?.getAttribute('aria-keyshortcuts')).toBe('F7')
+      expect(container.querySelector('[aria-label="Condición comercial"]')?.getAttribute('title')).toContain('F7')
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', bubbles: true })) })
+      expect(container.querySelector('[aria-label="Resumen de pago"] button')?.getAttribute('aria-keyshortcuts')).toBe('F6')
+      expect(container.querySelector('[aria-label="Resumen de pago"] button')?.getAttribute('title')).toContain('F6')
+      expect(container.querySelector('[aria-label="Captura de pagos"]')).toBeTruthy()
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('captura efectivo rápido, bloquea denominaciones insuficientes y enfoca Cobrar', async () => {
+    const confirmButtonRef = createRef<HTMLButtonElement>()
+    function CashDockHarness() {
+      const [payments, setPayments] = useState<SalePaymentInput[]>([])
+      return <CheckoutDock cart={[]} confirmButtonRef={confirmButtonRef} customerSearch="" customers={[]} customersError={null} customersLoading={false} isSubmitting={false} onConfirm={() => undefined} onCustomerSearchChange={() => undefined} onCustomerSelect={() => undefined} onPaymentTypeChange={() => undefined} onPaymentsChange={setPayments} paymentType="CASH_SALE" payments={payments} selectedCustomer={null} total={187.5} transactionState={payments.length ? 'READY_TO_CHARGE' : 'CART_ACTIVE'} />
+    }
+    const { container, root } = await renderDom(<CashDockHarness />)
+
+    try {
+      await openPaymentCapture(container)
+      const cashInput = container.querySelector<HTMLInputElement>('input[aria-label="Efectivo entregado del pago 1"]')
+      const fifty = container.querySelector<HTMLButtonElement>('button[aria-label="Usar $50.00 de efectivo entregado"]')
+      const twoHundred = container.querySelector<HTMLButtonElement>('button[aria-label="Usar $200.00 de efectivo entregado"]')
+      expect(document.activeElement).toBe(cashInput)
+      expect(fifty?.disabled).toBe(true)
+      expect(twoHundred?.disabled).toBe(false)
+      expect(getButtonByText(container, 'Agregar pago').disabled).toBe(true)
+
+      await act(async () => {
+        twoHundred?.click()
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+      })
+
+      const change = container.querySelector('[aria-label="Resumen de pago"] dl > div:last-child')
+      expect(change?.textContent).toContain('$12.50')
+      expect(change?.className).toContain('text-[var(--pos-success)]')
+      expect(container.querySelector('[aria-label="Captura de pagos"]')).toBeNull()
+      expect(document.activeElement).toBe(confirmButtonRef.current)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('deshabilita Crédito para Público general y lo habilita sólo con un cliente válido', async () => {
+    const conditionPanelRef = createRef<HTMLElement>()
+    const paymentPanelRef = createRef<HTMLElement>()
+    const customerSearchRef = createRef<HTMLInputElement>()
+    const onPaymentTypeChange = vi.fn()
+    const validCustomer = { id: 'customer-1', name: 'Cliente válido', customerType: 'WHOLESALE' as const, isActive: true, active: true, creditSummary: { availableCredit: 1000 } }
+    const renderDock = (selectedCustomer: typeof validCustomer | null) => (
+      <CheckoutDock
+        cart={[]}
+        conditionPanelRef={conditionPanelRef}
+        customerSearch=""
+        customerSearchRef={customerSearchRef}
+        customers={[]}
+        customersError={null}
+        customersLoading={false}
+        isSubmitting={false}
+        onConfirm={() => undefined}
+        onCustomerSearchChange={() => undefined}
+        onCustomerSelect={() => undefined}
+        onPaymentTypeChange={onPaymentTypeChange}
+        onPaymentsChange={() => undefined}
+        paymentPanelRef={paymentPanelRef}
+        paymentType="CASH_SALE"
+        payments={[]}
+        selectedCustomer={selectedCustomer}
+        total={100}
+        transactionState="CART_ACTIVE"
+      />
+    )
+    const { container, root } = await renderDom(renderDock(null))
+
+    try {
+      const creditButton = getConditionButton(container, 'Crédito')
+      expect(creditButton.disabled).toBe(true)
+      expect(creditButton.getAttribute('aria-disabled')).toBe('true')
+      expect(creditButton.tabIndex).toBe(-1)
+      expect(creditButton.getAttribute('aria-describedby')).toBe('pos-credit-condition-reason')
+      expect(container.textContent?.match(/Selecciona un cliente válido para habilitar crédito\./g)).toHaveLength(1)
+
+      await act(async () => { creditButton.click() })
+      expect(onPaymentTypeChange).not.toHaveBeenCalled()
+
+      await act(async () => { root.render(renderDock(validCustomer)) })
+      const enabledCreditButton = getConditionButton(container, 'Crédito')
+      expect(enabledCreditButton.disabled).toBe(false)
+      expect(enabledCreditButton.getAttribute('aria-disabled')).toBe('false')
+      expect(enabledCreditButton.tabIndex).toBe(0)
+      expect(enabledCreditButton.getAttribute('aria-describedby')).toBeNull()
+      expect(container.textContent).not.toContain('Selecciona un cliente válido para habilitar crédito.')
+
+      await act(async () => { enabledCreditButton.click() })
+      expect(onPaymentTypeChange).toHaveBeenCalledWith('CREDIT_SALE')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -401,6 +557,38 @@ describe('TASK-055 sales UI behavior', () => {
     }
   })
 
+  it('deshabilita Agregar sin stock sin hover, foco ni tabulación y conserva Sin stock visible', async () => {
+    const onAdd = vi.fn()
+    const products = [
+      { availableKg: 0, availablePieces: 0, id: 'prod-empty', locationId: 'loc-counter', name: 'Pollo agotado', presentationType: 'WHOLE' as const, quantityKg: 0, quantityPieces: 0, salePrice: 92, unit: 'PIECE' as const, unitPrice: 92 },
+      { availableKg: 10, availablePieces: 8, id: 'prod-available', locationId: 'loc-counter', name: 'Pollo disponible', presentationType: 'WHOLE' as const, quantityKg: 0, quantityPieces: 0, salePrice: 92, unit: 'PIECE' as const, unitPrice: 92 },
+    ]
+    const { container, root } = await renderDom(<ProductResultsTable error={null} frequentProducts={[]} isLoading={false} locationId="loc-counter" locations={[]} locationsError={null} locationsLoading={false} onAdd={onAdd} onLocationChange={() => undefined} products={products} search="" showLocationSelector={false} />)
+    try {
+      const emptyRow = Array.from(container.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes('Pollo agotado'))
+      const emptyButton = emptyRow?.querySelector('button')
+      const availableButton = Array.from(container.querySelectorAll('button')).find((button) => button.closest('tr')?.textContent?.includes('Pollo disponible'))
+
+      expect(emptyButton).toBeInstanceOf(HTMLButtonElement)
+      expect((emptyButton as HTMLButtonElement).disabled).toBe(true)
+      expect((emptyButton as HTMLButtonElement).tabIndex).toBe(-1)
+      expect(emptyButton?.getAttribute('aria-describedby')).toBe('product-stock-prod-empty')
+      expect(emptyButton?.className).toContain('cursor-not-allowed')
+      expect(emptyButton?.className).toContain('disabled:pointer-events-none')
+      expect(emptyButton?.className).not.toContain('hover:')
+      expect(emptyButton?.className).not.toContain('focus-visible:')
+      expect(emptyRow?.textContent).toContain('Sin stock')
+      expect(availableButton).toBeInstanceOf(HTMLButtonElement)
+      expect((availableButton as HTMLButtonElement).disabled).toBe(false)
+
+      await act(async () => { (emptyButton as HTMLButtonElement).click() })
+      expect(onAdd).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
   it('agrega un producto al leer su código de barras y presionar Enter', async () => {
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = {
@@ -485,10 +673,44 @@ describe('TASK-055 sales UI behavior', () => {
         }
       })
 
-      expect((container.querySelector('input[aria-label="Kilos capturados de Pechuga"]') as HTMLInputElement).value).toBe('1')
+      expect((container.querySelector('input[aria-label="Kilos capturados de Pechuga"]') as HTMLInputElement).value).toBe('')
       expect(container.textContent).toContain('Captura el peso de Pechuga')
       expect(Array.from(container.querySelectorAll('tr')).some((row) => row.className.includes('shadow-[inset_3px_0_0_var(--pos-green)]'))).toBe(true)
-      expect(container.querySelector('[aria-label="Total de la venta"]')?.textContent).toContain('1 partida · 1 kg')
+      expect(container.querySelector('[aria-label="Total de la venta"]')?.textContent).toContain('1 partida')
+      expect(container.querySelector('[aria-label="Total de la venta"]')?.textContent).not.toContain('kg')
+
+      const weightInput = container.querySelector('input[aria-label="Kilos capturados de Pechuga"]') as HTMLInputElement
+      expect(document.activeElement).toBe(weightInput)
+      await act(async () => {
+        changeInput(weightInput, '2.5')
+      })
+      await act(async () => {
+        weightInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+      })
+      expect(container.textContent).toContain('Peso capturado')
+      expect(container.textContent).not.toContain('Peso estable')
+      expect(container.querySelector('[aria-label="Total de la venta"]')?.textContent).toContain('2.5 kg')
+      expect(document.activeElement).toBe(search)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('mantiene el sonido de escaneo desactivado por defecto y guarda la preferencia local', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const soundButton = container.querySelector<HTMLButtonElement>('button[aria-label="Activar sonido de escaneo"]')
+      expect(soundButton?.getAttribute('aria-pressed')).toBe('false')
+      expect(window.localStorage.getItem('pos:scan-sound-enabled')).toBeNull()
+
+      await act(async () => { soundButton?.click() })
+
+      const enabledButton = container.querySelector<HTMLButtonElement>('button[aria-label="Desactivar sonido de escaneo"]')
+      expect(enabledButton?.getAttribute('aria-pressed')).toBe('true')
+      expect(window.localStorage.getItem('pos:scan-sound-enabled')).toBe('true')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -523,7 +745,7 @@ describe('TASK-055 sales UI behavior', () => {
       })
 
       expect(piecesInput.value).toBe('1')
-      expect((container.querySelector('input[aria-label="Kilos capturados de Pierna y muslo"]') as HTMLInputElement).value).toBe('1')
+      expect((container.querySelector('input[aria-label="Kilos capturados de Pierna y muslo"]') as HTMLInputElement).value).toBe('')
       expect(container.textContent).toContain('Incrementado: Pierna y muslo (1 pieza)')
     } finally {
       await act(async () => { root.unmount() })
@@ -618,16 +840,64 @@ describe('TASK-055 sales UI behavior', () => {
 
       const primaryAction = getPosPrimaryAction(container)
       expect(primaryAction.disabled).toBe(false)
-      expect(primaryAction.getAttribute('aria-keyshortcuts')).toBe('F8')
+      expect(primaryAction.getAttribute('aria-keyshortcuts')).toBe('F8 Enter')
       expect(primaryAction.textContent).toContain('Registrar pago')
-      expect(container.textContent).toContain('La venta de contado debe liquidarse completamente')
+      const paymentSummary = container.querySelector('[aria-label="Resumen de pago"]')
+      expect(paymentSummary?.textContent).toContain('Captura el pago.')
+      expect(paymentSummary?.textContent).not.toContain('La venta de contado debe liquidarse completamente')
+      expect(paymentSummary?.querySelector('span[role="status"]')?.className).toContain('h-5')
+      expect(paymentSummary?.querySelector('dl')?.className).toContain('h-12')
+      expect(paymentSummary?.querySelectorAll('dl > div')).toHaveLength(3)
+      expect(paymentSummary?.textContent).toContain('Pagado')
+      expect(paymentSummary?.textContent).toContain('Pendiente')
+      expect(paymentSummary?.textContent).toContain('Cambio')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
     }
   })
 
-  it('bloquea el POS de contado cuando no existe una sesión de caja abierta', async () => {
+  it('usa un aviso breve para un pago parcial sin cambiar la validación', async () => {
+    const conditionPanelRef = createRef<HTMLElement>()
+    const paymentPanelRef = createRef<HTMLElement>()
+    const customerSearchRef = createRef<HTMLInputElement>()
+    const { container, root } = await renderDom(
+      <CheckoutDock
+        cart={[]}
+        conditionPanelRef={conditionPanelRef}
+        customerSearch=""
+        customerSearchRef={customerSearchRef}
+        customers={[]}
+        customersError={null}
+        customersLoading={false}
+        disabledReason="La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial."
+        isSubmitting={false}
+        onConfirm={() => undefined}
+        onCustomerSearchChange={() => undefined}
+        onCustomerSelect={() => undefined}
+        onPaymentTypeChange={() => undefined}
+        onPaymentsChange={() => undefined}
+        paymentPanelRef={paymentPanelRef}
+        paymentType="CASH_SALE"
+        payments={[{ amount: 40, paymentMethod: 'CASH' }]}
+        selectedCustomer={null}
+        total={100}
+        transactionState="PAYMENT_PENDING"
+      />,
+    )
+
+    try {
+      const paymentSummary = container.querySelector('[aria-label="Resumen de pago"]')
+      expect(paymentSummary?.textContent).toContain('Completa el pago.')
+      expect(paymentSummary?.textContent).not.toContain('La venta de contado debe liquidarse completamente')
+      expect(paymentSummary?.querySelectorAll('dl > div')).toHaveLength(3)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('bloquea el POS cuando no existe un turno de caja abierto', async () => {
     mockState.cashSession = { data: null, isLoading: false } as unknown as typeof mockState.cashSession
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
@@ -641,9 +911,9 @@ describe('TASK-055 sales UI behavior', () => {
       const primaryAction = getPosPrimaryAction(container)
       expect(primaryAction.disabled).toBe(true)
       expect(primaryAction.getAttribute('aria-keyshortcuts')).toBeNull()
-      expect(primaryAction.textContent).toContain('Abre una sesión de caja antes de registrar ventas de contado')
-      expect(container.textContent).toContain('Abre una sesión de caja antes de registrar ventas de contado')
-      expect(container.textContent).toContain('Abrir caja')
+      expect(primaryAction.textContent).toContain('Abre un turno de caja en esta terminal')
+      expect(container.textContent).toContain('Abre un turno de caja en esta terminal')
+      expect(container.textContent).toContain('Abrir turno')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -716,13 +986,13 @@ describe('TASK-055 sales UI behavior', () => {
 
   it('anuncia cada estado del CTA y asocia su bloqueo visible', () => {
     const cases = [
-      ['EMPTY', 'Agrega productos'],
+      ['EMPTY', 'Confirmar venta'],
       ['CART_ACTIVE', 'Registra el pago'],
       ['WEIGHT_PENDING', 'Captura el peso'],
       ['CUSTOMER_REQUIRED', 'Selecciona cliente'],
       ['CREDIT_BLOCKED', 'Crédito no disponible'],
       ['PAYMENT_PENDING', 'Pendiente: $10.00'],
-      ['READY_TO_CHARGE', 'Cobrar $10.00 · F8'],
+      ['READY_TO_CHARGE', 'Confirmar venta'],
       ['PROCESSING', 'Procesando...'],
       ['SUCCESS', 'Venta registrada'],
       ['BLOCKED', 'Resolver incidencia'],
@@ -737,6 +1007,38 @@ describe('TASK-055 sales UI behavior', () => {
     const blocked = renderToStaticMarkup(<ConfirmSaleButton disabledReason="Registra el pago pendiente." isSubmitting={false} onConfirm={() => undefined} total={10} transactionState="PAYMENT_PENDING" />)
     expect(blocked).toContain('aria-describedby="checkout-blocker"')
     expect(blocked).toContain('id="checkout-blocker"')
+  })
+
+  it('abre el modal en el primer Enter y registra la venta en el segundo', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = {
+      data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    mockState.createSale.mutateAsync.mockResolvedValue({
+      sale: { id: 'sale-enter', saleNumber: 'V-ENTER', items: [], total: 92, paymentType: 'CASH_SALE', status: 'CONFIRMED', collectionStatus: 'PAID' },
+      ticketId: 'ticket-enter',
+    })
+
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
+      await addPosPayment(container)
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+      expect(container.querySelector('[role="alertdialog"]')).toBeTruthy()
+      expect(mockState.createSale.mutateAsync).not.toHaveBeenCalled()
+
+      await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+      expect(mockState.createSale.mutateAsync).toHaveBeenCalledTimes(1)
+      expect(document.body.textContent).toContain('Venta registrada')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
   })
 
   it('limpia el cliente del resumen y conserva la ubicación después de registrar una venta', async () => {
@@ -790,6 +1092,7 @@ describe('TASK-055 sales UI behavior', () => {
   })
 
   it('conserva una pantalla de venta registrada y usa impresión provisional si falla el documento', async () => {
+    vi.useFakeTimers()
     mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
     mockState.products = {
       data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', locationName: 'Mostrador', quantityKg: 0, quantityPieces: 8 } }],
@@ -827,23 +1130,29 @@ describe('TASK-055 sales UI behavior', () => {
       expect(document.body.textContent).toContain('V-1001')
       expect(document.body.textContent).toContain('$92.00')
       expect(document.body.textContent).toContain('Restaurante Norte')
-      expect(document.body.textContent).toContain('Reintentar impresión')
-      expect(document.body.textContent).toContain('Abrir historial')
+      expect(document.body.textContent).toContain('Reimprimir')
+      expect(document.body.textContent).toContain('Ir al historial')
       expect(document.body.textContent).toContain('Nueva venta')
       expect(document.body.textContent).toContain('No se pudo consultar el documento')
 
-      await act(async () => { getButtonByText(document.body, 'Reintentar impresión').click() })
+      await act(async () => { vi.advanceTimersByTime(701) })
+      expect(document.body.textContent).toContain('Venta registrada')
+
+      await act(async () => { getButtonByText(document.body, 'Reimprimir').click() })
       expect(mockState.ticket.refetch).toHaveBeenCalledTimes(1)
       expect(document.body.textContent).toContain('Impresión provisional')
       expect(document.body.textContent).toContain('NOTA DE VENTA')
       expect(document.body.textContent).toContain('Pollo entero')
 
-      await act(async () => { getButtonByText(document.body, 'Cerrar').click() })
+      const closeTicketButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Cerrar')
+      expect(closeTicketButton).toBeInstanceOf(HTMLButtonElement)
+      await act(async () => { (closeTicketButton as HTMLButtonElement).click() })
       expect(document.body.textContent).toContain('Venta registrada')
-      await act(async () => { getButtonByText(document.body, 'Nueva venta').click() })
+      await act(async () => { getButtonByText(document.body, 'Cerrar ventana').click() })
       expect(document.body.textContent).not.toContain('Venta registrada')
       expect(container.textContent).toContain('0 en carrito')
     } finally {
+      vi.useRealTimers()
       await act(async () => { root.unmount() })
       container.remove()
     }

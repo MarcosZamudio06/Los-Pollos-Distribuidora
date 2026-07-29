@@ -81,7 +81,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Ignorar precios enviados por frontend como fuente de verdad.
 - Crear venta de contado con método de pago.
 - Rechazar venta de contado sin sesión `PointOfSaleDailyClose` abierta y verificar que no persista efectos parciales.
-- Verificar que la venta y sus pagos inmediatos conserven `pointOfSaleDailyCloseId` desde la confirmación.
+- Verificar que ventas y pagos de punto fijo conserven `cashShiftId`, que el cierre se derive del turno y que cajero/dispositivo distintos sean rechazados.
 - Rechazar `CASH_SALE` sin pagos o con pagos parciales, incluso cuando exista un cliente activo, sin crear venta ni cuenta por cobrar.
 - Requerir cambio explícito a `CREDIT_SALE` para confirmar pagos parciales y ejecutar la evaluación de crédito.
 - Crear venta a crédito con cliente autorizado y cuenta por cobrar.

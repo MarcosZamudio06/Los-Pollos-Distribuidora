@@ -1,8 +1,7 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   AgingStatus,
   BillingRequestStatus,
-  CashSessionStatus,
   CollectionStatus,
   CreditStatus,
   EquivalentStatus,
@@ -26,8 +25,9 @@ import {
 import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, CreateSalePaymentDto, ListSalesQueryDto, VoidSaleDto } from './dto';
+import { CancelSaleDto, CreateSaleDto, CreateSaleItemDto, CreateSalePaymentDto, ListBranchOrdersQueryDto, ListSalesQueryDto, VoidSaleDto } from './dto';
 import { evaluateCreditDecision } from './credit-decision';
+import { SalesRealtimeService } from './sales-realtime.service';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'operationalLocationId'> & Partial<Pick<AuthenticatedUser, 'name'>>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
@@ -157,6 +157,24 @@ type SaleDetailRecord = SaleListRecord & {
     longitude?: DecimalLike;
     stopSequence?: number | null;
   } | null;
+};
+
+type BranchOrderRecord = {
+  id: string;
+  saleNumber: string;
+  createdAt: Date;
+  total: DecimalLike;
+  status: SaleStatus;
+  customer: { id: string; name: string } | null;
+  location: { id: string; name: string };
+  items: Array<{
+    id: string;
+    productId: string;
+    productNameSnapshot: string;
+    unit: ProductUnit;
+    quantityKg: DecimalLike;
+    quantityPieces: number | null;
+  }>;
 };
 
 type SaleDocumentListRecord = Record<string, unknown> & {
@@ -333,7 +351,10 @@ const saleChannelLocationTypes: Record<SaleChannel, ReadonlySet<OperationalLocat
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly salesRealtime?: SalesRealtimeService,
+  ) {}
 
   async findAll(query: ListSalesQueryDto = {}, currentUser: Actor) {
     const sales = (await this.prisma.sale.findMany({
@@ -356,6 +377,42 @@ export class SalesService {
     } as Prisma.SaleFindManyArgs)) as SaleListRecord[];
 
     return { items: sales.map((sale) => this.toSaleListItem(sale)) };
+  }
+
+  async findBranchOrders(query: ListBranchOrdersQueryDto, currentUser: Actor) {
+    await this.assertBranchOrderLocationAccess(query.locationId, currentUser);
+    const orders = await this.prisma.sale.findMany({
+      where: {
+        locationId: query.locationId,
+        status: SaleStatus.CONFIRMED,
+        ...(query.dateFrom || query.dateTo ? {
+          createdAt: {
+            ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+            ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+          },
+        } : {}),
+        ...(query.saleChannel ? { saleChannel: query.saleChannel } : {}),
+        ...(query.paymentType ? { paymentType: query.paymentType } : {}),
+      },
+      include: {
+        customer: { select: { id: true, name: true } },
+        location: { select: { id: true, name: true } },
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            productNameSnapshot: true,
+            unit: true,
+            quantityKg: true,
+            quantityPieces: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: query.limit ?? 50,
+    });
+
+    return { items: (orders as BranchOrderRecord[]).map((order) => this.toBranchOrder(order)) };
   }
 
   async findOne(id: string, currentUser: Actor) {
@@ -464,7 +521,7 @@ export class SalesService {
 
     const payloadHash = this.hashPayload(dto);
 
-    return this.withSerializableRetry(() => this.prisma.$transaction(
+    const outcome = await this.withSerializableRetry(() => this.prisma.$transaction(
       async (tx) => {
         const existingSale = await tx.sale.findUnique({
           where: { idempotencyKey },
@@ -479,14 +536,17 @@ export class SalesService {
 
           const existingBillingState = existingSale as unknown as SaleListRecord;
           return {
-            sale: this.toSaleResponse(existingSale, currentUser),
-            payments: existingSale.payments.map((payment) => this.toPaymentResponse(payment)),
-            // Deprecated compatibility field. New consumers must use payments.
-            payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
-            accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
-            billingRequest: existingSale.billingRequests?.[0] ?? existingBillingState.billingRequest ?? null,
-            inventoryMovements: existingSale.inventoryMovements.map((movement) => this.toMovementResponse(movement)),
-            documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
+            created: false,
+            response: {
+              sale: this.toSaleResponse(existingSale, currentUser),
+              payments: existingSale.payments.map((payment) => this.toPaymentResponse(payment)),
+              // Deprecated compatibility field. New consumers must use payments.
+              payment: existingSale.payments[0] ? this.toPaymentResponse(existingSale.payments[0]) : null,
+              accountReceivable: existingSale.accountReceivable ? this.toReceivableResponse(existingSale.accountReceivable) : null,
+              billingRequest: existingSale.billingRequests?.[0] ?? existingBillingState.billingRequest ?? null,
+              inventoryMovements: existingSale.inventoryMovements.map((movement) => this.toMovementResponse(movement)),
+              documents: (existingSale.documents ?? []).map((document) => this.toSaleDocumentResponse(document as SaleDocumentListRecord)),
+            },
           };
         }
         const location = await tx.operationalLocation.findUnique({ where: { id: dto.locationId } });
@@ -495,7 +555,8 @@ export class SalesService {
         }
 
         this.assertLocationMatchesSaleChannel(dto, location.type);
-        const cashSessionId = await this.resolveCashSession(tx, dto, payments, location.id);
+        const cashShift = await this.resolveCashShift(tx, dto, location.id, currentUser);
+        const dailyCloseId = cashShift?.pointOfSaleDailyCloseId ?? null;
 
         const customer = dto.customerId
           ? ((await tx.customer.findUnique({ where: { id: dto.customerId } })) as CustomerCredit | null)
@@ -558,13 +619,20 @@ export class SalesService {
         });
 
         const saleNumber = await this.nextSaleNumber(tx);
+        const registeredAt = new Date();
         const sale = await tx.sale.create({
           data: {
             saleNumber,
             customerId: dto.customerId ?? null,
             userId: currentUser.id,
             locationId: dto.locationId,
-            pointOfSaleDailyCloseId: cashSessionId,
+            pointOfSaleDailyCloseId: dailyCloseId,
+            terminalId: cashShift?.terminalId ?? null,
+            cashShiftId: cashShift?.id ?? null,
+            cashierUserId: cashShift?.cashierUserId ?? null,
+            businessDate: cashShift?.businessDate ?? null,
+            registeredAt: cashShift ? registeredAt : null,
+            deviceId: cashShift?.terminal.deviceId ?? null,
             saleChannel: dto.saleChannel,
             documentType: dto.documentType,
             currencyCode: 'MXN',
@@ -652,7 +720,7 @@ export class SalesService {
         const documentData = {
             saleId: sale.id,
             operationalLocationId: dto.locationId,
-            pointOfSaleDailyCloseId: cashSessionId,
+            pointOfSaleDailyCloseId: dailyCloseId,
             physicalFolio: this.normalizeOptionalText(dto.physicalFolio ?? sale.saleNumber),
             status: SaleDocumentStatus.ISSUED,
             requiresAdministrativeInvoice: dto.requiresAdministrativeInvoice ?? false,
@@ -704,7 +772,8 @@ export class SalesService {
               referenceNumber: this.normalizeOptionalText(payment.referenceNumber),
               cardLastFour: this.normalizeOptionalText(payment.cardLastFour),
               operationalLocationId: dto.locationId,
-              pointOfSaleDailyCloseId: cashSessionId,
+              pointOfSaleDailyCloseId: dailyCloseId,
+              cashShiftId: cashShift?.id ?? null,
               status: PaymentStatus.APPLIED,
               paidAt: new Date(),
               idempotencyKey: `${idempotencyKey}:${index}`,
@@ -780,20 +849,30 @@ export class SalesService {
         }
 
         return {
-          sale: this.toSaleResponse(sale, currentUser),
-          payments: createdPayments.map((payment) => this.toPaymentResponse(payment)),
-          // Deprecated compatibility field. New consumers must use payments.
-          payment: createdPayments[0] ? this.toPaymentResponse(createdPayments[0]) : null,
-          accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
-          billingRequest,
-          inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
-          documents: saleDocuments.map((document) =>
-            this.toSaleDocumentResponse(document as SaleDocumentListRecord),
-          ),
+          created: true,
+          saleId: sale.id,
+          response: {
+            sale: this.toSaleResponse(sale, currentUser),
+            payments: createdPayments.map((payment) => this.toPaymentResponse(payment)),
+            // Deprecated compatibility field. New consumers must use payments.
+            payment: createdPayments[0] ? this.toPaymentResponse(createdPayments[0]) : null,
+            accountReceivable: accountReceivable ? this.toReceivableResponse(accountReceivable) : null,
+            billingRequest,
+            inventoryMovements: inventoryMovements.map((movement) => this.toMovementResponse(movement)),
+            documents: saleDocuments.map((document) =>
+              this.toSaleDocumentResponse(document as SaleDocumentListRecord),
+            ),
+          },
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ));
+
+    if (outcome.created && typeof outcome.saleId === 'string') {
+      await this.salesRealtime?.publishCreated(outcome.saleId);
+    }
+
+    return outcome.response;
   }
 
   private assertOverrideIntent(dto: CreateSaleDto, currentUser: Actor): void {
@@ -1741,39 +1820,57 @@ export class SalesService {
     }
   }
 
-  private async resolveCashSession(
+  private async resolveCashShift(
     tx: Prisma.TransactionClient,
     dto: CreateSaleDto,
-    payments: CreateSalePaymentDto[],
     locationId: string,
-  ): Promise<string | null> {
-    const requiresSession = dto.paymentType === SalePaymentType.CASH_SALE
-      || payments.some((payment) => payment.paymentMethod === PaymentMethod.CASH);
-    if (!dto.pointOfSaleDailyCloseId && !requiresSession) return null;
+    currentUser: Actor,
+  ) {
+    const isFixedPointOfSale = dto.saleChannel !== SaleChannel.ROUTE;
+    if (!dto.cashShiftId && !isFixedPointOfSale) return null;
+    if (!dto.cashShiftId) {
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_REQUIRED',
+        message: 'An open cash shift is required for fixed point-of-sale sales',
+      });
+    }
+    if (!dto.deviceId?.trim()) {
+      throw new BadRequestException({
+        code: 'CASH_TERMINAL_DEVICE_REQUIRED',
+        message: 'The registered terminal device is required',
+      });
+    }
 
-    const session = dto.pointOfSaleDailyCloseId
-      ? await tx.pointOfSaleDailyClose.findUnique({
-          where: { id: dto.pointOfSaleDailyCloseId },
-          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
-        })
-      : await tx.pointOfSaleDailyClose.findFirst({
-          where: { operationalLocationId: locationId, status: PointOfSaleDailyCloseStatus.DRAFT, cashSessionStatus: CashSessionStatus.OPEN },
-          orderBy: { openedAt: 'desc' },
-          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
-        });
-    if (!session || session.operationalLocationId !== locationId) {
-      throw new BadRequestException({
-        code: dto.pointOfSaleDailyCloseId ? 'CASH_SESSION_LOCATION_MISMATCH' : 'CASH_SESSION_REQUIRED',
-        message: dto.pointOfSaleDailyCloseId ? 'The cash session does not belong to the sale location' : 'An open cash session is required before registering a cash sale or cash payment',
-      });
+    const shift = await tx.cashShift.findUnique({
+      where: { id: dto.cashShiftId },
+      select: {
+        id: true,
+        terminalId: true,
+        pointOfSaleDailyCloseId: true,
+        operationalLocationId: true,
+        cashierUserId: true,
+        businessDate: true,
+        status: true,
+        terminal: { select: { id: true, deviceId: true, isActive: true } },
+        pointOfSaleDailyClose: { select: { status: true } },
+      },
+    });
+    if (!shift) {
+      throw new BadRequestException({ code: 'CASH_SHIFT_NOT_FOUND', message: 'The selected cash shift does not exist' });
     }
-    if (session.status !== PointOfSaleDailyCloseStatus.DRAFT || session.cashSessionStatus !== CashSessionStatus.OPEN) {
-      throw new BadRequestException({
-        code: 'CASH_SESSION_NOT_OPEN',
-        message: 'The selected cash session is not open for sales',
-      });
+    if (shift.operationalLocationId !== locationId) {
+      throw new BadRequestException({ code: 'CASH_SHIFT_LOCATION_MISMATCH', message: 'The cash shift does not belong to the sale location' });
     }
-    return session.id;
+    if (shift.status !== 'OPEN' || shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT) {
+      throw new BadRequestException({ code: 'CASH_SHIFT_NOT_OPEN', message: 'The selected cash shift is not open for sales' });
+    }
+    if (shift.cashierUserId !== currentUser.id) {
+      throw new BadRequestException({ code: 'CASH_SHIFT_CASHIER_MISMATCH', message: 'The cash shift belongs to another cashier' });
+    }
+    if (!shift.terminal.isActive || shift.terminal.deviceId !== dto.deviceId.trim()) {
+      throw new BadRequestException({ code: 'CASH_TERMINAL_DEVICE_MISMATCH', message: 'The device does not belong to the registered cash terminal' });
+    }
+    return shift;
   }
 
   private assertLocationAccess(dto: CreateSaleDto, currentUser: Actor) {
@@ -1876,8 +1973,10 @@ export class SalesService {
     currentUser: Actor,
   ) {
     const creditDecision = sale.creditDecisionSnapshot as Record<string, unknown> | null | undefined;
+    const visibleSale = { ...sale };
+    if (currentUser.role !== 'ADMIN') delete visibleSale.deviceId;
     return {
-      ...sale,
+      ...visibleSale,
       creditWarnings: Array.isArray(creditDecision?.warnings) ? creditDecision.warnings : [],
       subtotal: this.decimalToString(sale.subtotal),
       discount: this.decimalToString(sale.discount),
@@ -1907,6 +2006,22 @@ export class SalesService {
   private buildVisibleSalesWhere(query: ListSalesQueryDto, currentUser: Actor): Prisma.SaleWhereInput {
     const where = this.buildSalesFilterWhere(query);
     return this.applyVisibilityScope(where, currentUser);
+  }
+
+  private async assertBranchOrderLocationAccess(locationId: string, currentUser: Actor): Promise<void> {
+    if (!['ADMIN', 'SELLER'].includes(currentUser.role)) {
+      throw new ForbiddenException('BRANCH_ORDERS_FORBIDDEN');
+    }
+
+    if (currentUser.role === 'SELLER' && currentUser.operationalLocationId !== locationId) {
+      throw new ForbiddenException('BRANCH_ORDERS_LOCATION_FORBIDDEN');
+    }
+
+    const location = await this.prisma.operationalLocation.findUnique({
+      where: { id: locationId },
+      select: { id: true, isActive: true },
+    });
+    if (!location?.isActive) throw new NotFoundException('Operational location not found');
   }
 
   private buildVisibleSaleDetailWhere(id: string, currentUser: Actor): Prisma.SaleWhereInput {
@@ -1998,6 +2113,26 @@ export class SalesService {
       collectedByUserId: sale.collectedByUserId ?? null,
       routeId: sale.routeId ?? null,
       pointOfSaleDailyCloseId: sale.pointOfSaleDailyCloseId ?? null,
+    };
+  }
+
+  private toBranchOrder(sale: BranchOrderRecord) {
+    return {
+      id: sale.id,
+      saleNumber: sale.saleNumber,
+      createdAt: sale.createdAt,
+      location: sale.location,
+      customer: sale.customer,
+      items: sale.items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.productNameSnapshot,
+        unit: item.unit,
+        quantityKg: this.decimalToString(item.quantityKg),
+        quantityPieces: item.quantityPieces,
+      })),
+      total: this.decimalToString(sale.total),
+      status: sale.status,
     };
   }
 

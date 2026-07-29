@@ -254,7 +254,8 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
   return {
     customerId: input.customer?.id,
     locationId: input.locationId,
-    pointOfSaleDailyCloseId: input.pointOfSaleDailyCloseId,
+    cashShiftId: input.cashShiftId,
+    deviceId: input.deviceId,
     saleChannel: input.saleChannel,
     documentType: input.documentType,
     physicalFolio: physicalFolio || undefined,

@@ -1050,9 +1050,9 @@ Notas:
 ### Ajustes a entidades existentes
 
 - `OperationalLocation.type` admite `EXTERNAL_POINT_OF_SALE` y `ROUTE_STOCK`; ambas ubicaciones deben estar activas para nuevas operaciones.
-- `Sale` agrega `saleChannel`, `documentType`, `physicalFolio` opcional y `pointOfSaleDailyCloseId` opcional.
-- `Payment` agrega `operationalLocationId` cuando el cobro se recibe en una ubicación fija y `pointOfSaleDailyCloseId` opcional al asociarlo. `accountReceivableId` permanece requerido para cobranza o saldo pendiente; el contado inmediato puede asociarse a `saleId` sin `AccountReceivable` artificial.
-- Una venta de contado o un pago en efectivo de una ubicación fija requiere una sesión abierta y persiste directamente `pointOfSaleDailyCloseId`; el cierre no debe descubrir esas operaciones posteriormente por fecha.
+- `Sale` agrega `saleChannel`, `documentType`, `physicalFolio` y las referencias auditables `terminalId`, `cashShiftId`, `cashierUserId`, `businessDate`, `registeredAt` y `deviceId` para ventas de punto fijo.
+- `Payment` agrega `operationalLocationId` y `cashShiftId` cuando el cobro se recibe en una ubicación fija. `accountReceivableId` permanece requerido para cobranza o saldo pendiente; el contado inmediato puede asociarse a `saleId` sin `AccountReceivable` artificial.
+- Toda venta de punto fijo y todo pago en efectivo fijo requieren un turno abierto del cajero y dispositivo actuales. `pointOfSaleDailyCloseId` se deriva del turno para consolidación.
 - `InventoryMovement` puede referenciar `pointOfSaleDailyCloseId` solo para trazabilidad de un ajuste autorizado; el cierre no crea movimientos implícitos.
 - `SaleDocument` concentra nota sencilla, nota grande y ticket/comprobante interno.
 - La solicitud administrativa de factura se modela con `billingRequestId` y `requiresAdministrativeInvoice`, no como un valor de `Sale.documentType`.
@@ -1076,13 +1076,6 @@ Campos:
 - operationalLocationId
 - businessDate
 - status
-- cashSessionStatus
-- terminalIdentifier
-- openedAt
-- cashSessionClosedAt
-- initialCashFund
-- initialCashIn
-- initialCashOut
 - version
 - lastValidatedAt
 - lastValidationAttemptAt
@@ -1128,15 +1121,22 @@ Estados:
 
 Reglas:
 
-- Solo un cierre no cancelado por `operationalLocationId` y `businessDate` mientras no se aprueben turnos o cajas múltiples; PostgreSQL lo garantiza con un índice único parcial para registros cuyo estado sea distinto de `CANCELLED`.
-- En el MVP, `PointOfSaleDailyClose` es también la sesión de caja: `cashSessionStatus=OPEN` y `status=DRAFT` permiten operaciones monetarias; cerrar o cancelar cambia la sesión a `CLOSED`.
-- `openedByUserId` es el cajero responsable del turno y `openedAt` es la hora de apertura del servidor. `initialCashFund`, `initialCashIn` e `initialCashOut` forman el efectivo de apertura esperado.
+- Solo existe un cierre no cancelado por `operationalLocationId` y `businessDate`; PostgreSQL lo garantiza con un índice único parcial para estados distintos de `CANCELLED`.
+- El cierre consolida `CashShift[]` y no representa una terminal ni una sesión monetaria.
+- No puede cerrarse mientras exista un `CashShift` abierto.
 - Los totales se recalculan en backend y se guardan como snapshot auditable al revisar y cerrar.
 - Cerrar, cancelar o reabrir registra usuario, fecha, motivo y versión esperada.
 - Las transiciones que afecten asociaciones, snapshots o ajustes relacionados se ejecutan en transacción.
 - Una diferencia fuera de tolerancia no se oculta; genera advertencia o bloqueo según una política futura aún abierta.
 - `cashCountedTotal` es nulo hasta que se captura el efectivo físico; al capturarlo, `cashDifferenceTotal` se persiste como `cashCountedTotal - netCashExpected`.
 - `lastValidatedAt` y `validatedSourceVersion` solo se conservan tras una validación sin errores; `lastValidationAttemptAt` registra cualquier intento, incluido uno fallido.
+
+### CashTerminal y CashShift
+
+- `CashTerminal` requiere `operationalLocationId`, código único por ubicación, nombre, `deviceId` globalmente único y estado activo.
+- `CashShift` requiere terminal, ubicación, cierre diario, cajero, fecha de negocio, estado, apertura y fondos iniciales.
+- PostgreSQL impone un solo turno `OPEN` por terminal mediante índice único parcial.
+- `CashShift` conserva conteo y diferencia independientes; ventas, pagos y movimientos monetarios referencian el turno.
 
 ### DailyCloseInventoryCount
 

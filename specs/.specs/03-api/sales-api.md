@@ -31,6 +31,35 @@ Respuesta `data.items[]`:
 - `paymentsSummary` opcional: `totalPaid`, `lastPaidAt`, `methods[]`.
 - `deliveredByUserId`, `collectedByUserId`, `routeId`.
 
+## GET /api/sales/orders
+
+Propósito: recuperar la bandeja operativa de pedidos de una única ubicación operativa. La fuente de verdad sigue siendo la base de datos y este endpoint también sincroniza eventos que el cliente no recibió durante una desconexión.
+
+Permisos: `ADMIN` para una ubicación activa seleccionada; `SELLER` únicamente para su `operationalLocationId`. No existe un listado global, ni se permite a `COLLECTIONS` o `DRIVER` sin una ampliación explícita del flujo.
+
+Query:
+
+- `locationId` requerido.
+- `limit` opcional; por defecto `50`.
+- `dateFrom`, `dateTo`, `saleChannel`, `paymentType` opcionales.
+
+El backend fuerza `status=CONFIRMED`, valida que la ubicación esté activa y rechaza una ubicación no autorizada con `403`.
+
+Respuesta `data.items[]`:
+
+- `id`, `saleNumber`, `createdAt`, `total`, `status`.
+- `location`: `id`, `name`.
+- `customer`: `id`, `name` o `null`.
+- `items[]`: `id`, `productId`, `productName`, `unit`, `quantityKg`, `quantityPieces`.
+
+## Socket.IO /sales
+
+Propósito: notificar la creación de pedidos confirmados dentro de una sola ubicación operativa.
+
+Handshake `auth`: `token` de acceso y `locationId` requerido. El servidor valida token, usuario activo, cambio obligatorio de contraseña, rol y acceso a la ubicación antes de unir el socket a `sales:location:{locationId}`.
+
+Evento servidor-cliente `sale.created`: usa la misma proyección de pedido de `GET /api/sales/orders`. Se emite solo después del commit de la venta, hacia el room de `Sale.locationId`. No existe broadcast global y un replay idempotente no emite de nuevo.
+
 ## GET /api/sales/:id
 
 Propósito: obtener detalle de venta.
@@ -60,7 +89,8 @@ Body importante:
 {
   "customerId": "string opcional para contado pagado al momento; requerido para crédito",
   "locationId": "string",
-  "pointOfSaleDailyCloseId": "string opcional; requerido o resuelto a una sesión abierta para contado/efectivo",
+  "cashShiftId": "string requerido para ventas de punto fijo",
+  "deviceId": "string requerido; debe coincidir con la terminal registrada del turno",
   "saleChannel": "COUNTER",
   "documentType": "SIMPLE_NOTE",
   "physicalFolio": "string opcional",
@@ -101,13 +131,14 @@ Respuesta `data`:
 - `documents[]` cuando el flujo genere nota o documento operativo.
 
 Cuando el actor sea `SELLER`, los snapshots de costo no se devuelven dentro de `sale.items[]`, aunque se persistan internamente para cálculos, auditoría y cierres administrativos.
+El `deviceId` persistido es evidencia interna y no se devuelve en respuestas de venta a actores no administrativos.
 
 Validaciones:
 
 - Debe contener al menos un item.
 - `paymentType` clasifica solo el tipo de venta (`CASH_SALE` o `CREDIT_SALE`); no representa mora, abonos ni envejecimiento.
 - `locationId` requerido como ubicación operativa de descuento.
-- `pointOfSaleDailyCloseId` puede enviarse para seleccionar la sesión; si no se envía en una operación de contado o con efectivo, el backend debe resolver una sesión abierta de la misma ubicación. Si no existe, rechaza con `CASH_SESSION_REQUIRED`.
+- `cashShiftId` y `deviceId` seleccionan el turno y prueban el dispositivo. El backend no resuelve un turno únicamente por ubicación porque podría asociar la venta a otra caja o cajero.
 - `saleChannel` y `documentType` requeridos para distinguir el flujo documental.
 - `SELLER` solo puede usar su ubicación operativa asignada; `ADMIN` puede usar cualquier ubicación activa compatible.
 - La compatibilidad canal-ubicación es: `COUNTER` con `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`; `EXTERNAL_POINT_OF_SALE` con `EXTERNAL_POINT_OF_SALE`; `ROUTE` con `ROUTE_STOCK`; `INSTITUTIONAL` y `WHOLESALE` con `BRANCH` o `MIXED`.
@@ -121,8 +152,8 @@ Validaciones:
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
 - `quantityPieces` debe ser entero cuando aplique.
 - Venta de contado requiere que exista al menos un pago y que la suma de `payments[]` sea exactamente igual al total calculado por backend.
-- La venta de contado requiere una sesión con `cashSessionStatus=OPEN` y `status=DRAFT`; la venta y cada pago inmediato conservan directamente `pointOfSaleDailyCloseId`.
-- Un abono inicial en efectivo de una venta a crédito usa la misma regla de sesión y asociación directa. Los cobros en ruta se mantienen en `RouteSettlement`.
+- Toda venta de punto fijo requiere un `CashShift` abierto del cajero autenticado y dispositivo registrado. El backend deriva y persiste `terminalId`, `cashShiftId`, `cashierUserId`, `businessDate`, `registeredAt`, `deviceId` y el `pointOfSaleDailyCloseId` consolidado.
+- Un abono inicial en efectivo de una venta a crédito usa la misma regla de turno y asociación directa. Los cobros en ruta se mantienen en `RouteSettlement`.
 - Cada pago inmediato de contado se registra como un `Payment` asociado a `saleId`; no crea `AccountReceivable` artificial.
 - Una venta de contado sin pagos o con pagos parciales se rechaza, aunque tenga cliente registrado; para conservar un saldo pendiente el operador debe cambiar explícitamente `paymentType` a `CREDIT_SALE`.
 - `payments[].amount` permanece como monto aplicado contable. `cashTendered` y `changeGiven` son evidencia individual del `Payment` en efectivo, no modifican el total aplicado ni generan pago, reembolso o movimiento de caja adicional.

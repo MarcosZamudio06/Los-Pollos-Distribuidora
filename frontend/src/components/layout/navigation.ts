@@ -23,6 +23,7 @@ export type NavigationItemKey =
   | 'home'
   | 'sales'
   | 'sales-history'
+  | 'orders'
   | 'customers'
   | 'accounts-receivable'
   | 'billing-requests'
@@ -85,6 +86,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: 'Historial de ventas',
     section: 'commercial',
     to: '/sales/history',
+  },
+  {
+    activePaths: ['/orders'],
+    allowedRoles: ROUTE_ACCESS_ROLES.orders,
+    routeAccessKey: 'orders',
+    description: 'Pedidos por sucursal en vivo',
+    icon: ClipboardList,
+    key: 'orders',
+    label: 'Pedidos',
+    section: 'operations',
+    to: '/orders',
   },
   {
     activePaths: ['/customers'],

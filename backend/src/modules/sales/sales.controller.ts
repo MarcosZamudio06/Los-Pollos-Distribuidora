@@ -4,7 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelSaleDto, CreateSaleDto, ListSalesQueryDto, VoidSaleDto } from './dto';
+import { CancelSaleDto, CreateSaleDto, ListBranchOrdersQueryDto, ListSalesQueryDto, VoidSaleDto } from './dto';
 import { SalesService } from './sales.service';
 
 @Controller('sales')
@@ -22,6 +22,19 @@ export class SalesController {
       success: true,
       message: 'Sales retrieved successfully',
       data: await this.salesService.findAll(query, currentUser),
+    };
+  }
+
+  @Get('orders')
+  @Roles('ADMIN', 'SELLER')
+  async findOrders(
+    @Query() query: ListBranchOrdersQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Branch orders retrieved successfully',
+      data: await this.salesService.findBranchOrders(query, currentUser),
     };
   }
 

@@ -241,7 +241,7 @@ Mostrar:
 
 * Contado o crédito.
 * Efectivo, tarjeta, transferencia u otro método configurado.
-* Atajo `F6`.
+* Atajo `F7` para cambiar entre contado y crédito.
 * Acceso a pago combinado.
 
 ### Pago
@@ -252,6 +252,7 @@ Mostrar:
 * Importe pendiente.
 * Cambio.
 * Número de pagos registrados.
+* Atajo `F6` para abrir o editar pagos.
 
 ### Total y CTA
 
@@ -390,6 +391,7 @@ Se descartan las filas de 28–32 px. Aunque permiten mostrar más registros, re
 F2        Enfocar buscador
 F4        Seleccionar cliente
 F6        Registrar o editar pago
+F7        Cambiar condición entre contado y crédito
 F8        Cobrar
 F9        Nueva venta
 Enter     Confirmar selección
@@ -637,8 +639,8 @@ Se mostrará una vista informativa indicando que el POS operativo requiere una r
 
 * `Procesando…`
 * `Venta registrada`
-* Confirmación visual máxima de 700 ms.
-* Inicio automático de la siguiente venta.
+* La confirmación permanece visible hasta una acción explícita del cajero.
+* `Reimprimir`, `Nueva venta`, `Ir al historial` y `Cerrar ventana` son acciones visibles.
 
 ## Reglas
 

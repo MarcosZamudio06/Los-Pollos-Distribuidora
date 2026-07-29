@@ -123,6 +123,21 @@ El CTA no dice genéricamente `Confirmar`. Deriva del estado: `Agrega productos`
 - La lectura del escáner conserva el foco por defecto y no borra una consulta con error.
 - Para kilos se permiten decimales; para piezas sólo enteros.
 
+### Cobro en efectivo
+
+El pago en efectivo prioriza una sola captura y mantiene el total, el importe recibido y el cambio dentro del mismo campo visual.
+
+| Control | Comportamiento |
+| --- | --- |
+| `Importe exacto` | Usa el saldo pendiente como importe recibido y recalcula el cambio en la misma interacción. |
+| `$50`, `$100`, `$200`, `$500`, `$1,000` | Sustituye el importe del campo activo por la denominación elegida; no acumula pulsaciones ni confirma el cobro. |
+| Captura manual | Permite cualquier importe válido y permanece disponible junto a los accesos rápidos. |
+| Cambio | Se actualiza de inmediato, usa `--pos-mono` y nunca depende sólo de color. |
+
+Las denominaciones sólo aparecen para efectivo. En pago combinado actúan sobre la línea de efectivo activa y usan su saldo pendiente. Después de seleccionar una denominación, el foco avanza a la acción de cobro; al cancelar o completar la venta, vuelve al escáner.
+
+Un cambio que supere el umbral aprobado por negocio se muestra con tratamiento `warning` y requiere confirmación explícita, pero no se debe inventar un umbral en frontend ni bloquear la operación sin una política canónica.
+
 ### Tablas y filas
 
 | Elemento | Contrato |
@@ -172,12 +187,111 @@ Los atajos se muestran junto a la acción, en `--pos-mono` a 12 px. No viven só
 | `F2` | Escáner/buscador. |
 | `F4` | Cliente. |
 | `F6` | Pago. |
+| `F7` | Condición comercial. |
 | `F8` | Cobrar desde estado listo. |
 | `F9` | Nueva venta. |
 | `Enter` | Confirmar selección o valor inline. |
 | `+` / `-` | Ajustar cantidad de la partida activa. |
 | `Delete` | Quitar partida activa. |
 | `Esc` | Cerrar panel sin descartar borrador. |
+
+## Evolución de producto
+
+Esta sección define dirección de producto, no amplía por sí sola el contrato del MVP. Toda capacidad marcada como `Requiere spec` debe actualizar primero los specs canónicos de negocio, permisos, datos, API y auditoría.
+
+### Alcance y prioridad
+
+| Capacidad | Prioridad propuesta | Estado documental |
+| --- | --- | --- |
+| Importe exacto, denominaciones, autofoco y cambio visible | P0 | Compatible con el flujo actual; requiere criterios de aceptación. |
+| Sonido opcional de escaneo | P1 | Preferencia local por terminal; desactivado por defecto. |
+| Roles operativos y autorización mediante PIN | P1 | Requiere spec; `CASHIER` sigue fuera del MVP y como decisión abierta. |
+| Segunda pantalla para cliente | P1 | Requiere spec e integración de dispositivo. |
+| Telemetría productiva del POS | P1 | Requiere contrato de eventos, privacidad y backend de observabilidad. |
+| Integración de báscula y confirmación de peso estable | P2 | Fuera del MVP; no simular estado de hardware en captura manual. |
+| Emisión, timbrado y cancelación de CFDI | P2 | Fuera del MVP; proceso posterior y desacoplado de la venta. |
+
+### Roles y capacidades
+
+Los roles propuestos representan responsabilidades operativas, pero no deben agregarse como etiquetas aisladas. Primero se define una matriz de capacidades por ubicación, turno y acción; después se asignan estas capacidades a los roles.
+
+| Rol propuesto | Responsabilidad principal | Límite recomendado |
+| --- | --- | --- |
+| `CASHIER` | Venta, cobro y operación de su caja y turno. | Sin excepciones comerciales ni anulaciones por defecto. |
+| `SUPERVISOR` | Autorizar excepciones durante la operación. | Sólo dentro de ubicaciones y turnos asignados. |
+| `STORE_MANAGER` | Operar y supervisar una sucursal, sus cajas y diferencias. | Sin acceso administrativo global por defecto. |
+
+`ADMIN` conserva administración global y `SELLER` permanece vigente hasta que negocio apruebe la separación de responsabilidades. La migración debe evitar que un cambio de nombre altere silenciosamente permisos existentes.
+
+### Autorización de supervisor
+
+Descuento, crédito excepcional, reimpresión, cancelación, devolución y apertura de cajón sin venta son candidatas a autorización sensible. Cada acción debe aprobarse por separado en los specs: compartir el mismo diálogo no implica compartir la misma política.
+
+Flujo propuesto:
+
+1. El operador inicia la acción y ve su impacto antes de continuar.
+2. El sistema solicita motivo cuando la política de esa acción lo requiera.
+3. El supervisor captura un PIN en un diálogo que no expone identidad ni credenciales previas.
+4. El backend valida usuario activo, capacidad, ubicación, turno, dispositivo y límites aplicables.
+5. Una aprobación autoriza una sola acción, tiene vigencia breve y no eleva la sesión completa del operador.
+6. El resultado registra operador, autorizador, motivo, valores anterior y nuevo, venta o turno, terminal y fecha.
+
+El PIN nunca se valida sólo en frontend, ni se persiste en texto, ni aparece en logs, ni se reutiliza como credencial general. El servicio debe limitar intentos y reportar bloqueos sin revelar si un PIN pertenece a una persona concreta.
+
+### Escaneo y peso
+
+- El escáner recupera foco después de agregar, corregir, cerrar un panel o terminar una venta, excepto cuando el usuario mantiene otro campo en edición.
+- El sonido de escaneo es opcional por terminal, está desactivado por defecto y distingue éxito de error. Siempre acompaña una confirmación visual y se silencia con una sola acción.
+- La captura manual de peso sólo comunica `Peso capturado` o su validación; no muestra `Peso estable` porque no recibe estabilidad de un dispositivo.
+- Una futura báscula integrada debe mostrar `Conectando`, `Inestable`, `Estable` y `Error`, además del peso y la antigüedad de la lectura. Sólo `Estable` habilita su aceptación automática.
+
+### Pantalla para cliente
+
+La segunda pantalla es una proyección de sólo lectura del estado confirmado por el POS. Su desconexión no bloquea escaneo, cobro ni registro de venta; el operador recibe un estado discreto y accionable.
+
+Durante la venta muestra:
+
+- Producto, cantidad y unidad.
+- Precio unitario, descuento y subtotal por partida.
+- Descuentos y total acumulados.
+- Efectivo recibido y cambio cuando correspondan.
+
+Después de la venta muestra folio interno, total, cambio y mensaje de cierre durante un tiempo configurable, y después vuelve al estado de bienvenida. No expone crédito disponible, datos fiscales, información administrativa, IDs internos ni controles operativos.
+
+### Preparación fiscal
+
+El ticket, las notas internas y la `BillingRequest` actual no son CFDI. La preparación fiscal futura debe preservar esta separación y no convertir una solicitud administrativa en factura fiscal por cambio de nombre.
+
+Cuando negocio apruebe el alcance fiscal mexicano se requerirán, como mínimo:
+
+- Catálogo versionado de impuestos y snapshots fiscales por partida.
+- Entidad legal emisora compatible con la sucursal y la fecha de venta.
+- Perfil fiscal validado del cliente.
+- Solicitud de factura originada desde el documento interno.
+- Timbrado, cancelación, sustitución y relación entre CFDI y documentos internos.
+- Estados, reintentos, conciliación y auditoría independientes de la venta.
+
+La venta concluye cuando su transacción operativa queda confirmada. La facturación ocurre después mediante un proceso idempotente y desacoplado; una demora o indisponibilidad de SAT o PAC nunca debe convertir una venta cobrada en fallida.
+
+### Observabilidad en producción
+
+Las marcas del navegador sirven para diagnóstico local, pero no permiten conocer la experiencia real. La instrumentación productiva debe enviar eventos estructurados a un colector, correlacionar frontend y backend con un identificador de operación y evitar nombres, datos fiscales, PIN, códigos completos o información de pago sensible.
+
+| Señal | Medición mínima |
+| --- | --- |
+| Escaneo a carrito | Duración, resultado y causa de rechazo. |
+| Búsqueda | Duración, cantidad de resultados y resultado seleccionado. |
+| Confirmación | Duración total y por backend, resultado y código de error. |
+| Impresión | Duración, resultado, reintento y dispositivo anonimizado. |
+| Venta fallida | Etapa, código estable, conectividad y recuperación. |
+| Reintento idempotente | Operación, replay reconocido y resultado, sin exponer la clave. |
+| Cambio de precio o descuento | Tipo de excepción y autorización; nunca el PIN. |
+| Error de stock | Producto anonimizado, ubicación, etapa y diferencia solicitada. |
+| Impresora o báscula | Estado, transición, antigüedad y terminal anonimizada. |
+| Diferencia de caja | Presencia, rango y resolución; el importe exacto sólo en sistemas financieros autorizados. |
+| Reimpresión, cancelación o anulación | Motivo categorizado, autorización y resultado. |
+
+Los objetivos de servicio se fijan después de obtener una línea base representativa por terminal y ubicación. No se deben convertir umbrales locales de desarrollo en SLO productivos sin volumen, percentiles y ventana de medición aprobados.
 
 ## Movimiento y accesibilidad
 
@@ -196,3 +310,7 @@ Los atajos se muestran junto a la acción, en `--pos-mono` a 12 px. No viven só
 - [ ] El CTA expresa exactamente la siguiente acción transaccional.
 - [ ] Drawer y modal sólo aparecen en casos autorizados.
 - [ ] Datos internos y estados técnicos no llegan a la interfaz.
+- [ ] Los accesos rápidos de efectivo no confirman pagos por accidente.
+- [ ] Toda autorización sensible se valida en backend y deja auditoría.
+- [ ] La segunda pantalla omite información privada y no bloquea la venta.
+- [ ] La telemetría productiva evita credenciales, PII y datos de pago sensibles.

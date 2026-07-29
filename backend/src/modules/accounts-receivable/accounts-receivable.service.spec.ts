@@ -28,6 +28,7 @@ type MockPrisma = {
   };
   payment: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
   sale: { findUnique: jest.Mock; update: jest.Mock };
+  cashShift: { findUnique: jest.Mock };
   pointOfSaleDailyClose: { findUnique: jest.Mock; findFirst: jest.Mock };
   $transaction: jest.Mock;
 };
@@ -98,6 +99,12 @@ function createPrisma(): MockPrisma {
     sale: {
       findUnique: jest.fn().mockResolvedValue({ locationId: 'loc-1' }),
       update: jest.fn().mockResolvedValue(undefined),
+    },
+    cashShift: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'shift-1', operationalLocationId: 'loc-1', pointOfSaleDailyCloseId: 'close-1', cashierUserId: 'collector-1', status: 'OPEN',
+        terminal: { deviceId: 'device-1', isActive: true }, pointOfSaleDailyClose: { status: 'DRAFT' },
+      }),
     },
     pointOfSaleDailyClose: {
       findUnique: jest.fn(),
@@ -232,11 +239,10 @@ describe('AccountsReceivableService', () => {
     );
   });
 
-  it('rejects a cash collection payment when the sale location has no open cash session', async () => {
+  it('rejects a cash collection payment when the cashier has no open shift', async () => {
     const { service, prisma } = createService();
     prisma.payment.findFirst.mockResolvedValue(null);
     prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
-    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
 
     await expect(
       service.registerPayment(
@@ -245,7 +251,7 @@ describe('AccountsReceivableService', () => {
         { id: 'collector-1', role: 'COLLECTIONS' },
         'idem-payment-no-cash-session',
       ),
-    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SESSION_REQUIRED' }) });
+    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }) });
 
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
@@ -282,6 +288,8 @@ describe('AccountsReceivableService', () => {
         accountReceivableId: 'ar-1',
         amount: 1000,
         paymentMethod: PaymentMethod.CASH,
+        cashShiftId: 'shift-1',
+        deviceId: 'device-1',
         paidAt: '2026-06-20T10:00:00.000Z',
       },
       { id: 'collector-1', role: 'COLLECTIONS' },
@@ -522,6 +530,8 @@ describe('AccountsReceivableService', () => {
           accountReceivableId: 'ar-1',
           amount: 400,
           paymentMethod: PaymentMethod.CASH,
+          cashShiftId: 'shift-1',
+          deviceId: 'device-1',
           paidAt: '2026-06-19T10:00:00.000Z',
         },
         { id: 'collector-1', role: 'COLLECTIONS' },
@@ -631,6 +641,8 @@ describe('AccountsReceivableService', () => {
           accountReceivableId: 'ar-1',
           amount: 400,
           paymentMethod: PaymentMethod.CASH,
+          cashShiftId: 'shift-1',
+          deviceId: 'device-1',
         },
         { id: 'collector-1', role: 'COLLECTIONS' },
         'sale-update-key',

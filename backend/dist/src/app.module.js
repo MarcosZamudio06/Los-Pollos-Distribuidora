@@ -33,6 +33,7 @@ const reports_module_1 = require("./modules/reports/reports.module");
 const billing_requests_module_1 = require("./modules/billing-requests/billing-requests.module");
 const point_of_sale_daily_close_module_1 = require("./modules/point-of-sale-daily-close/point-of-sale-daily-close.module");
 const billing_module_1 = require("./modules/billing/billing.module");
+const cash_management_module_1 = require("./modules/cash-management/cash-management.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -65,6 +66,7 @@ exports.AppModule = AppModule = __decorate([
             reports_module_1.ReportsModule,
             billing_requests_module_1.BillingRequestsModule,
             point_of_sale_daily_close_module_1.PointOfSaleDailyCloseModule,
+            cash_management_module_1.CashManagementModule,
             billing_module_1.BillingModule,
         ],
         controllers: [],

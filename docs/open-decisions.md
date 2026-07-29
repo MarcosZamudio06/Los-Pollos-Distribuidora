@@ -14,3 +14,7 @@ Mantener visibles hasta que el negocio confirme:
 - Catalogo final de metodos de pago y bancos.
 - Politica de folios por sucursal, punto de venta o ruta.
 - Manejo de canastillas de clientes.
+
+## Decisiones cerradas
+
+- Las terminales de caja son entidades persistentes administradas y cada una se vincula a un `deviceId` registrado. Los turnos son independientes del cierre diario consolidado de sucursal.

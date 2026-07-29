@@ -54,9 +54,9 @@ Para el MVP, los tipos autorizados son `BRANCH`, `MIXED` y `EXTERNAL_POINT_OF_SA
 - Cuando un usuario intenta crear un cierre
 - Entonces el sistema rechaza la operación con `LOCATION_NOT_POINT_OF_SALE`.
 
-### Requirement: Borrador único por ubicación y fecha
+### Requirement: Cierre diario único y consolidado por ubicación
 
-El sistema debe mantener un solo cierre no cancelado por ubicación y fecha mientras no exista una política de turnos o cajas múltiples. La base de datos debe imponer esta regla mediante un índice único parcial para estados distintos de `CANCELLED`; la API traduce el conflicto de unicidad al código de dominio.
+El sistema debe mantener un solo `PointOfSaleDailyClose` no cancelado por ubicación y fecha de negocio. Este registro representa el consolidado de sucursal y no una caja ni un turno. La base de datos debe imponer la regla mediante un índice único parcial para estados distintos de `CANCELLED`.
 
 #### Scenario: Cierre duplicado
 
@@ -71,32 +71,56 @@ El sistema debe mantener un solo cierre no cancelado por ubicación y fecha mien
 - Entonces la base de datos persiste solo un cierre no cancelado.
 - Y la otra solicitud responde `DAILY_CLOSE_ALREADY_EXISTS`.
 
-### Requirement: Sesión monetaria de caja
+### Requirement: Terminal persistente administrada
 
-El borrador del cierre representa también la sesión monetaria operativa del punto de venta. La apertura debe conservar `terminalIdentifier`, `openedByUserId` como cajero responsable, `openedAt`, `cashSessionStatus`, `initialCashFund`, `initialCashIn` e `initialCashOut`. Los depósitos y retiros iniciales se registran como `CashMovement` trazables.
+Cada caja física o navegador autorizado debe existir como `CashTerminal`, pertenecer a una ubicación operativa y conservar un `deviceId` único registrado por administración. El nombre o código de la terminal no puede capturarse libremente al abrir un turno ni sustituir la identidad del dispositivo.
 
-Mientras `cashSessionStatus=OPEN` y el cierre está en `DRAFT`, la sesión puede recibir ventas y pagos. Al cerrar o cancelar el cierre, la sesión pasa a `CLOSED`; una reapertura administrativa vuelve a `OPEN`.
+#### Scenario: Dispositivo no registrado
 
-#### Scenario: Apertura con fondo y terminal
+- Dado un navegador cuyo `deviceId` no pertenece a una terminal activa
+- Cuando un usuario intenta abrir turno o registrar una venta
+- Entonces el backend responde `CASH_TERMINAL_DEVICE_MISMATCH`
+- Y no crea turno, venta, pago ni movimiento.
 
-- Dada una ubicación activa autorizada
-- Cuando el cajero abre `Caja 01` con fondo inicial de 1,500.00 MXN y hora de apertura del servidor
-- Entonces la respuesta conserva terminal, cajero, fondo, estado abierto y hora de apertura
-- Y cualquier depósito o retiro inicial queda asociado al mismo cierre sin depender de una conciliación posterior.
+### Requirement: Turno monetario independiente
 
-#### Scenario: Venta sin sesión
+Cada apertura debe crear un `CashShift` asociado a un `CashTerminal`, al `PointOfSaleDailyClose` de la sucursal y fecha, y al cajero autenticado. El turno conserva `cashierUserId`, `businessDate`, `openedAt`, `closedAt`, `status`, `initialCashFund`, `initialCashIn`, `initialCashOut`, ventas, pagos, entradas, retiros, gastos, conteo y diferencia.
 
-- Dada una venta de contado o un pago en efectivo sin una sesión abierta en la ubicación
+Una terminal puede tener varios turnos secuenciales en la misma fecha de negocio, pero solo uno abierto simultáneamente. Varias terminales de la misma sucursal pueden operar turnos abiertos en paralelo.
+
+#### Scenario: Apertura con fondo y terminal registrada
+
+- Dada una terminal activa cuyo `deviceId` coincide con el dispositivo solicitante
+- Cuando el cajero abre un turno con fondo inicial de 1,500.00 MXN
+- Entonces el servidor crea o reutiliza el cierre diario de la sucursal y fecha
+- Y crea un turno independiente con terminal, cajero, fondo, estado abierto y hora del servidor
+- Y cualquier depósito o retiro inicial queda asociado al turno.
+
+#### Scenario: Venta sin turno
+
+- Dada una venta de punto de venta sin un turno abierto del cajero y dispositivo actuales
 - Cuando se intenta confirmar la operación
-- Entonces el backend responde `CASH_SESSION_REQUIRED` o `CASH_SESSION_NOT_OPEN`
+- Entonces el backend responde `CASH_SHIFT_REQUIRED`, `CASH_SHIFT_NOT_OPEN`, `CASH_SHIFT_CASHIER_MISMATCH` o `CASH_TERMINAL_DEVICE_MISMATCH`
 - Y no crea venta, pago, movimiento de inventario ni cuenta por cobrar.
 
-#### Scenario: Asociación directa
+#### Scenario: Asociación directa y auditable
 
-- Dada una sesión abierta
-- Cuando se confirma una venta de contado o un pago en efectivo
-- Entonces `Sale.pointOfSaleDailyCloseId` y `Payment.pointOfSaleDailyCloseId` conservan directamente el identificador de la sesión
-- Y el cierre no necesita descubrir esa operación después por rango de fechas.
+- Dado un turno abierto que pertenece al cajero autenticado y al dispositivo registrado
+- Cuando se confirma una venta en el punto de venta
+- Entonces la venta conserva `terminalId`, `cashShiftId`, `cashierUserId`, `businessDate`, `registeredAt` y `deviceId`
+- Y los pagos y movimientos monetarios conservan `cashShiftId`
+- Y el cierre diario consolida mediante los turnos, sin descubrir operaciones por rangos ambiguos.
+
+### Requirement: Consolidación del cierre diario
+
+El `PointOfSaleDailyClose` debe consolidar todos los turnos de sus terminales para la ubicación y fecha. No puede cerrarse mientras exista un turno abierto. Sus totales deben derivarse de turnos, ventas, pagos y movimientos asociados, sin reemplazar conteos ni diferencias por terminal.
+
+#### Scenario: Dos cajas en una sucursal
+
+- Dadas `Caja 01` y `Caja 02` activas en la misma sucursal y fecha
+- Cuando dos cajeros abren turnos en sus dispositivos registrados
+- Entonces ambos turnos operan simultáneamente bajo el mismo cierre diario
+- Y cada venta permanece atribuida a una sola terminal, turno y cajero.
 
 ### Requirement: Inventario por ubicación
 

@@ -94,7 +94,8 @@ export type ReceivablePaymentFormValues = {
   appliedDocumentId?: string
   appliedDocumentType?: string
   collectionPass?: number
-  pointOfSaleDailyCloseId?: string
+  cashShiftId?: string
+  deviceId?: string
   paidAt?: string
 }
 

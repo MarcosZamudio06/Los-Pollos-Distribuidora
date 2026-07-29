@@ -79,6 +79,7 @@ Estados posteriores:
 | `F2` | Enfoca el escáner/buscador. |
 | `F4` | Abre o enfoca el selector de cliente. |
 | `F6` | Enfoca el primer pago incompleto; si no hay pagos, crea la primera fila de pago con el saldo pendiente. |
+| `F7` | Enfoca la condición comercial para cambiar entre contado y crédito. |
 | `F8` | Envía sólo desde `READY_TO_CHARGE`; no abre confirmación adicional. |
 | `F9` | Inicia una venta. Con borrador con cambios, solicita confirmación de descarte. |
 | `Enter` | Resuelve lectura exacta, agrega el resultado seleccionado o confirma el valor inline activo. |
@@ -118,7 +119,7 @@ Antes de habilitarlo, el spec de inventario y el contrato de ventas deben defini
 | Caso | Flujo mínimo |
 | --- | --- |
 | Contado | El dock inicia con el método predeterminado y el importe pendiente. `CASH_SALE` requiere que la suma aplicada sea exactamente el total. |
-| Efectivo | Se captura monto aplicado y, si corresponde, efectivo entregado. El cambio se calcula desde datos capturados y no aumenta el total aplicado. |
+| Efectivo | `F6` crea la primera fila con el saldo pendiente y enfoca `Efectivo entregado`. `Importe exacto` y las denominaciones `$50`, `$100`, `$200`, `$500` y `$1,000` sustituyen ese valor sin confirmar la venta. El cambio se calcula desde datos capturados, no aumenta el total aplicado y recibe jerarquía visual cuando es positivo. |
 | Pago combinado | `Agregar pago` incorpora una segunda fila con el saldo restante. Cada fila exige método, importe positivo y evidencia requerida. La suma no supera el total. |
 | Crédito | Cambiar a crédito exige cliente válido y muestra disponible, saldo vencido y motivo de restricción en el dock. Puede tener cero o más abonos iniciales. Cobranza posterior no ocurre en POS. |
 | Crédito bloqueado | El cajero puede volver a contado. Sólo `ADMIN`, cuando la política lo permita, puede abrir la autorización con motivo auditable; no existe un bypass local. |
@@ -163,7 +164,10 @@ La implementación se acepta cuando:
 - La barra, escáner, workspace y dock cumplen 52/64/38-62/144 px en escritorio.
 - El carrito domina visualmente, conserva resumen al hacer scroll y no hay tarjetas de resultados.
 - Un lector compatible con teclado completa una venta de contado mediante `F2`, lecturas, `F6` y `F8` sin modal de revisión.
+- `F6` crea y enfoca un pago en efectivo cuando no existe ninguno; los accesos rápidos no permiten efectivo menor al monto aplicado y dejan el CTA como siguiente foco.
 - KG bloquea el cobro hasta contar con peso válido; PZA conserva enteros y disponibilidad local.
+- El peso manual válido se confirma como capturado sin representar estabilidad o conexión de una báscula inexistente.
 - Crédito, pago combinado, promoción, autorización, pérdida de conexión e impresión siguen los estados descritos sin duplicar ventas.
+- La confirmación posterior a una venta permanece visible hasta que el cajero elige `Reimprimir`, `Nueva venta`, `Ir al historial` o `Cerrar ventana`; nunca desaparece por un temporizador no visible.
 - Sólo descarte destructivo y autorización pueden interrumpir con confirmación/modal.
 - Los cambios de unidades siguen los contratos canónicos; `CAJA` permanece bloqueada hasta definirlos.

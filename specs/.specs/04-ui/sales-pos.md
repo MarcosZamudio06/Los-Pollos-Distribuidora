@@ -91,7 +91,7 @@ Debe enviar `POST /api/sales` con:
 
 - `customerId` opcional en contado completamente pagado; requerido en crédito.
 - `locationId` requerido.
-- `pointOfSaleDailyCloseId` de la sesión abierta cuando se registra contado o cualquier pago en efectivo.
+- `cashShiftId` del turno abierto de la terminal y dispositivo actuales.
 - `paymentType`: `CASH_SALE` o `CREDIT_SALE`.
 - `saleChannel`.
 - `documentType`.
@@ -110,8 +110,9 @@ Reglas de interpretación:
 - Los métodos de pago viven en `payments[].paymentMethod`, no en `Sale`.
 - Si la venta es de contado y se paga al momento, el sistema registra un `Payment` por cada elemento de `payments[]` asociado a `saleId` sin crear una cuenta por cobrar artificial.
 - Cada fila `CASH` permite capturar «Efectivo entregado» distinto de su monto aplicado y muestra el «Cambio» calculado. Al cambiar la fila a otro método se limpia ese dato; los tickets muestran solo efectivo entregado y cambio persistidos, sin inventarlos para pagos históricos.
+- La captura de efectivo ofrece `Importe exacto` y denominaciones de `$50`, `$100`, `$200`, `$500` y `$1,000`. El acceso elegido sustituye el efectivo entregado de la fila activa, nunca acumula pulsaciones ni confirma la venta, y las denominaciones menores al monto aplicado permanecen deshabilitadas.
 - Una venta de contado sin pagos o con pagos parciales no puede confirmarse; la UI debe indicar que el operador debe completar el pago o cambiar explícitamente a venta a crédito.
-- Antes de confirmar una venta de contado, la UI debe consultar la sesión abierta de la ubicación y mostrar terminal, cajero, hora de apertura y fondo inicial. Si no existe, debe bloquear la confirmación y ofrecer abrir la caja.
+- Antes de confirmar cualquier venta de punto fijo, la UI debe consultar el turno abierto del cajero y dispositivo actuales y mostrar terminal, cajero, hora de apertura y fondo inicial. Si no existe o no coincide, debe bloquear la confirmación y ofrecer abrir turno.
 
 ## Venta a crédito
 
@@ -244,20 +245,21 @@ La consulta y reapertura de documentos debe ocurrir dentro de la misma venta, si
 
 ## Integración con cierre diario
 
-- Una venta de contado solo puede confirmarse con el cierre `DRAFT` de la ubicación en sesión `cashSessionStatus=OPEN`.
-- La cabecera debe mostrar `Caja/terminal`, ubicación, cajero, turno abierto, fondo inicial y estado de la sesión; no debe usar el nombre o rol del usuario como valor de caja.
-- La apertura ocurre desde el flujo de caja/cierre diario con terminal, fondo inicial, depósito y retiro inicial; las horas se muestran con el timestamp del servidor.
-- Asociar una venta al cierre no permite cambiar su ubicación, fecha, items, pago o movimiento de inventario.
-- La venta y sus pagos inmediatos quedan asociados desde `POST /api/sales`; no dependen de una asociación posterior por ubicación y rango de fechas.
+- Una venta de punto fijo solo puede confirmarse con un `CashShift` abierto cuyo cajero, terminal, ubicación y `deviceId` coinciden con el actor y dispositivo actuales.
+- La cabecera debe mostrar sucursal, terminal registrada, turno, cajero, conexión y hora; no debe confundir ninguno de esos conceptos.
+- La apertura ocurre desde el flujo de turnos con una terminal administrada, fondo inicial, depósito y retiro inicial; las horas se muestran con timestamps del servidor.
+- La venta y sus pagos inmediatos quedan asociados al turno desde `POST /api/sales`; el cierre diario los consolida a través del turno.
 - Las ventas a crédito se muestran separadas de efectivo; solo pagos aplicados pueden aparecer como ingreso de cobranza.
 
 ## Rediseño de velocidad POS
 
 - La superficie de caja se organiza en barra operativa de 52 px, escáner de 64 px, workspace 38/62 de resultados y carrito, y dock de cobro de 144 px. En escritorio cada zona con contenido variable usa scroll interno para evitar navegación vertical innecesaria.
 - El buscador debe recibir autofocus al abrir el POS y después de una lectura válida. `Enter` debe intentar resolver el valor exacto por `sku`, compatible con lectores que funcionan como teclado.
+- El sonido de lectura es una preferencia local de la terminal, desactivada por defecto. Distingue una lectura aceptada de una rechazada, siempre acompaña la confirmación visual y no sustituye mensajes accesibles.
 - La UI debe ofrecer una vista de productos frecuentes recientes de la sesión y vistas rápidas por categoría sin presentar datos locales como frecuencia histórica global.
-- El carrito debe exponer kilos, piezas, stock por ubicación, precio de referencia e importe por partida. Un teclado numérico contextual puede editar la cantidad del renglón activo; los kilos aceptan decimales y las piezas no.
-- Deben existir las acciones `Nueva venta`, pantalla completa y los atajos `F2` búsqueda, `F4` cliente, `F6` pago, `F8` confirmación y `F9` nueva venta.
+- El carrito debe exponer kilos, piezas, stock por ubicación, precio de referencia e importe por partida. Un teclado numérico contextual puede editar la cantidad del renglón activo; los kilos aceptan decimales y las piezas no. Una captura manual válida muestra `Peso capturado`, nunca `Peso estable`, porque el MVP no recibe estabilidad de hardware.
+- Deben existir las acciones `Nueva venta`, pantalla completa y los atajos `F2` búsqueda, `F4` cliente, `F6` pago, `F7` condición comercial, `F8` confirmación y `F9` nueva venta.
 - La cabecera debe informar ubicación, operador, conexión, estado de impresora y estado de báscula sin simular hardware no integrado. El MVP muestra impresora no configurada y báscula de captura manual cuando no exista contrato de dispositivo.
+- Después de registrar una venta, la confirmación permanece visible hasta una acción explícita del cajero. Debe conservar folio, total y cliente, y ofrecer `Reimprimir`, `Nueva venta`, `Ir al historial` y `Cerrar ventana`.
 - Antes de confirmar, el dock y carrito deben mantener visible cliente, sucursal, productos, kilos, piezas, subtotal, descuento autorizado, total, pagos, saldo pendiente de la venta, saldo histórico del cliente cuando exista, documento, folio, canal, solicitud administrativa y motivo de autorización cuando aplique. `F8` registra directamente desde el estado listo, sin una segunda pantalla de revisión.
 - `Nueva venta` debe solicitar confirmación si existe captura. El envío se protege contra doble clic y conserva la clave de idempotencia para reintentos después de error; una incertidumbre de red debe verificarse con esa misma clave antes de reintentar.

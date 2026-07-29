@@ -134,8 +134,9 @@
 - Los cobros de cuentas por cobrar deben distinguirse de ventas de contado del día para fines de corte y reporte.
 - Los cobros recibidos por chofer deben considerarse dentro de la liquidación de ruta antes de integrarse al corte correspondiente.
 - Los abonos y transferencias/depositos deben conservar su origen operativo antes de consolidarse en caja o cobranza.
-- Una venta de contado o cualquier pago en efectivo recibido en un punto fijo requiere una sesión de caja abierta. La operación conserva directamente `pointOfSaleDailyCloseId`; no espera una asociación posterior por fecha.
-- La sesión de caja debe conservar terminal, cajero responsable, hora de apertura, estado, fondo inicial y depósitos o retiros iniciales trazables.
+- Toda venta registrada en un punto fijo requiere un `CashShift` abierto que pertenezca al cajero autenticado y a un `CashTerminal` activo cuyo `deviceId` coincida con el dispositivo registrado.
+- La venta conserva `terminalId`, `cashShiftId`, `cashierUserId`, `businessDate`, `registeredAt` y `deviceId`; estos valores se derivan y sellan en backend, no se aceptan como autoridad del cliente.
+- Todo pago o movimiento monetario recibido en un punto fijo conserva `cashShiftId`; no espera asociación posterior por ubicación y rango de fechas.
 
 ## 6.1 Facturación y comprobantes
 
@@ -178,9 +179,10 @@
 ## 8.1 Cierre diario de punto de venta
 
 - Debe existir como dominio separado de `RouteSettlement` y asociarse a una `OperationalLocation` y una fecha de negocio.
-- En el MVP, el borrador de `PointOfSaleDailyClose` también representa la sesión monetaria abierta de esa ubicación: `cashSessionStatus=OPEN` permite vender y `CLOSED` bloquea nuevas operaciones.
-- La apertura de caja debe recibir `terminalIdentifier`, `initialCashFund`, `initialCashIn` e `initialCashOut`, conservar `openedAt` y usar `openedByUserId` como cajero responsable del turno.
-- Solo puede existir un cierre diario no cancelado por ubicación y fecha, salvo decisión posterior que autorice turnos o múltiples cajas.
+- `PointOfSaleDailyClose` representa el consolidado de sucursal y fecha; no representa una terminal ni un turno.
+- `CashTerminal` es una entidad administrada con `deviceId` único. `CashShift` conserva terminal, cajero, fecha de negocio, fondo inicial, entradas, retiros, gastos, conteo y diferencia.
+- Solo puede existir un `CashShift` abierto por terminal. Varias terminales pueden operar en paralelo y una terminal puede tener turnos secuenciales durante la misma fecha.
+- Solo puede existir un cierre diario no cancelado por ubicación y fecha; el cierre consolida sus turnos y no puede cerrarse mientras alguno permanezca abierto.
 - Debe iniciar en `DRAFT`; puede pasar a `REVIEWED`, `CLOSED` o `CANCELLED` conforme a permisos.
 - No puede cerrarse si alguna venta, movimiento de inventario, movimiento de caja o pago incluido carece de ubicación operativa trazable.
 - Debe conciliar entradas, ventas por nota, ventas por ticket/etiqueta, otras salidas, sobrantes y faltantes por producto y unidad.
@@ -213,7 +215,7 @@
 
 - Definir tolerancias y escalamiento para diferencias de peso y dinero.
 - Definir fórmulas oficiales de costo y utilidad.
-- El MVP conserva una sesión/cierre único por ubicación y fecha; soportar múltiples turnos o cajas requiere una ampliación explícita de unicidad y asociaciones.
+- El sistema soporta múltiples terminales y turnos independientes por ubicación y fecha mediante `CashTerminal` y `CashShift`.
 - Definir catálogo final de gastos, entradas, salidas y otros conceptos.
 - Definir política de reapertura y bloqueo de periodos ya revisados.
 

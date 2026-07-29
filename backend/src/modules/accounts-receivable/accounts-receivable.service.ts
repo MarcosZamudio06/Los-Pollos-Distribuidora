@@ -2,7 +2,6 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from 'crypto';
 import {
   BillingRequestStatus,
-  CashSessionStatus,
   CollectionStatus,
   CreditStatus,
   PaymentStatus,
@@ -140,7 +139,7 @@ export class AccountsReceivableService {
 
         this.assertReceivableCanReceivePayment(receivable);
         const sale = await tx.sale.findUnique({ where: { id: receivable.saleId }, select: { locationId: true } });
-        const cashSessionId = await this.resolveCashSession(tx, dto, sale?.locationId ?? null);
+        const cashShift = await this.resolveCashShift(tx, dto, sale?.locationId ?? null, currentUser);
 
         const outstandingAmount = this.toNumber(receivable.outstandingAmount);
         if (dto.amount > outstandingAmount) {
@@ -170,7 +169,8 @@ export class AccountsReceivableService {
             routeId: this.normalizeOptionalText(dto.routeId),
             routeSettlementId: this.normalizeOptionalText(dto.routeSettlementId),
             operationalLocationId: sale?.locationId ?? null,
-            pointOfSaleDailyCloseId: cashSessionId,
+            pointOfSaleDailyCloseId: cashShift?.pointOfSaleDailyCloseId ?? null,
+            cashShiftId: cashShift?.id ?? null,
             status: PaymentStatus.APPLIED,
             paidAt,
             idempotencyKey,
@@ -348,37 +348,31 @@ export class AccountsReceivableService {
     }
   }
 
-  private async resolveCashSession(
+  private async resolveCashShift(
     tx: Prisma.TransactionClient,
     dto: RegisterReceivablePaymentDto,
     locationId: string | null,
-  ): Promise<string | null> {
+    currentUser: Actor,
+  ) {
     if (dto.routeId || dto.routeSettlementId) return null;
-    if (!dto.pointOfSaleDailyCloseId && dto.paymentMethod !== 'CASH') return null;
+    if (!dto.cashShiftId && dto.paymentMethod !== 'CASH') return null;
     if (!locationId) throw new BadRequestException('PAYMENT_LOCATION_REQUIRED');
-    const session = dto.pointOfSaleDailyCloseId
-      ? await tx.pointOfSaleDailyClose.findUnique({
-          where: { id: dto.pointOfSaleDailyCloseId },
-          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
-        })
-      : await tx.pointOfSaleDailyClose.findFirst({
-          where: { operationalLocationId: locationId, status: PointOfSaleDailyCloseStatus.DRAFT, cashSessionStatus: CashSessionStatus.OPEN },
-          orderBy: { openedAt: 'desc' },
-          select: { id: true, operationalLocationId: true, status: true, cashSessionStatus: true },
-        });
-    if (!session || session.operationalLocationId !== locationId) {
-      throw new BadRequestException({
-        code: dto.pointOfSaleDailyCloseId ? 'CASH_SESSION_LOCATION_MISMATCH' : 'CASH_SESSION_REQUIRED',
-        message: dto.pointOfSaleDailyCloseId ? 'The cash session does not belong to the payment location' : 'An open cash session is required before registering a cash payment',
-      });
-    }
-    if (session.status !== PointOfSaleDailyCloseStatus.DRAFT || session.cashSessionStatus !== CashSessionStatus.OPEN) {
-      throw new BadRequestException({
-        code: 'CASH_SESSION_NOT_OPEN',
-        message: 'The selected cash session is not open for payments',
-      });
-    }
-    return session.id;
+    if (!dto.cashShiftId) throw new BadRequestException({ code: 'CASH_SHIFT_REQUIRED', message: 'An open cash shift is required before registering a cash payment' });
+    if (!dto.deviceId?.trim()) throw new BadRequestException({ code: 'CASH_TERMINAL_DEVICE_REQUIRED', message: 'The registered terminal device is required' });
+    const shift = await tx.cashShift.findUnique({
+      where: { id: dto.cashShiftId },
+      select: {
+        id: true, operationalLocationId: true, pointOfSaleDailyCloseId: true, cashierUserId: true, status: true,
+        terminal: { select: { deviceId: true, isActive: true } },
+        pointOfSaleDailyClose: { select: { status: true } },
+      },
+    });
+    if (!shift) throw new BadRequestException({ code: 'CASH_SHIFT_NOT_FOUND', message: 'The selected cash shift does not exist' });
+    if (shift.operationalLocationId !== locationId) throw new BadRequestException({ code: 'CASH_SHIFT_LOCATION_MISMATCH', message: 'The cash shift does not belong to the payment location' });
+    if (shift.status !== 'OPEN' || shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT) throw new BadRequestException({ code: 'CASH_SHIFT_NOT_OPEN', message: 'The selected cash shift is not open for payments' });
+    if (shift.cashierUserId !== currentUser.id) throw new BadRequestException({ code: 'CASH_SHIFT_CASHIER_MISMATCH', message: 'The cash shift belongs to another cashier' });
+    if (!shift.terminal.isActive || shift.terminal.deviceId !== dto.deviceId.trim()) throw new BadRequestException({ code: 'CASH_TERMINAL_DEVICE_MISMATCH', message: 'The device does not belong to the registered cash terminal' });
+    return shift;
   }
 
   private assertEligibleCreditSale(sale: CreditSaleRecord): void {

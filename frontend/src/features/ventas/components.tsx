@@ -229,32 +229,6 @@ export function CartPanel(props: CartProps) {
   return <Cart {...props} />
 }
 
-type NumericPadProps = {
-  disabled?: boolean
-  label: string
-  onChange: (value: string) => void
-  onClear: () => void
-  onDelete: () => void
-  value: string
-  allowDecimal?: boolean
-}
-
-export function NumericPad({ allowDecimal = true, disabled = false, label, onChange, onClear, onDelete, value }: NumericPadProps) {
-  const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3']
-  return (
-    <section className="rounded-2xl border border-[var(--pos-steel)] bg-[var(--pos-ink)] p-3 text-white" aria-label="Teclado numérico">
-      <div className="mb-2 flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-amber)]">Entrada rápida</p><h3 className="text-sm font-bold">{label}</h3></div><output className="min-w-24 text-right font-mono text-xl font-bold" aria-live="polite">{value || '0'}</output></div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {keys.map((key) => <button className="rounded-lg bg-white/10 py-2.5 font-mono text-lg font-bold transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} key={key} onClick={() => onChange(key)} type="button">{key}</button>)}
-        <button className="rounded-lg bg-white/10 py-2.5 font-mono text-lg font-bold transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled || !allowDecimal} onClick={() => onChange('.')} type="button">.</button>
-        <button className="rounded-lg bg-white/10 py-2.5 font-mono text-lg font-bold transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={() => onChange('0')} type="button">0</button>
-        <button aria-label="Borrar último dígito" className="rounded-lg bg-[rgba(233,167,47,0.24)] py-2.5 font-mono text-lg font-bold text-[var(--pos-amber)] transition hover:bg-[rgba(233,167,47,0.34)] disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onDelete} type="button">←</button>
-      </div>
-      <button className="mt-1.5 min-h-11 w-full rounded-lg border border-white/20 px-2 text-xs font-bold uppercase tracking-[0.14em] text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClear} type="button">Limpiar entrada</button>
-    </section>
-  )
-}
-
 type CustomerSelectorProps = {
   customers: CustomerOption[]
   error: unknown
@@ -303,7 +277,7 @@ type PaymentTypeControlProps = {
 export function PaymentTypeControl({ compact = false, onPaymentTypeChange, paymentType }: PaymentTypeControlProps) {
   return (
     <section className={compact ? 'min-w-0 overflow-x-hidden overflow-y-auto p-3' : panelClass}>
-      <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Condición de pago</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Contado / Crédito</h2><span className="sr-only">Tipo de venta y pago</span></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F6</span></div>
+      <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Condición de pago</p><h2 className={`${compact ? 'mt-1 text-sm' : 'mt-1 text-xl'} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}>Contado / Crédito</h2><span className="sr-only">Tipo de venta y pago</span></div><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F7</span></div>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
         <button aria-pressed={paymentType === 'CASH_SALE'} className={`min-h-11 ${compact ? 'rounded-none' : 'rounded-lg'} px-2 text-xs font-black transition ${paymentType === 'CASH_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CASH_SALE')} type="button">Venta de contado</button>
         <button aria-pressed={paymentType === 'CREDIT_SALE'} className={`min-h-11 ${compact ? 'rounded-none' : 'rounded-lg'} px-2 text-xs font-black transition ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--pos-ink)] text-white' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)] hover:bg-[var(--pos-steel)]'}`} onClick={() => onPaymentTypeChange('CREDIT_SALE')} type="button">Venta a crédito</button>
@@ -315,16 +289,25 @@ export function PaymentTypeControl({ compact = false, onPaymentTypeChange, payme
 
 type PaymentEntryControlProps = {
   compact?: boolean
+  firstCashInputRef?: RefObject<HTMLInputElement | null>
+  onCashTenderedSelect?: () => void
   onPaymentsChange: (payments: SalePaymentInput[]) => void
   panelRef?: RefObject<HTMLElement | null>
   payments: SalePaymentInput[]
   total: number
 }
 
-export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRef, payments, total }: PaymentEntryControlProps) {
+const CASH_DENOMINATIONS = [50, 100, 200, 500, 1000]
+
+export function PaymentEntryControl({ compact = false, firstCashInputRef, onCashTenderedSelect, onPaymentsChange, panelRef, payments, total }: PaymentEntryControlProps) {
   const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0)
+  const remaining = Math.max(0, Math.round((total - totalPaid) * 100) / 100)
   const updatePayment = (index: number, update: Partial<SalePaymentInput>) => {
     onPaymentsChange(payments.map((payment, currentIndex) => currentIndex === index ? { ...payment, ...update } : payment))
+  }
+  const selectCashTendered = (index: number, cashTendered: number) => {
+    updatePayment(index, { cashTendered })
+    onCashTenderedSelect?.()
   }
 
   return (
@@ -340,15 +323,16 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
                 </select>
               </label>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Monto
-                <input className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} min="0.01" onChange={(event) => updatePayment(index, { amount: Number(event.target.value) })} step="0.01" type="number" value={payment.amount || ''} />
+                <input aria-label={`Monto aplicado del pago ${index + 1}`} className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} min="0.01" onChange={(event) => updatePayment(index, { amount: Number(event.target.value) })} step="0.01" type="number" value={payment.amount || ''} />
               </label>
               <button className="h-11 self-end rounded-lg px-2 text-xs font-black text-[var(--pos-red)] hover:bg-white" onClick={() => onPaymentsChange(payments.filter((_, currentIndex) => currentIndex !== index))} type="button">Quitar</button>
             </div>
             {payment.paymentMethod === 'CASH' && <div className={`${compact ? 'mt-2' : 'mt-3'} grid gap-2 sm:grid-cols-2`}>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Efectivo entregado
-                <input className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} min={payment.amount || 0.01} onChange={(event) => updatePayment(index, { cashTendered: event.target.value === '' ? undefined : Number(event.target.value) })} step="0.01" type="number" value={payment.cashTendered ?? ''} />
+                <input aria-label={`Efectivo entregado del pago ${index + 1}`} className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} data-pos-cash-tendered min={payment.amount || 0.01} onChange={(event) => updatePayment(index, { cashTendered: event.target.value === '' ? undefined : Number(event.target.value) })} onFocus={(event) => event.currentTarget.select()} ref={index === 0 ? firstCashInputRef : undefined} step="0.01" type="number" value={payment.cashTendered ?? ''} />
               </label>
-              {payment.cashTendered !== undefined && payment.cashTendered >= payment.amount && <div className="grid content-end gap-1 text-xs font-bold text-[var(--pos-muted)]"><span>Cambio</span><output className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''} bg-[var(--erp-surface-elevated)]`}>{toMoney(calculateCashChange(payment.cashTendered, payment.amount))}</output></div>}
+              <div className="grid content-end gap-1 text-xs font-bold text-[var(--pos-muted)]"><span>Cambio a entregar</span><output aria-atomic="true" aria-live="polite" className={`${inputClass} ${compact ? 'px-2 py-2' : ''} ${payment.cashTendered !== undefined && payment.cashTendered >= payment.amount ? 'border-[rgba(22,117,82,0.45)] bg-[rgba(22,117,82,0.10)] text-lg font-black text-[var(--pos-success)]' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)]'} font-mono tabular-nums`} data-pos-cash-change>{toMoney(payment.cashTendered !== undefined && payment.cashTendered >= payment.amount ? calculateCashChange(payment.cashTendered, payment.amount) : 0)}</output></div>
+              <fieldset className="sm:col-span-2"><legend className="text-xs font-bold text-[var(--pos-muted)]">Efectivo rápido</legend><div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:grid-cols-6"><button aria-label={`Usar importe exacto de ${toMoney(payment.amount)}`} className="min-h-11 border border-[var(--pos-action)] bg-[rgba(18,61,50,0.08)] px-2 text-xs font-black text-[var(--pos-action)] transition hover:bg-[rgba(18,61,50,0.16)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:opacity-40" disabled={payment.amount <= 0} onClick={() => selectCashTendered(index, payment.amount)} type="button">Exacto</button>{CASH_DENOMINATIONS.map((denomination) => <button aria-label={`Usar ${toMoney(denomination)} de efectivo entregado`} className="min-h-11 border border-[var(--pos-steel)] bg-white px-1 font-mono text-xs font-black tabular-nums text-[var(--pos-ink)] transition hover:border-[var(--pos-action)] hover:bg-[var(--pos-porcelain)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:bg-[var(--pos-porcelain)] disabled:text-[var(--pos-muted)] disabled:opacity-50" disabled={denomination < payment.amount} key={denomination} onClick={() => selectCashTendered(index, denomination)} title={denomination < payment.amount ? 'La denominación es menor al monto aplicado.' : undefined} type="button">${denomination.toLocaleString('es-MX')}</button>)}</div></fieldset>
             </div>}
             {(payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT' || payment.paymentMethod === 'CHECK') && <div className={`${compact ? 'mt-2' : 'mt-3'} grid gap-2 sm:grid-cols-2`}>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Banco<input className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} onChange={(event) => updatePayment(index, { bankName: event.target.value })} value={payment.bankName ?? ''} /></label>
@@ -360,7 +344,7 @@ export function PaymentEntryControl({ compact = false, onPaymentsChange, panelRe
             </div>}
           </article>
         ))}
-        <button className={`${compact ? 'rounded-none px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)]`} onClick={() => onPaymentsChange([...payments, { amount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
+        <button className={`${compact ? 'rounded-none px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)] disabled:cursor-not-allowed disabled:border-[var(--pos-steel)] disabled:text-[var(--pos-muted)] disabled:opacity-50`} disabled={remaining <= 0} onClick={() => onPaymentsChange([...payments, { amount: remaining, paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
       </div>
     </section>
   )
@@ -513,9 +497,9 @@ type ConfirmSaleButtonProps = {
   buttonRef?: RefObject<HTMLButtonElement | null>
 }
 
-export function ConfirmSaleButton({ buttonRef, compact = false, disabledReason, isSubmitting, onConfirm, pendingAmount, total, transactionState }: ConfirmSaleButtonProps) {
+export function ConfirmSaleButton({ buttonRef, compact = false, disabledReason, isSubmitting, onConfirm, pendingAmount, transactionState }: ConfirmSaleButtonProps) {
   const actionLabel = transactionState === 'EMPTY'
-    ? 'Agrega productos'
+    ? 'Confirmar venta'
     : transactionState === 'CART_ACTIVE'
       ? 'Registra el pago'
     : transactionState === 'WEIGHT_PENDING'
@@ -532,18 +516,16 @@ export function ConfirmSaleButton({ buttonRef, compact = false, disabledReason, 
                 ? 'Venta registrada'
                 : transactionState === 'BLOCKED'
                   ? 'Resolver incidencia'
-                  : disabledReason?.includes('producto')
-                    ? 'Agrega productos'
+                   : disabledReason?.includes('producto')
+                     ? 'Confirmar venta'
                     : disabledReason?.includes('cliente') || disabledReason?.includes('crédito')
                       ? 'Selecciona cliente'
                       : disabledReason?.includes('pago') || disabledReason?.includes('liquidarse')
                         ? 'Registra el pago'
-                        : total !== undefined
-                          ? `Cobrar ${toMoney(total)} · F8`
-                          : 'Confirmar venta · F8'
+                        : 'Confirmar venta · F8'
   return (
     <div className="grid gap-2">
-      <button aria-describedby={disabledReason ? 'checkout-blocker' : undefined} aria-keyshortcuts="F8" aria-live="polite" className={`${compact ? 'h-14 rounded-none px-3 shadow-none' : 'rounded-xl px-4 py-3.5 shadow-[0_12px_26px_rgba(18,61,50,0.24)]'} bg-[var(--pos-action)] text-sm font-black text-white transition hover:bg-[#0d2e25] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.40)] disabled:shadow-none`} disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} ref={buttonRef} type="button">
+      <button aria-describedby={disabledReason ? 'checkout-blocker' : undefined} aria-keyshortcuts="F8 Enter" aria-live="polite" className={`${compact ? 'h-14 rounded-none px-3 shadow-none' : 'rounded-xl px-4 py-3.5 shadow-[0_12px_26px_rgba(18,61,50,0.24)]'} bg-[var(--pos-action)] text-sm font-black text-white transition hover:bg-[#0d2e25] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.40)] disabled:shadow-none`} disabled={Boolean(disabledReason) || isSubmitting} onClick={onConfirm} ref={buttonRef} type="button">
         {actionLabel}
       </button>
       {disabledReason && <p className="text-[0.68rem] font-bold leading-tight text-[var(--pos-red)]" id="checkout-blocker" role="status">{disabledReason}</p>}
@@ -561,6 +543,7 @@ type TicketModalProps = {
 
 type SaleRegisteredScreenProps = {
   customerName: string
+  onClose: () => void
   onNewSale: () => void
   onOpenHistory: () => void
   onRetryPrint: () => void
@@ -569,7 +552,7 @@ type SaleRegisteredScreenProps = {
   printStatus?: 'loading' | 'ready' | 'error' | 'unavailable'
 }
 
-export function SaleRegisteredScreen({ customerName, onNewSale, onOpenHistory, onRetryPrint, saleNumber, total, printStatus = 'ready' }: SaleRegisteredScreenProps) {
+export function SaleRegisteredScreen({ customerName, onClose, onNewSale, onOpenHistory, onRetryPrint, saleNumber, total, printStatus = 'ready' }: SaleRegisteredScreenProps) {
   return (
     <aside aria-labelledby="sale-registered-title" aria-modal="true" className="fixed inset-0 z-30 grid place-items-center bg-[rgba(23,33,30,0.62)] p-4 sm:p-6" role="dialog">
       <section className="w-full max-w-xl overflow-hidden rounded-[1.75rem] border border-[var(--pos-steel)] bg-white shadow-[0_28px_80px_rgba(23,33,30,0.28)]">
@@ -584,14 +567,16 @@ export function SaleRegisteredScreen({ customerName, onNewSale, onOpenHistory, o
             <div className="rounded-2xl bg-[var(--pos-porcelain)] p-4"><dt className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--pos-muted)]">Total</dt><dd className="mt-2 font-mono text-lg font-black text-[var(--pos-ink)]">{toMoney(total)}</dd></div>
             <div className="rounded-2xl bg-[var(--pos-porcelain)] p-4"><dt className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--pos-muted)]">Cliente</dt><dd className="mt-2 break-words text-sm font-black text-[var(--pos-ink)]">{customerName}</dd></div>
           </dl>
-          {printStatus === 'loading' && <p className="rounded-xl border border-[rgba(35,113,90,0.22)] bg-[rgba(35,113,90,0.08)] p-3 text-sm font-bold text-[var(--pos-green)]" role="status">Consultando el documento de impresión...</p>}
-          {printStatus === 'ready' && <p className="rounded-xl border border-[rgba(35,113,90,0.22)] bg-[rgba(35,113,90,0.08)] p-3 text-sm font-bold text-[var(--pos-green)]" role="status">Documento listo para imprimir.</p>}
-          {printStatus === 'error' && <p className="rounded-xl border border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] p-3 text-sm font-bold text-[var(--pos-red)]" role="alert">No se pudo consultar el documento. Puedes reintentar o usar la impresión provisional de la venta registrada.</p>}
-          {printStatus === 'unavailable' && <p className="rounded-xl border border-[rgba(233,167,47,0.35)] bg-[rgba(233,167,47,0.14)] p-3 text-sm font-bold text-[#7d5a12]" role="status">La creación no devolvió una referencia documental. Se conservaron los datos para una impresión provisional.</p>}
-          <div className="grid gap-2 sm:grid-cols-3">
-            <button className="rounded-xl bg-[var(--pos-red)] px-4 py-3 text-sm font-black text-white transition hover:bg-[var(--pos-red-dark)]" onClick={onRetryPrint} type="button">Reintentar impresión</button>
-            <button className="rounded-xl border border-[var(--pos-steel)] px-4 py-3 text-sm font-black text-[var(--pos-ink)] transition hover:border-[var(--pos-green)] hover:text-[var(--pos-green)]" onClick={onOpenHistory} type="button">Abrir historial</button>
+          {printStatus === 'loading' && <p className="rounded-xl border border-[rgba(35,113,90,0.22)] bg-[rgba(35,113,90,0.08)] p-3 text-sm font-bold text-[var(--pos-green)]" role="status">Imprimiendo... preparando el documento.</p>}
+          {printStatus === 'ready' && <p className="rounded-xl border border-[rgba(35,113,90,0.22)] bg-[rgba(35,113,90,0.08)] p-3 text-sm font-bold text-[var(--pos-green)]" role="status">Impreso · documento listo para reimprimir.</p>}
+          {printStatus === 'error' && <p className="rounded-xl border border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] p-3 text-sm font-bold text-[var(--pos-red)]" role="alert">Error de impresión. No se pudo consultar el documento; puedes reimprimir o usar la impresión provisional.</p>}
+          {printStatus === 'unavailable' && <p className="rounded-xl border border-[rgba(233,167,47,0.35)] bg-[rgba(233,167,47,0.14)] p-3 text-sm font-bold text-[#7d5a12]" role="status">Impresión pendiente. Se conservaron los datos para una impresión provisional.</p>}
+          <p className="text-xs font-semibold text-[var(--pos-muted)]">Esta confirmación permanecerá visible hasta que elijas una acción.</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button className="rounded-xl bg-[var(--pos-red)] px-4 py-3 text-sm font-black text-white transition hover:bg-[var(--pos-red-dark)]" onClick={onRetryPrint} type="button">Reimprimir</button>
             <button className="rounded-xl border border-[var(--pos-ink)] px-4 py-3 text-sm font-black text-[var(--pos-ink)] transition hover:bg-[var(--pos-ink)] hover:text-white" onClick={onNewSale} type="button">Nueva venta</button>
+            <button className="rounded-xl border border-[var(--pos-steel)] px-4 py-3 text-sm font-black text-[var(--pos-ink)] transition hover:border-[var(--pos-green)] hover:text-[var(--pos-green)]" onClick={onOpenHistory} type="button">Ir al historial</button>
+            <button className="rounded-xl border border-[var(--pos-steel)] px-4 py-3 text-sm font-black text-[var(--pos-muted)] transition hover:border-[var(--pos-ink)] hover:text-[var(--pos-ink)]" onClick={onClose} type="button">Cerrar ventana</button>
           </div>
         </div>
       </section>

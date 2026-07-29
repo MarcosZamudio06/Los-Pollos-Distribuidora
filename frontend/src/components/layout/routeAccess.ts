@@ -27,6 +27,7 @@ export const ROUTE_ACCESS_ROLES = {
   saleDetail: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   salesHistory: ['ADMIN', 'SELLER', 'COLLECTIONS'],
   salesPos: ['ADMIN', 'SELLER'],
+  orders: ['ADMIN', 'SELLER'],
   inventory: ['ADMIN', 'WAREHOUSE', 'SELLER'],
   dailyClose: ['ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS'],
 } as const satisfies Record<string, readonly KnownRole[]>

@@ -20,6 +20,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { SalesService } from './sales.service';
+import { SalesRealtimeService } from './sales-realtime.service';
 
 const now = new Date('2026-06-21T10:00:00.000Z');
 
@@ -36,6 +37,7 @@ type MockPrisma = {
   inventoryMovement: { create: jest.Mock };
   saleDocument: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
   sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
+  cashShift: { findUnique: jest.Mock };
   pointOfSaleDailyClose: { findUnique: jest.Mock; findFirst: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock };
   accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; update: jest.Mock };
@@ -68,6 +70,7 @@ function createPrisma(): MockPrisma {
     inventoryMovement: { create: jest.fn() },
     saleDocument: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
     sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
+    cashShift: { findUnique: jest.fn() },
     pointOfSaleDailyClose: { findUnique: jest.fn(), findFirst: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() },
     accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
@@ -80,14 +83,15 @@ function createPrisma(): MockPrisma {
   return prisma;
 }
 
-function createService(prisma = createPrisma()) {
-  return { service: new SalesService(prisma as unknown as PrismaService), prisma };
+function createService(prisma = createPrisma(), salesRealtime?: Pick<SalesRealtimeService, 'publishCreated'>) {
+  return { service: new SalesService(prisma as unknown as PrismaService, salesRealtime as SalesRealtimeService), prisma };
 }
 
 function validCashSale(overrides: Record<string, unknown> = {}) {
   return {
     locationId: 'loc-1',
-    pointOfSaleDailyCloseId: 'close-1',
+    cashShiftId: 'shift-1',
+    deviceId: 'device-1',
     saleChannel: SaleChannel.COUNTER,
     documentType: SaleDocumentType.SIMPLE_NOTE,
     paymentType: SalePaymentType.CASH_SALE,
@@ -122,11 +126,16 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
     type: 'BRANCH',
     isActive: true,
   });
-  prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
-    id: 'close-1',
+  prisma.cashShift.findUnique.mockResolvedValue({
+    id: 'shift-1',
+    terminalId: 'terminal-1',
+    pointOfSaleDailyCloseId: 'close-1',
     operationalLocationId: 'loc-1',
-    status: PointOfSaleDailyCloseStatus.DRAFT,
-    cashSessionStatus: 'OPEN',
+    cashierUserId: 'seller-1',
+    businessDate: new Date('2026-06-21T00:00:00.000Z'),
+    status: 'OPEN',
+    terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
+    pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
   });
   prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue({
     id: 'close-1',
@@ -333,15 +342,16 @@ describe('SalesService', () => {
       type: OperationalLocationType.BRANCH,
       isActive: true,
     });
-    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
-      id: 'close-2',
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-2', terminalId: 'terminal-2', pointOfSaleDailyCloseId: 'close-2',
       operationalLocationId: 'loc-2',
-      status: PointOfSaleDailyCloseStatus.DRAFT,
-      cashSessionStatus: 'OPEN',
+      cashierUserId: 'admin-1', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      terminal: { id: 'terminal-2', deviceId: 'device-2', isActive: true },
+      pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
 
     await expect(
-      service.create(validCashSale({ locationId: 'loc-2', pointOfSaleDailyCloseId: 'close-2' }), { id: 'admin-1', role: 'ADMIN' }, 'idem-admin-location'),
+      service.create(validCashSale({ locationId: 'loc-2', cashShiftId: 'shift-2', deviceId: 'device-2' }), { id: 'admin-1', role: 'ADMIN' }, 'idem-admin-location'),
     ).resolves.toEqual(expect.objectContaining({ sale: expect.objectContaining({ locationId: 'loc-2' }) }));
   });
 
@@ -1036,6 +1046,11 @@ describe('SalesService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           pointOfSaleDailyCloseId: 'close-1',
+          terminalId: 'terminal-1',
+          cashShiftId: 'shift-1',
+          cashierUserId: 'seller-1',
+          businessDate: new Date('2026-06-21T00:00:00.000Z'),
+          deviceId: 'device-1',
           subtotal: 250,
           total: 250,
           currencyCode: 'MXN',
@@ -1090,6 +1105,7 @@ describe('SalesService', () => {
         data: expect.objectContaining({
           saleId: 'sale-1',
           pointOfSaleDailyCloseId: 'close-1',
+          cashShiftId: 'shift-1',
           accountReceivableId: null,
           amount: 250,
           paymentMethod: PaymentMethod.CASH,
@@ -1148,35 +1164,117 @@ describe('SalesService', () => {
     expect(result.sale.items[0]).not.toHaveProperty('costSnapshotSource');
   });
 
-  it('rejects a cash sale when the location has no open cash session', async () => {
+  it('publishes a newly created sale only after its transaction completes', async () => {
+    const salesRealtime = { publishCreated: jest.fn() };
+    const { service, prisma } = createService(createPrisma(), salesRealtime);
+    mockHappyPath(prisma);
+    let transactionResolved = false;
+    prisma.$transaction.mockImplementation(async (callback) => {
+      const result = await callback(prisma);
+      transactionResolved = true;
+      return result;
+    });
+    salesRealtime.publishCreated.mockImplementation(() => {
+      expect(transactionResolved).toBe(true);
+    });
+
+    await service.create(validCashSale(), seller(), 'idem-sale-realtime');
+
+    expect(salesRealtime.publishCreated).toHaveBeenCalledTimes(1);
+    expect(salesRealtime.publishCreated).toHaveBeenCalledWith('sale-1');
+  });
+
+  it('does not publish when sale creation fails before commit', async () => {
+    const salesRealtime = { publishCreated: jest.fn() };
+    const { service } = createService(createPrisma(), salesRealtime);
+
+    await expect(service.create({ ...validCashSale(), items: [] }, seller(), 'idem-sale-invalid')).rejects.toThrow('Sale must contain at least one item');
+
+    expect(salesRealtime.publishCreated).not.toHaveBeenCalled();
+  });
+
+  it('lists confirmed orders only for the requested authorized location', async () => {
+    const { service, prisma } = createService();
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true });
+    prisma.sale.findMany.mockResolvedValue([{
+      id: 'sale-1', saleNumber: 'SALE-000001', createdAt: now, total: decimal('250'), status: SaleStatus.CONFIRMED,
+      customer: null, location: { id: 'loc-1', name: 'Sucursal Centro' },
+      items: [{ id: 'item-1', productId: 'product-1', productNameSnapshot: 'Pechuga', unit: ProductUnit.KG, quantityKg: decimal('2.5'), quantityPieces: 0 }],
+    }]);
+
+    const result = await service.findBranchOrders({ locationId: 'loc-1' }, seller());
+
+    expect(prisma.sale.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ locationId: 'loc-1', status: SaleStatus.CONFIRMED }),
+    }));
+    expect(result.items).toEqual([expect.objectContaining({ id: 'sale-1', location: { id: 'loc-1', name: 'Sucursal Centro' } })]);
+  });
+
+  it('rejects a branch order query outside the seller assigned location', async () => {
+    const { service, prisma } = createService();
+
+    await expect(service.findBranchOrders({ locationId: 'loc-2' }, seller())).rejects.toThrow(new ForbiddenException('BRANCH_ORDERS_LOCATION_FORBIDDEN'));
+
+    expect(prisma.sale.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fixed-POS sale without a cash shift', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
 
     await expect(service.create(
-      validCashSale({ pointOfSaleDailyCloseId: undefined }),
+      validCashSale({ cashShiftId: undefined }),
       seller(),
-      'idem-no-cash-session',
-    )).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SESSION_REQUIRED' }) });
+      'idem-no-cash-shift',
+    )).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }) });
 
     expect(prisma.sale.create).not.toHaveBeenCalled();
     expect(prisma.payment.create).not.toHaveBeenCalled();
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
   });
 
-  it('rejects a sale linked to a closed cash session', async () => {
+  it('rejects a sale linked to a closed cash shift', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
-      id: 'close-1',
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-1',
+      terminalId: 'terminal-1',
+      pointOfSaleDailyCloseId: 'close-1',
       operationalLocationId: 'loc-1',
-      status: PointOfSaleDailyCloseStatus.CLOSED,
-      cashSessionStatus: 'CLOSED',
+      cashierUserId: 'seller-1',
+      businessDate: new Date('2026-06-21T00:00:00.000Z'),
+      status: 'CLOSED',
+      terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
 
-    await expect(service.create(validCashSale(), seller(), 'idem-closed-cash-session'))
-      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SESSION_NOT_OPEN' }) });
+    await expect(service.create(validCashSale(), seller(), 'idem-closed-cash-shift'))
+      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_NOT_OPEN' }) });
 
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a sale when the shift belongs to another cashier', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-1', terminalId: 'terminal-1', pointOfSaleDailyCloseId: 'close-1', operationalLocationId: 'loc-1',
+      cashierUserId: 'seller-2', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
+    });
+
+    await expect(service.create(validCashSale(), seller(), 'idem-other-cashier'))
+      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_CASHIER_MISMATCH' }) });
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a sale when the registered terminal device does not match', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+
+    await expect(service.create(validCashSale({ deviceId: 'unregistered-device' }), seller(), 'idem-device-mismatch'))
+      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_TERMINAL_DEVICE_MISMATCH' }) });
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
 
@@ -1210,6 +1308,12 @@ describe('SalesService', () => {
   it('keeps cost snapshots in the sale response for ADMIN', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-1', terminalId: 'terminal-1', pointOfSaleDailyCloseId: 'close-1', operationalLocationId: 'loc-1',
+      cashierUserId: 'admin-1', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
+    });
 
     const result = await service.create(
       validCashSale(),
@@ -1724,7 +1828,8 @@ describe('SalesService', () => {
 
 
   it('replays an idempotent sale request without creating another sale or discounting stock again', async () => {
-    const { service, prisma } = createService();
+    const salesRealtime = { publishCreated: jest.fn() };
+    const { service, prisma } = createService(createPrisma(), salesRealtime);
     const dto = validCashSale();
     const existingSale = {
       id: 'sale-1',
@@ -1749,6 +1854,7 @@ describe('SalesService', () => {
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
     expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-1' }));
+    expect(salesRealtime.publishCreated).not.toHaveBeenCalled();
   });
 
   it('rejects an idempotent replay when the actor cannot view the original sale', async () => {
@@ -1822,6 +1928,12 @@ describe('SalesService', () => {
       id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
     });
     prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-1', terminalId: 'terminal-1', pointOfSaleDailyCloseId: 'close-1', operationalLocationId: 'loc-1',
+      cashierUserId: 'admin-1', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
+    });
 
     await expect(
       service.create(

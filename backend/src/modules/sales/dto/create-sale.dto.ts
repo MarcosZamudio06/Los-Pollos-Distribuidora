@@ -83,7 +83,18 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  /** @deprecated The daily close is derived from cashShiftId. */
   pointOfSaleDailyCloseId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cashShiftId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  deviceId?: string;
 
   @IsEnum(SaleChannel)
   saleChannel!: SaleChannel;

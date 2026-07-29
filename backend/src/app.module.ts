@@ -24,6 +24,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { BillingRequestsModule } from './modules/billing-requests/billing-requests.module';
 import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close/point-of-sale-daily-close.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { CashManagementModule } from './modules/cash-management/cash-management.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { BillingModule } from './modules/billing/billing.module';
     ReportsModule,
     BillingRequestsModule,
     PointOfSaleDailyCloseModule,
+    CashManagementModule,
     BillingModule,
   ],
   controllers: [],

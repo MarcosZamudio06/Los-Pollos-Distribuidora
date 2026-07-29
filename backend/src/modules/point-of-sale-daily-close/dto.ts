@@ -30,6 +30,8 @@ export class ReasonedDailyCloseDto extends VersionedDailyCloseDto {
 }
 
 export class CreateExpenseDto {
+  @IsString() @IsNotEmpty() cashShiftId!: string;
+  @IsString() @IsNotEmpty() deviceId!: string;
   @Type(() => Number) @IsNumber() @IsPositive() amount!: number;
   @IsString() @IsNotEmpty() reason!: string;
   @IsOptional() @IsString() reference?: string;

@@ -286,7 +286,9 @@ Reglas estructurales:
 
 | Agregado | Responsabilidad |
 | --- | --- |
-| `PointOfSaleDailyClose` | Conciliar una ubicación fija, fecha de negocio, producto, ventas, caja, gastos y utilidad. |
+| `CashTerminal` | Identificar una terminal administrada y su dispositivo registrado dentro de una ubicación fija. |
+| `CashShift` | Conciliar la operación monetaria independiente de una terminal y cajero. |
+| `PointOfSaleDailyClose` | Consolidar por ubicación y fecha los turnos, producto, ventas, gastos y utilidad. |
 | `RouteSettlement` | Conciliar una ruta, repartidor, entregas, devoluciones, incidencias y cobros en tránsito. |
 
 El módulo de cierre diario debe depender de contratos públicos de Ventas, Inventario, Pagos, Ubicaciones y Reportes. No debe duplicar ventas, pagos ni movimientos; conserva asociaciones y snapshots de totales para auditoría.

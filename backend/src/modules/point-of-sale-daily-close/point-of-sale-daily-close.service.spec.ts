@@ -8,6 +8,7 @@ describe('PointOfSaleDailyCloseService', () => {
     user: { findUnique: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
     pointOfSaleDailyClose: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+    cashShift: { count: jest.fn(), findUnique: jest.fn() },
     cashMovement: { create: jest.fn(), findUnique: jest.fn() },
     scaleTicketReference: { create: jest.fn(), findUnique: jest.fn() },
     sale: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
@@ -40,6 +41,8 @@ describe('PointOfSaleDailyCloseService', () => {
     prisma.inventoryMovement.updateMany.mockResolvedValue({ count: 0 });
     prisma.dailyCloseEvent.create.mockResolvedValue({ id: 'event-1' });
     prisma.dailyCloseSnapshot.create.mockResolvedValue({ id: 'snapshot-1' });
+    prisma.cashShift.count.mockResolvedValue(0);
+    prisma.cashShift.findUnique.mockResolvedValue({ id: 'shift-1', pointOfSaleDailyCloseId: 'close-1', cashierUserId: 'seller-1', status: 'OPEN', terminal: { isActive: true, deviceId: 'device-1' } });
     prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma));
   });
 
@@ -183,7 +186,7 @@ describe('PointOfSaleDailyCloseService', () => {
 
     await expect(service.addExpense(
       'close-1',
-      { amount: 100, reason: 'Compra operativa', occurredAt: '2026-07-17T05:59:59.999Z' },
+      { cashShiftId: 'shift-1', deviceId: 'device-1', amount: 100, reason: 'Compra operativa', occurredAt: '2026-07-17T05:59:59.999Z' },
       { id: 'admin-1', role: 'ADMIN' } as never,
       'expense-key-1',
     )).rejects.toThrow(new BadRequestException('EXPENSE_OUTSIDE_OPERATIONAL_DAY'));
@@ -280,7 +283,7 @@ describe('PointOfSaleDailyCloseService', () => {
     await expect(service.get('close-other', seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
     await expect(service.validate('close-other', seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
     await expect(service.refresh('close-other', seller)).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
-    await expect(service.addExpense('close-other', { amount: 10, reason: 'Gasto' }, seller, 'expense-key-2')).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+    await expect(service.addExpense('close-other', { cashShiftId: 'shift-1', deviceId: 'device-1', amount: 10, reason: 'Gasto' }, seller, 'expense-key-2')).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
     await expect(service.addScaleTicket('close-other', { physicalFolio: 'B-1', capturedDate: '2026-07-17', weightKg: 1 }, seller, 'scale-key-3')).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
 
     expect(prisma.cashMovement.create).not.toHaveBeenCalled();
@@ -570,10 +573,10 @@ describe('PointOfSaleDailyCloseService', () => {
     jest.spyOn(service as any, 'recalculate').mockResolvedValue(close);
     prisma.cashMovement.create.mockResolvedValue({ id: 'expense-1' });
 
-    await service.addExpense('close-1', { amount: 100, reason: 'Hielo', occurredAt: '2026-07-17T10:00:00.000Z' }, { id: 'seller-1', role: 'ADMIN' } as never, 'expense-key-atomic');
+    await service.addExpense('close-1', { cashShiftId: 'shift-1', deviceId: 'device-1', amount: 100, reason: 'Hielo', occurredAt: '2026-07-17T10:00:00.000Z' }, { id: 'seller-1', role: 'ADMIN' } as never, 'expense-key-atomic');
 
     expect(prisma.$transaction).toHaveBeenCalled();
-    expect(prisma.cashMovement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ idempotencyKey: 'expense-key-atomic' }) }));
+    expect(prisma.cashMovement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ cashShiftId: 'shift-1', idempotencyKey: 'expense-key-atomic' }) }));
     expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ version: { increment: 1 } }) }));
     expect((service as any).recalculate).toHaveBeenCalledWith('close-1', prisma);
     expect(prisma.dailyCloseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'EXPENSE_RECORDED', idempotencyKey: 'expense-key-atomic' }) }));
@@ -582,12 +585,12 @@ describe('PointOfSaleDailyCloseService', () => {
   it('replays an idempotent expense without a second write', async () => {
     const occurredAt = new Date('2026-07-17T10:00:00.000Z');
     const close = { id: 'close-1', operationalLocationId: 'loc-1', businessDate: new Date('2026-07-17T00:00:00.000Z'), status: 'DRAFT', sales: [], updatedAt: new Date() };
-    const payloadHash = createHash('sha256').update(JSON.stringify({ closeId: 'close-1', amount: 100, reason: 'Hielo', reference: null, occurredAt: occurredAt.toISOString(), userId: 'seller-1' })).digest('hex');
+    const payloadHash = createHash('sha256').update(JSON.stringify({ closeId: 'close-1', cashShiftId: 'shift-1', amount: 100, reason: 'Hielo', reference: null, occurredAt: occurredAt.toISOString(), userId: 'seller-1' })).digest('hex');
     jest.spyOn(service as any, 'requireDraft').mockResolvedValue(close);
     prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(close);
     prisma.cashMovement.findUnique.mockResolvedValue({ id: 'expense-1', idempotencyPayloadHash: payloadHash });
 
-    await service.addExpense('close-1', { amount: 100, reason: 'Hielo', occurredAt: occurredAt.toISOString() }, { id: 'seller-1', role: 'ADMIN' } as never, 'expense-key-replay');
+    await service.addExpense('close-1', { cashShiftId: 'shift-1', deviceId: 'device-1', amount: 100, reason: 'Hielo', occurredAt: occurredAt.toISOString() }, { id: 'seller-1', role: 'ADMIN' } as never, 'expense-key-replay');
 
     expect(prisma.cashMovement.create).not.toHaveBeenCalled();
     expect(prisma.pointOfSaleDailyClose.update).not.toHaveBeenCalled();
@@ -610,7 +613,7 @@ describe('PointOfSaleDailyCloseService', () => {
       }
     });
 
-    await expect(service.addExpense('close-1', { amount: 100, reason: 'Hielo', occurredAt: '2026-07-17T10:00:00.000Z' }, { id: 'seller-1', role: 'ADMIN' } as never, 'expense-key-rollback')).rejects.toThrow('audit storage failed');
+    await expect(service.addExpense('close-1', { cashShiftId: 'shift-1', deviceId: 'device-1', amount: 100, reason: 'Hielo', occurredAt: '2026-07-17T10:00:00.000Z' }, { id: 'seller-1', role: 'ADMIN' } as never, 'expense-key-rollback')).rejects.toThrow('audit storage failed');
 
     expect(persistedExpense).toBe(false);
   });
@@ -625,5 +628,13 @@ describe('PointOfSaleDailyCloseService', () => {
 
     expect(prisma.dailyCloseSnapshot.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pointOfSaleDailyCloseId: 'close-1', sourceVersion: 4, snapshotType: 'CLOSED', payloadHash: expect.any(String) }) }));
     expect(prisma.dailyCloseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'STATUS_CHANGED' }) }));
+  });
+
+  it('blocks branch daily closing while any terminal shift remains open', async () => {
+    jest.spyOn(service as any, 'requireCloseAccess').mockResolvedValue({ id: 'close-1', version: 4, validatedSourceVersion: 4 });
+    prisma.cashShift.count.mockResolvedValue(1);
+
+    await expect(service.close('close-1', { version: 4 }, { id: 'admin-1', role: 'ADMIN' } as never))
+      .rejects.toThrow(new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS'));
   });
 });

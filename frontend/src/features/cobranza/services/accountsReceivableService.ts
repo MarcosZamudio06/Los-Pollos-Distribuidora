@@ -67,7 +67,8 @@ function toPaymentPayload(values: ReceivablePaymentFormValues) {
     appliedDocumentId: cleanText(values.appliedDocumentId),
     appliedDocumentType: cleanText(values.appliedDocumentType),
     collectionPass: values.collectionPass,
-    pointOfSaleDailyCloseId: values.pointOfSaleDailyCloseId,
+    cashShiftId: values.cashShiftId,
+    deviceId: values.deviceId,
     paidAt: cleanText(values.paidAt),
   }
 }

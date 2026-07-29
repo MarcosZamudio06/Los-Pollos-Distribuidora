@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/input'
 import { Select } from '../../components/ui/select'
 import { formatMoney as money } from '../../lib/money'
 import { getOperationalDate } from '../../lib/operationalDate'
+import { getPosDeviceId } from '../../lib/deviceIdentity'
 import { useAuth } from '../auth'
 import { usePurchaseLocations } from '../compras/hooks'
 import { locationTypeLabel } from '../compras/purchaseLabels'
@@ -15,10 +16,17 @@ import { DailyCloseGuidedFlow, type DailyCloseStepId } from './DailyCloseGuidedF
 import { DailyCloseHeader } from './DailyCloseHeader'
 import { DailyCloseTransitionDialog } from './DailyCloseTransitionDialog'
 import { dailyCloseService } from './dailyCloseService'
+import { cashManagementService, type CashTerminal } from './cashManagementService'
+import { CashShiftSummary } from './CashShiftSummary'
 import type { DailyCloseReportAction } from './dailyCloseTransition'
 import { canAutoRefreshDailyClose, canUseLocationForDailyClose, canValidateDailyClose, type DailyClose, type DailyCloseInventoryReconciliation as InventoryReconciliation, type DailyCloseValidationResult } from './types'
 
-const statusLabel = { DRAFT: 'Borrador', REVIEWED: 'Revisado', CLOSED: 'Cerrado', CANCELLED: 'Cancelado' }
+const statusLabel = {
+  DRAFT: 'Borrador',
+  REVIEWED: 'Revisado',
+  CLOSED: 'Cerrado',
+  CANCELLED: 'Cancelado',
+}
 const today = getOperationalDate()
 
 export function DailyClosePage() {
@@ -28,9 +36,26 @@ export function DailyClosePage() {
   const [loading, setLoading] = useState(true)
   const [locationId, setLocationId] = useState('')
   const [businessDate, setBusinessDate] = useState(today)
-  const [openingCash, setOpeningCash] = useState({ terminalIdentifier: 'Caja 01', initialCashFund: '', initialCashIn: '', initialCashOut: '', notes: '' })
-  const [expense, setExpense] = useState({ amount: '', reason: '', reference: '' })
-  const [ticket, setTicket] = useState({ physicalFolio: '', weightKg: '', pieceCount: '', amount: '' })
+  const [openingCash, setOpeningCash] = useState({
+    terminalId: '',
+    initialCashFund: '',
+    initialCashIn: '',
+    initialCashOut: '',
+    notes: '',
+  })
+  const [terminals, setTerminals] = useState<CashTerminal[]>([])
+  const deviceId = useMemo(() => getPosDeviceId(), [])
+  const [expense, setExpense] = useState({
+    amount: '',
+    reason: '',
+    reference: '',
+  })
+  const [ticket, setTicket] = useState({
+    physicalFolio: '',
+    weightKg: '',
+    pieceCount: '',
+    amount: '',
+  })
   const [cashCountedTotal, setCashCountedTotal] = useState('')
   const [inventoryReconciliation, setInventoryReconciliation] = useState<InventoryReconciliation | null>(null)
   const [validationResult, setValidationResult] = useState<DailyCloseValidationResult | null>(null)
@@ -41,18 +66,22 @@ export function DailyClosePage() {
   const canViewInventory = user?.role !== 'COLLECTIONS'
   const canViewFinancials = user?.role !== 'WAREHOUSE'
   const canEditDraft = user?.role === 'ADMIN' || user?.role === 'SELLER'
-  const products = useProducts({ isActive: 'true', locationId: selected?.operationalLocationId ?? '' })
+  const products = useProducts({
+    isActive: 'true',
+    locationId: selected?.operationalLocationId ?? '',
+  })
 
-  const selectClose = useCallback(async (close: Pick<DailyClose, 'id' | 'status'>, resetStep = false) => {
-    setValidationResult(null)
-    if (resetStep) setActiveStep('operations')
-    const detail = canAutoRefreshDailyClose(close.status)
-      ? await dailyCloseService.refresh(close.id, accessToken)
-      : await dailyCloseService.get(close.id, accessToken)
-    setSelected(detail)
-    setInventoryReconciliation(canViewInventory ? await dailyCloseService.reconciliation(close.id, accessToken) : null)
-    return detail
-  }, [accessToken, canViewInventory])
+  const selectClose = useCallback(
+    async (close: Pick<DailyClose, 'id' | 'status'>, resetStep = false) => {
+      setValidationResult(null)
+      if (resetStep) setActiveStep('operations')
+      const detail = canAutoRefreshDailyClose(close.status) ? await dailyCloseService.refresh(close.id, accessToken) : await dailyCloseService.get(close.id, accessToken)
+      setSelected(detail)
+      setInventoryReconciliation(canViewInventory ? await dailyCloseService.reconciliation(close.id, accessToken) : null)
+      return detail
+    },
+    [accessToken, canViewInventory],
+  )
 
   const load = async () => {
     try {
@@ -61,7 +90,10 @@ export function DailyClosePage() {
       setItems(data)
       const current = selected ? data.find((item) => item.id === selected.id) : data[0]
       if (current) await selectClose(current)
-      else { setSelected(null); setInventoryReconciliation(null) }
+      else {
+        setSelected(null)
+        setInventoryReconciliation(null)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No fue posible cargar los cierres.')
     } finally {
@@ -71,23 +103,61 @@ export function DailyClosePage() {
 
   useEffect(() => {
     let active = true
-    dailyCloseService.list(accessToken)
+    dailyCloseService
+      .list(accessToken)
       .then(async (data) => {
         if (!active) return
         setItems(data)
         if (data[0]) await selectClose(data[0], true)
-        else { setSelected(null); setInventoryReconciliation(null) }
+        else {
+          setSelected(null)
+          setInventoryReconciliation(null)
+        }
       })
-      .catch((error: unknown) => { if (active) toast.error(error instanceof Error ? error.message : 'No fue posible cargar los cierres.') })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
+      .catch((error: unknown) => {
+        if (active) toast.error(error instanceof Error ? error.message : 'No fue posible cargar los cierres.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [accessToken, selectClose])
 
   useEffect(() => {
     if (!selected || !canAutoRefreshDailyClose(selected.status)) return
-    const interval = window.setInterval(() => { void selectClose(selected) }, 30_000)
+    const interval = window.setInterval(() => {
+      void selectClose(selected)
+    }, 30_000)
     return () => window.clearInterval(interval)
   }, [selectClose, selected])
+
+  useEffect(() => {
+    if (!locationId) {
+      setTerminals([])
+      setOpeningCash((current) => ({ ...current, terminalId: '' }))
+      return
+    }
+    let active = true
+    cashManagementService
+      .listTerminals(locationId, deviceId, accessToken)
+      .then((items) => {
+        if (!active) return
+        const registeredForDevice = items.filter((terminal) => terminal.deviceId === deviceId)
+        setTerminals(registeredForDevice)
+        setOpeningCash((current) => ({
+          ...current,
+          terminalId: registeredForDevice[0]?.id ?? '',
+        }))
+      })
+      .catch((error: unknown) => {
+        if (active) toast.error(error instanceof Error ? error.message : 'No fue posible consultar las terminales.')
+      })
+    return () => {
+      active = false
+    }
+  }, [accessToken, deviceId, locationId])
 
   const run = async (operation: () => Promise<DailyClose>, message: string) => {
     try {
@@ -102,31 +172,64 @@ export function DailyClosePage() {
     }
   }
 
-  const open = (event: FormEvent) => {
+  const open = async (event: FormEvent) => {
     event.preventDefault()
     if (!locationId.trim()) return toast.error('Selecciona una ubicación operativa.')
-    void run(() => dailyCloseService.open({
-      operationalLocationId: locationId.trim(),
-      businessDate,
-      terminalIdentifier: openingCash.terminalIdentifier.trim(),
-      initialCashFund: Number(openingCash.initialCashFund || 0),
-      initialCashIn: Number(openingCash.initialCashIn || 0),
-      initialCashOut: Number(openingCash.initialCashOut || 0),
-      notes: openingCash.notes.trim() || undefined,
-    }, accessToken), 'Caja abierta y lista para vender.')
+    if (!openingCash.terminalId) return toast.error('Este dispositivo no tiene una terminal activa registrada.')
+    try {
+      await cashManagementService.openShift(
+        {
+          terminalId: openingCash.terminalId,
+          deviceId,
+          businessDate,
+          initialCashFund: Number(openingCash.initialCashFund || 0),
+          initialCashIn: Number(openingCash.initialCashIn || 0),
+          initialCashOut: Number(openingCash.initialCashOut || 0),
+          notes: openingCash.notes.trim() || undefined,
+        },
+        accessToken,
+      )
+      await load()
+      toast.success('Turno abierto y listo para vender.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible abrir el turno.')
+    }
   }
-  const addExpense = (event: FormEvent) => {
+  const addExpense = async (event: FormEvent) => {
     event.preventDefault()
     if (!selected || !expense.reason.trim()) return
     const idempotencyKey = crypto.randomUUID()
-    void run(() => dailyCloseService.expense(selected.id, { amount: Number(expense.amount), reason: expense.reason, reference: expense.reference || undefined }, accessToken, idempotencyKey), 'Gasto registrado.')
-    setExpense({ amount: '', reason: '', reference: '' })
+    try {
+      const shift = await cashManagementService.currentShift(deviceId, accessToken)
+      if (!shift || shift.pointOfSaleDailyCloseId !== selected.id) throw new Error('Abre tu turno en esta sucursal antes de registrar el gasto.')
+      await cashManagementService.recordMovement(shift.id, { deviceId, type: 'EXPENSE', amount: Number(expense.amount), reason: expense.reason, reference: expense.reference || undefined }, accessToken, idempotencyKey)
+      setExpense({ amount: '', reason: '', reference: '' })
+      await selectClose(selected)
+      toast.success('Gasto registrado en el turno actual.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible registrar el gasto.')
+    }
   }
   const addTicket = (event: FormEvent) => {
     event.preventDefault()
     if (!selected) return
     const idempotencyKey = crypto.randomUUID()
-    void run(() => dailyCloseService.ticket(selected.id, { physicalFolio: ticket.physicalFolio, capturedDate: businessDate, weightKg: ticket.weightKg ? Number(ticket.weightKg) : undefined, pieceCount: ticket.pieceCount ? Number(ticket.pieceCount) : undefined, amount: ticket.amount ? Number(ticket.amount) : undefined }, accessToken, idempotencyKey), 'Referencia de báscula registrada.')
+    void run(
+      () =>
+        dailyCloseService.ticket(
+          selected.id,
+          {
+            physicalFolio: ticket.physicalFolio,
+            capturedDate: businessDate,
+            weightKg: ticket.weightKg ? Number(ticket.weightKg) : undefined,
+            pieceCount: ticket.pieceCount ? Number(ticket.pieceCount) : undefined,
+            amount: ticket.amount ? Number(ticket.amount) : undefined,
+          },
+          accessToken,
+          idempotencyKey,
+        ),
+      'Referencia de báscula registrada.',
+    )
     setTicket({ physicalFolio: '', weightKg: '', pieceCount: '', amount: '' })
   }
   const recordCashCount = (event: FormEvent) => {
@@ -135,10 +238,18 @@ export function DailyClosePage() {
     void run(() => dailyCloseService.recordCashCount(selected.id, { cashCountedTotal: Number(cashCountedTotal) }, accessToken), 'Efectivo contado registrado.')
     setCashCountedTotal('')
   }
-  const saveInventoryCount = (countId: string | undefined, productId: string, values: { physicalQuantityKg?: number; physicalQuantityPieces?: number; reason: string }) => {
+  const saveInventoryCount = (
+    countId: string | undefined,
+    productId: string,
+    values: {
+      physicalQuantityKg?: number
+      physicalQuantityPieces?: number
+      reason: string
+    },
+  ) => {
     if (!selected) return
     const idempotencyKey = crypto.randomUUID()
-    void run(() => countId ? dailyCloseService.updateInventoryCount(selected.id, countId, values, accessToken) : dailyCloseService.createInventoryCount(selected.id, { productId, ...values }, accessToken, idempotencyKey), 'Conteo físico guardado.')
+    void run(() => (countId ? dailyCloseService.updateInventoryCount(selected.id, countId, values, accessToken) : dailyCloseService.createInventoryCount(selected.id, { productId, ...values }, accessToken, idempotencyKey)), 'Conteo físico guardado.')
   }
   const deleteInventoryCount = (countId: string) => {
     if (!selected || !window.confirm('¿Eliminar este conteo físico?')) return
@@ -166,7 +277,10 @@ export function DailyClosePage() {
     }
   }
   const transition = (action: 'validate' | 'review' | 'close' | 'cancel' | 'reopen') => {
-    if (action === 'validate') { void validate(); return }
+    if (action === 'validate') {
+      void validate()
+      return
+    }
     if (!selected) return
     if (action === 'close' || action === 'reopen') {
       if (action === 'close') setActiveStep('signoff')
@@ -184,15 +298,189 @@ export function DailyClosePage() {
   }
 
   const editable = canEditDraft && selected?.status === 'DRAFT'
-  const cashCountForm = editable && selected ? <form className="space-y-3 rounded-2xl border border-[var(--erp-brand-red)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={recordCashCount}><h3 className="font-bold">Registrar efectivo contado</h3><p className="text-sm text-[var(--erp-muted-foreground)]">Esperado: <strong className="tabular-nums text-[var(--erp-foreground)]">{money(selected.netCashExpected)}</strong></p><Input required min="0" onChange={(event) => setCashCountedTotal(event.target.value)} placeholder="Efectivo contado" step="0.01" type="number" value={cashCountedTotal} /><Button type="submit">Guardar conteo</Button></form> : undefined
-  const expenseForm = editable ? <form className="space-y-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={addExpense}><h3 className="font-bold">Registrar gasto</h3><div className="grid grid-cols-2 gap-2"><Input required min="0.01" onChange={(event) => setExpense({ ...expense, amount: event.target.value })} placeholder="Importe" step="0.01" type="number" value={expense.amount} /><Input onChange={(event) => setExpense({ ...expense, reference: event.target.value })} placeholder="Referencia" value={expense.reference} /></div><Input required onChange={(event) => setExpense({ ...expense, reason: event.target.value })} placeholder="Motivo del gasto" value={expense.reason} /><Button type="submit">Guardar gasto</Button></form> : undefined
-  const scaleTicketForm = editable ? <form className="space-y-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={addTicket}><h3 className="font-bold">Capturar referencia de báscula</h3><Input required onChange={(event) => setTicket({ ...ticket, physicalFolio: event.target.value })} placeholder="Folio físico" value={ticket.physicalFolio} /><div className="grid grid-cols-3 gap-2"><Input min="0" onChange={(event) => setTicket({ ...ticket, weightKg: event.target.value })} placeholder="Kilos" step="0.001" type="number" value={ticket.weightKg} /><Input min="0" onChange={(event) => setTicket({ ...ticket, pieceCount: event.target.value })} placeholder="Piezas" type="number" value={ticket.pieceCount} /><Input min="0" onChange={(event) => setTicket({ ...ticket, amount: event.target.value })} placeholder="Importe" step="0.01" type="number" value={ticket.amount} /></div><Button type="submit">Guardar referencia</Button></form> : undefined
+  const cashCountForm =
+    editable && selected ? (
+      <form className="space-y-3 rounded-2xl border border-[var(--erp-brand-red)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={recordCashCount}>
+        <h3 className="font-bold">Registrar efectivo contado</h3>
+        <p className="text-sm text-[var(--erp-muted-foreground)]">
+          Esperado: <strong className="tabular-nums text-[var(--erp-foreground)]">{money(selected.netCashExpected)}</strong>
+        </p>
+        <Input required min="0" onChange={(event) => setCashCountedTotal(event.target.value)} placeholder="Efectivo contado" step="0.01" type="number" value={cashCountedTotal} />
+        <Button type="submit">Guardar conteo</Button>
+      </form>
+    ) : undefined
+  const expenseForm = editable ? (
+    <form className="space-y-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={addExpense}>
+      <h3 className="font-bold">Registrar gasto</h3>
+      <div className="grid grid-cols-2 gap-2">
+        <Input required min="0.01" onChange={(event) => setExpense({ ...expense, amount: event.target.value })} placeholder="Importe" step="0.01" type="number" value={expense.amount} />
+        <Input onChange={(event) => setExpense({ ...expense, reference: event.target.value })} placeholder="Referencia" value={expense.reference} />
+      </div>
+      <Input required onChange={(event) => setExpense({ ...expense, reason: event.target.value })} placeholder="Motivo del gasto" value={expense.reason} />
+      <Button type="submit">Guardar gasto</Button>
+    </form>
+  ) : undefined
+  const scaleTicketForm = editable ? (
+    <form className="space-y-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={addTicket}>
+      <h3 className="font-bold">Capturar referencia de báscula</h3>
+      <Input required onChange={(event) => setTicket({ ...ticket, physicalFolio: event.target.value })} placeholder="Folio físico" value={ticket.physicalFolio} />
+      <div className="grid grid-cols-3 gap-2">
+        <Input min="0" onChange={(event) => setTicket({ ...ticket, weightKg: event.target.value })} placeholder="Kilos" step="0.001" type="number" value={ticket.weightKg} />
+        <Input min="0" onChange={(event) => setTicket({ ...ticket, pieceCount: event.target.value })} placeholder="Piezas" type="number" value={ticket.pieceCount} />
+        <Input min="0" onChange={(event) => setTicket({ ...ticket, amount: event.target.value })} placeholder="Importe" step="0.01" type="number" value={ticket.amount} />
+      </div>
+      <Button type="submit">Guardar referencia</Button>
+    </form>
+  ) : undefined
 
-  return <PageContainer className="space-y-6">
-     <header className="relative overflow-hidden rounded-[1.75rem] border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-6 shadow-sm"><div className="absolute inset-y-0 left-0 w-2 bg-[var(--erp-brand-red)]" /><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--erp-brand-red)]">Apertura de caja</p><h1 className="mt-2 text-3xl font-black tracking-tight">Caja y cierre diario</h1><p className="mt-2 max-w-2xl text-sm text-[var(--erp-muted-foreground)]">Abre una sesión monetaria antes de vender. La jornada conservará terminal, cajero, hora y fondo inicial.</p></div><form className="grid gap-2 sm:grid-cols-2 lg:min-w-[700px] lg:grid-cols-3" onSubmit={open}><Select aria-label="Ubicación operativa" disabled={locations.isLoading} onChange={(event) => setLocationId(event.target.value)} value={locationId}><option value="">{locations.isLoading ? 'Cargando ubicaciones...' : 'Selecciona punto de venta'}</option>{closeLocations.map((location) => <option key={location.id} value={location.id}>{location.name} · {locationTypeLabel(location.type)}</option>)}</Select><Input aria-label="Fecha operativa" max={today} onChange={(event) => setBusinessDate(event.target.value)} type="date" value={businessDate} /><Input aria-label="Identificador de terminal" onChange={(event) => setOpeningCash({ ...openingCash, terminalIdentifier: event.target.value })} placeholder="Caja 01" required value={openingCash.terminalIdentifier} /><Input aria-label="Fondo inicial" min="0" onChange={(event) => setOpeningCash({ ...openingCash, initialCashFund: event.target.value })} placeholder="Fondo inicial" step="0.01" type="number" value={openingCash.initialCashFund} /><Input aria-label="Depósito inicial" min="0" onChange={(event) => setOpeningCash({ ...openingCash, initialCashIn: event.target.value })} placeholder="Depósito inicial" step="0.01" type="number" value={openingCash.initialCashIn} /><Input aria-label="Retiro inicial" min="0" onChange={(event) => setOpeningCash({ ...openingCash, initialCashOut: event.target.value })} placeholder="Retiro inicial" step="0.01" type="number" value={openingCash.initialCashOut} /><Input aria-label="Notas de apertura" onChange={(event) => setOpeningCash({ ...openingCash, notes: event.target.value })} placeholder="Notas de apertura" value={openingCash.notes} /><Button className="sm:col-span-2 lg:col-span-3" disabled={locations.isLoading || closeLocations.length === 0} type="submit"><Plus size={16} /> Abrir caja</Button></form></div></header>
-    <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]"><aside className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-3"><div className="mb-3 flex items-center justify-between px-2"><h2 className="font-bold">Jornadas</h2><Button onClick={() => void load()} size="sm" variant="ghost"><RefreshCw size={15} /></Button></div>{loading ? <p className="p-3 text-sm">Cargando...</p> : items.length === 0 ? <p className="p-3 text-sm text-[var(--erp-muted-foreground)]">Aún no hay cierres.</p> : items.map((item) => <button className={`mb-2 w-full rounded-xl border p-3 text-left transition ${selected?.id === item.id ? 'border-[var(--erp-brand-red)] bg-[var(--erp-surface-muted)]' : 'border-transparent hover:bg-[var(--erp-surface-muted)]'}`} key={item.id} onClick={() => void selectClose(item, true)} type="button"><span className="block font-semibold">{item.operationalLocation.name}</span><span className="mt-1 flex justify-between text-xs text-[var(--erp-muted-foreground)]"><span>{item.businessDate.slice(0, 10)}</span><span>{statusLabel[item.status]}</span></span></button>)}</aside>
-      {!selected ? <section className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-[var(--erp-border)]"><p className="text-[var(--erp-muted-foreground)]">Abre o selecciona un cierre para comenzar.</p></section> : <section className="space-y-5"><DailyCloseHeader close={selected} /><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-[var(--erp-muted-foreground)]">Las acciones administrativas respetan la versión y la validación vigente.</p></div><div className="flex flex-wrap gap-2">{canAutoRefreshDailyClose(selected.status) && <Button onClick={() => void selectClose(selected)} variant="ghost"><RefreshCw size={16} /> Actualizar</Button>}{canEditDraft && canValidateDailyClose(selected.status) && <Button onClick={() => transition('validate')} variant="secondary"><ClipboardCheck size={16} /> Validar</Button>}{user?.role === 'ADMIN' && selected.status === 'DRAFT' && <Button onClick={() => transition('review')}>Marcar revisado</Button>}{user?.role === 'ADMIN' && selected.status === 'REVIEWED' && <Button onClick={() => transition('close')}><CheckCircle2 size={16} /> Cerrar jornada</Button>}{user?.role === 'ADMIN' && selected.status === 'CLOSED' && <Button onClick={() => transition('reopen')} variant="secondary">Reabrir</Button>}{user?.role === 'ADMIN' && selected.status !== 'CANCELLED' && <Button onClick={() => transition('cancel')} variant="destructive">Cancelar</Button>}</div></div><DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={user?.role === 'ADMIN' && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} /></section>}
-    </div>
-    {selected && reportAction && <DailyCloseTransitionDialog action={reportAction} close={selected} onCancel={() => setReportAction(null)} onConfirm={confirmReportTransition} />}
-  </PageContainer>
+  return (
+    <PageContainer className="space-y-6">
+      <header className="relative overflow-hidden rounded-[1.75rem] border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-6 shadow-sm">
+        <div className="absolute inset-y-0 left-0 w-2 bg-[var(--erp-brand-red)]" />
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--erp-brand-red)]">Apertura de turno</p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight">Turnos y cierre diario</h1>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--erp-muted-foreground)]">Abre un turno en la terminal administrada de este dispositivo. El cierre diario consolida todos los turnos de la sucursal.</p>
+            <p className="mt-2 font-mono text-xs text-[var(--erp-muted-foreground)]">Dispositivo: {deviceId}</p>
+          </div>
+          <form className="grid gap-2 sm:grid-cols-2 lg:min-w-[700px] lg:grid-cols-3" onSubmit={open}>
+            <Select aria-label="Ubicación operativa" disabled={locations.isLoading} onChange={(event) => setLocationId(event.target.value)} value={locationId}>
+              <option value="">{locations.isLoading ? 'Cargando ubicaciones...' : 'Selecciona punto de venta'}</option>
+              {closeLocations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name} · {locationTypeLabel(location.type)}
+                </option>
+              ))}
+            </Select>
+            <Input aria-label="Fecha operativa" max={today} onChange={(event) => setBusinessDate(event.target.value)} type="date" value={businessDate} />
+            <Select aria-label="Terminal registrada" disabled={!locationId || terminals.length === 0} onChange={(event) => setOpeningCash({ ...openingCash, terminalId: event.target.value })} required value={openingCash.terminalId}>
+              <option value="">{locationId && terminals.length === 0 ? 'Dispositivo sin terminal registrada' : 'Selecciona terminal'}</option>
+              {terminals.map((terminal) => (
+                <option key={terminal.id} value={terminal.id}>
+                  {terminal.name} · {terminal.code}
+                </option>
+              ))}
+            </Select>
+            <Input
+              aria-label="Fondo inicial"
+              min="0"
+              onChange={(event) =>
+                setOpeningCash({
+                  ...openingCash,
+                  initialCashFund: event.target.value,
+                })
+              }
+              placeholder="Fondo inicial"
+              step="0.01"
+              type="number"
+              value={openingCash.initialCashFund}
+            />
+            <Input
+              aria-label="Depósito inicial"
+              min="0"
+              onChange={(event) =>
+                setOpeningCash({
+                  ...openingCash,
+                  initialCashIn: event.target.value,
+                })
+              }
+              placeholder="Depósito inicial"
+              step="0.01"
+              type="number"
+              value={openingCash.initialCashIn}
+            />
+            <Input
+              aria-label="Retiro inicial"
+              min="0"
+              onChange={(event) =>
+                setOpeningCash({
+                  ...openingCash,
+                  initialCashOut: event.target.value,
+                })
+              }
+              placeholder="Retiro inicial"
+              step="0.01"
+              type="number"
+              value={openingCash.initialCashOut}
+            />
+            <Input aria-label="Notas de apertura" onChange={(event) => setOpeningCash({ ...openingCash, notes: event.target.value })} placeholder="Notas de apertura" value={openingCash.notes} />
+            <Button className="sm:col-span-2 lg:col-span-3" disabled={locations.isLoading || closeLocations.length === 0 || !openingCash.terminalId} type="submit">
+              <Plus size={16} /> Abrir turno
+            </Button>
+          </form>
+        </div>
+      </header>
+      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-3">
+          <div className="mb-3 flex items-center justify-between px-2">
+            <h2 className="font-bold">Jornadas</h2>
+            <Button onClick={() => void load()} size="sm" variant="ghost">
+              <RefreshCw size={15} />
+            </Button>
+          </div>
+          {loading ? (
+            <p className="p-3 text-sm">Cargando...</p>
+          ) : items.length === 0 ? (
+            <p className="p-3 text-sm text-[var(--erp-muted-foreground)]">Aún no hay cierres.</p>
+          ) : (
+            items.map((item) => (
+              <button className={`mb-2 w-full rounded-xl border p-3 text-left transition ${selected?.id === item.id ? 'border-[var(--erp-brand-red)] bg-[var(--erp-surface-muted)]' : 'border-transparent hover:bg-[var(--erp-surface-muted)]'}`} key={item.id} onClick={() => void selectClose(item, true)} type="button">
+                <span className="block font-semibold">{item.operationalLocation.name}</span>
+                <span className="mt-1 flex justify-between text-xs text-[var(--erp-muted-foreground)]">
+                  <span>{item.businessDate.slice(0, 10)}</span>
+                  <span>{statusLabel[item.status]}</span>
+                </span>
+              </button>
+            ))
+          )}
+        </aside>
+        {!selected ? (
+          <section className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-[var(--erp-border)]">
+            <p className="text-[var(--erp-muted-foreground)]">Abre o selecciona un cierre para comenzar.</p>
+          </section>
+        ) : (
+          <section className="space-y-5">
+            <DailyCloseHeader close={selected} />
+            <CashShiftSummary close={selected} />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-[var(--erp-muted-foreground)]">Las acciones administrativas respetan la versión y la validación vigente.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {canAutoRefreshDailyClose(selected.status) && (
+                  <Button onClick={() => void selectClose(selected)} variant="ghost">
+                    <RefreshCw size={16} /> Actualizar
+                  </Button>
+                )}
+                {canEditDraft && canValidateDailyClose(selected.status) && (
+                  <Button onClick={() => transition('validate')} variant="secondary">
+                    <ClipboardCheck size={16} /> Validar
+                  </Button>
+                )}
+                {user?.role === 'ADMIN' && selected.status === 'DRAFT' && <Button onClick={() => transition('review')}>Marcar revisado</Button>}
+                {user?.role === 'ADMIN' && selected.status === 'REVIEWED' && (
+                  <Button onClick={() => transition('close')}>
+                    <CheckCircle2 size={16} /> Cerrar jornada
+                  </Button>
+                )}
+                {user?.role === 'ADMIN' && selected.status === 'CLOSED' && (
+                  <Button onClick={() => transition('reopen')} variant="secondary">
+                    Reabrir
+                  </Button>
+                )}
+                {user?.role === 'ADMIN' && selected.status !== 'CANCELLED' && (
+                  <Button onClick={() => transition('cancel')} variant="destructive">
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            </div>
+            <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={user?.role === 'ADMIN' && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
+          </section>
+        )}
+      </div>
+      {selected && reportAction && <DailyCloseTransitionDialog action={reportAction} close={selected} onCancel={() => setReportAction(null)} onConfirm={confirmReportTransition} />}
+    </PageContainer>
+  )
 }

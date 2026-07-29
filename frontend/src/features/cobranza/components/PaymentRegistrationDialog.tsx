@@ -7,6 +7,7 @@ import { formatMoney, toNumber } from './formatters'
 import type { AccountReceivable, PaymentMethod } from '../types'
 import { ConfirmationDialog } from '@/components/shared/confirmation-dialog'
 import { toast } from 'sonner'
+import { getPosDeviceId } from '../../../lib/deviceIdentity'
 
 type PaymentRegistrationDialogProps = {
   account: AccountReceivable
@@ -49,7 +50,8 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
       appliedDocumentId,
       appliedDocumentType: appliedDocumentId ? 'INTERNAL_DOCUMENT' : undefined,
       collectionPass: collectionPass ? Number(collectionPass) : undefined,
-      pointOfSaleDailyCloseId: paymentMethod === 'CASH' ? openCashSession.data?.id : undefined,
+      cashShiftId: paymentMethod === 'CASH' ? openCashSession.data?.id : undefined,
+      deviceId: paymentMethod === 'CASH' ? getPosDeviceId() : undefined,
       paidAt: paidAt ? new Date(`${paidAt}T00:00:00`).toISOString() : undefined,
     })
   }
@@ -81,7 +83,7 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
         </div>
         <div className="p-6">
           {cannotPay && <p role="alert" className="mb-4 rounded-2xl bg-[rgba(157,45,36,0.10)] p-4 text-sm font-semibold text-[var(--erp-danger)]">No se pueden registrar pagos sobre cuentas pagadas o canceladas.</p>}
-          {cashSessionError && <p role="alert" className="mb-4 rounded-2xl bg-[rgba(157,45,36,0.10)] p-4 text-sm font-semibold text-[var(--erp-danger)]">Abre una caja en la ubicación de la venta antes de registrar un pago en efectivo. <Link className="underline" to="/daily-close">Abrir caja</Link></p>}
+          {cashSessionError && <p role="alert" className="mb-4 rounded-2xl bg-[rgba(157,45,36,0.10)] p-4 text-sm font-semibold text-[var(--erp-danger)]">Abre un turno en la terminal registrada antes de recibir efectivo. <Link className="underline" to="/daily-close">Abrir turno</Link></p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-2 text-sm font-semibold">Monto<input className={fieldClass} min="0.01" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
             <label className="grid gap-2 text-sm font-semibold">Método<select className={fieldClass} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>{paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}</select></label>
@@ -100,7 +102,7 @@ export function PaymentRegistrationDialog({ account, onClose }: PaymentRegistrat
         </div>
       </form>
       <ConfirmationDialog confirmLabel="Confirmar registro" description="Verifique el pago antes de aplicarlo a la cuenta por cobrar." isLoading={registerPayment.isPending} onConfirm={confirmRegistration} onOpenChange={(open) => { if (!open) setPendingPayment(null) }} open={Boolean(pendingPayment)} title="Confirmar registro de pago">
-        <p><strong>Cliente:</strong> {account.customerName ?? account.customerId}</p><p><strong>Monto:</strong> {formatMoney(pendingPayment?.amount ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}</p><p><strong>Caja:</strong> {openCashSession.data?.terminalIdentifier ?? 'No seleccionada'}</p><p><strong>Fecha:</strong> {pendingPayment?.paidAt ? new Date(pendingPayment.paidAt).toLocaleDateString('es-MX') : '—'}</p>
+        <p><strong>Cliente:</strong> {account.customerName ?? account.customerId}</p><p><strong>Monto:</strong> {formatMoney(pendingPayment?.amount ?? 0)}</p><p><strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}</p><p><strong>Terminal:</strong> {openCashSession.data?.terminal.name ?? 'No seleccionada'}</p><p><strong>Fecha:</strong> {pendingPayment?.paidAt ? new Date(pendingPayment.paidAt).toLocaleDateString('es-MX') : '—'}</p>
         {registerPayment.error && <p className="font-semibold text-[var(--erp-danger)]" role="alert">{registerPayment.error instanceof Error ? registerPayment.error.message : 'No se pudo registrar el pago.'}</p>}
       </ConfirmationDialog>
     </div>

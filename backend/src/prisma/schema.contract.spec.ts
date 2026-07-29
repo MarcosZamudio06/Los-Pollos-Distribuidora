@@ -26,6 +26,10 @@ const cashSessionMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260725100000_add_cash_session_fields/migration.sql',
 );
+const cashTerminalShiftMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260727120000_separate_cash_terminals_shifts/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -74,6 +78,8 @@ describe('Prisma schema contract', () => {
       'DeliveryOrder',
       'DeliveryEvidence',
       'RouteSettlement',
+      'CashTerminal',
+      'CashShift',
       'PointOfSaleDailyClose',
       'PointOfSaleDailyCloseLine',
       'DailyCloseInventoryCount',
@@ -96,7 +102,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(47);
+    expect(modelNames).toHaveLength(49);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
@@ -163,6 +169,36 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('CREATE TYPE "CashSessionStatus" AS ENUM');
     expect(migrationSql).toContain('ADD COLUMN "terminalIdentifier" TEXT');
     expect(migrationSql).toContain('ADD COLUMN "isOpening" BOOLEAN');
+  });
+
+  it('separates managed cash terminals, cashier shifts, and branch daily closing', () => {
+    const terminal = getModelBlock('CashTerminal');
+    const shift = getModelBlock('CashShift');
+    const sale = getModelBlock('Sale');
+    const payment = getModelBlock('Payment');
+    const cashMovement = getModelBlock('CashMovement');
+    const dailyClose = getModelBlock('PointOfSaleDailyClose');
+    const migrationSql = readFileSync(cashTerminalShiftMigrationSqlPath, 'utf8');
+
+    expect(terminal).toMatch(/deviceId\s+String\s+@unique/);
+    expect(terminal).toContain('@@unique([operationalLocationId, code])');
+    expect(shift).toMatch(/cashierUserId\s+String/);
+    expect(shift).toMatch(/businessDate\s+DateTime\s+@db\.Date/);
+    expect(shift).toMatch(/pointOfSaleDailyCloseId\s+String/);
+    expect(sale).toMatch(/terminalId\s+String\?/);
+    expect(sale).toMatch(/cashShiftId\s+String\?/);
+    expect(sale).toMatch(/cashierUserId\s+String\?/);
+    expect(sale).toMatch(/businessDate\s+DateTime\?\s+@db\.Date/);
+    expect(sale).toMatch(/registeredAt\s+DateTime\?/);
+    expect(sale).toMatch(/deviceId\s+String\?/);
+    expect(payment).toMatch(/cashShiftId\s+String\?/);
+    expect(cashMovement).toMatch(/cashShiftId\s+String\?/);
+    expect(dailyClose).toMatch(/cashShifts\s+CashShift\[\]/);
+    expect(migrationSql).toContain('CREATE TABLE "CashTerminal"');
+    expect(migrationSql).toContain('CREATE TABLE "CashShift"');
+    expect(migrationSql).toContain('cash_shift_one_open_per_terminal_uq');
+    expect(migrationSql).toContain('legacy-terminal-');
+    expect(migrationSql).toContain('legacy-shift-');
   });
 
   it('keeps scale ticket folio unique per location and date', () => {

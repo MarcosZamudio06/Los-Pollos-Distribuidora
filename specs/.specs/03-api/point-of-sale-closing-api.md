@@ -44,7 +44,7 @@ CLOSED -> DRAFT        solo ADMIN mediante reapertura auditada
 
 No se elimina físicamente un cierre. Cancelar o reabrir requiere motivo y control de versión.
 
-`DRAFT` con `cashSessionStatus=OPEN` representa una caja abierta. `CLOSED` representa una sesión que ya no acepta ventas ni pagos en efectivo; la reapertura administrativa vuelve a abrir la sesión.
+El estado de `PointOfSaleDailyClose` representa el consolidado de sucursal. La operación monetaria usa `CashShiftStatus`; un cierre no puede avanzar a `CLOSED` mientras exista un turno `OPEN`.
 
 Headers recomendados en comandos críticos:
 
@@ -52,7 +52,7 @@ Headers recomendados en comandos críticos:
 
 ## POST /api/point-of-sale-daily-closes
 
-Propósito: crear cierre en borrador.
+Propósito: crear explícitamente un cierre consolidado en borrador. La apertura ordinaria de turno puede crear o reutilizar este agregado.
 
 Permisos: `ADMIN`, `SELLER` dentro de su ubicación.
 
@@ -62,10 +62,6 @@ Body:
 {
   "operationalLocationId": "string",
   "businessDate": "2026-06-19",
-  "terminalIdentifier": "Caja 01",
-  "initialCashFund": 1500.00,
-  "initialCashIn": 0,
-  "initialCashOut": 0,
   "notes": "string opcional"
 }
 ```
@@ -75,9 +71,56 @@ Validaciones:
 - Ubicación requerida, activa y de tipo `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`.
 - No crear un segundo cierre no cancelado para la misma ubicación y fecha.
 - `SELLER` solo puede crear dentro de su alcance.
-- `terminalIdentifier` identifica la terminal; `openedByUserId` y `openedAt` se asignan desde el actor y el servidor.
-- `initialCashFund`, `initialCashIn` e `initialCashOut` son montos no negativos; el retiro inicial no puede superar el fondo más el depósito inicial.
-- La apertura crea los `CashMovement` iniciales correspondientes con `isOpening=true` y los asocia al cierre dentro de la misma transacción.
+- La terminal y los fondos no pertenecen a este endpoint; se registran mediante `CashTerminal` y `CashShift`.
+
+## GET/POST/PATCH /api/cash-terminals
+
+Propósito: consultar o registrar terminales persistentes administradas.
+
+- `GET` permite `ADMIN` y `SELLER` dentro de su ubicación.
+- `SELLER` debe enviar su `deviceId` y sólo recibe la terminal activa que coincide; no puede enumerar identidades de otros dispositivos.
+- `POST` requiere `ADMIN` y recibe `operationalLocationId`, `code`, `name` y `deviceId`.
+- `PATCH /api/cash-terminals/:id` permite a `ADMIN` enlazar una terminal migrada al dispositivo real, renombrarla o desactivarla.
+- `deviceId` es globalmente único; `code` es único dentro de la ubicación.
+- El nombre o código no sustituyen la prueba de dispositivo.
+
+## GET /api/cash-shifts/current
+
+Propósito: obtener exclusivamente el turno abierto del usuario autenticado para `deviceId`.
+
+No busca el último turno de la sucursal ni devuelve el turno de otro cajero.
+
+## POST /api/cash-shifts
+
+Propósito: abrir un turno independiente en una terminal registrada.
+
+Body: `terminalId`, `deviceId`, `businessDate`, `initialCashFund`, `initialCashIn`, `initialCashOut`, `notes` opcionales.
+
+- Terminal activa, ubicación autorizada y coincidencia exacta de dispositivo.
+- La ubicación debe estar activa, habilitada para punto de venta y la fecha no puede ser futura.
+- Solo un turno abierto por terminal.
+- Crea o reutiliza el cierre diario consolidado de sucursal y fecha solo cuando está en `DRAFT`; un cierre revisado o cerrado requiere reapertura explícita.
+- Los movimientos iniciales conservan `cashShiftId`.
+
+## PATCH /api/cash-shifts/:id/close
+
+Propósito: cerrar el turno con conteo independiente.
+
+Body: `deviceId`, `cashCountedTotal`.
+
+El backend valida cajero o privilegio administrativo, calcula efectivo esperado y persiste `cashDifferenceTotal` sin alterar las diferencias de otros turnos.
+Los depósitos y retiros iniciales se representan también como movimientos auditables, pero se contabilizan una sola vez en el efectivo esperado.
+
+## POST /api/cash-shifts/:id/movements
+
+Propósito: registrar un gasto, entrada o retiro contra el turno abierto del cajero y dispositivo actuales.
+
+Body: `deviceId`, `type` (`EXPENSE`, `CASH_IN` o `CASH_OUT`), `amount`, `reason` y `reference` opcional.
+
+- Requiere el header `Idempotency-Key`; repetir la misma clave y payload devuelve el movimiento previo.
+- Rechaza reutilizar la clave con otro payload.
+- Valida turno abierto, cajero o privilegio administrativo y coincidencia exacta del dispositivo registrado.
+- El backend deriva ubicación y cierre diario desde el turno; el cliente no puede reemplazarlos.
 
 ## GET /api/point-of-sale-daily-closes
 
@@ -105,7 +148,7 @@ Propósito: obtener el cierre completo.
 Respuesta `data`:
 
 - Encabezado y totales.
-- `lines[]`, `sales[]`, `payments[]`, `cashMovements[]`, `scaleTicketReferences[]`.
+- `cashShifts[]`, `lines[]`, `sales[]`, `payments[]`, `cashMovements[]`, `scaleTicketReferences[]`.
 - `validation`: advertencias, bloqueos y versión validada.
 - Auditoría de transiciones.
 
@@ -114,7 +157,7 @@ En particular, para `SELLER` debe omitir los snapshots de costo dentro de `sales
 
 `data.differences[]` conserva para cada diferencia `code`, `scope`, `referenceKey`, `unit`, `expectedValue`, `recordedValue`, `differenceValue`, `differenceType`, `status`, `reason`, `evidence`, `justifiedBy`, `justifiedAt`, `authorizedBy` y `authorizedAt`. La respuesta también incluye `openedBy`, `reviewedBy`, `closedBy` y `unresolvedDifferenceCount` cuando el rol tenga acceso a la proyección.
 
-La respuesta incluye `cashSessionStatus`, `terminalIdentifier`, `openedAt`, `cashSessionClosedAt`, `initialCashFund`, `initialCashIn` e `initialCashOut`.
+Cada elemento de `cashShifts[]` incluye terminal, cajero, estado, apertura, cierre, fondo, entradas, retiros, conteo y diferencia.
 
 ## POST /api/point-of-sale-daily-closes/:id/lines
 
@@ -209,9 +252,9 @@ Validaciones:
 - Las correcciones históricas no se realizan en este endpoint; requieren un procedimiento administrativo separado y auditable.
 - No genera venta, movimiento de inventario o CFDI.
 
-## POST /api/point-of-sale-daily-closes/:id/cash-movements
+## POST /api/point-of-sale-daily-closes/:id/expenses
 
-Propósito: registrar gasto, entrada, salida o ajuste de caja.
+Propósito: contrato compatible para registrar un gasto contra un turno del cierre diario. El endpoint preferente para nuevas integraciones es `/api/cash-shifts/:id/movements`.
 
 Permisos: `ADMIN`, `SELLER` conforme a política; `COLLECTIONS` solo consulta.
 
@@ -219,8 +262,8 @@ Body:
 
 ```json
 {
-  "type": "EXPENSE",
-  "movementChannel": "CASH",
+  "cashShiftId": "string",
+  "deviceId": "string",
   "amount": 120,
   "reason": "Compra operativa autorizada",
   "reference": "string opcional",
@@ -231,8 +274,9 @@ Body:
 Validaciones:
 
 - Solo `DRAFT`.
+- Requiere turno abierto del cajero autenticado y coincidencia exacta del dispositivo registrado.
 - Requiere el header `Idempotency-Key`; repetir la misma clave y payload devuelve el resultado previo sin crear otro movimiento.
-- El backend asigna `pointOfSaleDailyCloseId` desde `:id`; el cliente no puede enviarlo ni reemplazarlo.
+- El backend valida que `cashShiftId` pertenezca al cierre `:id`; el cliente no puede reemplazar la ubicación ni el cierre derivados.
 - Monto mayor a cero, motivo y ubicación requeridos.
 - `CARD_VOUCHER` representa boucher/tarjeta y debe separarse de efectivo.
 - `movementChannel` clasifica solo el medio operativo de la entrada/salida de caja.
@@ -408,7 +452,7 @@ Validaciones:
 
 ## Decisiones abiertas
 
-- El MVP conserva un cierre/sesión único por día y ubicación; múltiples turnos o cajas requieren una ampliación explícita.
+- El cierre permanece único por ubicación y fecha, y consolida múltiples terminales y turnos independientes.
 - Tolerancias de peso y dinero y si bloquean o solo advierten.
 - Fórmulas oficiales de costo y utilidad.
 - Catálogo final de conceptos, métodos y bancos.

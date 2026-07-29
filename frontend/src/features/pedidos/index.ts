@@ -1,0 +1,1 @@
+export { PedidosPage } from './PedidosPage'

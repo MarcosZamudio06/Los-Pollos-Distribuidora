@@ -57,7 +57,8 @@ Body importante:
   "accountReceivableId": "string",
   "amount": 1500,
   "paymentMethod": "TRANSFER",
-  "pointOfSaleDailyCloseId": "string opcional; requerido o resuelto a una sesión abierta para CASH",
+  "cashShiftId": "string requerido para CASH recibido en punto fijo",
+  "deviceId": "string requerido para CASH recibido en punto fijo",
   "bankName": "Santander",
   "referenceNumber": "REF-1234",
   "appliedDocumentId": "string opcional",
@@ -85,7 +86,7 @@ Validaciones:
 - Permitir capturar `collectionPass` y `collectedByUserId` cuando la cobranza ocurra en segunda vuelta.
 - Si aplica documento, debe conservar relación con la nota o relación administrativa interna.
 - `Payment` es la única fuente monetaria del cobro recibido.
-- Un pago `CASH` de una ubicación fija requiere una sesión abierta; el backend valida ubicación, estado y conserva `pointOfSaleDailyCloseId` directamente. Los cobros de ruta siguen el contrato de `RouteSettlement`.
+- Un pago `CASH` de una ubicación fija requiere turno abierto del cajero y dispositivo registrados; conserva `cashShiftId` y deriva `pointOfSaleDailyCloseId`. Los cobros de ruta siguen `RouteSettlement`.
 
 ## POST /api/payments/:id/cancel
 

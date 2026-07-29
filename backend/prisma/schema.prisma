@@ -206,6 +206,12 @@ enum CashSessionStatus {
   CLOSED
 }
 
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
 enum DailyCloseSnapshotType {
   REVIEWED
   CLOSED
@@ -324,6 +330,7 @@ model User {
   deactivatedBy                   User?                        @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id])
   deactivatedUsers                User[]                       @relation("UserDeactivatedBy")
   sales                           Sale[]                       @relation("SaleCreatedBy")
+  cashierSales                    Sale[]                       @relation("SaleCashier")
   deliveredSales                  Sale[]                       @relation("SaleDeliveredBy")
   collectedSales                  Sale[]                       @relation("SaleCollectedBy")
   cancelledSales                  Sale[]                       @relation("SaleCancelledBy")
@@ -375,6 +382,8 @@ model User {
   justifiedDailyCloseDifferences  DailyCloseDifference[]       @relation("DailyCloseDifferenceJustifiedBy")
   authorizedDailyCloseDifferences DailyCloseDifference[]       @relation("DailyCloseDifferenceAuthorizedBy")
   cashMovements                   CashMovement[]
+  cashShifts                      CashShift[]                  @relation("CashShiftCashier")
+  closedCashShifts                CashShift[]                  @relation("CashShiftClosedBy")
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
   grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
@@ -412,6 +421,8 @@ model OperationalLocation {
   payments              Payment[]
   saleDocuments         SaleDocument[]
   dailyCloses           PointOfSaleDailyClose[]
+  cashTerminals         CashTerminal[]
+  cashShifts            CashShift[]
   dailyCloseLines       PointOfSaleDailyCloseLine[]
   cashMovements         CashMovement[]
   scaleTicketReferences ScaleTicketReference[]
@@ -566,6 +577,12 @@ model Sale {
   discountPercentage                     Decimal                     @default(0) @db.Decimal(5, 2)
   discountEvidence                       String?
   pointOfSaleDailyCloseId                String?
+  terminalId                             String?
+  cashShiftId                            String?
+  cashierUserId                          String?
+  businessDate                           DateTime?                   @db.Date
+  registeredAt                           DateTime?
+  deviceId                               String?
   collectionStatus                       CollectionStatus            @default(UNPAID)
   subtotal                               Decimal                     @db.Decimal(14, 2)
   discount                               Decimal                     @default(0) @db.Decimal(14, 2)
@@ -598,6 +615,9 @@ model Sale {
   commercialPolicy                       CommercialPolicy?           @relation(fields: [commercialPolicyId], references: [id])
   discountAuthorization                  DiscountAuthorization?      @relation(fields: [discountAuthorizationId], references: [id])
   pointOfSaleDailyClose                  PointOfSaleDailyClose?      @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  terminal                               CashTerminal?               @relation(fields: [terminalId], references: [id])
+  cashShift                              CashShift?                  @relation(fields: [cashShiftId], references: [id])
+  cashier                                User?                       @relation("SaleCashier", fields: [cashierUserId], references: [id])
   items                                  SaleItem[]
   documents                              SaleDocument[]
   payments                               Payment[]
@@ -613,6 +633,9 @@ model Sale {
   @@index([customerId, collectionStatus])
   @@index([legalEntityId, currencyCode, createdAt])
   @@index([pointOfSaleDailyCloseId, createdAt])
+  @@index([cashShiftId, registeredAt])
+  @@index([terminalId, businessDate])
+  @@index([cashierUserId, registeredAt])
 }
 
 model SaleItem {
@@ -853,6 +876,7 @@ model Payment {
   routeId                    String?
   routeSettlementId          String?
   pointOfSaleDailyCloseId    String?
+  cashShiftId                String?
   status                     PaymentStatus          @default(REGISTERED)
   paidAt                     DateTime               @default(now())
   cancelledAt                DateTime?
@@ -875,11 +899,13 @@ model Payment {
   route                      DeliveryRoute?         @relation(fields: [routeId], references: [id])
   routeSettlement            RouteSettlement?       @relation(fields: [routeSettlementId], references: [id])
   pointOfSaleDailyClose      PointOfSaleDailyClose? @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  cashShift                  CashShift?             @relation(fields: [cashShiftId], references: [id])
 
   @@index([accountReceivableId, paidAt])
   @@index([saleId, paidAt])
   @@index([operationalLocationId, paidAt])
   @@index([pointOfSaleDailyCloseId, paidAt])
+  @@index([cashShiftId, paidAt])
   @@index([cancelledByUserId])
 }
 
@@ -934,26 +960,26 @@ model BillingRequestHistory {
 }
 
 model CommercialPolicy {
-  id                          String               @id @default(cuid())
+  id                          String                  @id @default(cuid())
   name                        String
   description                 String?
   customerType                CustomerType?
   priceListId                 String?
-  defaultCreditLimit          Decimal?             @db.Decimal(14, 2)
+  defaultCreditLimit          Decimal?                @db.Decimal(14, 2)
   defaultCreditDays           Int?
   overdueBlockingMode         OverdueBlockingMode?
   creditLimitBlockingMode     String?
-  allowAdministrativeOverride Boolean              @default(false)
-  maximumDiscountPercentage  Decimal              @default(0) @db.Decimal(5, 2)
-  isActive                    Boolean              @default(true)
+  allowAdministrativeOverride Boolean                 @default(false)
+  maximumDiscountPercentage   Decimal                 @default(0) @db.Decimal(5, 2)
+  isActive                    Boolean                 @default(true)
   effectiveFrom               DateTime?
   effectiveTo                 DateTime?
   createdByUserId             String
   updatedByUserId             String
-  createdAt                   DateTime             @default(now())
-  updatedAt                   DateTime             @updatedAt
-  createdBy                   User                 @relation("CommercialPolicyCreatedBy", fields: [createdByUserId], references: [id])
-  updatedBy                   User                 @relation("CommercialPolicyUpdatedBy", fields: [updatedByUserId], references: [id])
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+  createdBy                   User                    @relation("CommercialPolicyCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy                   User                    @relation("CommercialPolicyUpdatedBy", fields: [updatedByUserId], references: [id])
   customers                   Customer[]
   sales                       Sale[]
   accountReceivables          AccountReceivable[]
@@ -961,19 +987,19 @@ model CommercialPolicy {
 }
 
 model DiscountAuthorization {
-  id                  String            @id @default(cuid())
+  id                  String           @id @default(cuid())
   commercialPolicyId  String
   authorizedForUserId String?
-  maximumPercentage   Decimal           @db.Decimal(5, 2)
+  maximumPercentage   Decimal          @db.Decimal(5, 2)
   reason              String
   evidence            String
   authorizedByUserId  String
   expiresAt           DateTime?
   usedAt              DateTime?
-  createdAt           DateTime          @default(now())
-  commercialPolicy    CommercialPolicy  @relation(fields: [commercialPolicyId], references: [id])
-  authorizedForUser   User?             @relation("DiscountAuthorizationAuthorizedFor", fields: [authorizedForUserId], references: [id])
-  authorizedByUser    User              @relation("DiscountAuthorizationAuthorizedBy", fields: [authorizedByUserId], references: [id])
+  createdAt           DateTime         @default(now())
+  commercialPolicy    CommercialPolicy @relation(fields: [commercialPolicyId], references: [id])
+  authorizedForUser   User?            @relation("DiscountAuthorizationAuthorizedFor", fields: [authorizedForUserId], references: [id])
+  authorizedByUser    User             @relation("DiscountAuthorizationAuthorizedBy", fields: [authorizedByUserId], references: [id])
   sale                Sale?
 
   @@index([commercialPolicyId, usedAt])
@@ -1157,70 +1183,123 @@ model RouteSettlement {
   inventoryMovements          InventoryMovement[]
 }
 
+model CashTerminal {
+  id                    String              @id @default(cuid())
+  operationalLocationId String
+  code                  String
+  name                  String
+  deviceId              String              @unique
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
+  shifts                CashShift[]
+  sales                 Sale[]
+
+  @@unique([operationalLocationId, code])
+  @@index([operationalLocationId, isActive])
+}
+
+model CashShift {
+  id                      String                @id @default(cuid())
+  terminalId              String
+  operationalLocationId   String
+  pointOfSaleDailyCloseId String
+  cashierUserId           String
+  businessDate            DateTime              @db.Date
+  status                  CashShiftStatus       @default(OPEN)
+  openedAt                DateTime              @default(now())
+  closedAt                DateTime?
+  closedByUserId          String?
+  initialCashFund         Decimal               @default(0) @db.Decimal(14, 2)
+  initialCashIn           Decimal               @default(0) @db.Decimal(14, 2)
+  initialCashOut          Decimal               @default(0) @db.Decimal(14, 2)
+  cashCountedTotal        Decimal?              @db.Decimal(14, 2)
+  cashDifferenceTotal     Decimal?              @db.Decimal(14, 2)
+  notes                   String?
+  version                 Int                   @default(1)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  terminal                CashTerminal          @relation(fields: [terminalId], references: [id])
+  operationalLocation     OperationalLocation   @relation(fields: [operationalLocationId], references: [id])
+  pointOfSaleDailyClose   PointOfSaleDailyClose @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  cashier                 User                  @relation("CashShiftCashier", fields: [cashierUserId], references: [id])
+  closedBy                User?                 @relation("CashShiftClosedBy", fields: [closedByUserId], references: [id])
+  sales                   Sale[]
+  payments                Payment[]
+  cashMovements           CashMovement[]
+
+  @@index([terminalId, businessDate, status])
+  @@index([operationalLocationId, businessDate, status])
+  @@index([cashierUserId, status])
+  @@index([pointOfSaleDailyCloseId])
+}
+
 model PointOfSaleDailyClose {
-  id                     String                      @id @default(cuid())
-  operationalLocationId  String
-  businessDate           DateTime                    @db.Date
-  status                 PointOfSaleDailyCloseStatus @default(DRAFT)
-  cashSessionStatus      CashSessionStatus           @default(OPEN)
-  terminalIdentifier     String                      @default("Caja 01")
-  openedAt               DateTime                    @default(now())
-  cashSessionClosedAt    DateTime?
-  initialCashFund        Decimal                     @default(0) @db.Decimal(14, 2)
-  initialCashIn          Decimal                     @default(0) @db.Decimal(14, 2)
-  initialCashOut         Decimal                     @default(0) @db.Decimal(14, 2)
-  version                Int                         @default(1)
-  lastValidatedAt        DateTime?
+  id                      String                      @id @default(cuid())
+  operationalLocationId   String
+  businessDate            DateTime                    @db.Date
+  status                  PointOfSaleDailyCloseStatus @default(DRAFT)
+  cashSessionStatus       CashSessionStatus           @default(OPEN)
+  terminalIdentifier      String                      @default("Caja 01")
+  openedAt                DateTime                    @default(now())
+  cashSessionClosedAt     DateTime?
+  initialCashFund         Decimal                     @default(0) @db.Decimal(14, 2)
+  initialCashIn           Decimal                     @default(0) @db.Decimal(14, 2)
+  initialCashOut          Decimal                     @default(0) @db.Decimal(14, 2)
+  version                 Int                         @default(1)
+  lastValidatedAt         DateTime?
   lastValidationAttemptAt DateTime?
-  validatedSourceVersion Int?
-  openedByUserId         String
-  reviewedByUserId       String?
-  closedByUserId         String?
-  cancelledByUserId      String?
-  reopenedByUserId       String?
-  totalInputKg           Decimal                     @default(0) @db.Decimal(14, 3)
-  totalSoldKg            Decimal                     @default(0) @db.Decimal(14, 3)
-  totalRemainingKg       Decimal                     @default(0) @db.Decimal(14, 3)
-  totalShortageKg        Decimal                     @default(0) @db.Decimal(14, 3)
-  totalSurplusKg         Decimal                     @default(0) @db.Decimal(14, 3)
-  scaleReportedKg        Decimal                     @default(0) @db.Decimal(14, 3)
-  scaleDifferenceKg      Decimal                     @default(0) @db.Decimal(14, 3)
-  cashTotal              Decimal                     @default(0) @db.Decimal(14, 2)
-  cardVoucherTotal       Decimal                     @default(0) @db.Decimal(14, 2)
-  transferTotal          Decimal                     @default(0) @db.Decimal(14, 2)
-  expenseTotal           Decimal                     @default(0) @db.Decimal(14, 2)
-  grossSalesTotal        Decimal                     @default(0) @db.Decimal(14, 2)
-  netCashExpected        Decimal                     @default(0) @db.Decimal(14, 2)
-  cashCountedTotal       Decimal?                    @db.Decimal(14, 2)
-  cashDifferenceTotal    Decimal?                    @db.Decimal(14, 2)
-  purchaseCostTotal      Decimal                     @default(0) @db.Decimal(14, 2)
-  grossProfitTotal       Decimal                     @default(0) @db.Decimal(14, 2)
-  netProfitTotal         Decimal                     @default(0) @db.Decimal(14, 2)
-  notes                  String?
-  reviewedAt             DateTime?
-  closedAt               DateTime?
-  cancelledAt            DateTime?
-  reopenedAt             DateTime?
-  reopenedReason         String?
-  createdAt              DateTime                    @default(now())
-  updatedAt              DateTime                    @updatedAt
-  operationalLocation    OperationalLocation         @relation(fields: [operationalLocationId], references: [id])
-  openedBy               User                        @relation("DailyCloseOpenedBy", fields: [openedByUserId], references: [id])
-  reviewedBy             User?                       @relation("DailyCloseReviewedBy", fields: [reviewedByUserId], references: [id])
-  closedBy               User?                       @relation("DailyCloseClosedBy", fields: [closedByUserId], references: [id])
-  cancelledBy            User?                       @relation("DailyCloseCancelledBy", fields: [cancelledByUserId], references: [id])
-  reopenedBy             User?                       @relation("DailyCloseReopenedBy", fields: [reopenedByUserId], references: [id])
-  sales                  Sale[]
-  saleDocuments          SaleDocument[]              @relation("DailyCloseDocuments")
-  payments               Payment[]
-  inventoryMovements     InventoryMovement[]
-  lines                  PointOfSaleDailyCloseLine[]
-  cashMovements          CashMovement[]
-  scaleTicketReferences  ScaleTicketReference[]
-  inventoryCounts        DailyCloseInventoryCount[]
-  differences            DailyCloseDifference[]
-  events                 DailyCloseEvent[]
-  snapshots              DailyCloseSnapshot[]
+  validatedSourceVersion  Int?
+  openedByUserId          String
+  reviewedByUserId        String?
+  closedByUserId          String?
+  cancelledByUserId       String?
+  reopenedByUserId        String?
+  totalInputKg            Decimal                     @default(0) @db.Decimal(14, 3)
+  totalSoldKg             Decimal                     @default(0) @db.Decimal(14, 3)
+  totalRemainingKg        Decimal                     @default(0) @db.Decimal(14, 3)
+  totalShortageKg         Decimal                     @default(0) @db.Decimal(14, 3)
+  totalSurplusKg          Decimal                     @default(0) @db.Decimal(14, 3)
+  scaleReportedKg         Decimal                     @default(0) @db.Decimal(14, 3)
+  scaleDifferenceKg       Decimal                     @default(0) @db.Decimal(14, 3)
+  cashTotal               Decimal                     @default(0) @db.Decimal(14, 2)
+  cardVoucherTotal        Decimal                     @default(0) @db.Decimal(14, 2)
+  transferTotal           Decimal                     @default(0) @db.Decimal(14, 2)
+  expenseTotal            Decimal                     @default(0) @db.Decimal(14, 2)
+  grossSalesTotal         Decimal                     @default(0) @db.Decimal(14, 2)
+  netCashExpected         Decimal                     @default(0) @db.Decimal(14, 2)
+  cashCountedTotal        Decimal?                    @db.Decimal(14, 2)
+  cashDifferenceTotal     Decimal?                    @db.Decimal(14, 2)
+  purchaseCostTotal       Decimal                     @default(0) @db.Decimal(14, 2)
+  grossProfitTotal        Decimal                     @default(0) @db.Decimal(14, 2)
+  netProfitTotal          Decimal                     @default(0) @db.Decimal(14, 2)
+  notes                   String?
+  reviewedAt              DateTime?
+  closedAt                DateTime?
+  cancelledAt             DateTime?
+  reopenedAt              DateTime?
+  reopenedReason          String?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  operationalLocation     OperationalLocation         @relation(fields: [operationalLocationId], references: [id])
+  openedBy                User                        @relation("DailyCloseOpenedBy", fields: [openedByUserId], references: [id])
+  reviewedBy              User?                       @relation("DailyCloseReviewedBy", fields: [reviewedByUserId], references: [id])
+  closedBy                User?                       @relation("DailyCloseClosedBy", fields: [closedByUserId], references: [id])
+  cancelledBy             User?                       @relation("DailyCloseCancelledBy", fields: [cancelledByUserId], references: [id])
+  reopenedBy              User?                       @relation("DailyCloseReopenedBy", fields: [reopenedByUserId], references: [id])
+  sales                   Sale[]
+  saleDocuments           SaleDocument[]              @relation("DailyCloseDocuments")
+  payments                Payment[]
+  inventoryMovements      InventoryMovement[]
+  lines                   PointOfSaleDailyCloseLine[]
+  cashMovements           CashMovement[]
+  scaleTicketReferences   ScaleTicketReference[]
+  inventoryCounts         DailyCloseInventoryCount[]
+  differences             DailyCloseDifference[]
+  events                  DailyCloseEvent[]
+  snapshots               DailyCloseSnapshot[]
+  cashShifts              CashShift[]
 
   @@unique([id, operationalLocationId])
   @@index([operationalLocationId, businessDate, status])
@@ -1275,17 +1354,17 @@ model DailyCloseInventoryCount {
 }
 
 model DailyCloseDifference {
-  id                      String                       @id @default(cuid())
+  id                      String                     @id @default(cuid())
   pointOfSaleDailyCloseId String
   code                    String
   referenceKey            String
   scope                   DailyCloseDifferenceScope
   unit                    DailyCloseDifferenceUnit
-  expectedValue           Decimal                      @db.Decimal(14, 3)
-  recordedValue           Decimal?                     @db.Decimal(14, 3)
-  differenceValue         Decimal                      @db.Decimal(14, 3)
+  expectedValue           Decimal                    @db.Decimal(14, 3)
+  recordedValue           Decimal?                   @db.Decimal(14, 3)
+  differenceValue         Decimal                    @db.Decimal(14, 3)
   differenceType          DailyCloseDifferenceType
-  status                  DailyCloseDifferenceStatus   @default(PENDING_JUSTIFICATION)
+  status                  DailyCloseDifferenceStatus @default(PENDING_JUSTIFICATION)
   reason                  String?
   evidence                String?
   productId               String?
@@ -1293,12 +1372,12 @@ model DailyCloseDifference {
   justifiedAt             DateTime?
   authorizedByUserId      String?
   authorizedAt            DateTime?
-  createdAt               DateTime                     @default(now())
-  updatedAt               DateTime                     @updatedAt
-  pointOfSaleDailyClose   PointOfSaleDailyClose        @relation(fields: [pointOfSaleDailyCloseId], references: [id])
-  product                 Product?                     @relation(fields: [productId], references: [id])
-  justifiedBy             User?                        @relation("DailyCloseDifferenceJustifiedBy", fields: [justifiedByUserId], references: [id])
-  authorizedBy            User?                        @relation("DailyCloseDifferenceAuthorizedBy", fields: [authorizedByUserId], references: [id])
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  pointOfSaleDailyClose   PointOfSaleDailyClose      @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  product                 Product?                   @relation(fields: [productId], references: [id])
+  justifiedBy             User?                      @relation("DailyCloseDifferenceJustifiedBy", fields: [justifiedByUserId], references: [id])
+  authorizedBy            User?                      @relation("DailyCloseDifferenceAuthorizedBy", fields: [authorizedByUserId], references: [id])
 
   @@unique([pointOfSaleDailyCloseId, scope, referenceKey])
   @@index([pointOfSaleDailyCloseId, status])
@@ -1309,6 +1388,7 @@ model CashMovement {
   id                      String                 @id @default(cuid())
   operationalLocationId   String
   pointOfSaleDailyCloseId String?
+  cashShiftId             String?
   type                    CashMovementType
   movementChannel         MovementChannel
   amount                  Decimal                @db.Decimal(14, 2)
@@ -1323,10 +1403,12 @@ model CashMovement {
   updatedAt               DateTime               @updatedAt
   operationalLocation     OperationalLocation    @relation(fields: [operationalLocationId], references: [id])
   pointOfSaleDailyClose   PointOfSaleDailyClose? @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  cashShift               CashShift?             @relation(fields: [cashShiftId], references: [id])
   user                    User                   @relation(fields: [userId], references: [id])
 
   @@index([operationalLocationId, occurredAt])
   @@index([pointOfSaleDailyCloseId, occurredAt])
+  @@index([cashShiftId, occurredAt])
 }
 
 model ScaleTicketReference {
@@ -1350,7 +1432,7 @@ model ScaleTicketReference {
   capturedByUserId        String
   capturedAt              DateTime
   notes                   String?
-  idempotencyKey          String?                      @unique
+  idempotencyKey          String?                     @unique
   idempotencyPayloadHash  String?
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt
@@ -1368,30 +1450,30 @@ model ScaleTicketReference {
 }
 
 model DailyCloseEvent {
-  id                      String              @id @default(cuid())
+  id                      String                @id @default(cuid())
   pointOfSaleDailyCloseId String
   type                    DailyCloseEventType
   payload                 Json
-  idempotencyKey          String?             @unique
+  idempotencyKey          String?               @unique
   createdByUserId         String
-  createdAt               DateTime            @default(now())
+  createdAt               DateTime              @default(now())
   pointOfSaleDailyClose   PointOfSaleDailyClose @relation(fields: [pointOfSaleDailyCloseId], references: [id])
-  createdBy               User                @relation("DailyCloseEventCreatedBy", fields: [createdByUserId], references: [id])
+  createdBy               User                  @relation("DailyCloseEventCreatedBy", fields: [createdByUserId], references: [id])
 
   @@index([pointOfSaleDailyCloseId, createdAt])
 }
 
 model DailyCloseSnapshot {
-  id                      String                @id @default(cuid())
+  id                      String                 @id @default(cuid())
   pointOfSaleDailyCloseId String
   sourceVersion           Int
   snapshotType            DailyCloseSnapshotType
   payload                 Json
   payloadHash             String
   createdByUserId         String
-  createdAt               DateTime              @default(now())
-  pointOfSaleDailyClose   PointOfSaleDailyClose @relation(fields: [pointOfSaleDailyCloseId], references: [id])
-  createdBy               User                  @relation("DailyCloseSnapshotCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt               DateTime               @default(now())
+  pointOfSaleDailyClose   PointOfSaleDailyClose  @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  createdBy               User                   @relation("DailyCloseSnapshotCreatedBy", fields: [createdByUserId], references: [id])
 
   @@unique([pointOfSaleDailyCloseId, sourceVersion, snapshotType])
   @@index([pointOfSaleDailyCloseId, createdAt])

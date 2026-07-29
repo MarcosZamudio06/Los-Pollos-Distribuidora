@@ -201,6 +201,13 @@ export type DailyClose = {
   excludedOperations?: Array<DailyCloseExcludedOperation>
   differences?: Array<DailyCloseDifference>
   unresolvedDifferenceCount?: number
+  cashShifts?: Array<{
+    id: string; terminalId: string; cashierUserId: string; businessDate: string; status: 'OPEN' | 'CLOSED' | 'CANCELLED'
+    openedAt: string; closedAt?: string | null; initialCashFund: string; initialCashIn: string; initialCashOut: string
+    cashCountedTotal?: string | null; cashDifferenceTotal?: string | null
+    terminal: { id: string; code: string; name: string }
+    cashier: DailyCloseActor; closedBy?: DailyCloseActor | null
+  }>
 }
 
 export function dailyCloseArray<T>(value: Array<T> | undefined): Array<T> {

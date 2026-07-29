@@ -22,6 +22,7 @@ import { BillingRequestDetailPage, BillingRequestsPage } from '../features/billi
 import { BillingReportableNotesPage } from '../features/billing-reportable-notes'
 import { BillingRemediationsPage } from '../features/billing-remediations'
 import { DailyClosePage } from '../features/cierre-diario'
+import { PedidosPage } from '../features/pedidos'
 
 export function AppRouter() {
   return (
@@ -167,6 +168,10 @@ export function AppRouter() {
               <DeliveryRoutesPage />
             </RoleRoute>
           }
+        />
+        <Route
+          path="/orders"
+          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.orders}><PedidosPage /></RoleRoute>}
         />
         <Route
           path="/daily-close"
