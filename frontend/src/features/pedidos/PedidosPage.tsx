@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Boxes, CircleAlert, CircleCheck, Maximize2, Minimize2, Store } from 'lucide-react'
+import { motion, useReducedMotion } from 'motion/react'
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, Select } from '@/components/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { salesSocket, type SaleOrder } from '@/lib/salesSocket'
@@ -38,8 +39,16 @@ function formatQuantity(item: SaleOrder['items'][number]) {
 }
 
 function OrderCard({ order, isLatest }: { order: SaleOrder; isLatest: boolean }) {
+  const shouldReduceMotion = useReducedMotion()
+
   return (
-    <article className={`group relative w-full overflow-hidden rounded-[1.35rem] border ${isLatest ? 'border-[rgba(47,111,115,0.24)] bg-[var(--erp-surface-elevated)] shadow-[var(--erp-shadow-elevated)]' : 'border-[color:var(--erp-border)] bg-white shadow-sm'}`}>
+    <motion.article
+      animate={isLatest ? { opacity: 1, y: 0 } : undefined}
+      className={`group relative w-full overflow-hidden rounded-[1.35rem] border transition-[box-shadow,border-color] duration-200 ease-out hover:shadow-[var(--erp-shadow-elevated)] motion-reduce:transition-none ${isLatest ? 'border-[rgba(47,111,115,0.24)] bg-[var(--erp-surface-elevated)] shadow-[var(--erp-shadow-elevated)]' : 'border-[color:var(--erp-border)] bg-white shadow-sm'}`}
+      initial={isLatest && !shouldReduceMotion ? { opacity: 0, y: 8 } : false}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: 'easeOut' }}
+      whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+    >
       <div className="absolute inset-y-0 left-0 w-1 bg-[var(--erp-brand-gold)]" />
       {isLatest && <div className="flex items-center justify-between gap-3 border-b border-[color:var(--erp-border)] bg-[rgba(47,111,115,0.05)] px-5 py-2 md:px-7"><span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-info)]">Última venta</span><Badge className="gap-1.5 px-2.5 py-1 font-black" tone="green"><CircleCheck className="h-3.5 w-3.5" />Confirmada</Badge></div>}
       <div className="grid gap-4 p-4 pl-5 md:grid-cols-2 md:gap-4 md:p-6 md:pl-7 lg:grid-cols-[minmax(14rem,0.85fr)_minmax(0,2.3fr)_minmax(11rem,0.75fr)] lg:gap-5 lg:pl-7">
@@ -73,7 +82,7 @@ function OrderCard({ order, isLatest }: { order: SaleOrder; isLatest: boolean })
           </div>
         </section>
       </div>
-    </article>
+    </motion.article>
   )
 }
 
@@ -155,7 +164,7 @@ export function PedidosPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2 lg:pl-2">
               <Badge aria-live="polite" className="w-fit gap-1.5 whitespace-nowrap font-black" tone={status.tone}>{connectionStatus === 'connected' ? <CircleCheck className="h-3.5 w-3.5" /> : <CircleAlert className="h-3.5 w-3.5" />}{status.label}</Badge>
-              <Button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'} className="size-10 p-0" onClick={() => void toggleFullscreen()} size="sm" variant="outline">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
+              <Button aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'} className="size-10 p-0 transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out hover:-translate-y-px hover:shadow-sm active:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0" onClick={() => void toggleFullscreen()} size="sm" variant="outline">{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button>
             </div>
           </div>
         </header>
