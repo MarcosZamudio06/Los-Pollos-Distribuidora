@@ -213,9 +213,15 @@ Toda respuesta de error debe mantener estructura consistente:
   "success": false,
   "message": "Descripción del error",
   "error": "ERROR_CODE",
-  "statusCode": 400
+  "statusCode": 400,
+  "requestId": "uuid"
 }
 ```
+
+El backend debe registrar un filtro HTTP global. Los errores esperados conservan
+su status y código de negocio; los errores inesperados responden un mensaje
+genérico y solo registran detalles internos del lado servidor, correlacionados
+por `requestId`.
 
 ## 9. Manejo de respuestas exitosas
 

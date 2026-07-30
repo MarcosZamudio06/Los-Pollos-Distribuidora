@@ -12,6 +12,7 @@ import {
 import type { Response } from 'express';
 import { AllowPasswordChangeRequired } from '../../common/decorators/allow-password-change-required.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RateLimitPolicy } from '../../common/decorators/rate-limit-policy.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import type {
@@ -31,6 +32,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
+  @RateLimitPolicy('login')
   async login(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -46,6 +48,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(200)
+  @RateLimitPolicy('refresh')
   async refresh(
     @Headers('cookie') cookieHeader: string | undefined,
     @Res({ passthrough: true }) response: Response,

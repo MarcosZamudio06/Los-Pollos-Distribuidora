@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CashManagementService } from './cash-management.service';
-import { CloseCashShiftDto, CreateCashShiftMovementDto, CreateCashTerminalDto, CurrentCashShiftQueryDto, ListCashTerminalQueryDto, OpenCashShiftDto, UpdateCashTerminalDto } from './dto';
+import { ActivateMigratedCashTerminalDto, CloseCashShiftDto, CreateCashShiftMovementDto, CreateCashTerminalDto, CurrentCashShiftQueryDto, ListCashTerminalQueryDto, OpenCashShiftDto, RequestCashTerminalActivationDto, UpdateCashTerminalDto } from './dto';
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,6 +25,16 @@ export class CashManagementController {
   @Patch('cash-terminals/:id') @Roles('ADMIN')
   updateTerminal(@Param('id') id: string, @Body() dto: UpdateCashTerminalDto, @CurrentUser() user: AuthenticatedUser) {
     return this.response('Cash terminal updated successfully', this.service.updateTerminal(id, dto, user));
+  }
+
+  @Post('cash-terminal-activations') @Roles('ADMIN', 'SELLER')
+  requestTerminalActivation(@Body() dto: RequestCashTerminalActivationDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.response('Cash terminal activation code issued successfully', this.service.requestTerminalActivation(dto, user));
+  }
+
+  @Post('cash-terminals/:id/activate') @Roles('ADMIN')
+  activateMigratedTerminal(@Param('id') id: string, @Body() dto: ActivateMigratedCashTerminalDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.response('Migrated cash terminal activated successfully', this.service.activateMigratedTerminal(id, dto, user));
   }
 
   @Get('cash-shifts/current') @Roles('ADMIN', 'SELLER')

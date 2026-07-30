@@ -385,6 +385,8 @@ model User {
   cashMovements                   CashMovement[]
   cashShifts                      CashShift[]                  @relation("CashShiftCashier")
   closedCashShifts                CashShift[]                  @relation("CashShiftClosedBy")
+  requestedTerminalActivations    CashTerminalActivation[]    @relation("CashTerminalActivationRequestedBy")
+  consumedTerminalActivations     CashTerminalActivation[]    @relation("CashTerminalActivationConsumedBy")
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
   grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
@@ -440,6 +442,7 @@ model OperationalLocation {
   saleDocuments         SaleDocument[]
   dailyCloses           PointOfSaleDailyClose[]
   cashTerminals         CashTerminal[]
+  cashTerminalActivations CashTerminalActivation[]
   cashShifts            CashShift[]
   dailyCloseLines       PointOfSaleDailyCloseLine[]
   cashMovements         CashMovement[]
@@ -1215,9 +1218,32 @@ model CashTerminal {
   operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
   shifts                CashShift[]
   sales                 Sale[]
+  activations           CashTerminalActivation[]
 
   @@unique([operationalLocationId, code])
   @@index([operationalLocationId, isActive])
+}
+
+model CashTerminalActivation {
+  id                    String              @id @default(cuid())
+  operationalLocationId String
+  requestedByUserId     String
+  deviceId              String
+  codeHash              String              @unique
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  consumedByUserId      String?
+  cashTerminalId        String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
+  requestedBy           User                @relation("CashTerminalActivationRequestedBy", fields: [requestedByUserId], references: [id])
+  consumedBy            User?               @relation("CashTerminalActivationConsumedBy", fields: [consumedByUserId], references: [id])
+  cashTerminal          CashTerminal?       @relation(fields: [cashTerminalId], references: [id])
+
+  @@index([deviceId, consumedAt])
+  @@index([operationalLocationId, consumedAt, expiresAt])
+  @@index([cashTerminalId])
 }
 
 model CashShift {

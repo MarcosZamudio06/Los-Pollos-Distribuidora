@@ -42,6 +42,8 @@ Errores:
 
 - 401 si credenciales inválidas.
 - 403 si usuario inactivo.
+- 429 si se excede el límite por cuenta o por IP. La respuesta no debe exponer
+  el tracker interno y debe incluir `Retry-After`.
 
 ## POST /api/auth/refresh
 
@@ -55,6 +57,9 @@ rotada revoca la sesión y responde 401.
 
 La respuesta contiene un access token nuevo y el usuario autenticado, pero no
 expone el refresh token.
+
+Responde 429 cuando se excede la política de renovación por IP, sin incluir la
+cookie ni el token en logs o respuestas.
 
 ## POST /api/auth/logout
 

@@ -30,6 +30,10 @@ const cashTerminalShiftMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260727120000_separate_cash_terminals_shifts/migration.sql',
 );
+const cashTerminalCutoverMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260729220000_add_cash_terminal_cutover/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -80,6 +84,7 @@ describe('Prisma schema contract', () => {
       'DeliveryEvidence',
       'RouteSettlement',
       'CashTerminal',
+      'CashTerminalActivation',
       'CashShift',
       'PointOfSaleDailyClose',
       'PointOfSaleDailyCloseLine',
@@ -103,7 +108,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(50);
+    expect(modelNames).toHaveLength(51);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
@@ -200,6 +205,18 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('cash_shift_one_open_per_terminal_uq');
     expect(migrationSql).toContain('legacy-terminal-');
     expect(migrationSql).toContain('legacy-shift-');
+  });
+
+  it('persists hashed, expiring terminal activation codes for supervised cutover', () => {
+    const activation = getModelBlock('CashTerminalActivation');
+    const migrationSql = readFileSync(cashTerminalCutoverMigrationSqlPath, 'utf8');
+
+    expect(activation).toMatch(/codeHash\s+String\s+@unique/);
+    expect(activation).toMatch(/expiresAt\s+DateTime/);
+    expect(activation).toMatch(/consumedAt\s+DateTime\?/);
+    expect(activation).toMatch(/cashTerminalId\s+String\?/);
+    expect(migrationSql).toContain('CREATE TABLE "CashTerminalActivation"');
+    expect(migrationSql).not.toContain('activationCode');
   });
 
   it('keeps scale ticket folio unique per location and date', () => {

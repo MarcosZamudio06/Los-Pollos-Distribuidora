@@ -25,9 +25,19 @@ Todas las rutas deben iniciar con:
   "success": false,
   "message": "Descripción del error",
   "error": "ERROR_CODE",
-  "statusCode": 400
+  "statusCode": 400,
+  "requestId": "7ce692e3-37d6-4d92-b46d-2a1ab80262ac"
 }
 ```
+
+`requestId` también se devuelve en el header `X-Request-ID`. Permite
+correlacionar una respuesta con los registros del backend sin exponer stack,
+consultas, secretos ni detalles internos. Los errores inesperados deben usar un
+mensaje genérico y el código `INTERNAL_SERVER_ERROR`.
+
+Los errores de negocio pueden conservar extensiones estructuradas aprobadas,
+como `code`, `findings`, `errors`, `blockers` o `saleIds`. El filtro global no
+debe copiar propiedades arbitrarias del objeto de excepción.
 
 ## Paginación
 
@@ -69,6 +79,8 @@ Authorization: Bearer <token>
 - 403: sin permisos.
 - 404: recurso no encontrado.
 - 409: conflicto de negocio.
+- 413: payload mayor al límite permitido.
+- 429: límite de solicitudes excedido; debe incluir `Retry-After` cuando aplique.
 - 500: error interno.
 
 ## Validaciones

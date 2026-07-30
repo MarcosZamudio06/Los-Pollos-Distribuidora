@@ -9,10 +9,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const core_1 = require("@nestjs/core");
 const schedule_1 = require("@nestjs/schedule");
+const throttler_1 = require("@nestjs/throttler");
+const http_throttler_guard_1 = require("./common/guards/http-throttler.guard");
 const app_config_1 = require("./config/app.config");
 const database_config_1 = require("./config/database.config");
 const env_validation_1 = require("./config/env.validation");
+const http_throttler_config_1 = require("./config/http-throttler.config");
 const prisma_module_1 = require("./database/prisma.module");
 const auth_module_1 = require("./modules/auth/auth.module");
 const users_module_1 = require("./modules/users/users.module");
@@ -46,6 +50,11 @@ exports.AppModule = AppModule = __decorate([
                 load: [app_config_1.appConfig, database_config_1.databaseConfig],
                 validate: env_validation_1.validateEnvironment,
             }),
+            throttler_1.ThrottlerModule.forRootAsync({
+                imports: [config_1.ConfigModule],
+                inject: [config_1.ConfigService],
+                useFactory: http_throttler_config_1.createHttpThrottlerOptions,
+            }),
             schedule_1.ScheduleModule.forRoot(),
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
@@ -70,7 +79,7 @@ exports.AppModule = AppModule = __decorate([
             billing_module_1.BillingModule,
         ],
         controllers: [],
-        providers: [],
+        providers: [{ provide: core_1.APP_GUARD, useClass: http_throttler_guard_1.HttpThrottlerGuard }],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

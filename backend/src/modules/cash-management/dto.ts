@@ -22,6 +22,15 @@ export class UpdateCashTerminalDto {
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
+export class RequestCashTerminalActivationDto {
+  @IsString() @IsNotEmpty() deviceId!: string;
+  @IsOptional() @IsString() @IsNotEmpty() operationalLocationId?: string;
+}
+
+export class ActivateMigratedCashTerminalDto {
+  @IsString() @IsNotEmpty() activationCode!: string;
+}
+
 export class OpenCashShiftDto {
   @IsString() @IsNotEmpty() terminalId!: string;
   @IsString() @IsNotEmpty() deviceId!: string;

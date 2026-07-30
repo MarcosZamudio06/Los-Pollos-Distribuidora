@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CashShiftStatus, OperationalLocationType, Prisma } from '@prisma/client';
-import { createHash } from 'crypto';
+import { createHash, randomInt } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CloseCashShiftDto, CreateCashShiftMovementDto, CreateCashTerminalDto, ListCashTerminalQueryDto, OpenCashShiftDto, UpdateCashTerminalDto } from './dto';
+import { ActivateMigratedCashTerminalDto, CloseCashShiftDto, CreateCashShiftMovementDto, CreateCashTerminalDto, ListCashTerminalQueryDto, OpenCashShiftDto, RequestCashTerminalActivationDto, UpdateCashTerminalDto } from './dto';
 
 const shiftInclude = {
   terminal: { select: { id: true, code: true, name: true, deviceId: true, operationalLocationId: true } },
@@ -16,6 +16,8 @@ const cashTerminalLocationTypes = new Set<OperationalLocationType>([
   OperationalLocationType.MIXED,
   OperationalLocationType.EXTERNAL_POINT_OF_SALE,
 ]);
+const terminalActivationAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const terminalActivationTtlMs = 15 * 60 * 1000;
 
 @Injectable()
 export class CashManagementService {
@@ -59,6 +61,61 @@ export class CashManagementService {
       } });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('CASH_TERMINAL_ALREADY_EXISTS');
+      throw error;
+    }
+  }
+
+  async requestTerminalActivation(dto: RequestCashTerminalActivationDto, user: AuthenticatedUser) {
+    const deviceId = dto.deviceId.trim();
+    if (deviceId.startsWith('legacy:')) throw new BadRequestException('CASH_TERMINAL_DEVICE_INVALID');
+    if (user.role !== 'ADMIN' && dto.operationalLocationId && dto.operationalLocationId !== user.operationalLocationId) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    const operationalLocationId = user.role === 'ADMIN' ? dto.operationalLocationId?.trim() || user.operationalLocationId : user.operationalLocationId;
+    if (!operationalLocationId) throw new BadRequestException('OPERATIONAL_LOCATION_REQUIRED');
+    const location = await this.prisma.operationalLocation.findUnique({ where: { id: operationalLocationId }, select: { id: true, isActive: true, type: true } });
+    if (!location?.isActive) throw new BadRequestException('LOCATION_INACTIVE');
+    if (!cashTerminalLocationTypes.has(location.type)) throw new BadRequestException('LOCATION_NOT_POINT_OF_SALE');
+
+    const compactCode = Array.from({ length: 10 }, () => terminalActivationAlphabet[randomInt(terminalActivationAlphabet.length)]).join('');
+    const activationCode = `${compactCode.slice(0, 5)}-${compactCode.slice(5)}`;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + terminalActivationTtlMs);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cashTerminalActivation.updateMany({ where: { deviceId, consumedAt: null }, data: { consumedAt: now } });
+      await tx.cashTerminalActivation.create({ data: {
+        operationalLocationId,
+        requestedByUserId: user.id,
+        deviceId,
+        codeHash: this.hash(compactCode),
+        expiresAt,
+      } });
+    });
+    return { activationCode, expiresAt, operationalLocationId, deviceId };
+  }
+
+  async activateMigratedTerminal(id: string, dto: ActivateMigratedCashTerminalDto, user: AuthenticatedUser) {
+    if (user.role !== 'ADMIN') throw new ForbiddenException('ADMIN_REQUIRED');
+    const compactCode = dto.activationCode.toUpperCase().replace(/[-\s]/g, '');
+    if (!/^[A-Z2-9]{10}$/.test(compactCode)) throw new BadRequestException('CASH_TERMINAL_ACTIVATION_INVALID');
+    const now = new Date();
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const terminal = await tx.cashTerminal.findUnique({ where: { id }, select: { id: true, operationalLocationId: true, deviceId: true } });
+        if (!terminal) throw new NotFoundException('CASH_TERMINAL_NOT_FOUND');
+        if (!terminal.deviceId.startsWith('legacy:')) throw new ConflictException('CASH_TERMINAL_ALREADY_BOUND');
+        const activation = await tx.cashTerminalActivation.findUnique({ where: { codeHash: this.hash(compactCode) } });
+        if (!activation || activation.consumedAt || activation.expiresAt <= now || activation.operationalLocationId !== terminal.operationalLocationId) {
+          throw new BadRequestException('CASH_TERMINAL_ACTIVATION_INVALID');
+        }
+        const claim = await tx.cashTerminalActivation.updateMany({
+          where: { id: activation.id, consumedAt: null, expiresAt: { gt: now } },
+          data: { consumedAt: now, consumedByUserId: user.id, cashTerminalId: terminal.id },
+        });
+        if (claim.count !== 1) throw new ConflictException('CASH_TERMINAL_ACTIVATION_ALREADY_USED');
+        return tx.cashTerminal.update({ where: { id: terminal.id }, data: { deviceId: activation.deviceId } });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('CASH_TERMINAL_DEVICE_ALREADY_REGISTERED');
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') throw new ConflictException('CASH_TERMINAL_ACTIVATION_ALREADY_USED');
       throw error;
     }
   }
