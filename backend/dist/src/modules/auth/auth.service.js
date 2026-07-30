@@ -8,6 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -18,6 +21,7 @@ const jwt_1 = require("@nestjs/jwt");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const node_crypto_1 = require("node:crypto");
 const prisma_service_1 = require("../../database/prisma.service");
+const session_revocation_registry_1 = require("../../common/session/session-revocation.registry");
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 10;
 const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
@@ -27,9 +31,11 @@ const DEFAULT_IDLE_TTL_SECONDS = 24 * 60 * 60;
 let AuthService = class AuthService {
     prisma;
     jwtService;
-    constructor(prisma, jwtService) {
+    sessionRevocationRegistry;
+    constructor(prisma, jwtService, sessionRevocationRegistry) {
         this.prisma = prisma;
         this.jwtService = jwtService;
+        this.sessionRevocationRegistry = sessionRevocationRegistry;
     }
     async login(credentials) {
         const user = await this.findUserByEmail(credentials.email);
@@ -157,6 +163,7 @@ let AuthService = class AuthService {
             });
             return updated;
         });
+        this.sessionRevocationRegistry?.notify([userId]);
         return this.toAuthenticatedUser(updatedUser);
     }
     async logout(sessionId) {
@@ -310,7 +317,9 @@ let AuthService = class AuthService {
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
+    __param(2, (0, common_1.Optional)()),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        jwt_1.JwtService])
+        jwt_1.JwtService,
+        session_revocation_registry_1.SessionRevocationRegistry])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

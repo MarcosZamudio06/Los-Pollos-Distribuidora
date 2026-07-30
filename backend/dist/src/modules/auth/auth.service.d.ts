@@ -1,12 +1,14 @@
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../database/prisma.service';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import { AuthenticatedPrincipal, AuthenticatedUser, IssuedSession } from './auth.types';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
 export declare class AuthService {
     private readonly prisma;
     private readonly jwtService;
-    constructor(prisma: PrismaService, jwtService: JwtService);
+    private readonly sessionRevocationRegistry?;
+    constructor(prisma: PrismaService, jwtService: JwtService, sessionRevocationRegistry?: SessionRevocationRegistry | undefined);
     login(credentials: LoginDto): Promise<IssuedSession>;
     refresh(refreshToken: string): Promise<IssuedSession>;
     verifyAccessToken(token: string): Promise<AuthenticatedPrincipal>;

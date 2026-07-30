@@ -55,8 +55,11 @@ describe('Prisma schema contract', () => {
     const modelNames = getModelNames();
     const requiredModels = [
       'Role',
+      'Permission',
+      'RolePermission',
       'User',
       'AuthSession',
+      'AccessControlAuditLog',
       'OperationalLocation',
       'Product',
       'Category',
@@ -108,11 +111,13 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(53);
+    expect(modelNames).toHaveLength(54);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
     expect(getModelBlock('Product')).not.toMatch(/\bstock\b/);
+    expect(getModelBlock('Role')).toMatch(/version\s+Int\s+@default\(1\)/);
+    expect(getModelBlock('AccessControlAuditLog')).toMatch(/reason\s+String/);
   });
 
   it('persists route planning coordinates and PostGIS search geometries', () => {

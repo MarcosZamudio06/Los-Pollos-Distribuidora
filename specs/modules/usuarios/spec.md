@@ -43,6 +43,10 @@ Administrar usuarios internos del sistema.
 - `access_profiles.manage` permite administrar perfiles y sus permisos.
 - La administración técnica no concede automáticamente autorizaciones financieras.
 - Cambiar un perfil o sus permisos debe conservar actor, valores anterior y nuevo, fecha y motivo cuando corresponda.
+- El cambio de perfil se realiza únicamente mediante `/users/:id/access-profile`, con `expectedRoleId` y motivo.
+- El cambio de perfil revoca todas las sesiones activas del usuario.
+- `/users/:id/sessions/revoke` permite cerrar sesiones activas con motivo y auditoría.
+- La respuesta de acceso incluye el perfil efectivo, permisos y sesiones activas sin exponer hashes ni tokens.
 
 ## API sugerida
 
@@ -52,6 +56,9 @@ Administrar usuarios internos del sistema.
 - PATCH /api/users/:id
 - PATCH /api/users/:id/password
 - DELETE /api/users/:id
+- GET /api/users/:id/access
+- PATCH /api/users/:id/access-profile
+- POST /api/users/:id/sessions/revoke
 
 ## UI
 
@@ -62,6 +69,7 @@ Pantalla de usuarios con:
 - Editar usuario.
 - Cambiar estado.
 - Asignar perfil y revisar permisos efectivos.
+- Revisar y revocar sesiones activas.
 
 ## Pruebas mínimas
 

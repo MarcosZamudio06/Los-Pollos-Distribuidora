@@ -43,10 +43,14 @@ const productionAdmin = {
 export type ProductionBootstrapClient = {
   role: {
     upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
-    update: (args: Prisma.RoleUpdateArgs) => Promise<unknown>;
+    findUnique: (args: Prisma.RoleFindUniqueArgs) => Promise<{ id: string } | null>;
   };
   permission: {
     upsert: (args: Prisma.PermissionUpsertArgs) => Promise<unknown>;
+    findUnique: (args: Prisma.PermissionFindUniqueArgs) => Promise<{ id: string } | null>;
+  };
+  rolePermission: {
+    createMany: (args: Prisma.RolePermissionCreateManyArgs) => Promise<unknown>;
   };
   operationalLocation: {
     upsert: (args: Prisma.OperationalLocationUpsertArgs) => Promise<unknown>;
@@ -99,16 +103,25 @@ export async function bootstrapProduction(
 
   for (const role of productionRoles) {
     const permissionKeys = ROLE_PERMISSION_KEYS[role.name] ?? [];
-    await prisma.role.update({
+    const persistedRole = await prisma.role.findUnique({
       where: { name: role.name },
-      data: {
-        permissions: {
-          deleteMany: {},
-          create: permissionKeys.map((key) => ({
-            permission: { connect: { key } },
-          })),
-        },
-      },
+      select: { id: true },
+    });
+    if (!persistedRole) throw new Error(`Role ${role.name} was not created`);
+
+    const permissionIds = await Promise.all(
+      permissionKeys.map(async (key) => {
+        const permission = await prisma.permission.findUnique({
+          where: { key },
+          select: { id: true },
+        });
+        if (!permission) throw new Error(`Permission ${key} was not created`);
+        return { roleId: persistedRole.id, permissionId: permission.id };
+      }),
+    );
+    await prisma.rolePermission.createMany({
+      data: permissionIds,
+      skipDuplicates: true,
     });
   }
 

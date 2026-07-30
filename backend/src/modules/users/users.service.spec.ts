@@ -46,6 +46,7 @@ function prismaMock() {
       update: jest.fn(),
       count: jest.fn(),
     },
+    authSession: { updateMany: jest.fn() },
     role: { findUnique: jest.fn(), findMany: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
     $queryRawUnsafe: jest.fn().mockResolvedValue([{ value: 1 }]),
@@ -57,6 +58,16 @@ function prismaMock() {
 }
 
 describe('UsersService employee administration', () => {
+  it('requires the dedicated access-profile flow for role changes', async () => {
+    const prisma = prismaMock();
+    const service = new UsersService(prisma as unknown as PrismaService);
+
+    await expect(service.update('user-1', { roleId: 'role-admin' })).rejects.toThrow(
+      'Use the access-profile endpoint to change a user profile',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('creates an employee with a generated one-time password and safe persisted fields', async () => {
     const prisma = prismaMock();
     prisma.user.findUnique.mockResolvedValue(null);
@@ -171,6 +182,24 @@ describe('UsersService employee administration', () => {
       'EPDP-000001',
       'EPDP-000002',
     ]);
+  });
+
+  it('revokes active sessions when an administrator resets a password', async () => {
+    const prisma = prismaMock();
+    prisma.user.findUnique.mockResolvedValue(user());
+    prisma.user.update.mockResolvedValue(user({ mustChangePassword: true }));
+    prisma.authSession.updateMany.mockResolvedValue({ count: 2 });
+    const service = new UsersService(prisma as unknown as PrismaService);
+
+    await service.updatePassword('user-1', { temporaryPassword: 'temporary-password' });
+
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ sessionVersion: { increment: 1 } }),
+    }));
+    expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
   });
 
   it('lists employees with combined role, location, status and search filters', async () => {

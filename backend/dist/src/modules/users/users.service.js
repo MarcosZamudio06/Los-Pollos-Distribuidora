@@ -8,6 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -17,6 +20,7 @@ const common_1 = require("@nestjs/common");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const node_crypto_1 = require("node:crypto");
 const prisma_service_1 = require("../../database/prisma.service");
+const session_revocation_registry_1 = require("../../common/session/session-revocation.registry");
 const ADMIN_ROLE_NAME = 'ADMIN';
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_TEMPORARY_PASSWORD_LENGTH = 10;
@@ -26,8 +30,10 @@ const LAST_ADMIN_TRANSACTION_OPTIONS = {
 };
 let UsersService = class UsersService {
     prisma;
-    constructor(prisma) {
+    sessionRevocationRegistry;
+    constructor(prisma, sessionRevocationRegistry) {
         this.prisma = prisma;
+        this.sessionRevocationRegistry = sessionRevocationRegistry;
     }
     async findAll(query) {
         const where = this.buildListWhere(query);
@@ -86,6 +92,9 @@ let UsersService = class UsersService {
         return { ...this.toUserResponse(user), temporaryPassword };
     }
     async update(id, dto) {
+        if (dto.roleId !== undefined) {
+            throw new common_1.BadRequestException('Use the access-profile endpoint to change a user profile');
+        }
         return this.prisma
             .$transaction(async (tx) => {
             const client = tx;
@@ -93,19 +102,12 @@ let UsersService = class UsersService {
             if (email) {
                 await this.assertEmailAvailable(email, id, client);
             }
-            const nextRole = dto.roleId
-                ? await this.assertRoleExists(dto.roleId, client)
-                : undefined;
-            const currentUser = await this.findActiveUserForMutation(id, client);
-            if (nextRole && nextRole.name !== ADMIN_ROLE_NAME) {
-                await this.assertNotLastActiveAdmin(currentUser, client);
-            }
+            await this.findActiveUserForMutation(id, client);
             const user = await client.user.update({
                 where: { id },
                 data: {
                     ...(dto.name !== undefined ? { name: dto.name } : {}),
                     ...(email !== undefined ? { email } : {}),
-                    ...(dto.roleId !== undefined ? { roleId: dto.roleId } : {}),
                 },
                 include: { role: true, operationalLocation: true },
             });
@@ -120,18 +122,28 @@ let UsersService = class UsersService {
         this.assertTemporaryPassword(dto.temporaryPassword);
         await this.ensureUserExists(id);
         const passwordHash = await bcryptjs_1.default.hash(dto.temporaryPassword, PASSWORD_HASH_ROUNDS);
-        const user = await this.prisma.user.update({
-            where: { id },
-            data: {
-                passwordHash,
-                mustChangePassword: true,
-            },
-            include: { role: true, operationalLocation: true },
+        const user = await this.prisma.$transaction(async (tx) => {
+            const client = tx;
+            const updated = await client.user.update({
+                where: { id },
+                data: {
+                    passwordHash,
+                    mustChangePassword: true,
+                    sessionVersion: { increment: 1 },
+                },
+                include: { role: true, operationalLocation: true },
+            });
+            await client.authSession.updateMany({
+                where: { userId: id, revokedAt: null },
+                data: { revokedAt: new Date() },
+            });
+            return updated;
         });
+        this.sessionRevocationRegistry?.notify([id]);
         return this.toUserResponse(user);
     }
     async deactivate(id, actorUserId, dto) {
-        return this.prisma.$transaction(async (tx) => {
+        const user = await this.prisma.$transaction(async (tx) => {
             const client = tx;
             const currentUser = await this.findActiveUserForMutation(id, client);
             await this.assertNotLastActiveAdmin(currentUser, client);
@@ -139,14 +151,21 @@ let UsersService = class UsersService {
                 where: { id },
                 data: {
                     isActive: false,
+                    sessionVersion: { increment: 1 },
                     deactivatedAt: new Date(),
                     deactivatedByUserId: actorUserId,
                     deactivationReason: dto.reason ?? null,
                 },
                 include: { role: true, operationalLocation: true },
             });
+            await client.authSession.updateMany({
+                where: { userId: id, revokedAt: null },
+                data: { revokedAt: new Date() },
+            });
             return this.toUserResponse(user);
         }, LAST_ADMIN_TRANSACTION_OPTIONS);
+        this.sessionRevocationRegistry?.notify([id]);
+        return user;
     }
     toUserResponse(user) {
         return {
@@ -287,6 +306,8 @@ let UsersService = class UsersService {
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __param(1, (0, common_1.Optional)()),
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        session_revocation_registry_1.SessionRevocationRegistry])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

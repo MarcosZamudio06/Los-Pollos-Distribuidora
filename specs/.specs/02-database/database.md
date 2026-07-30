@@ -108,6 +108,8 @@ Roles iniciales:
 
 `Role` representa un perfil de acceso y no es una autorización ejecutable por sí mismo. Sus permisos se asignan mediante `RolePermission`.
 
+`Role.version` se incrementa en cada cambio administrativo de permisos y permite rechazar escrituras concurrentes obsoletas.
+
 ### Permission
 
 Campos:
@@ -134,6 +136,27 @@ Relaciones:
 - La combinación roleId + permissionId es única.
 
 Los permisos financieros, fiscales, de costos y de administración de acceso deben asignarse de forma explícita. La auditoría de cambios de acceso no puede eliminarse ni modificarse.
+
+### AccessControlAuditLog
+
+Registra cambios de perfiles, reasignaciones y revocaciones de sesión.
+
+Campos:
+
+- actorUserId
+- action
+- targetType
+- targetId
+- before
+- after
+- reason
+- affectedUserCount
+- revokedSessionCount
+- requestId
+- ipAddress
+- createdAt
+
+El registro es append-only mediante restricciones de base de datos. Nunca almacena tokens, hashes, contraseñas ni payloads HTTP completos.
 
 ### OperationalLocation
 

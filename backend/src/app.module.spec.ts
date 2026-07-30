@@ -5,6 +5,7 @@ import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { AuthModule } from './modules/auth/auth.module';
+import { AccessControlModule } from './modules/access-control/access-control.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
@@ -29,6 +30,7 @@ describe('AppModule', () => {
     ) as unknown[] | undefined;
 
     expect(imports).toContain(AuthModule);
+    expect(imports).toContain(AccessControlModule);
     expect(imports).toContain(UsersModule);
     expect(imports).toContain(ProductsModule);
     expect(imports).toContain(CategoriesModule);

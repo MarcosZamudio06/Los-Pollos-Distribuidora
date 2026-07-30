@@ -13,16 +13,6 @@ export declare class UsersController {
                 name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                isActive: boolean;
-                email: string;
-                controlNumber: string;
-                phone: string;
-                roleId: string;
-                operationalLocationId: string;
-                mustChangePassword: boolean;
-                deactivatedAt: Date | null;
-                deactivatedByUserId: string | null;
-                deactivationReason: string | null;
                 role: {
                     id: string;
                     name: string;
@@ -30,6 +20,16 @@ export declare class UsersController {
                     createdAt?: Date;
                     updatedAt?: Date;
                 };
+                roleId: string;
+                isActive: boolean;
+                email: string;
+                controlNumber: string;
+                phone: string;
+                operationalLocationId: string;
+                mustChangePassword: boolean;
+                deactivatedAt: Date | null;
+                deactivatedByUserId: string | null;
+                deactivationReason: string | null;
                 operationalLocation: {
                     id: string;
                     name: string;
@@ -49,16 +49,6 @@ export declare class UsersController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
-            email: string;
-            controlNumber: string;
-            phone: string;
-            roleId: string;
-            operationalLocationId: string;
-            mustChangePassword: boolean;
-            deactivatedAt: Date | null;
-            deactivatedByUserId: string | null;
-            deactivationReason: string | null;
             role: {
                 id: string;
                 name: string;
@@ -66,6 +56,16 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            roleId: string;
+            isActive: boolean;
+            email: string;
+            controlNumber: string;
+            phone: string;
+            operationalLocationId: string;
+            mustChangePassword: boolean;
+            deactivatedAt: Date | null;
+            deactivatedByUserId: string | null;
+            deactivationReason: string | null;
             operationalLocation: {
                 id: string;
                 name: string;
@@ -81,16 +81,6 @@ export declare class UsersController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
-            email: string;
-            controlNumber: string;
-            phone: string;
-            roleId: string;
-            operationalLocationId: string;
-            mustChangePassword: boolean;
-            deactivatedAt: Date | null;
-            deactivatedByUserId: string | null;
-            deactivationReason: string | null;
             role: {
                 id: string;
                 name: string;
@@ -98,6 +88,16 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            roleId: string;
+            isActive: boolean;
+            email: string;
+            controlNumber: string;
+            phone: string;
+            operationalLocationId: string;
+            mustChangePassword: boolean;
+            deactivatedAt: Date | null;
+            deactivatedByUserId: string | null;
+            deactivationReason: string | null;
             operationalLocation: {
                 id: string;
                 name: string;
@@ -115,16 +115,6 @@ export declare class UsersController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
-            email: string;
-            controlNumber: string;
-            phone: string;
-            roleId: string;
-            operationalLocationId: string;
-            mustChangePassword: boolean;
-            deactivatedAt: Date | null;
-            deactivatedByUserId: string | null;
-            deactivationReason: string | null;
             role: {
                 id: string;
                 name: string;
@@ -132,6 +122,16 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            roleId: string;
+            isActive: boolean;
+            email: string;
+            controlNumber: string;
+            phone: string;
+            operationalLocationId: string;
+            mustChangePassword: boolean;
+            deactivatedAt: Date | null;
+            deactivatedByUserId: string | null;
+            deactivationReason: string | null;
             operationalLocation: {
                 id: string;
                 name: string;
@@ -147,16 +147,6 @@ export declare class UsersController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
-            email: string;
-            controlNumber: string;
-            phone: string;
-            roleId: string;
-            operationalLocationId: string;
-            mustChangePassword: boolean;
-            deactivatedAt: Date | null;
-            deactivatedByUserId: string | null;
-            deactivationReason: string | null;
             role: {
                 id: string;
                 name: string;
@@ -164,6 +154,16 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            roleId: string;
+            isActive: boolean;
+            email: string;
+            controlNumber: string;
+            phone: string;
+            operationalLocationId: string;
+            mustChangePassword: boolean;
+            deactivatedAt: Date | null;
+            deactivatedByUserId: string | null;
+            deactivationReason: string | null;
             operationalLocation: {
                 id: string;
                 name: string;
@@ -179,16 +179,6 @@ export declare class UsersController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
-            email: string;
-            controlNumber: string;
-            phone: string;
-            roleId: string;
-            operationalLocationId: string;
-            mustChangePassword: boolean;
-            deactivatedAt: Date | null;
-            deactivatedByUserId: string | null;
-            deactivationReason: string | null;
             role: {
                 id: string;
                 name: string;
@@ -196,6 +186,16 @@ export declare class UsersController {
                 createdAt?: Date;
                 updatedAt?: Date;
             };
+            roleId: string;
+            isActive: boolean;
+            email: string;
+            controlNumber: string;
+            phone: string;
+            operationalLocationId: string;
+            mustChangePassword: boolean;
+            deactivatedAt: Date | null;
+            deactivatedByUserId: string | null;
+            deactivationReason: string | null;
             operationalLocation: {
                 id: string;
                 name: string;

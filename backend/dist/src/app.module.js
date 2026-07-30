@@ -15,12 +15,14 @@ const throttler_1 = require("@nestjs/throttler");
 const http_throttler_guard_1 = require("./common/guards/http-throttler.guard");
 const jwt_auth_guard_1 = require("./common/guards/jwt-auth.guard");
 const permissions_guard_1 = require("./common/guards/permissions.guard");
+const session_revocation_module_1 = require("./common/session/session-revocation.module");
 const app_config_1 = require("./config/app.config");
 const database_config_1 = require("./config/database.config");
 const env_validation_1 = require("./config/env.validation");
 const http_throttler_config_1 = require("./config/http-throttler.config");
 const prisma_module_1 = require("./database/prisma.module");
 const auth_module_1 = require("./modules/auth/auth.module");
+const access_control_module_1 = require("./modules/access-control/access-control.module");
 const users_module_1 = require("./modules/users/users.module");
 const products_module_1 = require("./modules/products/products.module");
 const categories_module_1 = require("./modules/categories/categories.module");
@@ -60,8 +62,10 @@ exports.AppModule = AppModule = __decorate([
             }),
             schedule_1.ScheduleModule.forRoot(),
             prisma_module_1.PrismaModule,
+            session_revocation_module_1.SessionRevocationModule,
             health_module_1.HealthModule,
             auth_module_1.AuthModule,
+            access_control_module_1.AccessControlModule,
             users_module_1.UsersModule,
             products_module_1.ProductsModule,
             categories_module_1.CategoriesModule,

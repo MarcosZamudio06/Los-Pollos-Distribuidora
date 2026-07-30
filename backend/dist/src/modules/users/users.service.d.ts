@@ -1,4 +1,5 @@
 import { PrismaService } from '../../database/prisma.service';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import { CreateUserDto, DeactivateUserDto, ListUsersQueryDto, UpdateUserDto, UpdateUserPasswordDto } from './dto';
 type RoleRecord = {
     id: string;
@@ -36,7 +37,8 @@ type CreatedUserResponse = UserResponse & {
 };
 export declare class UsersService {
     private readonly prisma;
-    constructor(prisma: PrismaService);
+    private readonly sessionRevocationRegistry?;
+    constructor(prisma: PrismaService, sessionRevocationRegistry?: SessionRevocationRegistry | undefined);
     findAll(query: ListUsersQueryDto): Promise<{
         items: UserResponse[];
         total: number;

@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import {
   CreateUserDto,
   DeactivateUserDto,
@@ -56,11 +58,17 @@ type UserRecord = {
 type UserResponse = Omit<UserRecord, 'passwordHash'>;
 type CreatedUserResponse = UserResponse & { temporaryPassword: string };
 
-type UsersTransactionClient = Pick<PrismaService, 'user' | 'role' | 'operationalLocation'>;
+type UsersTransactionClient = Pick<
+  PrismaService,
+  'user' | 'role' | 'operationalLocation' | 'authSession'
+>;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
+  ) {}
 
   async findAll(query: ListUsersQueryDto): Promise<{ items: UserResponse[]; total: number; page: number; limit: number }> {
     const where = this.buildListWhere(query);
@@ -132,6 +140,12 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<UserResponse> {
+    if (dto.roleId !== undefined) {
+      throw new BadRequestException(
+        'Use the access-profile endpoint to change a user profile',
+      );
+    }
+
     return this.prisma
       .$transaction(async (tx) => {
         const client = tx as UsersTransactionClient;
@@ -140,21 +154,13 @@ export class UsersService {
           await this.assertEmailAvailable(email, id, client);
         }
 
-        const nextRole = dto.roleId
-          ? await this.assertRoleExists(dto.roleId, client)
-          : undefined;
-        const currentUser = await this.findActiveUserForMutation(id, client);
-
-        if (nextRole && nextRole.name !== ADMIN_ROLE_NAME) {
-          await this.assertNotLastActiveAdmin(currentUser, client);
-        }
+        await this.findActiveUserForMutation(id, client);
 
         const user = await client.user.update({
           where: { id },
           data: {
             ...(dto.name !== undefined ? { name: dto.name } : {}),
             ...(email !== undefined ? { email } : {}),
-            ...(dto.roleId !== undefined ? { roleId: dto.roleId } : {}),
           },
           include: { role: true, operationalLocation: true },
         });
@@ -179,15 +185,25 @@ export class UsersService {
       PASSWORD_HASH_ROUNDS,
     );
 
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: {
-        passwordHash,
-        mustChangePassword: true,
-      },
-      include: { role: true, operationalLocation: true },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const client = tx as UsersTransactionClient;
+      const updated = await client.user.update({
+        where: { id },
+        data: {
+          passwordHash,
+          mustChangePassword: true,
+          sessionVersion: { increment: 1 },
+        },
+        include: { role: true, operationalLocation: true },
+      });
+      await client.authSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return updated;
     });
 
+    this.sessionRevocationRegistry?.notify([id]);
     return this.toUserResponse(user);
   }
 
@@ -196,7 +212,7 @@ export class UsersService {
     actorUserId: string,
     dto: DeactivateUserDto,
   ): Promise<UserResponse> {
-    return this.prisma.$transaction(async (tx) => {
+    const user = await this.prisma.$transaction(async (tx) => {
       const client = tx as UsersTransactionClient;
       const currentUser = await this.findActiveUserForMutation(id, client);
       await this.assertNotLastActiveAdmin(currentUser, client);
@@ -205,15 +221,22 @@ export class UsersService {
         where: { id },
         data: {
           isActive: false,
+          sessionVersion: { increment: 1 },
           deactivatedAt: new Date(),
           deactivatedByUserId: actorUserId,
           deactivationReason: dto.reason ?? null,
         },
         include: { role: true, operationalLocation: true },
       });
+      await client.authSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
 
       return this.toUserResponse(user);
     }, LAST_ADMIN_TRANSACTION_OPTIONS);
+    this.sessionRevocationRegistry?.notify([id]);
+    return user;
   }
 
   private toUserResponse(user: UserRecord): UserResponse {

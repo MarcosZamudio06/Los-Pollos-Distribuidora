@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -10,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { StringValue } from 'ms';
 import { PrismaService } from '../../database/prisma.service';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import {
   AuthenticatedPrincipal,
   AuthenticatedUser,
@@ -57,6 +59,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    @Optional() private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
   ) {}
 
   async login(credentials: LoginDto): Promise<IssuedSession> {
@@ -234,6 +237,7 @@ export class AuthService {
       return updated;
     });
 
+    this.sessionRevocationRegistry?.notify([userId]);
     return this.toAuthenticatedUser(updatedUser);
   }
 

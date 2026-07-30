@@ -27,6 +27,14 @@ Gestionar autenticación, sesión y autorización del sistema.
 - POST /api/auth/refresh
 - POST /api/auth/logout
 - GET /api/auth/me
+- GET /api/permissions
+- GET /api/roles
+- GET /api/roles/:id
+- PATCH /api/roles/:id/permissions
+- GET /api/users/:id/access
+- PATCH /api/users/:id/access-profile
+- POST /api/users/:id/sessions/revoke
+- GET /api/access-control/audit-logs
 
 ## Reglas de negocio
 
@@ -51,6 +59,13 @@ Gestionar autenticación, sesión y autorización del sistema.
 - La interfaz puede ocultar controles con base en capacidades efectivas, pero el backend es la autoridad.
 - Los cambios de perfil o permisos deben ser auditables y revocar o invalidar las sesiones afectadas antes de surtir efecto.
 - Los roles representan perfiles de trabajo y agrupan permisos; un rol técnico no recibe permisos financieros por implicación.
+- La primera versión solo administra perfiles canónicos; no permite crear, eliminar ni renombrar perfiles.
+- Una mutación de perfil requiere versión esperada y motivo obligatorio.
+- Un actor no puede conceder permisos que no posee.
+- Cambiar permisos de un perfil incrementa la versión, incrementa `sessionVersion` de sus usuarios y revoca sus sesiones activas.
+- Reasignar un perfil o revocar sesiones incrementa `sessionVersion` y revoca las sesiones activas del usuario.
+- Debe permanecer al menos un usuario activo con `access_profiles.manage` y al menos uno con `users.manage`.
+- La auditoría de acceso es append-only y no almacena tokens, hashes ni contraseñas.
 
 ## Permisos
 

@@ -16,13 +16,20 @@ function upsertMock<T>(): UpsertMock<T> {
 
 function createClient() {
   const roleUpsert = upsertMock<Prisma.RoleUpsertArgs>();
-  const roleUpdate = upsertMock<Prisma.RoleUpdateArgs>();
+  const roleFindUnique = jest
+    .fn<Promise<{ id: string }>, [Prisma.RoleFindUniqueArgs]>()
+    .mockResolvedValue({ id: 'role-id' });
   const permissionUpsert = upsertMock<Prisma.PermissionUpsertArgs>();
+  const permissionFindUnique = jest
+    .fn<Promise<{ id: string }>, [Prisma.PermissionFindUniqueArgs]>()
+    .mockResolvedValue({ id: 'permission-id' });
+  const rolePermissionCreateMany = upsertMock<Prisma.RolePermissionCreateManyArgs>();
   const locationUpsert = upsertMock<Prisma.OperationalLocationUpsertArgs>();
   const userUpsert = upsertMock<Prisma.UserUpsertArgs>();
   const client: ProductionBootstrapClient = {
-    role: { upsert: roleUpsert, update: roleUpdate },
-    permission: { upsert: permissionUpsert },
+    role: { upsert: roleUpsert, findUnique: roleFindUnique },
+    permission: { upsert: permissionUpsert, findUnique: permissionFindUnique },
+    rolePermission: { createMany: rolePermissionCreateMany },
     operationalLocation: { upsert: locationUpsert },
     user: { upsert: userUpsert },
   };
@@ -30,8 +37,10 @@ function createClient() {
   return {
     client,
     roleUpsert,
-    roleUpdate,
+    roleFindUnique,
     permissionUpsert,
+    permissionFindUnique,
+    rolePermissionCreateMany,
     locationUpsert,
     userUpsert,
   };
@@ -109,7 +118,7 @@ describe('Production bootstrap contract', () => {
   });
 
   it('idempotently upserts access data, the initial location, and the administrator', async () => {
-    const { client, roleUpsert, roleUpdate, permissionUpsert, locationUpsert, userUpsert } = createClient();
+    const { client, roleUpsert, roleFindUnique, permissionUpsert, permissionFindUnique, rolePermissionCreateMany, locationUpsert, userUpsert } = createClient();
     const env = {
       NODE_ENV: 'production',
       SEED_ADMIN_PASSWORD: 'production-secret',
@@ -119,13 +128,19 @@ describe('Production bootstrap contract', () => {
     await bootstrapProduction(client, env);
 
     expect(roleUpsert).toHaveBeenCalledTimes(12);
-    expect(roleUpdate).toHaveBeenCalledTimes(12);
-    expect(permissionUpsert).toHaveBeenCalledTimes(18);
+    expect(roleFindUnique).toHaveBeenCalledTimes(12);
+    expect(permissionUpsert).toHaveBeenCalledTimes(22);
+    expect(permissionFindUnique).toHaveBeenCalled();
+    expect(rolePermissionCreateMany).toHaveBeenCalledTimes(12);
     expect(locationUpsert).toHaveBeenCalledTimes(2);
     expect(userUpsert).toHaveBeenCalledTimes(2);
     for (const call of roleUpsert.mock.calls) {
       const upsert = call[0];
       expect(upsert.where).toEqual({ name: upsert.create.name });
+    }
+    for (const call of rolePermissionCreateMany.mock.calls) {
+      expect(call[0].skipDuplicates).toBe(true);
+      expect(call[0]).not.toHaveProperty('data.deleteMany');
     }
     for (const call of locationUpsert.mock.calls) {
       expect(call[0]).toMatchObject({
