@@ -3,9 +3,9 @@ FROM node:24.14.1-alpine AS build
 ARG VITE_API_URL=/api
 ENV VITE_API_BASE_URL=${VITE_API_URL}
 
-WORKDIR /app
+WORKDIR /app/frontend
 
-COPY frontend/package*.json ./
+COPY shared frontend/package*.json ./
 
 RUN npm config set registry https://registry.npmjs.org/ \
   && npm config set fetch-retries 5 \
