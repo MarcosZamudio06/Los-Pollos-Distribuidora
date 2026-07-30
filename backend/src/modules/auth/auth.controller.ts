@@ -106,7 +106,8 @@ export class AuthController {
   @AllowPasswordChangeRequired()
   @Authenticated()
   me(@CurrentUser() user: AuthenticatedPrincipal) {
-    const { authSessionId: _authSessionId, ...authenticatedUser } = user;
+    const { authSessionId, ...authenticatedUser } = user;
+    void authSessionId;
     return {
       success: true,
       message: 'Usuario autenticado',

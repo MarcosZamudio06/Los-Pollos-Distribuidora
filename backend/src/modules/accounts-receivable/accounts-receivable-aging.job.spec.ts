@@ -6,7 +6,7 @@ describe('AccountsReceivableAgingJob', () => {
   const prisma = {
     accountReceivable,
     $queryRawUnsafe: jest.fn(),
-    $transaction: jest.fn(async (callback: (tx: unknown) => unknown) =>
+    $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
       callback(prisma),
     ),
   };
@@ -22,7 +22,7 @@ describe('AccountsReceivableAgingJob', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     prisma.$transaction.mockImplementation(
-      async (callback: (tx: unknown) => unknown) => callback(prisma),
+      (callback: (tx: unknown) => unknown) => callback(prisma),
     );
   });
 
@@ -139,7 +139,13 @@ describe('AccountsReceivableAgingJob', () => {
       )
       .mockRejectedValueOnce(new Error('database unavailable'));
     const job = new AccountsReceivableAgingJob(prisma as never);
-    const error = jest.spyOn((job as any).logger, 'error').mockImplementation();
+    const error = jest
+      .spyOn(
+        (job as unknown as { logger: { error: (...args: unknown[]) => void } })
+          .logger,
+        'error',
+      )
+      .mockImplementation();
 
     await expect(
       job.reconcile(new Date('2026-07-17T12:00:00Z')),

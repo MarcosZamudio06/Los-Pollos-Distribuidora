@@ -135,7 +135,7 @@ describe('evaluateCreditDecision', () => {
     await expect(evaluate()).resolves.toMatchObject({
       outcome: 'WARNING',
       warnings: ['CREDIT_OVERDUE_WARNING'],
-       overdueAmount: '200.00',
+      overdueAmount: '200.00',
       maximumDaysOverdue: 2,
     });
 
@@ -219,7 +219,7 @@ describe('evaluateCreditDecision', () => {
       warnings: ['CREDIT_OVERRIDE_APPLIED'],
       overrideActorId: 'admin-1',
       overrideReason: 'Director approval',
-       projectedExposure: '1150.00',
+      projectedExposure: '1150.00',
     });
   });
 });
@@ -266,7 +266,7 @@ describe('calculateCreditState', () => {
       ).toMatchObject({
         effectiveCreditStatus,
         blockingReasons,
-         overdueAmount: '200.00',
+        overdueAmount: '200.00',
         maximumDaysOverdue: 2,
       });
     },
@@ -308,7 +308,7 @@ describe('calculateCreditState', () => {
       }),
     ).toMatchObject({
       effectiveCreditStatus: 'ACTIVE',
-       overdueAmount: '200.00',
+      overdueAmount: '200.00',
       overdueBlockingMode: null,
       canAdministrativeOverride: false,
     });
@@ -329,7 +329,7 @@ describe('calculateCreditState', () => {
       }),
     ).toMatchObject({
       effectiveCreditStatus: 'ACTIVE',
-       overdueAmount: '200.00',
+      overdueAmount: '200.00',
       overdueBlockingMode: null,
       policyId: null,
     });

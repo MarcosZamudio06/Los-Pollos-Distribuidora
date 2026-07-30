@@ -86,7 +86,7 @@ function hashPayload(payload: unknown): string {
 
 function createPrisma(): MockPrisma {
   const prisma: MockPrisma = {
-    $transaction: jest.fn(async (callback) => callback(prisma)),
+    $transaction: jest.fn((callback) => callback(prisma)),
     $queryRawUnsafe: jest.fn(),
     product: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
@@ -156,7 +156,7 @@ function validCashSale(overrides: Record<string, unknown> = {}) {
     documentType: SaleDocumentType.SIMPLE_NOTE,
     paymentType: SalePaymentType.CASH_SALE,
     initialPayment: {
-      amount: 250,
+      amount: '250.00',
       paymentMethod: PaymentMethod.CASH,
       paidAt: now.toISOString(),
     },
@@ -417,10 +417,10 @@ describe('SalesService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           discountAuthorizationId: 'discount-auth-1',
-          discountPercentage: 10,
+          discountPercentage: '10.00',
           discountEvidence: 'Photo evidence: case-123',
-          discount: 25,
-          total: 225,
+          discount: '25.00',
+          total: '225.00',
         }),
       }),
     );
@@ -655,9 +655,9 @@ describe('SalesService', () => {
       expect.objectContaining({
         id: 'sale-1',
         customerName: 'Restaurant Norte',
-        total: '250',
+        total: '250.00',
         paymentsSummary: {
-          totalPaid: '250',
+          totalPaid: '250.00',
           lastPaidAt: new Date('2026-06-21T13:00:00.000Z'),
           methods: [PaymentMethod.CASH, PaymentMethod.TRANSFER],
         },
@@ -777,15 +777,15 @@ describe('SalesService', () => {
     expect(detail).toEqual(
       expect.objectContaining({
         id: 'sale-credit-1',
-        total: '250',
+        total: '250.00',
         accountReceivable: expect.objectContaining({
           id: 'ar-1',
-          outstandingAmount: '250',
+          outstandingAmount: '250.00',
         }),
         items: [
           expect.objectContaining({
             productName: 'Chicken breast',
-            subtotal: '250',
+            subtotal: '250.00',
           }),
         ],
         inventoryMovements: [
@@ -1092,20 +1092,20 @@ describe('SalesService', () => {
           unit: ProductUnit.KG,
           quantityKg: '2.5',
           quantityPieces: 0,
-          unitPrice: '100',
-          subtotal: '250',
+          unitPrice: '100.00',
+          subtotal: '250.00',
         },
       ],
-      subtotal: '250',
-      discount: '10',
-      tax: '0',
-      total: '240',
+      subtotal: '250.00',
+      discount: '10.00',
+      tax: '0.00',
+      total: '240.00',
       paymentType: SalePaymentType.CASH_SALE,
       collectionStatus: CollectionStatus.PAID,
       status: SaleStatus.CONFIRMED,
       payments: [
         {
-          amount: '240',
+          amount: '240.00',
           paymentMethod: PaymentMethod.CASH,
           paidAt: now,
           saleId: 'sale-1',
@@ -1503,8 +1503,8 @@ describe('SalesService', () => {
           tareWeightKg: '1.2',
           netWeightKg: '25',
           pieceCount: 14,
-          unitPrice: '42.5',
-          amount: '1062.5',
+          unitPrice: '42.50',
+          amount: '1062.50',
           operatorName: 'Scale Operator',
         },
       }),
@@ -1641,8 +1641,8 @@ describe('SalesService', () => {
           cashierUserId: 'seller-1',
           businessDate: new Date('2026-06-21T00:00:00.000Z'),
           deviceId: 'device-1',
-          subtotal: 250,
-          total: 250,
+          subtotal: '250.00',
+          total: '250.00',
           currencyCode: 'MXN',
           legalEntityId: 'legal-entity-1',
           paymentType: SalePaymentType.CASH_SALE,
@@ -1654,16 +1654,16 @@ describe('SalesService', () => {
                 unit: ProductUnit.KG,
                 quantityKg: 2.5,
                 quantityPieces: 0,
-                unitPrice: 100,
-                subtotal: 250,
-                discount: 0,
-                taxableBase: 250,
-                tax: 0,
-                total: 250,
+                unitPrice: '100.00',
+                subtotal: '250.00',
+                discount: '0.00',
+                taxableBase: '250.00',
+                tax: '0.00',
+                total: '250.00',
                 productNameSnapshot: 'Chicken breast',
                 quantitySnapshot: 2.5,
-                unitCostSnapshot: 62.5,
-                costSubtotalSnapshot: 156.25,
+                unitCostSnapshot: '62.50',
+                costSubtotalSnapshot: '156.25',
                 costSnapshotSource: 'SALE_CONFIRMATION',
               }),
             ],
@@ -1705,7 +1705,7 @@ describe('SalesService', () => {
           pointOfSaleDailyCloseId: 'close-1',
           cashShiftId: 'shift-1',
           accountReceivableId: null,
-          amount: 250,
+          amount: '250.00',
           paymentMethod: PaymentMethod.CASH,
           status: PaymentStatus.APPLIED,
         }),
@@ -1731,11 +1731,11 @@ describe('SalesService', () => {
             ],
           }),
           priceSnapshot: expect.objectContaining({
-            subtotal: 250,
-            discount: 0,
-            total: 250,
-            paid: 250,
-            outstanding: 0,
+            subtotal: '250.00',
+            discount: '0.00',
+            total: '250.00',
+            paid: '250.00',
+            outstanding: '0.00',
             paymentType: SalePaymentType.CASH_SALE,
           }),
         }),
@@ -1754,11 +1754,11 @@ describe('SalesService', () => {
     expect(result).toEqual(
       expect.objectContaining({
         sale: expect.objectContaining({
-          total: '250',
+          total: '250.00',
           paymentType: SalePaymentType.CASH_SALE,
         }),
         payment: expect.objectContaining({
-          amount: '250',
+          amount: '250.00',
           saleId: 'sale-1',
           accountReceivableId: null,
         }),
@@ -2015,7 +2015,7 @@ describe('SalesService', () => {
 
     expect(result.sale.items[0]).toEqual(
       expect.objectContaining({
-        unitCostSnapshot: '62.5',
+        unitCostSnapshot: '62.50',
         costSubtotalSnapshot: '156.25',
         costSnapshotSource: 'SALE_CONFIRMATION',
       }),
@@ -2032,7 +2032,7 @@ describe('SalesService', () => {
         payments: [
           { amount: 100, paymentMethod: PaymentMethod.CASH },
           {
-            amount: 100,
+            amount: '100.00',
             paymentMethod: PaymentMethod.TRANSFER,
             bankName: 'Banco Norte',
             referenceNumber: 'TRANSFER-001',
@@ -2055,7 +2055,7 @@ describe('SalesService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           saleId: 'sale-1',
-          amount: 100,
+          amount: '100.00',
           paymentMethod: PaymentMethod.CASH,
         }),
       }),
@@ -2065,7 +2065,7 @@ describe('SalesService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           saleId: 'sale-1',
-          amount: 100,
+          amount: '100.00',
           paymentMethod: PaymentMethod.TRANSFER,
           bankName: 'Banco Norte',
           referenceNumber: 'TRANSFER-001',
@@ -2077,7 +2077,7 @@ describe('SalesService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           saleId: 'sale-1',
-          amount: 50,
+          amount: '50.00',
           paymentMethod: PaymentMethod.CARD,
           referenceNumber: 'AUTH-123',
           cardLastFour: '4242',
@@ -2089,15 +2089,15 @@ describe('SalesService', () => {
       expect.objectContaining({
         payments: [
           expect.objectContaining({
-            amount: '100',
+            amount: '100.00',
             paymentMethod: PaymentMethod.CASH,
           }),
           expect.objectContaining({
-            amount: '100',
+            amount: '100.00',
             paymentMethod: PaymentMethod.TRANSFER,
           }),
           expect.objectContaining({
-            amount: '50',
+            amount: '50.00',
             paymentMethod: PaymentMethod.CARD,
           }),
         ],
@@ -2122,7 +2122,7 @@ describe('SalesService', () => {
     const result = await service.create(
       validCashSale({
         initialPayment: {
-          amount: 187.5,
+          amount: '187.50',
           paymentMethod: PaymentMethod.CASH,
           cashTendered: 200,
         } as never,
@@ -2135,10 +2135,10 @@ describe('SalesService', () => {
     expect(prisma.payment.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          amount: 187.5,
+          amount: '187.50',
           paymentMethod: PaymentMethod.CASH,
-          cashTendered: 200,
-          changeGiven: 12.5,
+          cashTendered: '200.00',
+          changeGiven: '12.50',
         }),
       }),
     );
@@ -2147,9 +2147,9 @@ describe('SalesService', () => {
       expect.objectContaining({
         payments: [
           expect.objectContaining({
-            amount: '187.5',
-            cashTendered: '200',
-            changeGiven: '12.5',
+            amount: '187.50',
+            cashTendered: '200.00',
+            changeGiven: '12.50',
           }),
         ],
       }),
@@ -2184,7 +2184,7 @@ describe('SalesService', () => {
     expect(prisma.sale.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          total: 250,
+          total: '250.00',
           collectionStatus: CollectionStatus.PAID,
         }),
       }),
@@ -2193,9 +2193,9 @@ describe('SalesService', () => {
       1,
       expect.objectContaining({
         data: expect.objectContaining({
-          amount: 100,
-          cashTendered: 120,
-          changeGiven: 20,
+          amount: '100.00',
+          cashTendered: '120.00',
+          changeGiven: '20.00',
         }),
       }),
     );
@@ -2203,7 +2203,7 @@ describe('SalesService', () => {
       2,
       expect.objectContaining({
         data: expect.objectContaining({
-          amount: 150,
+          amount: '150.00',
           cashTendered: null,
           changeGiven: null,
         }),
@@ -2389,9 +2389,9 @@ describe('SalesService', () => {
       data: expect.objectContaining({
         billingRequestId: 'billing-1',
         saleDocumentId: 'doc-1',
-        requestedSubtotal: 250,
-        requestedTax: 0,
-        requestedTotal: 250,
+        requestedSubtotal: '250.00',
+        requestedTax: '0.00',
+        requestedTotal: '250.00',
         createdByUserId: 'seller-1',
       }),
     });
@@ -2462,7 +2462,7 @@ describe('SalesService', () => {
 
     expect(prisma.payment.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ amount: 50 }),
+        data: expect.objectContaining({ amount: '50.00' }),
       }),
     );
     expect(prisma.accountReceivable.create).toHaveBeenCalledWith(
@@ -2471,15 +2471,15 @@ describe('SalesService', () => {
           customerId: 'customer-1',
           saleId: 'sale-1',
           originalSaleId: 'sale-1',
-          originalAmount: 200,
-          outstandingAmount: 200,
+          originalAmount: '200.00',
+          outstandingAmount: '200.00',
           paymentTermsDays: 15,
           status: CollectionStatus.UNPAID,
         }),
       }),
     );
     expect(result.accountReceivable).toEqual(
-      expect.objectContaining({ outstandingAmount: '200' }),
+      expect.objectContaining({ outstandingAmount: '200.00' }),
     );
   });
 
@@ -2560,10 +2560,10 @@ describe('SalesService', () => {
           creditDecisionSnapshot: expect.objectContaining({
             policyId: 'policy-1',
             overdueBlockingMode: 'WARN_ONLY',
-            overdueAmount: 100,
+            overdueAmount: '100.00',
             maximumDaysOverdue: 2,
-            projectedExposure: 350,
-            creditLimit: 1000,
+            projectedExposure: '350.00',
+            creditLimit: '1000.00',
             outcome: 'WARNING',
             warnings: ['CREDIT_OVERDUE_WARNING'],
             overrideActorId: null,
@@ -2677,7 +2677,7 @@ describe('SalesService', () => {
     first.prisma.$transaction
       .mockRejectedValueOnce({ code: 'P2034' })
       .mockRejectedValueOnce({ code: 'P2034' })
-      .mockImplementationOnce(async (callback) => callback(first.prisma));
+      .mockImplementationOnce((callback) => callback(first.prisma));
     await expect(
       first.service.create(validCashSale(), seller(), 'retry-success'),
     ).resolves.toBeDefined();
@@ -2720,7 +2720,7 @@ describe('SalesService', () => {
         code: 'P2002',
         meta: { target: ['saleNumber'] },
       })
-      .mockImplementationOnce(async (callback) => callback(prisma));
+      .mockImplementationOnce((callback) => callback(prisma));
 
     await expect(
       service.create(validCashSale(), seller(), 'sequence-retry'),
@@ -3111,8 +3111,8 @@ describe('SalesService', () => {
                 roundingMode: 'HALF_UP',
                 quantity: 3.75,
                 quantitySnapshot: 3.75,
-                subtotal: 300,
-                costSubtotalSnapshot: 187.5,
+                subtotal: '300.00',
+                costSubtotalSnapshot: '187.50',
               }),
             ],
           },

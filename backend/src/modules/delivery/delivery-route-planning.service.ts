@@ -59,7 +59,7 @@ export class DeliveryRoutePlanningService {
       }),
     ]);
     return {
-      items: sales.map((sale: any) => ({
+      items: sales.map((sale) => ({
         saleId: sale.id,
         saleNumber: sale.saleNumber,
         customerId: sale.customerId,
@@ -113,7 +113,7 @@ export class DeliveryRoutePlanningService {
     const invalidSales = saleIds.filter(
       (id) =>
         !sales.some(
-          (sale: any) =>
+          (sale) =>
             sale.id === id && (!sale.routeId || sale.routeId === dto.routeId),
         ),
     );
@@ -123,9 +123,7 @@ export class DeliveryRoutePlanningService {
         saleIds: invalidSales,
       });
     for (const stop of dto.stops) {
-      const sale: any = sales.find(
-        (candidate: any) => candidate.id === stop.saleId,
-      );
+      const sale = sales.find((candidate) => candidate.id === stop.saleId)!;
       if (
         stop.accountReceivableId &&
         sale.accountReceivable?.id !== stop.accountReceivableId
@@ -171,7 +169,7 @@ export class DeliveryRoutePlanningService {
         scheduledDate: new Date(dto.scheduledDate),
         originLocationId: dto.originLocationId,
         orderedStops: orderedStops,
-        geometry: route.geometry as Prisma.InputJsonValue,
+        geometry: route.geometry,
         distanceMeters: route.distanceMeters,
         durationSeconds: route.durationSeconds,
         routingProfile: 'driving',

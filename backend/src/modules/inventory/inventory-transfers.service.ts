@@ -20,12 +20,6 @@ import {
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
-type LocationRecord = {
-  id: string;
-  name: string;
-  isActive: boolean;
-};
-
 type ProductRecord = {
   id: string;
   name: string;

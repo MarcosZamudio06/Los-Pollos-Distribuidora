@@ -3,6 +3,10 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { BillingRemediationController } from './billing-remediation.controller';
 
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('BillingRemediationController', () => {
   const service = { resolve: jest.fn().mockResolvedValue({ id: 'rem-1' }) };
   const controller = new BillingRemediationController(service as never);
@@ -14,13 +18,13 @@ describe('BillingRemediationController', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        BillingRemediationController.prototype.list,
+        methodOf(BillingRemediationController.prototype, 'list'),
       ),
     ).toEqual(['ADMIN', 'BILLING']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        BillingRemediationController.prototype.resolve,
+        methodOf(BillingRemediationController.prototype, 'resolve'),
       ),
     ).toEqual(['ADMIN']);
   });
@@ -38,7 +42,7 @@ describe('BillingRemediationController', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     await controller.resolve('rem-1', body, {} as never, ' remediation-key-1 ');
 
-    expect(service.resolve).toHaveBeenCalledWith(
+    expect(service.resolve as jest.Mock).toHaveBeenCalledWith(
       'rem-1',
       body,
       {},

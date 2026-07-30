@@ -171,6 +171,15 @@ export function toMoneyString(value: DecimalInput | Money | null | undefined): s
   return value instanceof Money ? value.toString() : decimalToString(value ?? '0')
 }
 
+export function hasSubCentPrecision(value: DecimalInput | Money | null | undefined): boolean {
+  if (value === null || value === undefined || value instanceof Money) return false
+
+  const parsed = parseDecimal(value)
+  if (parsed.scale <= 2) return false
+
+  return parsed.coefficient % pow10(parsed.scale - 2) !== 0n
+}
+
 export function isMoneyString(value: unknown): value is string {
   if (typeof value !== 'string' || !DECIMAL_PATTERN.test(value.trim())) return false
   try {

@@ -8,6 +8,34 @@ import { ConfigService } from '@nestjs/config';
 
 type Coordinate = [number, number];
 type Stop = { saleId: string; longitude: number; latitude: number };
+type PhotonFeature = {
+  geometry: { coordinates: Coordinate };
+  properties?: {
+    name?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    label?: string;
+    osm_type?: string | null;
+    osm_id?: string | number | null;
+  };
+};
+type PhotonResponse = { features?: PhotonFeature[] };
+type VroomStep = { id: number; type: string };
+type VroomResponse = {
+  unassigned?: Array<{ id: number }>;
+  routes?: Array<{ steps?: VroomStep[] }>;
+};
+type OsrmResponse = {
+  code?: string;
+  routes?: Array<{
+    geometry?: unknown;
+    distance: number;
+    duration: number;
+    legs?: Array<{ distance: number; duration: number }>;
+  }>;
+};
 
 @Injectable()
 export class RoutingProvidersService {
@@ -37,8 +65,12 @@ export class RoutingProvidersService {
     url.searchParams.set('limit', String(limit));
     if (latitude !== undefined) url.searchParams.set('lat', String(latitude));
     if (longitude !== undefined) url.searchParams.set('lon', String(longitude));
-    const payload = await this.request(url, undefined, 'Photon');
-    return (payload.features ?? []).map((feature: any) =>
+    const payload = await this.request<PhotonResponse>(
+      url,
+      undefined,
+      'Photon',
+    );
+    return (payload.features ?? []).map((feature) =>
       this.normalizePhotonFeature(feature),
     );
   }
@@ -48,7 +80,11 @@ export class RoutingProvidersService {
     url.searchParams.set('lat', String(latitude));
     url.searchParams.set('lon', String(longitude));
     url.searchParams.set('lang', 'default');
-    const payload = await this.request(url, undefined, 'Photon');
+    const payload = await this.request<PhotonResponse>(
+      url,
+      undefined,
+      'Photon',
+    );
     const feature = payload.features?.[0];
     if (!feature)
       throw new UnprocessableEntityException(
@@ -59,7 +95,7 @@ export class RoutingProvidersService {
 
   async optimizeStops(origin: Coordinate, stops: Stop[]) {
     const url = new URL('/', this.vroomUrl);
-    const payload = await this.request(
+    const payload = await this.request<VroomResponse>(
       url,
       {
         method: 'POST',
@@ -76,7 +112,7 @@ export class RoutingProvidersService {
     );
     if (payload.unassigned?.length) {
       const saleIds = payload.unassigned
-        .map((job: any) => stops[Number(job.id) - 1]?.saleId)
+        .map((job) => stops[Number(job.id) - 1]?.saleId)
         .filter(Boolean);
       throw new UnprocessableEntityException({
         message: 'Some delivery stops are unreachable',
@@ -84,13 +120,12 @@ export class RoutingProvidersService {
       });
     }
     const steps =
-      payload.routes?.[0]?.steps?.filter((step: any) => step.type === 'job') ??
-      [];
+      payload.routes?.[0]?.steps?.filter((step) => step.type === 'job') ?? [];
     if (steps.length !== stops.length)
       throw new ServiceUnavailableException(
         'VROOM returned an incomplete route',
       );
-    return steps.map((step: any, index: number) => ({
+    return steps.map((step, index) => ({
       saleId: stops[Number(step.id) - 1].saleId,
       sequence: index + 1,
     }));
@@ -104,7 +139,7 @@ export class RoutingProvidersService {
     url.searchParams.set('geometries', 'geojson');
     url.searchParams.set('overview', 'full');
     url.searchParams.set('steps', 'false');
-    const payload = await this.request(url, undefined, 'OSRM');
+    const payload = await this.request<OsrmResponse>(url, undefined, 'OSRM');
     const route = payload.routes?.[0];
     if (payload.code !== 'Ok' || !route?.geometry)
       throw new UnprocessableEntityException(
@@ -114,25 +149,25 @@ export class RoutingProvidersService {
       geometry: route.geometry,
       distanceMeters: Math.round(route.distance),
       durationSeconds: Math.round(route.duration),
-      legs: (route.legs ?? []).map((leg: any) => ({
+      legs: (route.legs ?? []).map((leg) => ({
         distanceMeters: Math.round(leg.distance),
         durationSeconds: Math.round(leg.duration),
       })),
     };
   }
 
-  private async request(
+  private async request<T>(
     url: URL,
     init: RequestInit | undefined,
     provider: string,
-  ): Promise<any> {
+  ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     const startedAt = Date.now();
     try {
       const response = await fetch(url, { ...init, signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
+      const payload = (await response.json()) as T;
       this.logger.log({
         provider,
         outcome: 'success',
@@ -154,7 +189,7 @@ export class RoutingProvidersService {
     }
   }
 
-  private normalizePhotonFeature(feature: any) {
+  private normalizePhotonFeature(feature: PhotonFeature) {
     const [longitude, latitude] = feature.geometry.coordinates;
     const properties = feature.properties ?? {};
     const label = properties.name

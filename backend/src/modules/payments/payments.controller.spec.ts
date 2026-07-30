@@ -2,6 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
 describe('PaymentsController', () => {
   it('passes current user and Idempotency-Key to cancellation service', async () => {
     const service = {
@@ -19,7 +23,7 @@ describe('PaymentsController', () => {
 
     await controller.cancel('payment-1', body, user, 'cancel-key');
 
-    expect(service.cancel).toHaveBeenCalledWith(
+    expect(mockOf(service, 'cancel')).toHaveBeenCalledWith(
       'payment-1',
       body,
       user,

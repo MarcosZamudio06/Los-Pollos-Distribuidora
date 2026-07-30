@@ -14,6 +14,11 @@ function contextFor(handler: object, user?: { permissions?: string[] }) {
   } as never;
 }
 
+function handlerFor(name: keyof GuardTestController): object {
+  return Object.getOwnPropertyDescriptor(GuardTestController.prototype, name)
+    ?.value as object;
+}
+
 class GuardTestController {
   @Public()
   publicRoute() {}
@@ -31,31 +36,25 @@ describe('PermissionsGuard', () => {
   const guard = new PermissionsGuard(new Reflector());
 
   it('allows an explicitly public route without an authenticated user', () => {
-    expect(
-      guard.canActivate(contextFor(GuardTestController.prototype.publicRoute)),
-    ).toBe(true);
+    expect(guard.canActivate(contextFor(handlerFor('publicRoute')))).toBe(true);
   });
 
   it('allows an explicitly authenticated route after JwtAuthGuard has populated the user', () => {
     expect(
-      guard.canActivate(
-        contextFor(GuardTestController.prototype.authenticatedRoute, {}),
-      ),
+      guard.canActivate(contextFor(handlerFor('authenticatedRoute'), {})),
     ).toBe(true);
   });
 
   it('denies a route without an access classification', () => {
     expect(() =>
-      guard.canActivate(
-        contextFor(GuardTestController.prototype.unclassifiedRoute, {}),
-      ),
+      guard.canActivate(contextFor(handlerFor('unclassifiedRoute'), {})),
     ).toThrow(new ForbiddenException('Access classification is required'));
   });
 
   it('requires every declared permission', () => {
     expect(() =>
       guard.canActivate(
-        contextFor(GuardTestController.prototype.protectedRoute, {
+        contextFor(handlerFor('protectedRoute'), {
           permissions: [],
         }),
       ),
@@ -63,7 +62,7 @@ describe('PermissionsGuard', () => {
 
     expect(
       guard.canActivate(
-        contextFor(GuardTestController.prototype.protectedRoute, {
+        contextFor(handlerFor('protectedRoute'), {
           permissions: [PERMISSIONS.PAYMENTS_CANCEL],
         }),
       ),

@@ -1,9 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import {
-  PaymentMethod,
-  SaleDocumentType,
-  SalePaymentType,
-} from '@prisma/client';
+import { PaymentMethod } from '@prisma/client';
 import { ReportsService } from './reports.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 
@@ -502,7 +498,7 @@ describe('ReportsService', () => {
     prisma.sale.findMany.mockResolvedValue([
       {
         id: 'sale-1',
-        total: 100,
+        total: '100.00',
         paymentType: 'CASH_SALE',
         updatedAt: new Date('2026-07-05T12:00:00.000Z'),
         payments: [{ amount: 100, paymentMethod: 'CASH', status: 'APPLIED' }],
@@ -561,7 +557,7 @@ describe('ReportsService', () => {
     );
 
     expect(sellerDashboard.salesToday).toEqual({
-      total: 100,
+      total: '100.00',
       count: 1,
       cash: '100.00',
       credit: '0.00',
@@ -710,26 +706,26 @@ describe('ReportsService', () => {
     );
     expect(result.summary).toEqual(
       expect.objectContaining({
-        originalBalance: 300,
-        outstandingBalance: 125,
-        overdueBalance: 125,
-        paymentsInPeriod: 175,
-        finalCustomerBalance: 125,
+        originalBalance: '300.00',
+        outstandingBalance: '125.00',
+        overdueBalance: '125.00',
+        paymentsInPeriod: '175.00',
+        finalCustomerBalance: '125.00',
         customersBlockedForCredit: 1,
       }),
     );
     expect(result.byCustomer).toEqual([
       expect.objectContaining({
         customerId: 'customer-1',
-        invoicedBalance: 300,
-        paidBalance: 175,
-        finalBalance: 125,
-        overdueBalance: 125,
+        invoicedBalance: '300.00',
+        paidBalance: '175.00',
+        finalBalance: '125.00',
+        overdueBalance: '125.00',
       }),
     ]);
     expect(result.paymentsByMethod).toEqual([
-      { paymentMethod: 'TRANSFER', amount: 100, count: 1 },
-      { paymentMethod: 'CASH', amount: 75, count: 1 },
+      { paymentMethod: 'TRANSFER', amount: '100.00', count: 1 },
+      { paymentMethod: 'CASH', amount: '75.00', count: 1 },
     ]);
   });
 

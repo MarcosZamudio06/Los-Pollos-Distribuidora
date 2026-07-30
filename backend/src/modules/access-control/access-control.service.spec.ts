@@ -58,8 +58,8 @@ function createPrisma() {
       findMany: jest.fn(),
       count: jest.fn(),
     },
-    $transaction: jest.fn(
-      async (callback: (client: typeof prisma) => unknown) => callback(prisma),
+    $transaction: jest.fn((callback: (client: typeof prisma) => unknown) =>
+      callback(prisma),
     ),
   };
   return prisma;

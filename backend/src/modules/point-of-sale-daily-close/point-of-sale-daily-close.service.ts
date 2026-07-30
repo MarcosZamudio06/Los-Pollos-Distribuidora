@@ -2074,14 +2074,13 @@ export class PointOfSaleDailyCloseService {
           ...sale,
           ...(Array.isArray(sale.items)
             ? {
-                items: sale.items.map(
-                  ({
-                    unitCostSnapshot,
-                    costSubtotalSnapshot,
-                    costSnapshotSource,
-                    ...item
-                  }) => item,
-                ),
+                items: sale.items.map((item) => {
+                  const visibleItem = { ...item };
+                  delete visibleItem.unitCostSnapshot;
+                  delete visibleItem.costSubtotalSnapshot;
+                  delete visibleItem.costSnapshotSource;
+                  return visibleItem;
+                }),
               }
             : {}),
         }));
@@ -2112,12 +2111,25 @@ export class PointOfSaleDailyCloseService {
         'costQuality',
         'profitSummary',
       ].forEach((field) => delete result[field]);
-      if (Array.isArray(result.lines))
-        result.lines = result.lines.map(({ amount, ...line }) => line);
-      if (Array.isArray(result.scaleTicketReferences))
-        result.scaleTicketReferences = result.scaleTicketReferences.map(
-          ({ amount, unitPrice, ...ticket }) => ticket,
-        );
+      if (Array.isArray(result.lines)) {
+        const lines = result.lines as Array<Record<string, unknown>>;
+        result.lines = lines.map((line) => {
+          const visibleLine = { ...line };
+          delete visibleLine.amount;
+          return visibleLine;
+        });
+      }
+      if (Array.isArray(result.scaleTicketReferences)) {
+        const scaleTicketReferences = result.scaleTicketReferences as Array<
+          Record<string, unknown>
+        >;
+        result.scaleTicketReferences = scaleTicketReferences.map((ticket) => {
+          const visibleTicket = { ...ticket };
+          delete visibleTicket.amount;
+          delete visibleTicket.unitPrice;
+          return visibleTicket;
+        });
+      }
       if (Array.isArray(result.excludedOperations))
         result.excludedOperations = result.excludedOperations.filter(
           (operation) => (operation as { type: string }).type === 'SALE',
@@ -2141,8 +2153,14 @@ export class PointOfSaleDailyCloseService {
         'costQuality',
         'profitSummary',
       ].forEach((field) => delete result[field]);
-      if (Array.isArray(result.sales))
-        result.sales = result.sales.map(({ items, ...sale }) => sale);
+      if (Array.isArray(result.sales)) {
+        const sales = result.sales as Array<Record<string, unknown>>;
+        result.sales = sales.map((sale) => {
+          const visibleSale = { ...sale };
+          delete visibleSale.items;
+          return visibleSale;
+        });
+      }
       if (Array.isArray(result.excludedOperations))
         result.excludedOperations = result.excludedOperations.filter(
           (operation) => (operation as { type: string }).type === 'PAYMENT',

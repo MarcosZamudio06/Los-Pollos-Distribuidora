@@ -1,4 +1,9 @@
-import { Money, isMoneyString, toMoneyString } from '../../../shared/money';
+import {
+  hasSubCentPrecision,
+  Money,
+  isMoneyString,
+  toMoneyString,
+} from '../../../shared/money';
 
 describe('Money', () => {
   it('does not use binary floating point for addition', () => {
@@ -28,5 +33,11 @@ describe('Money', () => {
     expect(toMoneyString('12')).toBe('12.00');
     expect(isMoneyString('12.00')).toBe(true);
     expect(isMoneyString('12')).toBe(false);
+  });
+
+  it('detects values that cannot be represented exactly in cents', () => {
+    expect(hasSubCentPrecision('10.004')).toBe(true);
+    expect(hasSubCentPrecision('10.000')).toBe(false);
+    expect(hasSubCentPrecision('10.00')).toBe(false);
   });
 });

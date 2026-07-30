@@ -146,7 +146,7 @@ function createPrisma(): MockPrisma {
     },
     operationalLocation: { create: jest.fn(), findFirst: jest.fn() },
     sale: { findMany: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
-    $transaction: jest.fn(async (callback) => callback(prisma)),
+    $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
 }

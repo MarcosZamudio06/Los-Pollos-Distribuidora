@@ -164,6 +164,7 @@ export class OperationalConfigService {
   }
 
   private async validateConfig(dto: Partial<ConfigMutationDto>): Promise<void> {
+    await Promise.resolve();
     const key = dto.key?.trim();
     const value = dto.value?.trim();
     const valueType = dto.valueType?.trim();

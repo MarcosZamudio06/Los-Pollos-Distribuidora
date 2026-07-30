@@ -24,6 +24,23 @@ import { Money, toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 type ReportUser = Pick<AuthenticatedUser, 'id' | 'role'>;
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    return Object.prototype.toString.call(value) as string;
+  }
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  ) {
+    return value.toString();
+  }
+  return '';
+}
 type FreshnessMeta = {
   generatedAt: string;
   dataAsOf: string;
@@ -342,8 +359,9 @@ export class ReportsService {
 
   async getInventoryLowStock(
     query: InventoryLowStockReportQueryDto,
-    _user: ReportUser,
+    user: ReportUser,
   ) {
+    void user;
     const balances = await this.findLowStockBalances(query);
     const items = balances.map((balance) => this.toLowStockItem(balance));
 
@@ -355,8 +373,9 @@ export class ReportsService {
 
   async getInventoryByLocation(
     query: InventoryByLocationReportQueryDto,
-    _user: ReportUser,
+    user: ReportUser,
   ) {
+    void user;
     const balances = await this.findInventoryBalances(query);
     const lastMovements = await this.findLastInventoryMovements(balances);
     const items = balances.map((balance) =>
@@ -461,8 +480,9 @@ export class ReportsService {
 
   async getAccountsReceivable(
     query: AccountsReceivableReportQueryDto,
-    _user: ReportUser,
+    user: ReportUser,
   ) {
+    void user;
     const receivables = await this.findDetailedReceivables(query);
     const activePayments = receivables.flatMap((receivable) =>
       this.activeReceivablePayments(receivable),
@@ -1292,7 +1312,7 @@ export class ReportsService {
     for (const sale of sales) {
       const rawKey = sale[field];
       if (!rawKey) continue;
-      const key = String(rawKey);
+      const key = stringifyValue(rawKey);
       const current = grouped.get(key) ?? {
         [label]: key,
         count: 0,

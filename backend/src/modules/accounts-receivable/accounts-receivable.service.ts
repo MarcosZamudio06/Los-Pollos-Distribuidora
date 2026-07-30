@@ -133,7 +133,7 @@ export class AccountsReceivableService {
 
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
     const payloadHash = this.hashPayload(
-      this.buildRegisterPaymentPayload(id, dto, currentUser.id, paidAt),
+      this.buildRegisterPaymentPayload(id, dto, currentUser.id),
     );
 
     try {
@@ -395,7 +395,10 @@ export class AccountsReceivableService {
     };
   }
 
-  private buildPagination(query: { page?: number; limit?: number }) {
+  private buildPagination(query: {
+    page?: number;
+    limit?: number;
+  }): Pick<Prisma.AccountReceivableFindManyArgs, 'skip' | 'take'> {
     if (!query.limit) {
       return {};
     }
@@ -624,7 +627,6 @@ export class AccountsReceivableService {
     accountReceivableId: string,
     dto: RegisterReceivablePaymentDto,
     userId: string,
-    paidAt: Date,
   ) {
     return {
       operation: 'REGISTER_RECEIVABLE_PAYMENT',

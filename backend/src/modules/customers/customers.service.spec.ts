@@ -187,7 +187,7 @@ describe('CustomersService', () => {
         expect.objectContaining({
           id: 'customer-1',
           customerType: CustomerType.INSTITUTIONAL,
-          creditLimit: '50000',
+          creditLimit: '50000.00',
           creditDays: 15,
           priceListId: 'price-list-1',
           deliveryAddress: 'Delivery address',
@@ -247,9 +247,9 @@ describe('CustomersService', () => {
         requiresBilling: true,
         commercialPolicy: null,
         creditSummary: expect.objectContaining({
-          creditLimit: '50000',
-          availableCredit: '50000',
-          outstandingAmount: '0',
+          creditLimit: '50000.00',
+          availableCredit: '50000.00',
+          outstandingAmount: '0.00',
         }),
         billingSummary: expect.objectContaining({
           billedAmount: '0',
@@ -320,7 +320,7 @@ describe('CustomersService', () => {
         name: 'Restaurante El Centro',
         phone: '2290000000',
         customerType: CustomerType.WHOLESALE,
-        creditLimit: '50000',
+        creditLimit: '50000.00',
         deliveryAddress: 'Delivery address',
         fiscalName: 'Razón social opcional',
         isActive: true,
@@ -630,13 +630,13 @@ describe('CustomersService', () => {
       expect.objectContaining({
         customerId: 'customer-1',
         creditStatus: CreditStatus.ACTIVE,
-        creditLimit: '1000',
+        creditLimit: '1000.00',
         paymentTermsDays: 15,
         agingStatus: AgingStatus.OVERDUE,
         collectionStatus: CollectionStatus.PARTIALLY_PAID,
-        globalBalance: '1100',
-        overdueAmount: '1100',
-        availableCredit: '0',
+        globalBalance: '1100.00',
+        overdueAmount: '1100.00',
+        availableCredit: '0.00',
         hasOverdueBalance: true,
         isBlocked: true,
         isBlockedForCredit: true,
@@ -732,7 +732,7 @@ describe('CustomersService', () => {
 
     await expect(service.getCreditSummary('customer-1')).resolves.toEqual(
       expect.objectContaining({
-        overdueAmount: '200',
+        overdueAmount: '200.00',
         daysOverdue: 2,
         effectiveCreditStatus: 'ACTIVE',
         overdueBlockingMode: null,

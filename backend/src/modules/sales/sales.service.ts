@@ -43,6 +43,23 @@ import {
 } from './dto';
 import { evaluateCreditDecision } from './credit-decision';
 import { SalesRealtimeService } from './sales-realtime.service';
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    return Object.prototype.toString.call(value) as string;
+  }
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  ) {
+    return value.toString();
+  }
+  return '';
+}
 import { Money, toMoneyString } from '../../../../shared/money';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'operationalLocationId'> &
@@ -126,9 +143,6 @@ type CreatedReceivable = Awaited<
 type CreatedMovement = Awaited<
   ReturnType<Prisma.TransactionClient['inventoryMovement']['create']>
 >;
-type UpdatedSale = Awaited<
-  ReturnType<Prisma.TransactionClient['sale']['update']>
->;
 type MovementResponseInput = Record<string, unknown> & {
   quantity?: DecimalLike;
   quantityKg?: DecimalLike;
@@ -144,7 +158,7 @@ type SalePaymentSummaryInput = {
   changeGiven?: DecimalLike;
   paymentMethod: string;
   paidAt?: Date | string | null;
-  status?: PaymentStatus | string;
+  status?: PaymentStatus;
   saleId?: string | null;
   accountReceivableId?: string | null;
 };
@@ -1203,7 +1217,7 @@ export class SalesService {
           typeof error === 'object' &&
           error !== null &&
           'code' in error &&
-          error.code === 'P2034';
+          (error as { code?: unknown }).code === 'P2034';
         const saleNumberConflict = this.isSaleNumberUniqueConflict(error);
         if (!serializationConflict && !saleNumberConflict) throw error;
         if (attempt === 3) {
@@ -2591,34 +2605,34 @@ export class SalesService {
       creditWarnings: Array.isArray(creditDecision?.warnings)
         ? creditDecision.warnings
         : [],
-      subtotal: toMoneyString(sale.subtotal),
-      discount: toMoneyString(sale.discount),
-      tax: toMoneyString(sale.tax),
-      total: toMoneyString(sale.total),
+      subtotal: this.moneyToString(sale.subtotal),
+      discount: this.moneyToString(sale.discount),
+      tax: this.moneyToString(sale.tax),
+      total: this.moneyToString(sale.total),
       items:
         sale.items?.map((item) => {
           const projectedItem = {
             ...item,
             quantity: this.decimalToString(item.quantity),
             quantityKg: this.decimalToString(item.quantityKg),
-            unitPrice: toMoneyString(item.unitPrice),
-            unitPriceSnapshot: toMoneyString(item.unitPriceSnapshot),
+            unitPrice: this.moneyToString(item.unitPrice),
+            unitPriceSnapshot: this.moneyToString(item.unitPriceSnapshot),
             quantitySnapshot: this.decimalToString(item.quantitySnapshot),
             appliedEquivalentFactor: this.decimalToString(
               item.appliedEquivalentFactor,
             ),
-            subtotal: toMoneyString(item.subtotal),
-            unitCostSnapshot: toMoneyString(item.unitCostSnapshot),
-            costSubtotalSnapshot: toMoneyString(item.costSubtotalSnapshot),
+            subtotal: this.moneyToString(item.subtotal),
+            unitCostSnapshot: this.moneyToString(item.unitCostSnapshot),
+            costSubtotalSnapshot: this.moneyToString(item.costSubtotalSnapshot),
             costSnapshotSource: item.costSnapshotSource,
           };
           if (currentUser.role !== 'SELLER') return projectedItem;
-          const {
-            unitCostSnapshot,
-            costSubtotalSnapshot,
-            costSnapshotSource,
-            ...visibleItem
-          } = projectedItem;
+          const visibleItem = { ...projectedItem } as Partial<
+            typeof projectedItem
+          >;
+          delete visibleItem.unitCostSnapshot;
+          delete visibleItem.costSubtotalSnapshot;
+          delete visibleItem.costSnapshotSource;
           return visibleItem;
         }) ?? [],
     };
@@ -2746,10 +2760,10 @@ export class SalesService {
       documentType: sale.documentType,
       physicalFolio: sale.physicalFolio,
       requiresAdministrativeInvoice: sale.requiresAdministrativeInvoice,
-      subtotal: toMoneyString(sale.subtotal),
-      discount: toMoneyString(sale.discount),
-      tax: toMoneyString(sale.tax),
-      total: toMoneyString(sale.total),
+      subtotal: this.moneyToString(sale.subtotal),
+      discount: this.moneyToString(sale.discount),
+      tax: this.moneyToString(sale.tax),
+      total: this.moneyToString(sale.total),
       paymentType: sale.paymentType,
       collectionStatus: sale.collectionStatus,
       status: sale.status,
@@ -2780,7 +2794,7 @@ export class SalesService {
         quantityKg: this.decimalToString(item.quantityKg),
         quantityPieces: item.quantityPieces,
       })),
-      total: toMoneyString(sale.total),
+      total: this.moneyToString(sale.total),
       status: sale.status,
     };
   }
@@ -2802,13 +2816,13 @@ export class SalesService {
           unit: item.unit,
           quantityKg: this.decimalToString(item.quantityKg),
           quantityPieces: item.quantityPieces ?? null,
-          unitPrice: toMoneyString(item.unitPrice),
+          unitPrice: this.moneyToString(item.unitPrice),
           unitEquivalentId: item.unitEquivalentId ?? null,
           appliedEquivalentFactor: this.decimalToString(
             item.appliedEquivalentFactor,
           ),
           roundingMode: item.roundingMode ?? null,
-          subtotal: toMoneyString(item.subtotal),
+          subtotal: this.moneyToString(item.subtotal),
         })) ?? [],
       customer: sale.customer ?? null,
       commercialPolicy: this.toCommercialPolicyResponse(
@@ -2910,26 +2924,26 @@ export class SalesService {
           unit: item.unit,
           quantityKg: this.decimalToString(item.quantityKg),
           quantityPieces: item.quantityPieces ?? null,
-          unitPrice: toMoneyString(item.unitPrice),
-          subtotal: toMoneyString(item.subtotal),
+          unitPrice: this.moneyToString(item.unitPrice),
+          subtotal: this.moneyToString(item.subtotal),
         })) ?? [],
-      subtotal: toMoneyString(sale.subtotal),
-      discount: toMoneyString(sale.discount),
-      tax: toMoneyString(sale.tax),
-      total: toMoneyString(sale.total),
+      subtotal: this.moneyToString(sale.subtotal),
+      discount: this.moneyToString(sale.discount),
+      tax: this.moneyToString(sale.tax),
+      total: this.moneyToString(sale.total),
       paymentType: sale.paymentType,
       collectionStatus: sale.collectionStatus,
       status: sale.status,
       payments: (sale.payments ?? []).map((payment) => ({
-        amount: toMoneyString(payment.amount),
+        amount: this.moneyToString(payment.amount),
         cashTendered:
           payment.cashTendered === null || payment.cashTendered === undefined
             ? null
-            : toMoneyString(payment.cashTendered),
+            : this.moneyToString(payment.cashTendered),
         changeGiven:
           payment.changeGiven === null || payment.changeGiven === undefined
             ? null
-            : toMoneyString(payment.changeGiven),
+            : this.moneyToString(payment.changeGiven),
         paymentMethod: payment.paymentMethod,
         paidAt: payment.paidAt ?? null,
         saleId: payment.saleId ?? null,
@@ -3013,8 +3027,10 @@ export class SalesService {
   private toReceivableRecordResponse(receivable: Record<string, unknown>) {
     return {
       ...receivable,
-      originalAmount: this.decimalToString(receivable.originalAmount),
-      outstandingAmount: this.decimalToString(receivable.outstandingAmount),
+      originalAmount: toMoneyString(receivable.originalAmount as DecimalLike),
+      outstandingAmount: toMoneyString(
+        receivable.outstandingAmount as DecimalLike,
+      ),
     };
   }
 
@@ -3262,7 +3278,13 @@ export class SalesService {
     if (value === null || value === undefined) {
       return null;
     }
-    return value instanceof Prisma.Decimal ? value.toString() : String(value);
+    return value instanceof Prisma.Decimal
+      ? value.toString()
+      : stringifyValue(value);
+  }
+
+  private moneyToString(value: unknown): string {
+    return toMoneyString(value as DecimalLike);
   }
 
   private toNumber(value: DecimalLike): number {

@@ -169,7 +169,7 @@ describe('POS cart calculations and validation', () => {
     expect(calculateCashChange(200, 187.5).toString()).toBe('12.50')
     expect(calculateCashChange(120, 100).toString()).toBe('20.00')
     expect(getPaymentsValidationError([{ amount: 187.5, paymentMethod: 'CASH', cashTendered: 180 } as never], 187.5)).toBe('El efectivo entregado no puede ser menor al monto aplicado.')
-    expect(getPaymentsValidationError([{ amount: 33.334, paymentMethod: 'CASH', cashTendered: 33.33 } as never], 100)).toBeNull()
+    expect(getPaymentsValidationError([{ amount: 33.33, paymentMethod: 'CASH', cashTendered: 33.33 } as never], 100)).toBeNull()
     expect(getPaymentsValidationError([{ amount: 100, paymentMethod: 'CARD', cashTendered: 100, referenceNumber: 'AUTH-1', cardLastFour: '4242' } as never], 100)).toBe('El efectivo entregado solo aplica a pagos en efectivo.')
   })
 
@@ -246,9 +246,14 @@ describe('POS sale payload', () => {
         total: 301.2,
       }),
     ).toEqual({
-      customerId: undefined,
+       administrativeOverrideReason: undefined,
+       billingRequest: undefined,
+       cashShiftId: undefined,
+       commercialPolicyId: undefined,
+       customerId: undefined,
+       deviceId: undefined,
       documentType: 'SIMPLE_NOTE',
-      payments: [{ amount: 301.2, paymentMethod: 'CASH' }],
+       payments: [{ amount: '301.20', paymentMethod: 'CASH' }],
       items: [
         {
           presentationType: 'CUT',
@@ -330,8 +335,8 @@ describe('POS sale payload', () => {
     ).toMatchObject({
       customerId: 'customer-active',
       payments: [
-        { amount: 40, paymentMethod: 'CASH' },
-        { amount: 60, paymentMethod: 'TRANSFER', bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' },
+         { amount: '40.00', paymentMethod: 'CASH' },
+         { amount: '60.00', paymentMethod: 'TRANSFER', bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' },
       ],
       paymentType: 'CREDIT_SALE',
     })

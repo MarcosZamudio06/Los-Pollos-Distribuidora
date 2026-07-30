@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentsService } from './payments.service';
+import { CancelPaymentDto } from './dto';
 
 function money(value: string) {
   return { toString: () => value };
@@ -67,7 +68,7 @@ function createPrisma() {
     payment: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     accountReceivable: { findUnique: jest.fn(), update: jest.fn() },
     sale: { update: jest.fn().mockResolvedValue(undefined) },
-    $transaction: jest.fn(async (callback) => callback(prisma)),
+    $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
 }
@@ -87,7 +88,7 @@ describe('PaymentsService', () => {
     await expect(
       service.cancel(
         'payment-1',
-        { reason: 'Pago duplicado' } as any,
+        { reason: 'Pago duplicado' } as unknown as CancelPaymentDto,
         { id: 'admin-1', role: 'ADMIN' },
         'cancel-key-missing-version',
       ),
@@ -136,7 +137,7 @@ describe('PaymentsService', () => {
       }),
       accountReceivable: expect.objectContaining({
         id: 'ar-1',
-         outstandingAmount: '1000.00',
+        outstandingAmount: '1000.00',
         status: CollectionStatus.UNPAID,
       }),
     });
@@ -159,7 +160,7 @@ describe('PaymentsService', () => {
       expect.objectContaining({
         where: { id: 'ar-1' },
         data: expect.objectContaining({
-          outstandingAmount: 1000,
+          outstandingAmount: '1000.00',
           status: CollectionStatus.UNPAID,
           agingStatus: AgingStatus.DUE_SOON,
           lastPaymentDate: null,
@@ -264,7 +265,7 @@ describe('PaymentsService', () => {
       }),
       accountReceivable: expect.objectContaining({
         id: 'ar-1',
-         outstandingAmount: '1000.00',
+        outstandingAmount: '1000.00',
       }),
     });
     expect(prisma.payment.update).not.toHaveBeenCalled();
@@ -342,7 +343,7 @@ describe('PaymentsService', () => {
       }),
       accountReceivable: expect.objectContaining({
         id: 'ar-1',
-         outstandingAmount: '1000.00',
+        outstandingAmount: '1000.00',
       }),
     });
     expect(prisma.accountReceivable.update).not.toHaveBeenCalled();

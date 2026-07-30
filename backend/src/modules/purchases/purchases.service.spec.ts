@@ -59,7 +59,7 @@ function decimal(value: string | number): Prisma.Decimal {
 
 function createPrisma(): MockPrisma {
   const prisma: MockPrisma = {
-    $transaction: jest.fn(async (callback) => callback(prisma)),
+    $transaction: jest.fn((callback) => callback(prisma)),
     supplier: { findUnique: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
     product: { findUnique: jest.fn(), update: jest.fn() },

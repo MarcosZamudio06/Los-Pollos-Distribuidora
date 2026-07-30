@@ -78,7 +78,7 @@ type RouteCollectionReceivable = {
   customerId: string;
   saleId: string;
   outstandingAmount: DecimalLike;
-  status: CollectionStatus | string;
+  status: CollectionStatus;
   dueDate?: Date;
 };
 
@@ -90,8 +90,8 @@ type RoutePaymentRecord = {
   routeId?: string | null;
   routeSettlementId?: string | null;
   amount: DecimalLike;
-  paymentMethod: PaymentMethod | string;
-  status: PaymentStatus | string;
+  paymentMethod: PaymentMethod;
+  status: PaymentStatus;
   paidAt: Date;
   collectedByUserId?: string | null;
   collectionPass?: number | null;
@@ -101,7 +101,7 @@ type InventoryMovementRecord = {
   id: string;
   productId?: string;
   locationId: string;
-  type?: InventoryMovementType | string;
+  type?: InventoryMovementType;
   quantityKg?: DecimalLike;
   quantityPieces?: number | null;
   reason?: string | null;
@@ -135,9 +135,9 @@ type AssignableSaleRecord = {
 
 type PaymentSummaryRecord = {
   amount: DecimalLike;
-  paymentMethod: string;
+  paymentMethod: PaymentMethod;
   collectionPass?: number | null;
-  status?: PaymentStatus | string;
+  status?: PaymentStatus;
 };
 
 type DeliveryRouteRecord = Record<string, unknown> & {
@@ -1527,7 +1527,13 @@ export class DeliveryService {
       );
     }, 0);
 
-    return payments.reduce(
+    return payments.reduce<{
+      expectedAmount: number;
+      totalCollectedAmount: number;
+      firstPassCollectedAmount: number;
+      secondPassCollectedAmount: number;
+      collectedByMethod: Record<string, number>;
+    }>(
       (summary, payment) => {
         const amount = Number(payment.amount?.toString() ?? 0);
         const method = payment.paymentMethod;
@@ -1742,7 +1748,7 @@ export class DeliveryService {
         typeof error === 'object' &&
         error !== null &&
         'code' in error &&
-        error.code === 'P2025'
+        (error as { code?: unknown }).code === 'P2025'
       ) {
         throw new ConflictException(
           'Route settlement version does not match expectedVersion',

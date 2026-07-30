@@ -9,7 +9,7 @@ import type {
   SaleChannel,
 } from './types'
 import type { OperationalLocation } from '../compras/types'
-import { formatMoney, Money } from '../../lib/money'
+import { formatMoney, hasSubCentPrecision, Money } from '../../lib/money'
 
 export { formatMoney as toMoney } from '../../lib/money'
 
@@ -121,6 +121,9 @@ export function getPaymentsValidationError(
   const exactTotal = Money.from(total)
   if (payments.some((payment) => !payment.paymentMethod || !Money.from(payment.amount).isPositive())) {
     return 'Captura un método y un monto mayor que cero para cada pago.'
+  }
+  if (payments.some((payment) => hasSubCentPrecision(payment.amount))) {
+    return 'Los montos de pago no pueden alterar el total al redondearse a centavos.'
   }
   const enteredPaid = Money.sum(payments.map((payment) => payment.amount))
   const paid = calculatePaymentsTotal(payments)

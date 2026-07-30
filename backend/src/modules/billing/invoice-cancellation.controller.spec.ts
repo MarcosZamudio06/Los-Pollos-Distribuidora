@@ -3,6 +3,10 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { InvoiceCancellationController } from './invoice-cancellation.controller';
 
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('InvoiceCancellationController', () => {
   const service = { cancel: jest.fn().mockResolvedValue({ id: 'invoice-1' }) };
   const controller = new InvoiceCancellationController(service as never);
@@ -14,7 +18,7 @@ describe('InvoiceCancellationController', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        InvoiceCancellationController.prototype.cancel,
+        methodOf(InvoiceCancellationController.prototype, 'cancel'),
       ),
     ).toEqual(['ADMIN', 'BILLING']);
   });

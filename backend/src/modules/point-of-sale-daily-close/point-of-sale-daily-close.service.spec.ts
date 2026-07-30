@@ -51,6 +51,10 @@ describe('PointOfSaleDailyCloseService', () => {
     $transaction: jest.fn(),
   };
   const service = new PointOfSaleDailyCloseService(prisma as never);
+  const privateService = service as unknown as Record<
+    string,
+    (...args: unknown[]) => unknown
+  >;
 
   beforeEach(() => {
     jest.restoreAllMocks();
@@ -78,7 +82,7 @@ describe('PointOfSaleDailyCloseService', () => {
       terminal: { isActive: true, deviceId: 'device-1' },
     });
     prisma.$transaction.mockImplementation(
-      async (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+      (callback: (tx: typeof prisma) => unknown) => callback(prisma),
     );
   });
 
@@ -160,7 +164,7 @@ describe('PointOfSaleDailyCloseService', () => {
       type: 'BRANCH',
     });
     prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
-    (prisma as any).$transaction = jest.fn().mockRejectedValue(
+    prisma.$transaction = jest.fn().mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
         code: 'P2002',
         clientVersion: '6.19.3',
@@ -187,9 +191,9 @@ describe('PointOfSaleDailyCloseService', () => {
     });
     prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue(null);
     prisma.pointOfSaleDailyClose.create.mockResolvedValue({ id: 'close-1' });
-    jest.spyOn(service as any, 'syncOperations').mockResolvedValue(undefined);
+    jest.spyOn(privateService, 'syncOperations').mockResolvedValue(undefined);
     jest
-      .spyOn(service as any, 'recalculate')
+      .spyOn(privateService, 'recalculate')
       .mockResolvedValue({ id: 'close-1', updatedAt: new Date() });
 
     await service.open(
@@ -357,7 +361,7 @@ describe('PointOfSaleDailyCloseService', () => {
     prisma.sale.findFirst.mockResolvedValue({ id: 'sale-scale-1' });
     prisma.scaleTicketReference.create.mockResolvedValue({ id: 'reference-1' });
     jest
-      .spyOn(service as any, 'recalculate')
+      .spyOn(privateService, 'recalculate')
       .mockResolvedValue({ sales: [], updatedAt: new Date() });
 
     await service.addScaleTicket(
@@ -399,7 +403,7 @@ describe('PointOfSaleDailyCloseService', () => {
       },
     };
 
-    await (service as any).syncOperations(
+    await privateService.syncOperations(
       tx,
       'close-1',
       'loc-1',
@@ -427,7 +431,7 @@ describe('PointOfSaleDailyCloseService', () => {
 
   it('uses America/Mexico_City boundaries for the operational day', () => {
     expect(
-      (service as any).operationalDay(new Date('2026-07-17T00:00:00.000Z')),
+      privateService.operationalDay(new Date('2026-07-17T00:00:00.000Z')),
     ).toEqual({
       from: new Date('2026-07-17T06:00:00.000Z'),
       to: new Date('2026-07-18T06:00:00.000Z'),
@@ -725,8 +729,7 @@ describe('PointOfSaleDailyCloseService', () => {
       .mockResolvedValueOnce(close)
       .mockResolvedValueOnce(close);
     prisma.$transaction.mockImplementation(
-      async (callback: (transaction: typeof prisma) => unknown) =>
-        callback(prisma),
+      (callback: (transaction: typeof prisma) => unknown) => callback(prisma),
     );
     prisma.pointOfSaleDailyClose.update.mockResolvedValue({
       ...close,
@@ -737,7 +740,9 @@ describe('PointOfSaleDailyCloseService', () => {
       cashDifferenceTotal: -20,
     });
 
-    const result = await (service as any).recalculate('close-1');
+    const result = (await privateService.recalculate('close-1')) as {
+      cashDifferenceTotal: number;
+    };
 
     expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -765,7 +770,7 @@ describe('PointOfSaleDailyCloseService', () => {
     prisma.product.findUnique.mockResolvedValue({ id: 'product-1' });
     prisma.dailyCloseInventoryCount.create.mockResolvedValue({ id: 'count-1' });
     jest
-      .spyOn(service as any, 'recalculate')
+      .spyOn(privateService, 'recalculate')
       .mockResolvedValue({ sales: [], updatedAt: new Date() });
 
     await service.createInventoryCount(
@@ -811,8 +816,7 @@ describe('PointOfSaleDailyCloseService', () => {
       .mockResolvedValueOnce(close)
       .mockResolvedValue(close);
     prisma.$transaction.mockImplementation(
-      async (callback: (transaction: typeof prisma) => unknown) =>
-        callback(prisma),
+      (callback: (transaction: typeof prisma) => unknown) => callback(prisma),
     );
     prisma.pointOfSaleDailyClose.update
       .mockResolvedValueOnce({
@@ -858,8 +862,8 @@ describe('PointOfSaleDailyCloseService', () => {
       scaleDifferenceKg: 0,
       cashDifferenceTotal: 0,
     };
-    jest.spyOn(service as any, 'requireDraft').mockResolvedValue(close);
-    jest.spyOn(service as any, 'recalculate').mockResolvedValue(recalculated);
+    jest.spyOn(privateService, 'requireDraft').mockResolvedValue(close);
+    jest.spyOn(privateService, 'recalculate').mockResolvedValue(recalculated);
     prisma.pointOfSaleDailyClose.update.mockResolvedValue(recalculated);
 
     const result = await service.validate('close-1', {
@@ -880,7 +884,7 @@ describe('PointOfSaleDailyCloseService', () => {
   });
 
   it('builds explicit cash, scale, and inventory difference definitions', () => {
-    const definitions = (service as any).buildDifferenceDefinitions({
+    const definitions = privateService.buildDifferenceDefinitions({
       cashExpected: 100,
       cashRecorded: 80,
       scaleExpected: 20,
@@ -1044,8 +1048,8 @@ describe('PointOfSaleDailyCloseService', () => {
       sales: [],
       updatedAt: new Date(),
     };
-    jest.spyOn(service as any, 'requireDraft').mockResolvedValue(close);
-    jest.spyOn(service as any, 'recalculate').mockResolvedValue(close);
+    jest.spyOn(privateService, 'requireDraft').mockResolvedValue(close);
+    jest.spyOn(privateService, 'recalculate').mockResolvedValue(close);
     prisma.cashMovement.create.mockResolvedValue({ id: 'expense-1' });
 
     await service.addExpense(
@@ -1075,7 +1079,7 @@ describe('PointOfSaleDailyCloseService', () => {
         data: expect.objectContaining({ version: { increment: 1 } }),
       }),
     );
-    expect((service as any).recalculate).toHaveBeenCalledWith(
+    expect(privateService.recalculate as jest.Mock).toHaveBeenCalledWith(
       'close-1',
       prisma,
     );
@@ -1112,7 +1116,7 @@ describe('PointOfSaleDailyCloseService', () => {
         }),
       )
       .digest('hex');
-    jest.spyOn(service as any, 'requireDraft').mockResolvedValue(close);
+    jest.spyOn(privateService, 'requireDraft').mockResolvedValue(close);
     prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(close);
     prisma.cashMovement.findUnique.mockResolvedValue({
       id: 'expense-1',
@@ -1147,9 +1151,9 @@ describe('PointOfSaleDailyCloseService', () => {
       updatedAt: new Date(),
     };
     let persistedExpense = false;
-    jest.spyOn(service as any, 'requireDraft').mockResolvedValue(close);
-    jest.spyOn(service as any, 'recalculate').mockResolvedValue(close);
-    prisma.cashMovement.create.mockImplementation(async () => {
+    jest.spyOn(privateService, 'requireDraft').mockResolvedValue(close);
+    jest.spyOn(privateService, 'recalculate').mockResolvedValue(close);
+    prisma.cashMovement.create.mockImplementation(() => {
       persistedExpense = true;
       return { id: 'expense-1' };
     });
@@ -1207,7 +1211,7 @@ describe('PointOfSaleDailyCloseService', () => {
       .mockResolvedValueOnce(closed);
     prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
 
-    await (service as any).transitionWithin(
+    await privateService.transitionWithin(
       prisma,
       'close-1',
       4,
@@ -1234,7 +1238,7 @@ describe('PointOfSaleDailyCloseService', () => {
   });
 
   it('blocks branch daily closing while any terminal shift remains open', async () => {
-    jest.spyOn(service as any, 'requireCloseAccess').mockResolvedValue({
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue({
       id: 'close-1',
       version: 4,
       validatedSourceVersion: 4,

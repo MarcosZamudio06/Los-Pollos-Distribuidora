@@ -29,6 +29,38 @@ import {
 } from '../billing/billability-evaluator';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type InvoiceWithDocuments = {
+  id: string;
+  status: InvoiceStatus;
+  legalEntityId: string;
+  currencyCode: string;
+  subtotal: Prisma.Decimal;
+  discount: Prisma.Decimal;
+  tax: Prisma.Decimal;
+  total: Prisma.Decimal;
+  version: number;
+  documents?: Array<{
+    subtotalApplied: Prisma.Decimal;
+    taxApplied: Prisma.Decimal;
+    totalApplied: Prisma.Decimal;
+  }>;
+};
+type BillingRequestListRecord = {
+  id: string;
+  customerId: string;
+  customer?: { name: string } | null;
+  saleId: string | null;
+  sale?: { saleNumber: string; locationId: string } | null;
+  requestedByUserId: string;
+  reviewedByUserId: string | null;
+  status: BillingRequestStatus;
+  requestedAt: Date;
+  reviewedAt: Date | null;
+  reason: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 type SubstitutionInvoice = Prisma.InvoiceGetPayload<{
   include: { documents: { include: { itemApplications: true } } };
 }>;
@@ -974,7 +1006,7 @@ export class BillingRequestsService {
               (item) => new Prisma.Decimal(item.totalApplied),
             ),
           );
-          let invoice;
+          let invoice: InvoiceWithDocuments | null = null;
           if (dto.invoiceId) {
             await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${dto.invoiceId} FOR UPDATE`;
             invoice = await tx.invoice.findUnique({
@@ -1040,6 +1072,7 @@ export class BillingRequestsService {
               });
             }
           }
+          if (!invoice) throw new NotFoundException('Invoice not found');
           const existingApplications = dto.invoiceId
             ? (invoice.documents ?? [])
             : [];
@@ -1432,7 +1465,7 @@ export class BillingRequestsService {
       throw new ForbiddenException('SELLER cannot transition billing requests');
   }
 
-  private toListItem(item: Record<string, any>) {
+  private toListItem(item: BillingRequestListRecord) {
     return {
       id: item.id,
       customerId: item.customerId,

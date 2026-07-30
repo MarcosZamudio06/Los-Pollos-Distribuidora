@@ -10,63 +10,86 @@ import { DeliveryOrdersController } from './delivery-orders.controller';
 import { RouteSettlementsController } from './route-settlements.controller';
 import { DeliveryService } from './delivery.service';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('Delivery controllers', () => {
   it('exposes delivery route endpoint permissions from the spec', () => {
     expect(
-      Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.findAll),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryController.prototype, 'findAll'),
+      ),
     ).toEqual(['ADMIN', 'DRIVER', 'COLLECTIONS', 'WAREHOUSE']);
     expect(
-      Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.findOne),
-    ).toEqual(['ADMIN', 'DRIVER', 'COLLECTIONS']);
-    expect(
-      Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.create),
-    ).toEqual(['ADMIN']);
-    expect(
-      Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.assignOrders),
-    ).toEqual(['ADMIN']);
-    expect(
-      Reflect.getMetadata(ROLES_KEY, DeliveryController.prototype.updateStatus),
-    ).toEqual(['ADMIN', 'DRIVER']);
-    expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        DeliveryOrdersController.prototype.updateStatus,
-      ),
-    ).toEqual(['ADMIN', 'DRIVER']);
-    expect(
-      Reflect.getMetadata(
-        ROLES_KEY,
-        DeliveryOrdersController.prototype.captureEvidence,
-      ),
-    ).toEqual(['ADMIN', 'DRIVER']);
-    expect(
-      Reflect.getMetadata(
-        ROLES_KEY,
-        DeliveryOrdersController.prototype.registerCollection,
+        methodOf(DeliveryController.prototype, 'findOne'),
       ),
     ).toEqual(['ADMIN', 'DRIVER', 'COLLECTIONS']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        DeliveryOrdersController.prototype.registerIncident,
+        methodOf(DeliveryController.prototype, 'create'),
+      ),
+    ).toEqual(['ADMIN']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryController.prototype, 'assignOrders'),
+      ),
+    ).toEqual(['ADMIN']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryController.prototype, 'updateStatus'),
       ),
     ).toEqual(['ADMIN', 'DRIVER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        DeliveryController.prototype.openSettlement,
+        methodOf(DeliveryOrdersController.prototype, 'updateStatus'),
+      ),
+    ).toEqual(['ADMIN', 'DRIVER']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryOrdersController.prototype, 'captureEvidence'),
+      ),
+    ).toEqual(['ADMIN', 'DRIVER']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryOrdersController.prototype, 'registerCollection'),
+      ),
+    ).toEqual(['ADMIN', 'DRIVER', 'COLLECTIONS']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryOrdersController.prototype, 'registerIncident'),
+      ),
+    ).toEqual(['ADMIN', 'DRIVER']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryController.prototype, 'openSettlement'),
       ),
     ).toEqual(['ADMIN', 'COLLECTIONS']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        RouteSettlementsController.prototype.close,
+        methodOf(RouteSettlementsController.prototype, 'close'),
       ),
     ).toEqual(['ADMIN', 'COLLECTIONS']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        RouteSettlementsController.prototype.reopen,
+        methodOf(RouteSettlementsController.prototype, 'reopen'),
       ),
     ).toEqual(['ADMIN']);
   });
@@ -113,12 +136,12 @@ describe('Delivery controllers', () => {
       data: { id: 'order-1', status: 'DELIVERED' },
     });
 
-    expect(service.updateRouteStatus).toHaveBeenCalledWith(
+    expect(mockOf(service, 'updateRouteStatus')).toHaveBeenCalledWith(
       'route-1',
       { status: 'IN_PROGRESS' },
       user,
     );
-    expect(service.updateOrderStatus).toHaveBeenCalledWith(
+    expect(mockOf(service, 'updateOrderStatus')).toHaveBeenCalledWith(
       'order-1',
       { status: 'DELIVERED' },
       user,
@@ -156,7 +179,7 @@ describe('Delivery controllers', () => {
       message: 'Delivery route orders assigned successfully',
       data: { id: 'route-1', orders: [{ id: 'order-2' }] },
     });
-    expect(service.assignOrdersToRoute).toHaveBeenCalledWith(
+    expect(mockOf(service, 'assignOrdersToRoute')).toHaveBeenCalledWith(
       'route-1',
       body,
       user,
@@ -187,7 +210,7 @@ describe('Delivery controllers', () => {
         user,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(service.createRoute).not.toHaveBeenCalled();
+    expect(mockOf(service, 'createRoute')).not.toHaveBeenCalled();
   });
 
   it('rejects route order assignment with no orders', async () => {
@@ -206,7 +229,7 @@ describe('Delivery controllers', () => {
     await expect(
       controller.assignOrders('route-1', { orders: [] }, user),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(service.assignOrdersToRoute).not.toHaveBeenCalled();
+    expect(mockOf(service, 'assignOrdersToRoute')).not.toHaveBeenCalled();
   });
 
   it('passes evidence, collection, incident, and settlement commands to the service with the current user', async () => {
@@ -305,29 +328,32 @@ describe('Delivery controllers', () => {
       data: { id: 'settlement-1', status: 'OPEN' },
     });
 
-    expect(service.captureEvidence).toHaveBeenCalledWith(
+    expect(mockOf(service, 'captureEvidence')).toHaveBeenCalledWith(
       'order-1',
       evidenceDto,
       user,
     );
-    expect(service.registerCollection).toHaveBeenCalledWith(
+    expect(mockOf(service, 'registerCollection')).toHaveBeenCalledWith(
       'order-1',
       collectionDto,
       user,
     );
-    expect(service.registerIncident).toHaveBeenCalledWith(
+    expect(mockOf(service, 'registerIncident')).toHaveBeenCalledWith(
       'order-1',
       incidentDto,
       user,
     );
-    expect(service.openSettlement).toHaveBeenCalledWith('route-1', user);
-    expect(service.closeSettlement).toHaveBeenCalledWith(
+    expect(mockOf(service, 'openSettlement')).toHaveBeenCalledWith(
+      'route-1',
+      user,
+    );
+    expect(mockOf(service, 'closeSettlement')).toHaveBeenCalledWith(
       'settlement-1',
       { expectedVersion: 3, notes: 'Ok' },
       user,
       'close-idem',
     );
-    expect(service.reopenSettlement).toHaveBeenCalledWith(
+    expect(mockOf(service, 'reopenSettlement')).toHaveBeenCalledWith(
       'settlement-1',
       { expectedVersion: 4, reason: 'Review' },
       user,

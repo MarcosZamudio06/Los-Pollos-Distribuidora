@@ -23,6 +23,23 @@ import {
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    return Object.prototype.toString.call(value) as string;
+  }
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  ) {
+    return value.toString();
+  }
+  return '';
+}
+
 type ProductRecord = {
   id: string;
   name: string;
@@ -807,7 +824,9 @@ export class PurchasesService {
 
   private decimalToString(value: unknown): string | null {
     if (value === null || value === undefined) return null;
-    return value instanceof Prisma.Decimal ? value.toString() : String(value);
+    return value instanceof Prisma.Decimal
+      ? value.toString()
+      : stringifyValue(value);
   }
 
   private toNumber(value: DecimalLike): number {

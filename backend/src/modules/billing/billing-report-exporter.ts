@@ -59,6 +59,23 @@ const CONTROL_TOTALS = [
   ['totalReceivable', 'Total por cobrar', true],
 ] as const;
 
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    return Object.prototype.toString.call(value) as string;
+  }
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  ) {
+    return value.toString();
+  }
+  return '';
+}
+
 @Injectable()
 export class BillingReportExporter {
   async createFile(
@@ -66,6 +83,7 @@ export class BillingReportExporter {
     metadata: BillingExportMetadata,
     format: BillingExportFormat,
   ) {
+    await Promise.resolve();
     const stamp = metadata.generatedAt
       .toISOString()
       .slice(0, 10)
@@ -190,18 +208,18 @@ export class BillingReportExporter {
       return new Date(value as string | Date);
     if (key === 'blockingCodes' && Array.isArray(value))
       return value.join(' | ');
-    return value == null ? '' : String(value);
+    return value == null ? '' : stringifyValue(value);
   }
 
   private csvValue(key: string, value: unknown) {
     if (key === 'blockingCodes' && Array.isArray(value))
       return value.join(' | ');
     if (value instanceof Date) return value.toISOString();
-    return value ?? '';
+    return value == null ? '' : value;
   }
 
   private escapeCsv(value: unknown) {
-    const text = String(value ?? '');
+    const text = value == null ? '' : stringifyValue(value);
     return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 

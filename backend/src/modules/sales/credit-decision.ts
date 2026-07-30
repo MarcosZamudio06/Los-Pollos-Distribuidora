@@ -97,6 +97,11 @@ export function calculateCreditState(input: CreditStateInput) {
     (reason) =>
       reason === 'CREDIT_OVERDUE_BLOCKED' || reason === 'CREDIT_LIMIT_EXCEEDED',
   );
+  const effectiveCreditStatus: 'ACTIVE' | 'BLOCKED' | 'WARNING' = hasBlock
+    ? 'BLOCKED'
+    : reasons.length
+      ? 'WARNING'
+      : 'ACTIVE';
   return {
     policyId: policy?.id ?? null,
     overdueBlockingMode: policy?.overdueBlockingMode ?? null,
@@ -105,11 +110,7 @@ export function calculateCreditState(input: CreditStateInput) {
     currentExposure: currentExposure.toString(),
     projectedExposure: projectedExposure.toString(),
     creditLimit: creditLimit.toString(),
-    effectiveCreditStatus: hasBlock
-      ? 'BLOCKED'
-      : reasons.length
-        ? 'WARNING'
-        : 'ACTIVE',
+    effectiveCreditStatus,
     blockingReasons: reasons,
     canAdministrativeOverride: Boolean(
       policy?.allowAdministrativeOverride && hasOverrideableBlock,

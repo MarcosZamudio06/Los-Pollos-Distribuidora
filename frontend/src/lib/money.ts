@@ -1,6 +1,6 @@
-import { Money, type DecimalInput, toMoneyString } from '../../../shared/money'
+import { hasSubCentPrecision, Money, type DecimalInput, toMoneyString } from '../../../shared/money'
 
-export { Money, toMoneyString }
+export { hasSubCentPrecision, Money, toMoneyString }
 
 export const moneyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',

@@ -36,8 +36,6 @@ type PaymentWithReceivable = Payment & {
   cancelledByUserId?: string | null;
 };
 
-type LastPaymentDate = { paidAt: Date } | null;
-
 @Injectable()
 export class PaymentsService {
   constructor(private readonly prisma: PrismaService) {}

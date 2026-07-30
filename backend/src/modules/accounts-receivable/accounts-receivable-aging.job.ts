@@ -127,7 +127,7 @@ export class AccountsReceivableAgingJob implements OnApplicationBootstrap {
         durationMs: Date.now() - startedAt,
       });
       return { skipped: false, examined, updated };
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error({
         event: 'receivable-aging.failed',
         examined,

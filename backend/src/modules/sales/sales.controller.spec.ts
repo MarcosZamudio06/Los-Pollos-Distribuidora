@@ -3,12 +3,20 @@ import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('SalesController', () => {
   it('allows ADMIN, SELLER, and COLLECTIONS to print a sale document', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        SalesController.prototype.getDocumentPrint,
+        methodOf(SalesController.prototype, 'getDocumentPrint'),
       ),
     ).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS']);
   });
@@ -28,7 +36,7 @@ describe('SalesController', () => {
 
     const result = await controller.getDocumentPrint('sale-1', 'doc-1', user);
 
-    expect(service.getDocumentPrint).toHaveBeenCalledWith(
+    expect(mockOf(service, 'getDocumentPrint')).toHaveBeenCalledWith(
       'sale-1',
       'doc-1',
       user,
@@ -42,7 +50,10 @@ describe('SalesController', () => {
 
   it('allows ADMIN, SELLER, and COLLECTIONS to read sale documents', () => {
     expect(
-      Reflect.getMetadata(ROLES_KEY, SalesController.prototype.getDocuments),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(SalesController.prototype, 'getDocuments'),
+      ),
     ).toEqual(['ADMIN', 'SELLER', 'COLLECTIONS']);
   });
 
@@ -61,7 +72,10 @@ describe('SalesController', () => {
 
     const result = await controller.getDocuments('sale-1', user);
 
-    expect(service.findDocuments).toHaveBeenCalledWith('sale-1', user);
+    expect(mockOf(service, 'findDocuments')).toHaveBeenCalledWith(
+      'sale-1',
+      user,
+    );
     expect(result).toEqual({
       success: true,
       message: 'Sale documents retrieved successfully',
@@ -71,7 +85,10 @@ describe('SalesController', () => {
 
   it('restricts sale cancellation to ADMIN only', () => {
     expect(
-      Reflect.getMetadata(ROLES_KEY, SalesController.prototype.cancel),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(SalesController.prototype, 'cancel'),
+      ),
     ).toEqual(['ADMIN']);
   });
 
@@ -91,7 +108,7 @@ describe('SalesController', () => {
 
     await controller.cancel('sale-1', body, user, 'cancel-key-1');
 
-    expect(service.cancel).toHaveBeenCalledWith(
+    expect(mockOf(service, 'cancel')).toHaveBeenCalledWith(
       'sale-1',
       body,
       user,
@@ -143,15 +160,21 @@ describe('SalesController', () => {
         '  ',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(service.cancel).not.toHaveBeenCalled();
+    expect(mockOf(service, 'cancel')).not.toHaveBeenCalled();
   });
 
   it('restricts administrative sale voiding and preview to ADMIN only', () => {
     expect(
-      Reflect.getMetadata(ROLES_KEY, SalesController.prototype.voidPreview),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(SalesController.prototype, 'voidPreview'),
+      ),
     ).toEqual(['ADMIN']);
     expect(
-      Reflect.getMetadata(ROLES_KEY, SalesController.prototype.voidSale),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(SalesController.prototype, 'voidSale'),
+      ),
     ).toEqual(['ADMIN']);
   });
 
@@ -173,7 +196,10 @@ describe('SalesController', () => {
       message: 'Sale void preview retrieved successfully',
       data: { canExecute: true },
     });
-    expect(service.getVoidPreview).toHaveBeenCalledWith('sale-1', user);
+    expect(mockOf(service, 'getVoidPreview')).toHaveBeenCalledWith(
+      'sale-1',
+      user,
+    );
   });
 
   it('passes the administrative void command and idempotency key to the service', async () => {
@@ -199,7 +225,7 @@ describe('SalesController', () => {
       message: 'Sale voided successfully',
       data: { sale: { id: 'sale-1', status: 'CANCELLED' } },
     });
-    expect(service.voidSale).toHaveBeenCalledWith(
+    expect(mockOf(service, 'voidSale')).toHaveBeenCalledWith(
       'sale-1',
       body,
       user,
@@ -236,6 +262,6 @@ describe('SalesController', () => {
         '  ',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(service.voidSale).not.toHaveBeenCalled();
+    expect(mockOf(service, 'voidSale')).not.toHaveBeenCalled();
   });
 });

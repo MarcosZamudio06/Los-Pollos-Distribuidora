@@ -3,6 +3,14 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('ReportsController', () => {
   const user: AuthenticatedUser = {
     id: 'admin-1',
@@ -29,39 +37,45 @@ describe('ReportsController', () => {
 
   it('exposes report endpoints with expected role metadata', () => {
     expect(
-      Reflect.getMetadata(ROLES_KEY, ReportsController.prototype.getDashboard),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(ReportsController.prototype, 'getDashboard'),
+      ),
     ).toEqual(['ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS', 'DRIVER']);
     expect(
-      Reflect.getMetadata(ROLES_KEY, ReportsController.prototype.getSalesDaily),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(ReportsController.prototype, 'getSalesDaily'),
+      ),
     ).toEqual(['ADMIN', 'SELLER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        ReportsController.prototype.getInventoryLowStock,
+        methodOf(ReportsController.prototype, 'getInventoryLowStock'),
       ),
     ).toEqual(['ADMIN', 'WAREHOUSE']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        ReportsController.prototype.getCashClosing,
+        methodOf(ReportsController.prototype, 'getCashClosing'),
       ),
     ).toEqual(['ADMIN', 'SELLER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        ReportsController.prototype.getInventoryByLocation,
+        methodOf(ReportsController.prototype, 'getInventoryByLocation'),
       ),
     ).toEqual(['ADMIN', 'WAREHOUSE', 'SELLER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        ReportsController.prototype.getAccountsReceivable,
+        methodOf(ReportsController.prototype, 'getAccountsReceivable'),
       ),
     ).toEqual(['ADMIN', 'COLLECTIONS']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        ReportsController.prototype.getDeliveryOperations,
+        methodOf(ReportsController.prototype, 'getDeliveryOperations'),
       ),
     ).toEqual(['ADMIN', 'COLLECTIONS', 'DRIVER']);
     expect(
@@ -88,7 +102,7 @@ describe('ReportsController', () => {
       message: 'Dashboard report retrieved successfully',
       data: { generatedAt: 'now' },
     });
-    expect(service.getDashboard).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getDashboard')).toHaveBeenCalledWith(query, user);
   });
 
   it('wraps sales-daily response and passes query/current user to service', async () => {
@@ -100,7 +114,7 @@ describe('ReportsController', () => {
       message: 'Daily sales report retrieved successfully',
       data: { date: '2026-07-05' },
     });
-    expect(service.getSalesDaily).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getSalesDaily')).toHaveBeenCalledWith(query, user);
   });
 
   it('wraps inventory low stock response and passes query/current user to service', async () => {
@@ -114,7 +128,10 @@ describe('ReportsController', () => {
         data: { items: [] },
       },
     );
-    expect(service.getInventoryLowStock).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getInventoryLowStock')).toHaveBeenCalledWith(
+      query,
+      user,
+    );
   });
 
   it('wraps cash closing response and passes query/current user to service', async () => {
@@ -126,7 +143,7 @@ describe('ReportsController', () => {
       message: 'Cash closing report retrieved successfully',
       data: { cashSales: [] },
     });
-    expect(service.getCashClosing).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getCashClosing')).toHaveBeenCalledWith(query, user);
   });
 
   it('wraps inventory-by-location response and passes query/current user to service', async () => {
@@ -140,7 +157,10 @@ describe('ReportsController', () => {
       message: 'Inventory by location report retrieved successfully',
       data: { items: [] },
     });
-    expect(service.getInventoryByLocation).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getInventoryByLocation')).toHaveBeenCalledWith(
+      query,
+      user,
+    );
   });
 
   it('wraps accounts-receivable response and passes query/current user to service', async () => {
@@ -154,7 +174,10 @@ describe('ReportsController', () => {
       message: 'Accounts receivable report retrieved successfully',
       data: { items: [] },
     });
-    expect(service.getAccountsReceivable).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getAccountsReceivable')).toHaveBeenCalledWith(
+      query,
+      user,
+    );
   });
 
   it('wraps delivery-operations response and passes query/current user to service', async () => {
@@ -168,6 +191,9 @@ describe('ReportsController', () => {
       message: 'Delivery operations report retrieved successfully',
       data: { deliverySummary: {} },
     });
-    expect(service.getDeliveryOperations).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'getDeliveryOperations')).toHaveBeenCalledWith(
+      query,
+      user,
+    );
   });
 });

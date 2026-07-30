@@ -99,7 +99,11 @@ describe('InvoiceCancellationService', () => {
       status: InvoiceStatus.CANCELLED,
       cancellationPayloadHash: expect.anything(),
     });
-    const firstHash = (service as any).hashPayload({
+    const firstHash = (
+      service as unknown as {
+        hashPayload: (payload: Record<string, unknown>) => string;
+      }
+    ).hashPayload({
       invoiceId: 'invoice-1',
       expectedVersion: 3,
       reason: 'Customer correction',

@@ -5,6 +5,14 @@ import { BillingReportController } from './billing-report.controller';
 import { BillingReportService } from './billing-report.service';
 import { BillingReportQueryDto } from './dto/billing-report-query.dto';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('BillingReportController', () => {
   const user: AuthenticatedUser = {
     id: 'admin-1',
@@ -34,12 +42,15 @@ describe('BillingReportController', () => {
       expect(
         Reflect.getMetadata(
           ROLES_KEY,
-          BillingReportController.prototype[method],
+          methodOf(BillingReportController.prototype, method),
         ),
       ).toEqual(['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS']);
     }
     expect(
-      Reflect.getMetadata(ROLES_KEY, BillingReportController.prototype.export),
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(BillingReportController.prototype, 'export'),
+      ),
     ).toEqual(['ADMIN', 'BILLING']);
   });
 
@@ -49,9 +60,9 @@ describe('BillingReportController', () => {
     await controller.detail('doc-1', user);
     await controller.export(query, user);
 
-    expect(service.list).toHaveBeenCalledWith(query, user);
-    expect(service.summary).toHaveBeenCalledWith(query, user);
-    expect(service.detail).toHaveBeenCalledWith('doc-1', user);
-    expect(service.exportFile).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'list')).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'summary')).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'detail')).toHaveBeenCalledWith('doc-1', user);
+    expect(mockOf(service, 'exportFile')).toHaveBeenCalledWith(query, user);
   });
 });

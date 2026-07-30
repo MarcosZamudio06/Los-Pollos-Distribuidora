@@ -5,12 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  AgingStatus,
-  CollectionStatus,
-  CreditStatus,
-  type Prisma,
-} from '@prisma/client';
+import { CollectionStatus, CreditStatus, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -21,7 +16,7 @@ import {
   UpdateCustomerDto,
 } from './dto';
 import { calculateCreditState } from '../sales/credit-decision';
-import { Money } from '../../../../shared/money';
+import { Money, toMoneyString } from '../../../../shared/money';
 
 type CustomerRecord = Prisma.CustomerGetPayload<{
   include: {
@@ -595,9 +590,15 @@ export class CustomersService {
       commercialPolicy,
       ...publicCustomer
     } = customer as CustomerRecord;
+    void _accountReceivables;
+    void _payments;
+    void _billingRequests;
     const response = {
       ...publicCustomer,
-      creditLimit: customer.creditLimit?.toString() ?? null,
+      creditLimit:
+        customer.creditLimit === null
+          ? null
+          : toMoneyString(customer.creditLimit),
       isBlockedForCredit: customer.creditStatus !== CreditStatus.ACTIVE,
     } as CustomerResponse;
 
@@ -671,7 +672,10 @@ export class CustomersService {
     return {
       customerId: customer.id,
       creditStatus: customer.creditStatus,
-      creditLimit: customer.creditLimit?.toString() ?? null,
+      creditLimit:
+        customer.creditLimit === null
+          ? null
+          : toMoneyString(customer.creditLimit),
       creditDays: customer.creditDays,
       paymentTermsDays: customer.creditDays,
       agingStatus: creditState.agingStatus,
