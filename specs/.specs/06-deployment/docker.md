@@ -24,8 +24,11 @@ Debe:
 - Instalar dependencias.
 - Generar Prisma Client.
 - Compilar TypeScript.
-- Ejecutar migraciones según ambiente.
 - Iniciar aplicación.
+
+No debe ejecutar migraciones al arrancar. El mismo artefacto de imagen se usa
+en un job único y explícito que ejecuta `npm run migrate:deploy` antes de
+desplegar nuevas réplicas.
 
 ## Frontend Dockerfile
 
@@ -56,5 +59,13 @@ Todos los servicios deben compartir una red interna.
 docker compose up -d
 docker compose down
 docker compose logs -f backend
-docker compose exec backend npx prisma migrate deploy
+docker compose run --rm migrate
+```
+
+En producción el servicio `migrate` usa el perfil `migration` para evitar que
+un `up` normal vuelva a ejecutar una migración:
+
+```bash
+docker compose -f docker-compose.production.yml --profile migration run --rm migrate
+docker compose -f docker-compose.production.yml up -d backend frontend
 ```

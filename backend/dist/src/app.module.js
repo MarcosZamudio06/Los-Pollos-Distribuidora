@@ -38,6 +38,7 @@ const billing_requests_module_1 = require("./modules/billing-requests/billing-re
 const point_of_sale_daily_close_module_1 = require("./modules/point-of-sale-daily-close/point-of-sale-daily-close.module");
 const billing_module_1 = require("./modules/billing/billing.module");
 const cash_management_module_1 = require("./modules/cash-management/cash-management.module");
+const health_module_1 = require("./modules/health/health.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -57,6 +58,7 @@ exports.AppModule = AppModule = __decorate([
             }),
             schedule_1.ScheduleModule.forRoot(),
             prisma_module_1.PrismaModule,
+            health_module_1.HealthModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             products_module_1.ProductsModule,

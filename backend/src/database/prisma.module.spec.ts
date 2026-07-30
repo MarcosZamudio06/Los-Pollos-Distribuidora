@@ -67,13 +67,13 @@ describe('PrismaService', () => {
     expect(connect).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the shared Prisma connection when the Nest module is destroyed', async () => {
+  it('closes the shared Prisma connection after the application shutdown', async () => {
     const service = new PrismaService();
     const disconnect = jest
       .spyOn(service, '$disconnect')
       .mockResolvedValue(undefined);
 
-    await service.onModuleDestroy();
+    await service.onApplicationShutdown();
 
     expect(disconnect).toHaveBeenCalledTimes(1);
   });

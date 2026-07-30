@@ -29,6 +29,7 @@ import { BillingRequestsModule } from './modules/billing-requests/billing-reques
 import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close/point-of-sale-daily-close.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { CashManagementModule } from './modules/cash-management/cash-management.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { CashManagementModule } from './modules/cash-management/cash-management.
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    HealthModule,
     AuthModule,
     UsersModule,
     ProductsModule,

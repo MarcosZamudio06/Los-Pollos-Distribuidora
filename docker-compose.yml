@@ -18,10 +18,28 @@ services:
     networks:
       - app_network
 
-  backend:
+  migrate:
+    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
+    command: npm run migrate:deploy
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  backend:
+    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    init: true
+    stop_grace_period: 75s
     environment:
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
       API_PREFIX: ${API_PREFIX:-api}
@@ -38,7 +56,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       MAP_DATA_VERSION: ${MAP_DATA_VERSION:-mexico-latest}
       MAP_DATA_PREPARED_AT: ${MAP_DATA_PREPARED_AT:-}
-      NODE_ENV: production
+      NODE_ENV: development
       OSRM_PROFILE: ${OSRM_PROFILE:-driving}
       OSRM_URL: ${OSRM_URL:-http://osrm:5000}
       PHOTON_URL: ${PHOTON_URL:-http://photon:2322}
@@ -51,26 +69,22 @@ services:
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
       TRUST_PROXY_HOPS: "0"
       VROOM_URL: ${VROOM_URL:-http://vroom:3000}
-    command: npm run start:docker
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         - CMD
         - node
         - -e
         - >-
-          const net = require('node:net');
-          const socket = net.createConnection({ host: '127.0.0.1', port: Number(process.env.PORT || 4000) });
-          socket.setTimeout(2000);
-          socket.once('connect', () => { socket.end(); process.exit(0); });
-          socket.once('timeout', () => { socket.destroy(); process.exit(1); });
-          socket.once('error', () => process.exit(1));
+          fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/' + (process.env.API_PREFIX || 'api') + '/health/ready')
+            .then((response) => process.exit(response.ok ? 0 : 1))
+            .catch(() => process.exit(1));
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 10s
+      start_period: 30s
     ports:
       - "${BACKEND_PORT:-4000}:${PORT:-4000}"
     networks:
