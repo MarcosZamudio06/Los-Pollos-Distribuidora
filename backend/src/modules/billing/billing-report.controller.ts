@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -14,19 +21,28 @@ export class BillingReportController {
 
   @Get()
   @Roles('ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS')
-  list(@Query() query: BillingReportQueryDto, @CurrentUser() user: AuthenticatedUser) {
+  list(
+    @Query() query: BillingReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.list(query, user);
   }
 
   @Get('summary')
   @Roles('ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS')
-  summary(@Query() query: BillingReportQueryDto, @CurrentUser() user: AuthenticatedUser) {
+  summary(
+    @Query() query: BillingReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.summary(query, user);
   }
 
   @Get('export')
   @Roles('ADMIN', 'BILLING')
-  async export(@Query() query: BillingReportQueryDto, @CurrentUser() user: AuthenticatedUser) {
+  async export(
+    @Query() query: BillingReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     const file = await this.service.exportFile(query, user);
     return new StreamableFile(file.stream, {
       type: file.contentType,
@@ -36,7 +52,10 @@ export class BillingReportController {
 
   @Get(':saleDocumentId')
   @Roles('ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS')
-  detail(@Param('saleDocumentId') saleDocumentId: string, @CurrentUser() user: AuthenticatedUser) {
+  detail(
+    @Param('saleDocumentId') saleDocumentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.detail(saleDocumentId, user);
   }
 }

@@ -20,9 +20,27 @@ import type {
   InventoryLowStockReportQueryDto,
   SalesDailyReportQueryDto,
 } from './dto';
+import { Money, toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 type ReportUser = Pick<AuthenticatedUser, 'id' | 'role'>;
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    return Object.prototype.toString.call(value) as string;
+  }
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  ) {
+    return value.toString();
+  }
+  return '';
+}
 type FreshnessMeta = {
   generatedAt: string;
   dataAsOf: string;
@@ -62,7 +80,10 @@ type SaleRecord = {
   cancellationReason?: string | null;
   updatedAt?: Date;
   payments?: PaymentRecord[];
-  accountReceivable?: { agingStatus?: string; outstandingAmount?: DecimalLike } | null;
+  accountReceivable?: {
+    agingStatus?: string;
+    outstandingAmount?: DecimalLike;
+  } | null;
 };
 
 type InventoryBalanceRecord = {
@@ -73,7 +94,12 @@ type InventoryBalanceRecord = {
   minQuantityKg?: DecimalLike;
   minQuantityPieces?: number;
   updatedAt?: Date;
-  product?: { name?: string; sku?: string | null; unit?: string; categoryId?: string | null } | null;
+  product?: {
+    name?: string;
+    sku?: string | null;
+    unit?: string;
+    categoryId?: string | null;
+  } | null;
   location?: { name?: string | null } | null;
 };
 
@@ -129,8 +155,13 @@ type DeliveryOrderRecord = {
 
 const FRESHNESS_TARGET_SECONDS = 60;
 const ACTIVE_PAYMENT_STATUSES = { not: PaymentStatus.CANCELLED } as const;
-const ACTIVE_PAYMENT_STATUSES_IN = { in: [PaymentStatus.REGISTERED, PaymentStatus.APPLIED] } as const;
-const SALE_REPORT_STATUSES = [SaleStatus.CONFIRMED, SaleStatus.CANCELLED] as const;
+const ACTIVE_PAYMENT_STATUSES_IN = {
+  in: [PaymentStatus.REGISTERED, PaymentStatus.APPLIED],
+} as const;
+const SALE_REPORT_STATUSES = [
+  SaleStatus.CONFIRMED,
+  SaleStatus.CANCELLED,
+] as const;
 
 @Injectable()
 export class ReportsService {
@@ -138,28 +169,60 @@ export class ReportsService {
 
   async getDashboard(query: DashboardReportQueryDto, user: ReportUser) {
     const range = this.resolveDateRange(query.date);
-    const baseSaleWhere = this.applySalesScope({
-      createdAt: range,
-      status: SaleStatus.CONFIRMED,
-      ...(query.locationId ? { locationId: query.locationId } : {}),
-    }, user);
-    const paymentWhere = this.applyDashboardPaymentScope(this.applyPaymentScope({
-      paidAt: range,
-      status: ACTIVE_PAYMENT_STATUSES_IN,
-      ...(query.locationId ? { operationalLocationId: query.locationId } : {}),
-    }, user), user);
+    const baseSaleWhere = this.applySalesScope(
+      {
+        createdAt: range,
+        status: SaleStatus.CONFIRMED,
+        ...(query.locationId ? { locationId: query.locationId } : {}),
+      },
+      user,
+    );
+    const paymentWhere = this.applyDashboardPaymentScope(
+      this.applyPaymentScope(
+        {
+          paidAt: range,
+          status: ACTIVE_PAYMENT_STATUSES_IN,
+          ...(query.locationId
+            ? { operationalLocationId: query.locationId }
+            : {}),
+        },
+        user,
+      ),
+      user,
+    );
 
     const canViewSales = user.role === 'ADMIN' || user.role === 'SELLER';
     const canViewInventory = user.role === 'ADMIN' || user.role === 'WAREHOUSE';
-    const canViewCollections = user.role === 'ADMIN' || user.role === 'COLLECTIONS';
-    const canViewDelivery = user.role === 'ADMIN' || user.role === 'DRIVER' || user.role === 'COLLECTIONS';
-    const canViewRouteCollectionAmounts = user.role === 'ADMIN' || user.role === 'COLLECTIONS';
+    const canViewCollections =
+      user.role === 'ADMIN' || user.role === 'COLLECTIONS';
+    const canViewDelivery =
+      user.role === 'ADMIN' ||
+      user.role === 'DRIVER' ||
+      user.role === 'COLLECTIONS';
+    const canViewRouteCollectionAmounts =
+      user.role === 'ADMIN' || user.role === 'COLLECTIONS';
 
     const sales = canViewSales ? await this.findSales(baseSaleWhere) : [];
-    const payments = canViewCollections || canViewSales ? this.filterDashboardPayments(await this.findPayments(paymentWhere), user) : [];
-    const receivables = canViewCollections ? await this.findReceivables({ status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] } }) : [];
-    const lowStock = canViewInventory ? await this.findLowStockBalances({ locationId: query.locationId }) : [];
-    const routeSettlements = canViewRouteCollectionAmounts ? await this.findRouteSettlements({ status: 'OPEN' }) : [];
+    const payments =
+      canViewCollections || canViewSales
+        ? this.filterDashboardPayments(
+            await this.findPayments(paymentWhere),
+            user,
+          )
+        : [];
+    const receivables = canViewCollections
+      ? await this.findReceivables({
+          status: {
+            in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+          },
+        })
+      : [];
+    const lowStock = canViewInventory
+      ? await this.findLowStockBalances({ locationId: query.locationId })
+      : [];
+    const routeSettlements = canViewRouteCollectionAmounts
+      ? await this.findRouteSettlements({ status: 'OPEN' })
+      : [];
 
     const dataDates = [
       ...sales.map((sale) => sale.updatedAt),
@@ -171,21 +234,47 @@ export class ReportsService {
 
     return {
       salesToday: this.summarizeSalesToday(sales),
-      cashSalesToday: this.sumSalesByPaymentType(sales, SalePaymentType.CASH_SALE),
-      collectionsToday: this.sumPayments(payments.filter((payment) => payment.accountReceivableId)),
+      cashSalesToday: this.sumSalesByPaymentType(
+        sales,
+        SalePaymentType.CASH_SALE,
+      ),
+      collectionsToday: this.sumPayments(
+        payments.filter((payment) => payment.accountReceivableId),
+      ),
       overdueReceivables: {
-        balance: this.sumValues(receivables.map((receivable) => receivable.outstandingAmount)),
+        balance: this.sumValues(
+          receivables.map((receivable) => receivable.outstandingAmount),
+        ),
         count: receivables.length,
       },
-      customersBlockedForCredit: canViewCollections ? await this.prisma.customer.count({ where: { creditStatus: { in: ['BLOCKED', 'SUSPENDED'] } } }) : 0,
-      billingRequestsToday: canViewSales ? await this.prisma.billingRequest.count({ where: { requestedAt: range } }) : 0,
+      customersBlockedForCredit: canViewCollections
+        ? await this.prisma.customer.count({
+            where: { creditStatus: { in: ['BLOCKED', 'SUSPENDED'] } },
+          })
+        : 0,
+      billingRequestsToday: canViewSales
+        ? await this.prisma.billingRequest.count({
+            where: { requestedAt: range },
+          })
+        : 0,
       paymentsByMethodToday: this.groupPayments(payments, 'paymentMethod'),
-      paymentsByBankToday: this.groupPayments(payments.filter((payment) => payment.bankName), 'bankName'),
-      lowStockByLocation: lowStock.map((balance) => this.toLowStockItem(balance)),
-      deliverySummary: canViewDelivery ? await this.buildDeliverySummary(range, user) : this.emptyDeliverySummary(),
-      routeCollectionsPendingSettlement: this.sumValues(routeSettlements.map((settlement) =>
-        this.toNumber(settlement.paidAtDeliveryAmount) + this.toNumber(settlement.secondPassCollectionsAmount),
-      )),
+      paymentsByBankToday: this.groupPayments(
+        payments.filter((payment) => payment.bankName),
+        'bankName',
+      ),
+      lowStockByLocation: lowStock.map((balance) =>
+        this.toLowStockItem(balance),
+      ),
+      deliverySummary: canViewDelivery
+        ? await this.buildDeliverySummary(range, user)
+        : this.emptyDeliverySummary(),
+      routeCollectionsPendingSettlement: this.sumValues(
+        routeSettlements.map((settlement) =>
+          Money.from(settlement.paidAtDeliveryAmount).add(
+            Money.from(settlement.secondPassCollectionsAmount),
+          ),
+        ),
+      ),
       topProducts: [],
       ...this.buildFreshnessMeta(dataDates),
     };
@@ -193,18 +282,35 @@ export class ReportsService {
 
   async getSalesDaily(query: SalesDailyReportQueryDto, user: ReportUser) {
     const range = this.resolveRequiredDateRange(query.date);
-    const where = this.applySalesScope({
-      createdAt: range,
-      status: { in: [...SALE_REPORT_STATUSES] },
-      ...(query.locationId ? { locationId: query.locationId } : {}),
-      ...(query.paymentType ? { paymentType: query.paymentType } : {}),
-      ...(query.documentType ? { documentType: query.documentType } : {}),
-      ...(query.paymentMethod ? { payments: { some: { paymentMethod: query.paymentMethod, status: ACTIVE_PAYMENT_STATUSES } } } : {}),
-    }, user, query.userId);
+    const where = this.applySalesScope(
+      {
+        createdAt: range,
+        status: { in: [...SALE_REPORT_STATUSES] },
+        ...(query.locationId ? { locationId: query.locationId } : {}),
+        ...(query.paymentType ? { paymentType: query.paymentType } : {}),
+        ...(query.documentType ? { documentType: query.documentType } : {}),
+        ...(query.paymentMethod
+          ? {
+              payments: {
+                some: {
+                  paymentMethod: query.paymentMethod,
+                  status: ACTIVE_PAYMENT_STATUSES,
+                },
+              },
+            }
+          : {}),
+      },
+      user,
+      query.userId,
+    );
 
     const sales = await this.findSales(where);
-    const activeSales = sales.filter((sale) => sale.status !== SaleStatus.CANCELLED);
-    const cancelledSales = sales.filter((sale) => sale.status === SaleStatus.CANCELLED);
+    const activeSales = sales.filter(
+      (sale) => sale.status !== SaleStatus.CANCELLED,
+    );
+    const cancelledSales = sales.filter(
+      (sale) => sale.status === SaleStatus.CANCELLED,
+    );
 
     return {
       date: query.date,
@@ -214,27 +320,48 @@ export class ReportsService {
         subtotal: this.sumValues(activeSales.map((sale) => sale.subtotal)),
         discounts: this.sumValues(activeSales.map((sale) => sale.discount)),
         total: this.sumValues(activeSales.map((sale) => sale.total)),
-        cash: this.sumSalesByPaymentType(activeSales, SalePaymentType.CASH_SALE),
-        credit: this.sumSalesByPaymentType(activeSales, SalePaymentType.CREDIT_SALE),
+        cash: this.sumSalesByPaymentType(
+          activeSales,
+          SalePaymentType.CASH_SALE,
+        ),
+        credit: this.sumSalesByPaymentType(
+          activeSales,
+          SalePaymentType.CREDIT_SALE,
+        ),
         cancelled: this.sumValues(cancelledSales.map((sale) => sale.total)),
       },
-      collectionStatusSummary: this.groupSalesBy(activeSales, 'collectionStatus', 'collectionStatus'),
+      collectionStatusSummary: this.groupSalesBy(
+        activeSales,
+        'collectionStatus',
+        'collectionStatus',
+      ),
       agingSummary: this.buildAgingSummary(activeSales),
-      byPaymentMethod: this.groupPayments(activeSales.flatMap((sale) => this.activePayments(sale)), 'paymentMethod'),
-      byDocumentType: this.groupSalesBy(activeSales, 'documentType', 'documentType'),
+      byPaymentMethod: this.groupPayments(
+        activeSales.flatMap((sale) => this.activePayments(sale)),
+        'paymentMethod',
+      ),
+      byDocumentType: this.groupSalesBy(
+        activeSales,
+        'documentType',
+        'documentType',
+      ),
       bySeller: this.groupBySeller(activeSales),
       items: sales.map((sale) => this.toSalesDailyItem(sale)),
       canceledNotes: cancelledSales.map((sale) => ({
         saleNumber: sale.saleNumber ?? null,
         customerName: sale.customer?.name ?? null,
         reason: sale.cancellationReason ?? null,
-        amount: this.toNumber(sale.total),
+        amount: toMoneyString(sale.total),
       })),
       ...this.buildFreshnessMeta(sales.map((sale) => sale.updatedAt)),
     };
   }
 
-  async getInventoryLowStock(query: InventoryLowStockReportQueryDto, _user: ReportUser) {
+  async getInventoryLowStock(
+    query: InventoryLowStockReportQueryDto,
+    user: ReportUser,
+  ) {
+    void user;
     const balances = await this.findLowStockBalances(query);
     const items = balances.map((balance) => this.toLowStockItem(balance));
 
@@ -244,10 +371,16 @@ export class ReportsService {
     };
   }
 
-  async getInventoryByLocation(query: InventoryByLocationReportQueryDto, _user: ReportUser) {
+  async getInventoryByLocation(
+    query: InventoryByLocationReportQueryDto,
+    user: ReportUser,
+  ) {
+    void user;
     const balances = await this.findInventoryBalances(query);
     const lastMovements = await this.findLastInventoryMovements(balances);
-    const items = balances.map((balance) => this.toInventoryByLocationItem(balance, lastMovements));
+    const items = balances.map((balance) =>
+      this.toInventoryByLocationItem(balance, lastMovements),
+    );
 
     return {
       items,
@@ -259,42 +392,84 @@ export class ReportsService {
   }
 
   async getCashClosing(query: CashClosingReportQueryDto, user: ReportUser) {
-    if (user.role === 'DRIVER' || user.role === 'WAREHOUSE' || user.role === 'COLLECTIONS') {
+    if (
+      user.role === 'DRIVER' ||
+      user.role === 'WAREHOUSE' ||
+      user.role === 'COLLECTIONS'
+    ) {
       throw new ForbiddenException('User cannot access cash closing report');
     }
 
     const range = this.resolveRequiredDateRange(query.date);
-    const saleWhere = this.applySalesScope({
-      createdAt: range,
-      status: SaleStatus.CONFIRMED,
-      ...(query.locationId ? { locationId: query.locationId } : {}),
-    }, user, query.userId);
-    const paymentWhere = this.applyPaymentScope({
-      paidAt: range,
-      status: ACTIVE_PAYMENT_STATUSES_IN,
-      ...(query.locationId ? { operationalLocationId: query.locationId } : {}),
-    }, user, query.userId);
+    const saleWhere = this.applySalesScope(
+      {
+        createdAt: range,
+        status: SaleStatus.CONFIRMED,
+        ...(query.locationId ? { locationId: query.locationId } : {}),
+      },
+      user,
+      query.userId,
+    );
+    const paymentWhere = this.applyPaymentScope(
+      {
+        paidAt: range,
+        status: ACTIVE_PAYMENT_STATUSES_IN,
+        ...(query.locationId
+          ? { operationalLocationId: query.locationId }
+          : {}),
+      },
+      user,
+      query.userId,
+    );
 
     const sales = await this.findSales(saleWhere);
     const payments = await this.findPayments(paymentWhere);
     const cashSalePayments = sales
       .filter((sale) => sale.paymentType === SalePaymentType.CASH_SALE)
-      .flatMap((sale) => this.activePayments(sale).filter((payment) => !payment.accountReceivableId && !payment.routeId));
-    const accountsReceivablePayments = payments.filter((payment) => payment.accountReceivableId && !payment.routeId);
+      .flatMap((sale) =>
+        this.activePayments(sale).filter(
+          (payment) => !payment.accountReceivableId && !payment.routeId,
+        ),
+      );
+    const accountsReceivablePayments = payments.filter(
+      (payment) => payment.accountReceivableId && !payment.routeId,
+    );
     const routeCollections = payments.filter((payment) => payment.routeId);
-    const bankPayments = payments.filter((payment) => payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT');
+    const bankPayments = payments.filter(
+      (payment) =>
+        payment.paymentMethod === 'TRANSFER' ||
+        payment.paymentMethod === 'DEPOSIT',
+    );
 
     return {
       cashSales: this.groupPayments(cashSalePayments, 'paymentMethod'),
       creditSales: {
         amount: this.sumSalesByPaymentType(sales, SalePaymentType.CREDIT_SALE),
-        count: sales.filter((sale) => sale.paymentType === SalePaymentType.CREDIT_SALE).length,
+        count: sales.filter(
+          (sale) => sale.paymentType === SalePaymentType.CREDIT_SALE,
+        ).length,
       },
-      accountsReceivablePayments: this.groupPayments(accountsReceivablePayments, 'paymentMethod'),
+      accountsReceivablePayments: this.groupPayments(
+        accountsReceivablePayments,
+        'paymentMethod',
+      ),
       routeCollections: this.groupPayments(routeCollections, 'paymentMethod'),
-      bankTransfersAndDeposits: this.groupPayments(bankPayments, 'paymentMethod'),
-      totalsByPaymentMethod: this.groupPayments([...cashSalePayments, ...accountsReceivablePayments, ...routeCollections], 'paymentMethod'),
-      paymentsByBank: this.groupPayments(payments.filter((payment) => payment.bankName), 'bankName'),
+      bankTransfersAndDeposits: this.groupPayments(
+        bankPayments,
+        'paymentMethod',
+      ),
+      totalsByPaymentMethod: this.groupPayments(
+        [
+          ...cashSalePayments,
+          ...accountsReceivablePayments,
+          ...routeCollections,
+        ],
+        'paymentMethod',
+      ),
+      paymentsByBank: this.groupPayments(
+        payments.filter((payment) => payment.bankName),
+        'bankName',
+      ),
       sellerSummary: this.groupSellerClosing(sales, payments),
       ...this.buildFreshnessMeta([
         ...sales.map((sale) => sale.updatedAt),
@@ -303,26 +478,49 @@ export class ReportsService {
     };
   }
 
-  async getAccountsReceivable(query: AccountsReceivableReportQueryDto, _user: ReportUser) {
+  async getAccountsReceivable(
+    query: AccountsReceivableReportQueryDto,
+    user: ReportUser,
+  ) {
+    void user;
     const receivables = await this.findDetailedReceivables(query);
-    const activePayments = receivables.flatMap((receivable) => this.activeReceivablePayments(receivable));
+    const activePayments = receivables.flatMap((receivable) =>
+      this.activeReceivablePayments(receivable),
+    );
     const paginatedReceivables = this.paginateItems(receivables, query);
 
     return {
       summary: {
-        originalBalance: this.sumValues(receivables.map((receivable) => receivable.originalAmount)),
-        outstandingBalance: this.sumValues(receivables.map((receivable) => receivable.outstandingAmount)),
-        overdueBalance: this.sumValues(receivables
-          .filter((receivable) => receivable.agingStatus === AgingStatus.OVERDUE)
-          .map((receivable) => receivable.outstandingAmount)),
+        originalBalance: this.sumValues(
+          receivables.map((receivable) => receivable.originalAmount),
+        ),
+        outstandingBalance: this.sumValues(
+          receivables.map((receivable) => receivable.outstandingAmount),
+        ),
+        overdueBalance: this.sumValues(
+          receivables
+            .filter(
+              (receivable) => receivable.agingStatus === AgingStatus.OVERDUE,
+            )
+            .map((receivable) => receivable.outstandingAmount),
+        ),
         paymentsInPeriod: this.sumPayments(activePayments),
-        finalCustomerBalance: this.sumValues(receivables.map((receivable) => receivable.outstandingAmount)),
-        customersBlockedForCredit: await this.prisma.customer.count({ where: { creditStatus: { in: ['BLOCKED', 'SUSPENDED'] } } }),
+        finalCustomerBalance: this.sumValues(
+          receivables.map((receivable) => receivable.outstandingAmount),
+        ),
+        customersBlockedForCredit: await this.prisma.customer.count({
+          where: { creditStatus: { in: ['BLOCKED', 'SUSPENDED'] } },
+        }),
       },
       byCustomer: this.groupReceivablesByCustomer(receivables),
-      items: paginatedReceivables.map((receivable) => this.toReceivableReportItem(receivable)),
+      items: paginatedReceivables.map((receivable) =>
+        this.toReceivableReportItem(receivable),
+      ),
       paymentsByMethod: this.groupPayments(activePayments, 'paymentMethod'),
-      paymentsByBank: this.groupPayments(activePayments.filter((payment) => payment.bankName), 'bankName'),
+      paymentsByBank: this.groupPayments(
+        activePayments.filter((payment) => payment.bankName),
+        'bankName',
+      ),
       ...this.buildFreshnessMeta([
         ...receivables.map((receivable) => receivable.updatedAt),
         ...activePayments.map((payment) => payment.paidAt),
@@ -330,7 +528,10 @@ export class ReportsService {
     };
   }
 
-  async getDeliveryOperations(query: DeliveryOperationsReportQueryDto, user: ReportUser) {
+  async getDeliveryOperations(
+    query: DeliveryOperationsReportQueryDto,
+    user: ReportUser,
+  ) {
     const range = this.resolveOptionalDateRange(query.dateFrom, query.dateTo);
     const routeScope = this.buildDeliveryRouteScope(query, user);
     const deliveryWhere = {
@@ -345,20 +546,26 @@ export class ReportsService {
     };
     const settlementWhere = this.buildDeliveryRouteScope(query, user);
 
-    const [deliverySummary, evidence, routePayments, settlements, incidents] = await Promise.all([
-      this.buildDeliveryOperationsSummary(deliveryWhere),
-      this.findDeliveryEvidence(range, routeScope),
-      user.role === 'DRIVER' ? Promise.resolve([]) : this.findPaymentsWithRoute(paymentWhere),
-      this.findRouteSettlements(settlementWhere),
-      this.findDeliveryIncidents(deliveryWhere),
-    ]);
+    const [deliverySummary, evidence, routePayments, settlements, incidents] =
+      await Promise.all([
+        this.buildDeliveryOperationsSummary(deliveryWhere),
+        this.findDeliveryEvidence(range, routeScope),
+        user.role === 'DRIVER'
+          ? Promise.resolve([])
+          : this.findPaymentsWithRoute(paymentWhere),
+        this.findRouteSettlements(settlementWhere),
+        this.findDeliveryIncidents(deliveryWhere),
+      ]);
 
     return {
       deliverySummary,
       evidenceSummary: this.groupEvidence(evidence),
-      collectionsSummary: user.role === 'DRIVER' ? [] : this.groupRouteCollections(routePayments),
+      collectionsSummary:
+        user.role === 'DRIVER' ? [] : this.groupRouteCollections(routePayments),
       settlementsSummary: this.summarizeSettlements(settlements),
-      incidents: incidents.map((incident) => this.toDeliveryIncidentItem(incident)),
+      incidents: incidents.map((incident) =>
+        this.toDeliveryIncidentItem(incident),
+      ),
       ...this.buildFreshnessMeta([
         ...evidence.map((item) => item.capturedAt),
         ...routePayments.map((payment) => payment.paidAt),
@@ -375,50 +582,71 @@ export class ReportsService {
         customer: { select: { name: true } },
         user: { select: { id: true, name: true } },
         location: { select: { id: true, name: true } },
-        payments: { where: { status: ACTIVE_PAYMENT_STATUSES }, orderBy: { paidAt: 'asc' } },
-        accountReceivable: { select: { agingStatus: true, outstandingAmount: true } },
+        payments: {
+          where: { status: ACTIVE_PAYMENT_STATUSES },
+          orderBy: { paidAt: 'asc' },
+        },
+        accountReceivable: {
+          select: { agingStatus: true, outstandingAmount: true },
+        },
       },
       orderBy: { createdAt: 'asc' },
-    }) as Promise<SaleRecord[]>;
+    });
   }
 
-  private findPayments(where: Record<string, unknown>): Promise<PaymentRecord[]> {
+  private findPayments(
+    where: Record<string, unknown>,
+  ): Promise<PaymentRecord[]> {
     return this.prisma.payment.findMany({
       where,
       orderBy: { paidAt: 'asc' },
-    }) as Promise<PaymentRecord[]>;
+    });
   }
 
-  private findReceivables(where: Record<string, unknown>): Promise<ReceivableRecord[]> {
-    return this.prisma.accountReceivable.findMany({ where }) as Promise<ReceivableRecord[]>;
+  private findReceivables(
+    where: Record<string, unknown>,
+  ): Promise<ReceivableRecord[]> {
+    return this.prisma.accountReceivable.findMany({ where });
   }
 
-  private findRouteSettlements(where: Record<string, unknown>): Promise<RouteSettlementRecord[]> {
-    return this.prisma.routeSettlement.findMany({ where }) as Promise<RouteSettlementRecord[]>;
+  private findRouteSettlements(
+    where: Record<string, unknown>,
+  ): Promise<RouteSettlementRecord[]> {
+    return this.prisma.routeSettlement.findMany({ where });
   }
 
-  private findPaymentsWithRoute(where: Record<string, unknown>): Promise<PaymentRecord[]> {
+  private findPaymentsWithRoute(
+    where: Record<string, unknown>,
+  ): Promise<PaymentRecord[]> {
     return this.prisma.payment.findMany({
       where,
       include: { route: { select: { id: true, name: true, driverId: true } } },
       orderBy: { paidAt: 'asc' },
-    }) as Promise<PaymentRecord[]>;
+    });
   }
 
-  private findDetailedReceivables(query: AccountsReceivableReportQueryDto): Promise<ReceivableRecord[]> {
+  private findDetailedReceivables(
+    query: AccountsReceivableReportQueryDto,
+  ): Promise<ReceivableRecord[]> {
     return this.prisma.accountReceivable.findMany({
       where: this.buildReceivableWhere(query),
       include: {
         customer: { select: { id: true, name: true, creditStatus: true } },
         sale: { select: { id: true, saleNumber: true } },
-        payments: { where: { status: ACTIVE_PAYMENT_STATUSES }, orderBy: { paidAt: 'asc' } },
+        payments: {
+          where: { status: ACTIVE_PAYMENT_STATUSES },
+          orderBy: { paidAt: 'asc' },
+        },
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
-    }) as Promise<ReceivableRecord[]>;
+    });
   }
 
   private buildReceivableWhere(query: AccountsReceivableReportQueryDto) {
-    const dueDate = this.resolveDateRangeFilter(query.dueDateFrom, query.dueDateTo);
+    const dueDate = this.resolveDateRangeFilter(
+      query.dueDateFrom,
+      query.dueDateTo,
+    );
     const agingStatus = query.onlyOverdue
       ? AgingStatus.OVERDUE
       : query.onlyDueSoon
@@ -433,27 +661,37 @@ export class ReportsService {
     };
   }
 
-  private async findInventoryBalances(query: InventoryByLocationReportQueryDto): Promise<InventoryBalanceRecord[]> {
+  private async findInventoryBalances(
+    query: InventoryByLocationReportQueryDto,
+  ): Promise<InventoryBalanceRecord[]> {
     return this.prisma.inventoryBalance.findMany({
       where: {
         ...(query.locationId ? { locationId: query.locationId } : {}),
         ...(query.productId ? { productId: query.productId } : {}),
-        ...(query.categoryId || query.search ? {
-          product: {
-            ...(query.categoryId ? { categoryId: query.categoryId } : {}),
-            ...(query.search ? {
-              OR: [
-                { name: { contains: query.search, mode: 'insensitive' } },
-                { sku: { contains: query.search, mode: 'insensitive' } },
-              ],
-            } : {}),
-          },
-        } : {}),
+        ...(query.categoryId || query.search
+          ? {
+              product: {
+                ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+                ...(query.search
+                  ? {
+                      OR: [
+                        {
+                          name: { contains: query.search, mode: 'insensitive' },
+                        },
+                        {
+                          sku: { contains: query.search, mode: 'insensitive' },
+                        },
+                      ],
+                    }
+                  : {}),
+              },
+            }
+          : {}),
       },
       include: { product: true, location: true },
       orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
       ...this.buildPagination(query),
-    }) as Promise<InventoryBalanceRecord[]>;
+    });
   }
 
   private async findLastInventoryMovements(balances: InventoryBalanceRecord[]) {
@@ -463,7 +701,7 @@ export class ReportsService {
       return movementMap;
     }
 
-    const movements = await this.prisma.inventoryMovement.findMany({
+    const movements = (await this.prisma.inventoryMovement.findMany({
       where: {
         OR: balances.map((balance) => ({
           productId: balance.productId,
@@ -472,10 +710,13 @@ export class ReportsService {
       },
       select: { productId: true, locationId: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
-    }) as InventoryMovementRecord[];
+    })) as InventoryMovementRecord[];
 
     for (const movement of movements) {
-      const key = this.inventoryPairKey(movement.productId, movement.locationId);
+      const key = this.inventoryPairKey(
+        movement.productId,
+        movement.locationId,
+      );
       if (!movementMap.has(key)) {
         movementMap.set(key, movement.createdAt);
       }
@@ -484,17 +725,22 @@ export class ReportsService {
     return movementMap;
   }
 
-  private findDeliveryEvidence(range: { gte: Date; lt: Date } | undefined, routeScope: Record<string, unknown>): Promise<DeliveryEvidenceRecord[]> {
+  private findDeliveryEvidence(
+    range: { gte: Date; lt: Date } | undefined,
+    routeScope: Record<string, unknown>,
+  ): Promise<DeliveryEvidenceRecord[]> {
     return this.prisma.deliveryEvidence.findMany({
       where: {
         ...(range ? { capturedAt: range } : {}),
         deliveryOrder: routeScope,
       },
       orderBy: { capturedAt: 'asc' },
-    }) as Promise<DeliveryEvidenceRecord[]>;
+    });
   }
 
-  private findDeliveryIncidents(where: Record<string, unknown>): Promise<DeliveryOrderRecord[]> {
+  private findDeliveryIncidents(
+    where: Record<string, unknown>,
+  ): Promise<DeliveryOrderRecord[]> {
     return this.prisma.deliveryOrder.findMany({
       where: {
         ...where,
@@ -507,17 +753,33 @@ export class ReportsService {
         },
       },
       orderBy: { updatedAt: 'desc' },
-    }) as Promise<DeliveryOrderRecord[]>;
+    });
   }
 
-  private async buildDeliverySummary(range: { gte: Date; lt: Date }, user: ReportUser) {
-    const driverScope = user.role === 'DRIVER' ? { route: { driverId: user.id } } : {};
+  private async buildDeliverySummary(
+    range: { gte: Date; lt: Date },
+    user: ReportUser,
+  ) {
+    const driverScope =
+      user.role === 'DRIVER' ? { route: { driverId: user.id } } : {};
 
     const [pending, inRoute, delivered, incident] = await Promise.all([
-      this.prisma.deliveryOrder.count({ where: { createdAt: range, status: 'PENDING', ...driverScope } }),
-      this.prisma.deliveryOrder.count({ where: { createdAt: range, status: 'IN_ROUTE', ...driverScope } }),
-      this.prisma.deliveryOrder.count({ where: { createdAt: range, status: 'DELIVERED', ...driverScope } }),
-      this.prisma.deliveryOrder.count({ where: { createdAt: range, status: { in: ['NOT_DELIVERED', 'PARTIALLY_REJECTED', 'RETURNED'] }, ...driverScope } }),
+      this.prisma.deliveryOrder.count({
+        where: { createdAt: range, status: 'PENDING', ...driverScope },
+      }),
+      this.prisma.deliveryOrder.count({
+        where: { createdAt: range, status: 'IN_ROUTE', ...driverScope },
+      }),
+      this.prisma.deliveryOrder.count({
+        where: { createdAt: range, status: 'DELIVERED', ...driverScope },
+      }),
+      this.prisma.deliveryOrder.count({
+        where: {
+          createdAt: range,
+          status: { in: ['NOT_DELIVERED', 'PARTIALLY_REJECTED', 'RETURNED'] },
+          ...driverScope,
+        },
+      }),
     ]);
 
     return { pending, inRoute, delivered, incident };
@@ -529,9 +791,15 @@ export class ReportsService {
 
   private async buildDeliveryOperationsSummary(where: Record<string, unknown>) {
     const [pending, inRoute, delivered, incident] = await Promise.all([
-      this.prisma.deliveryOrder.count({ where: { ...where, status: DeliveryOrderStatus.PENDING } }),
-      this.prisma.deliveryOrder.count({ where: { ...where, status: DeliveryOrderStatus.IN_ROUTE } }),
-      this.prisma.deliveryOrder.count({ where: { ...where, status: DeliveryOrderStatus.DELIVERED } }),
+      this.prisma.deliveryOrder.count({
+        where: { ...where, status: DeliveryOrderStatus.PENDING },
+      }),
+      this.prisma.deliveryOrder.count({
+        where: { ...where, status: DeliveryOrderStatus.IN_ROUTE },
+      }),
+      this.prisma.deliveryOrder.count({
+        where: { ...where, status: DeliveryOrderStatus.DELIVERED },
+      }),
       this.prisma.deliveryOrder.count({
         where: {
           ...where,
@@ -549,7 +817,10 @@ export class ReportsService {
     return { pending, inRoute, delivered, incident };
   }
 
-  private buildDeliveryRouteScope(query: DeliveryOperationsReportQueryDto, user: ReportUser) {
+  private buildDeliveryRouteScope(
+    query: DeliveryOperationsReportQueryDto,
+    user: ReportUser,
+  ) {
     const driverId = user.role === 'DRIVER' ? user.id : query.driverId;
     const routeFilters = {
       ...(driverId ? { driverId } : {}),
@@ -562,7 +833,10 @@ export class ReportsService {
     };
   }
 
-  private buildPaymentRouteScope(query: DeliveryOperationsReportQueryDto, user: ReportUser) {
+  private buildPaymentRouteScope(
+    query: DeliveryOperationsReportQueryDto,
+    user: ReportUser,
+  ) {
     const driverId = user.role === 'DRIVER' ? user.id : query.driverId;
     const routeFilters = {
       ...(driverId ? { driverId } : {}),
@@ -575,8 +849,13 @@ export class ReportsService {
     };
   }
 
-  private toInventoryByLocationItem(balance: InventoryBalanceRecord, lastMovements: Map<string, Date>) {
-    const lastMovementAt = lastMovements.get(this.inventoryPairKey(balance.productId, balance.locationId));
+  private toInventoryByLocationItem(
+    balance: InventoryBalanceRecord,
+    lastMovements: Map<string, Date>,
+  ) {
+    const lastMovementAt = lastMovements.get(
+      this.inventoryPairKey(balance.productId, balance.locationId),
+    );
 
     return {
       locationId: balance.locationId,
@@ -599,7 +878,11 @@ export class ReportsService {
   }
 
   private activeReceivablePayments(receivable: ReceivableRecord) {
-    return (receivable.payments ?? []).filter((payment) => payment.status !== PaymentStatus.CANCELLED && payment.accountReceivableId !== null);
+    return (receivable.payments ?? []).filter(
+      (payment) =>
+        payment.status !== PaymentStatus.CANCELLED &&
+        payment.accountReceivableId !== null,
+    );
   }
 
   private toReceivableReportItem(receivable: ReceivableRecord) {
@@ -611,58 +894,78 @@ export class ReportsService {
       saleNumber: receivable.sale?.saleNumber ?? null,
       dueDate: receivable.dueDate?.toISOString() ?? null,
       physicalFolio: receivable.physicalDocumentFolio ?? null,
-      originalAmount: this.toNumber(receivable.originalAmount),
-      outstandingAmount: this.toNumber(receivable.outstandingAmount),
+      originalAmount: toMoneyString(receivable.originalAmount),
+      outstandingAmount: toMoneyString(receivable.outstandingAmount),
       status: receivable.status ?? null,
       agingStatus: receivable.agingStatus ?? null,
     };
   }
 
   private groupReceivablesByCustomer(receivables: ReceivableRecord[]) {
-    const grouped = new Map<string, {
-      customerId: string | null;
-      customerName: string | null;
-      creditStatus: string | null;
-      invoicedBalance: number;
-      paidBalance: number;
-      finalBalance: number;
-      overdueBalance: number;
-      dueSoonBalance: number;
-      lastPaymentAt: string | null;
-    }>();
+    const grouped = new Map<
+      string,
+      {
+        customerId: string | null;
+        customerName: string | null;
+        creditStatus: string | null;
+        invoicedBalance: string;
+        paidBalance: string;
+        finalBalance: string;
+        overdueBalance: string;
+        dueSoonBalance: string;
+        lastPaymentAt: string | null;
+      }
+    >();
 
     for (const receivable of receivables) {
-      const customerId = receivable.customer?.id ?? receivable.customerId ?? null;
+      const customerId =
+        receivable.customer?.id ?? receivable.customerId ?? null;
       const key = customerId ?? 'unknown';
       const current = grouped.get(key) ?? {
         customerId,
         customerName: receivable.customer?.name ?? null,
         creditStatus: receivable.customer?.creditStatus ?? null,
-        invoicedBalance: 0,
-        paidBalance: 0,
-        finalBalance: 0,
-        overdueBalance: 0,
-        dueSoonBalance: 0,
+        invoicedBalance: '0.00',
+        paidBalance: '0.00',
+        finalBalance: '0.00',
+        overdueBalance: '0.00',
+        dueSoonBalance: '0.00',
         lastPaymentAt: null,
       };
-      const originalAmount = this.toNumber(receivable.originalAmount);
-      const outstandingAmount = this.toNumber(receivable.outstandingAmount);
-      const paidAmount = this.sumPayments(this.activeReceivablePayments(receivable));
+      const originalAmount = Money.from(receivable.originalAmount);
+      const outstandingAmount = Money.from(receivable.outstandingAmount);
+      const paidAmount = this.sumPayments(
+        this.activeReceivablePayments(receivable),
+      );
       const lastPayment = this.activeReceivablePayments(receivable)
         .map((payment) => payment.paidAt)
         .filter((date): date is Date => date instanceof Date)
         .sort((a, b) => b.getTime() - a.getTime())[0];
 
-      current.invoicedBalance = this.roundMoney(current.invoicedBalance + originalAmount);
-      current.paidBalance = this.roundMoney(current.paidBalance + paidAmount);
-      current.finalBalance = this.roundMoney(current.finalBalance + outstandingAmount);
+      current.invoicedBalance = Money.from(current.invoicedBalance)
+        .add(originalAmount)
+        .toString();
+      current.paidBalance = Money.from(current.paidBalance)
+        .add(paidAmount)
+        .toString();
+      current.finalBalance = Money.from(current.finalBalance)
+        .add(outstandingAmount)
+        .toString();
       if (receivable.agingStatus === AgingStatus.OVERDUE) {
-        current.overdueBalance = this.roundMoney(current.overdueBalance + outstandingAmount);
+        current.overdueBalance = Money.from(current.overdueBalance)
+          .add(outstandingAmount)
+          .toString();
       }
       if (receivable.agingStatus === AgingStatus.DUE_SOON) {
-        current.dueSoonBalance = this.roundMoney(current.dueSoonBalance + outstandingAmount);
+        current.dueSoonBalance = Money.from(current.dueSoonBalance)
+          .add(outstandingAmount)
+          .toString();
       }
-      if (lastPayment && (!current.lastPaymentAt || lastPayment.toISOString() > current.lastPaymentAt)) {
+      if (
+        lastPayment &&
+        (!current.lastPaymentAt ||
+          lastPayment.toISOString() > current.lastPaymentAt)
+      ) {
         current.lastPaymentAt = lastPayment.toISOString();
       }
       grouped.set(key, current);
@@ -675,7 +978,10 @@ export class ReportsService {
     const grouped = new Map<string, { evidenceType: string; count: number }>();
 
     for (const item of evidence) {
-      const current = grouped.get(item.type) ?? { evidenceType: item.type, count: 0 };
+      const current = grouped.get(item.type) ?? {
+        evidenceType: item.type,
+        count: 0,
+      };
       current.count += 1;
       grouped.set(item.type, current);
     }
@@ -684,7 +990,17 @@ export class ReportsService {
   }
 
   private groupRouteCollections(payments: PaymentRecord[]) {
-    const grouped = new Map<string, { routeId: string | null; routeName: string | null; paymentMethod: string; collectionPass: number | null; amount: number; count: number }>();
+    const grouped = new Map<
+      string,
+      {
+        routeId: string | null;
+        routeName: string | null;
+        paymentMethod: string;
+        collectionPass: number | null;
+        amount: string;
+        count: number;
+      }
+    >();
 
     for (const payment of payments) {
       const routeId = payment.route?.id ?? payment.routeId ?? null;
@@ -695,10 +1011,12 @@ export class ReportsService {
         routeName: payment.route?.name ?? null,
         paymentMethod: payment.paymentMethod,
         collectionPass,
-        amount: 0,
+        amount: '0.00',
         count: 0,
       };
-      current.amount = this.roundMoney(current.amount + this.toNumber(payment.amount));
+      current.amount = Money.from(current.amount)
+        .add(payment.amount)
+        .toString();
       current.count += 1;
       grouped.set(key, current);
     }
@@ -708,9 +1026,16 @@ export class ReportsService {
 
   private summarizeSettlements(settlements: RouteSettlementRecord[]) {
     return {
-      open: settlements.filter((settlement) => settlement.status === RouteSettlementStatus.OPEN).length,
-      closed: settlements.filter((settlement) => settlement.status === RouteSettlementStatus.CLOSED).length,
-      reviewRequired: settlements.filter((settlement) => settlement.status === RouteSettlementStatus.REVIEW_REQUIRED).length,
+      open: settlements.filter(
+        (settlement) => settlement.status === RouteSettlementStatus.OPEN,
+      ).length,
+      closed: settlements.filter(
+        (settlement) => settlement.status === RouteSettlementStatus.CLOSED,
+      ).length,
+      reviewRequired: settlements.filter(
+        (settlement) =>
+          settlement.status === RouteSettlementStatus.REVIEW_REQUIRED,
+      ).length,
     };
   }
 
@@ -726,18 +1051,28 @@ export class ReportsService {
     };
   }
 
-  private async findLowStockBalances(query: Pick<InventoryLowStockReportQueryDto, 'locationId' | 'categoryId' | 'productId' | 'page' | 'limit'>): Promise<InventoryBalanceRecord[]> {
-    const balances = await this.prisma.inventoryBalance.findMany({
+  private async findLowStockBalances(
+    query: Pick<
+      InventoryLowStockReportQueryDto,
+      'locationId' | 'categoryId' | 'productId' | 'page' | 'limit'
+    >,
+  ): Promise<InventoryBalanceRecord[]> {
+    const balances = (await this.prisma.inventoryBalance.findMany({
       where: {
         ...(query.locationId ? { locationId: query.locationId } : {}),
         ...(query.productId ? { productId: query.productId } : {}),
-        ...(query.categoryId ? { product: { categoryId: query.categoryId } } : {}),
+        ...(query.categoryId
+          ? { product: { categoryId: query.categoryId } }
+          : {}),
       },
       include: { product: true, location: true },
       orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
-    }) as InventoryBalanceRecord[];
+    })) as InventoryBalanceRecord[];
 
-    return this.paginateItems(balances.filter((balance) => this.isLowStock(balance)), query);
+    return this.paginateItems(
+      balances.filter((balance) => this.isLowStock(balance)),
+      query,
+    );
   }
 
   private buildPagination(query: { page?: number; limit?: number }) {
@@ -750,7 +1085,10 @@ export class ReportsService {
     };
   }
 
-  private paginateItems<T>(items: T[], query: { page?: number; limit?: number }) {
+  private paginateItems<T>(
+    items: T[],
+    query: { page?: number; limit?: number },
+  ) {
     if (!query.limit) {
       return items;
     }
@@ -759,7 +1097,11 @@ export class ReportsService {
     return items.slice(start, start + query.limit);
   }
 
-  private applySalesScope(where: Record<string, unknown>, user: ReportUser, requestedUserId?: string) {
+  private applySalesScope(
+    where: Record<string, unknown>,
+    user: ReportUser,
+    requestedUserId?: string,
+  ) {
     if (user.role === 'SELLER') {
       return { ...where, userId: user.id };
     }
@@ -771,9 +1113,18 @@ export class ReportsService {
     return where;
   }
 
-  private applyDashboardPaymentScope(where: Record<string, unknown>, user: ReportUser) {
+  private applyDashboardPaymentScope(
+    where: Record<string, unknown>,
+    user: ReportUser,
+  ) {
     if (user.role === 'COLLECTIONS') {
-      return { ...where, OR: [{ accountReceivableId: { not: null } }, { routeId: { not: null } }] };
+      return {
+        ...where,
+        OR: [
+          { accountReceivableId: { not: null } },
+          { routeId: { not: null } },
+        ],
+      };
     }
 
     return where;
@@ -784,10 +1135,16 @@ export class ReportsService {
       return payments;
     }
 
-    return payments.filter((payment) => payment.accountReceivableId || payment.routeId);
+    return payments.filter(
+      (payment) => payment.accountReceivableId || payment.routeId,
+    );
   }
 
-  private applyPaymentScope(where: Record<string, unknown>, user: ReportUser, requestedUserId?: string) {
+  private applyPaymentScope(
+    where: Record<string, unknown>,
+    user: ReportUser,
+    requestedUserId?: string,
+  ) {
     if (user.role === 'SELLER') {
       return { ...where, userId: user.id };
     }
@@ -836,8 +1193,16 @@ export class ReportsService {
   }
 
   private startOfUtcDay(value: string) {
-    const source = new Date(value.includes('T') ? value : `${value}T00:00:00.000Z`);
-    return new Date(Date.UTC(source.getUTCFullYear(), source.getUTCMonth(), source.getUTCDate()));
+    const source = new Date(
+      value.includes('T') ? value : `${value}T00:00:00.000Z`,
+    );
+    return new Date(
+      Date.UTC(
+        source.getUTCFullYear(),
+        source.getUTCMonth(),
+        source.getUTCDate(),
+      ),
+    );
   }
 
   private summarizeSalesToday(sales: SaleRecord[]) {
@@ -849,12 +1214,21 @@ export class ReportsService {
     };
   }
 
-  private sumSalesByPaymentType(sales: SaleRecord[], paymentType: SalePaymentType) {
-    return this.sumValues(sales.filter((sale) => sale.paymentType === paymentType).map((sale) => sale.total));
+  private sumSalesByPaymentType(
+    sales: SaleRecord[],
+    paymentType: SalePaymentType,
+  ) {
+    return this.sumValues(
+      sales
+        .filter((sale) => sale.paymentType === paymentType)
+        .map((sale) => sale.total),
+    );
   }
 
   private activePayments(sale: SaleRecord) {
-    return (sale.payments ?? []).filter((payment) => payment.status !== PaymentStatus.CANCELLED);
+    return (sale.payments ?? []).filter(
+      (payment) => payment.status !== PaymentStatus.CANCELLED,
+    );
   }
 
   private toSalesDailyItem(sale: SaleRecord) {
@@ -868,10 +1242,14 @@ export class ReportsService {
       locationName: sale.location?.name ?? null,
       paymentType: sale.paymentType,
       collectionStatus: sale.collectionStatus ?? null,
-      paymentMethods: [...new Set(this.activePayments(sale).map((payment) => payment.paymentMethod))],
+      paymentMethods: [
+        ...new Set(
+          this.activePayments(sale).map((payment) => payment.paymentMethod),
+        ),
+      ],
       documentType: sale.documentType ?? null,
       physicalFolio: sale.physicalFolio ?? null,
-      total: this.toNumber(sale.total),
+      total: toMoneyString(sale.total),
     };
   }
 
@@ -892,36 +1270,58 @@ export class ReportsService {
   }
 
   private isLowStock(balance: InventoryBalanceRecord) {
-    return this.toNumber(balance.quantityKg) < this.toNumber(balance.minQuantityKg)
-      || (balance.quantityPieces ?? 0) < (balance.minQuantityPieces ?? 0);
+    return (
+      this.toNumber(balance.quantityKg) <
+        this.toNumber(balance.minQuantityKg) ||
+      (balance.quantityPieces ?? 0) < (balance.minQuantityPieces ?? 0)
+    );
   }
 
   private buildAgingSummary(sales: SaleRecord[]) {
-    const summary = new Map<string, { agingStatus: string; count: number; outstandingAmount: number }>();
+    const summary = new Map<
+      string,
+      { agingStatus: string; count: number; outstandingAmount: string }
+    >();
 
     for (const sale of sales) {
       const agingStatus = sale.accountReceivable?.agingStatus;
       if (!agingStatus) continue;
 
-      const current = summary.get(agingStatus) ?? { agingStatus, count: 0, outstandingAmount: 0 };
+      const current = summary.get(agingStatus) ?? {
+        agingStatus,
+        count: 0,
+        outstandingAmount: '0.00',
+      };
       current.count += 1;
-      current.outstandingAmount = this.roundMoney(current.outstandingAmount + this.toNumber(sale.accountReceivable?.outstandingAmount ?? sale.total));
+      current.outstandingAmount = Money.from(current.outstandingAmount)
+        .add(sale.accountReceivable?.outstandingAmount ?? sale.total)
+        .toString();
       summary.set(agingStatus, current);
     }
 
     return [...summary.values()];
   }
 
-  private groupSalesBy(sales: SaleRecord[], field: keyof SaleRecord, label: string) {
+  private groupSalesBy(
+    sales: SaleRecord[],
+    field: keyof SaleRecord,
+    label: string,
+  ) {
     const grouped = new Map<string, { [key: string]: string | number }>();
 
     for (const sale of sales) {
       const rawKey = sale[field];
       if (!rawKey) continue;
-      const key = String(rawKey);
-      const current = grouped.get(key) ?? { [label]: key, count: 0, amount: 0 };
+      const key = stringifyValue(rawKey);
+      const current = grouped.get(key) ?? {
+        [label]: key,
+        count: 0,
+        amount: '0.00',
+      };
       current.count = Number(current.count) + 1;
-      current.amount = this.roundMoney(Number(current.amount) + this.toNumber(sale.total));
+      current.amount = Money.from(String(current.amount))
+        .add(sale.total)
+        .toString();
       grouped.set(key, current);
     }
 
@@ -929,14 +1329,27 @@ export class ReportsService {
   }
 
   private groupBySeller(sales: SaleRecord[]) {
-    const grouped = new Map<string, { sellerId: string | null; sellerName: string | null; count: number; total: number }>();
+    const grouped = new Map<
+      string,
+      {
+        sellerId: string | null;
+        sellerName: string | null;
+        count: number;
+        total: string;
+      }
+    >();
 
     for (const sale of sales) {
       const sellerId = sale.user?.id ?? sale.userId ?? null;
       const key = sellerId ?? 'unknown';
-      const current = grouped.get(key) ?? { sellerId, sellerName: sale.user?.name ?? null, count: 0, total: 0 };
+      const current = grouped.get(key) ?? {
+        sellerId,
+        sellerName: sale.user?.name ?? null,
+        count: 0,
+        total: '0.00',
+      };
       current.count += 1;
-      current.total = this.roundMoney(current.total + this.toNumber(sale.total));
+      current.total = Money.from(current.total).add(sale.total).toString();
       grouped.set(key, current);
     }
 
@@ -944,25 +1357,61 @@ export class ReportsService {
   }
 
   private groupSellerClosing(sales: SaleRecord[], payments: PaymentRecord[]) {
-    const grouped = new Map<string, { sellerId: string | null; sellerName: string | null; cashSales: number; creditSales: number; collections: number; routeCollections: number }>();
+    const grouped = new Map<
+      string,
+      {
+        sellerId: string | null;
+        sellerName: string | null;
+        cashSales: string;
+        creditSales: string;
+        collections: string;
+        routeCollections: string;
+      }
+    >();
 
     for (const sale of sales) {
       const sellerId = sale.user?.id ?? sale.userId ?? null;
       const key = sellerId ?? 'unknown';
-      const current = grouped.get(key) ?? { sellerId, sellerName: sale.user?.name ?? null, cashSales: 0, creditSales: 0, collections: 0, routeCollections: 0 };
-      if (sale.paymentType === SalePaymentType.CASH_SALE) current.cashSales = this.roundMoney(current.cashSales + this.toNumber(sale.total));
-      if (sale.paymentType === SalePaymentType.CREDIT_SALE) current.creditSales = this.roundMoney(current.creditSales + this.toNumber(sale.total));
+      const current = grouped.get(key) ?? {
+        sellerId,
+        sellerName: sale.user?.name ?? null,
+        cashSales: '0.00',
+        creditSales: '0.00',
+        collections: '0.00',
+        routeCollections: '0.00',
+      };
+      if (sale.paymentType === SalePaymentType.CASH_SALE)
+        current.cashSales = Money.from(current.cashSales)
+          .add(sale.total)
+          .toString();
+      if (sale.paymentType === SalePaymentType.CREDIT_SALE)
+        current.creditSales = Money.from(current.creditSales)
+          .add(sale.total)
+          .toString();
       grouped.set(key, current);
     }
 
-    for (const payment of payments.filter((item) => item.accountReceivableId || item.routeId)) {
+    for (const payment of payments.filter(
+      (item) => item.accountReceivableId || item.routeId,
+    )) {
       const sellerId = payment.userId ?? null;
       const key = sellerId ?? 'unknown';
-      const current = grouped.get(key) ?? { sellerId, sellerName: null, cashSales: 0, creditSales: 0, collections: 0, routeCollections: 0 };
+      const current = grouped.get(key) ?? {
+        sellerId,
+        sellerName: null,
+        cashSales: '0.00',
+        creditSales: '0.00',
+        collections: '0.00',
+        routeCollections: '0.00',
+      };
       if (payment.routeId) {
-        current.routeCollections = this.roundMoney(current.routeCollections + this.toNumber(payment.amount));
+        current.routeCollections = Money.from(current.routeCollections)
+          .add(payment.amount)
+          .toString();
       } else {
-        current.collections = this.roundMoney(current.collections + this.toNumber(payment.amount));
+        current.collections = Money.from(current.collections)
+          .add(payment.amount)
+          .toString();
       }
       grouped.set(key, current);
     }
@@ -970,15 +1419,24 @@ export class ReportsService {
     return [...grouped.values()];
   }
 
-  private groupPayments(payments: PaymentRecord[], field: 'paymentMethod' | 'bankName') {
+  private groupPayments(
+    payments: PaymentRecord[],
+    field: 'paymentMethod' | 'bankName',
+  ) {
     const grouped = new Map<string, { [key: string]: string | number }>();
 
     for (const payment of payments) {
       const rawKey = payment[field];
       if (!rawKey) continue;
       const key = String(rawKey);
-      const current = grouped.get(key) ?? { [field]: key, amount: 0, count: 0 };
-      current.amount = this.roundMoney(Number(current.amount) + this.toNumber(payment.amount));
+      const current = grouped.get(key) ?? {
+        [field]: key,
+        amount: '0.00',
+        count: 0,
+      };
+      current.amount = Money.from(String(current.amount))
+        .add(payment.amount)
+        .toString();
       current.count = Number(current.count) + 1;
       grouped.set(key, current);
     }
@@ -990,8 +1448,8 @@ export class ReportsService {
     return this.sumValues(payments.map((payment) => payment.amount));
   }
 
-  private sumValues(values: Array<DecimalLike | number>) {
-    return this.roundMoney(values.reduce<number>((sum, value) => sum + this.toNumber(value), 0));
+  private sumValues(values: Array<DecimalLike | number | Money>) {
+    return Money.sum(values).toString();
   }
 
   private toNumber(value: DecimalLike): number {
@@ -1001,17 +1459,20 @@ export class ReportsService {
     return value.toNumber();
   }
 
-  private roundMoney(value: number) {
-    return Math.round((value + Number.EPSILON) * 100) / 100;
-  }
-
   private buildFreshnessMeta(dates: Array<Date | undefined>): FreshnessMeta {
     const generatedAtDate = new Date();
-    const validDates = dates.filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
-    const dataAsOfDate = validDates.length > 0
-      ? new Date(Math.max(...validDates.map((date) => date.getTime())))
-      : generatedAtDate;
-    const freshnessSeconds = Math.max(0, Math.floor((generatedAtDate.getTime() - dataAsOfDate.getTime()) / 1000));
+    const validDates = dates.filter(
+      (date): date is Date =>
+        date instanceof Date && !Number.isNaN(date.getTime()),
+    );
+    const dataAsOfDate =
+      validDates.length > 0
+        ? new Date(Math.max(...validDates.map((date) => date.getTime())))
+        : generatedAtDate;
+    const freshnessSeconds = Math.max(
+      0,
+      Math.floor((generatedAtDate.getTime() - dataAsOfDate.getTime()) / 1000),
+    );
 
     return {
       generatedAt: generatedAtDate.toISOString(),

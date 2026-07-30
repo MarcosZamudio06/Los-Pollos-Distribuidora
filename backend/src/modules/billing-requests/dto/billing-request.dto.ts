@@ -1,5 +1,19 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, Min, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { BillingRequestStatus } from '@prisma/client';
 
 function trim({ value }: TransformFnParams): unknown {
@@ -20,7 +34,11 @@ export class ListBillingRequestsQueryDto {
 export class CreateBillingRequestDto {
   @Transform(trim) @IsString() @IsNotEmpty() customerId!: string;
   @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() saleId?: string;
-  @IsOptional() @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => BillingRequestDocumentDto)
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => BillingRequestDocumentDto)
   documents?: BillingRequestDocumentDto[];
   @IsOptional() @Transform(trim) @IsString() retryOfBillingRequestId?: string;
   @Transform(trim) @IsString() @IsNotEmpty() reason!: string;
@@ -29,11 +47,24 @@ export class CreateBillingRequestDto {
 
 export class BillingRequestDocumentDto {
   @Transform(trim) @IsString() @IsNotEmpty() saleDocumentId!: string;
-  @IsOptional() @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => BillingRequestItemDto)
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => BillingRequestItemDto)
   items?: BillingRequestItemDto[];
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) requestedSubtotal!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) requestedTax!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) requestedTotal!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  requestedSubtotal!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  requestedTax!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  requestedTotal!: string;
 }
 
 export class BillingRequestItemDto {
@@ -52,22 +83,42 @@ export class CancelBillingRequestDto {
   @IsOptional() @Transform(trim) @IsString() notes?: string;
 }
 
-
 export class ReviewBillingRequestDto extends CancelBillingRequestDto {}
 
 export class InvoiceSaleItemApplicationDto {
   @Transform(trim) @IsString() @IsNotEmpty() saleItemId!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) subtotalApplied!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) taxApplied!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) totalApplied!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  subtotalApplied!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  taxApplied!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  totalApplied!: string;
 }
 
 export class InvoiceSaleDocumentApplicationDto {
   @Transform(trim) @IsString() @IsNotEmpty() saleDocumentId!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) subtotalApplied!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) taxApplied!: string;
-  @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) totalApplied!: string;
-  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => InvoiceSaleItemApplicationDto)
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  subtotalApplied!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  taxApplied!: string;
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/)
+  totalApplied!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceSaleItemApplicationDto)
   items!: InvoiceSaleItemApplicationDto[];
 }
 
@@ -81,15 +132,30 @@ export class ExternalInvoiceDto {
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) discount!: string;
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) tax!: string;
   @Transform(trim) @IsString() @Matches(/^\d+(\.\d{1,2})?$/) total!: string;
-  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() substitutesInvoiceId?: string;
-  @ValidateIf((invoice: ExternalInvoiceDto) => Boolean(invoice.substitutesInvoiceId))
-  @Transform(trim) @IsString() @IsNotEmpty() substitutionReason?: string;
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  substitutesInvoiceId?: string;
+  @ValidateIf((invoice: ExternalInvoiceDto) =>
+    Boolean(invoice.substitutesInvoiceId),
+  )
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  substitutionReason?: string;
 }
 
 export class LinkInvoiceDto {
   @Type(() => Number) @IsInt() @Min(1) expectedVersion!: number;
   @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() invoiceId?: string;
-  @IsOptional() @ValidateNested() @Type(() => ExternalInvoiceDto) invoice?: ExternalInvoiceDto;
-  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => InvoiceSaleDocumentApplicationDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ExternalInvoiceDto)
+  invoice?: ExternalInvoiceDto;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceSaleDocumentApplicationDto)
   applications!: InvoiceSaleDocumentApplicationDto[];
 }

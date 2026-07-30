@@ -37,6 +37,7 @@ Respuesta `data`:
 - `routeCollectionsPendingSettlement`.
 - `topProducts[]`.
 - `generatedAt`.
+- Todos los campos de importe se serializan como strings monetarios canónicos con dos decimales; conteos, porcentajes visuales y cantidades físicas conservan sus tipos numéricos propios.
 
 Validaciones:
 
@@ -79,6 +80,7 @@ Validaciones:
 - El filtro singular `paymentMethod` incluye una venta cuando al menos uno de sus `Payment` no cancelados usa el método solicitado.
 - `paymentMethods[]` debe contener los métodos distintos de los pagos no cancelados relacionados; una venta sin pagos devuelve una lista vacía.
 - `byPaymentMethod[]` agrega `Payment.amount` por método y nunca suma `Sale.total`, evitando duplicar una venta con múltiples pagos.
+- Los agregados monetarios se calculan con decimal exacto y se serializan como strings con dos decimales.
 - Basarse solo en ventas confirmadas, excluyendo o separando canceladas.
 
 ## GET /api/reports/inventory-low-stock

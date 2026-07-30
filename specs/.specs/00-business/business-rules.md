@@ -37,6 +37,8 @@
 - Una venta debe contener al menos un producto.
 - El total de venta se calcula con la suma de subtotales por producto.
 - Cada subtotal se calcula como cantidad multiplicada por precio unitario.
+- Los importes monetarios se calculan con decimal exacto, se redondean con `HALF_UP` en el límite monetario definido y se serializan como strings con dos decimales.
+- Ningún servicio ni cliente puede usar `number` para sumar, multiplicar o comparar dinero.
 - Una venta confirmada debe descontar inventario.
 - Una venta confirmada debe descontar inventario desde la ubicación operativa asociada a la venta.
 - Una venta cancelada debe regresar inventario si ya había sido descontado.

@@ -18,20 +18,25 @@ describe('RemediationImpactAnalyzer', () => {
   }
 
   it('blocks monetary edits to cancelled sales and closed accounting periods or documents', () => {
-    const blockers = analyzer.analyze(sale({
-      status: 'CANCELLED',
-      pointOfSaleDailyClose: { status: 'CLOSED' },
-      cashShift: { status: 'CLOSED' },
-      route: { settlement: { status: 'CLOSED' } },
-      documents: [{
-        status: 'ISSUED',
-        customerSnapshot: { name: 'Customer' },
-        productSnapshot: null,
-        priceSnapshot: null,
-        billingRequestDocuments: [],
-        invoiceDocuments: [],
-      }],
-    }), '900.00');
+    const blockers = analyzer.analyze(
+      sale({
+        status: 'CANCELLED',
+        pointOfSaleDailyClose: { status: 'CLOSED' },
+        cashShift: { status: 'CLOSED' },
+        route: { settlement: { status: 'CLOSED' } },
+        documents: [
+          {
+            status: 'ISSUED',
+            customerSnapshot: { name: 'Customer' },
+            productSnapshot: null,
+            priceSnapshot: null,
+            billingRequestDocuments: [],
+            invoiceDocuments: [],
+          },
+        ],
+      }),
+      '900.00',
+    );
 
     expect(blockers.map((blocker) => blocker.code)).toEqual([
       'SALE_CANCELLED',
@@ -43,30 +48,39 @@ describe('RemediationImpactAnalyzer', () => {
   });
 
   it('blocks incompatible payments, receivables, active requests, reservations and invoice applications', () => {
-    const blockers = analyzer.analyze(sale({
-      payments: [{ status: 'APPLIED', amount: '1000.00' }],
-      accountReceivable: {
-        originalAmount: '400.00',
-        outstandingAmount: '350.00',
-        payments: [{ status: 'APPLIED', amount: '100.00' }],
-      },
-      documents: [{
-        status: 'DRAFT',
-        customerSnapshot: null,
-        productSnapshot: null,
-        priceSnapshot: null,
-        billingRequestDocuments: [{
-          reversedAt: null,
-          billingRequest: { status: 'APPROVED' },
-          requestedItems: [{ reversedAt: null }],
-        }],
-        invoiceDocuments: [{
-          reversedAt: null,
-          invoice: { status: 'SUBSTITUTED' },
-          itemApplications: [{ reversedAt: null }],
-        }],
-      }],
-    }), '900.00');
+    const blockers = analyzer.analyze(
+      sale({
+        payments: [{ status: 'APPLIED', amount: '1000.00' }],
+        accountReceivable: {
+          originalAmount: '400.00',
+          outstandingAmount: '350.00',
+          payments: [{ status: 'APPLIED', amount: '100.00' }],
+        },
+        documents: [
+          {
+            status: 'DRAFT',
+            customerSnapshot: null,
+            productSnapshot: null,
+            priceSnapshot: null,
+            billingRequestDocuments: [
+              {
+                reversedAt: null,
+                billingRequest: { status: 'APPROVED' },
+                requestedItems: [{ reversedAt: null }],
+              },
+            ],
+            invoiceDocuments: [
+              {
+                reversedAt: null,
+                invoice: { status: 'SUBSTITUTED' },
+                itemApplications: [{ reversedAt: null }],
+              },
+            ],
+          },
+        ],
+      }),
+      '900.00',
+    );
 
     expect(blockers.map((blocker) => blocker.code)).toEqual([
       'APPLIED_PAYMENT_INCOMPATIBLE',
@@ -80,38 +94,50 @@ describe('RemediationImpactAnalyzer', () => {
   });
 
   it('allows a compatible open credit sale without billing history', () => {
-    const blockers = analyzer.analyze(sale({
-      payments: [{ status: 'APPLIED', amount: '100.00' }],
-      accountReceivable: {
-        originalAmount: '800.00',
-        outstandingAmount: '750.00',
-        payments: [{ status: 'APPLIED', amount: '50.00' }],
-      },
-    }), '900.00');
+    const blockers = analyzer.analyze(
+      sale({
+        payments: [{ status: 'APPLIED', amount: '100.00' }],
+        accountReceivable: {
+          originalAmount: '800.00',
+          outstandingAmount: '750.00',
+          payments: [{ status: 'APPLIED', amount: '50.00' }],
+        },
+      }),
+      '900.00',
+    );
 
     expect(blockers).toEqual([]);
   });
 
   it('does not count a receivable payment twice when it also references the sale', () => {
-    const blockers = analyzer.analyze(sale({
-      payments: [
-        { status: 'APPLIED', amount: '100.00', accountReceivableId: null },
-        { status: 'APPLIED', amount: '50.00', accountReceivableId: 'ar-1' },
-      ],
-      accountReceivable: {
-        originalAmount: '800.00', outstandingAmount: '750.00',
-        payments: [{ status: 'APPLIED', amount: '50.00', accountReceivableId: 'ar-1' }],
-      },
-    }), '900.00');
+    const blockers = analyzer.analyze(
+      sale({
+        payments: [
+          { status: 'APPLIED', amount: '100.00', accountReceivableId: null },
+          { status: 'APPLIED', amount: '50.00', accountReceivableId: 'ar-1' },
+        ],
+        accountReceivable: {
+          originalAmount: '800.00',
+          outstandingAmount: '750.00',
+          payments: [
+            { status: 'APPLIED', amount: '50.00', accountReceivableId: 'ar-1' },
+          ],
+        },
+      }),
+      '900.00',
+    );
 
     expect(blockers).toEqual([]);
   });
 
   it('requires applied cash payments to equal the corrected total', () => {
-    const blockers = analyzer.analyze(sale({
-      paymentType: 'CASH_SALE',
-      payments: [{ status: 'APPLIED', amount: '850.00' }],
-    }), '900.00');
+    const blockers = analyzer.analyze(
+      sale({
+        paymentType: 'CASH_SALE',
+        payments: [{ status: 'APPLIED', amount: '850.00' }],
+      }),
+      '900.00',
+    );
 
     expect(blockers).toEqual([
       expect.objectContaining({ code: 'APPLIED_PAYMENT_INCOMPATIBLE' }),

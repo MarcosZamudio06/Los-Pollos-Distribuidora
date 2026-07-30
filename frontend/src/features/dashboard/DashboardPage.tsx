@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Badge, Button, Card, ChartContainer, type ChartConfig } from '../../components/ui'
 import { canAccessWithRole, getKnownRole, getRoleLabel, ROUTE_ACCESS_ROLES, type KnownRole } from '../../components/layout/routeAccess'
 import { ApiClientError } from '../../lib/api'
-import { formatMoney } from '../../lib/money'
+import { formatMoney, Money } from '../../lib/money'
 import { useAuth } from '../auth'
 import { useDashboardReport } from '../reportes'
 import type { DashboardDeliverySummary, DashboardLowStockItem, DashboardReport, DashboardReportFilters, DashboardTopProduct } from '../reportes'
@@ -31,7 +31,7 @@ const dateFormatter = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', ti
 type DashboardRole = KnownRole | null
 
 type ChartItem = {
-  amount: number
+  amount: string | number
   label: string
 }
 
@@ -98,14 +98,14 @@ function isDashboardEmpty(data?: DashboardReport) {
   if (!data) return true
   return (
     data.salesToday.count === 0 &&
-    data.collectionsToday === 0 &&
+    Money.from(data.collectionsToday).isZero() &&
     data.overdueReceivables.count === 0 &&
     data.lowStockByLocation.length === 0 &&
     data.deliverySummary.pending === 0 &&
     data.deliverySummary.inRoute === 0 &&
     data.deliverySummary.delivered === 0 &&
     data.deliverySummary.incident === 0 &&
-    data.routeCollectionsPendingSettlement === 0 &&
+    Money.from(data.routeCollectionsPendingSettlement).isZero() &&
     data.topProducts.length === 0
   )
 }
@@ -147,10 +147,12 @@ function SimpleBarChart({ items, money = true }: { items: ChartItem[]; money?: b
     return <EmptyState description="El contrato actual de reportes no devolvió datos para esta gráfica." />
   }
 
+  const chartItems = items.map((item) => ({ ...item, amount: Number(item.amount) }))
+
   return (
     <ChartContainer config={chartConfig}>
       <ResponsiveContainer height={224} width="100%">
-        <RechartsBarChart accessibilityLayer data={items.slice(0, 6)} layout="vertical" margin={{ bottom: 8, left: 8, right: 20, top: 8 }}>
+        <RechartsBarChart accessibilityLayer data={chartItems.slice(0, 6)} layout="vertical" margin={{ bottom: 8, left: 8, right: 20, top: 8 }}>
           <CartesianGrid horizontal={false} strokeDasharray="4 4" />
           <XAxis axisLine={false} tickFormatter={(value) => (money ? formatMoney(Number(value)) : formatQuantity(Number(value)))} tickLine={false} type="number" />
           <YAxis axisLine={false} dataKey="label" tickLine={false} type="category" width={118} />
@@ -252,7 +254,7 @@ function RoleKpis({ data, role }: { data: DashboardReport; role: DashboardRole }
       {capabilities.sales && (
         <>
           <KpiCard action={getAction(role, '/sales/history', 'Ver ventas')} detail={`${data.salesToday.count} ventas · contado ${formatMoney(data.salesToday.cash)} · crédito ${formatMoney(data.salesToday.credit)}`} icon={BadgeDollarSign} label="Ventas del día" tone="green" value={formatMoney(data.salesToday.total)} />
-          <KpiCard detail="Promedio calculado con ventas del día disponibles." icon={ReceiptText} label="Ticket promedio" tone="amber" value={formatMoney(data.salesToday.count > 0 ? data.salesToday.total / data.salesToday.count : 0)} />
+          <KpiCard detail="Promedio calculado con ventas del día disponibles." icon={ReceiptText} label="Ticket promedio" tone="amber" value={formatMoney(data.salesToday.count > 0 ? Money.from(data.salesToday.total).divide(String(data.salesToday.count)) : Money.zero())} />
         </>
       )}
       {(capabilities.deliveryGlobal || role === 'ADMIN') && <KpiCard action={getAction(role, '/delivery-routes', 'Ver reparto')} detail="Pedidos pendientes y en ruta dentro del alcance autorizado." icon={Truck} label="Pedidos por surtir" tone="blue" value={formatQuantity(data.deliverySummary.pending + data.deliverySummary.inRoute)} />}
@@ -268,7 +270,7 @@ function AlertsPanel({ data, role }: { data: DashboardReport; role: DashboardRol
   const capabilities = getRoleCapabilities(role)
   const alerts = [
     capabilities.inventory && data.lowStockByLocation.length > 0 ? <AlertRow action={getAction(role, '/inventory', 'Revisar')} description="Requieren reposición o validación por ubicación operativa." key="stock" severity="red" title={`${data.lowStockByLocation.length} productos con inventario crítico`} /> : null,
-    capabilities.collections && data.overdueReceivables.balance > 0 ? <AlertRow action={getAction(role, '/accounts-receivable', 'Dar seguimiento')} description={`${data.overdueReceivables.count} cuentas vencidas necesitan seguimiento.`} key="collections" severity="amber" title="Cobranza por atender" /> : null,
+     capabilities.collections && Money.from(data.overdueReceivables.balance).isPositive() ? <AlertRow action={getAction(role, '/accounts-receivable', 'Dar seguimiento')} description={`${data.overdueReceivables.count} cuentas vencidas necesitan seguimiento.`} key="collections" severity="amber" title="Cobranza por atender" /> : null,
     (capabilities.deliveryGlobal || capabilities.driverOwnRoutes) && data.deliverySummary.incident > 0 ? <AlertRow action={capabilities.driverOwnRoutes ? getAction(role, '/my-routes', 'Ver mis rutas') : getAction(role, '/delivery-routes', 'Ver rutas')} description="Hay entregas o rutas con incidencia operativa." key="delivery" severity="red" title={`${data.deliverySummary.incident} incidencias de reparto`} /> : null,
     capabilities.sales && data.billingRequestsToday ? <AlertRow action={getAction(role, '/reports', 'Ver reportes')} description="Solicitudes administrativas registradas hoy." key="billing" severity="blue" title={`${data.billingRequestsToday} solicitudes internas`} /> : null,
   ].filter(Boolean)

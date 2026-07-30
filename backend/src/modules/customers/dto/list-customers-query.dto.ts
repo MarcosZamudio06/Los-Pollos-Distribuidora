@@ -1,10 +1,23 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { AgingStatus, CreditStatus, CustomerType } from '@prisma/client';
 
 export type CustomerAgingFilter = AgingStatus | 'LATE';
 
-const customerAgingFilters = [AgingStatus.CURRENT, AgingStatus.DUE_SOON, AgingStatus.OVERDUE, 'LATE'] as const;
+const customerAgingFilters = [
+  AgingStatus.CURRENT,
+  AgingStatus.DUE_SOON,
+  AgingStatus.OVERDUE,
+  'LATE',
+] as const;
 
 function toOptionalBoolean({ value }: TransformFnParams): unknown {
   if (value === true || value === false) return value;

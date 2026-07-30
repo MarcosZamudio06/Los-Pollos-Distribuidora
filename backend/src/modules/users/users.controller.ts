@@ -7,12 +7,10 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
+import { PERMISSIONS } from '../../common/authorization/permissions';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateUserDto,
@@ -24,8 +22,7 @@ import {
 import { UsersService } from './users.service';
 
 @Controller('users')
-@Roles('ADMIN')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePermissions(PERMISSIONS.USERS_MANAGE)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

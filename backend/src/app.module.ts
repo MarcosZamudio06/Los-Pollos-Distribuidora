@@ -4,12 +4,16 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
+import { SessionRevocationModule } from './common/session/session-revocation.module';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { validateEnvironment } from './config/env.validation';
 import { createHttpThrottlerOptions } from './config/http-throttler.config';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AccessControlModule } from './modules/access-control/access-control.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
@@ -46,8 +50,10 @@ import { HealthModule } from './modules/health/health.module';
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    SessionRevocationModule,
     HealthModule,
     AuthModule,
+    AccessControlModule,
     UsersModule,
     ProductsModule,
     CategoriesModule,
@@ -69,6 +75,10 @@ import { HealthModule } from './modules/health/health.module';
     BillingModule,
   ],
   controllers: [],
-  providers: [{ provide: APP_GUARD, useClass: HttpThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
+  ],
 })
 export class AppModule {}

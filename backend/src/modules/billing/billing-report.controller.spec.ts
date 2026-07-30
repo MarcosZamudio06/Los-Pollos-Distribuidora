@@ -5,23 +5,53 @@ import { BillingReportController } from './billing-report.controller';
 import { BillingReportService } from './billing-report.service';
 import { BillingReportQueryDto } from './dto/billing-report-query.dto';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('BillingReportController', () => {
-  const user: AuthenticatedUser = { id: 'admin-1', email: 'admin@example.com', name: 'Admin', role: 'ADMIN', mustChangePassword: false };
+  const user: AuthenticatedUser = {
+    id: 'admin-1',
+    email: 'admin@example.com',
+    name: 'Admin',
+    role: 'ADMIN',
+    mustChangePassword: false,
+  };
   const query = new BillingReportQueryDto();
   const service = {
     list: jest.fn().mockResolvedValue({ items: [] }),
     summary: jest.fn().mockResolvedValue({ totalDocuments: 0 }),
     detail: jest.fn().mockResolvedValue({ saleDocumentId: 'doc-1' }),
-    exportFile: jest.fn().mockResolvedValue({ stream: Buffer.from('csv'), contentType: 'text/csv', fileName: 'file.csv' }),
+    exportFile: jest.fn().mockResolvedValue({
+      stream: Buffer.from('csv'),
+      contentType: 'text/csv',
+      fileName: 'file.csv',
+    }),
   } as unknown as jest.Mocked<BillingReportService>;
   const controller = new BillingReportController(service);
 
   it('exposes the billing report base path and read roles', () => {
-    expect(Reflect.getMetadata(PATH_METADATA, BillingReportController)).toBe('billing/reportable-notes');
+    expect(Reflect.getMetadata(PATH_METADATA, BillingReportController)).toBe(
+      'billing/reportable-notes',
+    );
     for (const method of ['list', 'summary', 'detail'] as const) {
-      expect(Reflect.getMetadata(ROLES_KEY, BillingReportController.prototype[method])).toEqual(['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS']);
+      expect(
+        Reflect.getMetadata(
+          ROLES_KEY,
+          methodOf(BillingReportController.prototype, method),
+        ),
+      ).toEqual(['ADMIN', 'BILLING', 'SELLER', 'COLLECTIONS']);
     }
-    expect(Reflect.getMetadata(ROLES_KEY, BillingReportController.prototype.export)).toEqual(['ADMIN', 'BILLING']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(BillingReportController.prototype, 'export'),
+      ),
+    ).toEqual(['ADMIN', 'BILLING']);
   });
 
   it('delegates list, summary, detail, and export with the same filter DTO', async () => {
@@ -30,9 +60,9 @@ describe('BillingReportController', () => {
     await controller.detail('doc-1', user);
     await controller.export(query, user);
 
-    expect(service.list).toHaveBeenCalledWith(query, user);
-    expect(service.summary).toHaveBeenCalledWith(query, user);
-    expect(service.detail).toHaveBeenCalledWith('doc-1', user);
-    expect(service.exportFile).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'list')).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'summary')).toHaveBeenCalledWith(query, user);
+    expect(mockOf(service, 'detail')).toHaveBeenCalledWith('doc-1', user);
+    expect(mockOf(service, 'exportFile')).toHaveBeenCalledWith(query, user);
   });
 });

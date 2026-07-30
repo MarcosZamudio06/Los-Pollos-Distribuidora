@@ -1,7 +1,16 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { EquivalentStatus, Prisma, ProductUnit } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
-import { CreateProductEquivalenceDto, ListProductEquivalencesQueryDto, UpdateProductEquivalenceDto } from './dto';
+import {
+  CreateProductEquivalenceDto,
+  ListProductEquivalencesQueryDto,
+  UpdateProductEquivalenceDto,
+} from './dto';
 
 type DecimalLike = Prisma.Decimal | number | string;
 
@@ -29,7 +38,10 @@ type ProductEquivalenceResponse = Omit<ProductEquivalenceRecord, 'factor'> & {
 export class ProductEquivalencesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(productId: string, query: ListProductEquivalencesQueryDto = {}) {
+  async findAll(
+    productId: string,
+    query: ListProductEquivalencesQueryDto = {},
+  ) {
     await this.assertProductExists(productId);
     const records = (await this.prisma.productUnitEquivalent.findMany({
       where: {
@@ -53,7 +65,11 @@ export class ProductEquivalencesService {
     return { items: records.map((record) => this.toResponse(record)) };
   }
 
-  async create(productId: string, userId: string, dto: CreateProductEquivalenceDto) {
+  async create(
+    productId: string,
+    userId: string,
+    dto: CreateProductEquivalenceDto,
+  ) {
     await this.assertProductExists(productId);
     this.assertValidUnitPair(dto.unitFrom, dto.unitTo);
     this.assertValidDates(dto.effectiveFrom, dto.effectiveTo);
@@ -91,8 +107,14 @@ export class ProductEquivalencesService {
     const next = {
       unitFrom: dto.unitFrom ?? current.unitFrom,
       unitTo: dto.unitTo ?? current.unitTo,
-      effectiveFrom: dto.effectiveFrom !== undefined ? this.parseOptionalDate(dto.effectiveFrom) : current.effectiveFrom,
-      effectiveTo: dto.effectiveTo !== undefined ? this.parseOptionalDate(dto.effectiveTo) : current.effectiveTo,
+      effectiveFrom:
+        dto.effectiveFrom !== undefined
+          ? this.parseOptionalDate(dto.effectiveFrom)
+          : current.effectiveFrom,
+      effectiveTo:
+        dto.effectiveTo !== undefined
+          ? this.parseOptionalDate(dto.effectiveTo)
+          : current.effectiveTo,
       status: dto.status ?? current.status,
     };
     this.assertValidUnitPair(next.unitFrom, next.unitTo);
@@ -116,11 +138,19 @@ export class ProductEquivalencesService {
         ...(dto.unitFrom !== undefined ? { unitFrom: dto.unitFrom } : {}),
         ...(dto.unitTo !== undefined ? { unitTo: dto.unitTo } : {}),
         ...(dto.factor !== undefined ? { factor: dto.factor } : {}),
-        ...(dto.roundingMode !== undefined ? { roundingMode: dto.roundingMode ?? null } : {}),
-        ...(dto.effectiveFrom !== undefined ? { effectiveFrom: next.effectiveFrom } : {}),
-        ...(dto.effectiveTo !== undefined ? { effectiveTo: next.effectiveTo } : {}),
+        ...(dto.roundingMode !== undefined
+          ? { roundingMode: dto.roundingMode ?? null }
+          : {}),
+        ...(dto.effectiveFrom !== undefined
+          ? { effectiveFrom: next.effectiveFrom }
+          : {}),
+        ...(dto.effectiveTo !== undefined
+          ? { effectiveTo: next.effectiveTo }
+          : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
-        ...(current.status !== 'ACTIVE' && next.status === 'ACTIVE' ? { approvedByUserId: userId } : {}),
+        ...(current.status !== 'ACTIVE' && next.status === 'ACTIVE'
+          ? { approvedByUserId: userId }
+          : {}),
       },
     })) as ProductEquivalenceRecord;
 
@@ -156,12 +186,17 @@ export class ProductEquivalencesService {
   }
 
   private async assertProductExists(productId: string) {
-    const product = await this.prisma.product.findFirst({ where: { id: productId, isActive: true }, select: { id: true } });
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, isActive: true },
+      select: { id: true },
+    });
     if (!product) throw new NotFoundException('Product not found');
   }
 
   private async findExisting(id: string): Promise<ProductEquivalenceRecord> {
-    const record = (await this.prisma.productUnitEquivalent.findUnique({ where: { id } })) as ProductEquivalenceRecord | null;
+    const record = (await this.prisma.productUnitEquivalent.findUnique({
+      where: { id },
+    })) as ProductEquivalenceRecord | null;
     if (!record) throw new NotFoundException('Product equivalence not found');
     return record;
   }
@@ -171,26 +206,44 @@ export class ProductEquivalencesService {
       (unitFrom === 'KG' && unitTo === 'PIECE') ||
       (unitFrom === 'PIECE' && unitTo === 'KG');
     if (!allowedPair) {
-      throw new BadRequestException('Product equivalences only support KG to PIECE or PIECE to KG unit pairs');
+      throw new BadRequestException(
+        'Product equivalences only support KG to PIECE or PIECE to KG unit pairs',
+      );
     }
   }
 
-  private assertValidDates(effectiveFrom?: string | null, effectiveTo?: string | null) {
-    this.assertValidDateOrder(this.parseOptionalDate(effectiveFrom), this.parseOptionalDate(effectiveTo));
+  private assertValidDates(
+    effectiveFrom?: string | null,
+    effectiveTo?: string | null,
+  ) {
+    this.assertValidDateOrder(
+      this.parseOptionalDate(effectiveFrom),
+      this.parseOptionalDate(effectiveTo),
+    );
   }
 
-  private assertValidDateOrder(effectiveFrom: Date | null, effectiveTo: Date | null) {
+  private assertValidDateOrder(
+    effectiveFrom: Date | null,
+    effectiveTo: Date | null,
+  ) {
     if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) {
-      throw new BadRequestException('effectiveTo must be greater than or equal to effectiveFrom');
+      throw new BadRequestException(
+        'effectiveTo must be greater than or equal to effectiveFrom',
+      );
     }
   }
 
   private assertEffectiveFrom(effectiveFrom?: string | Date | null) {
-    if (!effectiveFrom) throw new BadRequestException('effectiveFrom is required for active equivalences');
+    if (!effectiveFrom)
+      throw new BadRequestException(
+        'effectiveFrom is required for active equivalences',
+      );
   }
 
-
-  private async assertHistoricalFieldsCanChange(current: ProductEquivalenceRecord, dto: UpdateProductEquivalenceDto) {
+  private async assertHistoricalFieldsCanChange(
+    current: ProductEquivalenceRecord,
+    dto: UpdateProductEquivalenceDto,
+  ) {
     const changesHistoricalField =
       dto.unitFrom !== undefined ||
       dto.unitTo !== undefined ||
@@ -208,7 +261,9 @@ export class ProductEquivalencesService {
 
     const [saleUsage, purchaseUsage] = await Promise.all([
       this.prisma.saleItem.count({ where: { unitEquivalentId: current.id } }),
-      this.prisma.purchaseItem.count({ where: { unitEquivalentId: current.id } }),
+      this.prisma.purchaseItem.count({
+        where: { unitEquivalentId: current.id },
+      }),
     ]);
 
     if (saleUsage > 0 || purchaseUsage > 0) {
@@ -218,7 +273,14 @@ export class ProductEquivalencesService {
     }
   }
 
-  private async assertNoActiveOverlap(input: { productId: string; unitFrom: ProductUnit; unitTo: ProductUnit; effectiveFrom: Date | null; effectiveTo: Date | null; excludeId?: string }) {
+  private async assertNoActiveOverlap(input: {
+    productId: string;
+    unitFrom: ProductUnit;
+    unitTo: ProductUnit;
+    effectiveFrom: Date | null;
+    effectiveTo: Date | null;
+    excludeId?: string;
+  }) {
     const overlapping = await this.prisma.productUnitEquivalent.findFirst({
       where: {
         productId: input.productId,
@@ -226,12 +288,24 @@ export class ProductEquivalencesService {
         unitTo: input.unitTo,
         status: 'ACTIVE',
         ...(input.excludeId ? { id: { not: input.excludeId } } : {}),
-        effectiveFrom: { lte: input.effectiveTo ?? new Date('9999-12-31T00:00:00.000Z') },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: input.effectiveFrom ?? new Date('0001-01-01T00:00:00.000Z') } }],
+        effectiveFrom: {
+          lte: input.effectiveTo ?? new Date('9999-12-31T00:00:00.000Z'),
+        },
+        OR: [
+          { effectiveTo: null },
+          {
+            effectiveTo: {
+              gte: input.effectiveFrom ?? new Date('0001-01-01T00:00:00.000Z'),
+            },
+          },
+        ],
       },
       select: { id: true },
     });
-    if (overlapping) throw new ConflictException('An active equivalence already applies for this product, unit pair, and period');
+    if (overlapping)
+      throw new ConflictException(
+        'An active equivalence already applies for this product, unit pair, and period',
+      );
   }
 
   private parseOptionalDate(value?: string | null): Date | null {
@@ -240,11 +314,14 @@ export class ProductEquivalencesService {
 
   private parseDate(value: string, field: string): Date {
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) throw new BadRequestException(`${field} must be a valid date`);
+    if (Number.isNaN(date.getTime()))
+      throw new BadRequestException(`${field} must be a valid date`);
     return date;
   }
 
-  private toResponse(record: ProductEquivalenceRecord): ProductEquivalenceResponse {
+  private toResponse(
+    record: ProductEquivalenceRecord,
+  ): ProductEquivalenceResponse {
     return { ...record, factor: Number(record.factor) };
   }
 }

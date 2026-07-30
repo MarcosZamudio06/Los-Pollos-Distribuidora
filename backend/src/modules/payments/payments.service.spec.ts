@@ -1,8 +1,18 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
-import { AgingStatus, CollectionStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
+import {
+  AgingStatus,
+  CollectionStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentsService } from './payments.service';
+import { CancelPaymentDto } from './dto';
 
 function money(value: string) {
   return { toString: () => value };
@@ -58,13 +68,16 @@ function createPrisma() {
     payment: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     accountReceivable: { findUnique: jest.fn(), update: jest.fn() },
     sale: { update: jest.fn().mockResolvedValue(undefined) },
-    $transaction: jest.fn(async (callback) => callback(prisma)),
+    $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
 }
 
 function createService(prisma = createPrisma()) {
-  return { service: new PaymentsService(prisma as unknown as PrismaService), prisma };
+  return {
+    service: new PaymentsService(prisma as unknown as PrismaService),
+    prisma,
+  };
 }
 
 describe('PaymentsService', () => {
@@ -73,16 +86,23 @@ describe('PaymentsService', () => {
     const { service, prisma } = createService();
 
     await expect(
-      service.cancel('payment-1', { reason: 'Pago duplicado' } as any, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-missing-version'),
+      service.cancel(
+        'payment-1',
+        { reason: 'Pago duplicado' } as unknown as CancelPaymentDto,
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-missing-version',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.payment.findFirst.mockResolvedValue(null);
-    prisma.payment.findUnique.mockResolvedValue(createPayment({
-      accountReceivable: {
-        ...createPayment().accountReceivable,
-        dueDate: new Date('2026-06-25T06:00:00.000Z'),
-      },
-    }));
+    prisma.payment.findUnique.mockResolvedValue(
+      createPayment({
+        accountReceivable: {
+          ...createPayment().accountReceivable,
+          dueDate: new Date('2026-06-25T06:00:00.000Z'),
+        },
+      }),
+    );
     prisma.payment.update.mockResolvedValue({
       ...createPayment(),
       status: PaymentStatus.CANCELLED,
@@ -115,31 +135,39 @@ describe('PaymentsService', () => {
         cancelledByUserId: 'admin-1',
         cancellationReason: 'Pago registrado por error',
       }),
-      accountReceivable: expect.objectContaining({ id: 'ar-1', outstandingAmount: '1000', status: CollectionStatus.UNPAID }),
+      accountReceivable: expect.objectContaining({
+        id: 'ar-1',
+        outstandingAmount: '1000.00',
+        status: CollectionStatus.UNPAID,
+      }),
     });
 
-    expect(prisma.payment.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'payment-1', version: 2 },
-      data: expect.objectContaining({
-        status: PaymentStatus.CANCELLED,
-        cancelledAt: expect.any(Date),
-        cancelledByUserId: 'admin-1',
-        cancellationReason: 'Pago registrado por error',
-        cancellationIdempotencyKey: 'cancel-key-1',
-        cancellationPayloadHash: expect.any(String),
-        version: { increment: 1 },
+    expect(prisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'payment-1', version: 2 },
+        data: expect.objectContaining({
+          status: PaymentStatus.CANCELLED,
+          cancelledAt: expect.any(Date),
+          cancelledByUserId: 'admin-1',
+          cancellationReason: 'Pago registrado por error',
+          cancellationIdempotencyKey: 'cancel-key-1',
+          cancellationPayloadHash: expect.any(String),
+          version: { increment: 1 },
+        }),
       }),
-    }));
-    expect(prisma.accountReceivable.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'ar-1' },
-      data: expect.objectContaining({
-        outstandingAmount: 1000,
-        status: CollectionStatus.UNPAID,
-        agingStatus: AgingStatus.DUE_SOON,
-        lastPaymentDate: null,
-        paidAt: null,
+    );
+    expect(prisma.accountReceivable.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ar-1' },
+        data: expect.objectContaining({
+          outstandingAmount: '1000.00',
+          status: CollectionStatus.UNPAID,
+          agingStatus: AgingStatus.DUE_SOON,
+          lastPaymentDate: null,
+          paidAt: null,
+        }),
       }),
-    }));
+    );
     jest.useRealTimers();
   });
 
@@ -147,21 +175,40 @@ describe('PaymentsService', () => {
     const { service, prisma } = createService();
 
     await expect(
-      service.cancel('payment-1', { reason: ' ', expectedVersion: 2 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key'),
+      service.cancel(
+        'payment-1',
+        { reason: ' ', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.payment.findFirst.mockResolvedValue(null);
     prisma.payment.findUnique.mockResolvedValueOnce(null);
     await expect(
-      service.cancel('missing', { reason: 'Pago duplicado', expectedVersion: 2 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key'),
+      service.cancel(
+        'missing',
+        { reason: 'Pago duplicado', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key',
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
 
-    prisma.payment.findUnique.mockResolvedValueOnce(createPayment({ status: PaymentStatus.CANCELLED }));
+    prisma.payment.findUnique.mockResolvedValueOnce(
+      createPayment({ status: PaymentStatus.CANCELLED }),
+    );
     await expect(
-      service.cancel('payment-1', { reason: 'Pago duplicado', expectedVersion: 2 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key'),
+      service.cancel(
+        'payment-1',
+        { reason: 'Pago duplicado', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    prisma.payment.findUnique.mockResolvedValueOnce(createPayment({ version: 3 }));
+    prisma.payment.findUnique.mockResolvedValueOnce(
+      createPayment({ version: 3 }),
+    );
     await expect(
       service.cancel(
         'payment-1',
@@ -212,8 +259,14 @@ describe('PaymentsService', () => {
         'cancel-key-1',
       ),
     ).resolves.toEqual({
-      payment: expect.objectContaining({ id: 'payment-1', status: PaymentStatus.CANCELLED }),
-      accountReceivable: expect.objectContaining({ id: 'ar-1', outstandingAmount: '1000' }),
+      payment: expect.objectContaining({
+        id: 'payment-1',
+        status: PaymentStatus.CANCELLED,
+      }),
+      accountReceivable: expect.objectContaining({
+        id: 'ar-1',
+        outstandingAmount: '1000.00',
+      }),
     });
     expect(prisma.payment.update).not.toHaveBeenCalled();
 
@@ -230,8 +283,6 @@ describe('PaymentsService', () => {
       ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
-
-
 
   it('maps stale optimistic update failures to ConflictException', async () => {
     const { service, prisma } = createService();
@@ -265,7 +316,9 @@ describe('PaymentsService', () => {
         expectedVersion: 2,
       }),
     });
-    prisma.payment.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(existingCancelled);
+    prisma.payment.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingCancelled);
     prisma.payment.findUnique.mockResolvedValue(createPayment());
     prisma.payment.update.mockRejectedValueOnce({ code: 'P2002' });
     prisma.accountReceivable.findUnique.mockResolvedValue({
@@ -284,8 +337,14 @@ describe('PaymentsService', () => {
         'cancel-race-key',
       ),
     ).resolves.toEqual({
-      payment: expect.objectContaining({ id: 'payment-1', status: PaymentStatus.CANCELLED }),
-      accountReceivable: expect.objectContaining({ id: 'ar-1', outstandingAmount: '1000' }),
+      payment: expect.objectContaining({
+        id: 'payment-1',
+        status: PaymentStatus.CANCELLED,
+      }),
+      accountReceivable: expect.objectContaining({
+        id: 'ar-1',
+        outstandingAmount: '1000.00',
+      }),
     });
     expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
   });
@@ -296,7 +355,10 @@ describe('PaymentsService', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ paidAt: new Date('2026-06-18T10:00:00.000Z') });
     prisma.payment.findUnique.mockResolvedValue(createPayment());
-    prisma.payment.update.mockResolvedValue({ ...createPayment(), status: PaymentStatus.CANCELLED });
+    prisma.payment.update.mockResolvedValue({
+      ...createPayment(),
+      status: PaymentStatus.CANCELLED,
+    });
     prisma.accountReceivable.update.mockResolvedValue({
       id: 'ar-1',
       outstandingAmount: money('1000'),
@@ -323,7 +385,9 @@ describe('PaymentsService', () => {
     });
     expect(prisma.accountReceivable.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ lastPaymentDate: new Date('2026-06-18T10:00:00.000Z') }),
+        data: expect.objectContaining({
+          lastPaymentDate: new Date('2026-06-18T10:00:00.000Z'),
+        }),
       }),
     );
   });
@@ -332,7 +396,10 @@ describe('PaymentsService', () => {
     const { service, prisma } = createService();
     prisma.payment.findFirst.mockResolvedValue(null);
     prisma.payment.findUnique.mockResolvedValue(createPayment());
-    prisma.payment.update.mockResolvedValue({ ...createPayment(), status: PaymentStatus.CANCELLED });
+    prisma.payment.update.mockResolvedValue({
+      ...createPayment(),
+      status: PaymentStatus.CANCELLED,
+    });
     prisma.accountReceivable.update.mockResolvedValue({
       id: 'ar-1',
       outstandingAmount: money('1000'),

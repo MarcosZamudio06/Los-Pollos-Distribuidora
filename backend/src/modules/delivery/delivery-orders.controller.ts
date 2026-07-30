@@ -1,4 +1,11 @@
-import { Body, Controller, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -55,7 +62,11 @@ export class DeliveryOrdersController {
     return {
       success: true,
       message: 'Route collection registered successfully',
-      data: await this.deliveryService.registerCollection(id, body, currentUser),
+      data: await this.deliveryService.registerCollection(
+        id,
+        body,
+        currentUser,
+      ),
     };
   }
 

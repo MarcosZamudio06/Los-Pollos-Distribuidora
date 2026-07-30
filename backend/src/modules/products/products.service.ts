@@ -11,6 +11,7 @@ import type {
   ProductUnit,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateProductDto,
@@ -119,7 +120,7 @@ export class ProductsService {
 
   async findAll(
     query: ListProductsQueryDto,
-    currentUser: Pick<AuthenticatedUser, 'role'>,
+    currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>,
   ): Promise<ProductListResponse> {
     if (query.lowStock === true && !query.locationId) {
       throw new BadRequestException(
@@ -155,7 +156,7 @@ export class ProductsService {
         if (exactSku) {
           products = [exactSku];
         } else {
-          products = (await this.prisma.product.findMany({
+          products = await this.prisma.product.findMany({
             where: {
               ...where,
               name: { contains: search, mode: 'insensitive' },
@@ -163,21 +164,24 @@ export class ProductsService {
             include,
             orderBy: { name: 'asc' },
             ...this.buildPagination(query),
-          })) as ProductRecord[];
+          });
         }
       }
     } else {
-      products = (await this.prisma.product.findMany({
+      products = await this.prisma.product.findMany({
         where,
         include,
         orderBy: { name: 'asc' },
         ...this.buildPagination(query),
-      })) as ProductRecord[];
+      });
     }
 
-    const items = products.map((product) => this.toProductResponse(product, {
-      includePurchaseCost: currentUser.role !== 'SELLER',
-    }));
+    const items = products.map((product) =>
+      this.toProductResponse(product, {
+        includePurchaseCost:
+          currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
+      }),
+    );
 
     return {
       items:
@@ -190,7 +194,7 @@ export class ProductsService {
   async findOne(
     id: string,
     query: GetProductQueryDto = {},
-    currentUser: Pick<AuthenticatedUser, 'role'>,
+    currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>,
   ): Promise<ProductResponse> {
     const includeBalances =
       query.includeBalances === true || !!query.locationId;
@@ -216,7 +220,8 @@ export class ProductsService {
 
     return this.toProductResponse(product, {
       includeBalances: true,
-      includePurchaseCost: currentUser.role !== 'SELLER',
+      includePurchaseCost:
+        currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
     });
   }
 
@@ -420,7 +425,9 @@ export class ProductsService {
     }
   }
 
-  private async assertCategoryExists(categoryId?: string | null): Promise<void> {
+  private async assertCategoryExists(
+    categoryId?: string | null,
+  ): Promise<void> {
     if (!categoryId) {
       return;
     }
@@ -467,7 +474,9 @@ export class ProductsService {
     return normalizedSku.length > 0 ? normalizedSku : null;
   }
 
-  private normalizeOptionalText(value?: string | null): string | null | undefined {
+  private normalizeOptionalText(
+    value?: string | null,
+  ): string | null | undefined {
     if (value === undefined) {
       return undefined;
     }

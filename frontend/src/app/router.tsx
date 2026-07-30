@@ -6,6 +6,8 @@ import {
   ChangePasswordPage,
   LoginPage,
   LogoutPage,
+  PermissionRoute,
+  PERMISSIONS,
   ProtectedRoute,
   RoleRoute,
 } from '../features/auth'
@@ -24,6 +26,7 @@ import { BillingRemediationsPage } from '../features/billing-remediations'
 import { DailyClosePage } from '../features/cierre-diario'
 import { PedidosPage } from '../features/pedidos'
 import { PosTerminalsPage } from '../features/terminales-pos'
+import { AccessProfilesPage } from '../features/access-control'
 
 export function AppRouter() {
   return (
@@ -200,6 +203,14 @@ export function AppRouter() {
             <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
               <EmployeesPage />
             </RoleRoute>
+          }
+        />
+        <Route
+          path="/admin/access-profiles"
+          element={
+            <PermissionRoute permission={PERMISSIONS.accessProfilesManage}>
+              <AccessProfilesPage />
+            </PermissionRoute>
           }
         />
         <Route

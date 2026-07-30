@@ -392,7 +392,7 @@ Los costos de compra, la utilidad bruta, la utilidad neta, la calidad del costo 
 - Cierre único por día frente a turnos o cajas múltiples.
 - Tolerancias de kilos y dinero y su impacto en el cierre.
 - Fórmulas oficiales de costo, utilidad bruta, utilidad neta y utilidad por pollo.
-- Política exacta de redondeo.
+- La política monetaria usa aritmética decimal exacta, importes en strings canónicos con dos decimales y redondeo `HALF_UP` centralizado.
 - Catálogo final de entradas, salidas, gastos, métodos y bancos.
 - Política de folios por ubicación y documento.
 - Reglas de reapertura y bloqueo de periodos.

@@ -96,7 +96,9 @@ function money(value: string) {
   return { toString: () => value };
 }
 
-function createCustomer(overrides: Partial<CustomerRecord> = {}): CustomerRecord {
+function createCustomer(
+  overrides: Partial<CustomerRecord> = {},
+): CustomerRecord {
   return {
     id: 'customer-1',
     customerNumber: 'C-1024',
@@ -185,7 +187,7 @@ describe('CustomersService', () => {
         expect.objectContaining({
           id: 'customer-1',
           customerType: CustomerType.INSTITUTIONAL,
-          creditLimit: '50000',
+          creditLimit: '50000.00',
           creditDays: 15,
           priceListId: 'price-list-1',
           deliveryAddress: 'Delivery address',
@@ -207,28 +209,30 @@ describe('CustomersService', () => {
     expect(list.items[0]).not.toHaveProperty('billingRequests');
     expect(list.items[0]).toHaveProperty('creditSummary');
 
-    expect(prisma.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      include: {
-        commercialPolicy: true,
-        accountReceivables: { include: { payments: true } },
-        payments: true,
-        billingRequests: true,
-      },
-      where: expect.objectContaining({
-        isActive: true,
-        customerType: CustomerType.INSTITUTIONAL,
-        creditStatus: CreditStatus.ACTIVE,
-        commercialPolicyId: 'policy-1',
-        assignedRouteId: 'route-1',
-        OR: expect.arrayContaining([
-          { name: { contains: 'centro', mode: 'insensitive' } },
-          { phone: { contains: 'centro', mode: 'insensitive' } },
-        ]),
+    expect(prisma.customer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: {
+          commercialPolicy: true,
+          accountReceivables: { include: { payments: true } },
+          payments: true,
+          billingRequests: true,
+        },
+        where: expect.objectContaining({
+          isActive: true,
+          customerType: CustomerType.INSTITUTIONAL,
+          creditStatus: CreditStatus.ACTIVE,
+          commercialPolicyId: 'policy-1',
+          assignedRouteId: 'route-1',
+          OR: expect.arrayContaining([
+            { name: { contains: 'centro', mode: 'insensitive' } },
+            { phone: { contains: 'centro', mode: 'insensitive' } },
+          ]),
+        }),
+        orderBy: { name: 'asc' },
+        skip: 10,
+        take: 10,
       }),
-      orderBy: { name: 'asc' },
-      skip: 10,
-      take: 10,
-    }));
+    );
   });
 
   it('gets customer detail by id with optional fiscal fields treated as commercial data only', async () => {
@@ -243,9 +247,9 @@ describe('CustomersService', () => {
         requiresBilling: true,
         commercialPolicy: null,
         creditSummary: expect.objectContaining({
-          creditLimit: '50000',
-          availableCredit: '50000',
-          outstandingAmount: '0',
+          creditLimit: '50000.00',
+          availableCredit: '50000.00',
+          outstandingAmount: '0.00',
         }),
         billingSummary: expect.objectContaining({
           billedAmount: '0',
@@ -260,11 +264,13 @@ describe('CustomersService', () => {
     expect(detail).not.toHaveProperty('accountReceivables');
     expect(detail).not.toHaveProperty('payments');
     expect(detail).not.toHaveProperty('billingRequests');
-    expect(detail).toEqual(expect.objectContaining({
-      commercialPolicy: null,
-      creditSummary: expect.any(Object),
-      billingSummary: expect.any(Object),
-    }));
+    expect(detail).toEqual(
+      expect.objectContaining({
+        commercialPolicy: null,
+        creditSummary: expect.any(Object),
+        billingSummary: expect.any(Object),
+      }),
+    );
 
     expect(prisma.customer.findFirst).toHaveBeenCalledWith({
       where: { id: 'customer-1' },
@@ -292,26 +298,29 @@ describe('CustomersService', () => {
     );
 
     await expect(
-      service.create({
-        name: ' Restaurante El Centro ',
-        phone: ' 2290000000 ',
-        email: 'cliente@example.com',
-        billingEmail: 'facturacion@cliente.com',
-        customerType: CustomerType.WHOLESALE,
-        creditLimit: 50000,
-        creditDays: 15,
-        creditStatus: CreditStatus.ACTIVE,
-        priceListId: 'price-list-1',
-        assignedRouteId: 'route-1',
-        deliveryAddress: ' Delivery address ',
-        fiscalName: 'Razón social opcional',
-      }, adminUser),
+      service.create(
+        {
+          name: ' Restaurante El Centro ',
+          phone: ' 2290000000 ',
+          email: 'cliente@example.com',
+          billingEmail: 'facturacion@cliente.com',
+          customerType: CustomerType.WHOLESALE,
+          creditLimit: 50000,
+          creditDays: 15,
+          creditStatus: CreditStatus.ACTIVE,
+          priceListId: 'price-list-1',
+          assignedRouteId: 'route-1',
+          deliveryAddress: ' Delivery address ',
+          fiscalName: 'Razón social opcional',
+        },
+        adminUser,
+      ),
     ).resolves.toEqual(
       expect.objectContaining({
         name: 'Restaurante El Centro',
         phone: '2290000000',
         customerType: CustomerType.WHOLESALE,
-        creditLimit: '50000',
+        creditLimit: '50000.00',
         deliveryAddress: 'Delivery address',
         fiscalName: 'Razón social opcional',
         isActive: true,
@@ -329,13 +338,23 @@ describe('CustomersService', () => {
       }),
     });
 
-    await expect(service.create({ name: '   ', customerType: CustomerType.RETAIL }, adminUser)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.create(
+        { name: '   ', customerType: CustomerType.RETAIL },
+        adminUser,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
 
     prisma.customer.findUnique.mockResolvedValueOnce(createCustomer());
     await expect(
-      service.create({ name: 'Otro Cliente', phone: '2290000000', customerType: CustomerType.RETAIL }, adminUser),
+      service.create(
+        {
+          name: 'Otro Cliente',
+          phone: '2290000000',
+          customerType: CustomerType.RETAIL,
+        },
+        adminUser,
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -379,26 +398,47 @@ describe('CustomersService', () => {
     prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
     prisma.customer.findUnique.mockResolvedValueOnce(null);
     prisma.customer.update.mockResolvedValueOnce(
-      createCustomer({ phone: '2291111111', creditStatus: CreditStatus.BLOCKED }),
+      createCustomer({
+        phone: '2291111111',
+        creditStatus: CreditStatus.BLOCKED,
+      }),
     );
 
     await expect(
-      service.update('customer-1', { phone: '2291111111', creditStatus: CreditStatus.BLOCKED }, adminUser),
-    ).resolves.toEqual(expect.objectContaining({ phone: '2291111111', isBlockedForCredit: true }));
+      service.update(
+        'customer-1',
+        { phone: '2291111111', creditStatus: CreditStatus.BLOCKED },
+        adminUser,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        phone: '2291111111',
+        isBlockedForCredit: true,
+      }),
+    );
     expect(prisma.customer.update).toHaveBeenCalledWith({
       where: { id: 'customer-1' },
-      data: expect.objectContaining({ phone: '2291111111', creditStatus: CreditStatus.BLOCKED }),
+      data: expect.objectContaining({
+        phone: '2291111111',
+        creditStatus: CreditStatus.BLOCKED,
+      }),
     });
 
     prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
-    prisma.customer.findUnique.mockResolvedValueOnce(createCustomer({ id: 'customer-2' }));
-    await expect(service.update('customer-1', { phone: '2290000000' }, adminUser)).rejects.toBeInstanceOf(
-      ConflictException,
+    prisma.customer.findUnique.mockResolvedValueOnce(
+      createCustomer({ id: 'customer-2' }),
     );
+    await expect(
+      service.update('customer-1', { phone: '2290000000' }, adminUser),
+    ).rejects.toBeInstanceOf(ConflictException);
 
     prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
-    prisma.customer.update.mockResolvedValueOnce(createCustomer({ isActive: false }));
-    await expect(service.deactivate('customer-1')).resolves.toEqual(expect.objectContaining({ isActive: false }));
+    prisma.customer.update.mockResolvedValueOnce(
+      createCustomer({ isActive: false }),
+    );
+    await expect(service.deactivate('customer-1')).resolves.toEqual(
+      expect.objectContaining({ isActive: false }),
+    );
     expect(prisma.customer.update).toHaveBeenLastCalledWith({
       where: { id: 'customer-1' },
       data: { isActive: false },
@@ -483,7 +523,9 @@ describe('CustomersService', () => {
     );
     expect(prisma.customer.update).toHaveBeenCalledWith({
       where: { id: 'customer-1' },
-      data: expect.objectContaining({ deliveryAddress: 'Updated route address' }),
+      data: expect.objectContaining({
+        deliveryAddress: 'Updated route address',
+      }),
     });
   });
 
@@ -505,10 +547,13 @@ describe('CustomersService', () => {
       createCustomer({ creditLimit: null, creditDays: null }),
     );
     await expect(
-      service.update('customer-1', { creditStatus: CreditStatus.ACTIVE }, adminUser),
+      service.update(
+        'customer-1',
+        { creditStatus: CreditStatus.ACTIVE },
+        adminUser,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
-
 
   it('filters customer list by aging status and cartera alias', async () => {
     const { service, prisma } = createService();
@@ -521,7 +566,9 @@ describe('CustomersService', () => {
           accountReceivables: {
             some: {
               agingStatus: AgingStatus.OVERDUE,
-              status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+              status: {
+                in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+              },
             },
           },
         }),
@@ -535,7 +582,9 @@ describe('CustomersService', () => {
           accountReceivables: {
             some: {
               daysOverdue: { gt: 0 },
-              status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+              status: {
+                in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+              },
             },
           },
         }),
@@ -550,8 +599,12 @@ describe('CustomersService', () => {
       createCustomer({
         creditLimit: money('1000'),
         commercialPolicy: {
-          id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null,
-          overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
+          id: 'policy-1',
+          isActive: true,
+          effectiveFrom: new Date('2026-01-01'),
+          effectiveTo: null,
+          overdueBlockingMode: 'BLOCK_NEW_CREDIT',
+          allowAdministrativeOverride: true,
         },
         accountReceivables: [
           {
@@ -564,7 +617,12 @@ describe('CustomersService', () => {
             status: CollectionStatus.PARTIALLY_PAID,
           },
         ],
-        payments: [{ amount: money('100'), paidAt: new Date('2026-06-29T10:00:00.000Z') }],
+        payments: [
+          {
+            amount: money('100'),
+            paidAt: new Date('2026-06-29T10:00:00.000Z'),
+          },
+        ],
       }),
     );
 
@@ -572,13 +630,13 @@ describe('CustomersService', () => {
       expect.objectContaining({
         customerId: 'customer-1',
         creditStatus: CreditStatus.ACTIVE,
-        creditLimit: '1000',
+        creditLimit: '1000.00',
         paymentTermsDays: 15,
         agingStatus: AgingStatus.OVERDUE,
         collectionStatus: CollectionStatus.PARTIALLY_PAID,
-        globalBalance: '1100',
-        overdueAmount: '1100',
-        availableCredit: '0',
+        globalBalance: '1100.00',
+        overdueAmount: '1100.00',
+        availableCredit: '0.00',
         hasOverdueBalance: true,
         isBlocked: true,
         isBlockedForCredit: true,
@@ -599,13 +657,24 @@ describe('CustomersService', () => {
     const { service, prisma } = createService();
     const customer = createCustomer({
       commercialPolicy: {
-        id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null,
-        overdueBlockingMode: 'WARN_ONLY', allowAdministrativeOverride: true,
+        id: 'policy-1',
+        isActive: true,
+        effectiveFrom: new Date('2026-01-01'),
+        effectiveTo: null,
+        overdueBlockingMode: 'WARN_ONLY',
+        allowAdministrativeOverride: true,
       },
-      accountReceivables: [{
-        originalAmount: money('200'), outstandingAmount: money('200'), dueDate: new Date('2026-07-15T06:00:00Z'),
-        daysOverdue: 0, lastPaymentDate: null, agingStatus: AgingStatus.CURRENT, status: CollectionStatus.UNPAID,
-      }],
+      accountReceivables: [
+        {
+          originalAmount: money('200'),
+          outstandingAmount: money('200'),
+          dueDate: new Date('2026-07-15T06:00:00Z'),
+          daysOverdue: 0,
+          lastPaymentDate: null,
+          agingStatus: AgingStatus.CURRENT,
+          status: CollectionStatus.UNPAID,
+        },
+      ],
     });
     prisma.customer.findMany.mockResolvedValue([customer]);
     prisma.customer.findFirst.mockResolvedValue(customer);
@@ -613,34 +682,65 @@ describe('CustomersService', () => {
     const list = await service.findAll();
     const detail = await service.findOne('customer-1');
 
-    expect(list.items[0]).toEqual(expect.objectContaining({
-      isBlockedForCredit: false,
-      creditSummary: expect.objectContaining({ effectiveCreditStatus: 'WARNING', blockingReasons: ['CREDIT_OVERDUE_WARNING'], daysOverdue: 2 }),
-    }));
-    expect(detail.creditSummary).toEqual(expect.objectContaining({
-      effectiveCreditStatus: 'WARNING', blockingReasons: ['CREDIT_OVERDUE_WARNING'], isBlocked: false, isBlockedForCredit: false,
-    }));
+    expect(list.items[0]).toEqual(
+      expect.objectContaining({
+        isBlockedForCredit: false,
+        creditSummary: expect.objectContaining({
+          effectiveCreditStatus: 'WARNING',
+          blockingReasons: ['CREDIT_OVERDUE_WARNING'],
+          daysOverdue: 2,
+        }),
+      }),
+    );
+    expect(detail.creditSummary).toEqual(
+      expect.objectContaining({
+        effectiveCreditStatus: 'WARNING',
+        blockingReasons: ['CREDIT_OVERDUE_WARNING'],
+        isBlocked: false,
+        isBlockedForCredit: false,
+      }),
+    );
     jest.useRealTimers();
   });
 
   it('keeps overdue visible but uses null-mode when policy effectiveFrom is null', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-17T12:00:00Z'));
     const { service, prisma } = createService();
-    prisma.customer.findFirst.mockResolvedValue(createCustomer({
-      commercialPolicy: {
-        id: 'policy-1', isActive: true, effectiveFrom: null, effectiveTo: null,
-        overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
-      },
-      accountReceivables: [{
-        originalAmount: money('200'), outstandingAmount: money('200'), dueDate: new Date('2026-07-15T06:00:00Z'),
-        daysOverdue: 99, lastPaymentDate: null, agingStatus: AgingStatus.OVERDUE, status: CollectionStatus.UNPAID,
-      }],
-    }));
+    prisma.customer.findFirst.mockResolvedValue(
+      createCustomer({
+        commercialPolicy: {
+          id: 'policy-1',
+          isActive: true,
+          effectiveFrom: null,
+          effectiveTo: null,
+          overdueBlockingMode: 'BLOCK_NEW_CREDIT',
+          allowAdministrativeOverride: true,
+        },
+        accountReceivables: [
+          {
+            originalAmount: money('200'),
+            outstandingAmount: money('200'),
+            dueDate: new Date('2026-07-15T06:00:00Z'),
+            daysOverdue: 99,
+            lastPaymentDate: null,
+            agingStatus: AgingStatus.OVERDUE,
+            status: CollectionStatus.UNPAID,
+          },
+        ],
+      }),
+    );
 
-    await expect(service.getCreditSummary('customer-1')).resolves.toEqual(expect.objectContaining({
-      overdueAmount: '200', daysOverdue: 2, effectiveCreditStatus: 'ACTIVE', overdueBlockingMode: null,
-      blockingReasons: [], isBlockedForCredit: false, canAdministrativeOverride: false,
-    }));
+    await expect(service.getCreditSummary('customer-1')).resolves.toEqual(
+      expect.objectContaining({
+        overdueAmount: '200.00',
+        daysOverdue: 2,
+        effectiveCreditStatus: 'ACTIVE',
+        overdueBlockingMode: null,
+        blockingReasons: [],
+        isBlockedForCredit: false,
+        canAdministrativeOverride: false,
+      }),
+    );
     jest.useRealTimers();
   });
 
@@ -658,7 +758,11 @@ describe('CustomersService', () => {
         status: SaleStatus.CONFIRMED,
         locationId: 'location-1',
         payments: [
-          { amount: money('50'), paidAt: new Date('2026-06-30T13:00:00.000Z'), paymentMethod: PaymentMethod.CASH },
+          {
+            amount: money('50'),
+            paidAt: new Date('2026-06-30T13:00:00.000Z'),
+            paymentMethod: PaymentMethod.CASH,
+          },
         ],
         accountReceivable: { id: 'ar-1' },
         billingRequest: { id: 'billing-1' },
@@ -666,19 +770,26 @@ describe('CustomersService', () => {
     ]);
 
     await expect(
-      service.findSales('customer-1', { paymentType: SalePaymentType.CREDIT_SALE }),
+      service.findSales('customer-1', {
+        paymentType: SalePaymentType.CREDIT_SALE,
+      }),
     ).resolves.toEqual({
       items: [
         expect.objectContaining({
           id: 'sale-1',
           accountReceivableId: 'ar-1',
           billingRequestId: 'billing-1',
-          paymentsSummary: expect.objectContaining({ totalPaid: '50', methods: [PaymentMethod.CASH] }),
+          paymentsSummary: expect.objectContaining({
+            totalPaid: '50',
+            methods: [PaymentMethod.CASH],
+          }),
         }),
       ],
     });
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ customerId: 'customer-1' }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ customerId: 'customer-1' }),
+      }),
     );
   });
 
@@ -704,7 +815,9 @@ describe('CustomersService', () => {
     ]);
 
     await expect(
-      service.findPayments('customer-1', { paymentMethod: PaymentMethod.TRANSFER }),
+      service.findPayments('customer-1', {
+        paymentMethod: PaymentMethod.TRANSFER,
+      }),
     ).resolves.toEqual({
       items: [
         expect.objectContaining({
@@ -728,5 +841,4 @@ describe('CustomersService', () => {
       }),
     );
   });
-
 });

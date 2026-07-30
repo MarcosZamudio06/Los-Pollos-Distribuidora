@@ -1,5 +1,13 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { AgingStatus, CollectionStatus } from '@prisma/client';
 
 function toOptionalBoolean({ value }: TransformFnParams): unknown {

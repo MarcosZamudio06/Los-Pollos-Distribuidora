@@ -113,16 +113,14 @@ function createPrisma(): MockPrisma {
     },
     pointOfSaleDailyClose: {
       findUnique: jest.fn(),
-      findFirst: jest
-        .fn()
-        .mockResolvedValue({
-          id: 'close-1',
-          operationalLocationId: 'loc-1',
-          status: 'DRAFT',
-          cashSessionStatus: 'OPEN',
-        }),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'close-1',
+        operationalLocationId: 'loc-1',
+        status: 'DRAFT',
+        cashSessionStatus: 'OPEN',
+      }),
     },
-    $transaction: jest.fn(async (callback) => callback(prisma)),
+    $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
 }
@@ -159,7 +157,7 @@ describe('AccountsReceivableService', () => {
           id: 'ar-1',
           customerName: 'Restaurante Centro',
           saleNumber: 'S-1001',
-          outstandingAmount: '1000',
+          outstandingAmount: '1000.00',
           status: CollectionStatus.UNPAID,
           agingStatus: AgingStatus.OVERDUE,
           daysOverdue: 3,
@@ -212,7 +210,7 @@ describe('AccountsReceivableService', () => {
         'ar-1',
         {
           accountReceivableId: 'ar-1',
-          amount: 400,
+          amount: '400.00',
           paymentMethod: PaymentMethod.TRANSFER,
           bankName: 'Santander',
           referenceNumber: 'REF-1234',
@@ -227,12 +225,12 @@ describe('AccountsReceivableService', () => {
         id: 'payment-1',
         accountReceivableId: 'ar-1',
         customerId: 'customer-1',
-        amount: '400',
+        amount: '400.00',
         status: PaymentStatus.APPLIED,
       }),
       accountReceivable: expect.objectContaining({
         id: 'ar-1',
-        outstandingAmount: '600',
+        outstandingAmount: '600.00',
         status: CollectionStatus.PARTIALLY_PAID,
       }),
     });
@@ -244,7 +242,7 @@ describe('AccountsReceivableService', () => {
           customerId: 'customer-1',
           userId: 'collector-1',
           collectedByUserId: 'collector-1',
-          amount: 400,
+          amount: '400.00',
           status: PaymentStatus.APPLIED,
         }),
       }),
@@ -317,7 +315,7 @@ describe('AccountsReceivableService', () => {
     expect(prisma.accountReceivable.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          outstandingAmount: 0,
+          outstandingAmount: '0.00',
           status: CollectionStatus.PAID,
           paidAt: new Date('2026-06-20T10:00:00.000Z'),
         }),
@@ -461,11 +459,11 @@ describe('AccountsReceivableService', () => {
     ).resolves.toEqual({
       payment: expect.objectContaining({
         id: 'payment-existing',
-        amount: '250',
+        amount: '250.00',
       }),
       accountReceivable: expect.objectContaining({
         id: 'ar-1',
-        outstandingAmount: '750',
+        outstandingAmount: '750.00',
       }),
     });
     expect(prisma.payment.create).not.toHaveBeenCalled();
@@ -556,10 +554,13 @@ describe('AccountsReceivableService', () => {
         'race-key',
       ),
     ).resolves.toEqual({
-      payment: expect.objectContaining({ id: 'payment-race', amount: '400' }),
+      payment: expect.objectContaining({
+        id: 'payment-race',
+        amount: '400.00',
+      }),
       accountReceivable: expect.objectContaining({
         id: 'ar-1',
-        outstandingAmount: '600',
+        outstandingAmount: '600.00',
       }),
     });
     expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
@@ -711,8 +712,8 @@ describe('AccountsReceivableService', () => {
     ).resolves.toEqual(
       expect.objectContaining({
         id: 'ar-1',
-        originalAmount: '800',
-        outstandingAmount: '800',
+        originalAmount: '800.00',
+        outstandingAmount: '800.00',
         paymentTermsDays: 15,
       }),
     );
@@ -723,8 +724,8 @@ describe('AccountsReceivableService', () => {
           customerId: 'customer-1',
           saleId: 'sale-1',
           originalSaleId: 'sale-1',
-          originalAmount: 800,
-          outstandingAmount: 800,
+          originalAmount: '800.00',
+          outstandingAmount: '800.00',
           dueDate,
           paymentTermsDays: 15,
           commercialPolicyId: 'policy-1',

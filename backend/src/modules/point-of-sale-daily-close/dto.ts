@@ -1,11 +1,24 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class OpenDailyCloseDto {
   @IsString() @IsNotEmpty() operationalLocationId!: string;
   @IsDateString() businessDate!: string;
   @IsOptional() @IsString() @IsNotEmpty() terminalIdentifier?: string;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashFund?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  initialCashFund?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashIn?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashOut?: number;
   @IsOptional() @IsString() notes?: string;
@@ -61,13 +74,29 @@ export class CreateScaleTicketDto {
 
 export class CreateDailyCloseInventoryCountDto {
   @IsString() @IsNotEmpty() productId!: string;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) physicalQuantityKg?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(0) physicalQuantityPieces?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  physicalQuantityKg?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  physicalQuantityPieces?: number;
   @IsString() @IsNotEmpty() reason!: string;
 }
 
 export class UpdateDailyCloseInventoryCountDto {
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) physicalQuantityKg?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(0) physicalQuantityPieces?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  physicalQuantityKg?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  physicalQuantityPieces?: number;
   @IsOptional() @IsString() @IsNotEmpty() reason?: string;
 }

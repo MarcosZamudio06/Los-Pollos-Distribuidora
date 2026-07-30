@@ -1,0 +1,582 @@
+
+> backend@0.0.1 lint:check
+> eslint "{src,apps,libs,test,scripts}/**/*.ts" --max-warnings 1062
+
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/common/guards/permissions.guard.spec.ts
+  35:36  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  42:20  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  50:20  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  58:20  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  66:20  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/access-control/access-control.service.spec.ts
+  62:60  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/accounts-receivable/accounts-receivable-aging.job.spec.ts
+    9:70  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   25:50  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  142:38  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/accounts-receivable/accounts-receivable-aging.job.ts
+  136:9  error  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/accounts-receivable/accounts-receivable.controller.spec.ts
+  12:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  18:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  47:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/accounts-receivable/accounts-receivable.service.spec.ts
+  123:44  error  Async arrow function has no 'await' expression                                                                                                                                            @typescript-eslint/require-await
+  160:11  error  Delete `·`                                                                                                                                                                                prettier/prettier
+  228:9   error  Delete `·`                                                                                                                                                                                prettier/prettier
+  233:1   error  Delete `·`                                                                                                                                                                                prettier/prettier
+  318:11  error  Delete `·`                                                                                                                                                                                prettier/prettier
+  462:1   error  Delete `·`                                                                                                                                                                                prettier/prettier
+  466:9   error  Delete `·`                                                                                                                                                                                prettier/prettier
+  557:7   error  Replace `·payment:·expect.objectContaining({·id:·'payment-race',·amount:·'400.00'` with `payment:·expect.objectContaining({⏎········id:·'payment-race',⏎········amount:·'400.00',⏎·····`  prettier/prettier
+  560:1   error  Delete `·`                                                                                                                                                                                prettier/prettier
+  712:9   error  Delete `·`                                                                                                                                                                                prettier/prettier
+  713:1   error  Delete `·`                                                                                                                                                                                prettier/prettier
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/accounts-receivable/accounts-receivable.service.ts
+  627:5  error  'paidAt' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/auth/auth.controller.ts
+  109:28  error  '_authSessionId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/auth/auth.service.spec.ts
+   57:38  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   57:43  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   67:34  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   68:49  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   68:54  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   88:34  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   89:38  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   89:43  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  104:49  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  104:66  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  109:54  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  114:48  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/billing-requests/billing-requests.service.ts
+   985:25  error  Unsafe member access .status on an `any` value                             @typescript-eslint/no-unsafe-member-access
+   987:25  error  Unsafe member access .legalEntityId on an `any` value                      @typescript-eslint/no-unsafe-member-access
+   989:25  error  Unsafe member access .currencyCode on an `any` value                       @typescript-eslint/no-unsafe-member-access
+   992:24  error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+   992:36  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1037:19  error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1037:51  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1043:17  error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1044:24  error  Unsafe member access .documents on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  1047:13  error  Unsafe argument of type `any` assigned to a parameter of type `Decimal[]`  @typescript-eslint/no-unsafe-argument
+  1047:13  error  Unsafe call of an `any` typed value                                        @typescript-eslint/no-unsafe-call
+  1047:34  error  Unsafe member access .map on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  1047:48  error  Unsafe return of a value of type `any`                                     @typescript-eslint/no-unsafe-return
+  1047:53  error  Unsafe member access .subtotalApplied on an `any` value                    @typescript-eslint/no-unsafe-member-access
+  1050:13  error  Unsafe argument of type `any` assigned to a parameter of type `Decimal[]`  @typescript-eslint/no-unsafe-argument
+  1050:13  error  Unsafe call of an `any` typed value                                        @typescript-eslint/no-unsafe-call
+  1050:34  error  Unsafe member access .map on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  1050:48  error  Unsafe return of a value of type `any`                                     @typescript-eslint/no-unsafe-return
+  1050:53  error  Unsafe member access .taxApplied on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  1053:13  error  Unsafe argument of type `any` assigned to a parameter of type `Decimal[]`  @typescript-eslint/no-unsafe-argument
+  1053:13  error  Unsafe call of an `any` typed value                                        @typescript-eslint/no-unsafe-call
+  1053:34  error  Unsafe member access .map on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  1053:48  error  Unsafe return of a value of type `any`                                     @typescript-eslint/no-unsafe-return
+  1053:53  error  Unsafe member access .totalApplied on an `any` value                       @typescript-eslint/no-unsafe-member-access
+  1057:15  error  Unsafe argument of type `any` assigned to a parameter of type `Value`      @typescript-eslint/no-unsafe-argument
+  1057:15  error  Unsafe call of an `any` typed value                                        @typescript-eslint/no-unsafe-call
+  1057:23  error  Unsafe member access .subtotal on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  1057:46  error  Unsafe member access .discount on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  1059:37  error  Unsafe argument of type `any` assigned to a parameter of type `Value`      @typescript-eslint/no-unsafe-argument
+  1059:45  error  Unsafe member access .tax on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  1060:34  error  Unsafe argument of type `any` assigned to a parameter of type `Value`      @typescript-eslint/no-unsafe-argument
+  1060:42  error  Unsafe member access .total on an `any` value                              @typescript-eslint/no-unsafe-member-access
+  1070:17  error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1070:36  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1102:13  error  Unsafe argument of type `any` assigned to a parameter of type `string`     @typescript-eslint/no-unsafe-argument
+  1102:21  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1117:13  error  Unsafe argument of type `any` assigned to a parameter of type `string`     @typescript-eslint/no-unsafe-argument
+  1117:21  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1136:26  error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1136:58  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1144:22  error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1144:34  error  Unsafe member access .id on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  1435:43  error  Unexpected any. Specify a different type                                   @typescript-eslint/no-explicit-any
+  1437:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1438:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1439:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1439:36  error  Unsafe member access .name on an `any` value                               @typescript-eslint/no-unsafe-member-access
+  1440:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1441:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1441:30  error  Unsafe member access .saleNumber on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  1442:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1442:30  error  Unsafe member access .locationId on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  1443:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1444:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1445:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1446:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1447:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1448:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1449:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1450:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+  1451:7   error  Unsafe assignment of an `any` value                                        @typescript-eslint/no-unsafe-assignment
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/billing/billing-remediation.controller.spec.ts
+  17:9  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  23:9  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/billing/billing-report-exporter.ts
+   64:3   error  Async method 'createFile' has no 'await' expression                                                  @typescript-eslint/require-await
+  193:40  error  'value' will use Object's default stringification format ('[object Object]') when stringified        @typescript-eslint/no-base-to-string
+  204:25  error  'value ?? ''' will use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/billing/billing-report.controller.spec.ts
+  42:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  52:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  53:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  54:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  55:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/billing/invoice-cancellation.controller.spec.ts
+  17:9  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/billing/invoice-cancellation.service.spec.ts
+  102:35  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/customers/customers.service.ts
+    9:3   error  'AgingStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  592:27  error  '_accountReceivables' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  593:17  error  '_payments' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  594:24  error  '_billingRequests' is assigned a value but never used     @typescript-eslint/no-unused-vars
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/delivery/delivery-route-planning.service.ts
+   62:31  error  Unexpected any. Specify a different type                                        @typescript-eslint/no-explicit-any
+   63:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+   63:22  error  Unsafe member access .id on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+   64:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+   64:26  error  Unsafe member access .saleNumber on an `any` value                              @typescript-eslint/no-unsafe-member-access
+   65:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+   65:26  error  Unsafe member access .customerId on an `any` value                              @typescript-eslint/no-unsafe-member-access
+   66:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+   66:28  error  Unsafe member access .customer on an `any` value                                @typescript-eslint/no-unsafe-member-access
+   67:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+   67:35  error  Unsafe member access .accountReceivable on an `any` value                       @typescript-eslint/no-unsafe-member-access
+   68:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+   69:16  error  Unsafe member access .customer on an `any` value                                @typescript-eslint/no-unsafe-member-access
+   69:50  error  Unsafe member access .customer on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  116:18  error  Unexpected any. Specify a different type                                        @typescript-eslint/no-explicit-any
+  117:18  error  Unsafe member access .id on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+  117:38  error  Unsafe member access .routeId on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  117:54  error  Unsafe member access .routeId on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+  126:19  error  Unexpected any. Specify a different type                                        @typescript-eslint/no-explicit-any
+  127:21  error  Unexpected any. Specify a different type                                        @typescript-eslint/no-explicit-any
+  127:39  error  Unsafe member access .id on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+  131:14  error  Unsafe member access .accountReceivable on an `any` value                       @typescript-eslint/no-unsafe-member-access
+  143:11  error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  148:11  error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  148:26  error  Unsafe call of an `any` typed value                                             @typescript-eslint/no-unsafe-call
+  148:36  error  Unsafe member access .map on an `any` value                                     @typescript-eslint/no-unsafe-member-access
+  148:64  error  Unsafe argument of type `any` assigned to a parameter of type `string`          @typescript-eslint/no-unsafe-argument
+  148:69  error  Unsafe member access .saleId on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  149:51  error  Unsafe argument of type `any[]` assigned to a parameter of type `Coordinate[]`  @typescript-eslint/no-unsafe-argument
+  151:7   error  Unsafe spread of an `any` value in an array                                     @typescript-eslint/no-unsafe-assignment
+  151:10  error  Unsafe call of an `any` typed value                                             @typescript-eslint/no-unsafe-call
+  151:23  error  Unsafe member access .map on an `any` value                                     @typescript-eslint/no-unsafe-member-access
+  152:25  error  Unsafe member access .longitude on an `any` value                               @typescript-eslint/no-unsafe-member-access
+  152:41  error  Unsafe member access .latitude on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  156:11  error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  156:26  error  Unsafe call of an `any` typed value                                             @typescript-eslint/no-unsafe-call
+  156:36  error  Unsafe member access .map on an `any` value                                     @typescript-eslint/no-unsafe-member-access
+  157:24  error  Unsafe argument of type `any` assigned to a parameter of type `string`          @typescript-eslint/no-unsafe-argument
+  157:29  error  Unsafe member access .saleId on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  158:7   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  158:22  error  Unsafe member access .sequence on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  159:7   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  159:37  error  Unsafe member access [index] on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  159:37  error  Computed name [index] resolves to an `any` value                                @typescript-eslint/no-unsafe-member-access
+  160:7   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  160:38  error  Unsafe member access [index] on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  160:38  error  Computed name [index] resolves to an `any` value                                @typescript-eslint/no-unsafe-member-access
+  173:9   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  187:7   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+  188:7   error  Unsafe assignment of an `any` value                                             @typescript-eslint/no-unsafe-assignment
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/delivery/delivery.controller.spec.ts
+   16:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   19:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   22:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   25:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   28:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   33:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   39:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   45:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   51:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   57:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   63:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   69:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  116:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  121:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  159:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  190:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  209:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  308:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  313:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  318:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  323:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  324:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  330:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/delivery/delivery.service.spec.ts
+  149:44  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/delivery/delivery.service.ts
+    81:11  error  "UNPAID" | "PARTIALLY_PAID" | "PAID" | "CANCELLED" is overridden by string in this union type                                                                                               @typescript-eslint/no-redundant-type-constituents
+    93:18  error  "CASH" | "TRANSFER" | "DEPOSIT" | "CARD" | "CHECK" | "VOUCHER" | "OTHER" is overridden by string in this union type                                                                         @typescript-eslint/no-redundant-type-constituents
+    94:11  error  "CANCELLED" | "REGISTERED" | "APPLIED" is overridden by string in this union type                                                                                                           @typescript-eslint/no-redundant-type-constituents
+   104:10  error  "ADJUSTMENT" | "IN" | "OUT" | "SALE" | "PURCHASE" | "CANCEL_SALE" | "CANCEL_PURCHASE" | "TRANSFER_OUT" | "TRANSFER_IN" | "SHRINKAGE" | "RETURN" is overridden by string in this union type  @typescript-eslint/no-redundant-type-constituents
+   140:12  error  "CANCELLED" | "REGISTERED" | "APPLIED" is overridden by string in this union type                                                                                                           @typescript-eslint/no-redundant-type-constituents
+  1534:9   error  Unsafe assignment of an error typed value                                                                                                                                                   @typescript-eslint/no-unsafe-assignment
+  1745:15  error  Unsafe member access .code on an `any` value                                                                                                                                                @typescript-eslint/no-unsafe-member-access
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/delivery/geocoding.controller.ts
+  21:9  error  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/delivery/routing-providers.service.ts
+   40:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   41:5   error  Unsafe return of a value of type `any`                                  @typescript-eslint/no-unsafe-return
+   41:12  error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+   41:21  error  Unsafe member access .features on an `any` value                        @typescript-eslint/no-unsafe-member-access
+   41:37  error  Unsafe member access .map on an `any` value                             @typescript-eslint/no-unsafe-member-access
+   41:51  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   51:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   52:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   52:29  error  Unsafe member access .features on an `any` value                        @typescript-eslint/no-unsafe-member-access
+   62:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   77:17  error  Unsafe member access .unassigned on an `any` value                      @typescript-eslint/no-unsafe-member-access
+   78:13  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   78:23  error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+   78:23  error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+   78:31  error  Unsafe member access .unassigned on an `any` value                      @typescript-eslint/no-unsafe-member-access
+   79:20  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   79:45  error  Unsafe member access .id on an `any` value                              @typescript-eslint/no-unsafe-member-access
+   80:10  error  Unsafe member access .filter on an `any` value                          @typescript-eslint/no-unsafe-member-access
+   83:9   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   86:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+   87:7   error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+   87:15  error  Unsafe member access .routes on an `any` value                          @typescript-eslint/no-unsafe-member-access
+   87:49  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   87:62  error  Unsafe member access .type on an `any` value                            @typescript-eslint/no-unsafe-member-access
+   89:15  error  Unsafe member access .length on an `any` value                          @typescript-eslint/no-unsafe-member-access
+   93:5   error  Unsafe return of a value of type `any`                                  @typescript-eslint/no-unsafe-return
+   93:12  error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+   93:18  error  Unsafe member access .map on an `any` value                             @typescript-eslint/no-unsafe-member-access
+   93:29  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   94:33  error  Unsafe member access .id on an `any` value                              @typescript-eslint/no-unsafe-member-access
+  107:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  108:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  108:27  error  Unsafe member access .routes on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  109:17  error  Unsafe member access .code on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  109:42  error  Unsafe member access .geometry on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  114:7   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  114:23  error  Unsafe member access .geometry on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  115:34  error  Unsafe argument of type `any` assigned to a parameter of type `number`  @typescript-eslint/no-unsafe-argument
+  115:40  error  Unsafe member access .distance on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  116:35  error  Unsafe argument of type `any` assigned to a parameter of type `number`  @typescript-eslint/no-unsafe-argument
+  116:41  error  Unsafe member access .duration on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  117:7   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  117:13  error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+  117:20  error  Unsafe member access .legs on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  117:32  error  Unsafe member access .map on an `any` value                             @typescript-eslint/no-unsafe-member-access
+  117:42  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  118:36  error  Unsafe argument of type `any` assigned to a parameter of type `number`  @typescript-eslint/no-unsafe-argument
+  118:40  error  Unsafe member access .distance on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  119:37  error  Unsafe argument of type `any` assigned to a parameter of type `number`  @typescript-eslint/no-unsafe-argument
+  119:41  error  Unsafe member access .duration on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  128:14  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  135:13  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  157:43  error  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  158:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  158:43  error  Unsafe member access .geometry on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  159:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  159:32  error  Unsafe member access .properties on an `any` value                      @typescript-eslint/no-unsafe-member-access
+  160:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  160:30  error  Unsafe member access .name on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  162:22  error  Unsafe member access .name on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  163:22  error  Unsafe member access .street on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  164:22  error  Unsafe member access .city on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  165:22  error  Unsafe member access .state on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  166:22  error  Unsafe member access .country on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  171:21  error  Unsafe member access .label on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  173:7   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  174:7   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  175:7   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  176:7   error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  176:27  error  Unsafe member access .osm_type on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  177:25  error  Unsafe member access .osm_id on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  177:67  error  Unsafe member access .osm_id on an `any` value                          @typescript-eslint/no-unsafe-member-access
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/inventory/inventory-transfers.service.ts
+  23:6  error  'LocationRecord' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/operational-config/operational-config.service.ts
+  166:3  error  Async method 'validateConfig' has no 'await' expression  @typescript-eslint/require-await
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/payments/payments.controller.spec.ts
+  22:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/payments/payments.service.spec.ts
+   70:44  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   90:41  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  139:9   error  Delete `·`                                      prettier/prettier
+  267:9   error  Delete `·`                                      prettier/prettier
+  345:1   error  Delete `·`                                      prettier/prettier
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/payments/payments.service.ts
+  39:6  error  'LastPaymentDate' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service.spec.ts
+    81:56  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   163:16  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   190:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   192:25  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   360:25  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   402:23  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   430:19  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   728:65  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   740:38  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   768:25  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   814:65  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   861:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   862:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   883:37  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1047:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1048:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1078:24  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1115:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1150:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1151:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1152:60  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  1210:23  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  1237:27  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service.ts
+  2079:21  error  'unitCostSnapshot' is defined but never used      @typescript-eslint/no-unused-vars
+  2080:21  error  'costSubtotalSnapshot' is defined but never used  @typescript-eslint/no-unused-vars
+  2081:21  error  'costSnapshotSource' is defined but never used    @typescript-eslint/no-unused-vars
+  2116:44  error  'amount' is defined but never used                @typescript-eslint/no-unused-vars
+  2116:66  error  Unsafe return of a value of type `any`            @typescript-eslint/no-unsafe-return
+  2119:14  error  'amount' is defined but never used                @typescript-eslint/no-unused-vars
+  2119:22  error  'unitPrice' is defined but never used             @typescript-eslint/no-unused-vars
+  2119:49  error  Unsafe return of a value of type `any`            @typescript-eslint/no-unsafe-return
+  2145:44  error  'items' is defined but never used                 @typescript-eslint/no-unused-vars
+  2145:65  error  Unsafe return of a value of type `any`            @typescript-eslint/no-unsafe-return
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/purchases/purchases.service.spec.ts
+  62:44  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/purchases/purchases.service.ts
+  810:72  error  'value' will use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/reports/reports.controller.spec.ts
+   32:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   35:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   40:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   46:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   52:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   58:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   64:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   91:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  103:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  117:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  129:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  143:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  157:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  171:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/reports/reports.service.spec.ts
+  4:3  error  'SaleDocumentType' is defined but never used  @typescript-eslint/no-unused-vars
+  5:3  error  'SalePaymentType' is defined but never used   @typescript-eslint/no-unused-vars
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/reports/reports.service.ts
+   345:5   error  '_user' is defined but never used                                                              @typescript-eslint/no-unused-vars
+   358:5   error  '_user' is defined but never used                                                              @typescript-eslint/no-unused-vars
+   464:5   error  '_user' is defined but never used                                                              @typescript-eslint/no-unused-vars
+  1295:26  error  'rawKey' may use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/sales/credit-decision.spec.ts
+  138:7  error  Delete `·`  prettier/prettier
+  222:7  error  Delete `·`  prettier/prettier
+  269:1  error  Delete `·`  prettier/prettier
+  311:7  error  Delete `·`  prettier/prettier
+  332:1  error  Delete `·`  prettier/prettier
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/sales/sales.controller.spec.ts
+   11:9   error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   31:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   45:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   64:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   74:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+   94:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  146:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  151:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  154:38  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  176:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  202:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+  239:12  error  A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object.
+Consider using an arrow function or explicitly `.bind()`ing the method to avoid calling the method with an unintended `this` value. 
+If a function does not access `this`, it can be annotated with `this: void`  @typescript-eslint/unbound-method
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/sales/sales.service.spec.ts
+    89:44  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  2680:48  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  2723:48  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/sales/sales.service.ts
+   129:6   error  'UpdatedSale' is defined but never used                                                        @typescript-eslint/no-unused-vars
+   147:12  error  "CANCELLED" | "REGISTERED" | "APPLIED" is overridden by string in this union type              @typescript-eslint/no-redundant-type-constituents
+  1206:17  error  Unsafe member access .code on an `any` value                                                   @typescript-eslint/no-unsafe-member-access
+  2617:13  error  'unitCostSnapshot' is assigned a value but never used                                          @typescript-eslint/no-unused-vars
+  2618:13  error  'costSubtotalSnapshot' is assigned a value but never used                                      @typescript-eslint/no-unused-vars
+  2619:13  error  'costSnapshotSource' is assigned a value but never used                                        @typescript-eslint/no-unused-vars
+  3265:72  error  'value' will use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
+
+/Users/marcoszamudio/Documents/Dev/pollos-distribuidor/backend/src/modules/users/users.service.spec.ts
+   53:73  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+   79:59  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  161:56  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+  168:59  error  Async arrow function has no 'await' expression  @typescript-eslint/require-await
+
+✖ 364 problems (364 errors, 0 warnings)
+  18 errors and 0 warnings potentially fixable with the `--fix` option.
+

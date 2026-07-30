@@ -33,13 +33,22 @@ type LocationRecord = {
   updatedAt: Date;
 };
 
-type LocationResponse = Omit<LocationRecord, 'latitude' | 'longitude'> & { latitude: number | null; longitude: number | null };
+type LocationResponse = Omit<LocationRecord, 'latitude' | 'longitude'> & {
+  latitude: number | null;
+  longitude: number | null;
+};
 
 type LocationListResponse = { items: LocationResponse[] };
 
 type LocationMutationDto = CreateLocationDto | UpdateLocationDto;
-type LocationMutationData = Pick<LocationRecord, 'name' | 'code' | 'type' | 'parentId' | 'address' | 'isActive'>;
-type LocationListActor = Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>;
+type LocationMutationData = Pick<
+  LocationRecord,
+  'name' | 'code' | 'type' | 'parentId' | 'address' | 'isActive'
+>;
+type LocationListActor = Pick<
+  AuthenticatedUser,
+  'role' | 'operationalLocationId'
+>;
 
 const SELLER_WITHOUT_LOCATION = '__seller_without_operational_location__';
 
@@ -117,7 +126,7 @@ export class LocationsService {
     const location = (await this.prisma.operationalLocation
       .update({
         where: { id: currentLocation.id },
-        data: data as Prisma.OperationalLocationUncheckedUpdateInput,
+        data: data,
       })
       .catch((error: unknown) => {
         this.throwDuplicateCodeConflict(error);
@@ -429,8 +438,12 @@ export class LocationsService {
       type: location.type,
       parentId: location.parentId,
       address: location.address,
-      latitude: location.latitude == null ? null : Number(location.latitude.toString()),
-      longitude: location.longitude == null ? null : Number(location.longitude.toString()),
+      latitude:
+        location.latitude == null ? null : Number(location.latitude.toString()),
+      longitude:
+        location.longitude == null
+          ? null
+          : Number(location.longitude.toString()),
       isActive: location.isActive,
       createdAt: location.createdAt,
       updatedAt: location.updatedAt,

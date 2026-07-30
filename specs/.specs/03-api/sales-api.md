@@ -83,7 +83,7 @@ Permisos: `ADMIN`, `SELLER`.
 
 Body importante:
 
-`payments` es opcional cuando una venta a crédito no recibe abono inicial. Cada elemento requiere `amount` positivo y `paymentMethod`; el backend asigna `paidAt` a cada `Payment`. Para `CASH`, `cashTendered` es opcional y representa efectivo físico recibido: debe ser positivo y no menor que `amount`; el backend calcula y persiste `changeGiven`. El cliente no envía `changeGiven`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`. La suma de `payments[].amount` no puede superar el total de la venta y, para `CASH_SALE`, debe ser exactamente igual.
+`payments` es opcional cuando una venta a crédito no recibe abono inicial. Cada elemento requiere `amount` como string monetario canónico con dos decimales y `paymentMethod`; el backend asigna `paidAt` a cada `Payment`. Para `CASH`, `cashTendered` es opcional y representa efectivo físico recibido como string monetario: debe ser positivo y no menor que `amount`; el backend calcula y persiste `changeGiven`. El cliente no envía `changeGiven`. Transferencia, depósito y cheque requieren `bankName` y `referenceNumber`; tarjeta o voucher requieren `referenceNumber` como autorización y `cardLastFour`. La suma de `payments[].amount` no puede superar el total de la venta y, para `CASH_SALE`, debe ser exactamente igual.
 
 ```json
 {
@@ -101,9 +101,9 @@ Body importante:
   },
   "paymentType": "CASH_SALE",
   "payments": [
-    { "amount": 500, "paymentMethod": "CASH", "cashTendered": 600 },
-    { "amount": 700, "paymentMethod": "TRANSFER", "bankName": "Banco Norte", "referenceNumber": "TRANSFER-001" },
-    { "amount": 300, "paymentMethod": "CARD", "referenceNumber": "AUTH-123", "cardLastFour": "4242" }
+    { "amount": "500.00", "paymentMethod": "CASH", "cashTendered": "600.00" },
+    { "amount": "700.00", "paymentMethod": "TRANSFER", "bankName": "Banco Norte", "referenceNumber": "TRANSFER-001" },
+    { "amount": "300.00", "paymentMethod": "CARD", "referenceNumber": "AUTH-123", "cardLastFour": "4242" }
   ],
   "discountAuthorizationId": "string opcional; autorización creada por ADMIN",
   "commercialPolicyId": "string opcional",
@@ -145,6 +145,8 @@ Validaciones:
 - No vender sin stock suficiente en la ubicación indicada.
 - No aceptar precios enviados por frontend como fuente de verdad.
 - Calcular precios, descuentos, subtotales y totales en backend.
+- Todos los importes monetarios de respuesta se serializan como strings canónicos con dos decimales; el cliente nunca recibe `number` como fuente monetaria.
+- Las operaciones monetarias usan aritmética decimal exacta y redondeo centralizado `HALF_UP`; queda prohibido convertir dinero a `number`.
 - No aceptar `discount` como importe enviado por cliente. Un descuento requiere `discountAuthorizationId`; el backend obtiene el porcentaje y la evidencia desde una autorización vigente, de un solo uso, ligada a la política comercial aplicable.
 - Solo `ADMIN` puede crear autorizaciones extraordinarias de descuento. La autorización requiere motivo, evidencia, usuario autorizador y un porcentaje que no exceda el máximo de la política comercial.
 - La venta persiste `discountAuthorizationId`, porcentaje, importe calculado y evidencia para auditoría.

@@ -1,21 +1,38 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEmpty, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Min, ValidateNested } from 'class-validator';
-import { PaymentMethod, ProductUnit, SaleChannel, SaleDocumentType, SalePaymentType } from '@prisma/client';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmpty,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsDecimal,
+  Matches,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import {
+  PaymentMethod,
+  ProductUnit,
+  SaleChannel,
+  SaleDocumentType,
+  SalePaymentType,
+} from '@prisma/client';
 
 export class CreateSalePaymentDto {
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.01)
-  amount!: number;
+  /** Strings are canonical at the API boundary; number remains only for legacy callers during migration. */
+  @IsDecimal({ decimal_digits: '0,2', force_decimal: false })
+  amount!: string | number;
 
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.01)
-  cashTendered?: number;
+  @IsDecimal({ decimal_digits: '0,2', force_decimal: false })
+  cashTendered?: string | number;
 
   @IsOptional()
   @IsString()

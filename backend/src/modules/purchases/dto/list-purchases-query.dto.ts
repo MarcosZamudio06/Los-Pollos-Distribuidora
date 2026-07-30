@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { PurchaseStatus } from '@prisma/client';
 
 export class ListPurchasesQueryDto {

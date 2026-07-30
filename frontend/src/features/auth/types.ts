@@ -5,6 +5,7 @@ export type AuthUser = {
   name: string
   email: string
   role: UserRole
+  permissions?: string[]
   operationalLocationId?: string
   mustChangePassword?: boolean
 }

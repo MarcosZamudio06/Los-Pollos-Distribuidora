@@ -1,10 +1,26 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { AssignDeliveryRouteOrdersDto, CreateDeliveryRouteDto, ListDeliveryRoutesQueryDto, UpdateDeliveryRouteStatusDto } from './dto';
+import {
+  AssignDeliveryRouteOrdersDto,
+  CreateDeliveryRouteDto,
+  ListDeliveryRoutesQueryDto,
+  UpdateDeliveryRouteStatusDto,
+} from './dto';
 import { DeliveryService } from './delivery.service';
 
 @Controller('delivery-routes')
@@ -46,16 +62,24 @@ export class DeliveryController {
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (Boolean(body.routePlanId) === Boolean(body.orders?.length)) {
-      throw new BadRequestException('Provide exactly one of routePlanId or orders');
+      throw new BadRequestException(
+        'Provide exactly one of routePlanId or orders',
+      );
     }
     if (body.routePlanId && !idempotencyKey?.trim()) {
-      throw new BadRequestException('Idempotency-Key is required for optimized route creation');
+      throw new BadRequestException(
+        'Idempotency-Key is required for optimized route creation',
+      );
     }
 
     return {
       success: true,
       message: 'Delivery route created successfully',
-      data: await this.deliveryService.createRoute(body, currentUser, idempotencyKey),
+      data: await this.deliveryService.createRoute(
+        body,
+        currentUser,
+        idempotencyKey,
+      ),
     };
   }
 
@@ -67,13 +91,19 @@ export class DeliveryController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     if (Boolean(body.routePlanId) === Boolean(body.orders?.length)) {
-      throw new BadRequestException('Provide exactly one of routePlanId or orders');
+      throw new BadRequestException(
+        'Provide exactly one of routePlanId or orders',
+      );
     }
 
     return {
       success: true,
       message: 'Delivery route orders assigned successfully',
-      data: await this.deliveryService.assignOrdersToRoute(id, body, currentUser),
+      data: await this.deliveryService.assignOrdersToRoute(
+        id,
+        body,
+        currentUser,
+      ),
     };
   }
 

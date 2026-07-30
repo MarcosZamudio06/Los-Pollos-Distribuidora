@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -10,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { StringValue } from 'ms';
 import { PrismaService } from '../../database/prisma.service';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import {
   AuthenticatedPrincipal,
   AuthenticatedUser,
@@ -35,7 +37,10 @@ type UserRecord = {
   mustChangePassword: boolean;
   operationalLocationId?: string;
   sessionVersion: number;
-  role: { name: string };
+  role: {
+    name: string;
+    permissions?: Array<{ permission: { key: string } }>;
+  };
 };
 
 type SessionRecord = {
@@ -54,6 +59,8 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    @Optional()
+    private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
   ) {}
 
   async login(credentials: LoginDto): Promise<IssuedSession> {
@@ -220,7 +227,9 @@ export class AuthService {
           mustChangePassword: false,
           sessionVersion: { increment: 1 },
         },
-        include: { role: true },
+        include: {
+          role: { include: { permissions: { include: { permission: true } } } },
+        },
       });
       await transaction.authSession.updateMany({
         where: { userId, revokedAt: null },
@@ -229,6 +238,7 @@ export class AuthService {
       return updated;
     });
 
+    this.sessionRevocationRegistry?.notify([userId]);
     return this.toAuthenticatedUser(updatedUser);
   }
 
@@ -242,7 +252,11 @@ export class AuthService {
     sessionId: string,
     sessionVersion: number,
     tokenVersion: number,
-  ): Promise<{ accessToken: string; refreshToken: string; user: AuthenticatedUser }> {
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    user: AuthenticatedUser;
+  }> {
     const sanitizedUser = this.toAuthenticatedUser(user);
     const accessToken = await this.signToken(sanitizedUser, 'access', {
       sessionId,
@@ -260,7 +274,15 @@ export class AuthService {
   private async findSession(id: string): Promise<SessionRecord | null> {
     return this.prisma.authSession.findUnique({
       where: { id },
-      include: { user: { include: { role: true } } },
+      include: {
+        user: {
+          include: {
+            role: {
+              include: { permissions: { include: { permission: true } } },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -273,8 +295,7 @@ export class AuthService {
 
   private isIdleExpired(session: SessionRecord, now: Date): boolean {
     return (
-      session.lastUsedAt.getTime() +
-        this.getSessionTtlSeconds('idle') * 1000 <=
+      session.lastUsedAt.getTime() + this.getSessionTtlSeconds('idle') * 1000 <=
       now.getTime()
     );
   }
@@ -291,7 +312,9 @@ export class AuthService {
     const configured = Number(process.env[envKey] ?? fallback);
 
     if (!Number.isInteger(configured) || configured <= 0) {
-      throw new InternalServerErrorException(`${envKey} must be a positive integer`);
+      throw new InternalServerErrorException(
+        `${envKey} must be a positive integer`,
+      );
     }
     return configured;
   }
@@ -312,14 +335,18 @@ export class AuthService {
   private async findUserById(id: string): Promise<UserRecord | null> {
     return this.prisma.user.findUnique({
       where: { id },
-      include: { role: true },
+      include: {
+        role: { include: { permissions: { include: { permission: true } } } },
+      },
     });
   }
 
   private async findUserByEmail(email: string): Promise<UserRecord | null> {
     return this.prisma.user.findUnique({
       where: { email },
-      include: { role: true },
+      include: {
+        role: { include: { permissions: { include: { permission: true } } } },
+      },
     });
   }
 
@@ -337,6 +364,8 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role.name,
+      permissions:
+        user.role.permissions?.map(({ permission }) => permission.key) ?? [],
       mustChangePassword: user.mustChangePassword,
       ...(user.operationalLocationId
         ? { operationalLocationId: user.operationalLocationId }

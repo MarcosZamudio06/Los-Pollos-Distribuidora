@@ -2,6 +2,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
@@ -54,12 +56,22 @@ describe('AuthController persistent session API', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: authService }],
+      providers: [
+        JwtAuthGuard,
+        PermissionsGuard,
+        { provide: AuthService, useValue: authService },
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalGuards(
+      moduleFixture.get(JwtAuthGuard),
+      moduleFixture.get(PermissionsGuard),
+    );
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
   });
 

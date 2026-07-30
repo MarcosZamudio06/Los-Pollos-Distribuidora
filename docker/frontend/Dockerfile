@@ -3,10 +3,9 @@ FROM node:24.14.1-alpine AS build
 ARG VITE_API_URL=/api
 ENV VITE_API_BASE_URL=${VITE_API_URL}
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-
 RUN npm config set registry https://registry.npmjs.org/ \
   && npm config set fetch-retries 5 \
   && npm config set fetch-retry-mintimeout 20000 \
@@ -16,12 +15,13 @@ RUN npm config set registry https://registry.npmjs.org/ \
 COPY frontend/index.html frontend/tsconfig*.json frontend/vite.config.ts ./
 COPY frontend/public ./public
 COPY frontend/src ./src
+COPY shared /app/shared
 
 RUN npm run build
 
 FROM nginx:alpine
 
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/frontend/dist /usr/share/nginx/html
 RUN printf '%s\n' \
   'server {' \
   '  listen 3000;' \
@@ -35,10 +35,10 @@ RUN printf '%s\n' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
   '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
-   '    proxy_set_header X-Forwarded-Proto $scheme;' \
-   '    proxy_set_header X-Request-ID $request_id;' \
-   '    proxy_set_header Upgrade $http_upgrade;' \
-   '    proxy_set_header Connection "upgrade";' \
+  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_set_header X-Request-ID $request_id;' \
+  '    proxy_set_header Upgrade $http_upgrade;' \
+  '    proxy_set_header Connection "upgrade";' \
   '  }' \
   '  location / {' \
   '    try_files $uri $uri/ /index.html;' \

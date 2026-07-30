@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsDecimal,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { PaymentMethod } from '@prisma/client';
 
 export class RegisterReceivablePaymentDto {
@@ -7,10 +16,9 @@ export class RegisterReceivablePaymentDto {
   @IsNotEmpty()
   accountReceivableId!: string;
 
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.01)
-  amount!: number;
+  /** Strings are canonical at the API boundary; number remains only for legacy callers during migration. */
+  @IsDecimal({ decimal_digits: '0,2', force_decimal: false })
+  amount!: string | number;
 
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
