@@ -9,6 +9,7 @@ async function bootstrap() {
     const configService = app.get(config_1.ConfigService);
     const port = configService.get('app.port', 3000);
     (0, configure_http_application_1.configureHttpApplication)(app, configService);
+    app.enableShutdownHooks(['SIGTERM', 'SIGINT']);
     await app.listen(port);
 }
 void bootstrap();

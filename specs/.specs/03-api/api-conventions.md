@@ -89,7 +89,12 @@ Todos los endpoints que reciben body deben usar DTOs y validación.
 
 ## Reglas transversales del MVP
 
-- Todas las rutas, excepto autenticación pública, requieren `Authorization: Bearer <token>`.
+- Todas las rutas, excepto autenticación pública y probes de infraestructura,
+  requieren `Authorization: Bearer <token>`.
+- Los probes `GET /api/health/live`, `GET /api/health/startup` y
+  `GET /api/health/ready` son públicos y no están sujetos a rate limiting. No
+  pueden devolver secretos, URLs de dependencias, consultas SQL ni diagnósticos
+  internos.
 - Los permisos se validan por rol y por alcance operativo cuando aplique, por ejemplo vendedor propio, repartidor asignado o ubicación autorizada.
 - Las respuestas no deben exponer `passwordHash`, secretos, tokens internos ni datos sensibles innecesarios.
 - Las operaciones que modifican inventario, ventas, compras, cuentas por cobrar, pagos, rutas o liquidaciones deben devolver el recurso afectado con identificadores de trazabilidad.

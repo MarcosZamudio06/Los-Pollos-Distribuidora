@@ -1,9 +1,25 @@
 services:
+  migrate:
+    profiles: ["migration"]
+    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Managed PostgreSQL DATABASE_URL is required}
+    command: npm run migrate:deploy
+    restart: "no"
+    networks:
+      - app_network
+
   backend:
+    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
     restart: unless-stopped
+    init: true
+    stop_grace_period: 75s
     environment:
       API_PREFIX: ${API_PREFIX:-api}
       AUTH_SESSION_ABSOLUTE_TTL_SECONDS: ${AUTH_SESSION_ABSOLUTE_TTL_SECONDS:-604800}
@@ -26,23 +42,19 @@ services:
       SWAGGER_ENABLED: "false"
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:?TRUST_PROXY_HOPS is required}
-    command: npm run start:docker
     healthcheck:
       test:
         - CMD
         - node
         - -e
         - >-
-          const net = require('node:net');
-          const socket = net.createConnection({ host: '127.0.0.1', port: Number(process.env.PORT || 4000) });
-          socket.setTimeout(2000);
-          socket.once('connect', () => { socket.end(); process.exit(0); });
-          socket.once('timeout', () => { socket.destroy(); process.exit(1); });
-          socket.once('error', () => process.exit(1));
+          fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/' + (process.env.API_PREFIX || 'api') + '/health/ready')
+            .then((response) => process.exit(response.ok ? 0 : 1))
+            .catch(() => process.exit(1));
       interval: 10s
       timeout: 3s
       retries: 10
-      start_period: 20s
+      start_period: 30s
     networks:
       - app_network
 
