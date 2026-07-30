@@ -3,6 +3,7 @@ export type AuthenticatedUser = {
     email: string;
     name: string;
     role: string;
+    permissions?: string[];
     mustChangePassword: boolean;
     operationalLocationId?: string;
 };

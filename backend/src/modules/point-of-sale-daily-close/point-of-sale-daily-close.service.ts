@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from 'crypto';
 import { CashSessionStatus, DailyCloseDifferenceScope, DailyCloseDifferenceStatus, DailyCloseDifferenceType, DailyCloseDifferenceUnit, DailyCloseEventType, DailyCloseSnapshotType, OperationalLocationType, PaymentStatus, PointOfSaleDailyCloseStatus, Prisma, SaleDocumentType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { calculateDailyCloseCost, calculateDailyCloseKilos } from './daily-close-calculations';
 import { CreateDailyCloseInventoryCountDto, CreateExpenseDto, CreateScaleTicketDto, JustifyDailyCloseDifferenceDto, ListDailyCloseQueryDto, OpenDailyCloseDto, ReasonedDailyCloseDto, RecordCashCountDto, UpdateDailyCloseInventoryCountDto, VersionedDailyCloseDto } from './dto';
@@ -338,7 +339,7 @@ export class PointOfSaleDailyCloseService {
   }
 
   async authorizeDifference(id: string, differenceId: string, dto: VersionedDailyCloseDto, user: AuthenticatedUser) {
-    this.admin(user);
+    this.requirePermission(user, PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE);
     await this.requireDraft(id, user);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -536,7 +537,7 @@ export class PointOfSaleDailyCloseService {
   }
 
   async reopen(id: string, dto: ReasonedDailyCloseDto, user: AuthenticatedUser) {
-    this.admin(user);
+    this.requirePermission(user, PERMISSIONS.DAILY_CLOSES_REOPEN);
     return this.transition(id, dto.version, 'DRAFT', { status: 'DRAFT', cashSessionStatus: CashSessionStatus.OPEN, cashSessionClosedAt: null, reopenedByUserId: user.id, reopenedAt: new Date(), reopenedReason: dto.reason.trim(), lastValidatedAt: null, validatedSourceVersion: null }, user);
   }
 
@@ -963,6 +964,11 @@ export class PointOfSaleDailyCloseService {
     return result;
   }
   private admin(user: AuthenticatedUser) { if (user.role !== 'ADMIN') throw new ForbiddenException('DAILY_CLOSE_ADMIN_REQUIRED'); }
+  private requirePermission(user: AuthenticatedUser, permission: string) {
+    if (!user.permissions?.includes(permission)) {
+      throw new ForbiddenException('DAILY_CLOSE_PERMISSION_REQUIRED');
+    }
+  }
   private date(value: string) { const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`); if (Number.isNaN(date.getTime())) throw new BadRequestException('INVALID_BUSINESS_DATE'); return date; }
   private currentOperationalDate(now = new Date()) {
     const timeZone = process.env.APP_TIMEZONE?.trim() || 'America/Mexico_City';

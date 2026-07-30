@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import { CashManagementService } from './cash-management.service';
 
@@ -18,7 +19,12 @@ function createPrisma() {
   return prisma;
 }
 
-const admin = { id: 'admin-1', role: 'ADMIN', operationalLocationId: 'loc-1' } as never;
+const admin = {
+  id: 'admin-1',
+  role: 'ADMIN',
+  permissions: [PERMISSIONS.CASH_TERMINALS_REASSIGN],
+  operationalLocationId: 'loc-1',
+} as never;
 const cashier = { id: 'cashier-1', role: 'SELLER', operationalLocationId: 'loc-1' } as never;
 
 describe('CashManagementService', () => {
@@ -30,6 +36,17 @@ describe('CashManagementService', () => {
     await expect(service.createTerminal({ operationalLocationId: 'loc-1', code: 'C01', name: 'Caja 01', deviceId: 'device-1' }, admin))
       .resolves.toMatchObject({ id: 'terminal-1', deviceId: 'device-1' });
     expect(prisma.cashTerminal.create).toHaveBeenCalledWith({ data: expect.objectContaining({ operationalLocationId: 'loc-1', code: 'C01', deviceId: 'device-1' }) });
+  });
+
+  it('rejects terminal changes without the terminal reassignment permission', async () => {
+    const prisma = createPrisma();
+    const service = new CashManagementService(prisma as unknown as PrismaService);
+
+    await expect(service.createTerminal(
+      { operationalLocationId: 'loc-1', code: 'C01', name: 'Caja 01', deviceId: 'device-1' },
+      { ...admin, permissions: [] },
+    )).rejects.toThrow('CASH_TERMINAL_PERMISSION_REQUIRED');
+    expect(prisma.cashTerminal.create).not.toHaveBeenCalled();
   });
 
   it('opens independent shifts for terminals under the same branch daily close', async () => {

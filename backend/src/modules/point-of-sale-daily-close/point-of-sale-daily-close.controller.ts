@@ -12,6 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PERMISSIONS } from '../../common/authorization/permissions';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -109,7 +111,7 @@ export class PointOfSaleDailyCloseController {
       await this.service.justifyDifference(id, differenceId, dto, user),
     );
   }
-  @Patch(':id/differences/:differenceId/authorize') @Roles('ADMIN') async authorizeDifference(
+  @Patch(':id/differences/:differenceId/authorize') @RequirePermissions(PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE) async authorizeDifference(
     @Param('id') id: string,
     @Param('differenceId') differenceId: string,
     @Body() dto: VersionedDailyCloseDto,
@@ -209,7 +211,7 @@ export class PointOfSaleDailyCloseController {
       await this.service.cancel(id, dto, user),
     );
   }
-  @Patch(':id/reopen') @Roles('ADMIN') async reopen(
+  @Patch(':id/reopen') @RequirePermissions(PERMISSIONS.DAILY_CLOSES_REOPEN) async reopen(
     @Param('id') id: string,
     @Body() dto: ReasonedDailyCloseDto,
     @CurrentUser() user: AuthenticatedUser,

@@ -24,7 +24,11 @@ const productionComposePath = resolve(
 );
 type UpsertMock<TArgs> = jest.MockedFunction<(args: TArgs) => Promise<unknown>>;
 type PrismaSeedMockClient = {
-  role: { upsert: UpsertMock<Prisma.RoleUpsertArgs> };
+  role: {
+    upsert: UpsertMock<Prisma.RoleUpsertArgs>;
+    update: UpsertMock<Prisma.RoleUpdateArgs>;
+  };
+  permission: { upsert: UpsertMock<Prisma.PermissionUpsertArgs> };
   user: {
     upsert: UpsertMock<Prisma.UserUpsertArgs>;
   };
@@ -47,7 +51,11 @@ function createPrismaSeedMock(): {
     .fn<Promise<unknown>, [Prisma.UserUpsertArgs]>()
     .mockResolvedValue(undefined);
   const prisma: PrismaSeedMockClient = {
-    role: { upsert: createUpsertMock<Prisma.RoleUpsertArgs>() },
+    role: {
+      upsert: createUpsertMock<Prisma.RoleUpsertArgs>(),
+      update: createUpsertMock<Prisma.RoleUpdateArgs>(),
+    },
+    permission: { upsert: createUpsertMock<Prisma.PermissionUpsertArgs>() },
     user: { upsert: userUpsertMock },
     operationalLocation: {
       upsert: createUpsertMock<Prisma.OperationalLocationUpsertArgs>(),

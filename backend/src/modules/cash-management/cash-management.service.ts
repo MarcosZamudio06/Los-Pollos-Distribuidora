@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { CashShiftStatus, OperationalLocationType, Prisma } from '@prisma/client';
 import { createHash, randomInt } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { ActivateMigratedCashTerminalDto, CloseCashShiftDto, CreateCashShiftMovementDto, CreateCashTerminalDto, ListCashTerminalQueryDto, OpenCashShiftDto, RequestCashTerminalActivationDto, UpdateCashTerminalDto } from './dto';
 
@@ -24,7 +25,7 @@ export class CashManagementService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createTerminal(dto: CreateCashTerminalDto, user: AuthenticatedUser) {
-    if (user.role !== 'ADMIN') throw new ForbiddenException('ADMIN_REQUIRED');
+    this.requirePermission(user, PERMISSIONS.CASH_TERMINALS_REASSIGN);
     try {
       return await this.prisma.cashTerminal.create({ data: {
         operationalLocationId: dto.operationalLocationId,
@@ -49,7 +50,7 @@ export class CashManagementService {
   }
 
   async updateTerminal(id: string, dto: UpdateCashTerminalDto, user: AuthenticatedUser) {
-    if (user.role !== 'ADMIN') throw new ForbiddenException('ADMIN_REQUIRED');
+    this.requirePermission(user, PERMISSIONS.CASH_TERMINALS_REASSIGN);
     const terminal = await this.prisma.cashTerminal.findUnique({ where: { id }, select: { id: true } });
     if (!terminal) throw new NotFoundException('CASH_TERMINAL_NOT_FOUND');
     try {
@@ -93,7 +94,7 @@ export class CashManagementService {
   }
 
   async activateMigratedTerminal(id: string, dto: ActivateMigratedCashTerminalDto, user: AuthenticatedUser) {
-    if (user.role !== 'ADMIN') throw new ForbiddenException('ADMIN_REQUIRED');
+    this.requirePermission(user, PERMISSIONS.CASH_TERMINALS_REASSIGN);
     const compactCode = dto.activationCode.toUpperCase().replace(/[-\s]/g, '');
     if (!/^[A-Z2-9]{10}$/.test(compactCode)) throw new BadRequestException('CASH_TERMINAL_ACTIVATION_INVALID');
     const now = new Date();
@@ -286,6 +287,12 @@ export class CashManagementService {
 
   private hash(value: string) {
     return createHash('sha256').update(value).digest('hex');
+  }
+
+  private requirePermission(user: AuthenticatedUser, permission: string) {
+    if (!user.permissions?.includes(permission)) {
+      throw new ForbiddenException('CASH_TERMINAL_PERMISSION_REQUIRED');
+    }
   }
 
   private currentOperationalDate(now = new Date()) {

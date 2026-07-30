@@ -4,11 +4,13 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthService } from '../auth/auth.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
-const admin = { id: 'admin-1', name: 'Admin', email: 'admin@pollos.local', role: 'ADMIN', mustChangePassword: false };
-const seller = { ...admin, id: 'seller-1', role: 'SELLER' };
+const admin = { id: 'admin-1', name: 'Admin', email: 'admin@pollos.local', role: 'ADMIN', permissions: ['users.manage'], mustChangePassword: false };
+const seller = { ...admin, id: 'seller-1', role: 'SELLER', permissions: [] };
 const employee = { id: 'user-1', name: 'Ana', email: 'ana@pollos.local', phone: '2291234567', controlNumber: 'EPDP-000001', roleId: 'role-1', operationalLocationId: 'location-1', role: { id: 'role-1', name: 'SELLER' }, operationalLocation: { id: 'location-1', name: 'Matriz', type: 'BRANCH' }, isActive: true, mustChangePassword: true, createdAt: new Date(), updatedAt: new Date(), deactivatedAt: null, deactivatedByUserId: null, deactivationReason: null };
 
 describe('UsersController employee API', () => {
@@ -16,10 +18,12 @@ describe('UsersController employee API', () => {
   beforeEach(async () => {
     service = { findAll: jest.fn().mockResolvedValue({ items: [employee], total: 1, page: 1, limit: 20 }), create: jest.fn().mockResolvedValue({ ...employee, temporaryPassword: 'temporary-secret' }) };
     const module = await Test.createTestingModule({ controllers: [UsersController], providers: [
+      JwtAuthGuard,
+      PermissionsGuard,
       { provide: UsersService, useValue: service },
       { provide: AuthService, useValue: { verifyAccessToken: jest.fn((token: string) => token === 'admin-token' ? Promise.resolve(admin) : token === 'seller-token' ? Promise.resolve(seller) : Promise.reject(new Error('invalid'))) } },
     ] }).compile();
-    app = module.createNestApplication(); app.setGlobalPrefix('api'); app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true })); await app.init();
+    app = module.createNestApplication(); app.setGlobalPrefix('api'); app.useGlobalGuards(module.get(JwtAuthGuard), module.get(PermissionsGuard)); app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true })); await app.init();
   });
   afterEach(async () => app.close());
   it('denies unauthenticated and non-admin requests', async () => {

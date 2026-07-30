@@ -44,8 +44,8 @@ type ProductListResponse = {
 export declare class ProductsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    findAll(query: ListProductsQueryDto, currentUser: Pick<AuthenticatedUser, 'role'>): Promise<ProductListResponse>;
-    findOne(id: string, query: GetProductQueryDto | undefined, currentUser: Pick<AuthenticatedUser, 'role'>): Promise<ProductResponse>;
+    findAll(query: ListProductsQueryDto, currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>): Promise<ProductListResponse>;
+    findOne(id: string, query: GetProductQueryDto | undefined, currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>): Promise<ProductResponse>;
     create(dto: CreateProductDto): Promise<ProductResponse>;
     update(id: string, dto: UpdateProductDto): Promise<ProductResponse>;
     deactivate(id: string): Promise<ProductResponse>;

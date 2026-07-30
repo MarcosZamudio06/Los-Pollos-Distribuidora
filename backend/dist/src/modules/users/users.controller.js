@@ -15,9 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
-const roles_decorator_1 = require("../../common/decorators/roles.decorator");
-const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
-const roles_guard_1 = require("../../common/guards/roles.guard");
+const permissions_1 = require("../../common/authorization/permissions");
+const require_permissions_decorator_1 = require("../../common/decorators/require-permissions.decorator");
 const dto_1 = require("./dto");
 const users_service_1 = require("./users.service");
 let UsersController = class UsersController {
@@ -117,8 +116,7 @@ __decorate([
 ], UsersController.prototype, "deactivate", null);
 exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)('users'),
-    (0, roles_decorator_1.Roles)('ADMIN'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, require_permissions_decorator_1.RequirePermissions)(permissions_1.PERMISSIONS.USERS_MANAGE),
     __metadata("design:paramtypes", [users_service_1.UsersService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map

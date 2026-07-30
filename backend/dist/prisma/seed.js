@@ -8,6 +8,7 @@ exports.getInitialAdminPassword = getInitialAdminPassword;
 exports.seed = seed;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const permissions_1 = require("../src/common/authorization/permissions");
 const seed_guard_1 = require("./seed-guard");
 exports.DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
 exports.DEVELOPMENT_ROLE_TEST_PASSWORD = 'DevRoleUsers-2026!';
@@ -177,6 +178,29 @@ async function seedRoles(prisma) {
         });
     }
 }
+async function seedPermissions(prisma) {
+    for (const permission of permissions_1.PERMISSION_DEFINITIONS) {
+        await prisma.permission.upsert({
+            where: { key: permission.key },
+            update: { description: permission.description },
+            create: permission,
+        });
+    }
+    for (const role of exports.initialRoles) {
+        const permissionKeys = permissions_1.ROLE_PERMISSION_KEYS[role.name] ?? [];
+        await prisma.role.update({
+            where: { name: role.name },
+            data: {
+                permissions: {
+                    deleteMany: {},
+                    create: permissionKeys.map((key) => ({
+                        permission: { connect: { key } },
+                    })),
+                },
+            },
+        });
+    }
+}
 async function seedInitialAdmin(prisma) {
     const passwordResolution = getInitialAdminPassword({
         env: process.env,
@@ -271,6 +295,7 @@ async function seedExampleProducts(prisma) {
 async function seed(prisma) {
     (0, seed_guard_1.assertSeedEnvironment)();
     await seedRoles(prisma);
+    await seedPermissions(prisma);
     await seedInitialLocation(prisma);
     await seedInitialAdmin(prisma);
     await seedInitialRoleUsers(prisma);

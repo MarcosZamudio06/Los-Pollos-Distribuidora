@@ -147,7 +147,9 @@ let AuthService = class AuthService {
                     mustChangePassword: false,
                     sessionVersion: { increment: 1 },
                 },
-                include: { role: true },
+                include: {
+                    role: { include: { permissions: { include: { permission: true } } } },
+                },
             });
             await transaction.authSession.updateMany({
                 where: { userId, revokedAt: null },
@@ -177,7 +179,13 @@ let AuthService = class AuthService {
     async findSession(id) {
         return this.prisma.authSession.findUnique({
             where: { id },
-            include: { user: { include: { role: true } } },
+            include: {
+                user: {
+                    include: {
+                        role: { include: { permissions: { include: { permission: true } } } },
+                    },
+                },
+            },
         });
     }
     async revokeSession(id, revokedAt) {
@@ -216,13 +224,17 @@ let AuthService = class AuthService {
     async findUserById(id) {
         return this.prisma.user.findUnique({
             where: { id },
-            include: { role: true },
+            include: {
+                role: { include: { permissions: { include: { permission: true } } } },
+            },
         });
     }
     async findUserByEmail(email) {
         return this.prisma.user.findUnique({
             where: { email },
-            include: { role: true },
+            include: {
+                role: { include: { permissions: { include: { permission: true } } } },
+            },
         });
     }
     assertPasswordPolicy(password) {
@@ -236,6 +248,7 @@ let AuthService = class AuthService {
             name: user.name,
             email: user.email,
             role: user.role.name,
+            permissions: user.role.permissions?.map(({ permission }) => permission.key) ?? [],
             mustChangePassword: user.mustChangePassword,
             ...(user.operationalLocationId
                 ? { operationalLocationId: user.operationalLocationId }

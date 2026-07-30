@@ -1,5 +1,9 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import {
+  PERMISSION_DEFINITIONS,
+  ROLE_PERMISSION_KEYS,
+} from '../src/common/authorization/permissions';
 import { assertSeedEnvironment } from './seed-guard';
 
 export const DEVELOPMENT_ADMIN_PASSWORD = 'DevOnly-ChangeMe-2026!';
@@ -172,6 +176,10 @@ export type SeedPrismaClient = {
   $executeRawUnsafe?: (query: string) => Promise<unknown>;
   role: {
     upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
+    update: (args: Prisma.RoleUpdateArgs) => Promise<unknown>;
+  };
+  permission: {
+    upsert: (args: Prisma.PermissionUpsertArgs) => Promise<unknown>;
   };
   user: {
     upsert: (args: Prisma.UserUpsertArgs) => Promise<unknown>;
@@ -211,6 +219,31 @@ async function seedRoles(prisma: SeedPrismaClient): Promise<void> {
       where: { name: role.name },
       update: { description: role.description },
       create: role,
+    });
+  }
+}
+
+async function seedPermissions(prisma: SeedPrismaClient): Promise<void> {
+  for (const permission of PERMISSION_DEFINITIONS) {
+    await prisma.permission.upsert({
+      where: { key: permission.key },
+      update: { description: permission.description },
+      create: permission,
+    });
+  }
+
+  for (const role of initialRoles) {
+    const permissionKeys = ROLE_PERMISSION_KEYS[role.name] ?? [];
+    await prisma.role.update({
+      where: { name: role.name },
+      data: {
+        permissions: {
+          deleteMany: {},
+          create: permissionKeys.map((key) => ({
+            permission: { connect: { key } },
+          })),
+        },
+      },
     });
   }
 }
@@ -323,6 +356,7 @@ async function seedExampleProducts(prisma: SeedPrismaClient): Promise<void> {
 export async function seed(prisma: SeedPrismaClient): Promise<void> {
   assertSeedEnvironment();
   await seedRoles(prisma);
+  await seedPermissions(prisma);
   await seedInitialLocation(prisma);
   await seedInitialAdmin(prisma);
   await seedInitialRoleUsers(prisma);

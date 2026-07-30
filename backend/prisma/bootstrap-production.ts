@@ -1,5 +1,9 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import {
+  PERMISSION_DEFINITIONS,
+  ROLE_PERMISSION_KEYS,
+} from '../src/common/authorization/permissions';
 
 const productionRoles = [
   { name: 'ADMIN', description: 'System administrator with full access.' },
@@ -12,6 +16,10 @@ const productionRoles = [
   {
     name: 'COLLECTIONS',
     description: 'Accounts receivable and collections user.',
+  },
+  {
+    name: 'BILLING',
+    description: 'Billing review, reconciliation and invoice linking user.',
   },
 ] as const;
 
@@ -35,6 +43,10 @@ const productionAdmin = {
 export type ProductionBootstrapClient = {
   role: {
     upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
+    update: (args: Prisma.RoleUpdateArgs) => Promise<unknown>;
+  };
+  permission: {
+    upsert: (args: Prisma.PermissionUpsertArgs) => Promise<unknown>;
   };
   operationalLocation: {
     upsert: (args: Prisma.OperationalLocationUpsertArgs) => Promise<unknown>;
@@ -74,6 +86,29 @@ export async function bootstrapProduction(
       where: { name: role.name },
       update: { description: role.description },
       create: role,
+    });
+  }
+
+  for (const permission of PERMISSION_DEFINITIONS) {
+    await prisma.permission.upsert({
+      where: { key: permission.key },
+      update: { description: permission.description },
+      create: permission,
+    });
+  }
+
+  for (const role of productionRoles) {
+    const permissionKeys = ROLE_PERMISSION_KEYS[role.name] ?? [];
+    await prisma.role.update({
+      where: { name: role.name },
+      data: {
+        permissions: {
+          deleteMany: {},
+          create: permissionKeys.map((key) => ({
+            permission: { connect: { key } },
+          })),
+        },
+      },
     });
   }
 

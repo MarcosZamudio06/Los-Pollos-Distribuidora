@@ -1,14 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PERMISSIONS } from '../../common/authorization/permissions';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CashManagementService } from './cash-management.service';
 import { ActivateMigratedCashTerminalDto, CloseCashShiftDto, CreateCashShiftMovementDto, CreateCashTerminalDto, CurrentCashShiftQueryDto, ListCashTerminalQueryDto, OpenCashShiftDto, RequestCashTerminalActivationDto, UpdateCashTerminalDto } from './dto';
 
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class CashManagementController {
   constructor(private readonly service: CashManagementService) {}
 
@@ -17,12 +16,12 @@ export class CashManagementController {
     return this.response('Cash terminals retrieved successfully', this.service.listTerminals(query, user));
   }
 
-  @Post('cash-terminals') @Roles('ADMIN')
+  @Post('cash-terminals') @RequirePermissions(PERMISSIONS.CASH_TERMINALS_REASSIGN)
   createTerminal(@Body() dto: CreateCashTerminalDto, @CurrentUser() user: AuthenticatedUser) {
     return this.response('Cash terminal registered successfully', this.service.createTerminal(dto, user));
   }
 
-  @Patch('cash-terminals/:id') @Roles('ADMIN')
+  @Patch('cash-terminals/:id') @RequirePermissions(PERMISSIONS.CASH_TERMINALS_REASSIGN)
   updateTerminal(@Param('id') id: string, @Body() dto: UpdateCashTerminalDto, @CurrentUser() user: AuthenticatedUser) {
     return this.response('Cash terminal updated successfully', this.service.updateTerminal(id, dto, user));
   }
@@ -32,7 +31,7 @@ export class CashManagementController {
     return this.response('Cash terminal activation code issued successfully', this.service.requestTerminalActivation(dto, user));
   }
 
-  @Post('cash-terminals/:id/activate') @Roles('ADMIN')
+  @Post('cash-terminals/:id/activate') @RequirePermissions(PERMISSIONS.CASH_TERMINALS_REASSIGN)
   activateMigratedTerminal(@Param('id') id: string, @Body() dto: ActivateMigratedCashTerminalDto, @CurrentUser() user: AuthenticatedUser) {
     return this.response('Migrated cash terminal activated successfully', this.service.activateMigratedTerminal(id, dto, user));
   }

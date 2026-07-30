@@ -2,6 +2,8 @@ import { MODULE_METADATA } from '@nestjs/common/constants';
 import { APP_GUARD } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProductsModule } from './modules/products/products.module';
@@ -37,6 +39,8 @@ describe('AppModule', () => {
     expect(imports).toContain(DeliveryModule);
     expect(controllers).toEqual([]);
     expect(providers).toEqual([
+      { provide: APP_GUARD, useClass: JwtAuthGuard },
+      { provide: APP_GUARD, useClass: PermissionsGuard },
       { provide: APP_GUARD, useClass: HttpThrottlerGuard },
     ]);
   });

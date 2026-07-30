@@ -13,6 +13,8 @@ const core_1 = require("@nestjs/core");
 const schedule_1 = require("@nestjs/schedule");
 const throttler_1 = require("@nestjs/throttler");
 const http_throttler_guard_1 = require("./common/guards/http-throttler.guard");
+const jwt_auth_guard_1 = require("./common/guards/jwt-auth.guard");
+const permissions_guard_1 = require("./common/guards/permissions.guard");
 const app_config_1 = require("./config/app.config");
 const database_config_1 = require("./config/database.config");
 const env_validation_1 = require("./config/env.validation");
@@ -81,7 +83,11 @@ exports.AppModule = AppModule = __decorate([
             billing_module_1.BillingModule,
         ],
         controllers: [],
-        providers: [{ provide: core_1.APP_GUARD, useClass: http_throttler_guard_1.HttpThrottlerGuard }],
+        providers: [
+            { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },
+            { provide: core_1.APP_GUARD, useClass: permissions_guard_1.PermissionsGuard },
+            { provide: core_1.APP_GUARD, useClass: http_throttler_guard_1.HttpThrottlerGuard },
+        ],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

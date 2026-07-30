@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../database/prisma.service");
+const permissions_1 = require("../../common/authorization/permissions");
 const PRODUCT_INCLUDE = {
     category: true,
 };
@@ -76,7 +77,7 @@ let ProductsService = class ProductsService {
             }));
         }
         const items = products.map((product) => this.toProductResponse(product, {
-            includePurchaseCost: currentUser.role !== 'SELLER',
+            includePurchaseCost: currentUser.permissions?.includes(permissions_1.PERMISSIONS.COSTS_READ) ?? false,
         }));
         return {
             items: query.lowStock === true
@@ -106,7 +107,7 @@ let ProductsService = class ProductsService {
         }
         return this.toProductResponse(product, {
             includeBalances: true,
-            includePurchaseCost: currentUser.role !== 'SELLER',
+            includePurchaseCost: currentUser.permissions?.includes(permissions_1.PERMISSIONS.COSTS_READ) ?? false,
         });
     }
     async create(dto) {

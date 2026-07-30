@@ -10,13 +10,16 @@ Administrar usuarios internos del sistema.
 - Editar usuario.
 - Desactivar usuario.
 - Listar usuarios.
-- Asignar rol.
+- Asignar perfil de acceso.
+- Consultar capacidades efectivas.
 - Cambiar contraseña.
 
 ## Entidades
 
 - User.
 - Role.
+- Permission.
+- RolePermission.
 
 ## Campos
 
@@ -36,8 +39,10 @@ Administrar usuarios internos del sistema.
 
 ## Permisos
 
-- ADMIN: CRUD.
-- Otros roles: sin acceso a administración de usuarios.
+- `users.manage` permite administrar usuarios.
+- `access_profiles.manage` permite administrar perfiles y sus permisos.
+- La administración técnica no concede automáticamente autorizaciones financieras.
+- Cambiar un perfil o sus permisos debe conservar actor, valores anterior y nuevo, fecha y motivo cuando corresponda.
 
 ## API sugerida
 
@@ -56,7 +61,7 @@ Pantalla de usuarios con:
 - Crear usuario.
 - Editar usuario.
 - Cambiar estado.
-- Asignar rol.
+- Asignar perfil y revisar permisos efectivos.
 
 ## Pruebas mínimas
 

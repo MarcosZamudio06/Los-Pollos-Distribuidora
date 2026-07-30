@@ -16,6 +16,7 @@ exports.JwtAuthGuard = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const allow_password_change_required_decorator_1 = require("../decorators/allow-password-change-required.decorator");
+const public_decorator_1 = require("../decorators/public.decorator");
 const auth_service_1 = require("../../modules/auth/auth.service");
 let JwtAuthGuard = class JwtAuthGuard {
     authService;
@@ -25,6 +26,12 @@ let JwtAuthGuard = class JwtAuthGuard {
         this.reflector = reflector;
     }
     async canActivate(context) {
+        const isPublic = this.reflector?.getAllAndOverride(public_decorator_1.IS_PUBLIC_KEY, [
+            context.getHandler(),
+            context.getClass(),
+        ]);
+        if (isPublic)
+            return true;
         const request = context.switchToHttp().getRequest();
         const token = this.extractBearerToken(request.headers.authorization);
         if (!token) {

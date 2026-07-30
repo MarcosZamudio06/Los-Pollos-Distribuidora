@@ -11,12 +11,14 @@ Gestionar autenticación, sesión y autorización del sistema.
 - Logout.
 - Obtener usuario autenticado.
 - Protección de rutas.
-- Validación de roles.
+- Validación de permisos y políticas de alcance.
 
 ## Entidades involucradas
 
 - User.
 - Role.
+- Permission.
+- RolePermission.
 - AuthSession.
 
 ## Endpoints
@@ -41,7 +43,14 @@ Gestionar autenticación, sesión y autorización del sistema.
 - El access token debe mantenerse únicamente en memoria del cliente.
 - El refresh token debe enviarse en cookie `HttpOnly`, `Secure` en producción y `SameSite=Strict`.
 - Endpoints protegidos deben validar JWT.
-- Acciones restringidas deben validar rol.
+- La autenticación es global por defecto. Una ruta solo puede omitirla con `@Public()`.
+- Toda ruta no pública debe declarar explícitamente `@Authenticated()` o `@RequirePermissions(...)`; una ruta sin clasificación debe rechazarse.
+- Las acciones restringidas deben validar permisos atómicos, no nombres de rol distribuidos.
+- Los permisos se resuelven desde la sesión y la base de datos en cada validación de token; no se confía en permisos persistidos dentro del JWT.
+- Las políticas de recurso validan adicionalmente ubicación operativa, propiedad, estado y versión cuando aplique.
+- La interfaz puede ocultar controles con base en capacidades efectivas, pero el backend es la autoridad.
+- Los cambios de perfil o permisos deben ser auditables y revocar o invalidar las sesiones afectadas antes de surtir efecto.
+- Los roles representan perfiles de trabajo y agrupan permisos; un rol técnico no recibe permisos financieros por implicación.
 
 ## Permisos
 
@@ -62,5 +71,7 @@ Gestionar autenticación, sesión y autorización del sistema.
 - Login exitoso.
 - Login con contraseña incorrecta.
 - Usuario inactivo no puede entrar.
-- Ruta protegida sin token falla.
-- Usuario sin rol correcto recibe 403.
+- Ruta no pública sin token falla.
+- Ruta sin clasificación de acceso falla la prueba arquitectónica.
+- Usuario sin permiso recibe 403.
+- Un perfil técnico no puede ejecutar acciones financieras sensibles.

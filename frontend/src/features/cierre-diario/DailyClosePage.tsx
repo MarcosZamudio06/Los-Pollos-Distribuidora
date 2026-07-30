@@ -8,7 +8,7 @@ import { Select } from '../../components/ui/select'
 import { formatMoney as money } from '../../lib/money'
 import { getOperationalDate } from '../../lib/operationalDate'
 import { getPosDeviceId } from '../../lib/deviceIdentity'
-import { useAuth } from '../auth'
+import { hasPermission, PERMISSIONS, useAuth } from '../auth'
 import { usePurchaseLocations } from '../compras/hooks'
 import { locationTypeLabel } from '../compras/purchaseLabels'
 import { useProducts } from '../inventario/hooks/useProducts'
@@ -71,6 +71,8 @@ export function DailyClosePage() {
   const canViewFinancials = user?.role !== 'WAREHOUSE'
   const canEditDraft = user?.role === 'ADMIN' || user?.role === 'SELLER'
   const canRequestTerminalActivation = user?.role === 'ADMIN' || user?.role === 'SELLER'
+  const canAuthorizeDifferences = hasPermission(user, PERMISSIONS.dailyCloseDifferencesAuthorize)
+  const canReopen = hasPermission(user, PERMISSIONS.dailyClosesReopen)
   const products = useProducts({
     isActive: 'true',
     locationId: selected?.operationalLocationId ?? '',
@@ -503,7 +505,7 @@ export function DailyClosePage() {
                     <CheckCircle2 size={16} /> Cerrar jornada
                   </Button>
                 )}
-                {user?.role === 'ADMIN' && selected.status === 'CLOSED' && (
+                {canReopen && selected.status === 'CLOSED' && (
                   <Button onClick={() => transition('reopen')} variant="secondary">
                     Reabrir
                   </Button>
@@ -515,7 +517,7 @@ export function DailyClosePage() {
                 )}
               </div>
             </div>
-            <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={user?.role === 'ADMIN' && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
+            <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={canAuthorizeDifferences && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
           </section>
         )}
       </div>

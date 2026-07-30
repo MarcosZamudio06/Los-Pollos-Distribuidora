@@ -37,6 +37,7 @@ export declare class AuthController {
                 email: string;
                 name: string;
                 role: string;
+                permissions?: string[];
                 mustChangePassword: boolean;
                 operationalLocationId?: string;
             };

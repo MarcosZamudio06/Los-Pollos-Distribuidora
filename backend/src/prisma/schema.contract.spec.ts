@@ -108,7 +108,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(51);
+    expect(modelNames).toHaveLength(53);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');

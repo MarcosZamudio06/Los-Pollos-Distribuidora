@@ -4,6 +4,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { validateEnvironment } from './config/env.validation';
@@ -69,6 +71,10 @@ import { HealthModule } from './modules/health/health.module';
     BillingModule,
   ],
   controllers: [],
-  providers: [{ provide: APP_GUARD, useClass: HttpThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
+  ],
 })
 export class AppModule {}

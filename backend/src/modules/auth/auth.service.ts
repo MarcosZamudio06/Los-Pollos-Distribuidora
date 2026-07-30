@@ -35,7 +35,10 @@ type UserRecord = {
   mustChangePassword: boolean;
   operationalLocationId?: string;
   sessionVersion: number;
-  role: { name: string };
+  role: {
+    name: string;
+    permissions?: Array<{ permission: { key: string } }>;
+  };
 };
 
 type SessionRecord = {
@@ -220,7 +223,9 @@ export class AuthService {
           mustChangePassword: false,
           sessionVersion: { increment: 1 },
         },
-        include: { role: true },
+        include: {
+          role: { include: { permissions: { include: { permission: true } } } },
+        },
       });
       await transaction.authSession.updateMany({
         where: { userId, revokedAt: null },
@@ -260,7 +265,13 @@ export class AuthService {
   private async findSession(id: string): Promise<SessionRecord | null> {
     return this.prisma.authSession.findUnique({
       where: { id },
-      include: { user: { include: { role: true } } },
+      include: {
+        user: {
+          include: {
+            role: { include: { permissions: { include: { permission: true } } } },
+          },
+        },
+      },
     });
   }
 
@@ -312,14 +323,18 @@ export class AuthService {
   private async findUserById(id: string): Promise<UserRecord | null> {
     return this.prisma.user.findUnique({
       where: { id },
-      include: { role: true },
+      include: {
+        role: { include: { permissions: { include: { permission: true } } } },
+      },
     });
   }
 
   private async findUserByEmail(email: string): Promise<UserRecord | null> {
     return this.prisma.user.findUnique({
       where: { email },
-      include: { role: true },
+      include: {
+        role: { include: { permissions: { include: { permission: true } } } },
+      },
     });
   }
 
@@ -337,6 +352,7 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role.name,
+      permissions: user.role.permissions?.map(({ permission }) => permission.key) ?? [],
       mustChangePassword: user.mustChangePassword,
       ...(user.operationalLocationId
         ? { operationalLocationId: user.operationalLocationId }

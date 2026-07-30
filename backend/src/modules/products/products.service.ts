@@ -11,6 +11,7 @@ import type {
   ProductUnit,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateProductDto,
@@ -119,7 +120,7 @@ export class ProductsService {
 
   async findAll(
     query: ListProductsQueryDto,
-    currentUser: Pick<AuthenticatedUser, 'role'>,
+    currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>,
   ): Promise<ProductListResponse> {
     if (query.lowStock === true && !query.locationId) {
       throw new BadRequestException(
@@ -176,7 +177,8 @@ export class ProductsService {
     }
 
     const items = products.map((product) => this.toProductResponse(product, {
-      includePurchaseCost: currentUser.role !== 'SELLER',
+      includePurchaseCost:
+        currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
     }));
 
     return {
@@ -190,7 +192,7 @@ export class ProductsService {
   async findOne(
     id: string,
     query: GetProductQueryDto = {},
-    currentUser: Pick<AuthenticatedUser, 'role'>,
+    currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>,
   ): Promise<ProductResponse> {
     const includeBalances =
       query.includeBalances === true || !!query.locationId;
@@ -216,7 +218,8 @@ export class ProductsService {
 
     return this.toProductResponse(product, {
       includeBalances: true,
-      includePurchaseCost: currentUser.role !== 'SELLER',
+      includePurchaseCost:
+        currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
     });
   }
 

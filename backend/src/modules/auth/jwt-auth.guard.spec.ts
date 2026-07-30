@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { ALLOW_PASSWORD_CHANGE_REQUIRED_KEY } from '../../common/decorators/allow-password-change-required.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 function createHttpContext(authorization?: string): ExecutionContext {
@@ -85,7 +86,9 @@ describe('JwtAuthGuard', () => {
       }),
     } as unknown as AuthService;
     const reflector = {
-      getAllAndOverride: jest.fn().mockReturnValue(true),
+      getAllAndOverride: jest.fn().mockImplementation((key: string) =>
+        key === ALLOW_PASSWORD_CHANGE_REQUIRED_KEY,
+      ),
     };
     const guard = new JwtAuthGuard(authService, reflector as never);
     const handler = jest.fn();

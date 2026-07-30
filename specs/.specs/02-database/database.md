@@ -106,6 +106,35 @@ Roles iniciales:
 - DRIVER
 - COLLECTIONS
 
+`Role` representa un perfil de acceso y no es una autorización ejecutable por sí mismo. Sus permisos se asignan mediante `RolePermission`.
+
+### Permission
+
+Campos:
+
+- id
+- key
+- description
+- createdAt
+- updatedAt
+
+`key` es único y describe una capacidad atómica con formato `resource.action`, por ejemplo `payments.cancel` o `daily_closes.reopen`.
+
+### RolePermission
+
+Campos:
+
+- roleId
+- permissionId
+- createdAt
+
+Relaciones:
+
+- Role N:M Permission mediante RolePermission.
+- La combinación roleId + permissionId es única.
+
+Los permisos financieros, fiscales, de costos y de administración de acceso deben asignarse de forma explícita. La auditoría de cambios de acceso no puede eliminarse ni modificarse.
+
 ### OperationalLocation
 
 Representa una ubicación operativa donde se controla inventario. Puede modelar sucursal, almacén o una combinación según la decisión final de negocio.

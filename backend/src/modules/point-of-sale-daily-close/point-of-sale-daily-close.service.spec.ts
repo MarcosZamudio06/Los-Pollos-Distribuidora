@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PointOfSaleDailyCloseService } from './point-of-sale-daily-close.service';
 
 describe('PointOfSaleDailyCloseService', () => {
@@ -165,7 +166,11 @@ describe('PointOfSaleDailyCloseService', () => {
     await service.reopen(
       'close-1',
       { version: 1, reason: 'Corregir conteo' },
-      { id: 'admin-1', role: 'ADMIN' } as never,
+      {
+        id: 'admin-1',
+        role: 'ADMIN',
+        permissions: [PERMISSIONS.DAILY_CLOSES_REOPEN],
+      } as never,
     );
 
     expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -548,7 +553,7 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(prisma.dailyCloseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'DIFFERENCE_JUSTIFIED' }) }));
   });
 
-  it('authorizes a justified difference only as an administrator', async () => {
+  it('authorizes a justified difference only with the required permission', async () => {
     const close = { id: 'close-1', operationalLocationId: 'loc-1', status: 'DRAFT', version: 4, sales: [], updatedAt: new Date() };
     const difference = { id: 'difference-1', pointOfSaleDailyCloseId: 'close-1', differenceValue: 12, status: 'PENDING_AUTHORIZATION' };
     prisma.pointOfSaleDailyClose.findUnique
@@ -558,7 +563,11 @@ describe('PointOfSaleDailyCloseService', () => {
     prisma.dailyCloseDifference.findFirst.mockResolvedValue(difference);
     prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
 
-    await service.authorizeDifference('close-1', 'difference-1', { version: 4 }, { id: 'admin-1', role: 'ADMIN' } as never);
+    await service.authorizeDifference('close-1', 'difference-1', { version: 4 }, {
+      id: 'admin-1',
+      role: 'ADMIN',
+      permissions: [PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE],
+    } as never);
 
     expect(prisma.dailyCloseDifference.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'difference-1' },

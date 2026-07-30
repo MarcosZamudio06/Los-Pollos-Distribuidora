@@ -149,6 +149,10 @@ export type SeedPrismaClient = {
     $executeRawUnsafe?: (query: string) => Promise<unknown>;
     role: {
         upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
+        update: (args: Prisma.RoleUpdateArgs) => Promise<unknown>;
+    };
+    permission: {
+        upsert: (args: Prisma.PermissionUpsertArgs) => Promise<unknown>;
     };
     user: {
         upsert: (args: Prisma.UserUpsertArgs) => Promise<unknown>;

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Boxes, MapPin, Package, Pencil, Search, Settings2, ShieldCheck, SlidersHorizontal } from 'lucide-react'
-import { useAuth } from '../../auth'
+import { hasPermission, PERMISSIONS, useAuth } from '../../auth'
 import { AsyncState } from '../components/AsyncState'
 import { InventoryAdjustmentModal } from '../components/InventoryAdjustmentModal'
 import { InventoryByLocationView } from '../components/InventoryByLocationView'
@@ -59,7 +59,7 @@ const tableCellClass = 'px-4 py-3 align-middle'
 export function ProductListPage() {
   const { user } = useAuth()
   const canManage = canManageInventory(user?.role)
-  const canViewPurchaseCost = user?.role === 'ADMIN' || user?.role === 'WAREHOUSE'
+  const canViewPurchaseCost = hasPermission(user, PERMISSIONS.costsRead)
   const [filters, setFilters] = useState<ProductFilters>({})
   const [editingProduct, setEditingProduct] = useState<Product | null>()
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null)

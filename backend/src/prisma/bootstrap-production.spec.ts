@@ -16,15 +16,25 @@ function upsertMock<T>(): UpsertMock<T> {
 
 function createClient() {
   const roleUpsert = upsertMock<Prisma.RoleUpsertArgs>();
+  const roleUpdate = upsertMock<Prisma.RoleUpdateArgs>();
+  const permissionUpsert = upsertMock<Prisma.PermissionUpsertArgs>();
   const locationUpsert = upsertMock<Prisma.OperationalLocationUpsertArgs>();
   const userUpsert = upsertMock<Prisma.UserUpsertArgs>();
   const client: ProductionBootstrapClient = {
-    role: { upsert: roleUpsert },
+    role: { upsert: roleUpsert, update: roleUpdate },
+    permission: { upsert: permissionUpsert },
     operationalLocation: { upsert: locationUpsert },
     user: { upsert: userUpsert },
   };
 
-  return { client, roleUpsert, locationUpsert, userUpsert };
+  return {
+    client,
+    roleUpsert,
+    roleUpdate,
+    permissionUpsert,
+    locationUpsert,
+    userUpsert,
+  };
 }
 
 describe('Production bootstrap contract', () => {
@@ -98,8 +108,8 @@ describe('Production bootstrap contract', () => {
     expect(() => assertSeedEnvironment('development')).not.toThrow();
   });
 
-  it('idempotently upserts only roles, the initial location, and the administrator', async () => {
-    const { client, roleUpsert, locationUpsert, userUpsert } = createClient();
+  it('idempotently upserts access data, the initial location, and the administrator', async () => {
+    const { client, roleUpsert, roleUpdate, permissionUpsert, locationUpsert, userUpsert } = createClient();
     const env = {
       NODE_ENV: 'production',
       SEED_ADMIN_PASSWORD: 'production-secret',
@@ -108,7 +118,9 @@ describe('Production bootstrap contract', () => {
     await bootstrapProduction(client, env);
     await bootstrapProduction(client, env);
 
-    expect(roleUpsert).toHaveBeenCalledTimes(10);
+    expect(roleUpsert).toHaveBeenCalledTimes(12);
+    expect(roleUpdate).toHaveBeenCalledTimes(12);
+    expect(permissionUpsert).toHaveBeenCalledTimes(18);
     expect(locationUpsert).toHaveBeenCalledTimes(2);
     expect(userUpsert).toHaveBeenCalledTimes(2);
     for (const call of roleUpsert.mock.calls) {
