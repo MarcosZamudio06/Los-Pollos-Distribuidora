@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { validateEnvironment } from './config/env.validation';
+import { createHttpThrottlerOptions } from './config/http-throttler.config';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -34,6 +38,11 @@ import { CashManagementModule } from './modules/cash-management/cash-management.
       load: [appConfig, databaseConfig],
       validate: validateEnvironment,
     }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: createHttpThrottlerOptions,
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
@@ -58,6 +67,6 @@ import { CashManagementModule } from './modules/cash-management/cash-management.
     BillingModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [{ provide: APP_GUARD, useClass: HttpThrottlerGuard }],
 })
 export class AppModule {}

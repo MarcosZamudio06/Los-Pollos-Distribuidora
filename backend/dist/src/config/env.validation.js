@@ -8,6 +8,67 @@ const KNOWN_INSECURE_SECRETS = new Set([
     'local_access_change_me',
     'local_refresh_change_me',
 ]);
+const MAXIMUM_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+function parseBoolean(env, key, defaultValue) {
+    const value = env[key]?.trim().toLowerCase();
+    if (!value)
+        return defaultValue;
+    if (value === 'true')
+        return true;
+    if (value === 'false')
+        return false;
+    throw new Error(`${key} must be true or false`);
+}
+function parseInteger(env, key, defaultValue, allowZero = false) {
+    const value = env[key]?.trim() || String(defaultValue);
+    const parsed = Number(value);
+    const minimum = allowZero ? 0 : 1;
+    if (!Number.isInteger(parsed) || parsed < minimum) {
+        throw new Error(`${key} must be ${allowZero ? 'a non-negative' : 'a positive'} integer`);
+    }
+    return parsed;
+}
+function parseCorsOrigins(value) {
+    const origins = (value?.trim() || 'http://localhost:3000')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+    if (origins.length === 0 || origins.includes('*')) {
+        throw new Error('CORS_ORIGIN must be a non-empty allowlist without wildcards');
+    }
+    return [
+        ...new Set(origins.map((origin) => {
+            let parsed;
+            try {
+                parsed = new URL(origin);
+            }
+            catch {
+                throw new Error(`Invalid CORS_ORIGIN value: ${origin}`);
+            }
+            if (!['http:', 'https:'].includes(parsed.protocol) ||
+                parsed.username ||
+                parsed.password ||
+                parsed.pathname !== '/' ||
+                parsed.search ||
+                parsed.hash) {
+                throw new Error(`Invalid CORS_ORIGIN value: ${origin}`);
+            }
+            return parsed.origin;
+        })),
+    ];
+}
+function parseBodyLimit(value) {
+    const bodyLimit = value?.trim().toLowerCase() || '1mb';
+    const match = /^(\d+)(b|kb|mb)$/.exec(bodyLimit);
+    if (!match || Number(match[1]) <= 0) {
+        throw new Error('HTTP_BODY_LIMIT must use a positive b, kb, or mb value');
+    }
+    const multiplier = match[2] === 'mb' ? 1024 * 1024 : match[2] === 'kb' ? 1024 : 1;
+    if (Number(match[1]) * multiplier > MAXIMUM_BODY_LIMIT_BYTES) {
+        throw new Error('HTTP_BODY_LIMIT cannot exceed 10mb');
+    }
+    return bodyLimit;
+}
 function requireProductionSecret(env, key) {
     const value = env[key]?.trim();
     if (!value) {
@@ -26,6 +87,14 @@ function validateEnvironment(env) {
     const appTimezone = env.APP_TIMEZONE?.trim() || 'America/Mexico_City';
     const absoluteSessionTtl = Number(env.AUTH_SESSION_ABSOLUTE_TTL_SECONDS?.trim() || 604800);
     const idleSessionTtl = Number(env.AUTH_SESSION_IDLE_TTL_SECONDS?.trim() || 86400);
+    const corsOrigins = parseCorsOrigins(env.CORS_ORIGIN);
+    const bodyLimit = parseBodyLimit(env.HTTP_BODY_LIMIT);
+    const swaggerEnabled = parseBoolean(env, 'SWAGGER_ENABLED', nodeEnv !== 'production');
+    const trustProxyHops = parseInteger(env, 'TRUST_PROXY_HOPS', 0, true);
+    const rateLimitGlobalMax = parseInteger(env, 'RATE_LIMIT_GLOBAL_MAX', 600);
+    const rateLimitLoginAccountMax = parseInteger(env, 'RATE_LIMIT_LOGIN_ACCOUNT_MAX', 5);
+    const rateLimitLoginIpMax = parseInteger(env, 'RATE_LIMIT_LOGIN_IP_MAX', 30);
+    const rateLimitRefreshMax = parseInteger(env, 'RATE_LIMIT_REFRESH_MAX', 120);
     try {
         new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
     }
@@ -44,11 +113,28 @@ function validateEnvironment(env) {
     if (idleSessionTtl > absoluteSessionTtl) {
         throw new Error('AUTH_SESSION_IDLE_TTL_SECONDS cannot exceed AUTH_SESSION_ABSOLUTE_TTL_SECONDS');
     }
+    if (nodeEnv === 'production' && swaggerEnabled) {
+        throw new Error('SWAGGER_ENABLED cannot be true when NODE_ENV=production');
+    }
     let jwtAccessSecret = env.JWT_ACCESS_SECRET?.trim();
     let jwtRefreshSecret = env.JWT_REFRESH_SECRET?.trim();
     if (nodeEnv === 'production') {
         if (!env.DATABASE_URL?.trim()) {
             throw new Error('DATABASE_URL is required when NODE_ENV=production');
+        }
+        let databaseUrl;
+        try {
+            databaseUrl = new URL(env.DATABASE_URL);
+        }
+        catch {
+            throw new Error('DATABASE_URL must be a valid URL');
+        }
+        if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol)) {
+            throw new Error('DATABASE_URL must use the PostgreSQL protocol');
+        }
+        const sslMode = databaseUrl.searchParams.get('sslmode');
+        if (!['require', 'verify-ca', 'verify-full'].includes(sslMode ?? '')) {
+            throw new Error('DATABASE_URL must require TLS when NODE_ENV=production');
         }
         jwtAccessSecret = requireProductionSecret(env, 'JWT_ACCESS_SECRET');
         jwtRefreshSecret = requireProductionSecret(env, 'JWT_REFRESH_SECRET');
@@ -61,14 +147,22 @@ function validateEnvironment(env) {
         APP_TIMEZONE: appTimezone,
         AUTH_SESSION_ABSOLUTE_TTL_SECONDS: absoluteSessionTtl,
         AUTH_SESSION_IDLE_TTL_SECONDS: idleSessionTtl,
-        CORS_ORIGIN: env.CORS_ORIGIN?.trim() || 'http://localhost:3000',
+        CORS_ORIGIN: corsOrigins.join(','),
+        CORS_ORIGINS: corsOrigins,
         DATABASE_SSL: env.DATABASE_SSL === 'true',
         DATABASE_URL: env.DATABASE_URL?.trim() || database_config_1.DEFAULT_DATABASE_URL,
         JWT_ACCESS_SECRET: jwtAccessSecret,
         JWT_REFRESH_SECRET: jwtRefreshSecret,
         NODE_ENV: nodeEnv,
+        HTTP_BODY_LIMIT: bodyLimit,
         PORT: parsedPort,
+        RATE_LIMIT_GLOBAL_MAX: rateLimitGlobalMax,
+        RATE_LIMIT_LOGIN_ACCOUNT_MAX: rateLimitLoginAccountMax,
+        RATE_LIMIT_LOGIN_IP_MAX: rateLimitLoginIpMax,
+        RATE_LIMIT_REFRESH_MAX: rateLimitRefreshMax,
+        SWAGGER_ENABLED: swaggerEnabled,
         SWAGGER_PATH: env.SWAGGER_PATH?.trim() || 'docs',
+        TRUST_PROXY_HOPS: trustProxyHops,
     };
 }
 //# sourceMappingURL=env.validation.js.map

@@ -1,13 +1,21 @@
 # Docker
 
-## docker-compose.yml
+## docker-compose.yml (desarrollo)
 
-Debe levantar:
+Debe levantar para desarrollo local:
 
 - PostgreSQL.
 - Backend NestJS.
 - Frontend React.
 - Nginx opcional para producción.
+
+PostgreSQL solo puede publicar su puerto en la interfaz loopback del host.
+
+## docker-compose.production.yml
+
+Debe levantar los servicios de aplicación sin crear una instancia PostgreSQL ni
+un volumen de datos. `DATABASE_URL` debe apuntar a PostgreSQL administrado o a un
+clúster externo con alta disponibilidad y debe exigir TLS.
 
 ## Backend Dockerfile
 
@@ -29,11 +37,14 @@ Debe:
 
 ## PostgreSQL
 
-Debe usar volumen:
+En desarrollo debe usar volumen:
 
 ```text
 postgres_data:/var/lib/postgresql/data
 ```
+
+El volumen local no es un respaldo y no puede utilizarse como estrategia de
+durabilidad productiva.
 
 ## Red
 

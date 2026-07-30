@@ -28,6 +28,7 @@ RUN printf '%s\n' \
   '  server_name _;' \
   '  root /usr/share/nginx/html;' \
   '  index index.html;' \
+  '  client_max_body_size 1m;' \
   '  location /api/ {' \
   '    proxy_pass http://backend:4000/api/;' \
   '    proxy_http_version 1.1;' \
@@ -35,6 +36,7 @@ RUN printf '%s\n' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
   '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
    '    proxy_set_header X-Forwarded-Proto $scheme;' \
+   '    proxy_set_header X-Request-ID $request_id;' \
    '    proxy_set_header Upgrade $http_upgrade;' \
    '    proxy_set_header Connection "upgrade";' \
   '  }' \

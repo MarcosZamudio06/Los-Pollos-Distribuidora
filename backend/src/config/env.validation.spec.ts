@@ -4,8 +4,12 @@ import { validateEnvironment } from './env.validation';
 describe('validateEnvironment', () => {
   it('defaults and validates the operational timezone', () => {
     expect(validateEnvironment({}).APP_TIMEZONE).toBe('America/Mexico_City');
-    expect(validateEnvironment({ APP_TIMEZONE: 'America/Cancun' }).APP_TIMEZONE).toBe('America/Cancun');
-    expect(() => validateEnvironment({ APP_TIMEZONE: 'Invalid/Timezone' })).toThrow('Invalid APP_TIMEZONE value');
+    expect(
+      validateEnvironment({ APP_TIMEZONE: 'America/Cancun' }).APP_TIMEZONE,
+    ).toBe('America/Cancun');
+    expect(() =>
+      validateEnvironment({ APP_TIMEZONE: 'Invalid/Timezone' }),
+    ).toThrow('Invalid APP_TIMEZONE value');
   });
   it('uses the repo default DATABASE_URL when none is provided', () => {
     expect(
@@ -20,6 +24,47 @@ describe('validateEnvironment', () => {
         DATABASE_URL: DEFAULT_DATABASE_URL,
       }),
     );
+  });
+
+  it('normalizes the CORS allowlist and HTTP security defaults', () => {
+    expect(
+      validateEnvironment({
+        CORS_ORIGIN:
+          'https://erp.example.com/, https://pos.example.com, https://erp.example.com',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        CORS_ORIGINS: ['https://erp.example.com', 'https://pos.example.com'],
+        HTTP_BODY_LIMIT: '1mb',
+        RATE_LIMIT_GLOBAL_MAX: 600,
+        SWAGGER_ENABLED: true,
+        TRUST_PROXY_HOPS: 0,
+      }),
+    );
+  });
+
+  it('rejects unsafe HTTP configuration', () => {
+    expect(() => validateEnvironment({ CORS_ORIGIN: '*' })).toThrow(
+      'CORS_ORIGIN must be a non-empty allowlist without wildcards',
+    );
+    expect(() =>
+      validateEnvironment({ CORS_ORIGIN: 'https://erp.example.com/path' }),
+    ).toThrow('Invalid CORS_ORIGIN value');
+    expect(() => validateEnvironment({ HTTP_BODY_LIMIT: '11mb' })).toThrow(
+      'HTTP_BODY_LIMIT cannot exceed 10mb',
+    );
+    expect(() => validateEnvironment({ TRUST_PROXY_HOPS: '-1' })).toThrow(
+      'TRUST_PROXY_HOPS must be a non-negative integer',
+    );
+    expect(() => validateEnvironment({ RATE_LIMIT_GLOBAL_MAX: '0' })).toThrow(
+      'RATE_LIMIT_GLOBAL_MAX must be a positive integer',
+    );
+  });
+
+  it('does not allow Swagger in production', () => {
+    expect(() =>
+      validateEnvironment({ NODE_ENV: 'production', SWAGGER_ENABLED: 'true' }),
+    ).toThrow('SWAGGER_ENABLED cannot be true when NODE_ENV=production');
   });
 
   it('validates absolute and inactivity session expiration windows', () => {
@@ -56,7 +101,8 @@ describe('validateEnvironment', () => {
 
   it('rejects missing, known, short, or repeated production JWT secrets', () => {
     const baseEnvironment = {
-      DATABASE_URL: 'postgresql://user:password@database:5432/app',
+      DATABASE_URL:
+        'postgresql://user:password@database:5432/app?sslmode=require',
       NODE_ENV: 'production',
     };
 
@@ -89,7 +135,8 @@ describe('validateEnvironment', () => {
   it('accepts independent production secrets with sufficient entropy space', () => {
     expect(
       validateEnvironment({
-        DATABASE_URL: 'postgresql://user:password@database:5432/app',
+        DATABASE_URL:
+          'postgresql://user:password@database:5432/app?sslmode=verify-full',
         JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
         JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
         NODE_ENV: 'production',
@@ -102,5 +149,27 @@ describe('validateEnvironment', () => {
         NODE_ENV: 'production',
       }),
     );
+  });
+
+  it('rejects an unencrypted production database connection', () => {
+    expect(() =>
+      validateEnvironment({
+        DATABASE_URL: 'postgresql://user:password@database:5432/app',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+      }),
+    ).toThrow('DATABASE_URL must require TLS when NODE_ENV=production');
+  });
+
+  it('rejects a non-PostgreSQL production database URL', () => {
+    expect(() =>
+      validateEnvironment({
+        DATABASE_URL: 'https://database.example.com/app?sslmode=require',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+      }),
+    ).toThrow('DATABASE_URL must use the PostgreSQL protocol');
   });
 });

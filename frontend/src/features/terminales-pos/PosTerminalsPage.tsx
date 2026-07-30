@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Copy, Link2, Monitor, Plus, Power, PowerOff, RefreshCw } from 'lucide-react'
+import { CircleAlert, Copy, Download, KeyRound, Link2, Monitor, Plus, Power, PowerOff, RefreshCw, ShieldCheck } from 'lucide-react'
 import { apiClient } from '../../lib/api'
 import { getPosDeviceIdentity } from '../../lib/deviceIdentity'
 import { Button, Input, Select } from '../../components/ui'
 import { useAuth } from '../auth'
+import { buildTerminalCutoverCsv, getTerminalCutoverSummary, isLegacyTerminal } from './terminalCutover'
 
 type Envelope<T> = { data: T }
 type Location = { id: string; name: string; code?: string | null; type: string; isActive: boolean }
@@ -34,6 +35,8 @@ export function PosTerminalsPage() {
   const [locationId, setLocationId] = useState('')
   const [reassigning, setReassigning] = useState<Terminal | null>(null)
   const [replacementDeviceId, setReplacementDeviceId] = useState('')
+  const [activating, setActivating] = useState<Terminal | null>(null)
+  const [activationCode, setActivationCode] = useState('')
   const [form, setForm] = useState({ operationalLocationId: '', code: '', name: '', deviceId: identity.id })
 
   const terminalCatalog = useQuery({
@@ -88,11 +91,45 @@ export function PosTerminalsPage() {
     }
   }
 
+  async function activateMigratedTerminal() {
+    if (!activating || !activationCode.trim()) return
+    setSaving(true)
+    setActionError('')
+    setNotice('')
+    try {
+      await apiClient.post<Envelope<Terminal>, { activationCode: string }>(`/cash-terminals/${activating.id}/activate`, { body: { activationCode: activationCode.trim() }, headers: headers(accessToken) })
+      setNotice(`${activating.code} quedó vinculada. El navegador puede reintentar la detección y abrir turno.`)
+      setActivating(null)
+      setActivationCode('')
+      await terminalCatalog.refetch()
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'No se pudo vincular la terminal migrada.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const visibleTerminals = terminals.filter((terminal) => {
-    const matchesStatus = status === 'all' || (status === 'active' ? terminal.isActive : !terminal.isActive)
+    const matchesStatus = status === 'all'
+      || (status === 'active' && terminal.isActive)
+      || (status === 'inactive' && !terminal.isActive)
+      || (status === 'pending' && isLegacyTerminal(terminal))
+      || (status === 'linked' && !isLegacyTerminal(terminal))
     return matchesStatus && (!locationId || terminal.operationalLocationId === locationId)
   })
   const currentTerminal = terminals.find((terminal) => terminal.deviceId === identity.id)
+  const cutoverSummary = getTerminalCutoverSummary(terminals)
+
+  function downloadCutoverReport() {
+    const locationNames = new Map(locations.map((location) => [location.id, location.name]))
+    const blob = new Blob([`\uFEFF${buildTerminalCutoverCsv(terminals, locationNames)}`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `terminales-pos-cutover-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <main className="min-h-full bg-[var(--erp-background)] p-4 text-[var(--erp-foreground)] sm:p-6 lg:p-8">
@@ -116,12 +153,29 @@ export function PosTerminalsPage() {
         {error && <p className="rounded-xl border border-[rgba(157,45,36,.3)] bg-[rgba(157,45,36,.08)] p-4 text-sm font-semibold text-[var(--erp-danger)]" role="alert">{error}</p>}
         {notice && <p className="rounded-xl border border-[rgba(63,123,65,.3)] bg-[rgba(63,123,65,.09)] p-4 text-sm font-semibold text-[var(--erp-success)]" role="status">{notice}</p>}
 
+        <section className="overflow-hidden rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white shadow-[var(--erp-shadow)]" aria-labelledby="cutover-title">
+          <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-[var(--erp-brand-red)]"><ShieldCheck className="h-4 w-4" /> Control posmigración</p>
+              <h2 className="mt-2 text-xl font-black" id="cutover-title">Vinculación de terminales heredadas</h2>
+              <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">Las terminales pendientes conservan su historial, pero no pueden abrir turnos hasta vincularse con un código temporal del navegador real.</p>
+            </div>
+            <Button disabled={terminals.length === 0} onClick={downloadCutoverReport} variant="outline"><Download className="h-4 w-4" /> Exportar reporte CSV</Button>
+          </div>
+          <div className="grid border-t border-[color:var(--erp-border)] sm:grid-cols-3">
+            <div className="p-4 sm:border-r sm:border-[color:var(--erp-border)]"><p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--erp-muted-foreground)]">Inventariadas</p><p className="mt-1 text-2xl font-black tabular-nums">{cutoverSummary.total}</p></div>
+            <div className="p-4 sm:border-r sm:border-[color:var(--erp-border)]"><p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--erp-muted-foreground)]">Vinculadas</p><p className="mt-1 text-2xl font-black tabular-nums text-[var(--erp-success)]">{cutoverSummary.linked}</p></div>
+            <div className="p-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--erp-muted-foreground)]">Pendientes</p><p className="mt-1 text-2xl font-black tabular-nums text-[var(--erp-danger)]">{cutoverSummary.pending}</p></div>
+          </div>
+          <div className="h-2 bg-[var(--erp-surface-muted)]" aria-label={`${cutoverSummary.completionPercentage}% de terminales vinculadas`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={cutoverSummary.completionPercentage}><div className="h-full bg-[var(--erp-success)] transition-[width]" style={{ width: `${cutoverSummary.completionPercentage}%` }} /></div>
+        </section>
+
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,.72fr)]">
           <div className="grid gap-5">
             <section className="rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white p-4 shadow-[var(--erp-shadow)]">
               <div className="grid gap-3 sm:grid-cols-3">
                 <Select aria-label="Filtrar por sucursal" value={locationId} onChange={(event) => setLocationId(event.target.value)}><option value="">Todas las sucursales</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</Select>
-                <Select aria-label="Filtrar por estado" value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Activas</option><option value="inactive">Inactivas</option><option value="all">Todas</option></Select>
+                <Select aria-label="Filtrar por estado" value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Activas</option><option value="pending">Pendientes de vincular</option><option value="linked">Vinculadas</option><option value="inactive">Inactivas</option><option value="all">Todas</option></Select>
                 <Button variant="secondary" onClick={() => void terminalCatalog.refetch()}><RefreshCw className="h-4 w-4" /> Actualizar</Button>
               </div>
             </section>
@@ -129,7 +183,7 @@ export function PosTerminalsPage() {
             <section className="overflow-hidden rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white shadow-[var(--erp-shadow)]">
               <div className="flex items-center justify-between border-b border-[color:var(--erp-border)] px-5 py-4"><div><h2 className="font-black">Estaciones registradas</h2><p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">{visibleTerminals.length} de {terminals.length} terminales</p></div><span className="font-mono text-xs font-bold text-[var(--erp-muted-foreground)]">ID = identidad de operación</span></div>
               <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] text-xs uppercase tracking-[.12em] text-[var(--erp-muted-foreground)]"><tr><th className="px-4 py-3 font-bold">Terminal</th><th className="px-4 py-3 font-bold">Sucursal</th><th className="px-4 py-3 font-bold">Identidad</th><th className="px-4 py-3 font-bold">Estado</th><th className="px-4 py-3 text-right font-bold">Acciones</th></tr></thead><tbody>
-                {terminalCatalog.isLoading ? <tr><td className="p-8 text-center text-[var(--erp-muted-foreground)]" colSpan={5}>Cargando terminales...</td></tr> : visibleTerminals.length === 0 ? <tr><td className="p-8 text-center text-[var(--erp-muted-foreground)]" colSpan={5}>No hay terminales con estos filtros.</td></tr> : visibleTerminals.map((terminal) => <tr className="border-b border-[color:var(--erp-border)] last:border-0 hover:bg-[var(--erp-surface)]" key={terminal.id}><td className="px-4 py-4"><p className="font-mono text-xs font-bold text-[var(--erp-brand-red)]">{terminal.code}</p><p className="mt-1 font-bold">{terminal.name}</p></td><td className="px-4 py-4 font-medium">{locationName(terminal, locations)}</td><td className="max-w-52 px-4 py-4 font-mono text-xs text-[var(--erp-muted-foreground)]"><span className="block truncate" title={terminal.deviceId}>{terminal.deviceId}</span>{terminal.deviceId === identity.id && <span className="mt-1 inline-block font-sans font-bold text-[var(--erp-success)]">Este navegador</span>}</td><td className="px-4 py-4"><span className={terminal.isActive ? 'rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800' : 'rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600'}>{terminal.isActive ? 'Activa' : 'Inactiva'}</span></td><td className="px-4 py-4"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setReassigning(terminal); setReplacementDeviceId('') }}><Link2 className="h-3.5 w-3.5" /> Reasignar</Button><Button aria-label={terminal.isActive ? `Desactivar ${terminal.name}` : `Activar ${terminal.name}`} size="sm" variant={terminal.isActive ? 'ghost' : 'secondary'} disabled={saving} onClick={() => void updateTerminal(terminal, { isActive: !terminal.isActive })}>{terminal.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}{terminal.isActive ? 'Desactivar' : 'Activar'}</Button></div></td></tr>)}</tbody></table></div>
+                {terminalCatalog.isLoading ? <tr><td className="p-8 text-center text-[var(--erp-muted-foreground)]" colSpan={5}>Cargando terminales...</td></tr> : visibleTerminals.length === 0 ? <tr><td className="p-8 text-center text-[var(--erp-muted-foreground)]" colSpan={5}>No hay terminales con estos filtros.</td></tr> : visibleTerminals.map((terminal) => <tr className="border-b border-[color:var(--erp-border)] last:border-0 hover:bg-[var(--erp-surface)]" key={terminal.id}><td className="px-4 py-4"><p className="font-mono text-xs font-bold text-[var(--erp-brand-red)]">{terminal.code}</p><p className="mt-1 font-bold">{terminal.name}</p></td><td className="px-4 py-4 font-medium">{locationName(terminal, locations)}</td><td className="max-w-52 px-4 py-4 font-mono text-xs text-[var(--erp-muted-foreground)]"><span className="block truncate" title={terminal.deviceId}>{terminal.deviceId}</span>{isLegacyTerminal(terminal) && <span className="mt-1 inline-block font-sans font-bold text-[var(--erp-danger)]">Pendiente de vínculo</span>}{terminal.deviceId === identity.id && <span className="mt-1 inline-block font-sans font-bold text-[var(--erp-success)]">Este navegador</span>}</td><td className="px-4 py-4"><span className={terminal.isActive ? 'rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800' : 'rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600'}>{terminal.isActive ? 'Activa' : 'Inactiva'}</span></td><td className="px-4 py-4"><div className="flex justify-end gap-2">{isLegacyTerminal(terminal) && <Button size="sm" onClick={() => { setActivating(terminal); setActivationCode('') }}><KeyRound className="h-3.5 w-3.5" /> Vincular código</Button>}<Button size="sm" variant="outline" onClick={() => { setReassigning(terminal); setReplacementDeviceId('') }}><Link2 className="h-3.5 w-3.5" /> Reasignar</Button><Button aria-label={terminal.isActive ? `Desactivar ${terminal.name}` : `Activar ${terminal.name}`} size="sm" variant={terminal.isActive ? 'ghost' : 'secondary'} disabled={saving} onClick={() => void updateTerminal(terminal, { isActive: !terminal.isActive })}>{terminal.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}{terminal.isActive ? 'Desactivar' : 'Activar'}</Button></div></td></tr>)}</tbody></table></div>
             </section>
           </div>
 
@@ -142,6 +196,7 @@ export function PosTerminalsPage() {
       </div>
 
       {reassigning && <div aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" role="dialog" aria-labelledby="reassign-title"><section className="w-full max-w-md rounded-[1.5rem] border border-[var(--erp-brand-gold)] bg-white p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--erp-brand-red)]">Cambio de equipo</p><h2 className="mt-3 text-2xl font-black" id="reassign-title">Reasignar {reassigning.code}</h2><p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">La terminal conservará su código, nombre e historial. Solo cambiará la identidad del navegador que puede usarla.</p><label className="mt-5 grid gap-1.5 text-sm font-semibold">Nuevo ID de dispositivo<Input autoFocus className="font-mono text-xs" placeholder="Pega el ID del nuevo navegador" value={replacementDeviceId} onChange={(event) => setReplacementDeviceId(event.target.value)} /></label><Button className="mt-3 w-full" variant="outline" onClick={() => setReplacementDeviceId(identity.id)}><Copy className="h-4 w-4" /> Usar ID de este navegador</Button><div className="mt-5 flex justify-end gap-3"><Button variant="secondary" onClick={() => { setReassigning(null); setReplacementDeviceId('') }}>Cancelar</Button><Button disabled={saving || !replacementDeviceId.trim()} onClick={() => void updateTerminal(reassigning, { deviceId: replacementDeviceId.trim() })}><Link2 className="h-4 w-4" /> Reasignar</Button></div></section></div>}
+      {activating && <div aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" role="dialog" aria-labelledby="activate-title"><section className="w-full max-w-md rounded-[1.5rem] border border-[var(--erp-brand-gold)] bg-white p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--erp-brand-red)]">Recuperación supervisada</p><h2 className="mt-3 text-2xl font-black" id="activate-title">Vincular {activating.code}</h2><p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">Solicita al operador el código temporal mostrado en el navegador de esta caja. La terminal conservará su historial y el código quedará invalidado al confirmar.</p><label className="mt-5 grid gap-1.5 text-sm font-semibold">Código temporal<Input autoFocus className="font-mono text-lg uppercase tracking-[.14em]" maxLength={11} placeholder="ABCDE-23456" value={activationCode} onChange={(event) => setActivationCode(event.target.value.toUpperCase())} /></label><div className="mt-5 flex justify-end gap-3"><Button variant="secondary" onClick={() => { setActivating(null); setActivationCode('') }}>Cancelar</Button><Button disabled={saving || !activationCode.trim()} onClick={() => void activateMigratedTerminal()}><KeyRound className="h-4 w-4" /> {saving ? 'Vinculando...' : 'Confirmar vínculo'}</Button></div></section></div>}
     </main>
   )
 }

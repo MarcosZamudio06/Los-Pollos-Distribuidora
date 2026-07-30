@@ -5,13 +5,15 @@ import { CashManagementService } from './cash-management.service';
 
 function createPrisma() {
   const prisma = {
-    $transaction: jest.fn(async (callback: (tx: unknown) => unknown) => callback(prisma)),
+    $transaction: jest.fn((callback: (tx: unknown) => unknown) => Promise.resolve(callback(prisma))),
     $executeRawUnsafe: jest.fn(),
     cashTerminal: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+    cashTerminalActivation: { create: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn() },
     cashShift: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     cashMovement: { aggregate: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     payment: { aggregate: jest.fn() },
     pointOfSaleDailyClose: { create: jest.fn(), findFirst: jest.fn() },
+    operationalLocation: { findUnique: jest.fn() },
   };
   return prisma;
 }
@@ -106,6 +108,88 @@ describe('CashManagementService', () => {
     await expect(service.listTerminals({ operationalLocationId: 'loc-1' }, cashier))
       .rejects.toThrow(new BadRequestException('CASH_TERMINAL_DEVICE_REQUIRED'));
   });
+
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unnecessary-type-assertion */
+  it('issues a short-lived activation code without persisting the plaintext value', async () => {
+    const prisma = createPrisma();
+    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true, type: 'BRANCH' });
+    prisma.cashTerminalActivation.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cashTerminalActivation.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => Promise.resolve({ id: 'activation-1', ...data }));
+    const service = new CashManagementService(prisma as unknown as PrismaService);
+
+    const result = await service.requestTerminalActivation({ deviceId: 'device-real' }, cashier);
+
+    expect(result.activationCode).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+    expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(prisma.cashTerminalActivation.updateMany).toHaveBeenCalledWith({ where: { deviceId: 'device-real', consumedAt: null }, data: { consumedAt: expect.any(Date) } });
+    expect(prisma.cashTerminalActivation.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      operationalLocationId: 'loc-1', requestedByUserId: 'cashier-1', deviceId: 'device-real',
+      codeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    }) });
+  });
+
+  it('atomically binds a legacy terminal with a valid activation code', async () => {
+    const prisma = createPrisma();
+    prisma.cashTerminal.findUnique.mockResolvedValue({ id: 'legacy-terminal-1', operationalLocationId: 'loc-1', deviceId: 'legacy:hash' });
+    prisma.cashTerminalActivation.findUnique.mockResolvedValue({
+      id: 'activation-1', operationalLocationId: 'loc-1', deviceId: 'device-real', consumedAt: null, expiresAt: new Date(Date.now() + 60_000),
+    });
+    prisma.cashTerminalActivation.updateMany.mockResolvedValue({ count: 1 });
+    prisma.cashTerminal.update.mockResolvedValue({ id: 'legacy-terminal-1', deviceId: 'device-real' });
+    const service = new CashManagementService(prisma as unknown as PrismaService);
+
+    await expect(service.activateMigratedTerminal('legacy-terminal-1', { activationCode: 'ABCDE-23456' }, admin))
+      .resolves.toMatchObject({ deviceId: 'device-real' });
+    expect(prisma.cashTerminalActivation.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: 'activation-1', consumedAt: null }),
+      data: expect.objectContaining({ consumedByUserId: 'admin-1', cashTerminalId: 'legacy-terminal-1' }),
+    });
+    expect(prisma.cashTerminal.update).toHaveBeenCalledWith({ where: { id: 'legacy-terminal-1' }, data: { deviceId: 'device-real' } });
+  });
+
+  it('does not activate a bound terminal or accept a code from another location', async () => {
+    const prisma = createPrisma();
+    const service = new CashManagementService(prisma as unknown as PrismaService);
+    prisma.cashTerminal.findUnique.mockResolvedValue({ id: 'terminal-1', operationalLocationId: 'loc-1', deviceId: 'device-existing' });
+
+    await expect(service.activateMigratedTerminal('terminal-1', { activationCode: 'ABCDE-23456' }, admin))
+      .rejects.toThrow(new ConflictException('CASH_TERMINAL_ALREADY_BOUND'));
+
+    prisma.cashTerminal.findUnique.mockResolvedValue({ id: 'legacy-terminal-1', operationalLocationId: 'loc-1', deviceId: 'legacy:hash' });
+    prisma.cashTerminalActivation.findUnique.mockResolvedValue({
+      id: 'activation-1', operationalLocationId: 'loc-2', deviceId: 'device-real', consumedAt: null, expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.activateMigratedTerminal('legacy-terminal-1', { activationCode: 'ABCDE-23456' }, admin))
+      .rejects.toThrow(new BadRequestException('CASH_TERMINAL_ACTIVATION_INVALID'));
+    expect(prisma.cashTerminal.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects consumed, expired, and concurrently claimed activation codes', async () => {
+    const prisma = createPrisma();
+    const service = new CashManagementService(prisma as unknown as PrismaService);
+    prisma.cashTerminal.findUnique.mockResolvedValue({ id: 'legacy-terminal-1', operationalLocationId: 'loc-1', deviceId: 'legacy:hash' });
+    prisma.cashTerminalActivation.findUnique.mockResolvedValue({
+      id: 'activation-1', operationalLocationId: 'loc-1', deviceId: 'device-real', consumedAt: new Date(), expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await expect(service.activateMigratedTerminal('legacy-terminal-1', { activationCode: 'ABCDE-23456' }, admin))
+      .rejects.toThrow(new BadRequestException('CASH_TERMINAL_ACTIVATION_INVALID'));
+
+    prisma.cashTerminalActivation.findUnique.mockResolvedValue({
+      id: 'activation-1', operationalLocationId: 'loc-1', deviceId: 'device-real', consumedAt: null, expiresAt: new Date(Date.now() - 1),
+    });
+    await expect(service.activateMigratedTerminal('legacy-terminal-1', { activationCode: 'ABCDE-23456' }, admin))
+      .rejects.toThrow(new BadRequestException('CASH_TERMINAL_ACTIVATION_INVALID'));
+
+    prisma.cashTerminalActivation.findUnique.mockResolvedValue({
+      id: 'activation-1', operationalLocationId: 'loc-1', deviceId: 'device-real', consumedAt: null, expiresAt: new Date(Date.now() + 60_000),
+    });
+    prisma.cashTerminalActivation.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.activateMigratedTerminal('legacy-terminal-1', { activationCode: 'ABCDE-23456' }, admin))
+      .rejects.toThrow(new ConflictException('CASH_TERMINAL_ACTIVATION_ALREADY_USED'));
+    expect(prisma.cashTerminal.update).not.toHaveBeenCalled();
+  });
+  /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unnecessary-type-assertion */
 
   it('rejects opening a shift when the consolidated close is no longer editable', async () => {
     const prisma = createPrisma();
