@@ -5,7 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
 describe('AppModule bootstrap (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication<App> | undefined;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -36,6 +36,6 @@ describe('AppModule bootstrap (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 });

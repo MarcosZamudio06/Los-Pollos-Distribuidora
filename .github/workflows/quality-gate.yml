@@ -91,6 +91,10 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
       JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
       OPENSSL_CONF: /dev/null
+      PHOTON_URL: http://127.0.0.1:2322
+      VROOM_URL: http://127.0.0.1:3000
+      OSRM_URL: http://127.0.0.1:5000
+      ROUTING_TIMEOUT_MS: 1000
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
