@@ -102,13 +102,25 @@ function createPrisma(): MockPrisma {
     },
     cashShift: {
       findUnique: jest.fn().mockResolvedValue({
-        id: 'shift-1', operationalLocationId: 'loc-1', pointOfSaleDailyCloseId: 'close-1', cashierUserId: 'collector-1', status: 'OPEN',
-        terminal: { deviceId: 'device-1', isActive: true }, pointOfSaleDailyClose: { status: 'DRAFT' },
+        id: 'shift-1',
+        operationalLocationId: 'loc-1',
+        pointOfSaleDailyCloseId: 'close-1',
+        cashierUserId: 'collector-1',
+        status: 'OPEN',
+        terminal: { deviceId: 'device-1', isActive: true },
+        pointOfSaleDailyClose: { status: 'DRAFT' },
       }),
     },
     pointOfSaleDailyClose: {
       findUnique: jest.fn(),
-      findFirst: jest.fn().mockResolvedValue({ id: 'close-1', operationalLocationId: 'loc-1', status: 'DRAFT', cashSessionStatus: 'OPEN' }),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({
+          id: 'close-1',
+          operationalLocationId: 'loc-1',
+          status: 'DRAFT',
+          cashSessionStatus: 'OPEN',
+        }),
     },
     $transaction: jest.fn(async (callback) => callback(prisma)),
   };
@@ -247,11 +259,17 @@ describe('AccountsReceivableService', () => {
     await expect(
       service.registerPayment(
         'ar-1',
-        { accountReceivableId: 'ar-1', amount: 100, paymentMethod: PaymentMethod.CASH },
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+        },
         { id: 'collector-1', role: 'COLLECTIONS' },
         'idem-payment-no-cash-session',
       ),
-    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }) });
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }),
+    });
 
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
