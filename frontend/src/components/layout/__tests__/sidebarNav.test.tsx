@@ -56,6 +56,7 @@ describe('role navigation', () => {
       '/daily-close',
       '/reports',
       '/admin/employees',
+      '/admin/cash-terminals',
     ])
     expect(items.map((item) => item.to)).not.toContain('/sales/:saleId')
     expect(items.map((item) => item.to)).not.toContain('/purchases/:purchaseId')

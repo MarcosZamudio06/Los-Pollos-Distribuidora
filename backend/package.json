@@ -17,11 +17,13 @@
     "seed:development": "prisma db seed",
     "seed:operational": "ts-node prisma/seed.operational.ts",
     "lint": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --fix",
+    "lint:check": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --max-warnings 1062",
+    "typecheck": "tsc --project tsconfig.build.json --noEmit --incremental false",
     "pretest": "ts-node scripts/forbid-focused-tests.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "pretest:cov": "ts-node scripts/forbid-focused-tests.ts",
-    "test:cov": "jest --coverage",
+    "test:cov": "jest --coverage --runInBand",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "pretest:e2e": "ts-node scripts/forbid-focused-tests.ts",
     "test:e2e": "jest --config ./test/jest-e2e.json"
@@ -90,9 +92,19 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
+    "coverageThreshold": {
+      "global": {
+        "branches": 65,
+        "functions": 75,
+        "lines": 80,
+        "statements": 80
+      }
+    },
+    "testTimeout": 15000,
     "testEnvironment": "node"
   },
   "overrides": {
+    "js-yaml": "5.2.2",
     "uuid": "11.1.1"
   }
 }

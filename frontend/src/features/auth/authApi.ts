@@ -16,6 +16,12 @@ export async function logout(accessToken: string) {
   })
 }
 
+export async function refreshSession() {
+  const response = await apiClient.post<ApiEnvelope<LoginResult>>('/auth/refresh')
+
+  return response.data
+}
+
 export async function getCurrentUser(accessToken: string) {
   const response = await apiClient.get<ApiEnvelope<{ user: AuthUser }>>('/auth/me', {
     headers: { authorization: `Bearer ${accessToken}` },

@@ -22,6 +22,28 @@ describe('validateEnvironment', () => {
     );
   });
 
+  it('validates absolute and inactivity session expiration windows', () => {
+    expect(
+      validateEnvironment({
+        AUTH_SESSION_ABSOLUTE_TTL_SECONDS: '7200',
+        AUTH_SESSION_IDLE_TTL_SECONDS: '1800',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        AUTH_SESSION_ABSOLUTE_TTL_SECONDS: 7200,
+        AUTH_SESSION_IDLE_TTL_SECONDS: 1800,
+      }),
+    );
+    expect(() =>
+      validateEnvironment({
+        AUTH_SESSION_ABSOLUTE_TTL_SECONDS: '3600',
+        AUTH_SESSION_IDLE_TTL_SECONDS: '7200',
+      }),
+    ).toThrow(
+      'AUTH_SESSION_IDLE_TTL_SECONDS cannot exceed AUTH_SESSION_ABSOLUTE_TTL_SECONDS',
+    );
+  });
+
   it('rejects a production environment without an explicit database URL', () => {
     expect(() =>
       validateEnvironment({

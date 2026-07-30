@@ -97,7 +97,7 @@ export function ChangePasswordPage() {
             )}
 
             <Button className="mt-2 h-12 w-full rounded-2xl font-black uppercase tracking-[0.12em]" disabled={isSubmitting} type="submit">
-              {isSubmitting ? 'Actualizando contraseña' : 'Guardar y continuar'}
+              {isSubmitting ? 'Actualizando contraseña' : 'Guardar y volver a iniciar sesión'}
             </Button>
           </form>
         </CardContent>

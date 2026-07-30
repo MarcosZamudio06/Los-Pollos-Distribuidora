@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known synthetic credentials used only by automated tests and the legacy Nest badge"
+regexTarget = "secret"
+regexes = [
+  '''^(?:abc123def456|current-secret|misma-segura-2026|nueva-segura-2026|temporal-2026|temporary-123|temporary-456|temporary-secret|valid-password)$'''
+]

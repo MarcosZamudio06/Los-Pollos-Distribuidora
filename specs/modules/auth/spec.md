@@ -17,7 +17,7 @@ Gestionar autenticación, sesión y autorización del sistema.
 
 - User.
 - Role.
-- RefreshToken si se decide persistir tokens.
+- AuthSession.
 
 ## Endpoints
 
@@ -32,6 +32,14 @@ Gestionar autenticación, sesión y autorización del sistema.
 - No devolver passwordHash.
 - Access token debe expirar.
 - Refresh token debe expirar.
+- Cada login debe crear una sesión persistente independiente.
+- Los refresh tokens deben persistirse únicamente como hash y rotarse en cada renovación.
+- La reutilización de un refresh token rotado debe revocar la sesión comprometida.
+- Logout debe revocar la sesión actual en el servidor.
+- El cambio de contraseña debe incrementar la versión de sesión y revocar todas las sesiones del usuario.
+- Las sesiones deben aplicar expiración absoluta y por inactividad.
+- El access token debe mantenerse únicamente en memoria del cliente.
+- El refresh token debe enviarse en cookie `HttpOnly`, `Secure` en producción y `SameSite=Strict`.
 - Endpoints protegidos deben validar JWT.
 - Acciones restringidas deben validar rol.
 
@@ -40,12 +48,12 @@ Gestionar autenticación, sesión y autorización del sistema.
 - Login público.
 - Me requiere autenticación.
 - Logout requiere autenticación.
-- Refresh requiere refreshToken válido.
+- Refresh requiere la cookie de refresh válida.
 
 ## UI
 
 - Pantalla login.
-- Guardado seguro de token en cliente.
+- Access token únicamente en memoria; ningún token se persiste en `localStorage` o almacenamiento accesible por JavaScript.
 - Redirección según autenticación.
 - Pantalla 403 para acceso denegado.
 

@@ -320,6 +320,7 @@ model User {
   operationalLocationId           String
   isActive                        Boolean                      @default(true)
   mustChangePassword              Boolean                      @default(false)
+  sessionVersion                  Int                          @default(0)
   deactivatedAt                   DateTime?
   deactivatedByUserId             String?
   deactivationReason              String?
@@ -387,9 +388,26 @@ model User {
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
   grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
+  authSessions                    AuthSession[]
 
   @@index([deactivatedByUserId])
   @@index([operationalLocationId])
+}
+
+model AuthSession {
+  id                String    @id @default(cuid())
+  userId            String
+  refreshTokenHash  String    @unique
+  tokenVersion      Int       @default(0)
+  lastUsedAt        DateTime  @default(now())
+  absoluteExpiresAt DateTime
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([absoluteExpiresAt])
 }
 
 model OperationalLocation {

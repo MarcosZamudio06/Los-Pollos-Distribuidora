@@ -22,8 +22,7 @@ Respuesta 200:
   "success": true,
   "message": "Sesión iniciada correctamente",
   "data": {
-    "accessToken": "jwt",
-    "refreshToken": "jwt",
+      "accessToken": "jwt",
     "user": {
       "id": "string",
       "name": "Administrador",
@@ -34,6 +33,10 @@ Respuesta 200:
   }
 }
 ```
+
+El refresh token no forma parte del JSON. Se entrega mediante cookie `refresh_token`
+con atributos `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` en
+producción.
 
 Errores:
 
@@ -46,13 +49,12 @@ Descripción:
 
 Renovar access token.
 
-Body:
+La solicitud no recibe token en el body. Requiere la cookie `refresh_token`.
+Cada renovación rota la cookie. La reutilización de una cookie previamente
+rotada revoca la sesión y responde 401.
 
-```json
-{
-  "refreshToken": "jwt"
-}
-```
+La respuesta contiene un access token nuevo y el usuario autenticado, pero no
+expone el refresh token.
 
 ## POST /api/auth/logout
 
@@ -61,6 +63,20 @@ Descripción:
 Cerrar sesión o invalidar refresh token.
 
 Requiere autenticación.
+
+Revoca la sesión identificada por el access token y elimina la cookie de
+refresh. Un refresh token copiado antes del logout ya no puede renovar la
+sesión.
+
+## POST /api/auth/change-password
+
+Descripción:
+
+Cambiar la contraseña del usuario autenticado.
+
+Requiere autenticación. Al completar el cambio incrementa la versión de sesión,
+revoca todas las sesiones del usuario y elimina la cookie de refresh. El cliente
+debe volver al login.
 
 ## GET /api/auth/me
 

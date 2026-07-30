@@ -7,16 +7,24 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { StringValue } from 'ms';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  AuthenticatedPrincipal,
+  AuthenticatedUser,
+  IssuedSession,
+  TokenPayload,
+} from './auth.types';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthenticatedUser, LoginResult, TokenPayload } from './auth.types';
 
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 10;
 const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
 const DEFAULT_REFRESH_TOKEN_EXPIRES_IN = '7d';
+const DEFAULT_ABSOLUTE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_IDLE_TTL_SECONDS = 24 * 60 * 60;
 
 type UserRecord = {
   id: string;
@@ -26,7 +34,19 @@ type UserRecord = {
   isActive: boolean;
   mustChangePassword: boolean;
   operationalLocationId?: string;
+  sessionVersion: number;
   role: { name: string };
+};
+
+type SessionRecord = {
+  id: string;
+  userId: string;
+  refreshTokenHash: string;
+  tokenVersion: number;
+  lastUsedAt: Date;
+  absoluteExpiresAt: Date;
+  revokedAt: Date | null;
+  user: UserRecord;
 };
 
 @Injectable()
@@ -36,13 +56,12 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(credentials: LoginDto): Promise<LoginResult> {
+  async login(credentials: LoginDto): Promise<IssuedSession> {
     const user = await this.findUserByEmail(credentials.email);
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-
     if (!user.isActive) {
       throw new ForbiddenException('User is inactive');
     }
@@ -51,50 +70,122 @@ export class AuthService {
       credentials.password,
       user.passwordHash,
     );
-
     if (!passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const sanitizedUser = this.toAuthenticatedUser(user);
+    const sessionId = randomUUID();
+    const absoluteExpiresAt = new Date(
+      Date.now() + this.getSessionTtlSeconds('absolute') * 1000,
+    );
+    const issued = await this.issueTokens(
+      user,
+      sessionId,
+      user.sessionVersion,
+      0,
+    );
+
+    await this.prisma.authSession.create({
+      data: {
+        id: sessionId,
+        userId: user.id,
+        refreshTokenHash: this.hashToken(issued.refreshToken),
+        absoluteExpiresAt,
+      },
+    });
 
     return {
-      accessToken: await this.signToken(sanitizedUser, 'access'),
-      refreshToken: await this.signToken(sanitizedUser, 'refresh'),
-      user: sanitizedUser,
+      ...issued,
+      refreshTokenExpiresAt: absoluteExpiresAt,
     };
   }
 
-  async refresh(refreshToken: string): Promise<LoginResult> {
+  async refresh(refreshToken: string): Promise<IssuedSession> {
     const payload = await this.verifyToken(refreshToken, 'refresh');
-    const user = await this.findUserByEmail(payload.email);
+    const session = await this.findSession(payload.sessionId);
 
-    if (!user) {
+    if (!session || session.userId !== payload.sub) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    if (!user.isActive) {
-      throw new ForbiddenException('User is inactive');
+    const now = new Date();
+    if (
+      session.revokedAt ||
+      session.absoluteExpiresAt <= now ||
+      this.isIdleExpired(session, now) ||
+      !session.user.isActive ||
+      session.user.sessionVersion !== payload.sessionVersion ||
+      session.tokenVersion !== payload.tokenVersion
+    ) {
+      await this.revokeSession(session.id, now);
+      throw new UnauthorizedException('Invalid token');
     }
 
-    const sanitizedUser = this.toAuthenticatedUser(user);
+    const presentedHash = this.hashToken(refreshToken);
+    if (!this.tokenHashesMatch(session.refreshTokenHash, presentedHash)) {
+      await this.revokeSession(session.id, now);
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+
+    const nextTokenVersion = session.tokenVersion + 1;
+    const issued = await this.issueTokens(
+      session.user,
+      session.id,
+      session.user.sessionVersion,
+      nextTokenVersion,
+    );
+    const replacementHash = this.hashToken(issued.refreshToken);
+    const rotated = await this.prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: presentedHash,
+        revokedAt: null,
+        tokenVersion: session.tokenVersion,
+      },
+      data: {
+        refreshTokenHash: replacementHash,
+        tokenVersion: nextTokenVersion,
+        lastUsedAt: now,
+      },
+    });
+
+    if (rotated.count !== 1) {
+      await this.revokeSession(session.id, now);
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
 
     return {
-      accessToken: await this.signToken(sanitizedUser, 'access'),
-      refreshToken: await this.signToken(sanitizedUser, 'refresh'),
-      user: sanitizedUser,
+      ...issued,
+      refreshTokenExpiresAt: session.absoluteExpiresAt,
     };
   }
 
-  async verifyAccessToken(token: string): Promise<AuthenticatedUser> {
+  async verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
     const payload = await this.verifyToken(token, 'access');
-    const user = await this.findUserByEmail(payload.email);
+    const session = await this.findSession(payload.sessionId);
+    const now = new Date();
 
-    if (!user || !user.isActive) {
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.revokedAt ||
+      session.absoluteExpiresAt <= now ||
+      this.isIdleExpired(session, now) ||
+      !session.user.isActive ||
+      session.user.sessionVersion !== payload.sessionVersion
+    ) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    return this.toAuthenticatedUser(user);
+    await this.prisma.authSession.updateMany({
+      where: { id: session.id, revokedAt: null },
+      data: { lastUsedAt: now },
+    });
+
+    return {
+      ...this.toAuthenticatedUser(session.user),
+      authSessionId: session.id,
+    };
   }
 
   async changeOwnPassword(
@@ -102,7 +193,6 @@ export class AuthService {
     dto: ChangeOwnPasswordDto,
   ): Promise<AuthenticatedUser> {
     this.assertPasswordPolicy(dto.newPassword);
-
     const user = await this.findUserById(userId);
 
     if (!user || !user.isActive) {
@@ -113,7 +203,6 @@ export class AuthService {
       dto.currentPassword,
       user.passwordHash,
     );
-
     if (!currentPasswordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -122,20 +211,102 @@ export class AuthService {
       dto.newPassword,
       PASSWORD_HASH_ROUNDS,
     );
-    const updatedUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        passwordHash,
-        mustChangePassword: false,
-      },
-      include: { role: true },
+    const now = new Date();
+    const updatedUser = await this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash,
+          mustChangePassword: false,
+          sessionVersion: { increment: 1 },
+        },
+        include: { role: true },
+      });
+      await transaction.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      return updated;
     });
 
     return this.toAuthenticatedUser(updatedUser);
   }
 
-  logout(): { success: true } {
+  async logout(sessionId: string): Promise<{ success: true }> {
+    await this.revokeSession(sessionId, new Date());
     return { success: true };
+  }
+
+  private async issueTokens(
+    user: UserRecord,
+    sessionId: string,
+    sessionVersion: number,
+    tokenVersion: number,
+  ): Promise<{ accessToken: string; refreshToken: string; user: AuthenticatedUser }> {
+    const sanitizedUser = this.toAuthenticatedUser(user);
+    const accessToken = await this.signToken(sanitizedUser, 'access', {
+      sessionId,
+      sessionVersion,
+    });
+    const refreshToken = await this.signToken(sanitizedUser, 'refresh', {
+      sessionId,
+      sessionVersion,
+      tokenVersion,
+    });
+
+    return { accessToken, refreshToken, user: sanitizedUser };
+  }
+
+  private async findSession(id: string): Promise<SessionRecord | null> {
+    return this.prisma.authSession.findUnique({
+      where: { id },
+      include: { user: { include: { role: true } } },
+    });
+  }
+
+  private async revokeSession(id: string, revokedAt: Date): Promise<void> {
+    await this.prisma.authSession.updateMany({
+      where: { id, revokedAt: null },
+      data: { revokedAt },
+    });
+  }
+
+  private isIdleExpired(session: SessionRecord, now: Date): boolean {
+    return (
+      session.lastUsedAt.getTime() +
+        this.getSessionTtlSeconds('idle') * 1000 <=
+      now.getTime()
+    );
+  }
+
+  private getSessionTtlSeconds(type: 'absolute' | 'idle'): number {
+    const envKey =
+      type === 'absolute'
+        ? 'AUTH_SESSION_ABSOLUTE_TTL_SECONDS'
+        : 'AUTH_SESSION_IDLE_TTL_SECONDS';
+    const fallback =
+      type === 'absolute'
+        ? DEFAULT_ABSOLUTE_TTL_SECONDS
+        : DEFAULT_IDLE_TTL_SECONDS;
+    const configured = Number(process.env[envKey] ?? fallback);
+
+    if (!Number.isInteger(configured) || configured <= 0) {
+      throw new InternalServerErrorException(`${envKey} must be a positive integer`);
+    }
+    return configured;
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private tokenHashesMatch(expected: string, actual: string): boolean {
+    const expectedBuffer = Buffer.from(expected, 'hex');
+    const actualBuffer = Buffer.from(actual, 'hex');
+    return (
+      expectedBuffer.length === actualBuffer.length &&
+      timingSafeEqual(expectedBuffer, actualBuffer)
+    );
   }
 
   private async findUserById(id: string): Promise<UserRecord | null> {
@@ -176,19 +347,21 @@ export class AuthService {
   private async signToken(
     user: AuthenticatedUser,
     type: TokenPayload['type'],
+    session: Pick<TokenPayload, 'sessionId' | 'sessionVersion'> &
+      Partial<Pick<TokenPayload, 'tokenVersion'>>,
   ): Promise<string> {
-    const secret = this.getSecret(type);
-
     return this.jwtService.signAsync(
       {
         sub: user.id,
         email: user.email,
         role: user.role,
         type,
+        ...session,
+        ...(type === 'refresh' ? { jti: randomUUID() } : {}),
       },
       {
         expiresIn: this.getExpiresIn(type),
-        secret,
+        secret: this.getSecret(type),
       },
     );
   }
@@ -202,16 +375,19 @@ export class AuthService {
         secret: this.getSecret(expectedType),
       });
 
-      if (payload.type !== expectedType) {
+      if (
+        payload.type !== expectedType ||
+        !payload.sessionId ||
+        !Number.isInteger(payload.sessionVersion) ||
+        (expectedType === 'refresh' && !Number.isInteger(payload.tokenVersion))
+      ) {
         throw new UnauthorizedException('Invalid token');
       }
-
       return payload;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-
       throw new UnauthorizedException('Invalid token');
     }
   }
@@ -224,7 +400,6 @@ export class AuthService {
     if (!secret) {
       throw new InternalServerErrorException(`${envKey} is required`);
     }
-
     return secret;
   }
 
@@ -232,11 +407,9 @@ export class AuthService {
     const envKey =
       type === 'access' ? 'JWT_ACCESS_EXPIRES_IN' : 'JWT_REFRESH_EXPIRES_IN';
     const configuredValue = process.env[envKey]?.trim();
-
     if (configuredValue) {
       return configuredValue as StringValue;
     }
-
     return type === 'access'
       ? DEFAULT_ACCESS_TOKEN_EXPIRES_IN
       : DEFAULT_REFRESH_TOKEN_EXPIRES_IN;

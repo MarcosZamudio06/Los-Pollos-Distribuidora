@@ -81,6 +81,7 @@ export function createApiClient(baseUrl = getDefaultApiBaseUrl()) {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
     const requestHeaders = new Headers(headers)
     const init: RequestInit = {
+      credentials: 'include',
       method,
       headers: requestHeaders,
       signal,

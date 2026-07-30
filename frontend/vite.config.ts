@@ -24,5 +24,21 @@ export default defineConfig({
   },
   test: {
     allowOnly: false,
+    coverage: {
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/**/__tests__/**',
+        'src/main.tsx',
+        'src/vite-env.d.ts',
+      ],
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      thresholds: {
+        branches: 45,
+        functions: 45,
+        lines: 55,
+        statements: 55,
+      },
+    },
   },
 })

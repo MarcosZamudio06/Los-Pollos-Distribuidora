@@ -1,0 +1,183 @@
+name: Quality Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: quality-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24.14.1
+
+jobs:
+  quality:
+    name: Quality and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Generate Prisma Client
+        run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
+
+      - name: Reject focused or skipped tests
+        run: npm run test:guard
+
+      - name: Lint backend without modifications
+        run: npm --prefix backend run lint:check
+
+      - name: Lint frontend without modifications
+        run: npm --prefix frontend run lint
+
+      - name: Type-check backend
+        run: npm --prefix backend run typecheck
+
+      - name: Type-check frontend
+        run: npm --prefix frontend run typecheck
+
+      - name: Test backend with coverage thresholds
+        env:
+          JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
+          JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+          OPENSSL_CONF: /dev/null
+        run: npm --prefix backend run test:cov
+
+      - name: Test frontend with coverage thresholds
+        run: npm --prefix frontend run test:cov
+
+  database:
+    name: PostgreSQL and PostGIS integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_DB: pollos_ci
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pollos_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_ci
+      JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+      OPENSSL_CONF: /dev/null
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Validate Prisma schema
+        run: npm --prefix backend exec prisma validate -- --schema backend/prisma/schema.prisma
+
+      - name: Generate Prisma Client
+        run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
+
+      - name: Apply all migrations to a clean database
+        run: npm --prefix backend exec prisma migrate deploy -- --schema backend/prisma/schema.prisma
+
+      - name: Verify migration status
+        run: npm --prefix backend exec prisma migrate status -- --schema backend/prisma/schema.prisma
+
+      - name: Run integration tests
+        run: npm --prefix backend run test:e2e -- --runInBand
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build backend image
+        run: docker build --file docker/backend/Dockerfile --tag pollos-backend:ci .
+
+      - name: Build frontend image
+        run: docker build --file docker/frontend/Dockerfile --tag pollos-frontend:ci .
+
+  security:
+    name: Dependency and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pinned audit tool without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Audit production dependencies
+        run: npm run audit:dependencies
+
+      - name: Scan committed history for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_VERSION: 8.28.0
+
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [quality, database, docker, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every quality check
+        env:
+          DATABASE_RESULT: ${{ needs.database.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+        run: |
+          test "$QUALITY_RESULT" = "success"
+          test "$DATABASE_RESULT" = "success"
+          test "$DOCKER_RESULT" = "success"
+          test "$SECURITY_RESULT" = "success"

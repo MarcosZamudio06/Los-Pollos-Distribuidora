@@ -21,7 +21,6 @@ export type ChangePasswordValues = {
 
 export type LoginResult = {
   accessToken: string
-  refreshToken: string
   user: AuthUser
 }
 

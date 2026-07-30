@@ -2,6 +2,9 @@ type EnvironmentVariables = Record<string, string | undefined>;
 export declare function validateEnvironment(env: EnvironmentVariables): {
     API_PREFIX: string;
     APP_TIMEZONE: string;
+    AUTH_SESSION_ABSOLUTE_TTL_SECONDS: number;
+    AUTH_SESSION_IDLE_TTL_SECONDS: number;
+    CORS_ORIGIN: string;
     DATABASE_SSL: boolean;
     DATABASE_URL: string;
     JWT_ACCESS_SECRET: string | undefined;

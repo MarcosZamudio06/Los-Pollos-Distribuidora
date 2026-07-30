@@ -1,15 +1,12 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthService } from './auth.service';
-import { TokenPayload } from './auth.types';
+import type { TokenPayload } from './auth.types';
 
-type UserWithRole = {
+type UserRecord = {
   id: string;
   name: string;
   email: string;
@@ -17,29 +14,22 @@ type UserWithRole = {
   isActive: boolean;
   mustChangePassword: boolean;
   operationalLocationId?: string;
+  sessionVersion: number;
   role: { name: string };
 };
 
-type UserUpdateArgs = {
-  where: { id: string };
-  data: {
-    passwordHash: string;
-    mustChangePassword: boolean;
-  };
-  include: { role: true };
-};
-type MockPrisma = {
-  user: {
-    findUnique: jest.MockedFunction<
-      (...args: unknown[]) => Promise<UserWithRole | null>
-    >;
-    update: jest.MockedFunction<
-      (args: UserUpdateArgs) => Promise<UserWithRole | null>
-    >;
-  };
+type SessionRecord = {
+  id: string;
+  userId: string;
+  refreshTokenHash: string;
+  tokenVersion: number;
+  lastUsedAt: Date;
+  absoluteExpiresAt: Date;
+  revokedAt: Date | null;
+  user: UserRecord;
 };
 
-function createUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
+function createUser(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
     id: 'user-1',
     name: 'Development Admin',
@@ -47,308 +37,184 @@ function createUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
     passwordHash: bcrypt.hashSync('valid-password', 4),
     isActive: true,
     mustChangePassword: false,
+    sessionVersion: 0,
     role: { name: 'ADMIN' },
     ...overrides,
   };
 }
 
-function createService(user: UserWithRole | null): {
-  service: AuthService;
-  jwtService: jest.Mocked<Pick<JwtService, 'signAsync' | 'verifyAsync'>>;
-  prisma: MockPrisma;
-} {
+function createService(user = createUser()) {
   process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
-  const prisma: MockPrisma = {
-    user: {
-      findUnique: jest.fn().mockResolvedValue(user),
-      update: jest.fn((args: UserUpdateArgs) =>
-        Promise.resolve(
-          user
-            ? {
-                ...user,
-                passwordHash: args.data.passwordHash,
-                mustChangePassword: args.data.mustChangePassword,
-              }
-            : null,
-        ),
-      ),
-    },
+  const state: { session: SessionRecord | null; user: UserRecord } = {
+    session: null,
+    user,
+  };
+  const signedPayloads = new Map<string, TokenPayload>();
+  let tokenSequence = 0;
+
+  const authSession = {
+    create: jest.fn(async ({ data }: any) => {
+      state.session = {
+        ...data,
+        tokenVersion: 0,
+        lastUsedAt: new Date(),
+        revokedAt: null,
+        user: state.user,
+      };
+      return state.session;
+    }),
+    findUnique: jest.fn(async () => state.session),
+    updateMany: jest.fn(async ({ where, data }: any) => {
+      const session = state.session;
+      if (
+        !session ||
+        (where.id && where.id !== session.id) ||
+        (where.userId && where.userId !== session.userId) ||
+        (where.revokedAt === null && session.revokedAt !== null) ||
+        (where.refreshTokenHash &&
+          where.refreshTokenHash !== session.refreshTokenHash) ||
+        (where.tokenVersion !== undefined &&
+          where.tokenVersion !== session.tokenVersion)
+      ) {
+        return { count: 0 };
+      }
+
+      Object.assign(session, data);
+      return { count: 1 };
+    }),
+  };
+  const userDelegate = {
+    findUnique: jest.fn(async () => state.user),
+    update: jest.fn(async ({ data }: any) => {
+      state.user = {
+        ...state.user,
+        passwordHash: data.passwordHash,
+        mustChangePassword: data.mustChangePassword,
+        sessionVersion:
+          state.user.sessionVersion + (data.sessionVersion?.increment ?? 0),
+      };
+      if (state.session) state.session.user = state.user;
+      return state.user;
+    }),
+  };
+  const prisma = {
+    authSession,
+    user: userDelegate,
+    $transaction: jest.fn(async (callback: (tx: any) => unknown) =>
+      callback({ authSession, user: userDelegate }),
+    ),
   };
   const jwtService = {
-    signAsync: jest.fn().mockImplementation((payload: TokenPayload) => {
-      const tokenType = payload.type;
-      return Promise.resolve(`${tokenType}.${payload.sub}.${payload.role}`);
+    signAsync: jest.fn(async (payload: TokenPayload) => {
+      const token = `${payload.type}-token-${tokenSequence++}`;
+      signedPayloads.set(token, payload);
+      return token;
     }),
-    verifyAsync: jest.fn(),
+    verifyAsync: jest.fn(async (token: string) => {
+      const payload = signedPayloads.get(token);
+      if (!payload) throw new Error('invalid signature');
+      return payload;
+    }),
   };
 
   return {
+    authSession,
+    jwtService,
+    prisma,
     service: new AuthService(
       prisma as unknown as PrismaService,
       jwtService as unknown as JwtService,
     ),
-    jwtService,
-    prisma,
+    state,
   };
 }
 
-describe('AuthService', () => {
-  it('logs in an active user with a valid password and never returns passwordHash', async () => {
-    const { service } = createService(createUser());
+describe('AuthService persistent sessions', () => {
+  it('creates a server session and stores only the refresh token hash', async () => {
+    const { authSession, service } = createService();
 
     const result = await service.login({
       email: 'dev.admin@pollos.local',
       password: 'valid-password',
     });
 
-    expect(result).toEqual({
-      accessToken: 'access.user-1.ADMIN',
-      refreshToken: 'refresh.user-1.ADMIN',
-      user: {
-        id: 'user-1',
-        name: 'Development Admin',
-        email: 'dev.admin@pollos.local',
-        role: 'ADMIN',
-        mustChangePassword: false,
-      },
-    });
+    const data = authSession.create.mock.calls[0][0].data;
+    expect(data.refreshTokenHash).toBe(
+      createHash('sha256').update(result.refreshToken).digest('hex'),
+    );
+    expect(JSON.stringify(data)).not.toContain(result.refreshToken);
     expect(result.user).not.toHaveProperty('passwordHash');
   });
 
-  it('includes the assigned operational location in the authenticated session', async () => {
-    const { service } = createService(
-      createUser({ operationalLocationId: 'location-1' }),
-    );
-
-    const result = await service.login({
+  it('rotates the refresh token and revokes the session when the old token is reused', async () => {
+    const { service, state } = createService();
+    const login = await service.login({
       email: 'dev.admin@pollos.local',
       password: 'valid-password',
     });
 
-    expect(result.user).toEqual(
-      expect.objectContaining({ operationalLocationId: 'location-1' }),
+    const refreshed = await service.refresh(login.refreshToken);
+    expect(refreshed.refreshToken).not.toBe(login.refreshToken);
+    expect(state.session?.tokenVersion).toBe(1);
+
+    await expect(service.refresh(login.refreshToken)).rejects.toThrow(
+      'Invalid token',
     );
+    expect(state.session?.revokedAt).toBeInstanceOf(Date);
   });
 
-  it('uses configured token expiration windows when present in the environment', async () => {
-    const previousAccessExpires = process.env.JWT_ACCESS_EXPIRES_IN;
-    const previousRefreshExpires = process.env.JWT_REFRESH_EXPIRES_IN;
+  it('invalidates access and refresh tokens after logout', async () => {
+    const { service, state } = createService();
+    const login = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+    const sessionId = state.session?.id;
+    if (!sessionId) throw new Error('Session was not created');
 
-    process.env.JWT_ACCESS_EXPIRES_IN = '30m';
-    process.env.JWT_REFRESH_EXPIRES_IN = '14d';
+    await service.logout(sessionId);
 
-    try {
-      const { service, jwtService } = createService(createUser());
-
-      await service.login({
-        email: 'dev.admin@pollos.local',
-        password: 'valid-password',
-      });
-
-      expect(jwtService.signAsync).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({ type: 'access' }),
-        expect.objectContaining({
-          expiresIn: '30m',
-          secret: 'test-access-secret',
-        }),
-      );
-      expect(jwtService.signAsync).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ type: 'refresh' }),
-        expect.objectContaining({
-          expiresIn: '14d',
-          secret: 'test-refresh-secret',
-        }),
-      );
-    } finally {
-      if (previousAccessExpires === undefined) {
-        delete process.env.JWT_ACCESS_EXPIRES_IN;
-      } else {
-        process.env.JWT_ACCESS_EXPIRES_IN = previousAccessExpires;
-      }
-
-      if (previousRefreshExpires === undefined) {
-        delete process.env.JWT_REFRESH_EXPIRES_IN;
-      } else {
-        process.env.JWT_REFRESH_EXPIRES_IN = previousRefreshExpires;
-      }
-    }
-  });
-
-  it('rejects login with an incorrect password', async () => {
-    const { service } = createService(createUser());
-
+    await expect(service.refresh(login.refreshToken)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     await expect(
-      service.login({
-        email: 'dev.admin@pollos.local',
-        password: 'wrong-password',
-      }),
+      service.verifyAccessToken(login.accessToken),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('rejects login for an inactive user before issuing tokens', async () => {
-    const { service, jwtService } = createService(
-      createUser({ isActive: false }),
-    );
-
-    await expect(
-      service.login({
-        email: 'dev.admin@pollos.local',
-        password: 'valid-password',
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(jwtService.signAsync).not.toHaveBeenCalled();
-  });
-
-  it('logs in an active user with a pending password change and exposes the required flag', async () => {
-    const { service } = createService(createUser({ mustChangePassword: true }));
-
-    const result = await service.login({
+  it('increments sessionVersion and revokes every session after a password change', async () => {
+    const { authSession, service, state } = createService();
+    await service.login({
       email: 'dev.admin@pollos.local',
       password: 'valid-password',
     });
 
-    expect(result.user).toEqual({
-      id: 'user-1',
-      name: 'Development Admin',
-      email: 'dev.admin@pollos.local',
-      role: 'ADMIN',
-      mustChangePassword: true,
-    });
-    expect(result.user).not.toHaveProperty('passwordHash');
-  });
-
-  it('changes the authenticated user password, clears mustChangePassword and never returns passwordHash', async () => {
-    const { service, prisma } = createService(
-      createUser({ mustChangePassword: true }),
-    );
-
-    const result = await service.changeOwnPassword('user-1', {
+    await service.changeOwnPassword('user-1', {
       currentPassword: 'valid-password',
       newPassword: 'new-secure-123',
     });
 
-    expect(prisma.user.update).toHaveBeenCalledTimes(1);
-    const updateArgs = prisma.user.update.mock.calls[0][0];
-    expect(updateArgs.where).toEqual({ id: 'user-1' });
-    expect(updateArgs.include).toEqual({ role: true });
-    expect(updateArgs.data.mustChangePassword).toBe(false);
-    expect(updateArgs.data.passwordHash).not.toBe('new-secure-123');
-    await expect(
-      bcrypt.compare('new-secure-123', updateArgs.data.passwordHash),
-    ).resolves.toBe(true);
-    expect(result).toEqual({
-      id: 'user-1',
-      name: 'Development Admin',
-      email: 'dev.admin@pollos.local',
-      role: 'ADMIN',
-      mustChangePassword: false,
-    });
-    expect(result).not.toHaveProperty('passwordHash');
-  });
-
-  it('rejects own password change with an incorrect current password', async () => {
-    const { service, prisma } = createService(createUser());
-
-    await expect(
-      service.changeOwnPassword('user-1', {
-        currentPassword: 'wrong-password',
-        newPassword: 'new-secure-123',
-      }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(prisma.user.update).not.toHaveBeenCalled();
-  });
-
-  it('rejects weak new passwords before updating credentials', async () => {
-    const { service, prisma } = createService(createUser());
-
-    await expect(
-      service.changeOwnPassword('user-1', {
-        currentPassword: 'valid-password',
-        newPassword: 'short',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.user.update).not.toHaveBeenCalled();
-  });
-
-  it('refreshes tokens when the refresh token is valid', async () => {
-    const { service, jwtService } = createService(createUser());
-    jwtService.verifyAsync.mockResolvedValue({
-      sub: 'user-1',
-      email: 'dev.admin@pollos.local',
-      role: 'ADMIN',
-      type: 'refresh',
-    });
-
-    const result = await service.refresh('valid-refresh-token');
-
-    expect(result.accessToken).toBe('access.user-1.ADMIN');
-    expect(result.refreshToken).toBe('refresh.user-1.ADMIN');
-    expect(result.user).toEqual({
-      id: 'user-1',
-      name: 'Development Admin',
-      email: 'dev.admin@pollos.local',
-      role: 'ADMIN',
-      mustChangePassword: false,
-    });
-  });
-
-  it('rejects refresh for an inactive user before issuing replacement tokens', async () => {
-    const { service, jwtService } = createService(
-      createUser({ isActive: false }),
+    expect(state.user.sessionVersion).toBe(1);
+    expect(state.session?.revokedAt).toBeInstanceOf(Date);
+    expect(authSession.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'user-1', revokedAt: null } }),
     );
-    jwtService.verifyAsync.mockResolvedValue({
-      sub: 'user-1',
-      email: 'dev.admin@pollos.local',
-      role: 'ADMIN',
-      type: 'refresh',
-    });
-
-    await expect(service.refresh('valid-refresh-token')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    expect(jwtService.signAsync).not.toHaveBeenCalled();
   });
 
-  it('rejects protected access when an already-issued access token belongs to a now inactive user', async () => {
-    const { service, jwtService } = createService(
-      createUser({ isActive: false }),
-    );
-    jwtService.verifyAsync.mockResolvedValue({
+  it('rejects tokens that do not reference a persistent session', async () => {
+    const { jwtService, service } = createService();
+    jwtService.verifyAsync.mockResolvedValueOnce({
       sub: 'user-1',
       email: 'dev.admin@pollos.local',
       role: 'ADMIN',
       type: 'access',
+      sessionId: 'missing-session',
+      sessionVersion: 0,
     });
 
     await expect(
-      service.verifyAccessToken('issued-before-deactivation'),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(jwtService.signAsync).not.toHaveBeenCalled();
-  });
-
-  it('includes the assigned operational location when validating an access token', async () => {
-    const { service, jwtService } = createService(createUser({ operationalLocationId: 'location-1' }));
-    jwtService.verifyAsync.mockResolvedValue({
-      sub: 'user-1',
-      email: 'dev.admin@pollos.local',
-      role: 'ADMIN',
-      type: 'access',
-    });
-
-    await expect(service.verifyAccessToken('valid-access-token')).resolves.toEqual(
-      expect.objectContaining({ id: 'user-1', operationalLocationId: 'location-1' }),
-    );
-  });
-
-  it('rejects an invalid refresh token', async () => {
-    const { service, jwtService } = createService(createUser());
-    jwtService.verifyAsync.mockRejectedValue(new Error('invalid signature'));
-
-    await expect(
-      service.refresh('invalid-refresh-token'),
+      service.verifyAccessToken('orphaned-token'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

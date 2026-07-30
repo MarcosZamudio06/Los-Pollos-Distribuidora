@@ -1,38 +1,49 @@
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
-import type { AuthenticatedUser } from './auth.types';
+import type { AuthenticatedPrincipal, LoginResult } from './auth.types';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
-    login(body: LoginDto): Promise<{
+    login(body: LoginDto, response: Response): Promise<{
         success: boolean;
         message: string;
-        data: import("./auth.types").LoginResult;
+        data: LoginResult;
     }>;
-    refresh(body: RefreshTokenDto): Promise<{
+    refresh(cookieHeader: string | undefined, response: Response): Promise<{
         success: boolean;
         message: string;
-        data: import("./auth.types").LoginResult;
+        data: LoginResult;
     }>;
-    logout(): {
+    logout(user: AuthenticatedPrincipal, response: Response): Promise<{
         success: boolean;
         message: string;
         data: {
             success: true;
         };
-    };
-    changePassword(user: AuthenticatedUser, body: ChangeOwnPasswordDto): Promise<{
+    }>;
+    changePassword(user: AuthenticatedPrincipal, body: ChangeOwnPasswordDto, response: Response): Promise<{
         success: boolean;
         message: string;
-        data: AuthenticatedUser;
+        data: import("./auth.types").AuthenticatedUser;
     }>;
-    me(user: AuthenticatedUser): {
+    me(user: AuthenticatedPrincipal): {
         success: boolean;
         message: string;
         data: {
-            user: AuthenticatedUser;
+            user: {
+                id: string;
+                email: string;
+                name: string;
+                role: string;
+                mustChangePassword: boolean;
+                operationalLocationId?: string;
+            };
         };
     };
+    private setRefreshCookie;
+    private clearRefreshCookie;
+    private readRefreshCookie;
+    private toLoginResult;
 }

@@ -15,22 +15,9 @@ import * as authApi from './authApi'
 import { AuthContext, type AuthContextValue } from './authContext'
 import type { AuthSession, ChangePasswordValues, LoginCredentials } from './types'
 
-const AUTH_STORAGE_KEY = 'pollos.auth.session'
-
-function readStoredSession(): AuthSession | null {
-  const rawSession = window.localStorage.getItem(AUTH_STORAGE_KEY)
-
-  if (!rawSession) {
-    return null
-  }
-
-  try {
-    return JSON.parse(rawSession) as AuthSession
-  } catch {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY)
-    return null
-  }
-}
+const DEFAULT_REFRESH_DELAY_MS = 10 * 60 * 1000
+const REFRESH_EARLY_MS = 30 * 1000
+const LEGACY_AUTH_STORAGE_KEY = 'pollos.auth.session'
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiClientError) {
@@ -44,48 +31,110 @@ function getErrorMessage(error: unknown) {
   return 'Ocurrió un problema inesperado.'
 }
 
+function getRefreshDelay(accessToken: string) {
+  try {
+    const [, encodedPayload] = accessToken.split('.')
+    const normalizedPayload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
+    const paddedPayload = normalizedPayload.padEnd(
+      Math.ceil(normalizedPayload.length / 4) * 4,
+      '=',
+    )
+    const payload = JSON.parse(atob(paddedPayload)) as {
+      exp?: number
+    }
+
+    if (payload.exp) {
+      return Math.max(payload.exp * 1000 - Date.now() - REFRESH_EARLY_MS, 0)
+    }
+  } catch {
+    // Non-JWT test tokens and malformed tokens use the conservative fallback.
+  }
+
+  return DEFAULT_REFRESH_DELAY_MS
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<AuthSession | null>(() => readStoredSession())
-  const [status, setStatus] = useState<'authenticated' | 'checking' | 'guest'>(() =>
-    readStoredSession() ? 'checking' : 'guest',
-  )
+  const [session, setSession] = useState<AuthSession | null>(null)
+  const [status, setStatus] = useState<'authenticated' | 'checking' | 'guest'>('checking')
   const [error, setError] = useState<string | null>(null)
   const accessToken = session?.accessToken ?? null
-  const accessTokenRef = useRef(accessToken)
+  const accessTokenRef = useRef<string | null>(null)
+  const refreshPromiseRef = useRef<Promise<AuthSession> | null>(null)
+  const hasBootstrappedRef = useRef(false)
   const user = session?.user ?? null
 
   const clearSession = useCallback(() => {
     accessTokenRef.current = null
-    window.localStorage.removeItem(AUTH_STORAGE_KEY)
     setSession(null)
     setStatus('guest')
   }, [])
 
-  const persistSession = useCallback((nextSession: AuthSession) => {
+  const establishSession = useCallback((nextSession: AuthSession) => {
     accessTokenRef.current = nextSession.accessToken
-    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
     setSession(nextSession)
     setStatus('authenticated')
+    setError(null)
   }, [])
+
+  const rotateSession = useCallback(
+    async (expectedAccessToken: string | null) => {
+      if (!refreshPromiseRef.current) {
+        refreshPromiseRef.current = authApi.refreshSession().finally(() => {
+          refreshPromiseRef.current = null
+        })
+      }
+
+      const nextSession = await refreshPromiseRef.current
+      if (accessTokenRef.current !== expectedAccessToken) {
+        return false
+      }
+
+      establishSession(nextSession)
+      return true
+    },
+    [establishSession],
+  )
+
+  useEffect(() => {
+    if (hasBootstrappedRef.current) return
+    hasBootstrappedRef.current = true
+    window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+
+    void rotateSession(null).catch(() => {
+      if (accessTokenRef.current === null) clearSession()
+    })
+  }, [clearSession, rotateSession])
 
   useEffect(() => {
     const handleUnauthorized = (event: Event) => {
       const unauthorizedEvent = event as AuthUnauthorizedEvent
+      const failedToken = accessTokenRef.current
 
       if (
         unauthorizedEvent.detail.statusCode === 401 &&
-        unauthorizedEvent.detail.matchesAccessToken(accessTokenRef.current)
+        unauthorizedEvent.detail.matchesAccessToken(failedToken)
       ) {
-        clearSession()
+        void rotateSession(failedToken).catch(() => {
+          if (accessTokenRef.current === failedToken) clearSession()
+        })
       }
     }
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+  }, [clearSession, rotateSession])
 
-    return () => {
-      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
-    }
-  }, [clearSession])
+  useEffect(() => {
+    if (!accessToken) return
+
+    const timer = window.setTimeout(() => {
+      void rotateSession(accessToken).catch(() => {
+        if (accessTokenRef.current === accessToken) clearSession()
+      })
+    }, getRefreshDelay(accessToken))
+
+    return () => window.clearTimeout(timer)
+  }, [accessToken, clearSession, rotateSession])
 
   const refreshUser = useCallback(async () => {
     if (!accessToken) {
@@ -94,56 +143,29 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     const requestedAccessToken = accessToken
+    const currentUser = await authApi.getCurrentUser(requestedAccessToken)
+    if (accessTokenRef.current !== requestedAccessToken) return
 
-    try {
-      const currentUser = await authApi.getCurrentUser(requestedAccessToken)
-
-      if (accessTokenRef.current !== requestedAccessToken) {
-        return
-      }
-
-      setSession((currentSession) => {
-        if (!currentSession || currentSession.accessToken !== requestedAccessToken) {
-          return currentSession
-        }
-
-        const nextSession = { ...currentSession, user: currentUser }
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
-        return nextSession
-      })
-      setStatus('authenticated')
-      setError(null)
-    } catch (caughtError) {
-      if (accessTokenRef.current !== requestedAccessToken) {
-        return
-      }
-
-      if (
-        caughtError instanceof ApiClientError &&
-        caughtError.statusCode === 401
-      ) {
-        clearSession()
-        return
-      }
-
-      throw caughtError
-    }
+    setSession((currentSession) =>
+      currentSession?.accessToken === requestedAccessToken
+        ? { ...currentSession, user: currentUser }
+        : currentSession,
+    )
+    setError(null)
   }, [accessToken, clearSession])
 
   const handleLogin = useCallback(
     async (credentials: LoginCredentials) => {
       setError(null)
       try {
-        const nextSession = await authApi.login(credentials)
-        persistSession(nextSession)
-        setStatus('authenticated')
+        establishSession(await authApi.login(credentials))
       } catch (caughtError) {
         clearSession()
         setError(getErrorMessage(caughtError))
         throw caughtError
       }
     },
-    [clearSession, persistSession],
+    [clearSession, establishSession],
   )
 
   const handleLogout = useCallback(async () => {
@@ -154,7 +176,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         await authApi.logout(token)
       } catch {
-        // Local logout is authoritative for the browser session.
+        // The browser session is cleared even if the server is unavailable.
       }
     }
   }, [accessToken, clearSession])
@@ -167,16 +189,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       setError(null)
-
       try {
-        const updatedUser = await authApi.changePassword(accessToken, values)
-        setSession((currentSession) => {
-          if (!currentSession) return currentSession
-
-          const nextSession = { ...currentSession, user: updatedUser }
-          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
-          return nextSession
-        })
+        await authApi.changePassword(accessToken, values)
+        clearSession()
       } catch (caughtError) {
         setError(getErrorMessage(caughtError))
         throw caughtError
@@ -184,62 +199,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     },
     [accessToken, clearSession],
   )
-
-  useEffect(() => {
-    if (!accessToken) {
-      return
-    }
-
-    let isCurrent = true
-    const requestedAccessToken = accessToken
-
-    void authApi.getCurrentUser(requestedAccessToken)
-      .then((currentUser) => {
-        if (!isCurrent || accessTokenRef.current !== requestedAccessToken) {
-          return
-        }
-
-        setSession((currentSession) => {
-          if (!currentSession || currentSession.accessToken !== requestedAccessToken) {
-            return currentSession
-          }
-
-          const nextSession = { ...currentSession, user: currentUser }
-          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession))
-          return nextSession
-        })
-        setStatus('authenticated')
-        setError(null)
-      })
-      .catch((caughtError) => {
-        if (!isCurrent || accessTokenRef.current !== requestedAccessToken) {
-          return
-        }
-
-        if (
-          caughtError instanceof ApiClientError &&
-          caughtError.statusCode === 401
-        ) {
-          clearSession()
-          return
-        }
-
-        setError(getErrorMessage(caughtError))
-      })
-      .finally(() => {
-        if (!isCurrent || accessTokenRef.current !== requestedAccessToken) {
-          return
-        }
-
-        setStatus((currentStatus) =>
-          currentStatus === 'guest' ? 'guest' : 'authenticated',
-        )
-      })
-
-    return () => {
-      isCurrent = false
-    }
-  }, [accessToken, clearSession])
 
   const value = useMemo<AuthContextValue>(
     () => ({

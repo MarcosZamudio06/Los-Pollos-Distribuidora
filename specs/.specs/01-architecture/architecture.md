@@ -176,6 +176,11 @@ SAT, CFDI real, timbrado, cancelación fiscal, catálogo fiscal obligatorio e in
 
 - Autenticación mediante JWT.
 - Refresh token para renovación de sesión.
+- Sesiones persistentes con refresh tokens almacenados como hash y rotación en cada renovación.
+- Detección de reutilización de refresh token con revocación de la sesión comprometida.
+- Revocación por sesión y por usuario mediante versión de sesión.
+- Expiración absoluta y por inactividad para sesiones autenticadas.
+- Access token únicamente en memoria del frontend y refresh token en cookie `HttpOnly`, `SameSite=Strict` y `Secure` en producción.
 - RBAC para permisos.
 - Hash de contraseñas.
 - Validación de datos con DTOs.

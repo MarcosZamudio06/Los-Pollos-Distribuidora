@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DashboardPage } from '../DashboardPage'
 import type { DashboardReport } from '../../reportes'
@@ -41,6 +42,18 @@ vi.mock('../../reportes', async (importOriginal) => {
   }
 })
 
+function renderDashboard() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter><DashboardPage /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
 describe('UI-004 role-aware executive dashboard', () => {
   beforeEach(() => {
     mockState.auth = { user: { id: 'admin-1', name: 'Admin', role: 'ADMIN' } }
@@ -48,7 +61,7 @@ describe('UI-004 role-aware executive dashboard', () => {
   })
 
   it('renderiza cards principales, bajo stock por ubicación y gráficas en español', () => {
-    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    const html = renderDashboard()
 
     expect(html).toContain('Dashboard Ejecutivo')
     expect(html).toContain('Ventas del día')
@@ -63,7 +76,7 @@ describe('UI-004 role-aware executive dashboard', () => {
   it('oculta métricas financieras globales para chofer y conserva estado de rutas', () => {
     mockState.auth = { user: { id: 'driver-1', name: 'Chofer', role: 'DRIVER' } }
 
-    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    const html = renderDashboard()
 
     expect(html).toContain('Próxima ruta y entregas')
     expect(html).toContain('Rutas asignadas')
@@ -78,7 +91,7 @@ describe('UI-004 role-aware executive dashboard', () => {
   it('filtra acciones rápidas y métricas para vendedor', () => {
     mockState.auth = { user: { id: 'seller-1', name: 'Vendedor', role: 'SELLER' } }
 
-    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    const html = renderDashboard()
 
     expect(html).toContain('Ventas del día')
     expect(html).toContain('Clientes')
@@ -91,7 +104,7 @@ describe('UI-004 role-aware executive dashboard', () => {
   it('filtra dashboard de almacén sin ventas globales ni cobranza', () => {
     mockState.auth = { user: { id: 'warehouse-1', name: 'Almacén', role: 'WAREHOUSE' } }
 
-    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    const html = renderDashboard()
 
     expect(html).toContain('Inventario crítico')
     expect(html).toContain('Compras')
@@ -120,7 +133,7 @@ describe('UI-004 role-aware executive dashboard', () => {
       refetch: vi.fn(),
     }
 
-    const html = renderToStaticMarkup(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    const html = renderDashboard()
 
     expect(html).toContain('No hay operaciones para los filtros seleccionados')
   })

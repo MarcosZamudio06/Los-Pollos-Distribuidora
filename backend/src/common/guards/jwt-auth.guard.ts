@@ -9,11 +9,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ALLOW_PASSWORD_CHANGE_REQUIRED_KEY } from '../decorators/allow-password-change-required.decorator';
 import { AuthService } from '../../modules/auth/auth.service';
-import { AuthenticatedUser } from '../../modules/auth/auth.types';
+import { AuthenticatedPrincipal } from '../../modules/auth/auth.types';
 
 type RequestWithUser = {
   headers: { authorization?: string };
-  user?: AuthenticatedUser;
+  user?: AuthenticatedPrincipal;
 };
 
 @Injectable()

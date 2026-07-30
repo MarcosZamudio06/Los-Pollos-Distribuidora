@@ -11,8 +11,16 @@ async function bootstrap() {
   const apiPrefix = configService.get<string>('app.apiPrefix', 'api');
   const swaggerPath = configService.get<string>('app.swaggerPath', 'docs');
   const port = configService.get<number>('app.port', 3000);
+  const corsOrigin = configService.get<string>(
+    'CORS_ORIGIN',
+    'http://localhost:3000',
+  );
 
   app.setGlobalPrefix(apiPrefix);
+  app.enableCors({
+    credentials: true,
+    origin: corsOrigin,
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       forbidUnknownValues: true,

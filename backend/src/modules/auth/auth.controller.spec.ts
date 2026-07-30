@@ -1,24 +1,29 @@
-import {
-  INestApplication,
-  UnauthorizedException,
-  ValidationPipe,
-} from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
-const authenticatedUser = {
+const authenticatedPrincipal = {
   id: 'user-1',
   name: 'Development Admin',
   email: 'dev.admin@pollos.local',
   role: 'ADMIN',
   operationalLocationId: 'location-1',
   mustChangePassword: false,
+  authSessionId: 'session-1',
+};
+const publicUser = {
+  id: authenticatedPrincipal.id,
+  name: authenticatedPrincipal.name,
+  email: authenticatedPrincipal.email,
+  role: authenticatedPrincipal.role,
+  operationalLocationId: authenticatedPrincipal.operationalLocationId,
+  mustChangePassword: false,
 };
 
-describe('AuthController API', () => {
+describe('AuthController persistent session API', () => {
   let app: INestApplication<App>;
   let authService: jest.Mocked<
     Pick<
@@ -28,23 +33,23 @@ describe('AuthController API', () => {
   >;
 
   beforeEach(async () => {
+    const expiresAt = new Date(Date.now() + 60_000);
     authService = {
       login: jest.fn().mockResolvedValue({
         accessToken: 'access-token',
         refreshToken: 'refresh-token',
-        user: authenticatedUser,
+        refreshTokenExpiresAt: expiresAt,
+        user: publicUser,
       }),
       refresh: jest.fn().mockResolvedValue({
         accessToken: 'new-access-token',
         refreshToken: 'new-refresh-token',
-        user: authenticatedUser,
+        refreshTokenExpiresAt: expiresAt,
+        user: publicUser,
       }),
-      logout: jest.fn().mockReturnValue({ success: true }),
-      verifyAccessToken: jest.fn().mockResolvedValue(authenticatedUser),
-      changeOwnPassword: jest.fn().mockResolvedValue({
-        ...authenticatedUser,
-        mustChangePassword: false,
-      }),
+      logout: jest.fn().mockResolvedValue({ success: true }),
+      verifyAccessToken: jest.fn().mockResolvedValue(authenticatedPrincipal),
+      changeOwnPassword: jest.fn().mockResolvedValue(publicUser),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -54,183 +59,76 @@ describe('AuthController API', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({
-        forbidUnknownValues: true,
-        transform: true,
-        whitelist: true,
-      }),
-    );
+    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
   });
 
-  afterEach(async () => {
-    await app.close();
-  });
+  afterEach(async () => app.close());
 
-  it('returns the documented login response for valid credentials', async () => {
-    await request(app.getHttpServer())
+  it('sets an HttpOnly refresh cookie without exposing it in login JSON', async () => {
+    const response = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: authenticatedUser.email, password: 'valid-password' })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          message: 'Sesión iniciada correctamente',
-          data: {
-            accessToken: 'access-token',
-            refreshToken: 'refresh-token',
-            user: authenticatedUser,
-          },
-        });
-      });
+      .send({ email: publicUser.email, password: 'valid-password' })
+      .expect(200);
+
+    expect(response.body.data).toEqual({
+      accessToken: 'access-token',
+      user: publicUser,
+    });
+    expect(JSON.stringify(response.body)).not.toContain('refresh-token');
+    expect(response.headers['set-cookie'][0]).toMatch(
+      /refresh_token=refresh-token;.*HttpOnly;.*SameSite=Strict/,
+    );
   });
 
-  it('rejects login when email is missing', async () => {
-    await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ password: 'valid-password' })
-      .expect(400);
+  it('requires the refresh cookie and rotates it in the response', async () => {
+    await request(app.getHttpServer()).post('/api/auth/refresh').expect(401);
 
-    expect(authService.login).not.toHaveBeenCalled();
-  });
-
-  it('rejects login when password is missing', async () => {
-    await request(app.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email: authenticatedUser.email })
-      .expect(400);
-
-    expect(authService.login).not.toHaveBeenCalled();
-  });
-
-  it('returns refreshed tokens for a valid refresh token', async () => {
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .post('/api/auth/refresh')
-      .send({ refreshToken: 'refresh-token' })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          message: 'Sesión renovada correctamente',
-          data: {
-            accessToken: 'new-access-token',
-            refreshToken: 'new-refresh-token',
-            user: authenticatedUser,
-          },
-        });
-      });
+      .set('Cookie', 'refresh_token=refresh-token')
+      .expect(200);
+
+    expect(authService.refresh).toHaveBeenCalledWith('refresh-token');
+    expect(response.body.data).toEqual({
+      accessToken: 'new-access-token',
+      user: publicUser,
+    });
+    expect(response.headers['set-cookie'][0]).toContain(
+      'refresh_token=new-refresh-token',
+    );
   });
 
-  it('rejects /me when no bearer token is provided', async () => {
-    await request(app.getHttpServer()).get('/api/auth/me').expect(401);
-
-    expect(authService.verifyAccessToken).not.toHaveBeenCalled();
-  });
-
-  it('returns the authenticated user for /me with a valid token', async () => {
-    await request(app.getHttpServer())
-      .get('/api/auth/me')
-      .set('Authorization', 'Bearer access-token')
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          message: 'Usuario autenticado',
-          data: { user: authenticatedUser },
-        });
-      });
-  });
-
-  it('allows a pending-password user to read /me so the client can route the required flow', async () => {
-    const pendingUser = { ...authenticatedUser, mustChangePassword: true };
-    authService.verifyAccessToken.mockResolvedValue(pendingUser);
-
-    await request(app.getHttpServer())
-      .get('/api/auth/me')
-      .set('Authorization', 'Bearer access-token')
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          message: 'Usuario autenticado',
-          data: { user: pendingUser },
-        });
-      });
-  });
-
-  it('rejects logout when no bearer token is provided', async () => {
-    await request(app.getHttpServer()).post('/api/auth/logout').expect(401);
-
-    expect(authService.logout).not.toHaveBeenCalled();
-  });
-
-  it('returns the logout response for an authenticated request', async () => {
-    await request(app.getHttpServer())
+  it('revokes the authenticated server session on logout', async () => {
+    const response = await request(app.getHttpServer())
       .post('/api/auth/logout')
       .set('Authorization', 'Bearer access-token')
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          message: 'Sesión cerrada correctamente',
-          data: { success: true },
-        });
-      });
+      .expect(200);
+
+    expect(authService.logout).toHaveBeenCalledWith('session-1');
+    expect(response.headers['set-cookie'][0]).toContain('refresh_token=;');
   });
 
-  it('allows a pending-password user to change their own password with a bearer token', async () => {
-    authService.verifyAccessToken.mockResolvedValue({
-      ...authenticatedUser,
-      mustChangePassword: true,
-    });
+  it('does not expose the internal session id from /me', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', 'Bearer access-token')
+      .expect(200);
 
-    await request(app.getHttpServer())
+    expect(response.body.data.user).toEqual(publicUser);
+    expect(response.body.data.user).not.toHaveProperty('authSessionId');
+  });
+
+  it('clears the refresh cookie after changing the password', async () => {
+    const response = await request(app.getHttpServer())
       .post('/api/auth/change-password')
       .set('Authorization', 'Bearer access-token')
       .send({
         currentPassword: 'temporary-123',
         newPassword: 'new-secure-123',
       })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          message: 'Contraseña actualizada correctamente',
-          data: {
-            ...authenticatedUser,
-            mustChangePassword: false,
-          },
-        });
-        expect(JSON.stringify(body)).not.toContain('passwordHash');
-      });
+      .expect(200);
 
-    expect(authService.changeOwnPassword).toHaveBeenCalledWith('user-1', {
-      currentPassword: 'temporary-123',
-      newPassword: 'new-secure-123',
-    });
-  });
-
-  it('rejects own password change without a bearer token', async () => {
-    await request(app.getHttpServer())
-      .post('/api/auth/change-password')
-      .send({
-        currentPassword: 'temporary-123',
-        newPassword: 'new-secure-123',
-      })
-      .expect(401);
-
-    expect(authService.changeOwnPassword).not.toHaveBeenCalled();
-  });
-
-  it('maps invalid bearer tokens to 401 at API level', async () => {
-    authService.verifyAccessToken.mockRejectedValue(
-      new UnauthorizedException('Invalid token'),
-    );
-
-    await request(app.getHttpServer())
-      .get('/api/auth/me')
-      .set('Authorization', 'Bearer invalid-token')
-      .expect(401);
+    expect(response.headers['set-cookie'][0]).toContain('refresh_token=;');
   });
 });

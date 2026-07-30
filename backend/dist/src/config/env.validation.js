@@ -24,6 +24,8 @@ function validateEnvironment(env) {
     const parsedPort = Number(portValue);
     const nodeEnv = env.NODE_ENV?.trim() || 'development';
     const appTimezone = env.APP_TIMEZONE?.trim() || 'America/Mexico_City';
+    const absoluteSessionTtl = Number(env.AUTH_SESSION_ABSOLUTE_TTL_SECONDS?.trim() || 604800);
+    const idleSessionTtl = Number(env.AUTH_SESSION_IDLE_TTL_SECONDS?.trim() || 86400);
     try {
         new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
     }
@@ -32,6 +34,15 @@ function validateEnvironment(env) {
     }
     if (Number.isNaN(parsedPort) || parsedPort <= 0) {
         throw new Error(`Invalid PORT value: ${portValue}`);
+    }
+    if (!Number.isInteger(absoluteSessionTtl) || absoluteSessionTtl <= 0) {
+        throw new Error('AUTH_SESSION_ABSOLUTE_TTL_SECONDS must be a positive integer');
+    }
+    if (!Number.isInteger(idleSessionTtl) || idleSessionTtl <= 0) {
+        throw new Error('AUTH_SESSION_IDLE_TTL_SECONDS must be a positive integer');
+    }
+    if (idleSessionTtl > absoluteSessionTtl) {
+        throw new Error('AUTH_SESSION_IDLE_TTL_SECONDS cannot exceed AUTH_SESSION_ABSOLUTE_TTL_SECONDS');
     }
     let jwtAccessSecret = env.JWT_ACCESS_SECRET?.trim();
     let jwtRefreshSecret = env.JWT_REFRESH_SECRET?.trim();
@@ -48,6 +59,9 @@ function validateEnvironment(env) {
     return {
         API_PREFIX: env.API_PREFIX?.trim() || 'api',
         APP_TIMEZONE: appTimezone,
+        AUTH_SESSION_ABSOLUTE_TTL_SECONDS: absoluteSessionTtl,
+        AUTH_SESSION_IDLE_TTL_SECONDS: idleSessionTtl,
+        CORS_ORIGIN: env.CORS_ORIGIN?.trim() || 'http://localhost:3000',
         DATABASE_SSL: env.DATABASE_SSL === 'true',
         DATABASE_URL: env.DATABASE_URL?.trim() || database_config_1.DEFAULT_DATABASE_URL,
         JWT_ACCESS_SECRET: jwtAccessSecret,

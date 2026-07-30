@@ -16,11 +16,14 @@ exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const node_crypto_1 = require("node:crypto");
 const prisma_service_1 = require("../../database/prisma.service");
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 10;
 const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
 const DEFAULT_REFRESH_TOKEN_EXPIRES_IN = '7d';
+const DEFAULT_ABSOLUTE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_IDLE_TTL_SECONDS = 24 * 60 * 60;
 let AuthService = class AuthService {
     prisma;
     jwtService;
@@ -40,36 +43,89 @@ let AuthService = class AuthService {
         if (!passwordMatches) {
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
-        const sanitizedUser = this.toAuthenticatedUser(user);
+        const sessionId = (0, node_crypto_1.randomUUID)();
+        const absoluteExpiresAt = new Date(Date.now() + this.getSessionTtlSeconds('absolute') * 1000);
+        const issued = await this.issueTokens(user, sessionId, user.sessionVersion, 0);
+        await this.prisma.authSession.create({
+            data: {
+                id: sessionId,
+                userId: user.id,
+                refreshTokenHash: this.hashToken(issued.refreshToken),
+                absoluteExpiresAt,
+            },
+        });
         return {
-            accessToken: await this.signToken(sanitizedUser, 'access'),
-            refreshToken: await this.signToken(sanitizedUser, 'refresh'),
-            user: sanitizedUser,
+            ...issued,
+            refreshTokenExpiresAt: absoluteExpiresAt,
         };
     }
     async refresh(refreshToken) {
         const payload = await this.verifyToken(refreshToken, 'refresh');
-        const user = await this.findUserByEmail(payload.email);
-        if (!user) {
+        const session = await this.findSession(payload.sessionId);
+        if (!session || session.userId !== payload.sub) {
             throw new common_1.UnauthorizedException('Invalid token');
         }
-        if (!user.isActive) {
-            throw new common_1.ForbiddenException('User is inactive');
+        const now = new Date();
+        if (session.revokedAt ||
+            session.absoluteExpiresAt <= now ||
+            this.isIdleExpired(session, now) ||
+            !session.user.isActive ||
+            session.user.sessionVersion !== payload.sessionVersion ||
+            session.tokenVersion !== payload.tokenVersion) {
+            await this.revokeSession(session.id, now);
+            throw new common_1.UnauthorizedException('Invalid token');
         }
-        const sanitizedUser = this.toAuthenticatedUser(user);
+        const presentedHash = this.hashToken(refreshToken);
+        if (!this.tokenHashesMatch(session.refreshTokenHash, presentedHash)) {
+            await this.revokeSession(session.id, now);
+            throw new common_1.UnauthorizedException('Refresh token reuse detected');
+        }
+        const nextTokenVersion = session.tokenVersion + 1;
+        const issued = await this.issueTokens(session.user, session.id, session.user.sessionVersion, nextTokenVersion);
+        const replacementHash = this.hashToken(issued.refreshToken);
+        const rotated = await this.prisma.authSession.updateMany({
+            where: {
+                id: session.id,
+                refreshTokenHash: presentedHash,
+                revokedAt: null,
+                tokenVersion: session.tokenVersion,
+            },
+            data: {
+                refreshTokenHash: replacementHash,
+                tokenVersion: nextTokenVersion,
+                lastUsedAt: now,
+            },
+        });
+        if (rotated.count !== 1) {
+            await this.revokeSession(session.id, now);
+            throw new common_1.UnauthorizedException('Refresh token reuse detected');
+        }
         return {
-            accessToken: await this.signToken(sanitizedUser, 'access'),
-            refreshToken: await this.signToken(sanitizedUser, 'refresh'),
-            user: sanitizedUser,
+            ...issued,
+            refreshTokenExpiresAt: session.absoluteExpiresAt,
         };
     }
     async verifyAccessToken(token) {
         const payload = await this.verifyToken(token, 'access');
-        const user = await this.findUserByEmail(payload.email);
-        if (!user || !user.isActive) {
+        const session = await this.findSession(payload.sessionId);
+        const now = new Date();
+        if (!session ||
+            session.userId !== payload.sub ||
+            session.revokedAt ||
+            session.absoluteExpiresAt <= now ||
+            this.isIdleExpired(session, now) ||
+            !session.user.isActive ||
+            session.user.sessionVersion !== payload.sessionVersion) {
             throw new common_1.UnauthorizedException('Invalid token');
         }
-        return this.toAuthenticatedUser(user);
+        await this.prisma.authSession.updateMany({
+            where: { id: session.id, revokedAt: null },
+            data: { lastUsedAt: now },
+        });
+        return {
+            ...this.toAuthenticatedUser(session.user),
+            authSessionId: session.id,
+        };
     }
     async changeOwnPassword(userId, dto) {
         this.assertPasswordPolicy(dto.newPassword);
@@ -82,18 +138,80 @@ let AuthService = class AuthService {
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
         const passwordHash = await bcryptjs_1.default.hash(dto.newPassword, PASSWORD_HASH_ROUNDS);
-        const updatedUser = await this.prisma.user.update({
-            where: { id: userId },
-            data: {
-                passwordHash,
-                mustChangePassword: false,
-            },
-            include: { role: true },
+        const now = new Date();
+        const updatedUser = await this.prisma.$transaction(async (transaction) => {
+            const updated = await transaction.user.update({
+                where: { id: userId },
+                data: {
+                    passwordHash,
+                    mustChangePassword: false,
+                    sessionVersion: { increment: 1 },
+                },
+                include: { role: true },
+            });
+            await transaction.authSession.updateMany({
+                where: { userId, revokedAt: null },
+                data: { revokedAt: now },
+            });
+            return updated;
         });
         return this.toAuthenticatedUser(updatedUser);
     }
-    logout() {
+    async logout(sessionId) {
+        await this.revokeSession(sessionId, new Date());
         return { success: true };
+    }
+    async issueTokens(user, sessionId, sessionVersion, tokenVersion) {
+        const sanitizedUser = this.toAuthenticatedUser(user);
+        const accessToken = await this.signToken(sanitizedUser, 'access', {
+            sessionId,
+            sessionVersion,
+        });
+        const refreshToken = await this.signToken(sanitizedUser, 'refresh', {
+            sessionId,
+            sessionVersion,
+            tokenVersion,
+        });
+        return { accessToken, refreshToken, user: sanitizedUser };
+    }
+    async findSession(id) {
+        return this.prisma.authSession.findUnique({
+            where: { id },
+            include: { user: { include: { role: true } } },
+        });
+    }
+    async revokeSession(id, revokedAt) {
+        await this.prisma.authSession.updateMany({
+            where: { id, revokedAt: null },
+            data: { revokedAt },
+        });
+    }
+    isIdleExpired(session, now) {
+        return (session.lastUsedAt.getTime() +
+            this.getSessionTtlSeconds('idle') * 1000 <=
+            now.getTime());
+    }
+    getSessionTtlSeconds(type) {
+        const envKey = type === 'absolute'
+            ? 'AUTH_SESSION_ABSOLUTE_TTL_SECONDS'
+            : 'AUTH_SESSION_IDLE_TTL_SECONDS';
+        const fallback = type === 'absolute'
+            ? DEFAULT_ABSOLUTE_TTL_SECONDS
+            : DEFAULT_IDLE_TTL_SECONDS;
+        const configured = Number(process.env[envKey] ?? fallback);
+        if (!Number.isInteger(configured) || configured <= 0) {
+            throw new common_1.InternalServerErrorException(`${envKey} must be a positive integer`);
+        }
+        return configured;
+    }
+    hashToken(token) {
+        return (0, node_crypto_1.createHash)('sha256').update(token).digest('hex');
+    }
+    tokenHashesMatch(expected, actual) {
+        const expectedBuffer = Buffer.from(expected, 'hex');
+        const actualBuffer = Buffer.from(actual, 'hex');
+        return (expectedBuffer.length === actualBuffer.length &&
+            (0, node_crypto_1.timingSafeEqual)(expectedBuffer, actualBuffer));
     }
     async findUserById(id) {
         return this.prisma.user.findUnique({
@@ -124,16 +242,17 @@ let AuthService = class AuthService {
                 : {}),
         };
     }
-    async signToken(user, type) {
-        const secret = this.getSecret(type);
+    async signToken(user, type, session) {
         return this.jwtService.signAsync({
             sub: user.id,
             email: user.email,
             role: user.role,
             type,
+            ...session,
+            ...(type === 'refresh' ? { jti: (0, node_crypto_1.randomUUID)() } : {}),
         }, {
             expiresIn: this.getExpiresIn(type),
-            secret,
+            secret: this.getSecret(type),
         });
     }
     async verifyToken(token, expectedType) {
@@ -141,7 +260,10 @@ let AuthService = class AuthService {
             const payload = await this.jwtService.verifyAsync(token, {
                 secret: this.getSecret(expectedType),
             });
-            if (payload.type !== expectedType) {
+            if (payload.type !== expectedType ||
+                !payload.sessionId ||
+                !Number.isInteger(payload.sessionVersion) ||
+                (expectedType === 'refresh' && !Number.isInteger(payload.tokenVersion))) {
                 throw new common_1.UnauthorizedException('Invalid token');
             }
             return payload;

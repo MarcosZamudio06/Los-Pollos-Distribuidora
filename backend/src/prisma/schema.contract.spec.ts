@@ -52,6 +52,7 @@ describe('Prisma schema contract', () => {
     const requiredModels = [
       'Role',
       'User',
+      'AuthSession',
       'OperationalLocation',
       'Product',
       'Category',
@@ -102,7 +103,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(49);
+    expect(modelNames).toHaveLength(50);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
