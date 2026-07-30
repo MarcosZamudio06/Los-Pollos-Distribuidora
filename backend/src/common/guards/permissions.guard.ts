@@ -42,7 +42,10 @@ export class PermissionsGuard implements CanActivate {
     const permissions = context
       .switchToHttp()
       .getRequest<RequestWithPermissions>().user?.permissions;
-    if (!permissions || !requiredPermissions.every((key) => permissions.includes(key))) {
+    if (
+      !permissions ||
+      !requiredPermissions.every((key) => permissions.includes(key))
+    ) {
       throw new ForbiddenException('Insufficient permissions');
     }
 

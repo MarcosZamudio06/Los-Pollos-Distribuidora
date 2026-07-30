@@ -84,17 +84,27 @@ describe('SalesGateway', () => {
   });
 
   it('disconnects sockets after the user session is revoked', async () => {
-    const authService = { verifyAccessToken: jest.fn().mockResolvedValue({
-      id: 'seller-1',
-      role: 'SELLER',
-      operationalLocationId: 'loc-1',
-      mustChangePassword: false,
-    }) };
+    const authService = {
+      verifyAccessToken: jest.fn().mockResolvedValue({
+        id: 'seller-1',
+        role: 'SELLER',
+        operationalLocationId: 'loc-1',
+        mustChangePassword: false,
+      }),
+    };
     const prisma = {
-      operationalLocation: { findUnique: jest.fn().mockResolvedValue({ id: 'loc-1', isActive: true }) },
+      operationalLocation: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'loc-1', isActive: true }),
+      },
     };
     const registry = new SessionRevocationRegistry();
-    const gateway = new SalesGateway(authService as never, prisma as never, registry);
+    const gateway = new SalesGateway(
+      authService as never,
+      prisma as never,
+      registry,
+    );
     const socket = {
       disconnect: jest.fn(),
       handshake: { auth: { locationId: 'loc-1', token: 'access-token' } },

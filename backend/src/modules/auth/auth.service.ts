@@ -59,7 +59,8 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    @Optional() private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
+    @Optional()
+    private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
   ) {}
 
   async login(credentials: LoginDto): Promise<IssuedSession> {
@@ -251,7 +252,11 @@ export class AuthService {
     sessionId: string,
     sessionVersion: number,
     tokenVersion: number,
-  ): Promise<{ accessToken: string; refreshToken: string; user: AuthenticatedUser }> {
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    user: AuthenticatedUser;
+  }> {
     const sanitizedUser = this.toAuthenticatedUser(user);
     const accessToken = await this.signToken(sanitizedUser, 'access', {
       sessionId,
@@ -272,7 +277,9 @@ export class AuthService {
       include: {
         user: {
           include: {
-            role: { include: { permissions: { include: { permission: true } } } },
+            role: {
+              include: { permissions: { include: { permission: true } } },
+            },
           },
         },
       },
@@ -288,8 +295,7 @@ export class AuthService {
 
   private isIdleExpired(session: SessionRecord, now: Date): boolean {
     return (
-      session.lastUsedAt.getTime() +
-        this.getSessionTtlSeconds('idle') * 1000 <=
+      session.lastUsedAt.getTime() + this.getSessionTtlSeconds('idle') * 1000 <=
       now.getTime()
     );
   }
@@ -306,7 +312,9 @@ export class AuthService {
     const configured = Number(process.env[envKey] ?? fallback);
 
     if (!Number.isInteger(configured) || configured <= 0) {
-      throw new InternalServerErrorException(`${envKey} must be a positive integer`);
+      throw new InternalServerErrorException(
+        `${envKey} must be a positive integer`,
+      );
     }
     return configured;
   }
@@ -356,7 +364,8 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role.name,
-      permissions: user.role.permissions?.map(({ permission }) => permission.key) ?? [],
+      permissions:
+        user.role.permissions?.map(({ permission }) => permission.key) ?? [],
       mustChangePassword: user.mustChangePassword,
       ...(user.operationalLocationId
         ? { operationalLocationId: user.operationalLocationId }

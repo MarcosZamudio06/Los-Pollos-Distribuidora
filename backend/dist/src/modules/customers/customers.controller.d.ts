@@ -9,21 +9,20 @@ export declare class CustomersController {
         message: string;
         data: {
             items: (Omit<{
+                isActive: boolean;
                 id: string;
                 name: string;
+                customerType: import("@prisma/client").$Enums.CustomerType;
+                priceListId: string | null;
                 createdAt: Date;
                 updatedAt: Date;
-                address: string | null;
-                isActive: boolean;
-                email: string | null;
-                phone: string | null;
-                assignedRouteId: string | null;
-                billingEmail: string | null;
-                commercialName: string | null;
-                customerType: import("@prisma/client").$Enums.CustomerType;
                 commercialPolicyId: string | null;
-                priceListId: string | null;
                 customerNumber: string | null;
+                commercialName: string | null;
+                phone: string | null;
+                email: string | null;
+                billingEmail: string | null;
+                address: string | null;
                 creditLimit: import("@prisma/client/runtime/library").Decimal | null;
                 creditDays: number | null;
                 creditStatus: import("@prisma/client").$Enums.CreditStatus;
@@ -35,6 +34,7 @@ export declare class CustomersController {
                 fiscalRegime: string | null;
                 fiscalUseCode: string | null;
                 deliveryAddress: string | null;
+                assignedRouteId: string | null;
                 notes: string | null;
             }, "creditLimit"> & {
                 creditLimit: string | number | null;
@@ -76,16 +76,16 @@ export declare class CustomersController {
             creditLimit: string | null;
             creditDays: number | null;
             paymentTermsDays: number | null;
-            agingStatus: "CURRENT" | "DUE_SOON" | "OVERDUE";
+            agingStatus: "OVERDUE" | "DUE_SOON" | "CURRENT";
             collectionStatus: import("@prisma/client").$Enums.CollectionStatus;
-            globalBalance: string;
-            outstandingAmount: string;
-            overdueAmount: string;
+            globalBalance: any;
+            outstandingAmount: any;
+            overdueAmount: any;
             availableCredit: string | null;
             hasOverdueBalance: boolean;
             isBlocked: boolean;
             isBlockedForCredit: boolean;
-            effectiveCreditStatus: "ACTIVE" | "BLOCKED" | "WARNING";
+            effectiveCreditStatus: "BLOCKED" | "WARNING" | "ACTIVE";
             blockingReasons: string[];
             blockingReason: string;
             overdueBlockingMode: string | null;
@@ -153,21 +153,20 @@ export declare class CustomersController {
         success: boolean;
         message: string;
         data: Omit<{
+            isActive: boolean;
             id: string;
             name: string;
+            customerType: import("@prisma/client").$Enums.CustomerType;
+            priceListId: string | null;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
-            isActive: boolean;
-            email: string | null;
-            phone: string | null;
-            assignedRouteId: string | null;
-            billingEmail: string | null;
-            commercialName: string | null;
-            customerType: import("@prisma/client").$Enums.CustomerType;
             commercialPolicyId: string | null;
-            priceListId: string | null;
             customerNumber: string | null;
+            commercialName: string | null;
+            phone: string | null;
+            email: string | null;
+            billingEmail: string | null;
+            address: string | null;
             creditLimit: import("@prisma/client/runtime/library").Decimal | null;
             creditDays: number | null;
             creditStatus: import("@prisma/client").$Enums.CreditStatus;
@@ -179,6 +178,7 @@ export declare class CustomersController {
             fiscalRegime: string | null;
             fiscalUseCode: string | null;
             deliveryAddress: string | null;
+            assignedRouteId: string | null;
             notes: string | null;
         }, "creditLimit"> & {
             creditLimit: string | number | null;
@@ -214,21 +214,20 @@ export declare class CustomersController {
         success: boolean;
         message: string;
         data: Omit<{
+            isActive: boolean;
             id: string;
             name: string;
+            customerType: import("@prisma/client").$Enums.CustomerType;
+            priceListId: string | null;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
-            isActive: boolean;
-            email: string | null;
-            phone: string | null;
-            assignedRouteId: string | null;
-            billingEmail: string | null;
-            commercialName: string | null;
-            customerType: import("@prisma/client").$Enums.CustomerType;
             commercialPolicyId: string | null;
-            priceListId: string | null;
             customerNumber: string | null;
+            commercialName: string | null;
+            phone: string | null;
+            email: string | null;
+            billingEmail: string | null;
+            address: string | null;
             creditLimit: import("@prisma/client/runtime/library").Decimal | null;
             creditDays: number | null;
             creditStatus: import("@prisma/client").$Enums.CreditStatus;
@@ -240,6 +239,7 @@ export declare class CustomersController {
             fiscalRegime: string | null;
             fiscalUseCode: string | null;
             deliveryAddress: string | null;
+            assignedRouteId: string | null;
             notes: string | null;
         }, "creditLimit"> & {
             creditLimit: string | number | null;
@@ -275,21 +275,20 @@ export declare class CustomersController {
         success: boolean;
         message: string;
         data: Omit<{
+            isActive: boolean;
             id: string;
             name: string;
+            customerType: import("@prisma/client").$Enums.CustomerType;
+            priceListId: string | null;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
-            isActive: boolean;
-            email: string | null;
-            phone: string | null;
-            assignedRouteId: string | null;
-            billingEmail: string | null;
-            commercialName: string | null;
-            customerType: import("@prisma/client").$Enums.CustomerType;
             commercialPolicyId: string | null;
-            priceListId: string | null;
             customerNumber: string | null;
+            commercialName: string | null;
+            phone: string | null;
+            email: string | null;
+            billingEmail: string | null;
+            address: string | null;
             creditLimit: import("@prisma/client/runtime/library").Decimal | null;
             creditDays: number | null;
             creditStatus: import("@prisma/client").$Enums.CreditStatus;
@@ -301,6 +300,7 @@ export declare class CustomersController {
             fiscalRegime: string | null;
             fiscalUseCode: string | null;
             deliveryAddress: string | null;
+            assignedRouteId: string | null;
             notes: string | null;
         }, "creditLimit"> & {
             creditLimit: string | number | null;
@@ -336,21 +336,20 @@ export declare class CustomersController {
         success: boolean;
         message: string;
         data: Omit<{
+            isActive: boolean;
             id: string;
             name: string;
+            customerType: import("@prisma/client").$Enums.CustomerType;
+            priceListId: string | null;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
-            isActive: boolean;
-            email: string | null;
-            phone: string | null;
-            assignedRouteId: string | null;
-            billingEmail: string | null;
-            commercialName: string | null;
-            customerType: import("@prisma/client").$Enums.CustomerType;
             commercialPolicyId: string | null;
-            priceListId: string | null;
             customerNumber: string | null;
+            commercialName: string | null;
+            phone: string | null;
+            email: string | null;
+            billingEmail: string | null;
+            address: string | null;
             creditLimit: import("@prisma/client/runtime/library").Decimal | null;
             creditDays: number | null;
             creditStatus: import("@prisma/client").$Enums.CreditStatus;
@@ -362,6 +361,7 @@ export declare class CustomersController {
             fiscalRegime: string | null;
             fiscalUseCode: string | null;
             deliveryAddress: string | null;
+            assignedRouteId: string | null;
             notes: string | null;
         }, "creditLimit"> & {
             creditLimit: string | number | null;

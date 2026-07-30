@@ -9,7 +9,7 @@ import type {
   SaleChannel,
 } from './types'
 import type { OperationalLocation } from '../compras/types'
-import { formatMoney } from '../../lib/money'
+import { formatMoney, Money } from '../../lib/money'
 
 export { formatMoney as toMoney } from '../../lib/money'
 
@@ -37,16 +37,12 @@ export function getSaleChannelsForLocation(locationType?: string | null): readon
   return locationType ? SALE_CHANNELS_BY_LOCATION_TYPE[locationType] ?? NO_SALE_CHANNELS : NO_SALE_CHANNELS
 }
 
-function roundMoney(value: number) {
-  return Math.round((value + Number.EPSILON) * 100) / 100
-}
-
 export function calculatePaymentsTotal(payments: BuildCreateSalePayloadInput['payments']) {
-  return roundMoney(payments.reduce((sum, payment) => sum + roundMoney(payment.amount), 0))
+  return Money.sum(payments.map((payment) => payment.amount))
 }
 
-export function calculateCashChange(cashTendered: number, amount: number) {
-  return roundMoney(cashTendered - amount)
+export function calculateCashChange(cashTendered: string | number, amount: string | number) {
+  return Money.from(cashTendered).subtract(Money.from(amount))
 }
 
 export function itemQuantity(item: CartItem) {
@@ -62,11 +58,11 @@ export function itemQuantity(item: CartItem) {
 }
 
 export function calculateItemSubtotal(item: CartItem) {
-  return roundMoney(item.unitPrice * itemQuantity(item))
+  return Money.from(item.unitPrice).multiply(String(itemQuantity(item)))
 }
 
 export function calculateCartTotal(cart: CartItem[]) {
-  return roundMoney(cart.reduce((total, item) => total + calculateItemSubtotal(item), 0))
+  return Money.sum(cart.map(calculateItemSubtotal))
 }
 
 export function getQuantityValidationError(item: CartItem) {
@@ -120,23 +116,24 @@ export function getPaymentReferenceValidationError(paymentMethod: PaymentMethod,
 
 export function getPaymentsValidationError(
   payments: BuildCreateSalePayloadInput['payments'],
-  total: number,
+  total: Money | string | number,
 ) {
-  if (payments.some((payment) => !payment.paymentMethod || !Number.isFinite(payment.amount) || payment.amount <= 0)) {
+  const exactTotal = Money.from(total)
+  if (payments.some((payment) => !payment.paymentMethod || !Money.from(payment.amount).isPositive())) {
     return 'Captura un método y un monto mayor que cero para cada pago.'
   }
-  const enteredPaid = roundMoney(payments.reduce((sum, payment) => sum + payment.amount, 0))
+  const enteredPaid = Money.sum(payments.map((payment) => payment.amount))
   const paid = calculatePaymentsTotal(payments)
-  if (paid !== enteredPaid) return 'Los montos de pago no pueden alterar el total al redondearse a centavos.'
-  if (paid > total) return 'El total recibido no puede exceder el total de la venta.'
+  if (paid.compare(enteredPaid) !== 0) return 'Los montos de pago no pueden alterar el total al redondearse a centavos.'
+  if (paid.compare(exactTotal) > 0) return 'El total recibido no puede exceder el total de la venta.'
 
   for (const payment of payments) {
     if (payment.cashTendered !== undefined) {
       if (payment.paymentMethod !== 'CASH') return 'El efectivo entregado solo aplica a pagos en efectivo.'
       if (!Number.isFinite(payment.cashTendered)) return 'El efectivo entregado no puede ser menor al monto aplicado.'
-      const cashTendered = roundMoney(payment.cashTendered)
-      const appliedAmount = roundMoney(payment.amount)
-      if (cashTendered <= 0 || cashTendered < appliedAmount) {
+      const cashTendered = Money.from(payment.cashTendered)
+      const appliedAmount = Money.from(payment.amount)
+      if (!cashTendered.isPositive() || cashTendered.compare(appliedAmount) < 0) {
         return 'El efectivo entregado no puede ser menor al monto aplicado.'
       }
     }
@@ -150,9 +147,12 @@ export function getPaymentsValidationError(
   return null
 }
 
-function numberFrom(value: string | number | null | undefined) {
-  const numericValue = Number(value ?? 0)
-  return Number.isFinite(numericValue) ? numericValue : 0
+function moneyFrom(value: string | number | null | undefined) {
+  try {
+    return Money.from(value)
+  } catch {
+    return Money.zero()
+  }
 }
 
 export type CreditRestrictionOptions = {
@@ -161,7 +161,7 @@ export type CreditRestrictionOptions = {
   overrideReason?: string
 }
 
-export function getCreditRestriction(paymentType: PaymentType, customer: CustomerOption | null, total: number, options: CreditRestrictionOptions = {}) {
+export function getCreditRestriction(paymentType: PaymentType, customer: CustomerOption | null, total: Money | string | number, options: CreditRestrictionOptions = {}) {
   if (paymentType !== 'CREDIT_SALE') return null
   if (!customer || customer.isActive === false || customer.active === false) {
     return 'Selecciona un cliente activo para una venta a crédito.'
@@ -179,9 +179,10 @@ export function getCreditRestriction(paymentType: PaymentType, customer: Custome
     return summary?.blockingReason ?? summary?.blockReason ?? 'El crédito del cliente está bloqueado.'
   }
 
-  const availableCredit = numberFrom(summary?.availableCredit ?? customer.creditLimit)
-  if (availableCredit >= 0 && total > availableCredit) {
-    return `La venta excede el crédito disponible de ${formatMoney(availableCredit)}.`
+   const exactTotal = Money.from(total)
+   const availableCredit = moneyFrom(summary?.availableCredit ?? customer.creditLimit)
+   if (availableCredit.compare(Money.zero()) >= 0 && exactTotal.compare(availableCredit) > 0) {
+     return `La venta excede el crédito disponible de ${formatMoney(availableCredit)}.`
   }
 
   return null
@@ -199,11 +200,11 @@ export function getLocationValidationError(cart: CartItem[], locationId: string)
 export function getSaleRestriction(
   paymentType: PaymentType,
   customer: CustomerOption | null,
-  total: number,
-  totalPaid: number,
+  total: Money | string | number,
+  totalPaid: Money | string | number,
   options: CreditRestrictionOptions = {},
 ) {
-  if (paymentType === 'CASH_SALE' && roundMoney(totalPaid) !== roundMoney(total)) {
+  if (paymentType === 'CASH_SALE' && Money.from(totalPaid).compare(Money.from(total)) !== 0) {
     return 'La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.'
   }
 
@@ -239,16 +240,16 @@ export function buildCreateSalePayload(input: BuildCreateSalePayloadInput): Crea
   const billingRequestReason = input.billingRequestReason?.trim()
   const billingRequestNotes = input.billingRequestNotes?.trim()
   const payments = input.payments
-    .filter((payment): payment is typeof payment & { paymentMethod: Exclude<PaymentMethod, ''> } => Boolean(payment.paymentMethod) && payment.amount > 0)
+    .filter((payment): payment is typeof payment & { paymentMethod: Exclude<PaymentMethod, ''> } => Boolean(payment.paymentMethod) && Money.from(payment.amount).isPositive())
     .map((payment) => ({
-      amount: roundMoney(payment.amount),
+      amount: Money.from(payment.amount).toString(),
       paymentMethod: payment.paymentMethod,
       ...(payment.paymentMethod === 'CASH' && payment.cashTendered !== undefined
-        ? { cashTendered: roundMoney(payment.cashTendered) }
-        : {}),
-      bankName: payment.bankName?.trim() || undefined,
-      referenceNumber: payment.referenceNumber?.trim() || undefined,
-      cardLastFour: payment.cardLastFour?.trim() || undefined,
+         ? { cashTendered: Money.from(payment.cashTendered).toString() }
+         : {}),
+      ...(payment.bankName?.trim() ? { bankName: payment.bankName.trim() } : {}),
+      ...(payment.referenceNumber?.trim() ? { referenceNumber: payment.referenceNumber.trim() } : {}),
+      ...(payment.cardLastFour?.trim() ? { cardLastFour: payment.cardLastFour.trim() } : {}),
     }))
 
   return {

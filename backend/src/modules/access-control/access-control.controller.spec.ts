@@ -28,14 +28,24 @@ const seller = { ...admin, id: 'seller-1', role: 'SELLER', permissions: [] };
 
 describe('AccessControlController', () => {
   let app: INestApplication<App>;
-  let service: jest.Mocked<Pick<AccessControlService, 'listPermissions' | 'listRoles' | 'updateRolePermissions' | 'listAuditLogs'>>;
+  let service: jest.Mocked<
+    Pick<
+      AccessControlService,
+      | 'listPermissions'
+      | 'listRoles'
+      | 'updateRolePermissions'
+      | 'listAuditLogs'
+    >
+  >;
 
   beforeEach(async () => {
     service = {
       listPermissions: jest.fn().mockResolvedValue([]),
       listRoles: jest.fn().mockResolvedValue([]),
       updateRolePermissions: jest.fn().mockResolvedValue({ changed: true }),
-      listAuditLogs: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 25 }),
+      listAuditLogs: jest
+        .fn()
+        .mockResolvedValue({ items: [], total: 0, page: 1, limit: 25 }),
     };
     const module = await Test.createTestingModule({
       controllers: [AccessControlController],
@@ -47,7 +57,11 @@ describe('AccessControlController', () => {
           provide: AuthService,
           useValue: {
             verifyAccessToken: jest.fn((token: string) =>
-              token === 'admin-token' ? Promise.resolve(admin) : token === 'seller-token' ? Promise.resolve(seller) : Promise.reject(new Error('Invalid token')),
+              token === 'admin-token'
+                ? Promise.resolve(admin)
+                : token === 'seller-token'
+                  ? Promise.resolve(seller)
+                  : Promise.reject(new Error('Invalid token')),
             ),
           },
         },
@@ -57,7 +71,9 @@ describe('AccessControlController', () => {
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.useGlobalGuards(module.get(JwtAuthGuard), module.get(PermissionsGuard));
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
   });
 
@@ -65,8 +81,14 @@ describe('AccessControlController', () => {
 
   it('protects profile reads globally and allows the declared permission', async () => {
     await request(app.getHttpServer()).get('/api/roles').expect(401);
-    await request(app.getHttpServer()).get('/api/roles').set('Authorization', 'Bearer seller-token').expect(403);
-    await request(app.getHttpServer()).get('/api/roles').set('Authorization', 'Bearer admin-token').expect(200);
+    await request(app.getHttpServer())
+      .get('/api/roles')
+      .set('Authorization', 'Bearer seller-token')
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/api/roles')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200);
     expect(service.listRoles).toHaveBeenCalled();
   });
 
@@ -74,12 +96,20 @@ describe('AccessControlController', () => {
     await request(app.getHttpServer())
       .patch('/api/roles/role-1/permissions')
       .set('Authorization', 'Bearer admin-token')
-      .send({ permissionKeys: [PERMISSIONS.COSTS_READ], expectedVersion: 4, reason: 'Separación de costos' })
+      .send({
+        permissionKeys: [PERMISSIONS.COSTS_READ],
+        expectedVersion: 4,
+        reason: 'Separación de costos',
+      })
       .expect(200);
 
     expect(service.updateRolePermissions).toHaveBeenCalledWith(
       'role-1',
-      { permissionKeys: [PERMISSIONS.COSTS_READ], expectedVersion: 4, reason: 'Separación de costos' },
+      {
+        permissionKeys: [PERMISSIONS.COSTS_READ],
+        expectedVersion: 4,
+        reason: 'Separación de costos',
+      },
       expect.objectContaining({ id: 'admin-1' }),
       expect.objectContaining({ ipAddress: expect.any(String) }),
     );

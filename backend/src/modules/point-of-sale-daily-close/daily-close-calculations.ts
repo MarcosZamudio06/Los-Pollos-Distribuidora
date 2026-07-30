@@ -31,11 +31,23 @@ export function calculateDailyCloseKilos(input: DailyCloseKilosInput) {
 type CostSnapshotSource = 'SALE_CONFIRMATION' | 'LEGACY_BACKFILL';
 
 export function calculateDailyCloseCost(
-  sales: Array<{ items: Array<{ costSubtotalSnapshot: NumericValue; costSnapshotSource: CostSnapshotSource }> }>,
+  sales: Array<{
+    items: Array<{
+      costSubtotalSnapshot: NumericValue;
+      costSnapshotSource: CostSnapshotSource;
+    }>;
+  }>,
 ) {
   const items = sales.flatMap((sale) => sale.items);
   return {
-    purchaseCostTotal: items.reduce((total, item) => total + numeric(item.costSubtotalSnapshot), 0),
-    costQuality: items.some((item) => item.costSnapshotSource === 'LEGACY_BACKFILL') ? 'ESTIMATED' as const : 'EXACT' as const,
+    purchaseCostTotal: items.reduce(
+      (total, item) => total + numeric(item.costSubtotalSnapshot),
+      0,
+    ),
+    costQuality: items.some(
+      (item) => item.costSnapshotSource === 'LEGACY_BACKFILL',
+    )
+      ? ('ESTIMATED' as const)
+      : ('EXACT' as const),
   };
 }

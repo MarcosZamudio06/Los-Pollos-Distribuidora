@@ -156,7 +156,7 @@ export class ProductsService {
         if (exactSku) {
           products = [exactSku];
         } else {
-          products = (await this.prisma.product.findMany({
+          products = await this.prisma.product.findMany({
             where: {
               ...where,
               name: { contains: search, mode: 'insensitive' },
@@ -164,22 +164,24 @@ export class ProductsService {
             include,
             orderBy: { name: 'asc' },
             ...this.buildPagination(query),
-          })) as ProductRecord[];
+          });
         }
       }
     } else {
-      products = (await this.prisma.product.findMany({
+      products = await this.prisma.product.findMany({
         where,
         include,
         orderBy: { name: 'asc' },
         ...this.buildPagination(query),
-      })) as ProductRecord[];
+      });
     }
 
-    const items = products.map((product) => this.toProductResponse(product, {
-      includePurchaseCost:
-        currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
-    }));
+    const items = products.map((product) =>
+      this.toProductResponse(product, {
+        includePurchaseCost:
+          currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
+      }),
+    );
 
     return {
       items:
@@ -423,7 +425,9 @@ export class ProductsService {
     }
   }
 
-  private async assertCategoryExists(categoryId?: string | null): Promise<void> {
+  private async assertCategoryExists(
+    categoryId?: string | null,
+  ): Promise<void> {
     if (!categoryId) {
       return;
     }
@@ -470,7 +474,9 @@ export class ProductsService {
     return normalizedSku.length > 0 ? normalizedSku : null;
   }
 
-  private normalizeOptionalText(value?: string | null): string | null | undefined {
+  private normalizeOptionalText(
+    value?: string | null,
+  ): string | null | undefined {
     if (value === undefined) {
       return undefined;
     }

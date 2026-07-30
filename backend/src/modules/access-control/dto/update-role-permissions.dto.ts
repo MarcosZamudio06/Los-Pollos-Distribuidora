@@ -1,4 +1,11 @@
-import { ArrayUnique, IsArray, IsInt, IsString, Min, MinLength } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsInt,
+  IsString,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateRolePermissionsDto {
   @IsArray()

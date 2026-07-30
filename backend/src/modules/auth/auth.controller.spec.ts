@@ -69,7 +69,9 @@ describe('AuthController persistent session API', () => {
       moduleFixture.get(PermissionsGuard),
     );
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
   });
 

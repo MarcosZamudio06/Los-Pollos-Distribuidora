@@ -1,8 +1,23 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsNotEmpty, IsNumberString, IsObject, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsNumberString,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class BillingRemediationQueryDto {
-  @IsOptional() @IsIn(['OPEN', 'RESOLVED', 'ALL']) status: 'OPEN' | 'RESOLVED' | 'ALL' = 'OPEN';
+  @IsOptional() @IsIn(['OPEN', 'RESOLVED', 'ALL']) status:
+    | 'OPEN'
+    | 'RESOLVED'
+    | 'ALL' = 'OPEN';
   @IsOptional() @IsString() code?: string;
   @IsOptional() @IsString() search?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
@@ -26,7 +41,11 @@ export class BillingRemediationDocumentVersionDto {
 export class BillingRemediationCorrectionDto {
   @IsOptional() @IsString() @IsNotEmpty() legalEntityId?: string;
   @IsOptional() @IsString() @IsNotEmpty() selectedSaleDocumentId?: string;
-  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => BillingRemediationItemCorrectionDto) items?: BillingRemediationItemCorrectionDto[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BillingRemediationItemCorrectionDto)
+  items?: BillingRemediationItemCorrectionDto[];
   @IsOptional() @IsNumberString() subtotal?: string;
   @IsOptional() @IsNumberString() discount?: string;
   @IsOptional() @IsNumberString() tax?: string;
@@ -36,7 +55,14 @@ export class BillingRemediationCorrectionDto {
 export class ResolveBillingRemediationDto {
   @IsInt() @Min(1) expectedRemediationVersion!: number;
   @IsInt() @Min(1) expectedSaleVersion!: number;
-  @IsArray() @ValidateNested({ each: true }) @Type(() => BillingRemediationDocumentVersionDto) expectedDocumentVersions!: BillingRemediationDocumentVersionDto[];
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BillingRemediationDocumentVersionDto)
+  expectedDocumentVersions!: BillingRemediationDocumentVersionDto[];
   @IsString() @IsNotEmpty() reason!: string;
-  @IsOptional() @IsObject() @ValidateNested() @Type(() => BillingRemediationCorrectionDto) correction?: BillingRemediationCorrectionDto;
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => BillingRemediationCorrectionDto)
+  correction?: BillingRemediationCorrectionDto;
 }

@@ -1,9 +1,16 @@
 import { ForbiddenException } from '@nestjs/common';
-import { PERMISSION_DEFINITIONS, PERMISSIONS } from '../../common/authorization/permissions';
+import {
+  PERMISSION_DEFINITIONS,
+  PERMISSIONS,
+} from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import { AccessControlService } from './access-control.service';
 
-const permission = (key: string) => ({ id: `permission-${key}`, key, description: key });
+const permission = (key: string) => ({
+  id: `permission-${key}`,
+  key,
+  description: key,
+});
 
 function roleRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -11,7 +18,9 @@ function roleRecord(overrides: Record<string, unknown> = {}) {
     name: 'SELLER',
     description: 'Sales profile',
     version: 4,
-    permissions: [{ permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) }],
+    permissions: [
+      { permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) },
+    ],
     _count: { users: 1 },
     ...overrides,
   };
@@ -49,7 +58,9 @@ function createPrisma() {
       findMany: jest.fn(),
       count: jest.fn(),
     },
-    $transaction: jest.fn(async (callback: (client: typeof prisma) => unknown) => callback(prisma)),
+    $transaction: jest.fn(
+      async (callback: (client: typeof prisma) => unknown) => callback(prisma),
+    ),
   };
   return prisma;
 }
@@ -64,7 +75,9 @@ describe('AccessControlService', () => {
   it('updates a canonical profile, revokes affected sessions, and writes an audit record', async () => {
     const prisma = createPrisma();
     const previous = roleRecord({
-      permissions: [{ permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) }],
+      permissions: [
+        { permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) },
+      ],
     });
     const updated = roleRecord({
       version: 5,
@@ -73,8 +86,13 @@ describe('AccessControlService', () => {
         { permission: permission(PERMISSIONS.COSTS_READ) },
       ],
     });
-    prisma.role.findUnique.mockResolvedValueOnce(previous).mockResolvedValueOnce(updated);
-    prisma.permission.findMany.mockResolvedValue([permission(PERMISSIONS.ACCESS_PROFILES_MANAGE), permission(PERMISSIONS.COSTS_READ)]);
+    prisma.role.findUnique
+      .mockResolvedValueOnce(previous)
+      .mockResolvedValueOnce(updated);
+    prisma.permission.findMany.mockResolvedValue([
+      permission(PERMISSIONS.ACCESS_PROFILES_MANAGE),
+      permission(PERMISSIONS.COSTS_READ),
+    ]);
     prisma.role.updateMany.mockResolvedValue({ count: 1 });
     prisma.user.findMany.mockResolvedValue([{ id: 'employee-1' }]);
     prisma.authSession.count.mockResolvedValue(2);
@@ -82,10 +100,15 @@ describe('AccessControlService', () => {
     prisma.authSession.updateMany.mockResolvedValue({ count: 2 });
     prisma.accessControlAuditLog.create.mockResolvedValue({ id: 'audit-1' });
 
-    const result = await new AccessControlService(prisma as unknown as PrismaService).updateRolePermissions(
+    const result = await new AccessControlService(
+      prisma as unknown as PrismaService,
+    ).updateRolePermissions(
       'role-seller',
       {
-        permissionKeys: [PERMISSIONS.ACCESS_PROFILES_MANAGE, PERMISSIONS.COSTS_READ],
+        permissionKeys: [
+          PERMISSIONS.ACCESS_PROFILES_MANAGE,
+          PERMISSIONS.COSTS_READ,
+        ],
         expectedVersion: 4,
         reason: 'Separación de costos',
       },
@@ -99,39 +122,65 @@ describe('AccessControlService', () => {
       activeSessionsBefore: 2,
       revokedSessions: 2,
     });
-    expect(prisma.rolePermission.deleteMany).toHaveBeenCalledWith({ where: { roleId: 'role-seller' } });
-    expect(prisma.user.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: { in: ['employee-1'] } },
-    }));
-    expect(prisma.accessControlAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        action: 'ROLE_PERMISSIONS_UPDATED',
-        reason: 'Separación de costos',
-        revokedSessionCount: 2,
+    expect(prisma.rolePermission.deleteMany).toHaveBeenCalledWith({
+      where: { roleId: 'role-seller' },
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['employee-1'] } },
       }),
-    }));
+    );
+    expect(prisma.accessControlAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'ROLE_PERMISSIONS_UPDATED',
+          reason: 'Separación de costos',
+          revokedSessionCount: 2,
+        }),
+      }),
+    );
   });
 
   it('does not let an actor grant a permission they do not possess', async () => {
     const prisma = createPrisma();
-    const service = new AccessControlService(prisma as unknown as PrismaService);
+    const service = new AccessControlService(
+      prisma as unknown as PrismaService,
+    );
 
-    await expect(service.updateRolePermissions(
-      'role-seller',
-      {
-        permissionKeys: [PERMISSIONS.ACCESS_PROFILES_MANAGE, PERMISSIONS.COSTS_READ],
-        expectedVersion: 4,
-        reason: 'Escalamiento no permitido',
-      },
-      { ...admin, permissions: [PERMISSIONS.ACCESS_PROFILES_MANAGE] } as never,
-    )).rejects.toThrow(new ForbiddenException(`Cannot grant permission: ${PERMISSIONS.COSTS_READ}`));
+    await expect(
+      service.updateRolePermissions(
+        'role-seller',
+        {
+          permissionKeys: [
+            PERMISSIONS.ACCESS_PROFILES_MANAGE,
+            PERMISSIONS.COSTS_READ,
+          ],
+          expectedVersion: 4,
+          reason: 'Escalamiento no permitido',
+        },
+        {
+          ...admin,
+          permissions: [PERMISSIONS.ACCESS_PROFILES_MANAGE],
+        } as never,
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException(
+        `Cannot grant permission: ${PERMISSIONS.COSTS_READ}`,
+      ),
+    );
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('preserves a security administrator when a profile loses security permissions', async () => {
     const prisma = createPrisma();
-    prisma.role.findUnique.mockResolvedValue(roleRecord({ permissions: [{ permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) }] }));
+    prisma.role.findUnique.mockResolvedValue(
+      roleRecord({
+        permissions: [
+          { permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) },
+        ],
+      }),
+    );
     prisma.permission.findMany.mockResolvedValue([]);
     prisma.role.updateMany.mockResolvedValue({ count: 1 });
     prisma.rolePermission.deleteMany.mockResolvedValue({ count: 1 });
@@ -139,11 +188,19 @@ describe('AccessControlService', () => {
     prisma.user.findMany.mockResolvedValue([{ id: 'employee-1' }]);
     prisma.user.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
 
-    await expect(new AccessControlService(prisma as unknown as PrismaService).updateRolePermissions(
-      'role-seller',
-      { permissionKeys: [], expectedVersion: 4, reason: 'Retirar administración' },
-      admin,
-    )).rejects.toThrow('At least one active access profile manager is required');
+    await expect(
+      new AccessControlService(
+        prisma as unknown as PrismaService,
+      ).updateRolePermissions(
+        'role-seller',
+        {
+          permissionKeys: [],
+          expectedVersion: 4,
+          reason: 'Retirar administración',
+        },
+        admin,
+      ),
+    ).rejects.toThrow('At least one active access profile manager is required');
 
     expect(prisma.user.updateMany).not.toHaveBeenCalled();
     expect(prisma.accessControlAuditLog.create).not.toHaveBeenCalled();
@@ -156,7 +213,9 @@ describe('AccessControlService', () => {
       name: 'SELLER',
       description: 'Sales profile',
       version: 4,
-      permissions: [{ permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) }],
+      permissions: [
+        { permission: permission(PERMISSIONS.ACCESS_PROFILES_MANAGE) },
+      ],
     };
     const nextRole = {
       id: 'role-warehouse',
@@ -189,7 +248,9 @@ describe('AccessControlService', () => {
     prisma.authSession.findMany.mockResolvedValue([]);
     prisma.accessControlAuditLog.create.mockResolvedValue({ id: 'audit-2' });
 
-    const result = await new AccessControlService(prisma as unknown as PrismaService).updateUserAccessProfile(
+    const result = await new AccessControlService(
+      prisma as unknown as PrismaService,
+    ).updateUserAccessProfile(
       'employee-1',
       {
         roleId: nextRole.id,
@@ -200,13 +261,19 @@ describe('AccessControlService', () => {
     );
 
     expect(result).toMatchObject({ changed: true, revokedSessions: 1 });
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'employee-1' },
-      data: expect.objectContaining({ roleId: nextRole.id }),
-    }));
-    expect(prisma.accessControlAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: 'USER_ACCESS_PROFILE_UPDATED' }),
-    }));
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'employee-1' },
+        data: expect.objectContaining({ roleId: nextRole.id }),
+      }),
+    );
+    expect(prisma.accessControlAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'USER_ACCESS_PROFILE_UPDATED',
+        }),
+      }),
+    );
   });
 
   it('revokes sessions and audits a manual session closure', async () => {
@@ -216,19 +283,31 @@ describe('AccessControlService', () => {
     prisma.authSession.updateMany.mockResolvedValue({ count: 3 });
     prisma.accessControlAuditLog.create.mockResolvedValue({ id: 'audit-3' });
 
-    const result = await new AccessControlService(prisma as unknown as PrismaService).revokeUserSessions(
+    const result = await new AccessControlService(
+      prisma as unknown as PrismaService,
+    ).revokeUserSessions(
       'employee-1',
       { reason: 'Incidente de seguridad' },
       admin,
     );
 
-    expect(result).toEqual({ revokedSessions: 3, currentSessionRevoked: false });
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'employee-1' },
-      data: { sessionVersion: { increment: 1 } },
-    }));
-    expect(prisma.accessControlAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: 'USER_SESSIONS_REVOKED', reason: 'Incidente de seguridad' }),
-    }));
+    expect(result).toEqual({
+      revokedSessions: 3,
+      currentSessionRevoked: false,
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'employee-1' },
+        data: { sessionVersion: { increment: 1 } },
+      }),
+    );
+    expect(prisma.accessControlAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'USER_SESSIONS_REVOKED',
+          reason: 'Incidente de seguridad',
+        }),
+      }),
+    );
   });
 });

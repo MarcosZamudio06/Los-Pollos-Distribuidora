@@ -1,4 +1,11 @@
-import { BadRequestException, Body, Controller, Headers, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../../common/authorization/permissions';
@@ -25,7 +32,12 @@ export class PaymentsController {
     return {
       success: true,
       message: 'Payment cancelled successfully',
-      data: await this.paymentsService.cancel(id, body, currentUser, idempotencyKey.trim()),
+      data: await this.paymentsService.cancel(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

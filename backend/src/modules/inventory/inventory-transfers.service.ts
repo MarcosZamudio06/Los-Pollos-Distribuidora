@@ -416,7 +416,6 @@ export class InventoryTransfersService {
     );
   }
 
-
   private buildCommandMarker(
     action: 'CONFIRM' | 'CANCEL',
     idempotencyKey: string,
@@ -567,10 +566,10 @@ export class InventoryTransfersService {
     id: string,
     role: 'origin' | 'destination',
   ): Promise<void> {
-    const location = (await tx.operationalLocation.findUnique({
+    const location = await tx.operationalLocation.findUnique({
       where: { id },
       select: { id: true, name: true, isActive: true },
-    })) as LocationRecord | null;
+    });
 
     if (!location) {
       throw new NotFoundException(`${role} location not found`);
@@ -587,10 +586,10 @@ export class InventoryTransfersService {
     tx: Prisma.TransactionClient,
     productId: string,
   ): Promise<ProductRecord> {
-    const product = (await tx.product.findUnique({
+    const product = await tx.product.findUnique({
       where: { id: productId },
       select: { id: true, name: true, unit: true, isActive: true },
-    })) as ProductRecord | null;
+    });
 
     if (!product) {
       throw new NotFoundException('Product not found');

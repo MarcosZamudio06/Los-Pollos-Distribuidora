@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   InventoryMovementType,
   InventoryTransferStatus,
@@ -33,7 +37,6 @@ const now = new Date('2026-06-29T12:00:00.000Z');
 function decimal(value: string | number): Prisma.Decimal {
   return new Prisma.Decimal(value);
 }
-
 
 function idempotencyMarker(
   action: 'CONFIRM' | 'CANCEL',
@@ -641,7 +644,6 @@ describe('InventoryTransfersService', () => {
 
     expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
   });
-
 
   it('rejects a repeated cancel without an idempotency key and does not mutate terminal cancellation fields', async () => {
     const { service, prisma } = createService();

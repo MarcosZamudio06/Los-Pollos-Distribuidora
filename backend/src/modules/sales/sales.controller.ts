@@ -1,10 +1,26 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelSaleDto, CreateSaleDto, ListBranchOrdersQueryDto, ListSalesQueryDto, VoidSaleDto } from './dto';
+import {
+  CancelSaleDto,
+  CreateSaleDto,
+  ListBranchOrdersQueryDto,
+  ListSalesQueryDto,
+  VoidSaleDto,
+} from './dto';
 import { SalesService } from './sales.service';
 
 @Controller('sales')
@@ -48,7 +64,11 @@ export class SalesController {
     return {
       success: true,
       message: 'Sale document print data retrieved successfully',
-      data: await this.salesService.getDocumentPrint(saleId, documentId, currentUser),
+      data: await this.salesService.getDocumentPrint(
+        saleId,
+        documentId,
+        currentUser,
+      ),
     };
   }
 
@@ -105,7 +125,11 @@ export class SalesController {
     return {
       success: true,
       message: 'Sale created successfully',
-      data: await this.salesService.create(body, currentUser, idempotencyKey.trim()),
+      data: await this.salesService.create(
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 
@@ -128,7 +152,12 @@ export class SalesController {
     return {
       success: true,
       message: 'Sale cancelled successfully',
-      data: await this.salesService.cancel(id, body, currentUser, idempotencyKey.trim()),
+      data: await this.salesService.cancel(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 
@@ -151,7 +180,12 @@ export class SalesController {
     return {
       success: true,
       message: 'Sale voided successfully',
-      data: await this.salesService.voidSale(id, body, currentUser, idempotencyKey.trim()),
+      data: await this.salesService.voidSale(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

@@ -1,8 +1,24 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
-export const OPERATIONAL_CONFIG_VALUE_TYPES = ['STRING', 'NUMBER', 'BOOLEAN', 'JSON'] as const;
-export const OPERATIONAL_CONFIG_SCOPES = ['GLOBAL', 'LOCATION', 'ROLE'] as const;
+export const OPERATIONAL_CONFIG_VALUE_TYPES = [
+  'STRING',
+  'NUMBER',
+  'BOOLEAN',
+  'JSON',
+] as const;
+export const OPERATIONAL_CONFIG_SCOPES = [
+  'GLOBAL',
+  'LOCATION',
+  'ROLE',
+] as const;
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;

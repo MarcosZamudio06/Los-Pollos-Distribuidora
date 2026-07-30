@@ -67,22 +67,36 @@ type UsersTransactionClient = Pick<
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
+    @Optional()
+    private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
   ) {}
 
-  async findAll(query: ListUsersQueryDto): Promise<{ items: UserResponse[]; total: number; page: number; limit: number }> {
+  async findAll(query: ListUsersQueryDto): Promise<{
+    items: UserResponse[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const where = this.buildListWhere(query);
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const [users, total] = await Promise.all([this.prisma.user.findMany({
-      where,
-      include: { role: true, operationalLocation: true },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    }), this.prisma.user.count({ where })]);
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        include: { role: true, operationalLocation: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
-    return { items: users.map((user) => this.toUserResponse(user)), total, page, limit };
+    return {
+      items: users.map((user) => this.toUserResponse(user)),
+      total,
+      page,
+      limit,
+    };
   }
 
   async findRoles(): Promise<RoleRecord[]> {
@@ -261,19 +275,29 @@ export class UsersService {
   }
 
   private buildListWhere(query: ListUsersQueryDto): Prisma.UserWhereInput {
-    const status = query.status === 'all' || query.includeInactive === true
-      ? undefined : query.status === 'inactive' ? false : true;
+    const status =
+      query.status === 'all' || query.includeInactive === true
+        ? undefined
+        : query.status === 'inactive'
+          ? false
+          : true;
     const search = query.search?.trim();
     return {
       ...(status === undefined ? {} : { isActive: status }),
       ...(query.roleId ? { roleId: query.roleId } : {}),
-      ...(query.operationalLocationId ? { operationalLocationId: query.operationalLocationId } : {}),
-      ...(search ? { OR: [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-        { controlNumber: { contains: search, mode: 'insensitive' } },
-      ] } : {}),
+      ...(query.operationalLocationId
+        ? { operationalLocationId: query.operationalLocationId }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search, mode: 'insensitive' } },
+              { controlNumber: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
   }
 
@@ -290,9 +314,9 @@ export class UsersService {
   }
 
   private async nextControlNumber(): Promise<string> {
-    const rows = await this.prisma.$queryRawUnsafe<Array<{ value: bigint | number }>>(
-      'SELECT nextval(\'"User_controlNumber_seq"\') AS value',
-    );
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{ value: bigint | number }>
+    >('SELECT nextval(\'"User_controlNumber_seq"\') AS value');
     return `EPDP-${String(rows[0].value).padStart(6, '0')}`;
   }
 
@@ -302,9 +326,17 @@ export class UsersService {
   }
 
   private async assertEmployeeLocation(locationId: string): Promise<void> {
-    const location = await this.prisma.operationalLocation.findUnique({ where: { id: locationId } });
-    if (!location || !location.isActive || !EMPLOYEE_LOCATION_TYPES.includes(location.type)) {
-      throw new BadRequestException('Operational location is not available for employees');
+    const location = await this.prisma.operationalLocation.findUnique({
+      where: { id: locationId },
+    });
+    if (
+      !location ||
+      !location.isActive ||
+      !EMPLOYEE_LOCATION_TYPES.includes(location.type)
+    ) {
+      throw new BadRequestException(
+        'Operational location is not available for employees',
+      );
     }
   }
 
@@ -399,11 +431,17 @@ export class UsersService {
   }
 
   private getUniqueConstraintTarget(error: unknown): string[] {
-    if (typeof error !== 'object' || error === null || !('meta' in error)) return [];
+    if (typeof error !== 'object' || error === null || !('meta' in error))
+      return [];
     const meta = error.meta;
-    if (typeof meta !== 'object' || meta === null || !('target' in meta)) return [];
+    if (typeof meta !== 'object' || meta === null || !('target' in meta))
+      return [];
     const target = meta.target;
-    return Array.isArray(target) ? target.filter((value): value is string => typeof value === 'string') : typeof target === 'string' ? [target] : [];
+    return Array.isArray(target)
+      ? target.filter((value): value is string => typeof value === 'string')
+      : typeof target === 'string'
+        ? [target]
+        : [];
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

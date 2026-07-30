@@ -17,7 +17,10 @@ import {
 } from '../../prisma/seed';
 
 const packageJsonPath = resolve(__dirname, '../../package.json');
-const developmentComposePath = resolve(__dirname, '../../../docker-compose.yml');
+const developmentComposePath = resolve(
+  __dirname,
+  '../../../docker-compose.yml',
+);
 const productionComposePath = resolve(
   __dirname,
   '../../../docker-compose.production.yml',
@@ -124,7 +127,6 @@ describe('Prisma seed contract', () => {
     expect(userUpsertMock).not.toHaveBeenCalled();
   });
 
-
   it('defines development role test users for the remaining canonical roles', () => {
     expect(initialRoleTestUsers.map((user) => user.roleName)).toEqual([
       'SELLER',
@@ -161,7 +163,9 @@ describe('Prisma seed contract', () => {
       process.env.NODE_ENV = previousNodeEnv;
     }
 
-    const roleUserUpserts = userUpsertMock.mock.calls.slice(1).map((call) => call[0]);
+    const roleUserUpserts = userUpsertMock.mock.calls
+      .slice(1)
+      .map((call) => call[0]);
 
     expect(roleUserUpserts).toHaveLength(initialRoleTestUsers.length);
 
@@ -345,7 +349,9 @@ describe('Prisma seed contract', () => {
     };
 
     expect(packageJson.prisma?.seed).toBe('ts-node prisma/seed.ts');
-    expect(packageJson.scripts?.['migrate:deploy']).toBe('prisma migrate deploy');
+    expect(packageJson.scripts?.['migrate:deploy']).toBe(
+      'prisma migrate deploy',
+    );
     expect(packageJson.scripts?.['start:docker']).toBe('npm run start:prod');
     expect(packageJson.scripts?.['start:docker']).not.toContain('migrate');
     expect(packageJson.scripts?.['start:docker']).not.toContain('seed');
@@ -357,7 +363,9 @@ describe('Prisma seed contract', () => {
 
     expect(developmentCompose).toContain('  migrate:\n');
     expect(developmentCompose).toContain('npm run migrate:deploy');
-    expect(developmentCompose).toContain('condition: service_completed_successfully');
+    expect(developmentCompose).toContain(
+      'condition: service_completed_successfully',
+    );
     expect(developmentCompose).not.toContain('command: npm run start:docker');
     expect(productionCompose).toContain('  migrate:\n');
     expect(productionCompose).toContain('profiles: ["migration"]');

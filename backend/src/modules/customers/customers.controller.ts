@@ -38,7 +38,6 @@ export class CustomersController {
     };
   }
 
-
   @Get(':id/credit-summary')
   @Roles('ADMIN', 'SELLER', 'COLLECTIONS')
   async getCreditSummary(@Param('id') id: string) {

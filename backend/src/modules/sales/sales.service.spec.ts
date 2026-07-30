@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
   BillingRequestStatus,
@@ -33,14 +38,37 @@ type MockPrisma = {
   discountAuthorization: { findFirst: jest.Mock; updateMany: jest.Mock };
   operationalLocation: { findUnique: jest.Mock };
   legalEntityOperationalLocation: { findFirst: jest.Mock };
-  inventoryBalance: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
+  inventoryBalance: {
+    findUnique: jest.Mock;
+    updateMany: jest.Mock;
+    update: jest.Mock;
+  };
   inventoryMovement: { create: jest.Mock };
-  saleDocument: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
-  sale: { count: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
+  saleDocument: {
+    create: jest.Mock;
+    findFirst: jest.Mock;
+    findMany: jest.Mock;
+    updateMany: jest.Mock;
+  };
+  sale: {
+    count: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+    findUnique: jest.Mock;
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+  };
   cashShift: { findUnique: jest.Mock };
   pointOfSaleDailyClose: { findUnique: jest.Mock; findFirst: jest.Mock };
   payment: { create: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock };
-  accountReceivable: { aggregate: jest.Mock; create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock; update: jest.Mock };
+  accountReceivable: {
+    aggregate: jest.Mock;
+    create: jest.Mock;
+    findFirst: jest.Mock;
+    findMany: jest.Mock;
+    update: jest.Mock;
+  };
   billingRequest: { create: jest.Mock; update: jest.Mock };
   billingRequestHistory: { create: jest.Mock };
   billingRequestSaleDocument: { create: jest.Mock };
@@ -66,14 +94,37 @@ function createPrisma(): MockPrisma {
     discountAuthorization: { findFirst: jest.fn(), updateMany: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
     legalEntityOperationalLocation: { findFirst: jest.fn() },
-    inventoryBalance: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
+    inventoryBalance: {
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+      update: jest.fn(),
+    },
     inventoryMovement: { create: jest.fn() },
-    saleDocument: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
-    sale: { count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
+    saleDocument: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    sale: {
+      count: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
     cashShift: { findUnique: jest.fn() },
     pointOfSaleDailyClose: { findUnique: jest.fn(), findFirst: jest.fn() },
     payment: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() },
-    accountReceivable: { aggregate: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    accountReceivable: {
+      aggregate: jest.fn(),
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
     billingRequest: { create: jest.fn(), update: jest.fn() },
     billingRequestHistory: { create: jest.fn() },
     billingRequestSaleDocument: { create: jest.fn() },
@@ -83,8 +134,17 @@ function createPrisma(): MockPrisma {
   return prisma;
 }
 
-function createService(prisma = createPrisma(), salesRealtime?: Pick<SalesRealtimeService, 'publishCreated'>) {
-  return { service: new SalesService(prisma as unknown as PrismaService, salesRealtime as SalesRealtimeService), prisma };
+function createService(
+  prisma = createPrisma(),
+  salesRealtime?: Pick<SalesRealtimeService, 'publishCreated'>,
+) {
+  return {
+    service: new SalesService(
+      prisma as unknown as PrismaService,
+      salesRealtime as SalesRealtimeService,
+    ),
+    prisma,
+  };
 }
 
 function validCashSale(overrides: Record<string, unknown> = {}) {
@@ -116,7 +176,10 @@ function seller() {
   return { id: 'seller-1', role: 'SELLER', operationalLocationId: 'loc-1' };
 }
 
-function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown> = {}) {
+function mockHappyPath(
+  prisma: MockPrisma,
+  saleOverrides: Record<string, unknown> = {},
+) {
   prisma.sale.findUnique.mockResolvedValue(null);
   prisma.sale.count.mockResolvedValue(0);
   prisma.$queryRawUnsafe.mockResolvedValue([{ value: 1 }]);
@@ -170,21 +233,64 @@ function mockHappyPath(prisma: MockPrisma, saleOverrides: Record<string, unknown
       createdAt: now,
       updatedAt: now,
       ...data,
-      items: data.items.create.map((item: Record<string, unknown>) => ({ id: 'item-1', saleId: 'sale-1', ...item })),
+      items: data.items.create.map((item: Record<string, unknown>) => ({
+        id: 'item-1',
+        saleId: 'sale-1',
+        ...item,
+      })),
     }),
   );
-  prisma.sale.update.mockImplementation(({ data }) => Promise.resolve({ id: 'sale-1', ...data }));
-  prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'movement-1', createdAt: now, ...data }));
-  prisma.payment.create.mockImplementation(({ data }) => Promise.resolve({ id: 'payment-1', createdAt: now, updatedAt: now, ...data }));
+  prisma.sale.update.mockImplementation(({ data }) =>
+    Promise.resolve({ id: 'sale-1', ...data }),
+  );
+  prisma.inventoryMovement.create.mockImplementation(({ data }) =>
+    Promise.resolve({ id: 'movement-1', createdAt: now, ...data }),
+  );
+  prisma.payment.create.mockImplementation(({ data }) =>
+    Promise.resolve({
+      id: 'payment-1',
+      createdAt: now,
+      updatedAt: now,
+      ...data,
+    }),
+  );
   prisma.saleDocument.create.mockImplementation(({ data }) =>
-    Promise.resolve({ id: 'doc-1', createdAt: now, updatedAt: now, status: SaleDocumentStatus.ISSUED, ...data }),
+    Promise.resolve({
+      id: 'doc-1',
+      createdAt: now,
+      updatedAt: now,
+      status: SaleDocumentStatus.ISSUED,
+      ...data,
+    }),
   );
   prisma.accountReceivable.findFirst.mockResolvedValue(null);
   prisma.accountReceivable.findMany.mockResolvedValue([]);
-  prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
-  prisma.accountReceivable.create.mockImplementation(({ data }) => Promise.resolve({ id: 'ar-1', createdAt: now, updatedAt: now, ...data }));
-  prisma.billingRequest.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-1', createdAt: now, updatedAt: now, requestedAt: now, reviewedAt: null, reviewedByUserId: null, status: 'REQUESTED', ...data }));
-  prisma.billingRequestSaleDocument.create.mockImplementation(({ data }) => Promise.resolve({ id: 'billing-doc-1', createdAt: now, updatedAt: now, ...data }));
+  prisma.accountReceivable.aggregate.mockResolvedValue({
+    _sum: { outstandingAmount: decimal('0') },
+  });
+  prisma.accountReceivable.create.mockImplementation(({ data }) =>
+    Promise.resolve({ id: 'ar-1', createdAt: now, updatedAt: now, ...data }),
+  );
+  prisma.billingRequest.create.mockImplementation(({ data }) =>
+    Promise.resolve({
+      id: 'billing-1',
+      createdAt: now,
+      updatedAt: now,
+      requestedAt: now,
+      reviewedAt: null,
+      reviewedByUserId: null,
+      status: 'REQUESTED',
+      ...data,
+    }),
+  );
+  prisma.billingRequestSaleDocument.create.mockImplementation(({ data }) =>
+    Promise.resolve({
+      id: 'billing-doc-1',
+      createdAt: now,
+      updatedAt: now,
+      ...data,
+    }),
+  );
   Object.assign(prisma.sale.create, saleOverrides);
 }
 
@@ -204,41 +310,47 @@ function voidSaleRecord(overrides: Record<string, unknown> = {}) {
     tax: decimal('0'),
     pointOfSaleDailyClose: null,
     route: null,
-    payments: [{
-      id: 'payment-void-1',
-      accountReceivableId: null,
-      saleId: 'sale-void-1',
-      customerId: null,
-      userId: 'seller-1',
-      amount: decimal('250'),
-      paymentMethod: PaymentMethod.CASH,
-      paidAt: now,
-      status: PaymentStatus.APPLIED,
-      version: 2,
-    }],
+    payments: [
+      {
+        id: 'payment-void-1',
+        accountReceivableId: null,
+        saleId: 'sale-void-1',
+        customerId: null,
+        userId: 'seller-1',
+        amount: decimal('250'),
+        paymentMethod: PaymentMethod.CASH,
+        paidAt: now,
+        status: PaymentStatus.APPLIED,
+        version: 2,
+      },
+    ],
     accountReceivable: null,
-    items: [{
-      id: 'item-void-1',
-      productId: 'product-1',
-      productNameSnapshot: 'Chicken breast',
-      unit: ProductUnit.KG,
-      quantity: decimal('2.500'),
-      quantityKg: decimal('2.500'),
-      quantityPieces: 0,
-    }],
-    documents: [{
-      id: 'document-void-1',
-      saleId: 'sale-void-1',
-      documentType: SaleDocumentType.SIMPLE_NOTE,
-      operationalLocationId: 'loc-1',
-      pointOfSaleDailyCloseId: null,
-      physicalFolio: 'N-VOID-1',
-      status: SaleDocumentStatus.ISSUED,
-      requiresAdministrativeInvoice: false,
-      createdAt: now,
-      updatedAt: now,
-      invoiceDocuments: [],
-    }],
+    items: [
+      {
+        id: 'item-void-1',
+        productId: 'product-1',
+        productNameSnapshot: 'Chicken breast',
+        unit: ProductUnit.KG,
+        quantity: decimal('2.500'),
+        quantityKg: decimal('2.500'),
+        quantityPieces: 0,
+      },
+    ],
+    documents: [
+      {
+        id: 'document-void-1',
+        saleId: 'sale-void-1',
+        documentType: SaleDocumentType.SIMPLE_NOTE,
+        operationalLocationId: 'loc-1',
+        pointOfSaleDailyCloseId: null,
+        physicalFolio: 'N-VOID-1',
+        status: SaleDocumentStatus.ISSUED,
+        requiresAdministrativeInvoice: false,
+        createdAt: now,
+        updatedAt: now,
+        invoiceDocuments: [],
+      },
+    ],
     billingRequests: [],
     inventoryMovements: [],
     ...overrides,
@@ -246,17 +358,28 @@ function voidSaleRecord(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SalesService', () => {
-  it.each([1, 50, 100])('rejects a seller attempt to submit a free %s%% discount before inventory is affected', async (discount) => {
-    const { service, prisma } = createService();
-    mockHappyPath(prisma);
+  it.each([1, 50, 100])(
+    'rejects a seller attempt to submit a free %s%% discount before inventory is affected',
+    async (discount) => {
+      const { service, prisma } = createService();
+      mockHappyPath(prisma);
 
-    await expect(
-      service.create(validCashSale({ discount }), seller(), `idem-free-discount-${discount}`),
-    ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'DISCOUNT_AMOUNT_FORBIDDEN' }) });
+      await expect(
+        service.create(
+          validCashSale({ discount }),
+          seller(),
+          `idem-free-discount-${discount}`,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'DISCOUNT_AMOUNT_FORBIDDEN',
+        }),
+      });
 
-    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
-    expect(prisma.sale.create).not.toHaveBeenCalled();
-  });
+      expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+      expect(prisma.sale.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('derives the discount from a seller-specific authorization and records its audit snapshot', async () => {
     const { service, prisma } = createService();
@@ -280,17 +403,27 @@ describe('SalesService', () => {
     });
     prisma.discountAuthorization.updateMany.mockResolvedValue({ count: 1 });
 
-    await service.create(validCashSale({ commercialPolicyId: 'policy-1', discountAuthorizationId: 'discount-auth-1', initialPayment: { amount: 225, paymentMethod: PaymentMethod.CASH } }), seller(), 'idem-authorized-discount');
-
-    expect(prisma.sale.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
+    await service.create(
+      validCashSale({
+        commercialPolicyId: 'policy-1',
         discountAuthorizationId: 'discount-auth-1',
-        discountPercentage: 10,
-        discountEvidence: 'Photo evidence: case-123',
-        discount: 25,
-        total: 225,
+        initialPayment: { amount: 225, paymentMethod: PaymentMethod.CASH },
       }),
-    }));
+      seller(),
+      'idem-authorized-discount',
+    );
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          discountAuthorizationId: 'discount-auth-1',
+          discountPercentage: 10,
+          discountEvidence: 'Photo evidence: case-123',
+          discount: 25,
+          total: 225,
+        }),
+      }),
+    );
     expect(prisma.discountAuthorization.updateMany).toHaveBeenCalledWith({
       where: { id: 'discount-auth-1', usedAt: null },
       data: { usedAt: expect.any(Date) },
@@ -301,13 +434,35 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.discountAuthorization.findFirst.mockResolvedValue({
-      id: 'discount-auth-1', commercialPolicyId: 'policy-1', authorizedForUserId: 'seller-2', maximumPercentage: decimal('10'), reason: 'Damaged packaging', evidence: 'Photo evidence', expiresAt: null, usedAt: null,
-      commercialPolicy: { id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01T00:00:00.000Z'), effectiveTo: null, maximumDiscountPercentage: decimal('15') },
+      id: 'discount-auth-1',
+      commercialPolicyId: 'policy-1',
+      authorizedForUserId: 'seller-2',
+      maximumPercentage: decimal('10'),
+      reason: 'Damaged packaging',
+      evidence: 'Photo evidence',
+      expiresAt: null,
+      usedAt: null,
+      commercialPolicy: {
+        id: 'policy-1',
+        isActive: true,
+        effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+        effectiveTo: null,
+        maximumDiscountPercentage: decimal('15'),
+      },
     });
 
     await expect(
-      service.create(validCashSale({ commercialPolicyId: 'policy-1', discountAuthorizationId: 'discount-auth-1' }), seller(), 'idem-other-seller-discount'),
-    ).rejects.toThrow(new ForbiddenException('DISCOUNT_AUTHORIZATION_FORBIDDEN'));
+      service.create(
+        validCashSale({
+          commercialPolicyId: 'policy-1',
+          discountAuthorizationId: 'discount-auth-1',
+        }),
+        seller(),
+        'idem-other-seller-discount',
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException('DISCOUNT_AUTHORIZATION_FORBIDDEN'),
+    );
 
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -325,7 +480,11 @@ describe('SalesService', () => {
     const assignedSeller = seller();
 
     await expect(
-      service.create(validCashSale({ locationId: 'loc-2' }), assignedSeller, 'idem-unauthorized-location'),
+      service.create(
+        validCashSale({ locationId: 'loc-2' }),
+        assignedSeller,
+        'idem-unauthorized-location',
+      ),
     ).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
 
     expect(prisma.product.findUnique).not.toHaveBeenCalled();
@@ -343,16 +502,32 @@ describe('SalesService', () => {
       isActive: true,
     });
     prisma.cashShift.findUnique.mockResolvedValue({
-      id: 'shift-2', terminalId: 'terminal-2', pointOfSaleDailyCloseId: 'close-2',
+      id: 'shift-2',
+      terminalId: 'terminal-2',
+      pointOfSaleDailyCloseId: 'close-2',
       operationalLocationId: 'loc-2',
-      cashierUserId: 'admin-1', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      cashierUserId: 'admin-1',
+      businessDate: new Date('2026-06-21T00:00:00.000Z'),
+      status: 'OPEN',
       terminal: { id: 'terminal-2', deviceId: 'device-2', isActive: true },
       pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
 
     await expect(
-      service.create(validCashSale({ locationId: 'loc-2', cashShiftId: 'shift-2', deviceId: 'device-2' }), { id: 'admin-1', role: 'ADMIN' }, 'idem-admin-location'),
-    ).resolves.toEqual(expect.objectContaining({ sale: expect.objectContaining({ locationId: 'loc-2' }) }));
+      service.create(
+        validCashSale({
+          locationId: 'loc-2',
+          cashShiftId: 'shift-2',
+          deviceId: 'device-2',
+        }),
+        { id: 'admin-1', role: 'ADMIN' },
+        'idem-admin-location',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        sale: expect.objectContaining({ locationId: 'loc-2' }),
+      }),
+    );
   });
 
   it.each([
@@ -362,24 +537,31 @@ describe('SalesService', () => {
     [SaleChannel.ROUTE, OperationalLocationType.MIXED],
     [SaleChannel.INSTITUTIONAL, OperationalLocationType.WAREHOUSE],
     [SaleChannel.WHOLESALE, OperationalLocationType.ROUTE_STOCK],
-  ])('rejects %s sales from an incompatible %s location', async (saleChannel, locationType) => {
-    const { service, prisma } = createService();
-    mockHappyPath(prisma);
-    prisma.operationalLocation.findUnique.mockResolvedValue({
-      id: 'loc-1',
-      name: 'Incompatible location',
-      type: locationType,
-      isActive: true,
-    });
+  ])(
+    'rejects %s sales from an incompatible %s location',
+    async (saleChannel, locationType) => {
+      const { service, prisma } = createService();
+      mockHappyPath(prisma);
+      prisma.operationalLocation.findUnique.mockResolvedValue({
+        id: 'loc-1',
+        name: 'Incompatible location',
+        type: locationType,
+        isActive: true,
+      });
 
-    await expect(
-      service.create(validCashSale({ saleChannel }), { id: 'admin-1', role: 'ADMIN' }, `idem-incompatible-${saleChannel}-${locationType}`),
-    ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.create(
+          validCashSale({ saleChannel }),
+          { id: 'admin-1', role: 'ADMIN' },
+          `idem-incompatible-${saleChannel}-${locationType}`,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(prisma.product.findUnique).not.toHaveBeenCalled();
-    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
-    expect(prisma.sale.create).not.toHaveBeenCalled();
-  });
+      expect(prisma.product.findUnique).not.toHaveBeenCalled();
+      expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+      expect(prisma.sale.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('lists ADMIN-visible sales with filters and derives payment summaries from Payment records', async () => {
     const { service, prisma } = createService();
@@ -405,9 +587,24 @@ describe('SalesService', () => {
         billingRequest: null,
         customer: { id: 'customer-1', name: 'Restaurant Norte' },
         payments: [
-          { amount: decimal('100'), paymentMethod: PaymentMethod.CASH, paidAt: new Date('2026-06-21T12:00:00.000Z'), status: PaymentStatus.APPLIED },
-          { amount: decimal('150'), paymentMethod: PaymentMethod.TRANSFER, paidAt: new Date('2026-06-21T13:00:00.000Z'), status: PaymentStatus.APPLIED },
-          { amount: decimal('20'), paymentMethod: PaymentMethod.CASH, paidAt: new Date('2026-06-21T14:00:00.000Z'), status: PaymentStatus.CANCELLED },
+          {
+            amount: decimal('100'),
+            paymentMethod: PaymentMethod.CASH,
+            paidAt: new Date('2026-06-21T12:00:00.000Z'),
+            status: PaymentStatus.APPLIED,
+          },
+          {
+            amount: decimal('150'),
+            paymentMethod: PaymentMethod.TRANSFER,
+            paidAt: new Date('2026-06-21T13:00:00.000Z'),
+            status: PaymentStatus.APPLIED,
+          },
+          {
+            amount: decimal('20'),
+            paymentMethod: PaymentMethod.CASH,
+            paidAt: new Date('2026-06-21T14:00:00.000Z'),
+            status: PaymentStatus.CANCELLED,
+          },
         ],
         createdAt: now,
       },
@@ -433,7 +630,10 @@ describe('SalesService', () => {
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          createdAt: { gte: new Date('2026-06-01'), lte: new Date('2026-06-30') },
+          createdAt: {
+            gte: new Date('2026-06-01'),
+            lte: new Date('2026-06-30'),
+          },
           customerId: 'customer-1',
           userId: 'seller-1',
           locationId: 'loc-1',
@@ -442,7 +642,12 @@ describe('SalesService', () => {
           saleChannel: SaleChannel.COUNTER,
           documentType: SaleDocumentType.SIMPLE_NOTE,
           physicalFolio: 'NF-10',
-          payments: { some: { paymentMethod: PaymentMethod.CASH, status: PaymentStatus.APPLIED } },
+          payments: {
+            some: {
+              paymentMethod: PaymentMethod.CASH,
+              status: PaymentStatus.APPLIED,
+            },
+          },
         }),
       }),
     );
@@ -468,11 +673,17 @@ describe('SalesService', () => {
     await service.findAll({}, { id: 'seller-1', role: 'SELLER' });
 
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ userId: 'seller-1' }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: 'seller-1' }),
+      }),
     );
-    await expect(service.findOne('sale-other', { id: 'seller-1', role: 'SELLER' })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.findOne('sale-other', { id: 'seller-1', role: 'SELLER' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.sale.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'sale-other', userId: 'seller-1' } }),
+      expect.objectContaining({
+        where: { id: 'sale-other', userId: 'seller-1' },
+      }),
     );
   });
 
@@ -498,17 +709,52 @@ describe('SalesService', () => {
       status: SaleStatus.CONFIRMED,
       customer: { id: 'customer-1', name: 'Restaurant Norte' },
       commercialPolicy: { id: 'policy-1', name: 'Wholesale 7 days' },
-      accountReceivable: { id: 'ar-1', originalAmount: decimal('250'), outstandingAmount: decimal('250'), status: CollectionStatus.UNPAID },
+      accountReceivable: {
+        id: 'ar-1',
+        originalAmount: decimal('250'),
+        outstandingAmount: decimal('250'),
+        status: CollectionStatus.UNPAID,
+      },
       billingRequest: null,
-      documents: [{ id: 'doc-1', documentType: SaleDocumentType.SIMPLE_NOTE, physicalFolio: 'CR-1' }],
-      inventoryMovements: [{ id: 'mov-1', quantityKg: decimal('2.500'), quantityPieces: 0, saleId: 'sale-credit-1' }],
+      documents: [
+        {
+          id: 'doc-1',
+          documentType: SaleDocumentType.SIMPLE_NOTE,
+          physicalFolio: 'CR-1',
+        },
+      ],
+      inventoryMovements: [
+        {
+          id: 'mov-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+          saleId: 'sale-credit-1',
+        },
+      ],
       payments: [],
-      items: [{ id: 'item-1', productId: 'product-1', productNameSnapshot: 'Chicken breast', unit: ProductUnit.KG, quantityKg: decimal('2.500'), quantityPieces: 0, unitPrice: decimal('100'), subtotal: decimal('250') }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          productNameSnapshot: 'Chicken breast',
+          unit: ProductUnit.KG,
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+          unitPrice: decimal('100'),
+          subtotal: decimal('250'),
+        },
+      ],
       createdAt: now,
     });
 
-    await service.findAll({ collectionStatus: CollectionStatus.UNPAID }, { id: 'collector-1', role: 'COLLECTIONS' });
-    const detail = await service.findOne('sale-credit-1', { id: 'collector-1', role: 'COLLECTIONS' });
+    await service.findAll(
+      { collectionStatus: CollectionStatus.UNPAID },
+      { id: 'collector-1', role: 'COLLECTIONS' },
+    );
+    const detail = await service.findOne('sale-credit-1', {
+      id: 'collector-1',
+      role: 'COLLECTIONS',
+    });
 
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -521,47 +767,113 @@ describe('SalesService', () => {
     );
     expect(prisma.sale.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'sale-credit-1', paymentType: SalePaymentType.CREDIT_SALE, accountReceivable: { isNot: null } },
+        where: {
+          id: 'sale-credit-1',
+          paymentType: SalePaymentType.CREDIT_SALE,
+          accountReceivable: { isNot: null },
+        },
       }),
     );
     expect(detail).toEqual(
       expect.objectContaining({
         id: 'sale-credit-1',
         total: '250',
-        accountReceivable: expect.objectContaining({ id: 'ar-1', outstandingAmount: '250' }),
-        items: [expect.objectContaining({ productName: 'Chicken breast', subtotal: '250' })],
-        inventoryMovements: [expect.objectContaining({ id: 'mov-1', quantityKg: '2.5' })],
+        accountReceivable: expect.objectContaining({
+          id: 'ar-1',
+          outstandingAmount: '250',
+        }),
+        items: [
+          expect.objectContaining({
+            productName: 'Chicken breast',
+            subtotal: '250',
+          }),
+        ],
+        inventoryMovements: [
+          expect.objectContaining({ id: 'mov-1', quantityKg: '2.5' }),
+        ],
       }),
     );
   });
 
   it('projects only the current sale optimized route preview in authorized sale detail', async () => {
     const { service, prisma } = createService();
-    const geometry = { type: 'LineString', coordinates: [[-96.14, 19.18], [-96.13, 19.17]] };
+    const geometry = {
+      type: 'LineString',
+      coordinates: [
+        [-96.14, 19.18],
+        [-96.13, 19.17],
+      ],
+    };
     prisma.sale.findFirst.mockResolvedValue({
-      id: 'sale-1', saleNumber: 'SALE-000001', userId: 'seller-1', locationId: 'loc-1',
-      saleChannel: SaleChannel.COUNTER, documentType: SaleDocumentType.SIMPLE_NOTE,
-      subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
-      paymentType: SalePaymentType.CASH_SALE, collectionStatus: CollectionStatus.PAID,
-      status: SaleStatus.CONFIRMED, customer: null, commercialPolicy: null,
-      accountReceivable: null, billingRequest: null, documents: [], inventoryMovements: [], payments: [], items: [],
-      route: { id: 'route-1', name: 'Ruta Norte', optimizationStatus: 'OPTIMIZED', geometry, distanceMeters: 8600, durationSeconds: 1440 },
-      deliveryOrder: { latitude: decimal('19.173800'), longitude: decimal('-96.134200'), stopSequence: 2 },
+      id: 'sale-1',
+      saleNumber: 'SALE-000001',
+      userId: 'seller-1',
+      locationId: 'loc-1',
+      saleChannel: SaleChannel.COUNTER,
+      documentType: SaleDocumentType.SIMPLE_NOTE,
+      subtotal: decimal('250'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      total: decimal('250'),
+      paymentType: SalePaymentType.CASH_SALE,
+      collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED,
+      customer: null,
+      commercialPolicy: null,
+      accountReceivable: null,
+      billingRequest: null,
+      documents: [],
+      inventoryMovements: [],
+      payments: [],
+      items: [],
+      route: {
+        id: 'route-1',
+        name: 'Ruta Norte',
+        optimizationStatus: 'OPTIMIZED',
+        geometry,
+        distanceMeters: 8600,
+        durationSeconds: 1440,
+      },
+      deliveryOrder: {
+        latitude: decimal('19.173800'),
+        longitude: decimal('-96.134200'),
+        stopSequence: 2,
+      },
       createdAt: now,
     });
 
-    const detail = await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' });
+    const detail = await service.findOne('sale-1', {
+      id: 'seller-1',
+      role: 'SELLER',
+    });
 
-    expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'sale-1', userId: 'seller-1' },
-      include: expect.objectContaining({
-        route: { select: { id: true, name: true, optimizationStatus: true, geometry: true, distanceMeters: true, durationSeconds: true } },
-        deliveryOrder: { select: { latitude: true, longitude: true, stopSequence: true } },
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'sale-1', userId: 'seller-1' },
+        include: expect.objectContaining({
+          route: {
+            select: {
+              id: true,
+              name: true,
+              optimizationStatus: true,
+              geometry: true,
+              distanceMeters: true,
+              durationSeconds: true,
+            },
+          },
+          deliveryOrder: {
+            select: { latitude: true, longitude: true, stopSequence: true },
+          },
+        }),
       }),
-    }));
+    );
     expect(detail.routePreview).toEqual({
-      id: 'route-1', name: 'Ruta Norte', geometry, mapAvailable: true,
-      distanceMeters: 8600, durationSeconds: 1440,
+      id: 'route-1',
+      name: 'Ruta Norte',
+      geometry,
+      mapAvailable: true,
+      distanceMeters: 8600,
+      durationSeconds: 1440,
       order: { latitude: 19.1738, longitude: -96.1342, stopSequence: 2 },
     });
     expect(detail.routePreview).not.toHaveProperty('orders');
@@ -570,39 +882,97 @@ describe('SalesService', () => {
   it('returns no route preview when unassigned and an unavailable preview without geometry when not optimized', async () => {
     const { service, prisma } = createService();
     const baseSale = {
-      id: 'sale-1', saleNumber: 'SALE-000001', userId: 'seller-1', locationId: 'loc-1',
-      saleChannel: SaleChannel.COUNTER, documentType: SaleDocumentType.SIMPLE_NOTE,
-      subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
-      paymentType: SalePaymentType.CASH_SALE, collectionStatus: CollectionStatus.PAID,
-      status: SaleStatus.CONFIRMED, customer: null, commercialPolicy: null,
-      accountReceivable: null, billingRequest: null, documents: [], inventoryMovements: [], payments: [], items: [],
-      deliveryOrder: null, createdAt: now,
+      id: 'sale-1',
+      saleNumber: 'SALE-000001',
+      userId: 'seller-1',
+      locationId: 'loc-1',
+      saleChannel: SaleChannel.COUNTER,
+      documentType: SaleDocumentType.SIMPLE_NOTE,
+      subtotal: decimal('250'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      total: decimal('250'),
+      paymentType: SalePaymentType.CASH_SALE,
+      collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED,
+      customer: null,
+      commercialPolicy: null,
+      accountReceivable: null,
+      billingRequest: null,
+      documents: [],
+      inventoryMovements: [],
+      payments: [],
+      items: [],
+      deliveryOrder: null,
+      createdAt: now,
     };
-    prisma.sale.findFirst.mockResolvedValueOnce({ ...baseSale, routeId: null, route: null });
-    expect((await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' })).routePreview).toBeNull();
+    prisma.sale.findFirst.mockResolvedValueOnce({
+      ...baseSale,
+      routeId: null,
+      route: null,
+    });
+    expect(
+      (await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' }))
+        .routePreview,
+    ).toBeNull();
 
     prisma.sale.findFirst.mockResolvedValueOnce({
-      ...baseSale, routeId: 'route-1',
-      route: { id: 'route-1', name: 'Ruta histórica', optimizationStatus: 'NOT_OPTIMIZED', geometry: null, distanceMeters: null, durationSeconds: null },
+      ...baseSale,
+      routeId: 'route-1',
+      route: {
+        id: 'route-1',
+        name: 'Ruta histórica',
+        optimizationStatus: 'NOT_OPTIMIZED',
+        geometry: null,
+        distanceMeters: null,
+        durationSeconds: null,
+      },
     });
-    expect((await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' })).routePreview).toEqual({
-      id: 'route-1', name: 'Ruta histórica', geometry: null, mapAvailable: false,
-      distanceMeters: null, durationSeconds: null, order: null,
+    expect(
+      (await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' }))
+        .routePreview,
+    ).toEqual({
+      id: 'route-1',
+      name: 'Ruta histórica',
+      geometry: null,
+      mapAvailable: false,
+      distanceMeters: null,
+      durationSeconds: null,
+      order: null,
     });
 
     for (const geometry of [
       { type: 'LineString', coordinates: [] },
-      { type: 'LineString', coordinates: [[-96.14, Number.NaN], [-96.13, 19.17]] },
+      {
+        type: 'LineString',
+        coordinates: [
+          [-96.14, Number.NaN],
+          [-96.13, 19.17],
+        ],
+      },
       { type: 'Point', coordinates: [-96.14, 19.18] },
     ]) {
       prisma.sale.findFirst.mockResolvedValueOnce({
-        ...baseSale, routeId: 'route-1',
-        route: { id: 'route-1', name: 'Ruta inválida', optimizationStatus: 'OPTIMIZED', geometry, distanceMeters: 100, durationSeconds: 60 },
+        ...baseSale,
+        routeId: 'route-1',
+        route: {
+          id: 'route-1',
+          name: 'Ruta inválida',
+          optimizationStatus: 'OPTIMIZED',
+          geometry,
+          distanceMeters: 100,
+          durationSeconds: 60,
+        },
       });
-      expect((await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' })).routePreview).toEqual(expect.objectContaining({
-        geometry: null,
-        mapAvailable: false,
-      }));
+      expect(
+        (await service.findOne('sale-1', { id: 'seller-1', role: 'SELLER' }))
+          .routePreview,
+      ).toEqual(
+        expect.objectContaining({
+          geometry: null,
+          mapAvailable: false,
+        }),
+      );
     }
   });
 
@@ -636,28 +1006,65 @@ describe('SalesService', () => {
       user: { id: 'seller-1', name: 'Seller One' },
       location: { id: 'loc-1', name: 'Sucursal Centro' },
       documents: [
-        { id: 'doc-ticket-1', documentType: SaleDocumentType.INTERNAL_RECEIPT, physicalFolio: 'T-100', createdAt: now },
+        {
+          id: 'doc-ticket-1',
+          documentType: SaleDocumentType.INTERNAL_RECEIPT,
+          physicalFolio: 'T-100',
+          createdAt: now,
+        },
       ],
       payments: [
-        { id: 'payment-1', amount: decimal('240'), paymentMethod: PaymentMethod.CASH, paidAt: now, saleId: 'sale-1', accountReceivableId: null, status: PaymentStatus.APPLIED },
+        {
+          id: 'payment-1',
+          amount: decimal('240'),
+          paymentMethod: PaymentMethod.CASH,
+          paidAt: now,
+          saleId: 'sale-1',
+          accountReceivableId: null,
+          status: PaymentStatus.APPLIED,
+        },
       ],
       items: [
-        { id: 'item-1', productId: 'product-1', productNameSnapshot: 'Chicken breast', unit: ProductUnit.KG, quantityKg: decimal('2.500'), quantityPieces: 0, unitPrice: decimal('100'), subtotal: decimal('250') },
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          productNameSnapshot: 'Chicken breast',
+          unit: ProductUnit.KG,
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+          unitPrice: decimal('100'),
+          subtotal: decimal('250'),
+        },
       ],
       createdAt: now,
     });
 
-    const ticket = await service.getTicket('sale-1', { id: 'seller-1', role: 'SELLER' });
+    const ticket = await service.getTicket('sale-1', {
+      id: 'seller-1',
+      role: 'SELLER',
+    });
 
     expect(prisma.sale.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'sale-1', userId: 'seller-1' },
         include: expect.objectContaining({
-          customer: { select: { id: true, name: true, address: true, phone: true, taxId: true, creditDays: true } },
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+              phone: true,
+              taxId: true,
+              creditDays: true,
+            },
+          },
           user: { select: { id: true, name: true } },
           location: { select: { id: true, name: true } },
           items: true,
-          payments: { where: { status: PaymentStatus.APPLIED }, orderBy: { paidAt: 'desc' } },
+          payments: {
+            where: { status: PaymentStatus.APPLIED },
+            orderBy: { paidAt: 'desc' },
+          },
           documents: { orderBy: { createdAt: 'desc' } },
         }),
       }),
@@ -735,7 +1142,17 @@ describe('SalesService', () => {
         paymentTermsDays: 15,
       },
       productSnapshot: {
-        items: [{ name: 'Pollo original', sku: 'POL-100', unit: ProductUnit.KG, quantityKg: 2.5, quantityPieces: 0, unitPrice: 100, subtotal: 250 }],
+        items: [
+          {
+            name: 'Pollo original',
+            sku: 'POL-100',
+            unit: ProductUnit.KG,
+            quantityKg: 2.5,
+            quantityPieces: 0,
+            unitPrice: 100,
+            subtotal: 250,
+          },
+        ],
       },
       priceSnapshot: {
         subtotal: 250,
@@ -752,12 +1169,17 @@ describe('SalesService', () => {
       scaleTicketReferences: [],
     });
 
-    const ticket = await service.getDocumentPrint('sale-1', 'doc-large-1', { id: 'seller-1', role: 'SELLER' });
+    const ticket = await service.getDocumentPrint('sale-1', 'doc-large-1', {
+      id: 'seller-1',
+      role: 'SELLER',
+    });
 
     expect(prisma.sale.findFirst).not.toHaveBeenCalled();
-    expect(prisma.saleDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: 'doc-large-1', saleId: 'sale-1' }),
-    }));
+    expect(prisma.saleDocument.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'doc-large-1', saleId: 'sale-1' }),
+      }),
+    );
     expect(ticket).toMatchObject({
       ticketId: 'doc-large-1',
       documentType: SaleDocumentType.LARGE_NOTE,
@@ -774,7 +1196,16 @@ describe('SalesService', () => {
       outstanding: '240',
       dueDate: '2026-07-06T10:00:00.000Z',
       templateVersion: 1,
-      items: [expect.objectContaining({ productName: 'Pollo original', sku: 'POL-100', unit: ProductUnit.KG, quantityKg: 2.5, unitPrice: 100, subtotal: 250 })],
+      items: [
+        expect.objectContaining({
+          productName: 'Pollo original',
+          sku: 'POL-100',
+          unit: ProductUnit.KG,
+          quantityKg: 2.5,
+          unitPrice: 100,
+          subtotal: 250,
+        }),
+      ],
     });
   });
 
@@ -804,8 +1235,18 @@ describe('SalesService', () => {
       },
       sale: {
         payments: [
-          { amount: decimal('100'), paymentMethod: PaymentMethod.CASH, paidAt: new Date('2026-06-21T10:01:00.000Z'), status: PaymentStatus.APPLIED },
-          { amount: decimal('150'), paymentMethod: PaymentMethod.CARD, paidAt: new Date('2026-06-21T10:02:00.000Z'), status: PaymentStatus.APPLIED },
+          {
+            amount: decimal('100'),
+            paymentMethod: PaymentMethod.CASH,
+            paidAt: new Date('2026-06-21T10:01:00.000Z'),
+            status: PaymentStatus.APPLIED,
+          },
+          {
+            amount: decimal('150'),
+            paymentMethod: PaymentMethod.CARD,
+            paidAt: new Date('2026-06-21T10:02:00.000Z'),
+            status: PaymentStatus.APPLIED,
+          },
         ],
       },
       createdAt: now,
@@ -813,25 +1254,39 @@ describe('SalesService', () => {
       scaleTicketReferences: [],
     });
 
-    const ticket = await service.getDocumentPrint('sale-split-1', 'doc-split-1', { id: 'seller-1', role: 'SELLER' });
+    const ticket = await service.getDocumentPrint(
+      'sale-split-1',
+      'doc-split-1',
+      { id: 'seller-1', role: 'SELLER' },
+    );
 
-    expect(prisma.saleDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      include: expect.objectContaining({
-        sale: {
-          select: {
-            payments: {
-              where: { status: PaymentStatus.APPLIED },
-              orderBy: { paidAt: 'asc' },
+    expect(prisma.saleDocument.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          sale: {
+            select: {
+              payments: {
+                where: { status: PaymentStatus.APPLIED },
+                orderBy: { paidAt: 'asc' },
+              },
             },
           },
-        },
+        }),
       }),
-    }));
+    );
     expect(ticket).toMatchObject({
       paymentMethod: null,
       payments: [
-        { amount: '100', paymentMethod: PaymentMethod.CASH, paidAt: new Date('2026-06-21T10:01:00.000Z') },
-        { amount: '150', paymentMethod: PaymentMethod.CARD, paidAt: new Date('2026-06-21T10:02:00.000Z') },
+        {
+          amount: '100',
+          paymentMethod: PaymentMethod.CASH,
+          paidAt: new Date('2026-06-21T10:01:00.000Z'),
+        },
+        {
+          amount: '150',
+          paymentMethod: PaymentMethod.CARD,
+          paidAt: new Date('2026-06-21T10:02:00.000Z'),
+        },
       ],
     });
   });
@@ -839,25 +1294,69 @@ describe('SalesService', () => {
   it('returns persisted cash tendered and change on printed payments without fabricating historical values', async () => {
     const { service, prisma } = createService();
     prisma.saleDocument.findFirst.mockResolvedValue({
-      id: 'doc-cash-change-1', saleId: 'sale-cash-change-1', documentType: SaleDocumentType.SIMPLE_NOTE,
-      operationalLocationId: 'loc-1', physicalFolio: 'T-202', status: SaleDocumentStatus.ISSUED,
-      requiresAdministrativeInvoice: false, printTemplateVersion: 1, customerSnapshot: null,
+      id: 'doc-cash-change-1',
+      saleId: 'sale-cash-change-1',
+      documentType: SaleDocumentType.SIMPLE_NOTE,
+      operationalLocationId: 'loc-1',
+      physicalFolio: 'T-202',
+      status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false,
+      printTemplateVersion: 1,
+      customerSnapshot: null,
       productSnapshot: { items: [] },
-      priceSnapshot: { subtotal: 187.5, discount: 0, tax: 0, total: 187.5, paid: 187.5, outstanding: 0, paymentType: SalePaymentType.CASH_SALE, paymentMethod: PaymentMethod.CASH, dueDate: null },
+      priceSnapshot: {
+        subtotal: 187.5,
+        discount: 0,
+        tax: 0,
+        total: 187.5,
+        paid: 187.5,
+        outstanding: 0,
+        paymentType: SalePaymentType.CASH_SALE,
+        paymentMethod: PaymentMethod.CASH,
+        dueDate: null,
+      },
       sale: {
         payments: [
-          { amount: decimal('187.50'), paymentMethod: PaymentMethod.CASH, cashTendered: decimal('200'), changeGiven: decimal('12.50'), paidAt: now, status: PaymentStatus.APPLIED },
-          { amount: decimal('0.01'), paymentMethod: PaymentMethod.CASH, cashTendered: null, changeGiven: null, paidAt: now, status: PaymentStatus.APPLIED },
+          {
+            amount: decimal('187.50'),
+            paymentMethod: PaymentMethod.CASH,
+            cashTendered: decimal('200'),
+            changeGiven: decimal('12.50'),
+            paidAt: now,
+            status: PaymentStatus.APPLIED,
+          },
+          {
+            amount: decimal('0.01'),
+            paymentMethod: PaymentMethod.CASH,
+            cashTendered: null,
+            changeGiven: null,
+            paidAt: now,
+            status: PaymentStatus.APPLIED,
+          },
         ],
       },
-      createdAt: now, updatedAt: now, scaleTicketReferences: [],
+      createdAt: now,
+      updatedAt: now,
+      scaleTicketReferences: [],
     });
 
-    const ticket = await service.getDocumentPrint('sale-cash-change-1', 'doc-cash-change-1', { id: 'seller-1', role: 'SELLER' });
+    const ticket = await service.getDocumentPrint(
+      'sale-cash-change-1',
+      'doc-cash-change-1',
+      { id: 'seller-1', role: 'SELLER' },
+    );
 
     expect(ticket.payments).toEqual([
-      expect.objectContaining({ amount: '187.5', cashTendered: '200', changeGiven: '12.5' }),
-      expect.objectContaining({ amount: '0.01', cashTendered: null, changeGiven: null }),
+      expect.objectContaining({
+        amount: '187.5',
+        cashTendered: '200',
+        changeGiven: '12.5',
+      }),
+      expect.objectContaining({
+        amount: '0.01',
+        cashTendered: null,
+        changeGiven: null,
+      }),
     ]);
   });
 
@@ -888,7 +1387,12 @@ describe('SalesService', () => {
       },
       sale: {
         payments: [
-          { amount: decimal('250'), paymentMethod: PaymentMethod.TRANSFER, paidAt, status: PaymentStatus.APPLIED },
+          {
+            amount: decimal('250'),
+            paymentMethod: PaymentMethod.TRANSFER,
+            paidAt,
+            status: PaymentStatus.APPLIED,
+          },
         ],
       },
       createdAt: now,
@@ -896,11 +1400,17 @@ describe('SalesService', () => {
       scaleTicketReferences: [],
     });
 
-    const ticket = await service.getDocumentPrint('sale-single-1', 'doc-single-1', { id: 'seller-1', role: 'SELLER' });
+    const ticket = await service.getDocumentPrint(
+      'sale-single-1',
+      'doc-single-1',
+      { id: 'seller-1', role: 'SELLER' },
+    );
 
     expect(ticket).toMatchObject({
       paymentMethod: PaymentMethod.TRANSFER,
-      payments: [{ amount: '250', paymentMethod: PaymentMethod.TRANSFER, paidAt }],
+      payments: [
+        { amount: '250', paymentMethod: PaymentMethod.TRANSFER, paidAt },
+      ],
     });
   });
 
@@ -913,39 +1423,92 @@ describe('SalesService', () => {
       documentType: SaleDocumentType.SCALE_TICKET,
       physicalFolio: 'BAS-001',
       requiresAdministrativeInvoice: false,
-      subtotal: decimal('1062.5'), discount: decimal('0'), tax: decimal('0'), total: decimal('1062.5'),
-      paymentType: SalePaymentType.CASH_SALE, collectionStatus: CollectionStatus.PAID, status: SaleStatus.CONFIRMED,
+      subtotal: decimal('1062.5'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      total: decimal('1062.5'),
+      paymentType: SalePaymentType.CASH_SALE,
+      collectionStatus: CollectionStatus.PAID,
+      status: SaleStatus.CONFIRMED,
       customer: null,
       user: { id: 'seller-1', name: 'Seller One' },
       location: { id: 'loc-1', name: 'Sucursal Centro' },
       documents: [
-        { id: 'doc-scale-1', documentType: SaleDocumentType.SCALE_TICKET, physicalFolio: 'BAS-001', createdAt: now },
-        { id: 'doc-receipt-1', documentType: SaleDocumentType.INTERNAL_RECEIPT, physicalFolio: 'BAS-001', createdAt: now },
+        {
+          id: 'doc-scale-1',
+          documentType: SaleDocumentType.SCALE_TICKET,
+          physicalFolio: 'BAS-001',
+          createdAt: now,
+        },
+        {
+          id: 'doc-receipt-1',
+          documentType: SaleDocumentType.INTERNAL_RECEIPT,
+          physicalFolio: 'BAS-001',
+          createdAt: now,
+        },
       ],
-      scaleTicketReferences: [{
-        saleDocumentId: 'doc-scale-1', physicalFolio: 'BAS-001', capturedAt: now,
-        grossWeightKg: decimal('26.2'), tareWeightKg: decimal('1.2'), netWeightKg: decimal('25'), weightKg: decimal('25'),
-        pieceCount: 14, unitPrice: decimal('42.5'), amount: decimal('1062.5'),
-        product: { name: 'Whole chicken', unit: ProductUnit.KG }, capturedBy: { name: 'Scale Operator' },
-      }],
+      scaleTicketReferences: [
+        {
+          saleDocumentId: 'doc-scale-1',
+          physicalFolio: 'BAS-001',
+          capturedAt: now,
+          grossWeightKg: decimal('26.2'),
+          tareWeightKg: decimal('1.2'),
+          netWeightKg: decimal('25'),
+          weightKg: decimal('25'),
+          pieceCount: 14,
+          unitPrice: decimal('42.5'),
+          amount: decimal('1062.5'),
+          product: { name: 'Whole chicken', unit: ProductUnit.KG },
+          capturedBy: { name: 'Scale Operator' },
+        },
+      ],
       payments: [],
-      items: [{ id: 'item-1', productId: 'product-1', productNameSnapshot: 'Whole chicken', unit: ProductUnit.KG, quantityKg: decimal('25'), quantityPieces: 14, unitPrice: decimal('42.5'), subtotal: decimal('1062.5') }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          productNameSnapshot: 'Whole chicken',
+          unit: ProductUnit.KG,
+          quantityKg: decimal('25'),
+          quantityPieces: 14,
+          unitPrice: decimal('42.5'),
+          subtotal: decimal('1062.5'),
+        },
+      ],
       createdAt: now,
     });
 
-    const ticket = await service.getTicket('sale-scale-1', { id: 'admin-1', role: 'ADMIN' });
+    const ticket = await service.getTicket('sale-scale-1', {
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
 
-    expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      include: expect.objectContaining({ scaleTicketReferences: expect.any(Object) }),
-    }));
-    expect(ticket).toEqual(expect.objectContaining({
-      documentType: SaleDocumentType.SCALE_TICKET,
-      scaleTicket: {
-        physicalFolio: 'BAS-001', capturedAt: now, productName: 'Whole chicken', productUnit: ProductUnit.KG,
-        grossWeightKg: '26.2', tareWeightKg: '1.2', netWeightKg: '25', pieceCount: 14,
-        unitPrice: '42.5', amount: '1062.5', operatorName: 'Scale Operator',
-      },
-    }));
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          scaleTicketReferences: expect.any(Object),
+        }),
+      }),
+    );
+    expect(ticket).toEqual(
+      expect.objectContaining({
+        documentType: SaleDocumentType.SCALE_TICKET,
+        scaleTicket: {
+          physicalFolio: 'BAS-001',
+          capturedAt: now,
+          productName: 'Whole chicken',
+          productUnit: ProductUnit.KG,
+          grossWeightKg: '26.2',
+          tareWeightKg: '1.2',
+          netWeightKg: '25',
+          pieceCount: 14,
+          unitPrice: '42.5',
+          amount: '1062.5',
+          operatorName: 'Scale Operator',
+        },
+      }),
+    );
   });
 
   it('lists sale documents with the internal receipt structure and blocks out-of-scope access', async () => {
@@ -969,13 +1532,22 @@ describe('SalesService', () => {
       },
     ]);
 
-    const result = await service.findDocuments('sale-1', { id: 'seller-1', role: 'SELLER' });
+    const result = await service.findDocuments('sale-1', {
+      id: 'seller-1',
+      role: 'SELLER',
+    });
 
     expect(prisma.sale.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'sale-1', userId: 'seller-1' }, select: { id: true } }),
+      expect.objectContaining({
+        where: { id: 'sale-1', userId: 'seller-1' },
+        select: { id: true },
+      }),
     );
     expect(prisma.saleDocument.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { saleId: 'sale-1' }, orderBy: { createdAt: 'desc' } }),
+      expect.objectContaining({
+        where: { saleId: 'sale-1' },
+        orderBy: { createdAt: 'desc' },
+      }),
     );
     expect(result).toEqual({
       items: [
@@ -1016,30 +1588,48 @@ describe('SalesService', () => {
       documents: [],
       payments: [],
       items: [
-        { id: 'item-2', productId: 'product-2', productNameSnapshot: 'Whole chicken', unit: ProductUnit.PIECE, quantityKg: decimal('0'), quantityPieces: 3, unitPrice: decimal('40'), subtotal: decimal('120') },
+        {
+          id: 'item-2',
+          productId: 'product-2',
+          productNameSnapshot: 'Whole chicken',
+          unit: ProductUnit.PIECE,
+          quantityKg: decimal('0'),
+          quantityPieces: 3,
+          unitPrice: decimal('40'),
+          subtotal: decimal('120'),
+        },
       ],
       createdAt: now,
     });
 
-    const ticket = await service.getTicket('sale-2', { id: 'admin-1', role: 'ADMIN' });
+    const ticket = await service.getTicket('sale-2', {
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
 
-    expect(ticket).toEqual(expect.objectContaining({
-      ticketId: null,
-      ticketNumber: 'SALE-000002',
-      customerName: null,
-      locationId: 'loc-2',
-      locationName: 'Ruta 2',
-      paymentType: SalePaymentType.CREDIT_SALE,
-      payments: [],
-      legend: 'Comprobante interno sin validez fiscal',
-    }));
+    expect(ticket).toEqual(
+      expect.objectContaining({
+        ticketId: null,
+        ticketNumber: 'SALE-000002',
+        customerName: null,
+        locationId: 'loc-2',
+        locationName: 'Ruta 2',
+        paymentType: SalePaymentType.CREDIT_SALE,
+        payments: [],
+        legend: 'Comprobante interno sin validez fiscal',
+      }),
+    );
   });
 
   it('creates a valid paid cash sale with backend pricing, sale payment, stock decrement, and no artificial account receivable', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    const result = await service.create(validCashSale(), seller(), 'idem-sale-1');
+    const result = await service.create(
+      validCashSale(),
+      seller(),
+      'idem-sale-1',
+    );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.sale.create).toHaveBeenCalledWith(
@@ -1083,8 +1673,16 @@ describe('SalesService', () => {
       }),
     );
     expect(prisma.inventoryBalance.updateMany).toHaveBeenCalledWith({
-      where: { productId: 'product-1', locationId: 'loc-1', quantityKg: { gte: 2.5 }, quantityPieces: { gte: 0 } },
-      data: { quantityKg: { decrement: 2.5 }, quantityPieces: { decrement: 0 } },
+      where: {
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: { gte: 2.5 },
+        quantityPieces: { gte: 0 },
+      },
+      data: {
+        quantityKg: { decrement: 2.5 },
+        quantityPieces: { decrement: 0 },
+      },
     });
     expect(prisma.inventoryMovement.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1124,7 +1722,13 @@ describe('SalesService', () => {
           status: SaleDocumentStatus.ISSUED,
           requiresAdministrativeInvoice: false,
           productSnapshot: expect.objectContaining({
-            items: [expect.objectContaining({ productId: 'product-1', name: 'Chicken breast', sku: 'PCH-001' })],
+            items: [
+              expect.objectContaining({
+                productId: 'product-1',
+                name: 'Chicken breast',
+                sku: 'PCH-001',
+              }),
+            ],
           }),
           priceSnapshot: expect.objectContaining({
             subtotal: 250,
@@ -1149,13 +1753,26 @@ describe('SalesService', () => {
     expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
-        sale: expect.objectContaining({ total: '250', paymentType: SalePaymentType.CASH_SALE }),
-        payment: expect.objectContaining({ amount: '250', saleId: 'sale-1', accountReceivableId: null }),
+        sale: expect.objectContaining({
+          total: '250',
+          paymentType: SalePaymentType.CASH_SALE,
+        }),
+        payment: expect.objectContaining({
+          amount: '250',
+          saleId: 'sale-1',
+          accountReceivableId: null,
+        }),
         accountReceivable: null,
         inventoryMovements: [expect.objectContaining({ saleId: 'sale-1' })],
         documents: [
-          expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.SIMPLE_NOTE }),
-          expect.objectContaining({ saleId: 'sale-1', documentType: SaleDocumentType.INTERNAL_RECEIPT }),
+          expect.objectContaining({
+            saleId: 'sale-1',
+            documentType: SaleDocumentType.SIMPLE_NOTE,
+          }),
+          expect.objectContaining({
+            saleId: 'sale-1',
+            documentType: SaleDocumentType.INTERNAL_RECEIPT,
+          }),
         ],
       }),
     );
@@ -1188,32 +1805,74 @@ describe('SalesService', () => {
     const salesRealtime = { publishCreated: jest.fn() };
     const { service } = createService(createPrisma(), salesRealtime);
 
-    await expect(service.create({ ...validCashSale(), items: [] }, seller(), 'idem-sale-invalid')).rejects.toThrow('Sale must contain at least one item');
+    await expect(
+      service.create(
+        { ...validCashSale(), items: [] },
+        seller(),
+        'idem-sale-invalid',
+      ),
+    ).rejects.toThrow('Sale must contain at least one item');
 
     expect(salesRealtime.publishCreated).not.toHaveBeenCalled();
   });
 
   it('lists confirmed orders only for the requested authorized location', async () => {
     const { service, prisma } = createService();
-    prisma.operationalLocation.findUnique.mockResolvedValue({ id: 'loc-1', isActive: true });
-    prisma.sale.findMany.mockResolvedValue([{
-      id: 'sale-1', saleNumber: 'SALE-000001', createdAt: now, total: decimal('250'), status: SaleStatus.CONFIRMED,
-      customer: null, location: { id: 'loc-1', name: 'Sucursal Centro' },
-      items: [{ id: 'item-1', productId: 'product-1', productNameSnapshot: 'Pechuga', unit: ProductUnit.KG, quantityKg: decimal('2.5'), quantityPieces: 0 }],
-    }]);
+    prisma.operationalLocation.findUnique.mockResolvedValue({
+      id: 'loc-1',
+      isActive: true,
+    });
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-1',
+        saleNumber: 'SALE-000001',
+        createdAt: now,
+        total: decimal('250'),
+        status: SaleStatus.CONFIRMED,
+        customer: null,
+        location: { id: 'loc-1', name: 'Sucursal Centro' },
+        items: [
+          {
+            id: 'item-1',
+            productId: 'product-1',
+            productNameSnapshot: 'Pechuga',
+            unit: ProductUnit.KG,
+            quantityKg: decimal('2.5'),
+            quantityPieces: 0,
+          },
+        ],
+      },
+    ]);
 
-    const result = await service.findBranchOrders({ locationId: 'loc-1' }, seller());
+    const result = await service.findBranchOrders(
+      { locationId: 'loc-1' },
+      seller(),
+    );
 
-    expect(prisma.sale.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ locationId: 'loc-1', status: SaleStatus.CONFIRMED }),
-    }));
-    expect(result.items).toEqual([expect.objectContaining({ id: 'sale-1', location: { id: 'loc-1', name: 'Sucursal Centro' } })]);
+    expect(prisma.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          locationId: 'loc-1',
+          status: SaleStatus.CONFIRMED,
+        }),
+      }),
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'sale-1',
+        location: { id: 'loc-1', name: 'Sucursal Centro' },
+      }),
+    ]);
   });
 
   it('rejects a branch order query outside the seller assigned location', async () => {
     const { service, prisma } = createService();
 
-    await expect(service.findBranchOrders({ locationId: 'loc-2' }, seller())).rejects.toThrow(new ForbiddenException('BRANCH_ORDERS_LOCATION_FORBIDDEN'));
+    await expect(
+      service.findBranchOrders({ locationId: 'loc-2' }, seller()),
+    ).rejects.toThrow(
+      new ForbiddenException('BRANCH_ORDERS_LOCATION_FORBIDDEN'),
+    );
 
     expect(prisma.sale.findMany).not.toHaveBeenCalled();
   });
@@ -1222,11 +1881,15 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    await expect(service.create(
-      validCashSale({ cashShiftId: undefined }),
-      seller(),
-      'idem-no-cash-shift',
-    )).rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }) });
+    await expect(
+      service.create(
+        validCashSale({ cashShiftId: undefined }),
+        seller(),
+        'idem-no-cash-shift',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }),
+    });
 
     expect(prisma.sale.create).not.toHaveBeenCalled();
     expect(prisma.payment.create).not.toHaveBeenCalled();
@@ -1248,8 +1911,11 @@ describe('SalesService', () => {
       pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
 
-    await expect(service.create(validCashSale(), seller(), 'idem-closed-cash-shift'))
-      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_NOT_OPEN' }) });
+    await expect(
+      service.create(validCashSale(), seller(), 'idem-closed-cash-shift'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CASH_SHIFT_NOT_OPEN' }),
+    });
 
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
@@ -1258,14 +1924,24 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.cashShift.findUnique.mockResolvedValue({
-      id: 'shift-1', terminalId: 'terminal-1', pointOfSaleDailyCloseId: 'close-1', operationalLocationId: 'loc-1',
-      cashierUserId: 'seller-2', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      id: 'shift-1',
+      terminalId: 'terminal-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      operationalLocationId: 'loc-1',
+      cashierUserId: 'seller-2',
+      businessDate: new Date('2026-06-21T00:00:00.000Z'),
+      status: 'OPEN',
       terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
       pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
 
-    await expect(service.create(validCashSale(), seller(), 'idem-other-cashier'))
-      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_SHIFT_CASHIER_MISMATCH' }) });
+    await expect(
+      service.create(validCashSale(), seller(), 'idem-other-cashier'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CASH_SHIFT_CASHIER_MISMATCH',
+      }),
+    });
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
 
@@ -1273,8 +1949,17 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    await expect(service.create(validCashSale({ deviceId: 'unregistered-device' }), seller(), 'idem-device-mismatch'))
-      .rejects.toMatchObject({ response: expect.objectContaining({ code: 'CASH_TERMINAL_DEVICE_MISMATCH' }) });
+    await expect(
+      service.create(
+        validCashSale({ deviceId: 'unregistered-device' }),
+        seller(),
+        'idem-device-mismatch',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CASH_TERMINAL_DEVICE_MISMATCH',
+      }),
+    });
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
 
@@ -1297,9 +1982,11 @@ describe('SalesService', () => {
         'idem-server-paid-at',
       );
 
-      expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ paidAt: serverPaidAt }),
-      }));
+      expect(prisma.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ paidAt: serverPaidAt }),
+        }),
+      );
     } finally {
       jest.useRealTimers();
     }
@@ -1309,8 +1996,13 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.cashShift.findUnique.mockResolvedValue({
-      id: 'shift-1', terminalId: 'terminal-1', pointOfSaleDailyCloseId: 'close-1', operationalLocationId: 'loc-1',
-      cashierUserId: 'admin-1', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      id: 'shift-1',
+      terminalId: 'terminal-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      operationalLocationId: 'loc-1',
+      cashierUserId: 'admin-1',
+      businessDate: new Date('2026-06-21T00:00:00.000Z'),
+      status: 'OPEN',
       terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
       pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
@@ -1321,11 +2013,13 @@ describe('SalesService', () => {
       'idem-admin-costs',
     );
 
-    expect(result.sale.items[0]).toEqual(expect.objectContaining({
-      unitCostSnapshot: '62.5',
-      costSubtotalSnapshot: '156.25',
-      costSnapshotSource: 'SALE_CONFIRMATION',
-    }));
+    expect(result.sale.items[0]).toEqual(
+      expect.objectContaining({
+        unitCostSnapshot: '62.5',
+        costSubtotalSnapshot: '156.25',
+        costSnapshotSource: 'SALE_CONFIRMATION',
+      }),
+    );
   });
 
   it('persists one payment per split payment item and settles the sale using their combined amount', async () => {
@@ -1337,8 +2031,18 @@ describe('SalesService', () => {
         initialPayment: undefined,
         payments: [
           { amount: 100, paymentMethod: PaymentMethod.CASH },
-          { amount: 100, paymentMethod: PaymentMethod.TRANSFER, bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' },
-          { amount: 50, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' },
+          {
+            amount: 100,
+            paymentMethod: PaymentMethod.TRANSFER,
+            bankName: 'Banco Norte',
+            referenceNumber: 'TRANSFER-001',
+          },
+          {
+            amount: 50,
+            paymentMethod: PaymentMethod.CARD,
+            referenceNumber: 'AUTH-123',
+            cardLastFour: '4242',
+          },
         ],
       }),
       seller(),
@@ -1346,25 +2050,73 @@ describe('SalesService', () => {
     );
 
     expect(prisma.payment.create).toHaveBeenCalledTimes(3);
-    expect(prisma.payment.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: expect.objectContaining({ saleId: 'sale-1', amount: 100, paymentMethod: PaymentMethod.CASH }) }));
-    expect(prisma.payment.create).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: expect.objectContaining({ saleId: 'sale-1', amount: 100, paymentMethod: PaymentMethod.TRANSFER, bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' }) }));
-    expect(prisma.payment.create).toHaveBeenNthCalledWith(3, expect.objectContaining({ data: expect.objectContaining({ saleId: 'sale-1', amount: 50, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' }) }));
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          saleId: 'sale-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+        }),
+      }),
+    );
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          saleId: 'sale-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.TRANSFER,
+          bankName: 'Banco Norte',
+          referenceNumber: 'TRANSFER-001',
+        }),
+      }),
+    );
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          saleId: 'sale-1',
+          amount: 50,
+          paymentMethod: PaymentMethod.CARD,
+          referenceNumber: 'AUTH-123',
+          cardLastFour: '4242',
+        }),
+      }),
+    );
     expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
-    expect(result).toEqual(expect.objectContaining({
-      payments: [
-        expect.objectContaining({ amount: '100', paymentMethod: PaymentMethod.CASH }),
-        expect.objectContaining({ amount: '100', paymentMethod: PaymentMethod.TRANSFER }),
-        expect.objectContaining({ amount: '50', paymentMethod: PaymentMethod.CARD }),
-      ],
-    }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        payments: [
+          expect.objectContaining({
+            amount: '100',
+            paymentMethod: PaymentMethod.CASH,
+          }),
+          expect.objectContaining({
+            amount: '100',
+            paymentMethod: PaymentMethod.TRANSFER,
+          }),
+          expect.objectContaining({
+            amount: '50',
+            paymentMethod: PaymentMethod.CARD,
+          }),
+        ],
+      }),
+    );
   });
 
   it('persists cash tendered and calculated change without creating an additional payment or inventory record', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1', name: 'Chicken breast', sku: 'PCH-001', unit: ProductUnit.KG,
-      salePrice: decimal('75'), purchaseCost: decimal('62.50'), isActive: true, unitEquivalents: [],
+      id: 'product-1',
+      name: 'Chicken breast',
+      sku: 'PCH-001',
+      unit: ProductUnit.KG,
+      salePrice: decimal('75'),
+      purchaseCost: decimal('62.50'),
+      isActive: true,
+      unitEquivalents: [],
     });
 
     const result = await service.create(
@@ -1380,18 +2132,28 @@ describe('SalesService', () => {
     );
 
     expect(prisma.payment.create).toHaveBeenCalledTimes(1);
-    expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        amount: 187.5,
-        paymentMethod: PaymentMethod.CASH,
-        cashTendered: 200,
-        changeGiven: 12.5,
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 187.5,
+          paymentMethod: PaymentMethod.CASH,
+          cashTendered: 200,
+          changeGiven: 12.5,
+        }),
       }),
-    }));
+    );
     expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(expect.objectContaining({
-      payments: [expect.objectContaining({ amount: '187.5', cashTendered: '200', changeGiven: '12.5' })],
-    }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        payments: [
+          expect.objectContaining({
+            amount: '187.5',
+            cashTendered: '200',
+            changeGiven: '12.5',
+          }),
+        ],
+      }),
+    );
   });
 
   it('preserves the accounting sum of split payment amounts while storing tender evidence only on cash', async () => {
@@ -1402,58 +2164,105 @@ describe('SalesService', () => {
       validCashSale({
         initialPayment: undefined,
         payments: [
-          { amount: 100, paymentMethod: PaymentMethod.CASH, cashTendered: 120 } as never,
-          { amount: 150, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' },
+          {
+            amount: 100,
+            paymentMethod: PaymentMethod.CASH,
+            cashTendered: 120,
+          } as never,
+          {
+            amount: 150,
+            paymentMethod: PaymentMethod.CARD,
+            referenceNumber: 'AUTH-123',
+            cardLastFour: '4242',
+          },
         ],
       }),
       seller(),
       'idem-split-cash-tendered',
     );
 
-    expect(prisma.sale.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ total: 250, collectionStatus: CollectionStatus.PAID }),
-    }));
-    expect(prisma.payment.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      data: expect.objectContaining({ amount: 100, cashTendered: 120, changeGiven: 20 }),
-    }));
-    expect(prisma.payment.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      data: expect.objectContaining({ amount: 150, cashTendered: null, changeGiven: null }),
-    }));
+    expect(prisma.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          total: 250,
+          collectionStatus: CollectionStatus.PAID,
+        }),
+      }),
+    );
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 100,
+          cashTendered: 120,
+          changeGiven: 20,
+        }),
+      }),
+    );
+    expect(prisma.payment.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 150,
+          cashTendered: null,
+          changeGiven: null,
+        }),
+      }),
+    );
   });
 
   it.each([
-    ['less than the applied amount', { amount: 250, paymentMethod: PaymentMethod.CASH, cashTendered: 249 }],
-    ['on a non-cash payment', { amount: 250, paymentMethod: PaymentMethod.CARD, cashTendered: 250, referenceNumber: 'AUTH-123', cardLastFour: '4242' }],
-  ])('rejects cash tendered %s before inventory, sale, or payment persistence', async (_case, payment) => {
-    const { service, prisma } = createService();
-    mockHappyPath(prisma);
+    [
+      'less than the applied amount',
+      { amount: 250, paymentMethod: PaymentMethod.CASH, cashTendered: 249 },
+    ],
+    [
+      'on a non-cash payment',
+      {
+        amount: 250,
+        paymentMethod: PaymentMethod.CARD,
+        cashTendered: 250,
+        referenceNumber: 'AUTH-123',
+        cardLastFour: '4242',
+      },
+    ],
+  ])(
+    'rejects cash tendered %s before inventory, sale, or payment persistence',
+    async (_case, payment) => {
+      const { service, prisma } = createService();
+      mockHappyPath(prisma);
 
-    await expect(service.create(
-      validCashSale({ initialPayment: payment as never }),
-      seller(),
-      `idem-invalid-cash-tendered-${_case}`,
-    )).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.create(
+          validCashSale({ initialPayment: payment as never }),
+          seller(),
+          `idem-invalid-cash-tendered-${_case}`,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
-    expect(prisma.sale.create).not.toHaveBeenCalled();
-    expect(prisma.payment.create).not.toHaveBeenCalled();
-  });
+      expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+      expect(prisma.sale.create).not.toHaveBeenCalled();
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects split payments whose combined amount exceeds the backend sale total before inventory is affected', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    await expect(service.create(
-      validCashSale({
-        initialPayment: undefined,
-        payments: [
-          { amount: 200, paymentMethod: PaymentMethod.CASH },
-          { amount: 100, paymentMethod: PaymentMethod.CASH },
-        ],
-      }),
-      seller(),
-      'idem-split-payment-excess',
-    )).rejects.toThrow('Payment total cannot exceed sale total');
+    await expect(
+      service.create(
+        validCashSale({
+          initialPayment: undefined,
+          payments: [
+            { amount: 200, paymentMethod: PaymentMethod.CASH },
+            { amount: 100, paymentMethod: PaymentMethod.CASH },
+          ],
+        }),
+        seller(),
+        'idem-split-payment-excess',
+      ),
+    ).rejects.toThrow('Payment total cannot exceed sale total');
 
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -1464,17 +2273,26 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    await expect(service.create(
-      validCashSale({ initialPayment: undefined, payments: [{ amount: 0, paymentMethod: PaymentMethod.CASH }] }),
-      seller(),
-      'idem-split-payment-zero',
-    )).rejects.toThrow('Each payment amount must be greater than zero');
+    await expect(
+      service.create(
+        validCashSale({
+          initialPayment: undefined,
+          payments: [{ amount: 0, paymentMethod: PaymentMethod.CASH }],
+        }),
+        seller(),
+        'idem-split-payment-zero',
+      ),
+    ).rejects.toThrow('Each payment amount must be greater than zero');
 
-    await expect(service.create(
-      validCashSale({ payments: [{ amount: 250, paymentMethod: PaymentMethod.CASH }] }),
-      seller(),
-      'idem-split-payment-mixed-contract',
-    )).rejects.toThrow('payments and initialPayment cannot be sent together');
+    await expect(
+      service.create(
+        validCashSale({
+          payments: [{ amount: 250, paymentMethod: PaymentMethod.CASH }],
+        }),
+        seller(),
+        'idem-split-payment-mixed-contract',
+      ),
+    ).rejects.toThrow('payments and initialPayment cannot be sent together');
 
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -1493,7 +2311,9 @@ describe('SalesService', () => {
 
     expect(prisma.saleDocument.create).toHaveBeenCalledTimes(1);
     expect(result.documents).toEqual([
-      expect.objectContaining({ documentType: SaleDocumentType.INTERNAL_RECEIPT }),
+      expect.objectContaining({
+        documentType: SaleDocumentType.INTERNAL_RECEIPT,
+      }),
     ]);
   });
 
@@ -1502,15 +2322,14 @@ describe('SalesService', () => {
     mockHappyPath(prisma);
     prisma.legalEntityOperationalLocation.findFirst.mockResolvedValue(null);
 
-    await service.create(
-      validCashSale(),
-      seller(),
-      'idem-missing-issuer',
-    );
+    await service.create(validCashSale(), seller(), 'idem-missing-issuer');
 
     expect(prisma.sale.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ legalEntityId: null, currencyCode: 'MXN' }),
+        data: expect.objectContaining({
+          legalEntityId: null,
+          currencyCode: 'MXN',
+        }),
       }),
     );
     expect(prisma.billingDataRemediation.upsert).toHaveBeenCalledWith(
@@ -1528,21 +2347,42 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.customer.findUnique.mockResolvedValue({
-      id: 'customer-1', name: 'Cliente Uno', isActive: true, creditStatus: CreditStatus.ACTIVE,
-      creditLimit: decimal('1000'), creditDays: 15, commercialPolicyId: null,
+      id: 'customer-1',
+      name: 'Cliente Uno',
+      isActive: true,
+      creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'),
+      creditDays: 15,
+      commercialPolicyId: null,
     });
 
-    const result = await service.create(validCashSale({
-      customerId: 'customer-1',
-      requiresAdministrativeInvoice: true,
-      billingRequest: { reason: 'Cliente solicita seguimiento', notes: 'Enviar a administración' },
-    }), seller(), 'idem-billing-sale');
+    const result = await service.create(
+      validCashSale({
+        customerId: 'customer-1',
+        requiresAdministrativeInvoice: true,
+        billingRequest: {
+          reason: 'Cliente solicita seguimiento',
+          notes: 'Enviar a administración',
+        },
+      }),
+      seller(),
+      'idem-billing-sale',
+    );
 
     expect(prisma.billingRequest.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        saleId: 'sale-1', customerId: 'customer-1', requestedByUserId: 'seller-1',
-        status: 'REQUESTED', reason: 'Cliente solicita seguimiento', notes: 'Enviar a administración',
-        history: { create: expect.objectContaining({ toStatus: 'REQUESTED', changedByUserId: 'seller-1' }) },
+        saleId: 'sale-1',
+        customerId: 'customer-1',
+        requestedByUserId: 'seller-1',
+        status: 'REQUESTED',
+        reason: 'Cliente solicita seguimiento',
+        notes: 'Enviar a administración',
+        history: {
+          create: expect.objectContaining({
+            toStatus: 'REQUESTED',
+            changedByUserId: 'seller-1',
+          }),
+        },
       }),
     });
     expect(prisma.billingRequestSaleDocument.create).toHaveBeenCalledWith({
@@ -1555,15 +2395,41 @@ describe('SalesService', () => {
         createdByUserId: 'seller-1',
       }),
     });
-    expect(result.billingRequest).toEqual(expect.objectContaining({ id: 'billing-1', status: 'REQUESTED' }));
+    expect(result.billingRequest).toEqual(
+      expect.objectContaining({ id: 'billing-1', status: 'REQUESTED' }),
+    );
   });
 
   it('requires a customer and billing reason when administrative invoicing is requested', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    await expect(service.create(validCashSale({ requiresAdministrativeInvoice: true, billingRequest: { reason: 'Razón' } }), seller(), 'idem-no-customer')).rejects.toBeInstanceOf(BadRequestException);
-    prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE, creditLimit: decimal('1000'), creditDays: 15 });
-    await expect(service.create(validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true }), seller(), 'idem-no-reason')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create(
+        validCashSale({
+          requiresAdministrativeInvoice: true,
+          billingRequest: { reason: 'Razón' },
+        }),
+        seller(),
+        'idem-no-customer',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+      isActive: true,
+      creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'),
+      creditDays: 15,
+    });
+    await expect(
+      service.create(
+        validCashSale({
+          customerId: 'customer-1',
+          requiresAdministrativeInvoice: true,
+        }),
+        seller(),
+        'idem-no-reason',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('creates a credit sale with an account receivable for the outstanding backend total', async () => {
@@ -1594,7 +2460,11 @@ describe('SalesService', () => {
       'idem-sale-credit',
     );
 
-    expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ amount: 50 }) }));
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ amount: 50 }),
+      }),
+    );
     expect(prisma.accountReceivable.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -1608,13 +2478,46 @@ describe('SalesService', () => {
         }),
       }),
     );
-    expect(result.accountReceivable).toEqual(expect.objectContaining({ outstandingAmount: '200' }));
+    expect(result.accountReceivable).toEqual(
+      expect.objectContaining({ outstandingAmount: '200' }),
+    );
   });
 
   it.each([
     ['no payment', undefined],
     ['partial payment', { amount: 100, paymentMethod: PaymentMethod.CASH }],
-  ])('rejects a cash sale with an active customer when it is %s', async (_caseName, initialPayment) => {
+  ])(
+    'rejects a cash sale with an active customer when it is %s',
+    async (_caseName, initialPayment) => {
+      const { service, prisma } = createService();
+      mockHappyPath(prisma);
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        isActive: true,
+        creditStatus: CreditStatus.ACTIVE,
+        creditLimit: decimal('1000'),
+        creditDays: 15,
+      });
+
+      await expect(
+        service.create(
+          validCashSale({ customerId: 'customer-1', initialPayment }),
+          seller(),
+          `idem-cash-not-fully-paid-${_caseName.replace(' ', '-')}`,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'CASH_SALE_REQUIRES_FULL_PAYMENT',
+        }),
+      });
+
+      expect(prisma.sale.create).not.toHaveBeenCalled();
+      expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('persists the evaluated credit decision snapshot and returns policy warnings', async () => {
+    jest.useFakeTimers().setSystemTime(now);
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.customer.findUnique.mockResolvedValue({
@@ -1623,52 +2526,56 @@ describe('SalesService', () => {
       creditStatus: CreditStatus.ACTIVE,
       creditLimit: decimal('1000'),
       creditDays: 15,
-    });
-
-    await expect(
-      service.create(
-        validCashSale({ customerId: 'customer-1', initialPayment }),
-        seller(),
-        `idem-cash-not-fully-paid-${_caseName.replace(' ', '-')}`,
-      ),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'CASH_SALE_REQUIRES_FULL_PAYMENT' }),
-    });
-
-    expect(prisma.sale.create).not.toHaveBeenCalled();
-    expect(prisma.accountReceivable.create).not.toHaveBeenCalled();
-  });
-
-  it('persists the evaluated credit decision snapshot and returns policy warnings', async () => {
-    jest.useFakeTimers().setSystemTime(now);
-    const { service, prisma } = createService();
-    mockHappyPath(prisma);
-    prisma.customer.findUnique.mockResolvedValue({
-      id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE,
-      creditLimit: decimal('1000'), creditDays: 15, commercialPolicyId: 'policy-1',
+      commercialPolicyId: 'policy-1',
     });
     prisma.commercialPolicy.findFirst.mockResolvedValue({
-      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'WARN_ONLY', allowAdministrativeOverride: false,
+      id: 'policy-1',
+      isActive: true,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      overdueBlockingMode: 'WARN_ONLY',
+      allowAdministrativeOverride: false,
     });
     prisma.accountReceivable.findMany.mockResolvedValue([
-      { dueDate: new Date('2026-06-19T06:00:00Z'), outstandingAmount: decimal('100'), status: CollectionStatus.UNPAID },
+      {
+        dueDate: new Date('2026-06-19T06:00:00Z'),
+        outstandingAmount: decimal('100'),
+        status: CollectionStatus.UNPAID,
+      },
     ]);
 
     const result = await service.create(
-      validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
+      validCashSale({
+        customerId: 'customer-1',
+        paymentType: SalePaymentType.CREDIT_SALE,
+        initialPayment: undefined,
+      }),
       seller(),
       'idem-credit-warning',
     );
 
-    expect(prisma.sale.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-      creditDecisionSnapshot: expect.objectContaining({
-        policyId: 'policy-1', overdueBlockingMode: 'WARN_ONLY', overdueAmount: 100,
-        maximumDaysOverdue: 2, projectedExposure: 350, creditLimit: 1000,
-        outcome: 'WARNING', warnings: ['CREDIT_OVERDUE_WARNING'], overrideActorId: null, overrideReason: null,
+    expect(prisma.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          creditDecisionSnapshot: expect.objectContaining({
+            policyId: 'policy-1',
+            overdueBlockingMode: 'WARN_ONLY',
+            overdueAmount: 100,
+            maximumDaysOverdue: 2,
+            projectedExposure: 350,
+            creditLimit: 1000,
+            outcome: 'WARNING',
+            warnings: ['CREDIT_OVERDUE_WARNING'],
+            overrideActorId: null,
+            overrideReason: null,
+          }),
+          creditDecisionEvaluatedAt: now,
+        }),
       }),
-      creditDecisionEvaluatedAt: now,
-    }) }));
-    expect(result.sale).toEqual(expect.objectContaining({ creditWarnings: ['CREDIT_OVERDUE_WARNING'] }));
+    );
+    expect(result.sale).toEqual(
+      expect.objectContaining({ creditWarnings: ['CREDIT_OVERDUE_WARNING'] }),
+    );
     jest.useRealTimers();
   });
 
@@ -1677,24 +2584,42 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.customer.findUnique.mockResolvedValue({
-      id: 'customer-1', isActive: true, creditStatus: CreditStatus.ACTIVE,
-      creditLimit: decimal('1000'), creditDays: 15, commercialPolicyId: 'policy-1',
+      id: 'customer-1',
+      isActive: true,
+      creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'),
+      creditDays: 15,
+      commercialPolicyId: 'policy-1',
     });
     prisma.commercialPolicy.findFirst.mockResolvedValue(null);
     prisma.accountReceivable.findMany.mockResolvedValue([
-      { dueDate: new Date('2026-06-19T06:00:00Z'), outstandingAmount: decimal('100'), status: CollectionStatus.UNPAID },
+      {
+        dueDate: new Date('2026-06-19T06:00:00Z'),
+        outstandingAmount: decimal('100'),
+        status: CollectionStatus.UNPAID,
+      },
     ]);
 
     const result = await service.create(
-      validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
+      validCashSale({
+        customerId: 'customer-1',
+        paymentType: SalePaymentType.CREDIT_SALE,
+        initialPayment: undefined,
+      }),
       seller(),
       'idem-null-effective-from',
     );
 
-    expect(result.sale).toEqual(expect.objectContaining({
-      creditDecisionSnapshot: expect.objectContaining({ policyId: null, overdueBlockingMode: null, outcome: 'PERMITTED' }),
-      creditWarnings: [],
-    }));
+    expect(result.sale).toEqual(
+      expect.objectContaining({
+        creditDecisionSnapshot: expect.objectContaining({
+          policyId: null,
+          overdueBlockingMode: null,
+          outcome: 'PERMITTED',
+        }),
+        creditWarnings: [],
+      }),
+    );
     jest.useRealTimers();
   });
 
@@ -1712,14 +2637,36 @@ describe('SalesService', () => {
   it('rejects override intent before non-applicable sale evaluation with stable codes', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    await expect(service.create(validCashSale({ administrativeOverrideReason: '   ' }), { id: 'admin-1', role: 'ADMIN' }, 'blank')).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_REASON_REQUIRED' }),
+    await expect(
+      service.create(
+        validCashSale({ administrativeOverrideReason: '   ' }),
+        { id: 'admin-1', role: 'ADMIN' },
+        'blank',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CREDIT_OVERRIDE_REASON_REQUIRED',
+      }),
     });
-    await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), seller(), 'seller')).rejects.toMatchObject({
+    await expect(
+      service.create(
+        validCashSale({ administrativeOverrideReason: 'Requested' }),
+        seller(),
+        'seller',
+      ),
+    ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_FORBIDDEN' }),
     });
-    await expect(service.create(validCashSale({ administrativeOverrideReason: 'Requested' }), { id: 'admin-1', role: 'ADMIN' }, 'cash')).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'CREDIT_OVERRIDE_NOT_APPLICABLE' }),
+    await expect(
+      service.create(
+        validCashSale({ administrativeOverrideReason: 'Requested' }),
+        { id: 'admin-1', role: 'ADMIN' },
+        'cash',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CREDIT_OVERRIDE_NOT_APPLICABLE',
+      }),
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -1731,13 +2678,19 @@ describe('SalesService', () => {
       .mockRejectedValueOnce({ code: 'P2034' })
       .mockRejectedValueOnce({ code: 'P2034' })
       .mockImplementationOnce(async (callback) => callback(first.prisma));
-    await expect(first.service.create(validCashSale(), seller(), 'retry-success')).resolves.toBeDefined();
+    await expect(
+      first.service.create(validCashSale(), seller(), 'retry-success'),
+    ).resolves.toBeDefined();
     expect(first.prisma.$transaction).toHaveBeenCalledTimes(3);
 
     const exhausted = createService();
     exhausted.prisma.$transaction.mockRejectedValue({ code: 'P2034' });
-    await expect(exhausted.service.create(validCashSale(), seller(), 'retry-fail')).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED' }),
+    await expect(
+      exhausted.service.create(validCashSale(), seller(), 'retry-fail'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CREDIT_CONCURRENCY_RETRY_EXHAUSTED',
+      }),
     });
     expect(exhausted.prisma.$transaction).toHaveBeenCalledTimes(3);
   });
@@ -1747,7 +2700,11 @@ describe('SalesService', () => {
     mockHappyPath(prisma);
     prisma.$queryRawUnsafe.mockResolvedValue([{ value: 42 }]);
 
-    const result = await service.create(validCashSale(), seller(), 'sequence-sale');
+    const result = await service.create(
+      validCashSale(),
+      seller(),
+      'sequence-sale',
+    );
 
     expect(result.sale.saleNumber).toBe('SALE-000042');
     expect(prisma.$queryRawUnsafe).toHaveBeenCalledWith(
@@ -1759,10 +2716,15 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.$transaction
-      .mockRejectedValueOnce({ code: 'P2002', meta: { target: ['saleNumber'] } })
+      .mockRejectedValueOnce({
+        code: 'P2002',
+        meta: { target: ['saleNumber'] },
+      })
       .mockImplementationOnce(async (callback) => callback(prisma));
 
-    await expect(service.create(validCashSale(), seller(), 'sequence-retry')).resolves.toBeDefined();
+    await expect(
+      service.create(validCashSale(), seller(), 'sequence-retry'),
+    ).resolves.toBeDefined();
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
@@ -1792,12 +2754,21 @@ describe('SalesService', () => {
       commercialPolicyId: 'policy-1',
     });
     prisma.commercialPolicy.findFirst.mockResolvedValue({
-      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
+      id: 'policy-1',
+      isActive: true,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      overdueBlockingMode: 'BLOCK_NEW_CREDIT',
+      allowAdministrativeOverride: true,
     });
 
     await expect(
       service.create(
-        validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
+        validCashSale({
+          customerId: 'customer-1',
+          paymentType: SalePaymentType.CREDIT_SALE,
+          initialPayment: undefined,
+        }),
         seller(),
         'idem-blocked',
       ),
@@ -1812,20 +2783,29 @@ describe('SalesService', () => {
       commercialPolicyId: 'policy-1',
     });
     prisma.commercialPolicy.findFirst.mockResolvedValue({
-      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
+      id: 'policy-1',
+      isActive: true,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      overdueBlockingMode: 'BLOCK_NEW_CREDIT',
+      allowAdministrativeOverride: true,
     });
-    prisma.accountReceivable.aggregate.mockResolvedValueOnce({ _sum: { outstandingAmount: decimal('0') } });
+    prisma.accountReceivable.aggregate.mockResolvedValueOnce({
+      _sum: { outstandingAmount: decimal('0') },
+    });
 
     await expect(
       service.create(
-        validCashSale({ customerId: 'customer-1', paymentType: SalePaymentType.CREDIT_SALE, initialPayment: undefined }),
+        validCashSale({
+          customerId: 'customer-1',
+          paymentType: SalePaymentType.CREDIT_SALE,
+          initialPayment: undefined,
+        }),
         seller(),
         'idem-limit',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
-
-
 
   it('replays an idempotent sale request without creating another sale or discounting stock again', async () => {
     const salesRealtime = { publishCreated: jest.fn() };
@@ -1843,7 +2823,14 @@ describe('SalesService', () => {
       locationId: 'loc-1',
       idempotencyPayloadHash: hashPayload(dto),
       items: [],
-      payments: [{ id: 'payment-1', amount: decimal('250'), saleId: 'sale-1', accountReceivableId: null }],
+      payments: [
+        {
+          id: 'payment-1',
+          amount: decimal('250'),
+          saleId: 'sale-1',
+          accountReceivableId: null,
+        },
+      ],
       accountReceivable: null,
       inventoryMovements: [],
     };
@@ -1861,11 +2848,21 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     const dto = validCashSale();
     prisma.sale.findUnique.mockResolvedValue({
-      id: 'sale-1', userId: 'seller-2', locationId: 'loc-1', idempotencyPayloadHash: hashPayload(dto),
-      items: [], payments: [], accountReceivable: null, billingRequests: [], inventoryMovements: [], documents: [],
+      id: 'sale-1',
+      userId: 'seller-2',
+      locationId: 'loc-1',
+      idempotencyPayloadHash: hashPayload(dto),
+      items: [],
+      payments: [],
+      accountReceivable: null,
+      billingRequests: [],
+      inventoryMovements: [],
+      documents: [],
     });
 
-    await expect(service.create(dto, seller(), 'idem-sale-1')).rejects.toThrow(new ForbiddenException('SALE_NOT_AUTHORIZED'));
+    await expect(service.create(dto, seller(), 'idem-sale-1')).rejects.toThrow(
+      new ForbiddenException('SALE_NOT_AUTHORIZED'),
+    );
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
 
@@ -1873,11 +2870,18 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
 
-    await expect(service.create(
-      validCashSale({ initialPayment: { amount: 250, paymentMethod: PaymentMethod.TRANSFER } }),
-      seller(),
-      'idem-transfer-without-evidence',
-    )).rejects.toThrow('Bank name and reference number are required');
+    await expect(
+      service.create(
+        validCashSale({
+          initialPayment: {
+            amount: 250,
+            paymentMethod: PaymentMethod.TRANSFER,
+          },
+        }),
+        seller(),
+        'idem-transfer-without-evidence',
+      ),
+    ).rejects.toThrow('Bank name and reference number are required');
 
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
@@ -1887,28 +2891,61 @@ describe('SalesService', () => {
     mockHappyPath(prisma);
 
     await service.create(
-      validCashSale({ initialPayment: { amount: 250, paymentMethod: PaymentMethod.CARD, referenceNumber: 'AUTH-123', cardLastFour: '4242' } }),
+      validCashSale({
+        initialPayment: {
+          amount: 250,
+          paymentMethod: PaymentMethod.CARD,
+          referenceNumber: 'AUTH-123',
+          cardLastFour: '4242',
+        },
+      }),
       seller(),
       'idem-card-evidence',
     );
 
-    expect(prisma.payment.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ referenceNumber: 'AUTH-123', cardLastFour: '4242', bankName: null }),
-    }));
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          referenceNumber: 'AUTH-123',
+          cardLastFour: '4242',
+          bankName: null,
+        }),
+      }),
+    );
   });
 
   it('replays the administrative request created by an idempotent sale without duplicating it', async () => {
     const { service, prisma } = createService();
-    const dto = validCashSale({ customerId: 'customer-1', requiresAdministrativeInvoice: true, billingRequest: { reason: 'Seguimiento' } });
+    const dto = validCashSale({
+      customerId: 'customer-1',
+      requiresAdministrativeInvoice: true,
+      billingRequest: { reason: 'Seguimiento' },
+    });
     prisma.sale.findUnique.mockResolvedValue({
-      id: 'sale-1', saleNumber: 'SALE-000001', subtotal: decimal('250'), discount: decimal('0'), tax: decimal('0'), total: decimal('250'),
-      paymentType: SalePaymentType.CASH_SALE, userId: 'seller-1', locationId: 'loc-1', idempotencyPayloadHash: hashPayload(dto), items: [], payments: [], accountReceivable: null,
-      billingRequest: { id: 'billing-1', status: 'REQUESTED' }, inventoryMovements: [], documents: [],
+      id: 'sale-1',
+      saleNumber: 'SALE-000001',
+      subtotal: decimal('250'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      total: decimal('250'),
+      paymentType: SalePaymentType.CASH_SALE,
+      userId: 'seller-1',
+      locationId: 'loc-1',
+      idempotencyPayloadHash: hashPayload(dto),
+      items: [],
+      payments: [],
+      accountReceivable: null,
+      billingRequest: { id: 'billing-1', status: 'REQUESTED' },
+      inventoryMovements: [],
+      documents: [],
     });
 
     const result = await service.create(dto, seller(), 'idem-billing-sale');
 
-    expect(result.billingRequest).toEqual({ id: 'billing-1', status: 'REQUESTED' });
+    expect(result.billingRequest).toEqual({
+      id: 'billing-1',
+      status: 'REQUESTED',
+    });
     expect(prisma.billingRequest.create).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
@@ -1925,12 +2962,24 @@ describe('SalesService', () => {
       commercialPolicyId: 'policy-1',
     });
     prisma.commercialPolicy.findFirst.mockResolvedValue({
-      id: 'policy-1', isActive: true, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, overdueBlockingMode: 'BLOCK_NEW_CREDIT', allowAdministrativeOverride: true,
+      id: 'policy-1',
+      isActive: true,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      overdueBlockingMode: 'BLOCK_NEW_CREDIT',
+      allowAdministrativeOverride: true,
     });
-    prisma.accountReceivable.aggregate.mockResolvedValue({ _sum: { outstandingAmount: decimal('0') } });
+    prisma.accountReceivable.aggregate.mockResolvedValue({
+      _sum: { outstandingAmount: decimal('0') },
+    });
     prisma.cashShift.findUnique.mockResolvedValue({
-      id: 'shift-1', terminalId: 'terminal-1', pointOfSaleDailyCloseId: 'close-1', operationalLocationId: 'loc-1',
-      cashierUserId: 'admin-1', businessDate: new Date('2026-06-21T00:00:00.000Z'), status: 'OPEN',
+      id: 'shift-1',
+      terminalId: 'terminal-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      operationalLocationId: 'loc-1',
+      cashierUserId: 'admin-1',
+      businessDate: new Date('2026-06-21T00:00:00.000Z'),
+      status: 'OPEN',
       terminal: { id: 'terminal-1', deviceId: 'device-1', isActive: true },
       pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.DRAFT },
     });
@@ -1980,12 +3029,16 @@ describe('SalesService', () => {
       creditDays: 7,
     });
 
-    await expect(service.create(
-      validCashSale({ customerId: 'customer-1', initialPayment: undefined }),
-      seller(),
-      'idem-contraentrega',
-    )).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'CASH_SALE_REQUIRES_FULL_PAYMENT' }),
+    await expect(
+      service.create(
+        validCashSale({ customerId: 'customer-1', initialPayment: undefined }),
+        seller(),
+        'idem-contraentrega',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CASH_SALE_REQUIRES_FULL_PAYMENT',
+      }),
     });
 
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -2025,8 +3078,20 @@ describe('SalesService', () => {
 
     await service.create(
       validCashSale({
-        initialPayment: { amount: 300, paymentMethod: PaymentMethod.CASH, paidAt: now.toISOString() },
-        items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 1.25, quantityPieces: 2, unitEquivalentId: 'eq-1' }],
+        initialPayment: {
+          amount: 300,
+          paymentMethod: PaymentMethod.CASH,
+          paidAt: now.toISOString(),
+        },
+        items: [
+          {
+            productId: 'product-1',
+            unit: ProductUnit.KG_AND_PIECE,
+            quantityKg: 1.25,
+            quantityPieces: 2,
+            unitEquivalentId: 'eq-1',
+          },
+        ],
       }),
       seller(),
       'idem-eq',
@@ -2073,15 +3138,37 @@ describe('SalesService', () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
     prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1', name: 'Whole chicken', sku: 'CHK-001', unit: ProductUnit.KG_AND_PIECE,
-      salePrice: decimal('80'), purchaseCost: decimal('50'), isActive: true, unitEquivalents: [],
+      id: 'product-1',
+      name: 'Whole chicken',
+      sku: 'CHK-001',
+      unit: ProductUnit.KG_AND_PIECE,
+      salePrice: decimal('80'),
+      purchaseCost: decimal('50'),
+      isActive: true,
+      unitEquivalents: [],
     });
 
-    await expect(service.create(
-      validCashSale({ initialPayment: { amount: 160, paymentMethod: PaymentMethod.CASH }, items: [{ productId: 'product-1', unit: ProductUnit.KG_AND_PIECE, quantityKg: 2, quantityPieces: 0 }] }),
-      seller(),
-      'idem-kg-only',
-    )).resolves.toEqual(expect.objectContaining({ sale: expect.objectContaining({ id: 'sale-1' }) }));
+    await expect(
+      service.create(
+        validCashSale({
+          initialPayment: { amount: 160, paymentMethod: PaymentMethod.CASH },
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG_AND_PIECE,
+              quantityKg: 2,
+              quantityPieces: 0,
+            },
+          ],
+        }),
+        seller(),
+        'idem-kg-only',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        sale: expect.objectContaining({ id: 'sale-1' }),
+      }),
+    );
   });
 
   it('rejects a sale item whose requested unit does not match the configured product unit', async () => {
@@ -2091,7 +3178,14 @@ describe('SalesService', () => {
     await expect(
       service.create(
         validCashSale({
-          items: [{ productId: 'product-1', unit: ProductUnit.PIECE, quantityKg: 0, quantityPieces: 1 }],
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.PIECE,
+              quantityKg: 0,
+              quantityPieces: 1,
+            },
+          ],
         }),
         seller(),
         'idem-invalid-unit',
@@ -2129,7 +3223,15 @@ describe('SalesService', () => {
     await expect(
       service.create(
         validCashSale({
-          items: [{ productId: 'product-1', unit: ProductUnit.KG, quantityKg: 2.5, quantityPieces: 0, unitEquivalentId: 'eq-1' }],
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG,
+              quantityKg: 2.5,
+              quantityPieces: 0,
+              unitEquivalentId: 'eq-1',
+            },
+          ],
         }),
         seller(),
         'idem-unneeded-equivalence',
@@ -2145,13 +3247,21 @@ describe('SalesService', () => {
     prisma.sale.count.mockResolvedValue(0);
     prisma.operationalLocation.findUnique.mockResolvedValue(null);
 
-    await expect(service.create(validCashSale(), seller(), 'idem-missing-location')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.create(validCashSale(), seller(), 'idem-missing-location'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('previews an administrative void with payments, inventory, receivable, documents, and authorizer', async () => {
     const { service, prisma } = createService();
     const sale = voidSaleRecord({
-      payments: [{ ...voidSaleRecord().payments[0], amount: decimal('100'), accountReceivableId: 'ar-void-1' }],
+      payments: [
+        {
+          ...voidSaleRecord().payments[0],
+          amount: decimal('100'),
+          accountReceivableId: 'ar-void-1',
+        },
+      ],
       accountReceivable: {
         id: 'ar-void-1',
         originalAmount: decimal('250'),
@@ -2161,48 +3271,104 @@ describe('SalesService', () => {
       },
       paymentType: SalePaymentType.CREDIT_SALE,
       collectionStatus: CollectionStatus.PARTIALLY_PAID,
-      billingRequests: [{ id: 'billing-void-1', status: BillingRequestStatus.REQUESTED, version: 1, reason: 'Control interno', notes: null }],
+      billingRequests: [
+        {
+          id: 'billing-void-1',
+          status: BillingRequestStatus.REQUESTED,
+          version: 1,
+          reason: 'Control interno',
+          notes: null,
+        },
+      ],
     });
     prisma.sale.findFirst.mockResolvedValue(sale);
 
-    const result = await service.getVoidPreview('sale-void-1', { id: 'admin-1', name: 'Admin', role: 'ADMIN' });
+    const result = await service.getVoidPreview('sale-void-1', {
+      id: 'admin-1',
+      name: 'Admin',
+      role: 'ADMIN',
+    });
 
     expect(result.canExecute).toBe(true);
-    expect(result.authorization.authorizedBy).toEqual({ id: 'admin-1', name: 'Admin', role: 'ADMIN' });
-    expect(result.payments).toEqual([expect.objectContaining({ id: 'payment-void-1', amount: '100', version: 2 })]);
-    expect(result.inventory).toEqual([expect.objectContaining({ productName: 'Chicken breast', quantityKg: '2.5', locationId: 'loc-1' })]);
-    expect(result.accountReceivable).toEqual(expect.objectContaining({ id: 'ar-void-1', outstandingAmount: '150' }));
-    expect(result.documents).toEqual([expect.objectContaining({ id: 'document-void-1', willCancel: true })]);
-    expect(result.billingRequest).toEqual(expect.objectContaining({ id: 'billing-void-1', willCancel: true }));
+    expect(result.authorization.authorizedBy).toEqual({
+      id: 'admin-1',
+      name: 'Admin',
+      role: 'ADMIN',
+    });
+    expect(result.payments).toEqual([
+      expect.objectContaining({
+        id: 'payment-void-1',
+        amount: '100',
+        version: 2,
+      }),
+    ]);
+    expect(result.inventory).toEqual([
+      expect.objectContaining({
+        productName: 'Chicken breast',
+        quantityKg: '2.5',
+        locationId: 'loc-1',
+      }),
+    ]);
+    expect(result.accountReceivable).toEqual(
+      expect.objectContaining({ id: 'ar-void-1', outstandingAmount: '150' }),
+    );
+    expect(result.documents).toEqual([
+      expect.objectContaining({ id: 'document-void-1', willCancel: true }),
+    ]);
+    expect(result.billingRequest).toEqual(
+      expect.objectContaining({ id: 'billing-void-1', willCancel: true }),
+    );
   });
 
   it('previews a closed POS daily close as an explicit reopening blocker', async () => {
     const { service, prisma } = createService();
-    prisma.sale.findFirst.mockResolvedValue(voidSaleRecord({ pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.CLOSED } }));
+    prisma.sale.findFirst.mockResolvedValue(
+      voidSaleRecord({
+        pointOfSaleDailyClose: { status: PointOfSaleDailyCloseStatus.CLOSED },
+      }),
+    );
 
-    const result = await service.getVoidPreview('sale-void-1', { id: 'admin-1', role: 'ADMIN' });
+    const result = await service.getVoidPreview('sale-void-1', {
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
 
     expect(result.canExecute).toBe(false);
-    expect(result.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'DAILY_CLOSE_REOPEN_REQUIRED' }),
-    ]));
+    expect(result.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'DAILY_CLOSE_REOPEN_REQUIRED' }),
+      ]),
+    );
   });
 
   it('previews a closed route settlement as an explicit reopening blocker', async () => {
     const { service, prisma } = createService();
-    prisma.sale.findFirst.mockResolvedValue(voidSaleRecord({ route: { settlement: { status: RouteSettlementStatus.CLOSED } } }));
+    prisma.sale.findFirst.mockResolvedValue(
+      voidSaleRecord({
+        route: { settlement: { status: RouteSettlementStatus.CLOSED } },
+      }),
+    );
 
-    const result = await service.getVoidPreview('sale-void-1', { id: 'admin-1', role: 'ADMIN' });
+    const result = await service.getVoidPreview('sale-void-1', {
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
 
     expect(result.canExecute).toBe(false);
-    expect(result.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'ROUTE_SETTLEMENT_REOPEN_REQUIRED' }),
-    ]));
+    expect(result.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'ROUTE_SETTLEMENT_REOPEN_REQUIRED' }),
+      ]),
+    );
   });
 
   it('voids a paid sale atomically, cancels its payment and document, restores stock, and updates receivable', async () => {
     const { service, prisma } = createService();
-    const payment = { ...voidSaleRecord().payments[0], accountReceivableId: 'ar-void-1', amount: decimal('100') };
+    const payment = {
+      ...voidSaleRecord().payments[0],
+      accountReceivableId: 'ar-void-1',
+      amount: decimal('100'),
+    };
     const sale = voidSaleRecord({
       payments: [payment],
       paymentType: SalePaymentType.CREDIT_SALE,
@@ -2214,17 +3380,51 @@ describe('SalesService', () => {
         status: CollectionStatus.PARTIALLY_PAID,
         payments: [payment],
       },
-      billingRequests: [{ id: 'billing-void-1', status: BillingRequestStatus.IN_REVIEW, version: 2, reason: 'Control interno', notes: null }],
+      billingRequests: [
+        {
+          id: 'billing-void-1',
+          status: BillingRequestStatus.IN_REVIEW,
+          version: 2,
+          reason: 'Control interno',
+          notes: null,
+        },
+      ],
     });
-    const cancelledSale = { ...sale, status: SaleStatus.CANCELLED, collectionStatus: CollectionStatus.CANCELLED, version: 5, items: sale.items };
-    prisma.sale.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(sale);
+    const cancelledSale = {
+      ...sale,
+      status: SaleStatus.CANCELLED,
+      collectionStatus: CollectionStatus.CANCELLED,
+      version: 5,
+      items: sale.items,
+    };
+    prisma.sale.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(sale);
     prisma.payment.updateMany.mockResolvedValue({ count: 1 });
-    prisma.inventoryBalance.update.mockResolvedValue({ productId: 'product-1', locationId: 'loc-1', quantityKg: decimal('10'), quantityPieces: 0 });
-    prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'void-movement-1', createdAt: now, ...data }));
-    prisma.accountReceivable.update.mockResolvedValue({ id: 'ar-void-1', originalAmount: decimal('250'), outstandingAmount: decimal('0'), status: CollectionStatus.CANCELLED });
+    prisma.inventoryBalance.update.mockResolvedValue({
+      productId: 'product-1',
+      locationId: 'loc-1',
+      quantityKg: decimal('10'),
+      quantityPieces: 0,
+    });
+    prisma.inventoryMovement.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 'void-movement-1', createdAt: now, ...data }),
+    );
+    prisma.accountReceivable.update.mockResolvedValue({
+      id: 'ar-void-1',
+      originalAmount: decimal('250'),
+      outstandingAmount: decimal('0'),
+      status: CollectionStatus.CANCELLED,
+    });
     prisma.saleDocument.updateMany.mockResolvedValue({ count: 1 });
-    prisma.billingRequestHistory.create.mockResolvedValue({ id: 'billing-history-void-1' });
-    prisma.billingRequest.update.mockResolvedValue({ id: 'billing-void-1', status: BillingRequestStatus.CANCELLED, version: 3 });
+    prisma.billingRequestHistory.create.mockResolvedValue({
+      id: 'billing-history-void-1',
+    });
+    prisma.billingRequest.update.mockResolvedValue({
+      id: 'billing-void-1',
+      status: BillingRequestStatus.CANCELLED,
+      version: 3,
+    });
     prisma.sale.updateMany.mockResolvedValue({ count: 1 });
     prisma.sale.findUnique.mockResolvedValue(cancelledSale);
     prisma.billingAuditLog.create.mockResolvedValue({ id: 'audit-void-1' });
@@ -2236,23 +3436,73 @@ describe('SalesService', () => {
       'void-key-1',
     );
 
-    expect(prisma.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'payment-void-1', status: PaymentStatus.APPLIED, version: 2 },
-      data: expect.objectContaining({ status: PaymentStatus.CANCELLED, cancelledByUserId: 'admin-1', cancellationReason: 'Cliente devolvió el pedido' }),
-    }));
-    expect(prisma.accountReceivable.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'ar-void-1' },
-      data: expect.objectContaining({ outstandingAmount: 0, status: CollectionStatus.CANCELLED, daysOverdue: 0, agingStatus: 'CURRENT' }),
-    }));
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'payment-void-1',
+          status: PaymentStatus.APPLIED,
+          version: 2,
+        },
+        data: expect.objectContaining({
+          status: PaymentStatus.CANCELLED,
+          cancelledByUserId: 'admin-1',
+          cancellationReason: 'Cliente devolvió el pedido',
+        }),
+      }),
+    );
+    expect(prisma.accountReceivable.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ar-void-1' },
+        data: expect.objectContaining({
+          outstandingAmount: 0,
+          status: CollectionStatus.CANCELLED,
+          daysOverdue: 0,
+          agingStatus: 'CURRENT',
+        }),
+      }),
+    );
     expect(prisma.saleDocument.updateMany).toHaveBeenCalledWith({
-      where: { saleId: 'sale-void-1', status: { not: SaleDocumentStatus.CANCELLED } },
+      where: {
+        saleId: 'sale-void-1',
+        status: { not: SaleDocumentStatus.CANCELLED },
+      },
       data: { status: SaleDocumentStatus.CANCELLED },
     });
-    expect(prisma.billingRequestHistory.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ toStatus: BillingRequestStatus.CANCELLED, changedByUserId: 'admin-1' }) }));
-    expect(prisma.billingAuditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'SALE_VOIDED', reason: 'Cliente devolvió el pedido', correlationId: 'void-key-1' }) }));
-    expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-void-1', status: SaleStatus.CANCELLED }));
-    expect(result.payments).toEqual([expect.objectContaining({ id: 'payment-void-1', status: PaymentStatus.CANCELLED })]);
-    expect(result.documents).toEqual([expect.objectContaining({ id: 'document-void-1', status: SaleDocumentStatus.CANCELLED })]);
+    expect(prisma.billingRequestHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toStatus: BillingRequestStatus.CANCELLED,
+          changedByUserId: 'admin-1',
+        }),
+      }),
+    );
+    expect(prisma.billingAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'SALE_VOIDED',
+          reason: 'Cliente devolvió el pedido',
+          correlationId: 'void-key-1',
+        }),
+      }),
+    );
+    expect(result.sale).toEqual(
+      expect.objectContaining({
+        id: 'sale-void-1',
+        status: SaleStatus.CANCELLED,
+      }),
+    );
+    expect(result.payments).toEqual([
+      expect.objectContaining({
+        id: 'payment-void-1',
+        status: PaymentStatus.CANCELLED,
+      }),
+    ]);
+    expect(result.documents).toEqual([
+      expect.objectContaining({
+        id: 'document-void-1',
+        status: SaleDocumentStatus.CANCELLED,
+      }),
+    ]);
   });
 
   it('replays an administrative void without duplicating effects', async () => {
@@ -2262,31 +3512,61 @@ describe('SalesService', () => {
       status: SaleStatus.CANCELLED,
       version: 5,
       cancellationIdempotencyKey: 'void-key-replay',
-      cancellationPayloadHash: hashPayload({ operation: 'VOID_SALE', saleId: 'sale-void-1', ...dto, authorizedByUserId: 'admin-1' }),
-      payments: [{ ...voidSaleRecord().payments[0], status: PaymentStatus.CANCELLED, version: 3 }],
-      documents: [{ ...voidSaleRecord().documents[0], status: SaleDocumentStatus.CANCELLED }],
+      cancellationPayloadHash: hashPayload({
+        operation: 'VOID_SALE',
+        saleId: 'sale-void-1',
+        ...dto,
+        authorizedByUserId: 'admin-1',
+      }),
+      payments: [
+        {
+          ...voidSaleRecord().payments[0],
+          status: PaymentStatus.CANCELLED,
+          version: 3,
+        },
+      ],
+      documents: [
+        {
+          ...voidSaleRecord().documents[0],
+          status: SaleDocumentStatus.CANCELLED,
+        },
+      ],
     });
     prisma.sale.findFirst.mockResolvedValue(existing);
 
-    const result = await service.voidSale('sale-void-1', dto, { id: 'admin-1', role: 'ADMIN' }, 'void-key-replay');
+    const result = await service.voidSale(
+      'sale-void-1',
+      dto,
+      { id: 'admin-1', role: 'ADMIN' },
+      'void-key-replay',
+    );
 
     expect(prisma.payment.updateMany).not.toHaveBeenCalled();
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
     expect(prisma.sale.updateMany).not.toHaveBeenCalled();
-    expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-void-1', status: SaleStatus.CANCELLED }));
+    expect(result.sale).toEqual(
+      expect.objectContaining({
+        id: 'sale-void-1',
+        status: SaleStatus.CANCELLED,
+      }),
+    );
   });
 
   it('stops the administrative void before inventory or sale changes when a payment version is stale', async () => {
     const { service, prisma } = createService();
-    prisma.sale.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(voidSaleRecord());
+    prisma.sale.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(voidSaleRecord());
     prisma.payment.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(service.voidSale(
-      'sale-void-1',
-      { reason: 'Revisión autorizada', expectedVersion: 4 },
-      { id: 'admin-1', role: 'ADMIN' },
-      'void-key-stale-payment',
-    )).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.voidSale(
+        'sale-void-1',
+        { reason: 'Revisión autorizada', expectedVersion: 4 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'void-key-stale-payment',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
@@ -2325,16 +3605,37 @@ describe('SalesService', () => {
       quantityKg: decimal('10.000'),
       quantityPieces: 5,
     });
-    prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'cancel-movement-1', createdAt: now, ...data }));
+    prisma.inventoryMovement.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 'cancel-movement-1', createdAt: now, ...data }),
+    );
     prisma.sale.updateMany.mockResolvedValue({ count: 1 });
-    prisma.sale.findUnique.mockResolvedValue({ id: 'sale-1', total: decimal('250'), discount: decimal('0'), tax: decimal('0'), subtotal: decimal('250'), version: 2, status: SaleStatus.CANCELLED, items: [] });
+    prisma.sale.findUnique.mockResolvedValue({
+      id: 'sale-1',
+      total: decimal('250'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      subtotal: decimal('250'),
+      version: 2,
+      status: SaleStatus.CANCELLED,
+      items: [],
+    });
 
-    const result = await service.cancel('sale-1', { reason: 'Cliente canceló pedido', expectedVersion: 1 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-1');
+    const result = await service.cancel(
+      'sale-1',
+      { reason: 'Cliente canceló pedido', expectedVersion: 1 },
+      { id: 'admin-1', role: 'ADMIN' },
+      'cancel-key-1',
+    );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.inventoryBalance.update).toHaveBeenCalledWith({
-      where: { productId_locationId: { productId: 'product-1', locationId: 'loc-1' } },
-      data: { quantityKg: { increment: 2.5 }, quantityPieces: { increment: 0 } },
+      where: {
+        productId_locationId: { productId: 'product-1', locationId: 'loc-1' },
+      },
+      data: {
+        quantityKg: { increment: 2.5 },
+        quantityPieces: { increment: 0 },
+      },
     });
     expect(prisma.inventoryMovement.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2364,8 +3665,12 @@ describe('SalesService', () => {
         }),
       }),
     );
-    expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-1', status: SaleStatus.CANCELLED }));
-    expect(result.inventoryMovements).toEqual([expect.objectContaining({ type: InventoryMovementType.CANCEL_SALE })]);
+    expect(result.sale).toEqual(
+      expect.objectContaining({ id: 'sale-1', status: SaleStatus.CANCELLED }),
+    );
+    expect(result.inventoryMovements).toEqual([
+      expect.objectContaining({ type: InventoryMovementType.CANCEL_SALE }),
+    ]);
   });
 
   it('cancels an unpaid credit sale and cancels its related account receivable', async () => {
@@ -2404,12 +3709,35 @@ describe('SalesService', () => {
       quantityKg: decimal('10.000'),
       quantityPieces: 0,
     });
-    prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'cancel-movement-1', createdAt: now, ...data }));
-    prisma.accountReceivable.update.mockImplementation(({ data }) => Promise.resolve({ id: 'ar-1', originalAmount: decimal('250'), outstandingAmount: decimal('0'), ...data }));
+    prisma.inventoryMovement.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 'cancel-movement-1', createdAt: now, ...data }),
+    );
+    prisma.accountReceivable.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'ar-1',
+        originalAmount: decimal('250'),
+        outstandingAmount: decimal('0'),
+        ...data,
+      }),
+    );
     prisma.sale.updateMany.mockResolvedValue({ count: 1 });
-    prisma.sale.findUnique.mockResolvedValue({ id: 'sale-credit-1', total: decimal('250'), discount: decimal('0'), tax: decimal('0'), subtotal: decimal('250'), version: 2, status: SaleStatus.CANCELLED, items: [] });
+    prisma.sale.findUnique.mockResolvedValue({
+      id: 'sale-credit-1',
+      total: decimal('250'),
+      discount: decimal('0'),
+      tax: decimal('0'),
+      subtotal: decimal('250'),
+      version: 2,
+      status: SaleStatus.CANCELLED,
+      items: [],
+    });
 
-    const result = await service.cancel('sale-credit-1', { reason: 'Cliente canceló crédito', expectedVersion: 1 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-credit');
+    const result = await service.cancel(
+      'sale-credit-1',
+      { reason: 'Cliente canceló crédito', expectedVersion: 1 },
+      { id: 'admin-1', role: 'ADMIN' },
+      'cancel-key-credit',
+    );
 
     expect(prisma.accountReceivable.update).toHaveBeenCalledWith({
       where: { id: 'ar-1' },
@@ -2419,7 +3747,12 @@ describe('SalesService', () => {
         cancelledAt: expect.any(Date),
       }),
     });
-    expect(result.accountReceivable).toEqual(expect.objectContaining({ id: 'ar-1', status: CollectionStatus.CANCELLED }));
+    expect(result.accountReceivable).toEqual(
+      expect.objectContaining({
+        id: 'ar-1',
+        status: CollectionStatus.CANCELLED,
+      }),
+    );
   });
 
   it('rejects double cancellation without restoring stock again', async () => {
@@ -2440,7 +3773,12 @@ describe('SalesService', () => {
     });
 
     await expect(
-      service.cancel('sale-1', { reason: 'Cliente canceló pedido', expectedVersion: 1 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-1'),
+      service.cancel(
+        'sale-1',
+        { reason: 'Cliente canceló pedido', expectedVersion: 1 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-1',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
@@ -2464,13 +3802,31 @@ describe('SalesService', () => {
         originalAmount: decimal('250'),
         outstandingAmount: decimal('150'),
         status: CollectionStatus.PARTIALLY_PAID,
-        payments: [{ id: 'payment-ar-1', status: PaymentStatus.APPLIED, accountReceivableId: 'ar-1' }],
+        payments: [
+          {
+            id: 'payment-ar-1',
+            status: PaymentStatus.APPLIED,
+            accountReceivableId: 'ar-1',
+          },
+        ],
       },
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
 
     await expect(
-      service.cancel('sale-credit-1', { reason: 'Cliente canceló crédito', expectedVersion: 3 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-ar-payment'),
+      service.cancel(
+        'sale-credit-1',
+        { reason: 'Cliente canceló crédito', expectedVersion: 3 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-ar-payment',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
@@ -2487,14 +3843,33 @@ describe('SalesService', () => {
       version: 2,
       paymentType: SalePaymentType.CASH_SALE,
       pointOfSaleDailyClose: null,
-      payments: [{ id: 'payment-sale-1', status: PaymentStatus.APPLIED, saleId: 'sale-cash-1', accountReceivableId: null }],
+      payments: [
+        {
+          id: 'payment-sale-1',
+          status: PaymentStatus.APPLIED,
+          saleId: 'sale-cash-1',
+          accountReceivableId: null,
+        },
+      ],
       route: null,
       accountReceivable: null,
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
 
     await expect(
-      service.cancel('sale-cash-1', { reason: 'Cliente canceló pago aplicado', expectedVersion: 2 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-direct-payment'),
+      service.cancel(
+        'sale-cash-1',
+        { reason: 'Cliente canceló pago aplicado', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-direct-payment',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
@@ -2514,11 +3889,23 @@ describe('SalesService', () => {
       payments: [],
       route: null,
       accountReceivable: null,
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
 
     await expect(
-      service.cancel('sale-pos-closed-1', { reason: 'Cliente canceló cierre', expectedVersion: 2 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-pos-closed'),
+      service.cancel(
+        'sale-pos-closed-1',
+        { reason: 'Cliente canceló cierre', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-pos-closed',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
@@ -2539,11 +3926,23 @@ describe('SalesService', () => {
       payments: [],
       route: null,
       accountReceivable: null,
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
 
     await expect(
-      service.cancel('sale-1', { reason: 'Cliente canceló pedido', expectedVersion: 3 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-version'),
+      service.cancel(
+        'sale-1',
+        { reason: 'Cliente canceló pedido', expectedVersion: 3 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-version',
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
@@ -2563,7 +3962,14 @@ describe('SalesService', () => {
       payments: [],
       route: null,
       accountReceivable: null,
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
     prisma.inventoryBalance.update.mockResolvedValue({
       productId: 'product-1',
@@ -2571,11 +3977,18 @@ describe('SalesService', () => {
       quantityKg: decimal('10.000'),
       quantityPieces: 0,
     });
-    prisma.inventoryMovement.create.mockImplementation(({ data }) => Promise.resolve({ id: 'cancel-movement-race', createdAt: now, ...data }));
+    prisma.inventoryMovement.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 'cancel-movement-race', createdAt: now, ...data }),
+    );
     prisma.sale.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      service.cancel('sale-race-1', { reason: 'Cliente canceló pedido', expectedVersion: 5 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-race'),
+      service.cancel(
+        'sale-race-1',
+        { reason: 'Cliente canceló pedido', expectedVersion: 5 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-race',
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(prisma.inventoryBalance.update).toHaveBeenCalled();
@@ -2585,7 +3998,9 @@ describe('SalesService', () => {
         where: { id: 'sale-race-1', status: SaleStatus.CONFIRMED, version: 5 },
       }),
     );
-    expect(prisma.sale.findUnique).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'sale-race-1' } }));
+    expect(prisma.sale.findUnique).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'sale-race-1' } }),
+    );
   });
 
   it('replays an idempotent cancellation without restoring stock again', async () => {
@@ -2604,16 +4019,29 @@ describe('SalesService', () => {
       payments: [],
       route: null,
       accountReceivable: null,
-      inventoryMovements: [{ id: 'movement-1', type: InventoryMovementType.CANCEL_SALE, saleId: 'sale-1' }],
+      inventoryMovements: [
+        {
+          id: 'movement-1',
+          type: InventoryMovementType.CANCEL_SALE,
+          saleId: 'sale-1',
+        },
+      ],
       items: [],
     });
 
-    const result = await service.cancel('sale-1', dto, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-replay');
+    const result = await service.cancel(
+      'sale-1',
+      dto,
+      { id: 'admin-1', role: 'ADMIN' },
+      'cancel-key-replay',
+    );
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
     expect(prisma.sale.updateMany).not.toHaveBeenCalled();
-    expect(result.sale).toEqual(expect.objectContaining({ id: 'sale-1', status: SaleStatus.CANCELLED }));
+    expect(result.sale).toEqual(
+      expect.objectContaining({ id: 'sale-1', status: SaleStatus.CANCELLED }),
+    );
   });
 
   it('blocks cancellation for a sale on a closed route settlement', async () => {
@@ -2629,11 +4057,23 @@ describe('SalesService', () => {
       payments: [],
       route: { settlement: { status: RouteSettlementStatus.CLOSED } },
       accountReceivable: null,
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
 
     await expect(
-      service.cancel('sale-route-1', { reason: 'Cliente canceló ruta', expectedVersion: 1 }, { id: 'admin-1', role: 'ADMIN' }, 'cancel-key-route'),
+      service.cancel(
+        'sale-route-1',
+        { reason: 'Cliente canceló ruta', expectedVersion: 1 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-route',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
@@ -2653,15 +4093,26 @@ describe('SalesService', () => {
       payments: [],
       route: null,
       accountReceivable: null,
-      items: [{ id: 'item-1', productId: 'product-1', quantityKg: decimal('2.500'), quantityPieces: 0 }],
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
     });
 
     await expect(
-      service.cancel('sale-1', { reason: 'Cliente canceló pedido', expectedVersion: 1 }, { id: 'seller-1', role: 'SELLER' }, 'cancel-key-seller'),
+      service.cancel(
+        'sale-1',
+        { reason: 'Cliente canceló pedido', expectedVersion: 1 },
+        { id: 'seller-1', role: 'SELLER' },
+        'cancel-key-seller',
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
     expect(prisma.sale.updateMany).not.toHaveBeenCalled();
   });
-
 });

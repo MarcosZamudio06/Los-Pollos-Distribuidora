@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 
 export class CreateDeliveryRouteOrderDto {
   @IsString()
@@ -45,7 +52,6 @@ export class CreateDeliveryRouteDto {
   @Type(() => CreateDeliveryRouteOrderDto)
   orders!: CreateDeliveryRouteOrderDto[];
 }
-
 
 export class AssignDeliveryRouteOrdersDto {
   @IsOptional()

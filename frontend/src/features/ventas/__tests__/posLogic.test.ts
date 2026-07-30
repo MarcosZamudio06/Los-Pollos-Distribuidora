@@ -109,11 +109,11 @@ describe('POS cart calculations and validation', () => {
   })
 
   it('calculates a real-time total using kg and piece quantities without sending it as source of truth', () => {
-    expect(calculateCartTotal([kgItem, pieceItem])).toBe(577.2)
+    expect(calculateCartTotal([kgItem, pieceItem]).toString()).toBe('577.20')
   })
 
   it('converts KG_AND_PIECE pieces to kilograms before calculating the preview subtotal', () => {
-    expect(calculateCartTotal([kgAndPieceItem])).toBe(460)
+    expect(calculateCartTotal([kgAndPieceItem]).toString()).toBe('460.00')
   })
 
   it('rejects empty, non-positive, over-stock, and fractional piece quantities per operational stock', () => {
@@ -158,16 +158,16 @@ describe('POS cart calculations and validation', () => {
       payments, paymentType: 'CASH_SALE', physicalFolio: '', requiresAdministrativeInvoice: false,
       saleChannel: 'COUNTER', total: 100,
     }).payments).toEqual([
-      { amount: 33.33, paymentMethod: 'CASH' },
-      { amount: 33.33, paymentMethod: 'CASH' },
-      { amount: 33.33, paymentMethod: 'CASH' },
+       { amount: '33.33', paymentMethod: 'CASH' },
+       { amount: '33.33', paymentMethod: 'CASH' },
+       { amount: '33.33', paymentMethod: 'CASH' },
     ])
     expect(getPaymentsValidationError(payments, 100)).toBe('Los montos de pago no pueden alterar el total al redondearse a centavos.')
   })
 
   it('validates cash tendered only for cash and calculates change from its individual applied amount', () => {
-    expect(calculateCashChange(200, 187.5)).toBe(12.5)
-    expect(calculateCashChange(120, 100)).toBe(20)
+    expect(calculateCashChange(200, 187.5).toString()).toBe('12.50')
+    expect(calculateCashChange(120, 100).toString()).toBe('20.00')
     expect(getPaymentsValidationError([{ amount: 187.5, paymentMethod: 'CASH', cashTendered: 180 } as never], 187.5)).toBe('El efectivo entregado no puede ser menor al monto aplicado.')
     expect(getPaymentsValidationError([{ amount: 33.334, paymentMethod: 'CASH', cashTendered: 33.33 } as never], 100)).toBeNull()
     expect(getPaymentsValidationError([{ amount: 100, paymentMethod: 'CARD', cashTendered: 100, referenceNumber: 'AUTH-1', cardLastFour: '4242' } as never], 100)).toBe('El efectivo entregado solo aplica a pagos en efectivo.')
@@ -238,7 +238,7 @@ describe('POS sale payload', () => {
         customer: null,
         documentType: 'SIMPLE_NOTE',
         locationId: 'loc-counter',
-        payments: [{ amount: 301.2, paymentMethod: 'CASH' }],
+         payments: [{ amount: '301.20', paymentMethod: 'CASH' }],
         paymentType: 'CASH_SALE',
         physicalFolio: ' note-42 ',
         requiresAdministrativeInvoice: false,
@@ -274,7 +274,7 @@ describe('POS sale payload', () => {
       paymentType: 'CASH_SALE', physicalFolio: '', requiresAdministrativeInvoice: false, saleChannel: 'COUNTER', total: 187.5,
     })
 
-    expect(payload.payments).toEqual([{ amount: 187.5, paymentMethod: 'CASH', cashTendered: 200 }])
+     expect(payload.payments).toEqual([{ amount: '187.50', paymentMethod: 'CASH', cashTendered: '200.00' }])
     expect(payload.payments?.[0]).not.toHaveProperty('changeGiven')
   })
 
@@ -318,8 +318,8 @@ describe('POS sale payload', () => {
         documentType: 'LARGE_NOTE',
         locationId: 'loc-counter',
         payments: [
-          { amount: 40, paymentMethod: 'CASH' },
-          { amount: 60, paymentMethod: 'TRANSFER', bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' },
+         { amount: '40.00', paymentMethod: 'CASH' },
+         { amount: '60.00', paymentMethod: 'TRANSFER', bankName: 'Banco Norte', referenceNumber: 'TRANSFER-001' },
         ],
         paymentType: 'CREDIT_SALE',
         physicalFolio: 'credit-9',

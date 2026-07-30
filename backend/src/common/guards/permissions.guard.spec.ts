@@ -31,26 +31,42 @@ describe('PermissionsGuard', () => {
   const guard = new PermissionsGuard(new Reflector());
 
   it('allows an explicitly public route without an authenticated user', () => {
-    expect(guard.canActivate(contextFor(GuardTestController.prototype.publicRoute))).toBe(true);
+    expect(
+      guard.canActivate(contextFor(GuardTestController.prototype.publicRoute)),
+    ).toBe(true);
   });
 
   it('allows an explicitly authenticated route after JwtAuthGuard has populated the user', () => {
-    expect(guard.canActivate(contextFor(GuardTestController.prototype.authenticatedRoute, {}))).toBe(true);
+    expect(
+      guard.canActivate(
+        contextFor(GuardTestController.prototype.authenticatedRoute, {}),
+      ),
+    ).toBe(true);
   });
 
   it('denies a route without an access classification', () => {
-    expect(() => guard.canActivate(contextFor(GuardTestController.prototype.unclassifiedRoute, {}))).toThrow(
-      new ForbiddenException('Access classification is required'),
-    );
+    expect(() =>
+      guard.canActivate(
+        contextFor(GuardTestController.prototype.unclassifiedRoute, {}),
+      ),
+    ).toThrow(new ForbiddenException('Access classification is required'));
   });
 
   it('requires every declared permission', () => {
-    expect(() => guard.canActivate(contextFor(GuardTestController.prototype.protectedRoute, { permissions: [] }))).toThrow(
-      new ForbiddenException('Insufficient permissions'),
-    );
+    expect(() =>
+      guard.canActivate(
+        contextFor(GuardTestController.prototype.protectedRoute, {
+          permissions: [],
+        }),
+      ),
+    ).toThrow(new ForbiddenException('Insufficient permissions'));
 
-    expect(guard.canActivate(contextFor(GuardTestController.prototype.protectedRoute, {
-      permissions: [PERMISSIONS.PAYMENTS_CANCEL],
-    }))).toBe(true);
+    expect(
+      guard.canActivate(
+        contextFor(GuardTestController.prototype.protectedRoute, {
+          permissions: [PERMISSIONS.PAYMENTS_CANCEL],
+        }),
+      ),
+    ).toBe(true);
   });
 });

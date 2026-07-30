@@ -12,6 +12,10 @@ export class RoutingTechnicalStatusController {
   @Get('technical-status')
   @Roles('ADMIN')
   async getTechnicalStatus() {
-    return { success: true, message: 'Routing technical status retrieved successfully', data: await this.statusService.getStatus() };
+    return {
+      success: true,
+      message: 'Routing technical status retrieved successfully',
+      data: await this.statusService.getStatus(),
+    };
   }
 }

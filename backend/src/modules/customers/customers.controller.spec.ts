@@ -66,7 +66,17 @@ const customerResponse = {
 describe('CustomersController API', () => {
   let app: INestApplication<App>;
   let customersService: jest.Mocked<
-    Pick<CustomersService, 'findAll' | 'findOne' | 'getCreditSummary' | 'findSales' | 'findPayments' | 'create' | 'update' | 'deactivate'>
+    Pick<
+      CustomersService,
+      | 'findAll'
+      | 'findOne'
+      | 'getCreditSummary'
+      | 'findSales'
+      | 'findPayments'
+      | 'create'
+      | 'update'
+      | 'deactivate'
+    >
   >;
 
   beforeEach(async () => {
@@ -74,7 +84,8 @@ describe('CustomersController API', () => {
       verifyAccessToken: jest.fn((token: string) => {
         if (token === 'admin-token') return Promise.resolve(adminUser);
         if (token === 'seller-token') return Promise.resolve(sellerUser);
-        if (token === 'collections-token') return Promise.resolve(collectionsUser);
+        if (token === 'collections-token')
+          return Promise.resolve(collectionsUser);
         if (token === 'warehouse-token') return Promise.resolve(warehouseUser);
         return Promise.reject(new Error('Invalid token'));
       }),
@@ -83,12 +94,28 @@ describe('CustomersController API', () => {
     customersService = {
       findAll: jest.fn().mockResolvedValue({ items: [customerResponse] }),
       findOne: jest.fn().mockResolvedValue(customerResponse),
-      getCreditSummary: jest.fn().mockResolvedValue({ customerId: 'customer-1', globalBalance: '0' }),
-      findSales: jest.fn().mockResolvedValue({ items: [{ id: 'sale-1', accountReceivableId: 'ar-1', billingRequestId: 'billing-1' }] }),
-      findPayments: jest.fn().mockResolvedValue({ items: [{ id: 'payment-1', accountReceivableId: 'ar-1', saleId: 'sale-1' }] }),
+      getCreditSummary: jest
+        .fn()
+        .mockResolvedValue({ customerId: 'customer-1', globalBalance: '0' }),
+      findSales: jest.fn().mockResolvedValue({
+        items: [
+          {
+            id: 'sale-1',
+            accountReceivableId: 'ar-1',
+            billingRequestId: 'billing-1',
+          },
+        ],
+      }),
+      findPayments: jest.fn().mockResolvedValue({
+        items: [
+          { id: 'payment-1', accountReceivableId: 'ar-1', saleId: 'sale-1' },
+        ],
+      }),
       create: jest.fn().mockResolvedValue(customerResponse),
       update: jest.fn().mockResolvedValue(customerResponse),
-      deactivate: jest.fn().mockResolvedValue({ ...customerResponse, isActive: false }),
+      deactivate: jest
+        .fn()
+        .mockResolvedValue({ ...customerResponse, isActive: false }),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -117,7 +144,9 @@ describe('CustomersController API', () => {
 
   it('allows documented roles to list and get customers with filters', async () => {
     await request(app.getHttpServer())
-      .get('/api/customers?page=1&limit=10&search=centro&customerType=INSTITUTIONAL&creditStatus=ACTIVE&commercialPolicyId=policy-1&assignedRouteId=route-1&agingStatus=OVERDUE&cartera=OVERDUE&isActive=true')
+      .get(
+        '/api/customers?page=1&limit=10&search=centro&customerType=INSTITUTIONAL&creditStatus=ACTIVE&commercialPolicyId=policy-1&assignedRouteId=route-1&agingStatus=OVERDUE&cartera=OVERDUE&isActive=true',
+      )
       .set('Authorization', 'Bearer collections-token')
       .expect(200)
       .expect(({ body }) => {
@@ -159,7 +188,6 @@ describe('CustomersController API', () => {
     expect(customersService.findOne).toHaveBeenCalledWith('customer-1');
   });
 
-
   it('exposes customer credit summary, sales history, and payment history endpoints', async () => {
     await request(app.getHttpServer())
       .get('/api/customers/customer-1/credit-summary')
@@ -172,10 +200,14 @@ describe('CustomersController API', () => {
           data: { customerId: 'customer-1', globalBalance: '0' },
         });
       });
-    expect(customersService.getCreditSummary).toHaveBeenCalledWith('customer-1');
+    expect(customersService.getCreditSummary).toHaveBeenCalledWith(
+      'customer-1',
+    );
 
     await request(app.getHttpServer())
-      .get('/api/customers/customer-1/sales?page=1&limit=10&paymentType=CREDIT_SALE&status=CONFIRMED')
+      .get(
+        '/api/customers/customer-1/sales?page=1&limit=10&paymentType=CREDIT_SALE&status=CONFIRMED',
+      )
       .set('Authorization', 'Bearer collections-token')
       .expect(200)
       .expect(({ body }) => {
@@ -187,11 +219,18 @@ describe('CustomersController API', () => {
       });
     expect(customersService.findSales).toHaveBeenCalledWith(
       'customer-1',
-      expect.objectContaining({ page: 1, limit: 10, paymentType: 'CREDIT_SALE', status: 'CONFIRMED' }),
+      expect.objectContaining({
+        page: 1,
+        limit: 10,
+        paymentType: 'CREDIT_SALE',
+        status: 'CONFIRMED',
+      }),
     );
 
     await request(app.getHttpServer())
-      .get('/api/customers/customer-1/payments?page=1&limit=10&paymentMethod=TRANSFER&status=APPLIED')
+      .get(
+        '/api/customers/customer-1/payments?page=1&limit=10&paymentMethod=TRANSFER&status=APPLIED',
+      )
       .set('Authorization', 'Bearer collections-token')
       .expect(200)
       .expect(({ body }) => {
@@ -203,7 +242,12 @@ describe('CustomersController API', () => {
       });
     expect(customersService.findPayments).toHaveBeenCalledWith(
       'customer-1',
-      expect.objectContaining({ page: 1, limit: 10, paymentMethod: 'TRANSFER', status: 'APPLIED' }),
+      expect.objectContaining({
+        page: 1,
+        limit: 10,
+        paymentMethod: 'TRANSFER',
+        status: 'APPLIED',
+      }),
     );
   });
 
@@ -246,7 +290,11 @@ describe('CustomersController API', () => {
     await request(app.getHttpServer())
       .post('/api/customers')
       .set('Authorization', 'Bearer admin-token')
-      .send({ name: 'Invalid Email', email: 'not-an-email', customerType: 'RETAIL' })
+      .send({
+        name: 'Invalid Email',
+        email: 'not-an-email',
+        customerType: 'RETAIL',
+      })
       .expect(400);
   });
 

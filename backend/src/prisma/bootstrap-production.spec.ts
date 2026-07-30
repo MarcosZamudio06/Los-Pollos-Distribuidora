@@ -23,7 +23,8 @@ function createClient() {
   const permissionFindUnique = jest
     .fn<Promise<{ id: string }>, [Prisma.PermissionFindUniqueArgs]>()
     .mockResolvedValue({ id: 'permission-id' });
-  const rolePermissionCreateMany = upsertMock<Prisma.RolePermissionCreateManyArgs>();
+  const rolePermissionCreateMany =
+    upsertMock<Prisma.RolePermissionCreateManyArgs>();
   const locationUpsert = upsertMock<Prisma.OperationalLocationUpsertArgs>();
   const userUpsert = upsertMock<Prisma.UserUpsertArgs>();
   const client: ProductionBootstrapClient = {
@@ -97,7 +98,9 @@ describe('Production bootstrap contract', () => {
     await expect(bcrypt.compare('  intentional secret  ', hash)).resolves.toBe(
       true,
     );
-    await expect(bcrypt.compare('intentional secret', hash)).resolves.toBe(false);
+    await expect(bcrypt.compare('intentional secret', hash)).resolves.toBe(
+      false,
+    );
   });
 
   it('rejects non-production execution without changing the development seed guard', async () => {
@@ -118,7 +121,16 @@ describe('Production bootstrap contract', () => {
   });
 
   it('idempotently upserts access data, the initial location, and the administrator', async () => {
-    const { client, roleUpsert, roleFindUnique, permissionUpsert, permissionFindUnique, rolePermissionCreateMany, locationUpsert, userUpsert } = createClient();
+    const {
+      client,
+      roleUpsert,
+      roleFindUnique,
+      permissionUpsert,
+      permissionFindUnique,
+      rolePermissionCreateMany,
+      locationUpsert,
+      userUpsert,
+    } = createClient();
     const env = {
       NODE_ENV: 'production',
       SEED_ADMIN_PASSWORD: 'production-secret',
@@ -173,7 +185,9 @@ describe('Production bootstrap contract', () => {
       expect(adminUpsert.update).not.toHaveProperty('passwordHash');
       const hash = adminUpsert.create.passwordHash;
       if (typeof hash !== 'string') throw new Error('Expected password hash');
-      await expect(bcrypt.compare('production-secret', hash)).resolves.toBe(true);
+      await expect(bcrypt.compare('production-secret', hash)).resolves.toBe(
+        true,
+      );
       expect(hash).toMatch(/^\$2[aby]\$12\$/);
     }
     expect(userUpsert.mock.calls[0]?.[0].create.passwordHash).not.toBe(

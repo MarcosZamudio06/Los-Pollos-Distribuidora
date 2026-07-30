@@ -31,7 +31,9 @@ export class HealthService implements OnApplicationBootstrap, OnModuleDestroy {
 
   getStartup() {
     if (!this.started) {
-      throw new ServiceUnavailableException('Application startup is incomplete');
+      throw new ServiceUnavailableException(
+        'Application startup is incomplete',
+      );
     }
 
     return {

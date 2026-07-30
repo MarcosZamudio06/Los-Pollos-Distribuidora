@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
   BillingRequestStatus,
@@ -14,8 +20,12 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { ListAccountsReceivableQueryDto, RegisterReceivablePaymentDto } from './dto';
+import {
+  ListAccountsReceivableQueryDto,
+  RegisterReceivablePaymentDto,
+} from './dto';
 import { calculateReceivableAging } from './receivable-aging';
+import { Money, toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
@@ -68,7 +78,10 @@ type CreditSaleRecord = {
 export class AccountsReceivableService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: ListAccountsReceivableQueryDto = {}, currentUser?: Actor) {
+  async findAll(
+    query: ListAccountsReceivableQueryDto = {},
+    currentUser?: Actor,
+  ) {
     this.assertSellerListScope(query, currentUser);
 
     const receivables = (await this.prisma.accountReceivable.findMany({
@@ -76,9 +89,11 @@ export class AccountsReceivableService {
       include: { customer: true, sale: true, billingRequest: true },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
       ...this.buildPagination(query),
-    } as Prisma.AccountReceivableFindManyArgs)) as ReceivableRecord[];
+    })) as ReceivableRecord[];
 
-    return { items: receivables.map((receivable) => this.toListItem(receivable)) };
+    return {
+      items: receivables.map((receivable) => this.toListItem(receivable)),
+    };
   }
 
   async findOne(id: string, currentUser?: Actor) {
@@ -111,100 +126,134 @@ export class AccountsReceivableService {
       throw new BadRequestException('accountReceivableId must match route id');
     }
 
-    if (dto.amount <= 0) {
+    const paymentAmount = Money.from(dto.amount);
+    if (!paymentAmount.isPositive()) {
       throw new BadRequestException('amount must be greater than 0');
     }
 
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
-    const payloadHash = this.hashPayload(this.buildRegisterPaymentPayload(id, dto, currentUser.id, paidAt));
+    const payloadHash = this.hashPayload(
+      this.buildRegisterPaymentPayload(id, dto, currentUser.id, paidAt),
+    );
 
     try {
       return await this.prisma.$transaction(
         async (tx) => {
-          const existingPayment = (await tx.payment.findFirst({
+          const existingPayment = await tx.payment.findFirst({
             where: { idempotencyKey },
-          })) as IdempotentPayment | null;
+          });
 
           if (existingPayment) {
-            return this.resolveExistingPaymentResponse(tx, existingPayment, id, payloadHash);
+            return this.resolveExistingPaymentResponse(
+              tx,
+              existingPayment,
+              id,
+              payloadHash,
+            );
           }
 
-        const receivable = (await tx.accountReceivable.findUnique({
-          where: { id },
-        })) as AccountReceivable | null;
+          const receivable = await tx.accountReceivable.findUnique({
+            where: { id },
+          });
 
-        if (!receivable) {
-          throw new NotFoundException('Account receivable not found');
-        }
+          if (!receivable) {
+            throw new NotFoundException('Account receivable not found');
+          }
 
-        this.assertReceivableCanReceivePayment(receivable);
-        const sale = await tx.sale.findUnique({ where: { id: receivable.saleId }, select: { locationId: true } });
-        const cashShift = await this.resolveCashShift(tx, dto, sale?.locationId ?? null, currentUser);
+          this.assertReceivableCanReceivePayment(receivable);
+          const sale = await tx.sale.findUnique({
+            where: { id: receivable.saleId },
+            select: { locationId: true },
+          });
+          const cashShift = await this.resolveCashShift(
+            tx,
+            dto,
+            sale?.locationId ?? null,
+            currentUser,
+          );
 
-        const outstandingAmount = this.toNumber(receivable.outstandingAmount);
-        if (dto.amount > outstandingAmount) {
-          throw new BadRequestException('Payment amount cannot exceed outstanding balance');
-        }
+          const outstandingAmount = Money.from(receivable.outstandingAmount);
+          if (paymentAmount.compare(outstandingAmount) > 0) {
+            throw new BadRequestException(
+              'Payment amount cannot exceed outstanding balance',
+            );
+          }
 
-        const newOutstandingAmount = this.roundMoney(outstandingAmount - dto.amount);
-        const nextStatus = newOutstandingAmount === 0
-          ? CollectionStatus.PAID
-          : CollectionStatus.PARTIALLY_PAID;
-        const { daysOverdue, agingStatus } = calculateReceivableAging(receivable.dueDate, newOutstandingAmount, paidAt);
-
-        const payment = await tx.payment.create({
-          data: {
-            accountReceivableId: id,
-            customerId: receivable.customerId,
-            saleId: receivable.saleId,
-            userId: currentUser.id,
-            collectedByUserId: dto.collectedByUserId ?? currentUser.id,
-            collectionPass: dto.collectionPass ?? null,
-            amount: dto.amount,
-            paymentMethod: dto.paymentMethod,
-            bankName: this.normalizeOptionalText(dto.bankName),
-            referenceNumber: this.normalizeOptionalText(dto.referenceNumber),
-            appliedDocumentId: this.normalizeOptionalText(dto.appliedDocumentId),
-            appliedDocumentType: this.normalizeOptionalText(dto.appliedDocumentType),
-            routeId: this.normalizeOptionalText(dto.routeId),
-            routeSettlementId: this.normalizeOptionalText(dto.routeSettlementId),
-            operationalLocationId: sale?.locationId ?? null,
-            pointOfSaleDailyCloseId: cashShift?.pointOfSaleDailyCloseId ?? null,
-            cashShiftId: cashShift?.id ?? null,
-            status: PaymentStatus.APPLIED,
+          const newOutstandingAmount =
+            outstandingAmount.subtract(paymentAmount);
+          const nextStatus = newOutstandingAmount.isZero()
+            ? CollectionStatus.PAID
+            : CollectionStatus.PARTIALLY_PAID;
+          const { daysOverdue, agingStatus } = calculateReceivableAging(
+            receivable.dueDate,
+            newOutstandingAmount,
             paidAt,
-            idempotencyKey,
-            idempotencyPayloadHash: payloadHash,
-          },
-        });
+          );
 
-        const updatedReceivable = await tx.accountReceivable.update({
-          where: { id },
-          data: {
-            outstandingAmount: newOutstandingAmount,
-            lastPaymentDate: paidAt,
-            daysOverdue,
-            agingStatus,
-            status: nextStatus,
-            paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
-          },
-        });
+          const payment = await tx.payment.create({
+            data: {
+              accountReceivableId: id,
+              customerId: receivable.customerId,
+              saleId: receivable.saleId,
+              userId: currentUser.id,
+              collectedByUserId: dto.collectedByUserId ?? currentUser.id,
+              collectionPass: dto.collectionPass ?? null,
+              amount: paymentAmount.toString(),
+              paymentMethod: dto.paymentMethod,
+              bankName: this.normalizeOptionalText(dto.bankName),
+              referenceNumber: this.normalizeOptionalText(dto.referenceNumber),
+              appliedDocumentId: this.normalizeOptionalText(
+                dto.appliedDocumentId,
+              ),
+              appliedDocumentType: this.normalizeOptionalText(
+                dto.appliedDocumentType,
+              ),
+              routeId: this.normalizeOptionalText(dto.routeId),
+              routeSettlementId: this.normalizeOptionalText(
+                dto.routeSettlementId,
+              ),
+              operationalLocationId: sale?.locationId ?? null,
+              pointOfSaleDailyCloseId:
+                cashShift?.pointOfSaleDailyCloseId ?? null,
+              cashShiftId: cashShift?.id ?? null,
+              status: PaymentStatus.APPLIED,
+              paidAt,
+              idempotencyKey,
+              idempotencyPayloadHash: payloadHash,
+            },
+          });
 
-        await tx.sale.update({
-          where: { id: receivable.saleId },
-          data: { collectionStatus: nextStatus },
-        });
+          const updatedReceivable = await tx.accountReceivable.update({
+            where: { id },
+            data: {
+              outstandingAmount: newOutstandingAmount.toString(),
+              lastPaymentDate: paidAt,
+              daysOverdue,
+              agingStatus,
+              status: nextStatus,
+              paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
+            },
+          });
+
+          await tx.sale.update({
+            where: { id: receivable.saleId },
+            data: { collectionStatus: nextStatus },
+          });
 
           return {
             payment: this.toPaymentResponse(payment),
-            accountReceivable: this.toListItem(updatedReceivable as ReceivableRecord),
+            accountReceivable: this.toListItem(updatedReceivable),
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
       if (this.isIdempotencyRaceError(error)) {
-        return this.resolveExistingPaymentByKey(idempotencyKey, id, payloadHash);
+        return this.resolveExistingPaymentByKey(
+          idempotencyKey,
+          id,
+          payloadHash,
+        );
       }
       throw error;
     }
@@ -223,44 +272,59 @@ export class AccountsReceivableService {
         }
 
         if (sale.accountReceivable) {
-          return this.toListItem(sale.accountReceivable as ReceivableRecord);
+          return this.toListItem(sale.accountReceivable);
         }
 
         this.assertEligibleCreditSale(sale);
 
         const initialPaid = this.sumActiveSalePayments(sale.payments ?? []);
-        const pendingAmount = this.roundMoney(this.toNumber(sale.total) - initialPaid);
-        if (pendingAmount <= 0) {
-          throw new BadRequestException('Confirmed credit sale has no outstanding balance');
+        const pendingAmount = Money.from(sale.total).subtract(initialPaid);
+        if (!pendingAmount.isPositive()) {
+          throw new BadRequestException(
+            'Confirmed credit sale has no outstanding balance',
+          );
         }
 
         const creditDays = sale.customer?.creditDays ?? 0;
-        const creditLimit = this.toNumber(sale.customer?.creditLimit);
+        const creditLimit = Money.from(sale.customer?.creditLimit);
         const dueDate = this.addDays(sale.createdAt, creditDays);
 
         const overdue = await tx.accountReceivable.findFirst({
           where: {
             customerId: sale.customerId ?? undefined,
-            status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+            status: {
+              in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+            },
             dueDate: { lt: new Date() },
             outstandingAmount: { gt: 0 },
           },
           select: { id: true },
         });
         if (overdue) {
-          throw new BadRequestException('Customer has overdue accounts receivable');
+          throw new BadRequestException(
+            'Customer has overdue accounts receivable',
+          );
         }
 
         const openBalance = await tx.accountReceivable.aggregate({
           where: {
             customerId: sale.customerId ?? undefined,
-            status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+            status: {
+              in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+            },
           },
           _sum: { outstandingAmount: true },
         });
-        const currentOpenBalance = this.toNumber(openBalance._sum.outstandingAmount);
-        if (creditLimit > 0 && this.roundMoney(currentOpenBalance + pendingAmount) > creditLimit) {
-          throw new BadRequestException('Credit sale exceeds customer credit limit');
+        const currentOpenBalance = Money.from(
+          openBalance._sum.outstandingAmount,
+        );
+        if (
+          creditLimit.isPositive() &&
+          currentOpenBalance.add(pendingAmount).compare(creditLimit) > 0
+        ) {
+          throw new BadRequestException(
+            'Credit sale exceeds customer credit limit',
+          );
         }
 
         const receivable = await tx.accountReceivable.create({
@@ -268,14 +332,19 @@ export class AccountsReceivableService {
             customerId: sale.customerId as string,
             saleId: sale.id,
             originalSaleId: sale.id,
-            originalAmount: pendingAmount,
-            outstandingAmount: pendingAmount,
+            originalAmount: pendingAmount.toString(),
+            outstandingAmount: pendingAmount.toString(),
             saleDate: sale.createdAt,
             dueDate,
             paymentTermsDays: creditDays,
             ...calculateReceivableAging(dueDate, pendingAmount),
-            physicalDocumentFolio: this.normalizeOptionalText(sale.physicalFolio),
-            commercialPolicyId: sale.commercialPolicyId ?? sale.customer?.commercialPolicyId ?? null,
+            physicalDocumentFolio: this.normalizeOptionalText(
+              sale.physicalFolio,
+            ),
+            commercialPolicyId:
+              sale.commercialPolicyId ??
+              sale.customer?.commercialPolicyId ??
+              null,
             status: CollectionStatus.UNPAID,
           },
         });
@@ -285,21 +354,31 @@ export class AccountsReceivableService {
           data: { collectionStatus: CollectionStatus.UNPAID },
         });
 
-        return this.toListItem(receivable as ReceivableRecord);
+        return this.toListItem(receivable);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
 
-  private buildListWhere(query: ListAccountsReceivableQueryDto): Prisma.AccountReceivableWhereInput {
+  private buildListWhere(
+    query: ListAccountsReceivableQueryDto,
+  ): Prisma.AccountReceivableWhereInput {
     return {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.saleId ? { saleId: query.saleId } : {}),
-      ...(query.billingRequestId ? { billingRequestId: query.billingRequestId } : {}),
+      ...(query.billingRequestId
+        ? { billingRequestId: query.billingRequestId }
+        : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.agingStatus ? { agingStatus: query.agingStatus } : {}),
-      ...(query.onlyOverdue ? { dueDate: { lt: new Date() } } : this.buildDueDateRange(query)),
-      ...(query.onlyActiveBillingRequest ? { billingRequest: { status: { not: BillingRequestStatus.CANCELLED } } } : {}),
+      ...(query.onlyOverdue
+        ? { dueDate: { lt: new Date() } }
+        : this.buildDueDateRange(query)),
+      ...(query.onlyActiveBillingRequest
+        ? {
+            billingRequest: { status: { not: BillingRequestStatus.CANCELLED } },
+          }
+        : {}),
     };
   }
 
@@ -327,24 +406,35 @@ export class AccountsReceivableService {
     };
   }
 
-  private assertSellerListScope(_query: ListAccountsReceivableQueryDto, currentUser?: Actor): void {
+  private assertSellerListScope(
+    _query: ListAccountsReceivableQueryDto,
+    currentUser?: Actor,
+  ): void {
     if (currentUser?.role === 'SELLER') {
-      throw new ForbiddenException('SELLER accounts receivable list access requires an ownership policy');
+      throw new ForbiddenException(
+        'SELLER accounts receivable list access requires an ownership policy',
+      );
     }
   }
 
   private assertSellerDetailScope(currentUser?: Actor): void {
     if (currentUser?.role === 'SELLER') {
-      throw new ForbiddenException('SELLER accounts receivable detail access requires an ownership policy');
+      throw new ForbiddenException(
+        'SELLER accounts receivable detail access requires an ownership policy',
+      );
     }
   }
 
-  private assertReceivableCanReceivePayment(receivable: AccountReceivable): void {
+  private assertReceivableCanReceivePayment(
+    receivable: AccountReceivable,
+  ): void {
     if (
       receivable.status === CollectionStatus.PAID ||
       receivable.status === CollectionStatus.CANCELLED
     ) {
-      throw new BadRequestException('Cannot register payments on paid or cancelled accounts receivable');
+      throw new BadRequestException(
+        'Cannot register payments on paid or cancelled accounts receivable',
+      );
     }
   }
 
@@ -357,71 +447,124 @@ export class AccountsReceivableService {
     if (dto.routeId || dto.routeSettlementId) return null;
     if (!dto.cashShiftId && dto.paymentMethod !== 'CASH') return null;
     if (!locationId) throw new BadRequestException('PAYMENT_LOCATION_REQUIRED');
-    if (!dto.cashShiftId) throw new BadRequestException({ code: 'CASH_SHIFT_REQUIRED', message: 'An open cash shift is required before registering a cash payment' });
-    if (!dto.deviceId?.trim()) throw new BadRequestException({ code: 'CASH_TERMINAL_DEVICE_REQUIRED', message: 'The registered terminal device is required' });
+    if (!dto.cashShiftId)
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_REQUIRED',
+        message:
+          'An open cash shift is required before registering a cash payment',
+      });
+    if (!dto.deviceId?.trim())
+      throw new BadRequestException({
+        code: 'CASH_TERMINAL_DEVICE_REQUIRED',
+        message: 'The registered terminal device is required',
+      });
     const shift = await tx.cashShift.findUnique({
       where: { id: dto.cashShiftId },
       select: {
-        id: true, operationalLocationId: true, pointOfSaleDailyCloseId: true, cashierUserId: true, status: true,
+        id: true,
+        operationalLocationId: true,
+        pointOfSaleDailyCloseId: true,
+        cashierUserId: true,
+        status: true,
         terminal: { select: { deviceId: true, isActive: true } },
         pointOfSaleDailyClose: { select: { status: true } },
       },
     });
-    if (!shift) throw new BadRequestException({ code: 'CASH_SHIFT_NOT_FOUND', message: 'The selected cash shift does not exist' });
-    if (shift.operationalLocationId !== locationId) throw new BadRequestException({ code: 'CASH_SHIFT_LOCATION_MISMATCH', message: 'The cash shift does not belong to the payment location' });
-    if (shift.status !== 'OPEN' || shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT) throw new BadRequestException({ code: 'CASH_SHIFT_NOT_OPEN', message: 'The selected cash shift is not open for payments' });
-    if (shift.cashierUserId !== currentUser.id) throw new BadRequestException({ code: 'CASH_SHIFT_CASHIER_MISMATCH', message: 'The cash shift belongs to another cashier' });
-    if (!shift.terminal.isActive || shift.terminal.deviceId !== dto.deviceId.trim()) throw new BadRequestException({ code: 'CASH_TERMINAL_DEVICE_MISMATCH', message: 'The device does not belong to the registered cash terminal' });
+    if (!shift)
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_NOT_FOUND',
+        message: 'The selected cash shift does not exist',
+      });
+    if (shift.operationalLocationId !== locationId)
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_LOCATION_MISMATCH',
+        message: 'The cash shift does not belong to the payment location',
+      });
+    if (
+      shift.status !== 'OPEN' ||
+      shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
+    )
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_NOT_OPEN',
+        message: 'The selected cash shift is not open for payments',
+      });
+    if (shift.cashierUserId !== currentUser.id)
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_CASHIER_MISMATCH',
+        message: 'The cash shift belongs to another cashier',
+      });
+    if (
+      !shift.terminal.isActive ||
+      shift.terminal.deviceId !== dto.deviceId.trim()
+    )
+      throw new BadRequestException({
+        code: 'CASH_TERMINAL_DEVICE_MISMATCH',
+        message: 'The device does not belong to the registered cash terminal',
+      });
     return shift;
   }
 
   private assertEligibleCreditSale(sale: CreditSaleRecord): void {
     if (sale.paymentType !== SalePaymentType.CREDIT_SALE) {
-      throw new BadRequestException('Only credit sales can create accounts receivable');
+      throw new BadRequestException(
+        'Only credit sales can create accounts receivable',
+      );
     }
     if (sale.status !== SaleStatus.CONFIRMED) {
-      throw new BadRequestException('Only confirmed credit sales can create accounts receivable');
+      throw new BadRequestException(
+        'Only confirmed credit sales can create accounts receivable',
+      );
     }
     if (!sale.customerId || !sale.customer) {
       throw new BadRequestException('Credit sale requires a customer');
     }
     if (!sale.customer.isActive) {
-      throw new BadRequestException('Inactive customer cannot receive credit sales');
+      throw new BadRequestException(
+        'Inactive customer cannot receive credit sales',
+      );
     }
     if (sale.customer.creditStatus !== CreditStatus.ACTIVE) {
       throw new BadRequestException('Customer credit is not active');
     }
   }
 
-  private sumActiveSalePayments(payments: Array<Pick<Payment, 'amount' | 'status'>>): number {
-    return this.roundMoney(
+  private sumActiveSalePayments(
+    payments: Array<Pick<Payment, 'amount' | 'status'>>,
+  ): Money {
+    return Money.sum(
       payments
         .filter((payment) => payment.status !== PaymentStatus.CANCELLED)
-        .reduce((sum, payment) => sum + this.toNumber(payment.amount), 0),
+        .map((payment) => payment.amount),
     );
   }
 
   private toDetail(receivable: ReceivableRecord) {
     return {
       ...this.toListItem(receivable),
-      customer: receivable.customer ? {
-        id: receivable.customer.id,
-        name: receivable.customer.name,
-        customerType: receivable.customer.customerType,
-        creditStatus: receivable.customer.creditStatus,
-        customerNumber: receivable.customer.customerNumber,
-        commercialName: receivable.customer.commercialName,
-      } : null,
-      sale: receivable.sale ? {
-        id: receivable.sale.id,
-        saleNumber: receivable.sale.saleNumber,
-        total: this.toMoneyString(receivable.sale.total),
-        locationId: receivable.sale.locationId,
-        documentType: receivable.sale.documentType,
-        physicalFolio: receivable.sale.physicalFolio ?? null,
-      } : null,
+      customer: receivable.customer
+        ? {
+            id: receivable.customer.id,
+            name: receivable.customer.name,
+            customerType: receivable.customer.customerType,
+            creditStatus: receivable.customer.creditStatus,
+            customerNumber: receivable.customer.customerNumber,
+            commercialName: receivable.customer.commercialName,
+          }
+        : null,
+      sale: receivable.sale
+        ? {
+            id: receivable.sale.id,
+            saleNumber: receivable.sale.saleNumber,
+            total: toMoneyString(receivable.sale.total),
+            locationId: receivable.sale.locationId,
+            documentType: receivable.sale.documentType,
+            physicalFolio: receivable.sale.physicalFolio ?? null,
+          }
+        : null,
       billingRequest: receivable.billingRequest ?? null,
-      payments: (receivable.payments ?? []).map((payment) => this.toPaymentResponse(payment)),
+      payments: (receivable.payments ?? []).map((payment) =>
+        this.toPaymentResponse(payment),
+      ),
     };
   }
 
@@ -435,8 +578,8 @@ export class AccountsReceivableService {
       saleLocationId: receivable.sale?.locationId ?? null,
       billingRequestId: receivable.billingRequestId,
       billingRequestStatus: receivable.billingRequest?.status ?? null,
-      originalAmount: this.toMoneyString(receivable.originalAmount),
-      outstandingAmount: this.toMoneyString(receivable.outstandingAmount),
+      originalAmount: toMoneyString(receivable.originalAmount),
+      outstandingAmount: toMoneyString(receivable.outstandingAmount),
       saleDate: receivable.saleDate,
       dueDate: receivable.dueDate,
       paymentTermsDays: receivable.paymentTermsDays,
@@ -460,7 +603,7 @@ export class AccountsReceivableService {
       accountReceivableId: payment.accountReceivableId,
       saleId: payment.saleId,
       customerId: payment.customerId,
-      amount: this.toMoneyString(payment.amount),
+      amount: toMoneyString(payment.amount),
       paymentMethod: payment.paymentMethod,
       bankName: payment.bankName,
       referenceNumber: payment.referenceNumber,
@@ -494,7 +637,13 @@ export class AccountsReceivableService {
       appliedDocumentType: this.normalizeOptionalText(dto.appliedDocumentType),
       routeId: this.normalizeOptionalText(dto.routeId),
       routeSettlementId: this.normalizeOptionalText(dto.routeSettlementId),
-      ...(dto.pointOfSaleDailyCloseId ? { pointOfSaleDailyCloseId: this.normalizeOptionalText(dto.pointOfSaleDailyCloseId) } : {}),
+      ...(dto.pointOfSaleDailyCloseId
+        ? {
+            pointOfSaleDailyCloseId: this.normalizeOptionalText(
+              dto.pointOfSaleDailyCloseId,
+            ),
+          }
+        : {}),
       collectedByUserId: dto.collectedByUserId ?? userId,
       collectionPass: dto.collectionPass ?? null,
       paidAt: dto.paidAt ?? null,
@@ -502,21 +651,27 @@ export class AccountsReceivableService {
     };
   }
 
-
   private async resolveExistingPaymentByKey(
     idempotencyKey: string,
     accountReceivableId: string,
     payloadHash: string,
   ) {
-    const existingPayment = (await this.prisma.payment.findFirst({
+    const existingPayment = await this.prisma.payment.findFirst({
       where: { idempotencyKey },
-    })) as IdempotentPayment | null;
+    });
 
     if (!existingPayment) {
-      throw new ConflictException('Concurrent payment registration is still in progress; retry with the same Idempotency-Key');
+      throw new ConflictException(
+        'Concurrent payment registration is still in progress; retry with the same Idempotency-Key',
+      );
     }
 
-    return this.resolveExistingPaymentResponse(this.prisma, existingPayment, accountReceivableId, payloadHash);
+    return this.resolveExistingPaymentResponse(
+      this.prisma,
+      existingPayment,
+      accountReceivableId,
+      payloadHash,
+    );
   }
 
   private async resolveExistingPaymentResponse(
@@ -555,7 +710,11 @@ export class AccountsReceivableService {
     );
   }
 
-  private assertSameIdempotencyPayload(existingHash: string | null | undefined, expectedHash: string, message: string): void {
+  private assertSameIdempotencyPayload(
+    existingHash: string | null | undefined,
+    expectedHash: string,
+    message: string,
+  ): void {
     if (existingHash !== expectedHash) {
       throw new ConflictException(message);
     }
@@ -578,13 +737,5 @@ export class AccountsReceivableService {
 
   private toNumber(value: DecimalLike): number {
     return Number(value?.toString() ?? 0);
-  }
-
-  private toMoneyString(value: DecimalLike): string {
-    return this.toNumber(value).toString();
-  }
-
-  private roundMoney(value: number): number {
-    return Math.round(value * 100) / 100;
   }
 }

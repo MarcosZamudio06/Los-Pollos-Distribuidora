@@ -189,7 +189,10 @@ describe('Prisma schema contract', () => {
     const payment = getModelBlock('Payment');
     const cashMovement = getModelBlock('CashMovement');
     const dailyClose = getModelBlock('PointOfSaleDailyClose');
-    const migrationSql = readFileSync(cashTerminalShiftMigrationSqlPath, 'utf8');
+    const migrationSql = readFileSync(
+      cashTerminalShiftMigrationSqlPath,
+      'utf8',
+    );
 
     expect(terminal).toMatch(/deviceId\s+String\s+@unique/);
     expect(terminal).toContain('@@unique([operationalLocationId, code])');
@@ -214,7 +217,10 @@ describe('Prisma schema contract', () => {
 
   it('persists hashed, expiring terminal activation codes for supervised cutover', () => {
     const activation = getModelBlock('CashTerminalActivation');
-    const migrationSql = readFileSync(cashTerminalCutoverMigrationSqlPath, 'utf8');
+    const migrationSql = readFileSync(
+      cashTerminalCutoverMigrationSqlPath,
+      'utf8',
+    );
 
     expect(activation).toMatch(/codeHash\s+String\s+@unique/);
     expect(activation).toMatch(/expiresAt\s+DateTime/);
@@ -236,7 +242,10 @@ describe('Prisma schema contract', () => {
 
   it('persists structured daily-close differences with justification and authorization actors', () => {
     const difference = getModelBlock('DailyCloseDifference');
-    const migrationSql = readFileSync(dailyCloseDifferenceMigrationSqlPath, 'utf8');
+    const migrationSql = readFileSync(
+      dailyCloseDifferenceMigrationSqlPath,
+      'utf8',
+    );
 
     expect(difference).toMatch(/expectedValue\s+Decimal/);
     expect(difference).toMatch(/recordedValue\s+Decimal\?/);
@@ -246,9 +255,13 @@ describe('Prisma schema contract', () => {
     expect(difference).toMatch(/evidence\s+String\?/);
     expect(difference).toMatch(/justifiedByUserId\s+String\?/);
     expect(difference).toMatch(/authorizedByUserId\s+String\?/);
-    expect(difference).toContain('@@unique([pointOfSaleDailyCloseId, scope, referenceKey])');
+    expect(difference).toContain(
+      '@@unique([pointOfSaleDailyCloseId, scope, referenceKey])',
+    );
     expect(migrationSql).toContain('CREATE TABLE "DailyCloseDifference"');
-    expect(migrationSql).toContain('DailyCloseDifference_pointOfSaleDailyCloseId_scope_referenceKey_key');
+    expect(migrationSql).toContain(
+      'DailyCloseDifference_pointOfSaleDailyCloseId_scope_referenceKey_key',
+    );
   });
 
   it('keeps the product barcode field synchronized with its database migration', () => {
@@ -272,7 +285,9 @@ describe('Prisma schema contract', () => {
     expect(scaleTicket).toMatch(/tareWeightKg\s+Decimal\?/);
     expect(scaleTicket).toMatch(/netWeightKg\s+Decimal\?/);
     expect(scaleTicket).toMatch(/scaleDeviceId\s+String\?/);
-    expect(scaleTicket).toMatch(/captureSource\s+ScaleTicketCaptureSource\s+@default\(MANUAL\)/);
+    expect(scaleTicket).toMatch(
+      /captureSource\s+ScaleTicketCaptureSource\s+@default\(MANUAL\)/,
+    );
   });
 
   it('persists user access status fields with safe defaults and nullable deactivation audit', () => {

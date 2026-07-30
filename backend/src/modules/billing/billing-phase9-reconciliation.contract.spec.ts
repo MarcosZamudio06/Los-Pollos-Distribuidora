@@ -3,10 +3,7 @@ import { resolve } from 'node:path';
 
 describe('billing phase 9 reconciliation contract', () => {
   const reconciliation = readFileSync(
-    resolve(
-      process.cwd(),
-      'prisma/scripts/billing-phase9-reconciliation.sql',
-    ),
+    resolve(process.cwd(), 'prisma/scripts/billing-phase9-reconciliation.sql'),
     'utf8',
   );
 

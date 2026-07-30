@@ -86,9 +86,11 @@ describe('JwtAuthGuard', () => {
       }),
     } as unknown as AuthService;
     const reflector = {
-      getAllAndOverride: jest.fn().mockImplementation((key: string) =>
-        key === ALLOW_PASSWORD_CHANGE_REQUIRED_KEY,
-      ),
+      getAllAndOverride: jest
+        .fn()
+        .mockImplementation(
+          (key: string) => key === ALLOW_PASSWORD_CHANGE_REQUIRED_KEY,
+        ),
     };
     const guard = new JwtAuthGuard(authService, reflector as never);
     const handler = jest.fn();

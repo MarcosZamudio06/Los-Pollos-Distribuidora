@@ -72,7 +72,8 @@ export class PointOfSaleDailyCloseController {
     @CurrentUser() user: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
+    if (!idempotencyKey?.trim())
+      throw new BadRequestException('Idempotency-Key header is required');
     return this.response(
       'Expense registered successfully',
       await this.service.addExpense(id, dto, user, idempotencyKey.trim()),
@@ -84,7 +85,8 @@ export class PointOfSaleDailyCloseController {
     @CurrentUser() user: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
+    if (!idempotencyKey?.trim())
+      throw new BadRequestException('Idempotency-Key header is required');
     return this.response(
       'Scale ticket registered successfully',
       await this.service.addScaleTicket(id, dto, user, idempotencyKey.trim()),
@@ -100,7 +102,9 @@ export class PointOfSaleDailyCloseController {
       await this.service.recordCashCount(id, dto, user),
     );
   }
-  @Patch(':id/differences/:differenceId/justify') @Roles('ADMIN', 'SELLER') async justifyDifference(
+  @Patch(':id/differences/:differenceId/justify')
+  @Roles('ADMIN', 'SELLER')
+  async justifyDifference(
     @Param('id') id: string,
     @Param('differenceId') differenceId: string,
     @Body() dto: JustifyDailyCloseDifferenceDto,
@@ -111,7 +115,9 @@ export class PointOfSaleDailyCloseController {
       await this.service.justifyDifference(id, differenceId, dto, user),
     );
   }
-  @Patch(':id/differences/:differenceId/authorize') @RequirePermissions(PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE) async authorizeDifference(
+  @Patch(':id/differences/:differenceId/authorize')
+  @RequirePermissions(PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE)
+  async authorizeDifference(
     @Param('id') id: string,
     @Param('differenceId') differenceId: string,
     @Body() dto: VersionedDailyCloseDto,
@@ -122,7 +128,9 @@ export class PointOfSaleDailyCloseController {
       await this.service.authorizeDifference(id, differenceId, dto, user),
     );
   }
-  @Get(':id/reconciliation') @Roles('ADMIN', 'SELLER', 'WAREHOUSE') async reconciliation(
+  @Get(':id/reconciliation')
+  @Roles('ADMIN', 'SELLER', 'WAREHOUSE')
+  async reconciliation(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -131,19 +139,29 @@ export class PointOfSaleDailyCloseController {
       await this.service.getReconciliation(id, user),
     );
   }
-  @Post(':id/inventory-counts') @Roles('ADMIN', 'SELLER') async createInventoryCount(
+  @Post(':id/inventory-counts')
+  @Roles('ADMIN', 'SELLER')
+  async createInventoryCount(
     @Param('id') id: string,
     @Body() dto: CreateDailyCloseInventoryCountDto,
     @CurrentUser() user: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (!idempotencyKey?.trim()) throw new BadRequestException('Idempotency-Key header is required');
+    if (!idempotencyKey?.trim())
+      throw new BadRequestException('Idempotency-Key header is required');
     return this.response(
       'Daily close inventory count registered successfully',
-      await this.service.createInventoryCount(id, dto, user, idempotencyKey.trim()),
+      await this.service.createInventoryCount(
+        id,
+        dto,
+        user,
+        idempotencyKey.trim(),
+      ),
     );
   }
-  @Patch(':id/inventory-counts/:countId') @Roles('ADMIN', 'SELLER') async updateInventoryCount(
+  @Patch(':id/inventory-counts/:countId')
+  @Roles('ADMIN', 'SELLER')
+  async updateInventoryCount(
     @Param('id') id: string,
     @Param('countId') countId: string,
     @Body() dto: UpdateDailyCloseInventoryCountDto,
@@ -154,7 +172,9 @@ export class PointOfSaleDailyCloseController {
       await this.service.updateInventoryCount(id, countId, dto, user),
     );
   }
-  @Delete(':id/inventory-counts/:countId') @Roles('ADMIN', 'SELLER') async deleteInventoryCount(
+  @Delete(':id/inventory-counts/:countId')
+  @Roles('ADMIN', 'SELLER')
+  async deleteInventoryCount(
     @Param('id') id: string,
     @Param('countId') countId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -175,7 +195,10 @@ export class PointOfSaleDailyCloseController {
   }
   @Post(':id/refresh')
   @Roles('ADMIN', 'SELLER', 'WAREHOUSE', 'COLLECTIONS')
-  async refresh(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  async refresh(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.response(
       'Daily close refreshed successfully',
       await this.service.refresh(id, user),
@@ -211,7 +234,9 @@ export class PointOfSaleDailyCloseController {
       await this.service.cancel(id, dto, user),
     );
   }
-  @Patch(':id/reopen') @RequirePermissions(PERMISSIONS.DAILY_CLOSES_REOPEN) async reopen(
+  @Patch(':id/reopen')
+  @RequirePermissions(PERMISSIONS.DAILY_CLOSES_REOPEN)
+  async reopen(
     @Param('id') id: string,
     @Body() dto: ReasonedDailyCloseDto,
     @CurrentUser() user: AuthenticatedUser,

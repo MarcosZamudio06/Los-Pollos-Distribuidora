@@ -13,7 +13,18 @@ import { SaleConsistencyValidator } from './sale-consistency-validator';
 
 @Module({
   imports: [PrismaModule, AuthModule],
-  controllers: [BillingReportController, InvoiceCancellationController, BillingRemediationController],
-  providers: [BillingReportService, BillingReportExporter, InvoiceCancellationService, BillingRemediationService, RemediationImpactAnalyzer, SaleConsistencyValidator],
+  controllers: [
+    BillingReportController,
+    InvoiceCancellationController,
+    BillingRemediationController,
+  ],
+  providers: [
+    BillingReportService,
+    BillingReportExporter,
+    InvoiceCancellationService,
+    BillingRemediationService,
+    RemediationImpactAnalyzer,
+    SaleConsistencyValidator,
+  ],
 })
 export class BillingModule {}

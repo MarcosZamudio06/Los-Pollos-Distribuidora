@@ -52,9 +52,7 @@ export class SuppliersService {
     const limit = query.limit ?? total;
 
     return {
-      items: (suppliers as SupplierRecord[]).map((supplier) =>
-        this.toSupplierResponse(supplier),
-      ),
+      items: suppliers.map((supplier) => this.toSupplierResponse(supplier)),
       total,
       page,
       limit,
@@ -63,9 +61,9 @@ export class SuppliersService {
   }
 
   async findOne(id: string): Promise<SupplierResponse> {
-    const supplier = (await this.prisma.supplier.findUnique({
+    const supplier = await this.prisma.supplier.findUnique({
       where: { id },
-    })) as SupplierRecord | null;
+    });
 
     if (!supplier) {
       throw new NotFoundException('Supplier not found');
@@ -77,34 +75,31 @@ export class SuppliersService {
   async create(dto: CreateSupplierDto): Promise<SupplierResponse> {
     const data = this.normalizeMutationData(dto);
 
-    const supplier = (await this.prisma.supplier.create({
+    const supplier = await this.prisma.supplier.create({
       data: { ...data, isActive: true },
-    })) as SupplierRecord;
+    });
 
     return this.toSupplierResponse(supplier);
   }
 
-  async update(
-    id: string,
-    dto: UpdateSupplierDto,
-  ): Promise<SupplierResponse> {
+  async update(id: string, dto: UpdateSupplierDto): Promise<SupplierResponse> {
     const currentSupplier = await this.findActiveSupplierForMutation(id);
     const data = this.normalizeUpdateData(dto, currentSupplier);
 
-    const supplier = (await this.prisma.supplier.update({
+    const supplier = await this.prisma.supplier.update({
       where: { id: currentSupplier.id },
       data,
-    })) as SupplierRecord;
+    });
 
     return this.toSupplierResponse(supplier);
   }
 
   async deactivate(id: string): Promise<SupplierResponse> {
     const currentSupplier = await this.findActiveSupplierForMutation(id);
-    const supplier = (await this.prisma.supplier.update({
+    const supplier = await this.prisma.supplier.update({
       where: { id: currentSupplier.id },
       data: { isActive: false },
-    })) as SupplierRecord;
+    });
 
     return this.toSupplierResponse(supplier);
   }
@@ -146,9 +141,9 @@ export class SuppliersService {
   private async findActiveSupplierForMutation(
     id: string,
   ): Promise<SupplierRecord> {
-    const supplier = (await this.prisma.supplier.findFirst({
+    const supplier = await this.prisma.supplier.findFirst({
       where: { id, isActive: true },
-    })) as SupplierRecord | null;
+    });
 
     if (!supplier) {
       throw new NotFoundException('Supplier not found');
@@ -182,13 +177,17 @@ export class SuppliersService {
     const effectiveName =
       dto.name !== undefined ? dto.name.trim() : currentSupplier.name;
     const effectivePhone =
-      dto.phone !== undefined ? dto.phone.trim() : currentSupplier.phone ?? '';
+      dto.phone !== undefined
+        ? dto.phone.trim()
+        : (currentSupplier.phone ?? '');
     const effectiveEmail =
-      dto.email !== undefined ? dto.email.trim() : currentSupplier.email ?? '';
+      dto.email !== undefined
+        ? dto.email.trim()
+        : (currentSupplier.email ?? '');
     const effectiveAddress =
       dto.address !== undefined
         ? dto.address.trim()
-        : currentSupplier.address ?? '';
+        : (currentSupplier.address ?? '');
 
     this.assertRequiredFields({
       address: effectiveAddress,

@@ -51,8 +51,11 @@ export type DeliveryOperationsReportFilters = {
   status?: string
 }
 
+/** API responses are canonical strings; number remains for legacy fixtures during cutover. */
+export type MoneyValue = string | number
+
 export type MoneyGroup = {
-  amount: number
+  amount: MoneyValue
   bankName?: string | null
   count?: number
   paymentMethod?: string | null
@@ -60,14 +63,14 @@ export type MoneyGroup = {
 }
 
 export type DashboardSalesToday = {
-  cash: number
+  cash: MoneyValue
   count: number
-  credit: number
-  total: number
+  credit: MoneyValue
+  total: MoneyValue
 }
 
 export type DashboardOverdueReceivables = {
-  balance: number
+  balance: MoneyValue
   count: number
 }
 
@@ -98,36 +101,36 @@ export type DashboardDeliverySummary = {
 }
 
 export type DashboardTopProduct = {
-  amount?: number
+  amount?: MoneyValue
   count?: number
   productId?: string
   productName?: string | null
   quantityKg?: number | null
   quantityPieces?: number | null
-  total?: number
+  total?: MoneyValue
 }
 
 export type DashboardReport = ReportFreshness & {
   billingRequestsToday?: number
-  cashSalesToday: number
-  collectionsToday: number
+  cashSalesToday: MoneyValue
+  collectionsToday: MoneyValue
   customersBlockedForCredit?: number
   deliverySummary: DashboardDeliverySummary
   lowStockByLocation: DashboardLowStockItem[]
   overdueReceivables: DashboardOverdueReceivables
   paymentsByBankToday?: MoneyGroup[]
   paymentsByMethodToday?: MoneyGroup[]
-  routeCollectionsPendingSettlement: number
+  routeCollectionsPendingSettlement: MoneyValue
   salesToday: DashboardSalesToday
   topProducts: DashboardTopProduct[]
 }
 
 export type CountAmountSummary = {
-  amount?: number
+  amount?: MoneyValue
   count?: number
   label?: string | null
   status?: string | null
-  total?: number
+  total?: MoneyValue
 }
 
 export type SalesDailyReportItem = {
@@ -142,7 +145,7 @@ export type SalesDailyReportItem = {
   saleId?: string
   saleNumber?: string | null
   sellerName?: string | null
-  total?: number
+  total?: MoneyValue
 }
 
 export type SalesDailyReport = ReportFreshness & {
@@ -156,13 +159,13 @@ export type SalesDailyReport = ReportFreshness & {
   items?: SalesDailyReportItem[]
   locationId?: string | null
   summary?: {
-    canceled?: number
-    cash?: number
+    canceled?: MoneyValue
+    cash?: MoneyValue
     count?: number
-    credit?: number
-    discounts?: number
-    subtotal?: number
-    total?: number
+    credit?: MoneyValue
+    discounts?: MoneyValue
+    subtotal?: MoneyValue
+    total?: MoneyValue
   }
 }
 
@@ -184,7 +187,7 @@ export type InventoryReport = ReportFreshness & {
 export type AccountsReceivableReportItem = {
   accountReceivableId?: string
   agingStatus?: string | null
-  balance?: number
+  balance?: MoneyValue
   clientName?: string | null
   customerName?: string | null
   dueDate?: string | null
@@ -195,15 +198,15 @@ export type AccountsReceivableReportItem = {
 }
 
 export type AccountsReceivableByCustomer = {
-  billedBalance?: number
+  billedBalance?: MoneyValue
   creditStatus?: string | null
   customerId?: string
   customerName?: string | null
-  dueSoon?: number
-  finalBalance?: number
+  dueSoon?: MoneyValue
+  finalBalance?: MoneyValue
   lastPaymentAt?: string | null
-  overdue?: number
-  paidBalance?: number
+  overdue?: MoneyValue
+  paidBalance?: MoneyValue
 }
 
 export type AccountsReceivableReport = ReportFreshness & {
@@ -213,12 +216,12 @@ export type AccountsReceivableReport = ReportFreshness & {
   paymentsByMethod?: MoneyGroup[]
   summary?: {
     blockedCustomers?: number
-    finalBalanceByCustomer?: number
-    originalBalance?: number
-    overdueBalance?: number
-    overdueCredit?: number
-    paymentsInPeriod?: number
-    pendingBalance?: number
+    finalBalanceByCustomer?: MoneyValue
+    originalBalance?: MoneyValue
+    overdueBalance?: MoneyValue
+    overdueCredit?: MoneyValue
+    paymentsInPeriod?: MoneyValue
+    pendingBalance?: MoneyValue
   }
 }
 

@@ -62,7 +62,9 @@ describe('UsersService employee administration', () => {
     const prisma = prismaMock();
     const service = new UsersService(prisma as unknown as PrismaService);
 
-    await expect(service.update('user-1', { roleId: 'role-admin' })).rejects.toThrow(
+    await expect(
+      service.update('user-1', { roleId: 'role-admin' }),
+    ).rejects.toThrow(
       'Use the access-profile endpoint to change a user profile',
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -191,11 +193,15 @@ describe('UsersService employee administration', () => {
     prisma.authSession.updateMany.mockResolvedValue({ count: 2 });
     const service = new UsersService(prisma as unknown as PrismaService);
 
-    await service.updatePassword('user-1', { temporaryPassword: 'temporary-password' });
+    await service.updatePassword('user-1', {
+      temporaryPassword: 'temporary-password',
+    });
 
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ sessionVersion: { increment: 1 } }),
-    }));
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ sessionVersion: { increment: 1 } }),
+      }),
+    );
     expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', revokedAt: null },
       data: { revokedAt: expect.any(Date) },

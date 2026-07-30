@@ -28,19 +28,28 @@ export class AccessControlController {
   @Get('permissions')
   @RequirePermissions(PERMISSIONS.ROLES_READ)
   async listPermissions() {
-    return this.response('Permissions retrieved successfully', await this.service.listPermissions());
+    return this.response(
+      'Permissions retrieved successfully',
+      await this.service.listPermissions(),
+    );
   }
 
   @Get('roles')
   @RequirePermissions(PERMISSIONS.ROLES_READ)
   async listRoles() {
-    return this.response('Access profiles retrieved successfully', await this.service.listRoles());
+    return this.response(
+      'Access profiles retrieved successfully',
+      await this.service.listRoles(),
+    );
   }
 
   @Get('roles/:id')
   @RequirePermissions(PERMISSIONS.ROLES_READ)
   async getRole(@Param('id') id: string) {
-    return this.response('Access profile retrieved successfully', await this.service.getRole(id));
+    return this.response(
+      'Access profile retrieved successfully',
+      await this.service.getRole(id),
+    );
   }
 
   @Patch('roles/:id/permissions')
@@ -53,14 +62,22 @@ export class AccessControlController {
   ) {
     return this.response(
       'Access profile permissions updated successfully',
-      await this.service.updateRolePermissions(id, body, actor, this.context(request)),
+      await this.service.updateRolePermissions(
+        id,
+        body,
+        actor,
+        this.context(request),
+      ),
     );
   }
 
   @Get('users/:id/access')
   @RequirePermissions(PERMISSIONS.USERS_MANAGE)
   async getUserAccess(@Param('id') id: string) {
-    return this.response('User access retrieved successfully', await this.service.getUserAccess(id));
+    return this.response(
+      'User access retrieved successfully',
+      await this.service.getUserAccess(id),
+    );
   }
 
   @Patch('users/:id/access-profile')
@@ -73,7 +90,12 @@ export class AccessControlController {
   ) {
     return this.response(
       'User access profile updated successfully',
-      await this.service.updateUserAccessProfile(id, body, actor, this.context(request)),
+      await this.service.updateUserAccessProfile(
+        id,
+        body,
+        actor,
+        this.context(request),
+      ),
     );
   }
 
@@ -87,14 +109,22 @@ export class AccessControlController {
   ) {
     return this.response(
       'User sessions revoked successfully',
-      await this.service.revokeUserSessions(id, body, actor, this.context(request)),
+      await this.service.revokeUserSessions(
+        id,
+        body,
+        actor,
+        this.context(request),
+      ),
     );
   }
 
   @Get('access-control/audit-logs')
   @RequirePermissions(PERMISSIONS.ACCESS_AUDIT_READ)
   async listAuditLogs(@Query() query: ListAccessAuditLogsDto) {
-    return this.response('Access-control audit logs retrieved successfully', await this.service.listAuditLogs(query));
+    return this.response(
+      'Access-control audit logs retrieved successfully',
+      await this.service.listAuditLogs(query),
+    );
   }
 
   private response(message: string, data: unknown) {

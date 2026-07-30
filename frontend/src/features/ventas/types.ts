@@ -1,5 +1,8 @@
 import type { Customer, CustomerCreditSummary, CustomerType } from '../clientes/types'
 import type { OperationalUnit, ProductPresentation } from '../inventario/types'
+import type { Money } from '../../../../shared/money'
+
+export type MoneyValue = string | number
 
 export type PaymentType = 'CASH_SALE' | 'CREDIT_SALE'
 export type PosTransactionState = 'EMPTY' | 'CART_ACTIVE' | 'WEIGHT_PENDING' | 'CUSTOMER_REQUIRED' | 'CREDIT_BLOCKED' | 'PAYMENT_PENDING' | 'READY_TO_CHARGE' | 'PROCESSING' | 'SUCCESS' | 'BLOCKED'
@@ -10,9 +13,9 @@ export type InitialPaymentReference = {
   cardLastFour: string
 }
 export type SalePaymentInput = {
-  amount: number
+  amount: MoneyValue
   paymentMethod: PaymentMethod
-  cashTendered?: number
+  cashTendered?: MoneyValue
   bankName?: string
   referenceNumber?: string
   cardLastFour?: string
@@ -49,8 +52,8 @@ export type ProductOption = {
   barcode?: string | null
   presentationType: ProductPresentation
   unit: OperationalUnit
-  salePrice: number
-  unitPrice: number
+  salePrice: MoneyValue
+  unitPrice: MoneyValue
   locationId: string
   locationName?: string | null
   availableKg: number
@@ -93,9 +96,9 @@ export type CreateSalePayload = {
   }
   paymentType: PaymentType
   payments?: Array<{
-    amount: number
+    amount: string
     paymentMethod: Exclude<PaymentMethod, ''>
-    cashTendered?: number
+    cashTendered?: string
     bankName?: string
     referenceNumber?: string
     cardLastFour?: string
@@ -121,7 +124,8 @@ export type BuildCreateSalePayloadInput = {
   physicalFolio: string
   requiresAdministrativeInvoice: boolean
   saleChannel: SaleChannel
-  total: number
+  /** Legacy input retained while callers transition to the exact Money value. */
+  total: Money | MoneyValue
 }
 
 export type CreateSaleResponse = {
