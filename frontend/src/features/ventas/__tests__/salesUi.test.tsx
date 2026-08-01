@@ -416,11 +416,12 @@ describe('TASK-055 sales UI behavior', () => {
     const primaryAction = dock.querySelector('button[data-pos-primary-action]')
     const actionWrapper = primaryAction?.parentElement
     const summaryWrapper = dock.querySelector('[aria-label="Resumen de transacción y total"]')?.parentElement
-    expect(primaryAction?.className).toContain('w-[clamp(220px,18vw,260px)]')
+    expect(primaryAction?.className).toContain('w-full')
     expect(primaryAction?.className).toContain('rounded-[14px]')
     expect(primaryAction?.className).toContain('active:scale-95')
     expect(primaryAction?.className).toContain('disabled:opacity-50')
     expect(actionWrapper?.className).toContain('min-[1280px]:col-start-5')
+    expect(actionWrapper?.className).toContain('p-3')
     expect(actionWrapper?.className).not.toContain('bg-[var(--pos-action)]')
     expect(summaryWrapper?.className).toContain('min-[1280px]:col-start-4')
   })
