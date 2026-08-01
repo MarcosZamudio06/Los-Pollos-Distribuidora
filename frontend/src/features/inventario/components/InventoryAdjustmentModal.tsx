@@ -75,7 +75,7 @@ export function InventoryAdjustmentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 overflow-y-auto bg-[rgba(16,24,32,0.56)] px-4 py-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[rgba(16,24,32,0.56)] px-4 py-8 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="mx-auto grid max-w-2xl gap-4 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-6 shadow-[0_30px_90px_rgba(16,24,32,0.22)]"
