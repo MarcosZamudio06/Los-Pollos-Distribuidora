@@ -237,13 +237,15 @@ describe('TASK-055 sales UI behavior', () => {
     expect(html).toContain('h-16')
     expect(html).toContain('grid-cols-[40fr_60fr]')
     expect(html).toContain('xl:grid-cols-[38fr_62fr]')
-    expect(html).toContain('h-40')
+    expect(html).toContain('min-h-0 min-w-0 overflow-hidden border-r')
+    expect(html).toContain('relative flex min-h-0 min-w-0 flex-col overflow-hidden')
     expect(html).toContain('h-60')
-    expect(html).toContain('grid-rows-3')
+    expect(html).toContain('min-[1280px]:h-36')
+    expect(html).toContain('grid-rows-[repeat(3,minmax(0,1fr))]')
     expect(html).toContain('gap-px')
     expect(html).toContain('min-[1024px]:grid-cols-[20fr_13fr_22fr]')
-    expect(html).toContain('min-[1024px]:grid-rows-2')
-    expect(html).toContain('min-[1440px]:grid-cols-[20fr_13fr_22fr_20fr_25fr]')
+    expect(html).toContain('min-[1024px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]')
+    expect(html).toContain('min-[1280px]:grid-cols-[20fr_13fr_22fr_20fr_25fr]')
     expect(html).toContain('Total de la venta')
     expect(html).toContain('text-[clamp(2.25rem,3.2vw,3rem)]')
     expect(html).toContain('Total en vivo')
@@ -378,6 +380,38 @@ describe('TASK-055 sales UI behavior', () => {
       await act(async () => { root.unmount() })
       container.remove()
     }
+  })
+
+  it('mantiene el dock dentro de su altura y cambia a una fila desde 1280px', () => {
+    const html = renderToStaticMarkup(
+      <CheckoutDock
+        cart={[]}
+        customerSearch=""
+        customers={[]}
+        customersError={null}
+        customersLoading={false}
+        isSubmitting={false}
+        onConfirm={() => undefined}
+        onCustomerSearchChange={() => undefined}
+        onCustomerSelect={() => undefined}
+        onPaymentTypeChange={() => undefined}
+        onPaymentsChange={() => undefined}
+        paymentType="CASH_SALE"
+        payments={[]}
+        selectedCustomer={null}
+        total={0}
+        transactionState="EMPTY"
+      />,
+    )
+    const dock = document.createElement('div')
+    dock.innerHTML = html
+    const footer = dock.querySelector('footer')
+    const grid = footer?.firstElementChild
+
+    expect(footer?.className).toContain('min-[1024px]:h-60')
+    expect(footer?.className).toContain('min-[1280px]:h-36')
+    expect(grid?.className).toContain('min-[1024px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]')
+    expect(grid?.className).toContain('min-[1280px]:grid-rows-1')
   })
 
   it('captura efectivo rápido, bloquea denominaciones insuficientes y enfoca Cobrar', async () => {
