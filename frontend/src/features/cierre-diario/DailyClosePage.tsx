@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { CheckCircle2, ClipboardCheck, Plus, RefreshCw } from 'lucide-react'
+import { CheckCircle2, ClipboardCheck, KeyRound, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageContainer } from '../../components/layout/PageContainer'
 import { Button } from '../../components/ui/button'
@@ -9,6 +9,7 @@ import { formatMoney as money } from '../../lib/money'
 import { getOperationalDate } from '../../lib/operationalDate'
 import { getPosDeviceId } from '../../lib/deviceIdentity'
 import { useAuth } from '../auth'
+import { hasPermission, PERMISSIONS } from '../auth/permissions'
 import { usePurchaseLocations } from '../compras/hooks'
 import { locationTypeLabel } from '../compras/purchaseLabels'
 import { useProducts } from '../inventario/hooks/useProducts'
@@ -16,7 +17,7 @@ import { DailyCloseGuidedFlow, type DailyCloseStepId } from './DailyCloseGuidedF
 import { DailyCloseHeader } from './DailyCloseHeader'
 import { DailyCloseTransitionDialog } from './DailyCloseTransitionDialog'
 import { dailyCloseService } from './dailyCloseService'
-import { cashManagementService, type CashTerminal } from './cashManagementService'
+import { cashManagementService, type CashTerminal, type CashTerminalActivation } from './cashManagementService'
 import { CashShiftSummary } from './CashShiftSummary'
 import type { DailyCloseReportAction } from './dailyCloseTransition'
 import { canAutoRefreshDailyClose, canUseLocationForDailyClose, canValidateDailyClose, type DailyClose, type DailyCloseInventoryReconciliation as InventoryReconciliation, type DailyCloseValidationResult } from './types'
@@ -44,6 +45,10 @@ export function DailyClosePage() {
     notes: '',
   })
   const [terminals, setTerminals] = useState<CashTerminal[]>([])
+  const [terminalsLoading, setTerminalsLoading] = useState(false)
+  const [terminalRefreshKey, setTerminalRefreshKey] = useState(0)
+  const [activation, setActivation] = useState<CashTerminalActivation | null>(null)
+  const [activationLoading, setActivationLoading] = useState(false)
   const deviceId = useMemo(() => getPosDeviceId(), [])
   const [expense, setExpense] = useState({
     amount: '',
@@ -66,6 +71,9 @@ export function DailyClosePage() {
   const canViewInventory = user?.role !== 'COLLECTIONS'
   const canViewFinancials = user?.role !== 'WAREHOUSE'
   const canEditDraft = user?.role === 'ADMIN' || user?.role === 'SELLER'
+  const canRequestTerminalActivation = user?.role === 'ADMIN' || user?.role === 'SELLER'
+  const canAuthorizeDifferences = hasPermission(user, PERMISSIONS.dailyCloseDifferencesAuthorize)
+  const canReopen = hasPermission(user, PERMISSIONS.dailyClosesReopen)
   const products = useProducts({
     isActive: 'true',
     locationId: selected?.operationalLocationId ?? '',
@@ -136,28 +144,47 @@ export function DailyClosePage() {
   useEffect(() => {
     if (!locationId) {
       setTerminals([])
+      setActivation(null)
+      setTerminalsLoading(false)
       setOpeningCash((current) => ({ ...current, terminalId: '' }))
       return
     }
     let active = true
+    setTerminalsLoading(true)
+    setActivation(null)
     cashManagementService
       .listTerminals(locationId, deviceId, accessToken)
       .then((items) => {
         if (!active) return
-        const registeredForDevice = items.filter((terminal) => terminal.deviceId === deviceId)
-        setTerminals(registeredForDevice)
+        setTerminals(items)
         setOpeningCash((current) => ({
           ...current,
-          terminalId: registeredForDevice[0]?.id ?? '',
+          terminalId: items[0]?.id ?? '',
         }))
       })
       .catch((error: unknown) => {
         if (active) toast.error(error instanceof Error ? error.message : 'No fue posible consultar las terminales.')
       })
+      .finally(() => {
+        if (active) setTerminalsLoading(false)
+      })
     return () => {
       active = false
     }
-  }, [accessToken, deviceId, locationId])
+  }, [accessToken, deviceId, locationId, terminalRefreshKey])
+
+  const requestTerminalActivation = async () => {
+    if (!locationId || activationLoading) return
+    setActivationLoading(true)
+    try {
+      setActivation(await cashManagementService.requestTerminalActivation({ deviceId, operationalLocationId: locationId }, accessToken))
+      toast.success('Código temporal generado. Entrégalo a un administrador.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible generar el código temporal.')
+    } finally {
+      setActivationLoading(false)
+    }
+  }
 
   const run = async (operation: () => Promise<DailyClose>, message: string) => {
     try {
@@ -355,13 +382,28 @@ export function DailyClosePage() {
             </Select>
             <Input aria-label="Fecha operativa" max={today} onChange={(event) => setBusinessDate(event.target.value)} type="date" value={businessDate} />
             <Select aria-label="Terminal registrada" disabled={!locationId || terminals.length === 0} onChange={(event) => setOpeningCash({ ...openingCash, terminalId: event.target.value })} required value={openingCash.terminalId}>
-              <option value="">{locationId && terminals.length === 0 ? 'Dispositivo sin terminal registrada' : 'Selecciona terminal'}</option>
+              <option value="">{terminalsLoading ? 'Consultando terminal...' : locationId && terminals.length === 0 ? 'Dispositivo sin terminal registrada' : 'Selecciona terminal'}</option>
               {terminals.map((terminal) => (
                 <option key={terminal.id} value={terminal.id}>
                   {terminal.name} · {terminal.code}
                 </option>
               ))}
             </Select>
+            {locationId && !terminalsLoading && terminals.length === 0 && canRequestTerminalActivation && (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-[rgba(180,122,16,.35)] bg-[rgba(214,155,45,.12)] p-4" role="status">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="flex items-center gap-2 text-sm font-black"><KeyRound className="h-4 w-4 text-[var(--erp-warning)]" /> Vinculación requerida</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--erp-muted-foreground)]">Esta caja permanece bloqueada hasta que administración vincule una terminal migrada a este navegador.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={activationLoading} onClick={() => void requestTerminalActivation()} type="button" variant="outline">{activationLoading ? 'Generando...' : 'Generar código'}</Button>
+                    <Button onClick={() => setTerminalRefreshKey((value) => value + 1)} type="button" variant="secondary"><RefreshCw className="h-4 w-4" /> Reintentar</Button>
+                  </div>
+                </div>
+                {activation && <div className="mt-3 border-l-4 border-[var(--erp-brand-red)] bg-white px-4 py-3"><p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--erp-muted-foreground)]">Código temporal, vence en 15 minutos</p><p className="mt-1 font-mono text-2xl font-black tracking-[.12em] text-[var(--erp-brand-red)]">{activation.activationCode}</p><p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">Un administrador debe abrir Terminales POS, elegir la terminal heredada de esta sucursal y confirmar este código.</p></div>}
+              </div>
+            )}
             <Input
               aria-label="Fondo inicial"
               min="0"
@@ -464,7 +506,7 @@ export function DailyClosePage() {
                     <CheckCircle2 size={16} /> Cerrar jornada
                   </Button>
                 )}
-                {user?.role === 'ADMIN' && selected.status === 'CLOSED' && (
+                {canReopen && selected.status === 'CLOSED' && (
                   <Button onClick={() => transition('reopen')} variant="secondary">
                     Reabrir
                   </Button>
@@ -476,7 +518,7 @@ export function DailyClosePage() {
                 )}
               </div>
             </div>
-            <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={user?.role === 'ADMIN' && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
+            <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={canAuthorizeDifferences && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
           </section>
         )}
       </div>

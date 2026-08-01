@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { ChevronDown, ChevronRight, LoaderCircle, Minus, ReceiptText, Search, UserRound, WalletCards } from 'lucide-react'
 import { PaymentEntryControl } from '../components'
-import { calculateCashChange, getCreditRestriction, toMoney, type CreditRestrictionOptions } from '../posLogic'
+import { calculateCashChange, calculatePaymentsTotal, getCreditRestriction, toMoney, type CreditRestrictionOptions } from '../posLogic'
 import { paymentMethodLabel } from '../saleLabels'
 import type { CartItem, CustomerOption, PaymentType, PosTransactionState, SalePaymentInput } from '../types'
+import { Money } from '../../../lib/money'
 
 type CheckoutDockProps = {
   cart: CartItem[]
@@ -27,7 +28,7 @@ type CheckoutDockProps = {
   paymentType: PaymentType
   payments: SalePaymentInput[]
   selectedCustomer: CustomerOption | null
-  total: number
+  total: Money | string | number
   transactionState: PosTransactionState
 }
 
@@ -74,13 +75,13 @@ function PosCustomerSummary({ customerSearch, customerSearchRef, customers, cust
   const triggerRef = useRef<HTMLButtonElement>(null)
   const errorId = 'pos-customer-search-error'
   const isCreditBlocked = selectedCustomer?.isBlockedForCredit || selectedCustomer?.creditSummary?.isBlockedForCredit || selectedCustomer?.creditSummary?.effectiveCreditStatus === 'BLOCKED'
-  const overdueAmount = Number(selectedCustomer?.creditSummary?.overdueAmount ?? 0)
+  const overdueAmount = Money.from(selectedCustomer?.creditSummary?.overdueAmount)
   const customerRequired = visualState.kind === 'CUSTOMER_REQUIRED'
   const customerStatus = customerRequired
     ? visualState.reason
     : isCreditBlocked
-      ? `Crédito bloqueado${overdueAmount > 0 ? ` · Saldo vencido ${toMoney(overdueAmount)}` : ''}`
-      : overdueAmount > 0
+       ? `Crédito bloqueado${overdueAmount.isPositive() ? ` · Saldo vencido ${toMoney(overdueAmount)}` : ''}`
+       : overdueAmount.isPositive()
         ? `Saldo vencido ${toMoney(overdueAmount)}`
         : selectedCustomer
           ? `${selectedCustomer.customerType} · ${selectedCustomer.creditStatus ?? 'Crédito disponible'}`
@@ -106,7 +107,7 @@ function PosCustomerSummary({ customerSearch, customerSearchRef, customers, cust
       <input aria-label="Abrir selección de cliente" className="sr-only" onFocus={() => setIsOpen(true)} ref={customerSearchRef} tabIndex={-1} />
       <button aria-controls="pos-customer-selection" aria-expanded={isOpen} className="block min-h-11 w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] focus-visible:ring-inset" onClick={() => setIsOpen(true)} ref={triggerRef} type="button">
          <span className="flex items-start gap-2"><UserRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--pos-neutral)]" /><span className="font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Cliente</span><span className="min-w-0 flex-1 break-words text-sm font-bold leading-tight text-[var(--pos-ink)]">{selectedCustomer?.name ?? 'Público general'}</span><span className="mt-0.5 shrink-0 font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F4</span></span>
-        <span aria-atomic="true" aria-live="polite" className={`mt-1 block break-words text-xs font-semibold leading-tight ${customerRequired || isCreditBlocked ? 'text-[var(--pos-red)]' : overdueAmount > 0 ? 'text-[var(--pos-amber)]' : 'text-[var(--pos-muted)]'}`} role={customerRequired || isCreditBlocked ? 'alert' : undefined}>{customerStatus}</span>
+         <span aria-atomic="true" aria-live="polite" className={`mt-1 block break-words text-xs font-semibold leading-tight ${customerRequired || isCreditBlocked ? 'text-[var(--pos-red)]' : overdueAmount.isPositive() ? 'text-[var(--pos-amber)]' : 'text-[var(--pos-muted)]'}`} role={customerRequired || isCreditBlocked ? 'alert' : undefined}>{customerStatus}</span>
       </button>
       {isOpen && <>
         <button aria-label="Cerrar selección de cliente" className="fixed inset-0 z-40 bg-[rgba(22,26,24,0.36)] min-[1440px]:hidden" onClick={closePanel} type="button" />
@@ -136,7 +137,7 @@ function PosCustomerSummary({ customerSearch, customerSearchRef, customers, cust
   )
 }
 
-type PaymentConditionControlProps = Pick<CheckoutDockProps, 'conditionPanelRef' | 'creditOptions' | 'disabledReason' | 'isSubmitting' | 'onPaymentTypeChange' | 'paymentType' | 'selectedCustomer' | 'total'> & { visualState: CheckoutVisualState }
+type PaymentConditionControlProps = Pick<CheckoutDockProps, 'conditionPanelRef' | 'creditOptions' | 'disabledReason' | 'isSubmitting' | 'onPaymentTypeChange' | 'paymentType' | 'selectedCustomer'> & { total: Money; visualState: CheckoutVisualState }
 
 function PaymentConditionControl({ conditionPanelRef, creditOptions, disabledReason, isSubmitting, onPaymentTypeChange, paymentType, selectedCustomer, total, visualState }: PaymentConditionControlProps) {
   const creditRestriction = getCreditRestriction('CREDIT_SALE', selectedCustomer, total, creditOptions)
@@ -167,23 +168,23 @@ function PaymentConditionControl({ conditionPanelRef, creditOptions, disabledRea
   )
 }
 
-type PaymentSummaryProps = Pick<CheckoutDockProps, 'confirmButtonRef' | 'onPaymentsChange' | 'paymentPanelRef' | 'paymentType' | 'payments' | 'total'> & { visualState: CheckoutVisualState }
+type PaymentSummaryProps = Pick<CheckoutDockProps, 'confirmButtonRef' | 'onPaymentsChange' | 'paymentPanelRef' | 'paymentType' | 'payments'> & { total: Money; visualState: CheckoutVisualState }
 
 function PaymentSummary({ confirmButtonRef, onPaymentsChange, paymentPanelRef, paymentType, payments, total, visualState }: PaymentSummaryProps) {
   const [isOpen, setIsOpen] = useState(false)
   const firstCashInputRef = useRef<HTMLInputElement>(null)
   const paymentEntryRef = useRef<HTMLElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const paid = payments.reduce((sum, payment) => sum + payment.amount, 0)
-  const pending = Math.max(total - paid, 0)
-  const change = payments.reduce((sum, payment) => payment.paymentMethod === 'CASH' && payment.cashTendered !== undefined && payment.cashTendered >= payment.amount ? sum + calculateCashChange(payment.cashTendered, payment.amount) : sum, 0)
+  const paid = calculatePaymentsTotal(payments)
+  const pending = total.subtract(paid).compare(Money.zero()) > 0 ? total.subtract(paid) : Money.zero()
+  const change = payments.reduce((sum, payment) => payment.paymentMethod === 'CASH' && payment.cashTendered !== undefined && Money.from(payment.cashTendered).compare(payment.amount) >= 0 ? sum.add(calculateCashChange(payment.cashTendered, payment.amount)) : sum, Money.zero())
   const methods = Array.from(payments.reduce((items, payment) => {
-    if (payment.amount <= 0) return items
-    items.set(payment.paymentMethod, (items.get(payment.paymentMethod) ?? 0) + payment.amount)
+    if (!Money.from(payment.amount).isPositive()) return items
+    items.set(payment.paymentMethod, (items.get(payment.paymentMethod) ?? Money.zero()).add(payment.amount))
     return items
-  }, new Map<string, number>()))
+  }, new Map<string, Money>()))
   const firstPaymentMethod = payments[0]?.paymentMethod
-  const creditWithoutPayment = paymentType === 'CREDIT_SALE' && paid === 0
+  const creditWithoutPayment = paymentType === 'CREDIT_SALE' && paid.isZero()
   const paymentValidationMessage = visualState.reason && visualState.kind === 'PAYMENT_NOT_STARTED'
     ? 'Captura el pago.'
     : visualState.reason && visualState.kind === 'PAYMENT_PARTIAL'
@@ -197,7 +198,7 @@ function PaymentSummary({ confirmButtonRef, onPaymentsChange, paymentPanelRef, p
   }, [firstPaymentMethod, isOpen, payments.length])
 
   const openPanel = () => {
-    if (payments.length === 0 && total > 0) onPaymentsChange([{ amount: total, paymentMethod: 'CASH' }])
+    if (payments.length === 0 && total.isPositive()) onPaymentsChange([{ amount: total.toString(), paymentMethod: 'CASH' }])
     setIsOpen(true)
   }
 
@@ -216,8 +217,8 @@ function PaymentSummary({ confirmButtonRef, onPaymentsChange, paymentPanelRef, p
       <input aria-label="Abrir captura de pagos" className="sr-only" onFocus={openPanel} tabIndex={-1} />
       <button aria-controls="pos-payment-entry" aria-expanded={isOpen} aria-keyshortcuts="F6" className="block min-h-11 w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] focus-visible:ring-inset" onClick={openPanel} ref={triggerRef} title="Atajo F6: abrir o editar pagos" type="button">
         <span className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]"><WalletCards aria-hidden="true" className="size-4 text-[var(--pos-neutral)]" />Pago</span><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F6</span></span>
-        <span aria-atomic="true" aria-live="polite" className={`mt-2 flex h-5 items-center overflow-hidden text-xs font-semibold leading-4 min-[1024px]:max-[1279px]:mt-1 min-[1024px]:max-[1279px]:h-4 ${paymentValidationMessage ? 'text-[var(--pos-amber)]' : 'text-[var(--pos-muted)]'}`} role={paymentValidationMessage || creditWithoutPayment ? 'status' : undefined}>{paymentValidationMessage || (creditWithoutPayment ? 'Venta a crédito sin pago inmediato' : methods.length === 0 ? 'Sin pagos aplicados' : <span className="flex min-w-0 gap-2 overflow-hidden whitespace-nowrap">{methods.slice(0, 3).map(([method, amount]) => <span className="shrink-0 font-mono text-[0.65rem] font-bold text-[var(--pos-ink)]" key={method}>{paymentMethodLabel(method)} {toMoney(amount)}</span>)}{methods.length > 3 && <span className="shrink-0 text-[0.65rem] font-bold text-[var(--pos-muted)]">+{methods.length - 3} métodos</span>}</span>)}</span>
-        <dl className="mt-2 grid h-12 grid-cols-3 gap-px bg-[var(--pos-steel)] text-xs min-[1024px]:max-[1279px]:mt-1 min-[1024px]:max-[1279px]:h-7"><div className="min-w-0 bg-[var(--pos-surface)] px-2 py-1.5 min-[1024px]:max-[1279px]:px-1 min-[1024px]:max-[1279px]:py-0.5"><dt className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]">Pagado</dt><dd aria-atomic="true" aria-live="polite" className="mt-0.5 whitespace-nowrap font-mono font-bold tabular-nums min-[1024px]:max-[1279px]:mt-0">{toMoney(paid)}</dd></div><div className="min-w-0 bg-[var(--pos-surface)] px-2 py-1.5 min-[1024px]:max-[1279px]:px-1 min-[1024px]:max-[1279px]:py-0.5"><dt className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]">Pendiente</dt><dd aria-atomic="true" aria-live="polite" className="mt-0.5 whitespace-nowrap font-mono font-bold tabular-nums min-[1024px]:max-[1279px]:mt-0">{toMoney(pending)}</dd></div><div className={`min-w-0 px-2 py-1.5 min-[1024px]:max-[1279px]:px-1 min-[1024px]:max-[1279px]:py-0.5 ${change > 0 ? 'bg-[rgba(22,117,82,0.12)] text-[var(--pos-success)]' : 'bg-[var(--pos-surface)]'}`}><dt className="text-[0.58rem] font-bold uppercase tracking-[0.1em]">Cambio</dt><dd aria-atomic="true" aria-live="polite" className="mt-0.5 whitespace-nowrap font-mono font-black tabular-nums min-[1024px]:max-[1279px]:mt-0">{toMoney(change)}</dd></div></dl>
+        <span aria-atomic="true" aria-live="polite" className={`mt-2 flex h-5 items-center overflow-hidden text-xs font-semibold leading-4 ${paymentValidationMessage ? 'text-[var(--pos-amber)]' : 'text-[var(--pos-muted)]'}`} role={paymentValidationMessage || creditWithoutPayment ? 'status' : undefined}>{paymentValidationMessage || (creditWithoutPayment ? 'Venta a crédito sin pago inmediato' : methods.length === 0 ? 'Sin pagos aplicados' : <span className="flex min-w-0 gap-2 overflow-hidden whitespace-nowrap">{methods.slice(0, 3).map(([method, amount]) => <span className="shrink-0 font-mono text-[0.65rem] font-bold text-[var(--pos-ink)]" key={method}>{paymentMethodLabel(method)} {toMoney(amount)}</span>)}{methods.length > 3 && <span className="shrink-0 text-[0.65rem] font-bold text-[var(--pos-muted)]">+{methods.length - 3} métodos</span>}</span>)}</span>
+       <dl className="mt-2 grid h-12 grid-cols-3 gap-px bg-[var(--pos-steel)] text-xs"><div className="min-w-0 bg-[var(--pos-surface)] px-2 py-1.5"><dt className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]">Pagado</dt><dd aria-atomic="true" aria-live="polite" className="mt-0.5 whitespace-nowrap font-mono font-bold tabular-nums">{toMoney(paid)}</dd></div><div className="min-w-0 bg-[var(--pos-surface)] px-2 py-1.5"><dt className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[var(--pos-muted)]">Pendiente</dt><dd aria-atomic="true" aria-live="polite" className="mt-0.5 whitespace-nowrap font-mono font-bold tabular-nums">{toMoney(pending)}</dd></div><div className={`min-w-0 px-2 py-1.5 ${change.isPositive() ? 'bg-[rgba(22,117,82,0.12)] text-[var(--pos-success)]' : 'bg-[var(--pos-surface)]'}`}><dt className="text-[0.58rem] font-bold uppercase tracking-[0.1em]">Cambio</dt><dd aria-atomic="true" aria-live="polite" className="mt-0.5 whitespace-nowrap font-mono font-black tabular-nums">{toMoney(change)}</dd></div></dl>
       </button>
       {isOpen && <>
         <button aria-label="Cerrar captura de pagos" className="fixed inset-0 z-40 bg-[rgba(22,26,24,0.36)] min-[1440px]:hidden" onClick={closePanel} type="button" />
@@ -228,22 +229,22 @@ function PaymentSummary({ confirmButtonRef, onPaymentsChange, paymentPanelRef, p
 }
 
 type TransactionSummaryDisclosureProps = {
-  adjustment?: number
-  discount?: number
-  promotion?: number
-  subtotal: number
-  tax?: number
+  adjustment?: Money
+  discount?: Money
+  promotion?: Money
+  subtotal: Money
+  tax?: Money
 }
 
-function TransactionSummaryDisclosure({ adjustment = 0, discount = 0, promotion = 0, subtotal, tax = 0 }: TransactionSummaryDisclosureProps) {
-  const hasException = Boolean(discount || promotion || tax || adjustment)
+function TransactionSummaryDisclosure({ adjustment = Money.zero(), discount = Money.zero(), promotion = Money.zero(), subtotal, tax = Money.zero() }: TransactionSummaryDisclosureProps) {
+  const hasException = [discount, promotion, tax, adjustment].some((value) => !value.isZero())
   const [isOpen, setIsOpen] = useState(hasException)
-  const rows = [
+  const rows: Array<readonly [string, Money]> = [
     ['Subtotal', subtotal],
-    ...(discount ? [['Descuento', -Math.abs(discount)] as const] : []),
-    ...(promotion ? [['Promociones', -Math.abs(promotion)] as const] : []),
-    ...(tax ? [['IVA', tax] as const] : []),
-    ...(adjustment ? [['Ajustes', adjustment] as const] : []),
+    ...(!discount.isZero() ? [['Descuento', Money.zero().subtract(discount)] as const] : []),
+    ...(!promotion.isZero() ? [['Promociones', Money.zero().subtract(promotion)] as const] : []),
+    ...(!tax.isZero() ? [['IVA', tax] as const] : []),
+    ...(!adjustment.isZero() ? [['Ajustes', adjustment] as const] : []),
   ]
 
   useEffect(() => {
@@ -254,13 +255,13 @@ function TransactionSummaryDisclosure({ adjustment = 0, discount = 0, promotion 
 
   return (
     <section aria-label="Resumen de transacción" className="min-w-0 px-4 py-2">
-      <button aria-expanded={isOpen} className="flex min-h-11 w-full items-center gap-2 text-left text-[0.68rem] font-semibold leading-3 text-[var(--pos-muted)] hover:text-[var(--pos-ink)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] focus-visible:ring-inset" onClick={() => setIsOpen((open) => !open)} type="button"><ReceiptText aria-hidden="true" className="size-4 shrink-0 text-[var(--pos-neutral)]" /><span>Subtotal {toMoney(subtotal)}</span>{tax !== 0 && <span>· IVA {toMoney(tax)}</span>}{discount !== 0 && <span>· Descuento {toMoney(-Math.abs(discount))}</span>}<span className="ml-auto flex shrink-0"><ChevronDown aria-hidden="true" className={`size-4 transition-transform ${isOpen ? '' : '-rotate-90'}`} /></span></button>
+       <button aria-expanded={isOpen} className="flex min-h-11 w-full items-center gap-2 text-left text-[0.68rem] font-semibold leading-3 text-[var(--pos-muted)] hover:text-[var(--pos-ink)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] focus-visible:ring-inset" onClick={() => setIsOpen((open) => !open)} type="button"><ReceiptText aria-hidden="true" className="size-4 shrink-0 text-[var(--pos-neutral)]" /><span>Subtotal {toMoney(subtotal)}</span>{!tax.isZero() && <span>· IVA {toMoney(tax)}</span>}{!discount.isZero() && <span>· Descuento {toMoney(Money.zero().subtract(discount))}</span>}<span className="ml-auto flex shrink-0"><ChevronDown className={`size-4 transition-transform ${isOpen ? '' : '-rotate-90'}`} /></span></button>
       {isOpen && <dl className="mt-2 grid gap-2 text-[0.65rem] leading-3">{rows.map(([label, amount]) => <div className="flex items-center justify-between gap-4" key={label}><dt>{label}</dt><dd className="font-mono font-bold tabular-nums text-[var(--pos-ink)]">{toMoney(amount)}</dd></div>)}</dl>}
     </section>
   )
 }
 
-type PosTotalProps = Pick<CheckoutDockProps, 'cart' | 'total'>
+type PosTotalProps = Pick<CheckoutDockProps, 'cart'> & { total: Money }
 
 function PosTotal({ cart, total }: PosTotalProps) {
   const totalWeightKg = cart.reduce((weight, item) => weight + item.quantityKg, 0)
@@ -274,7 +275,7 @@ function PosTotal({ cart, total }: PosTotalProps) {
   )
 }
 
-type PosPrimaryActionProps = Pick<CheckoutDockProps, 'confirmButtonRef' | 'customerSearchRef' | 'isSubmitting' | 'onConfirm' | 'paymentPanelRef' | 'total'> & { pendingAmount: number; visualState: CheckoutVisualState }
+type PosPrimaryActionProps = Pick<CheckoutDockProps, 'confirmButtonRef' | 'customerSearchRef' | 'isSubmitting' | 'onConfirm' | 'paymentPanelRef'> & { pendingAmount: Money; total: Money; visualState: CheckoutVisualState }
 
 function PosPrimaryAction({ confirmButtonRef, customerSearchRef, isSubmitting, onConfirm, paymentPanelRef, pendingAmount, visualState }: PosPrimaryActionProps) {
   const [isActivating, setIsActivating] = useState(false)
@@ -337,7 +338,7 @@ function PosPrimaryAction({ confirmButtonRef, customerSearchRef, isSubmitting, o
   )
 }
 
-type TransactionSummaryAreaProps = Pick<CheckoutDockProps, 'cart' | 'total'>
+type TransactionSummaryAreaProps = Pick<CheckoutDockProps, 'cart'> & { total: Money }
 
 function TransactionSummaryArea({ cart, total }: TransactionSummaryAreaProps) {
   return (
@@ -372,7 +373,10 @@ export function CheckoutDock({
   total,
   transactionState,
 }: CheckoutDockProps) {
-  const pendingAmount = Math.max(total - payments.reduce((sum, payment) => sum + payment.amount, 0), 0)
+  const exactTotal = Money.from(total)
+  const pendingAmount = exactTotal.subtract(calculatePaymentsTotal(payments)).compare(Money.zero()) > 0
+    ? exactTotal.subtract(calculatePaymentsTotal(payments))
+    : Money.zero()
   const visualState = selectCheckoutVisualState({ disabledReason, payments, transactionState })
 
   useEffect(() => {
@@ -403,10 +407,10 @@ export function CheckoutDock({
     <footer className="z-20 h-60 shrink-0 overflow-visible border-t border-[var(--pos-steel)] bg-[var(--pos-surface)] min-[1024px]:h-60 min-[1280px]:h-36" aria-label="Confirmación de venta">
       <div className="grid h-full grid-cols-2 grid-rows-[repeat(3,minmax(0,1fr))] gap-px bg-[var(--pos-steel)] min-[1024px]:grid-cols-[20fr_13fr_22fr] min-[1024px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] min-[1280px]:grid-cols-[20fr_13fr_22fr_20fr_25fr] min-[1280px]:grid-rows-1">
         <PosCustomerSummary customerSearch={customerSearch} customerSearchRef={customerSearchRef} customers={customers} customersError={customersError} customersLoading={customersLoading} onCustomerSearchChange={onCustomerSearchChange} onCustomerSelect={onCustomerSelect} selectedCustomer={selectedCustomer} visualState={visualState} />
-        <PaymentConditionControl conditionPanelRef={conditionPanelRef} creditOptions={creditOptions} disabledReason={disabledReason} isSubmitting={isSubmitting} onPaymentTypeChange={onPaymentTypeChange} paymentType={paymentType} selectedCustomer={selectedCustomer} total={total} visualState={visualState} />
-        <PaymentSummary confirmButtonRef={confirmButtonRef} onPaymentsChange={onPaymentsChange} paymentPanelRef={paymentPanelRef} paymentType={paymentType} payments={payments} total={total} visualState={visualState} />
-        <div className="col-start-2 row-start-2 h-full min-h-0 min-w-0 min-[1024px]:col-start-1 min-[1024px]:col-span-2 min-[1024px]:row-start-2 min-[1280px]:col-start-auto min-[1280px]:col-span-1 min-[1280px]:row-auto"><TransactionSummaryArea cart={cart} total={total} /></div>
-        <div className="col-span-2 row-start-3 min-h-0 min-w-0 bg-[var(--pos-action)] min-[1024px]:col-start-3 min-[1024px]:col-span-1 min-[1024px]:row-start-2 min-[1280px]:col-start-auto min-[1280px]:row-auto"><PosPrimaryAction confirmButtonRef={confirmButtonRef} customerSearchRef={customerSearchRef} isSubmitting={isSubmitting} onConfirm={onConfirm} paymentPanelRef={paymentPanelRef} pendingAmount={pendingAmount} total={total} visualState={visualState} /></div>
+        <PaymentConditionControl conditionPanelRef={conditionPanelRef} creditOptions={creditOptions} disabledReason={disabledReason} isSubmitting={isSubmitting} onPaymentTypeChange={onPaymentTypeChange} paymentType={paymentType} selectedCustomer={selectedCustomer} total={exactTotal} visualState={visualState} />
+        <PaymentSummary confirmButtonRef={confirmButtonRef} onPaymentsChange={onPaymentsChange} paymentPanelRef={paymentPanelRef} paymentType={paymentType} payments={payments} total={exactTotal} visualState={visualState} />
+        <div className="col-start-2 row-start-2 min-w-0 min-[1024px]:col-start-1 min-[1024px]:col-span-2 min-[1024px]:row-start-2 min-[1440px]:col-start-auto min-[1440px]:col-span-1 min-[1440px]:row-auto"><TransactionSummaryArea cart={cart} total={exactTotal} /></div>
+        <div className="col-span-2 row-start-3 min-w-0 bg-[var(--pos-action)] min-[1024px]:col-start-3 min-[1024px]:col-span-1 min-[1024px]:row-start-2 min-[1440px]:col-start-auto min-[1440px]:row-start-2 min-[1440px]:col-start-auto min-[1440px]:row-auto"><PosPrimaryAction confirmButtonRef={confirmButtonRef} customerSearchRef={customerSearchRef} isSubmitting={isSubmitting} onConfirm={onConfirm} paymentPanelRef={paymentPanelRef} pendingAmount={pendingAmount} total={exactTotal} visualState={visualState} /></div>
       </div>
     </footer>
   )

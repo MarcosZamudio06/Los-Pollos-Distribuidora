@@ -1,11 +1,19 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
+import { SessionRevocationModule } from './common/session/session-revocation.module';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { validateEnvironment } from './config/env.validation';
+import { createHttpThrottlerOptions } from './config/http-throttler.config';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AccessControlModule } from './modules/access-control/access-control.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
@@ -25,6 +33,7 @@ import { BillingRequestsModule } from './modules/billing-requests/billing-reques
 import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close/point-of-sale-daily-close.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { CashManagementModule } from './modules/cash-management/cash-management.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -34,9 +43,17 @@ import { CashManagementModule } from './modules/cash-management/cash-management.
       load: [appConfig, databaseConfig],
       validate: validateEnvironment,
     }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: createHttpThrottlerOptions,
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    SessionRevocationModule,
+    HealthModule,
     AuthModule,
+    AccessControlModule,
     UsersModule,
     ProductsModule,
     CategoriesModule,
@@ -58,6 +75,10 @@ import { CashManagementModule } from './modules/cash-management/cash-management.
     BillingModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
+  ],
 })
 export class AppModule {}

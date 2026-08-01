@@ -1,5 +1,6 @@
 import { SalesGateway } from './sales.gateway';
 import { SALE_CREATED_EVENT, salesLocationRoom } from './sales-realtime.types';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 
 describe('SalesGateway', () => {
   function createGateway() {
@@ -80,5 +81,40 @@ describe('SalesGateway', () => {
       (gateway as unknown as { server: { to: jest.Mock } }).server.to,
     ).toHaveBeenCalledWith(salesLocationRoom('loc-1'));
     expect(emit).toHaveBeenCalledWith(SALE_CREATED_EVENT, order);
+  });
+
+  it('disconnects sockets after the user session is revoked', async () => {
+    const authService = {
+      verifyAccessToken: jest.fn().mockResolvedValue({
+        id: 'seller-1',
+        role: 'SELLER',
+        operationalLocationId: 'loc-1',
+        mustChangePassword: false,
+      }),
+    };
+    const prisma = {
+      operationalLocation: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'loc-1', isActive: true }),
+      },
+    };
+    const registry = new SessionRevocationRegistry();
+    const gateway = new SalesGateway(
+      authService as never,
+      prisma as never,
+      registry,
+    );
+    const socket = {
+      disconnect: jest.fn(),
+      handshake: { auth: { locationId: 'loc-1', token: 'access-token' } },
+      join: jest.fn(),
+      once: jest.fn(),
+    };
+
+    await gateway.handleConnection(socket as never);
+    registry.notify(['seller-1']);
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 });

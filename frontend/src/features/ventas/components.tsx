@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type
 import { createPortal } from 'react-dom'
 import type { OperationalLocation } from '../compras/types'
 import type { CartItem, CustomerOption, PaymentMethod, PaymentType, PosTransactionState, ProductOption, SalePaymentInput, TicketData } from './types'
-import { calculateCartTotal, calculateCashChange, calculateItemSubtotal, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
+import { calculateCartTotal, calculateCashChange, calculateItemSubtotal, calculatePaymentsTotal, getQuantityValidationError, toMoney, type CreditRestrictionOptions } from './posLogic'
+import { Money } from '../../lib/money'
 import { operationalUnitLabel, paymentMethodLabel, paymentTypeLabel } from './saleLabels'
 
 type ProductSearchProps = {
@@ -294,18 +295,18 @@ type PaymentEntryControlProps = {
   onPaymentsChange: (payments: SalePaymentInput[]) => void
   panelRef?: RefObject<HTMLElement | null>
   payments: SalePaymentInput[]
-  total: number
+  total: Money
 }
 
 const CASH_DENOMINATIONS = [50, 100, 200, 500, 1000]
 
 export function PaymentEntryControl({ compact = false, firstCashInputRef, onCashTenderedSelect, onPaymentsChange, panelRef, payments, total }: PaymentEntryControlProps) {
-  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0)
-  const remaining = Math.max(0, Math.round((total - totalPaid) * 100) / 100)
+  const totalPaid = calculatePaymentsTotal(payments)
+  const remaining = total.subtract(totalPaid).compare(Money.zero()) > 0 ? total.subtract(totalPaid) : Money.zero()
   const updatePayment = (index: number, update: Partial<SalePaymentInput>) => {
     onPaymentsChange(payments.map((payment, currentIndex) => currentIndex === index ? { ...payment, ...update } : payment))
   }
-  const selectCashTendered = (index: number, cashTendered: number) => {
+  const selectCashTendered = (index: number, cashTendered: string | number) => {
     updatePayment(index, { cashTendered })
     onCashTenderedSelect?.()
   }
@@ -323,16 +324,16 @@ export function PaymentEntryControl({ compact = false, firstCashInputRef, onCash
                 </select>
               </label>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Monto
-                <input aria-label={`Monto aplicado del pago ${index + 1}`} className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} min="0.01" onChange={(event) => updatePayment(index, { amount: Number(event.target.value) })} step="0.01" type="number" value={payment.amount || ''} />
+                 <input aria-label={`Monto aplicado del pago ${index + 1}`} className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} min="0.01" onChange={(event) => updatePayment(index, { amount: event.target.value })} step="0.01" type="number" value={payment.amount || ''} />
               </label>
               <button className="h-11 self-end rounded-lg px-2 text-xs font-black text-[var(--pos-red)] hover:bg-white" onClick={() => onPaymentsChange(payments.filter((_, currentIndex) => currentIndex !== index))} type="button">Quitar</button>
             </div>
             {payment.paymentMethod === 'CASH' && <div className={`${compact ? 'mt-2' : 'mt-3'} grid gap-2 sm:grid-cols-2`}>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Efectivo entregado
-                <input aria-label={`Efectivo entregado del pago ${index + 1}`} className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} data-pos-cash-tendered min={payment.amount || 0.01} onChange={(event) => updatePayment(index, { cashTendered: event.target.value === '' ? undefined : Number(event.target.value) })} onFocus={(event) => event.currentTarget.select()} ref={index === 0 ? firstCashInputRef : undefined} step="0.01" type="number" value={payment.cashTendered ?? ''} />
+                 <input aria-label={`Efectivo entregado del pago ${index + 1}`} className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} data-pos-cash-tendered min={Money.from(payment.amount).toString()} onChange={(event) => updatePayment(index, { cashTendered: event.target.value === '' ? undefined : event.target.value })} onFocus={(event) => event.currentTarget.select()} ref={index === 0 ? firstCashInputRef : undefined} step="0.01" type="number" value={payment.cashTendered ?? ''} />
               </label>
-              <div className="grid content-end gap-1 text-xs font-bold text-[var(--pos-muted)]"><span>Cambio a entregar</span><output aria-atomic="true" aria-live="polite" className={`${inputClass} ${compact ? 'px-2 py-2' : ''} ${payment.cashTendered !== undefined && payment.cashTendered >= payment.amount ? 'border-[rgba(22,117,82,0.45)] bg-[rgba(22,117,82,0.10)] text-lg font-black text-[var(--pos-success)]' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)]'} font-mono tabular-nums`} data-pos-cash-change>{toMoney(payment.cashTendered !== undefined && payment.cashTendered >= payment.amount ? calculateCashChange(payment.cashTendered, payment.amount) : 0)}</output></div>
-              <fieldset className="sm:col-span-2"><legend className="text-xs font-bold text-[var(--pos-muted)]">Efectivo rápido</legend><div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:grid-cols-6"><button aria-label={`Usar importe exacto de ${toMoney(payment.amount)}`} className="min-h-11 border border-[var(--pos-action)] bg-[rgba(18,61,50,0.08)] px-2 text-xs font-black text-[var(--pos-action)] transition hover:bg-[rgba(18,61,50,0.16)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:opacity-40" disabled={payment.amount <= 0} onClick={() => selectCashTendered(index, payment.amount)} type="button">Exacto</button>{CASH_DENOMINATIONS.map((denomination) => <button aria-label={`Usar ${toMoney(denomination)} de efectivo entregado`} className="min-h-11 border border-[var(--pos-steel)] bg-white px-1 font-mono text-xs font-black tabular-nums text-[var(--pos-ink)] transition hover:border-[var(--pos-action)] hover:bg-[var(--pos-porcelain)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:bg-[var(--pos-porcelain)] disabled:text-[var(--pos-muted)] disabled:opacity-50" disabled={denomination < payment.amount} key={denomination} onClick={() => selectCashTendered(index, denomination)} title={denomination < payment.amount ? 'La denominación es menor al monto aplicado.' : undefined} type="button">${denomination.toLocaleString('es-MX')}</button>)}</div></fieldset>
+               <div className="grid content-end gap-1 text-xs font-bold text-[var(--pos-muted)]"><span>Cambio a entregar</span><output aria-atomic="true" aria-live="polite" className={`${inputClass} ${compact ? 'px-2 py-2' : ''} ${payment.cashTendered !== undefined && Money.from(payment.cashTendered).compare(payment.amount) >= 0 ? 'border-[rgba(22,117,82,0.45)] bg-[rgba(22,117,82,0.10)] text-lg font-black text-[var(--pos-success)]' : 'bg-[var(--pos-porcelain)] text-[var(--pos-muted)]'} font-mono tabular-nums`} data-pos-cash-change>{toMoney(payment.cashTendered !== undefined && Money.from(payment.cashTendered).compare(payment.amount) >= 0 ? calculateCashChange(payment.cashTendered, payment.amount) : Money.zero())}</output></div>
+               <fieldset className="sm:col-span-2"><legend className="text-xs font-bold text-[var(--pos-muted)]">Efectivo rápido</legend><div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:grid-cols-6"><button aria-label={`Usar importe exacto de ${toMoney(payment.amount)}`} className="min-h-11 border border-[var(--pos-action)] bg-[rgba(18,61,50,0.08)] px-2 text-xs font-black text-[var(--pos-action)] transition hover:bg-[rgba(18,61,50,0.16)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:opacity-40" disabled={!Money.from(payment.amount).isPositive()} onClick={() => selectCashTendered(index, Money.from(payment.amount).toString())} type="button">Exacto</button>{CASH_DENOMINATIONS.map((denomination) => <button aria-label={`Usar ${toMoney(denomination)} de efectivo entregado`} className="min-h-11 border border-[var(--pos-steel)] bg-white px-1 font-mono text-xs font-black tabular-nums text-[var(--pos-ink)] transition hover:border-[var(--pos-action)] hover:bg-[var(--pos-porcelain)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:bg-[var(--pos-porcelain)] disabled:text-[var(--pos-muted)] disabled:opacity-50" disabled={Money.from(String(denomination)).compare(payment.amount) < 0} key={denomination} onClick={() => selectCashTendered(index, String(denomination))} title={Money.from(String(denomination)).compare(payment.amount) < 0 ? 'La denominación es menor al monto aplicado.' : undefined} type="button">${denomination.toLocaleString('es-MX')}</button>)}</div></fieldset>
             </div>}
             {(payment.paymentMethod === 'TRANSFER' || payment.paymentMethod === 'DEPOSIT' || payment.paymentMethod === 'CHECK') && <div className={`${compact ? 'mt-2' : 'mt-3'} grid gap-2 sm:grid-cols-2`}>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">Banco<input className={`${inputClass} ${compact ? 'px-2 py-2 text-xs' : ''}`} onChange={(event) => updatePayment(index, { bankName: event.target.value })} value={payment.bankName ?? ''} /></label>
@@ -344,7 +345,7 @@ export function PaymentEntryControl({ compact = false, firstCashInputRef, onCash
             </div>}
           </article>
         ))}
-        <button className={`${compact ? 'rounded-none px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)] disabled:cursor-not-allowed disabled:border-[var(--pos-steel)] disabled:text-[var(--pos-muted)] disabled:opacity-50`} disabled={remaining <= 0} onClick={() => onPaymentsChange([...payments, { amount: remaining, paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
+         <button className={`${compact ? 'rounded-none px-2 text-xs' : 'rounded-xl px-4 text-sm'} min-h-11 border border-dashed border-[var(--pos-green)] font-black text-[var(--pos-green)] transition hover:bg-[rgba(35,113,90,0.06)] disabled:cursor-not-allowed disabled:border-[var(--pos-steel)] disabled:text-[var(--pos-muted)] disabled:opacity-50`} disabled={!remaining.isPositive()} onClick={() => onPaymentsChange([...payments, { amount: remaining.toString(), paymentMethod: 'CASH' }])} type="button">Agregar pago</button>
       </div>
     </section>
   )
@@ -356,7 +357,7 @@ type PaymentMethodSelectorProps = {
   panelRef?: RefObject<HTMLElement | null>
   paymentType: PaymentType
   payments: SalePaymentInput[]
-  total: number
+  total: Money | string | number
 }
 
 export function PaymentMethodSelector({
@@ -372,7 +373,7 @@ export function PaymentMethodSelector({
       <div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-amber)]">Cobro</p><h2 className="mt-1 font-[var(--pos-display)] text-xl font-bold uppercase tracking-[-0.02em]">Tipo de venta y pago</h2></div><AlertTriangle className="h-5 w-5 text-[var(--pos-amber)]" /></div>
       <div className="mt-3 grid gap-3">
         <PaymentTypeControl onPaymentTypeChange={onPaymentTypeChange} paymentType={paymentType} />
-        <PaymentEntryControl onPaymentsChange={onPaymentsChange} panelRef={panelRef} payments={payments} total={total} />
+         <PaymentEntryControl onPaymentsChange={onPaymentsChange} panelRef={panelRef} payments={payments} total={Money.from(total)} />
       </div>
       {paymentType === 'CREDIT_SALE' && <p className="mt-3 text-xs text-[var(--pos-muted)]">Las ventas a crédito generan cuentas por cobrar. La cobranza se mantiene en su propio flujo.</p>}
     </section>
@@ -432,14 +433,14 @@ type SaleSummaryProps = {
 
 export function SaleSummary({ cart, compact = false, creditOptions, creditRestriction, customer, payments = [], paymentType, summaryOnly = false }: SaleSummaryProps) {
   const total = calculateCartTotal(cart)
-  const paid = payments.reduce((sum, payment) => sum + payment.amount, 0)
-  const pending = Math.max(total - paid, 0)
-  const previousTotal = useRef(total)
+  const paid = calculatePaymentsTotal(payments)
+  const pending = total.subtract(paid).compare(Money.zero()) > 0 ? total.subtract(paid) : Money.zero()
+  const previousTotal = useRef(total.toString())
   const [isTotalUpdating, setIsTotalUpdating] = useState(false)
 
   useEffect(() => {
-    if (previousTotal.current === total) return
-    previousTotal.current = total
+    if (previousTotal.current === total.toString()) return
+    previousTotal.current = total.toString()
     setIsTotalUpdating(true)
     const timer = window.setTimeout(() => setIsTotalUpdating(false), 140)
     return () => window.clearTimeout(timer)

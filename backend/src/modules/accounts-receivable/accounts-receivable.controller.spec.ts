@@ -4,18 +4,26 @@ import { AccountsReceivableController } from './accounts-receivable.controller';
 import { AccountsReceivableService } from './accounts-receivable.service';
 import { PaymentMethod } from '@prisma/client';
 
+function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
+  return target[key] as jest.Mock;
+}
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
+
 describe('AccountsReceivableController', () => {
   it('does not expose list or detail routes to SELLER at the controller role gate', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        AccountsReceivableController.prototype.findAll,
+        methodOf(AccountsReceivableController.prototype, 'findAll'),
       ),
     ).toEqual(['ADMIN', 'COLLECTIONS']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
-        AccountsReceivableController.prototype.findOne,
+        methodOf(AccountsReceivableController.prototype, 'findOne'),
       ),
     ).toEqual(['ADMIN', 'COLLECTIONS']);
   });
@@ -44,7 +52,7 @@ describe('AccountsReceivableController', () => {
 
     await controller.registerPayment('ar-1', body, user, 'idem-key');
 
-    expect(service.registerPayment).toHaveBeenCalledWith(
+    expect(mockOf(service, 'registerPayment')).toHaveBeenCalledWith(
       'ar-1',
       body,
       user,

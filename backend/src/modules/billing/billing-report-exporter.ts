@@ -14,31 +14,98 @@ export interface BillingExportMetadata {
 }
 
 const COLUMNS = [
-  ['saleDocumentId', 'ID documento'], ['saleId', 'ID venta'], ['saleNumber', 'Venta'], ['physicalFolio', 'Folio visible'],
-  ['issuedAt', 'Fecha'], ['customerName', 'Cliente'], ['taxId', 'RFC'], ['documentType', 'Tipo de documento'],
-  ['billingStatus', 'Estado de facturación'], ['activeRequested', 'Solicitado'], ['activeInvoiced', 'Facturado'],
-  ['pendingInvoice', 'Pendiente'], ['total', 'Total'], ['currencyCode', 'Moneda'], ['invoiceUuids', 'UUID'], ['invoiceFolios', 'Folios factura'],
-  ['locationName', 'Ubicación'], ['sellerName', 'Vendedor'], ['routeName', 'Ruta'], ['activePaid', 'Saldo cobrado'],
-  ['collectionBalance', 'Saldo por cobrar'], ['blockingCodes', 'Códigos de bloqueo'], ['deadline', 'Fecha límite'], ['deliveryStatus', 'Estado de entrega'],
+  ['saleDocumentId', 'ID documento'],
+  ['saleId', 'ID venta'],
+  ['saleNumber', 'Venta'],
+  ['physicalFolio', 'Folio visible'],
+  ['issuedAt', 'Fecha'],
+  ['customerName', 'Cliente'],
+  ['taxId', 'RFC'],
+  ['documentType', 'Tipo de documento'],
+  ['billingStatus', 'Estado de facturación'],
+  ['activeRequested', 'Solicitado'],
+  ['activeInvoiced', 'Facturado'],
+  ['pendingInvoice', 'Pendiente'],
+  ['total', 'Total'],
+  ['currencyCode', 'Moneda'],
+  ['invoiceUuids', 'UUID'],
+  ['invoiceFolios', 'Folios factura'],
+  ['locationName', 'Ubicación'],
+  ['sellerName', 'Vendedor'],
+  ['routeName', 'Ruta'],
+  ['activePaid', 'Saldo cobrado'],
+  ['collectionBalance', 'Saldo por cobrar'],
+  ['blockingCodes', 'Códigos de bloqueo'],
+  ['deadline', 'Fecha límite'],
+  ['deliveryStatus', 'Estado de entrega'],
 ] as const;
-const MONEY_KEYS = new Set(['activeRequested', 'activeInvoiced', 'pendingInvoice', 'total', 'activePaid', 'collectionBalance']);
+const MONEY_KEYS = new Set([
+  'activeRequested',
+  'activeInvoiced',
+  'pendingInvoice',
+  'total',
+  'activePaid',
+  'collectionBalance',
+]);
 const CONTROL_TOTALS = [
-  ['totalDocuments', 'Total de documentos', false], ['billableDocuments', 'Documentos facturables', false], ['blockedDocuments', 'Documentos bloqueados', false],
-  ['totalBillable', 'Total facturable', true], ['totalRequested', 'Total solicitado', true], ['totalInvoiced', 'Total facturado', true],
-  ['totalPending', 'Total pendiente', true], ['totalCollected', 'Total cobrado', true], ['totalReceivable', 'Total por cobrar', true],
+  ['totalDocuments', 'Total de documentos', false],
+  ['billableDocuments', 'Documentos facturables', false],
+  ['blockedDocuments', 'Documentos bloqueados', false],
+  ['totalBillable', 'Total facturable', true],
+  ['totalRequested', 'Total solicitado', true],
+  ['totalInvoiced', 'Total facturado', true],
+  ['totalPending', 'Total pendiente', true],
+  ['totalCollected', 'Total cobrado', true],
+  ['totalReceivable', 'Total por cobrar', true],
 ] as const;
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object' && value !== null) {
+    return Object.prototype.toString.call(value) as string;
+  }
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  ) {
+    return value.toString();
+  }
+  return '';
+}
 
 @Injectable()
 export class BillingReportExporter {
-  async createFile(rows: BillingExportRow[], metadata: BillingExportMetadata, format: BillingExportFormat) {
-    const stamp = metadata.generatedAt.toISOString().slice(0, 10).replaceAll('-', '');
+  async createFile(
+    rows: BillingExportRow[],
+    metadata: BillingExportMetadata,
+    format: BillingExportFormat,
+  ) {
+    await Promise.resolve();
+    const stamp = metadata.generatedAt
+      .toISOString()
+      .slice(0, 10)
+      .replaceAll('-', '');
     const fileName = `notas-facturables-${stamp}.${format}`;
     if (format === 'csv') {
-      return { stream: Readable.from([this.toCsv(rows, metadata)]), contentType: 'text/csv; charset=utf-8', fileName };
+      return {
+        stream: Readable.from([this.toCsv(rows, metadata)]),
+        contentType: 'text/csv; charset=utf-8',
+        fileName,
+      };
     }
     const stream = new PassThrough();
-    void this.writeXlsx(stream, rows, metadata).catch((error) => stream.destroy(error as Error));
-    return { stream, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileName };
+    void this.writeXlsx(stream, rows, metadata).catch((error) =>
+      stream.destroy(error as Error),
+    );
+    return {
+      stream,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      fileName,
+    };
   }
 
   toCsv(rows: BillingExportRow[], metadata: BillingExportMetadata): string {
@@ -47,15 +114,27 @@ export class BillingReportExporter {
       ['Usuario', `${metadata.user.name} (${metadata.user.id})`],
       ['Zona horaria', metadata.timeZone],
       ['Filtros', this.stableJson(metadata.filters)],
-      ...CONTROL_TOTALS.map(([key, label]) => [label, metadata.totals[key] ?? (key.endsWith('Documents') ? 0 : '0.00')]),
+      ...CONTROL_TOTALS.map(([key, label]) => [
+        label,
+        metadata.totals[key] ?? (key.endsWith('Documents') ? 0 : '0.00'),
+      ]),
       [],
       COLUMNS.map(([, label]) => label),
-      ...rows.map((row) => COLUMNS.map(([key]) => MONEY_KEYS.has(key) ? Number(row[key] ?? 0) : this.csvValue(key, row[key]))),
+      ...rows.map((row) =>
+        COLUMNS.map(([key]) =>
+          MONEY_KEYS.has(key)
+            ? Number(row[key] ?? 0)
+            : this.csvValue(key, row[key]),
+        ),
+      ),
     ];
     return `\uFEFF${lines.map((line) => line.map((value) => this.escapeCsv(value)).join(',')).join('\r\n')}\r\n`;
   }
 
-  async toXlsxBuffer(rows: BillingExportRow[], metadata: BillingExportMetadata): Promise<Buffer> {
+  async toXlsxBuffer(
+    rows: BillingExportRow[],
+    metadata: BillingExportMetadata,
+  ): Promise<Buffer> {
     const output = new PassThrough();
     const chunks: Buffer[] = [];
     output.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
@@ -67,61 +146,88 @@ export class BillingReportExporter {
     return completed;
   }
 
-  private async writeXlsx(output: PassThrough, rows: BillingExportRow[], metadata: BillingExportMetadata) {
-    const workbook = new excelStream.xlsx.WorkbookWriter({ stream: output, useStyles: true, useSharedStrings: true });
+  private async writeXlsx(
+    output: PassThrough,
+    rows: BillingExportRow[],
+    metadata: BillingExportMetadata,
+  ) {
+    const workbook = new excelStream.xlsx.WorkbookWriter({
+      stream: output,
+      useStyles: true,
+      useSharedStrings: true,
+    });
     workbook.creator = 'Pollos Distribuidora';
     workbook.created = metadata.generatedAt;
     const headerRowNumber = 4 + CONTROL_TOTALS.length + 2;
-    const sheet = workbook.addWorksheet('Notas facturables', { views: [{ state: 'frozen', ySplit: headerRowNumber }] });
+    const sheet = workbook.addWorksheet('Notas facturables', {
+      views: [{ state: 'frozen', ySplit: headerRowNumber }],
+    });
     const metadataRows = [
       ['Fecha de generación', metadata.generatedAt],
       ['Usuario', `${metadata.user.name} (${metadata.user.id})`],
       ['Zona horaria', metadata.timeZone],
       ['Filtros', this.stableJson(metadata.filters)],
-      ...CONTROL_TOTALS.map(([key, label]) => [label, Number(metadata.totals[key] ?? 0)]),
+      ...CONTROL_TOTALS.map(([key, label]) => [
+        label,
+        Number(metadata.totals[key] ?? 0),
+      ]),
       [],
     ];
     metadataRows.forEach((values, index) => {
       const row = sheet.addRow(values);
-      if (index >= 4 + 3 && index < 4 + CONTROL_TOTALS.length) row.getCell(2).numFmt = '#,##0.00';
+      if (index >= 4 + 3 && index < 4 + CONTROL_TOTALS.length)
+        row.getCell(2).numFmt = '#,##0.00';
       row.commit();
     });
     const header = sheet.addRow(COLUMNS.map(([, label]) => label));
     header.font = { bold: true };
     header.commit();
     for (const source of rows) {
-      const row = sheet.addRow(COLUMNS.map(([key]) => this.xlsxValue(key, source[key])));
+      const row = sheet.addRow(
+        COLUMNS.map(([key]) => this.xlsxValue(key, source[key])),
+      );
       for (const key of MONEY_KEYS) {
         const index = COLUMNS.findIndex(([column]) => column === key) + 1;
         row.getCell(index).numFmt = '#,##0.00';
       }
-      row.getCell(COLUMNS.findIndex(([key]) => key === 'issuedAt') + 1).numFmt = 'yyyy-mm-dd hh:mm';
-      row.getCell(COLUMNS.findIndex(([key]) => key === 'deadline') + 1).numFmt = 'yyyy-mm-dd';
+      row.getCell(COLUMNS.findIndex(([key]) => key === 'issuedAt') + 1).numFmt =
+        'yyyy-mm-dd hh:mm';
+      row.getCell(COLUMNS.findIndex(([key]) => key === 'deadline') + 1).numFmt =
+        'yyyy-mm-dd';
       row.commit();
     }
-    sheet.columns.forEach((column) => { column.width = 20; });
+    sheet.columns.forEach((column) => {
+      column.width = 20;
+    });
     await workbook.commit();
   }
 
   private xlsxValue(key: string, value: unknown) {
     if (MONEY_KEYS.has(key)) return Number(value ?? 0);
-    if ((key === 'issuedAt' || key === 'deadline') && value) return new Date(value as string | Date);
-    if (key === 'blockingCodes' && Array.isArray(value)) return value.join(' | ');
-    return value == null ? '' : String(value);
+    if ((key === 'issuedAt' || key === 'deadline') && value)
+      return new Date(value as string | Date);
+    if (key === 'blockingCodes' && Array.isArray(value))
+      return value.join(' | ');
+    return value == null ? '' : stringifyValue(value);
   }
 
   private csvValue(key: string, value: unknown) {
-    if (key === 'blockingCodes' && Array.isArray(value)) return value.join(' | ');
+    if (key === 'blockingCodes' && Array.isArray(value))
+      return value.join(' | ');
     if (value instanceof Date) return value.toISOString();
-    return value ?? '';
+    return value == null ? '' : value;
   }
 
   private escapeCsv(value: unknown) {
-    const text = String(value ?? '');
+    const text = value == null ? '' : stringifyValue(value);
     return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
   private stableJson(value: Record<string, unknown>) {
-    return JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))));
+    return JSON.stringify(
+      Object.fromEntries(
+        Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+      ),
+    );
   }
 }

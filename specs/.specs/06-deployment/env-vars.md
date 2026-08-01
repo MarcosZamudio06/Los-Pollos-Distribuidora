@@ -14,6 +14,13 @@ AUTH_SESSION_ABSOLUTE_TTL_SECONDS=604800
 AUTH_SESSION_IDLE_TTL_SECONDS=86400
 BCRYPT_SALT_ROUNDS=10
 CORS_ORIGIN=http://localhost:3000
+HTTP_BODY_LIMIT=1mb
+SWAGGER_ENABLED=true
+TRUST_PROXY_HOPS=0
+RATE_LIMIT_GLOBAL_MAX=600
+RATE_LIMIT_LOGIN_ACCOUNT_MAX=5
+RATE_LIMIT_LOGIN_IP_MAX=30
+RATE_LIMIT_REFRESH_MAX=120
 ```
 
 ## Frontend
@@ -30,9 +37,26 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_DB=pollo_distribucion
 ```
 
+Estas variables son exclusivas de la instancia local de desarrollo. Producción
+debe proporcionar `DATABASE_URL` para el clúster externo e incluir
+`sslmode=require`, `sslmode=verify-ca` o `sslmode=verify-full`.
+
+Los restore drills deben proporcionar temporalmente:
+
+```env
+RESTORE_DATABASE_URL=postgresql://user:password@restore-host:5432/pollo_distribucion_restore_drill?sslmode=verify-full
+```
+
 ## Reglas
 
 - `.env` no debe subirse a Git.
 - `.env.example` sí debe mantenerse actualizado.
 - Los secretos productivos deben ser diferentes a los de desarrollo.
 - La vigencia criptográfica del refresh token no debe superar la expiración absoluta de la sesión.
+- `CORS_ORIGIN` acepta una allowlist separada por comas. No acepta `*` cuando
+  las credenciales están habilitadas.
+- `SWAGGER_ENABLED` solo puede habilitar Swagger fuera de producción.
+- `TRUST_PROXY_HOPS` debe coincidir con la cantidad real de proxies controlados.
+  El backend no debe exponerse directamente cuando el valor sea mayor a cero.
+- Los límites HTTP deben ser enteros positivos y probarse con la carga real de
+  terminales POS antes de liberar producción.

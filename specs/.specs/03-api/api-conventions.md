@@ -25,9 +25,19 @@ Todas las rutas deben iniciar con:
   "success": false,
   "message": "Descripción del error",
   "error": "ERROR_CODE",
-  "statusCode": 400
+  "statusCode": 400,
+  "requestId": "7ce692e3-37d6-4d92-b46d-2a1ab80262ac"
 }
 ```
+
+`requestId` también se devuelve en el header `X-Request-ID`. Permite
+correlacionar una respuesta con los registros del backend sin exponer stack,
+consultas, secretos ni detalles internos. Los errores inesperados deben usar un
+mensaje genérico y el código `INTERNAL_SERVER_ERROR`.
+
+Los errores de negocio pueden conservar extensiones estructuradas aprobadas,
+como `code`, `findings`, `errors`, `blockers` o `saleIds`. El filtro global no
+debe copiar propiedades arbitrarias del objeto de excepción.
 
 ## Paginación
 
@@ -69,6 +79,8 @@ Authorization: Bearer <token>
 - 403: sin permisos.
 - 404: recurso no encontrado.
 - 409: conflicto de negocio.
+- 413: payload mayor al límite permitido.
+- 429: límite de solicitudes excedido; debe incluir `Retry-After` cuando aplique.
 - 500: error interno.
 
 ## Validaciones
@@ -77,7 +89,12 @@ Todos los endpoints que reciben body deben usar DTOs y validación.
 
 ## Reglas transversales del MVP
 
-- Todas las rutas, excepto autenticación pública, requieren `Authorization: Bearer <token>`.
+- Todas las rutas, excepto autenticación pública y probes de infraestructura,
+  requieren `Authorization: Bearer <token>`.
+- Los probes `GET /api/health/live`, `GET /api/health/startup` y
+  `GET /api/health/ready` son públicos y no están sujetos a rate limiting. No
+  pueden devolver secretos, URLs de dependencias, consultas SQL ni diagnósticos
+  internos.
 - Los permisos se validan por rol y por alcance operativo cuando aplique, por ejemplo vendedor propio, repartidor asignado o ubicación autorizada.
 - Las respuestas no deben exponer `passwordHash`, secretos, tokens internos ni datos sensibles innecesarios.
 - Las operaciones que modifican inventario, ventas, compras, cuentas por cobrar, pagos, rutas o liquidaciones deben devolver el recurso afectado con identificadores de trazabilidad.

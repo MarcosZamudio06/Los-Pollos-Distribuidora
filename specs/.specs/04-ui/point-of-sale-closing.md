@@ -174,9 +174,15 @@ Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante 
 - El diálogo final de cierre debe mostrar kilos, báscula, inventario, gastos, ventas, notas facturables, efectivo y diferencias sin resolver.
 - La línea de tiempo de auditoría debe permitir verificar quién realizó cada transición.
 
+## Cutover de terminales migradas
+
+- El catálogo administrado debe distinguir terminales migradas `legacy:*`, mostrar avance de cutover por ubicación y permitir exportar el inventario pendiente.
+- Si el navegador actual no tiene terminal, `ADMIN` o `SELLER` puede generar un código temporal y debe recibir instrucciones para entregarlo a administración; generar el código no elimina el bloqueo de turno.
+- La pantalla administrativa consume el código sobre una terminal migrada, confirma que conserva su historial y permite reintentar la detección desde el navegador solicitante.
+- La vinculación manual por `deviceId` permanece como recuperación administrativa supervisada.
+
 ## Decisiones abiertas
 
-- Catálogo administrado de terminales y registro controlado de dispositivos.
 - Tolerancias y severidades de diferencias.
 - Fórmula oficial de utilidad y utilidad por pollo.
 - Catálogo final de gastos y otros conceptos.

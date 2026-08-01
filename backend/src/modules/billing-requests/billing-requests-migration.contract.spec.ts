@@ -3,7 +3,10 @@ import { resolve } from 'node:path';
 
 describe('billing requests phase 4 migration', () => {
   const migration = readFileSync(
-    resolve(process.cwd(), 'prisma/migrations/20260719003000_billing_requests_phase4/migration.sql'),
+    resolve(
+      process.cwd(),
+      'prisma/migrations/20260719003000_billing_requests_phase4/migration.sql',
+    ),
     'utf8',
   );
 

@@ -99,13 +99,16 @@ describe('LocationsService', () => {
     ]);
 
     await expect(
-      service.findAll({ role: 'ADMIN' }, {
-        page: 2,
-        limit: 5,
-        search: 'alm',
-        type: OperationalLocationType.WAREHOUSE,
-        parentId: 'parent-1',
-      }),
+      service.findAll(
+        { role: 'ADMIN' },
+        {
+          page: 2,
+          limit: 5,
+          search: 'alm',
+          type: OperationalLocationType.WAREHOUSE,
+          parentId: 'parent-1',
+        },
+      ),
     ).resolves.toEqual({
       items: [
         expect.objectContaining({
@@ -145,19 +148,26 @@ describe('LocationsService', () => {
 
   it('limits SELLER location listings to the assigned operational location', async () => {
     const { service, prisma } = createService();
-    prisma.operationalLocation.findMany.mockResolvedValue([createLocation({ id: 'location-2', type: OperationalLocationType.BRANCH })]);
+    prisma.operationalLocation.findMany.mockResolvedValue([
+      createLocation({
+        id: 'location-2',
+        type: OperationalLocationType.BRANCH,
+      }),
+    ]);
 
     await service.findAll(
       { role: 'SELLER', operationalLocationId: 'location-2' },
       { limit: 50 },
     );
 
-    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        id: 'location-2',
-        isActive: true,
+    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'location-2',
+          isActive: true,
+        }),
       }),
-    }));
+    );
   });
 
   it('does not expose locations when SELLER has no assigned location', async () => {
@@ -166,9 +176,13 @@ describe('LocationsService', () => {
 
     await service.findAll({ role: 'SELLER' }, { limit: 50 });
 
-    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: '__seller_without_operational_location__' }),
-    }));
+    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: '__seller_without_operational_location__',
+        }),
+      }),
+    );
   });
 
   it('creates active branch, warehouse, mixed, external POS, and route stock locations without forcing parentId', async () => {

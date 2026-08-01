@@ -5,12 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  AgingStatus,
-  CollectionStatus,
-  CreditStatus,
-  type Prisma,
-} from '@prisma/client';
+import { CollectionStatus, CreditStatus, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -21,6 +16,7 @@ import {
   UpdateCustomerDto,
 } from './dto';
 import { calculateCreditState } from '../sales/credit-decision';
+import { Money, toMoneyString } from '../../../../shared/money';
 
 type CustomerRecord = Prisma.CustomerGetPayload<{
   include: {
@@ -163,7 +159,7 @@ export class CustomersService {
 
   async findPayments(id: string, query: ListCustomerPaymentsQueryDto = {}) {
     await this.assertCustomerExists(id);
-    const payments = (await this.prisma.payment.findMany({
+    const payments = await this.prisma.payment.findMany({
       where: {
         OR: [
           { customerId: id },
@@ -171,15 +167,19 @@ export class CustomersService {
           { accountReceivable: { customerId: id } },
         ],
         ...(query.paymentMethod ? { paymentMethod: query.paymentMethod } : {}),
-        ...(query.bankName ? { bankName: { contains: query.bankName, mode: 'insensitive' } } : {}),
+        ...(query.bankName
+          ? { bankName: { contains: query.bankName, mode: 'insensitive' } }
+          : {}),
         ...(query.status ? { status: query.status } : {}),
         ...this.buildDateRangeWhere('paidAt', query.dateFrom, query.dateTo),
       },
       orderBy: { paidAt: 'desc' },
       ...this.buildPagination(query),
-    })) as CustomerPaymentRecord[];
+    });
 
-    return { items: payments.map((payment) => this.toPaymentHistoryItem(payment)) };
+    return {
+      items: payments.map((payment) => this.toPaymentHistoryItem(payment)),
+    };
   }
 
   async create(
@@ -189,24 +189,24 @@ export class CustomersService {
     this.assertCanMutateCommercialTerms(dto, currentUser);
     this.assertCoherentCreditTerms(dto);
 
-    const data = this.normalizeMutationData(
-      dto,
-      true,
-    ) as CustomerMutationData;
+    const data = this.normalizeMutationData(dto, true);
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone);
     }
     await this.assertReferencedRelationsAvailable(data);
 
-    const customer = (await this.prisma.customer
+    const customer = await this.prisma.customer
       .create({
-        data: { ...data, isActive: true } as Prisma.CustomerUncheckedCreateInput,
+        data: {
+          ...data,
+          isActive: true,
+        } as Prisma.CustomerUncheckedCreateInput,
       })
       .catch((error: unknown) => {
         this.throwUniqueConflict(error);
         throw error;
-      })) as CustomerListRecord;
+      });
 
     return this.toCustomerResponse(customer);
   }
@@ -220,35 +220,32 @@ export class CustomersService {
     this.assertCanMutateCommercialTerms(dto, currentUser);
     this.assertCoherentCreditTermsForUpdate(dto, currentCustomer);
 
-    const data = this.normalizeMutationData(
-      dto,
-      false,
-    ) as CustomerMutationData;
+    const data = this.normalizeMutationData(dto, false);
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone, currentCustomer.id);
     }
     await this.assertReferencedRelationsAvailable(data);
 
-    const customer = (await this.prisma.customer
+    const customer = await this.prisma.customer
       .update({
         where: { id: currentCustomer.id },
-        data: data as Prisma.CustomerUncheckedUpdateInput,
+        data: data,
       })
       .catch((error: unknown) => {
         this.throwUniqueConflict(error);
         throw error;
-      })) as CustomerListRecord;
+      });
 
     return this.toCustomerResponse(customer);
   }
 
   async deactivate(id: string): Promise<CustomerResponse> {
     const currentCustomer = await this.findActiveCustomerForMutation(id);
-    const customer = (await this.prisma.customer.update({
+    const customer = await this.prisma.customer.update({
       where: { id: currentCustomer.id },
       data: { isActive: false },
-    })) as CustomerListRecord;
+    });
 
     return this.toCustomerResponse(customer);
   }
@@ -294,20 +291,24 @@ export class CustomersService {
 
     if (agingStatus === 'LATE') {
       return {
-      accountReceivables: {
-        some: {
-          daysOverdue: { gt: 0 },
-          status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+        accountReceivables: {
+          some: {
+            daysOverdue: { gt: 0 },
+            status: {
+              in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+            },
+          },
         },
-      },
-    };
+      };
     }
 
     return {
       accountReceivables: {
         some: {
           agingStatus,
-          status: { in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID] },
+          status: {
+            in: [CollectionStatus.UNPAID, CollectionStatus.PARTIALLY_PAID],
+          },
         },
       },
     };
@@ -345,7 +346,7 @@ export class CustomersService {
   }
 
   private async findCustomerDetail(id: string): Promise<CustomerRecord> {
-    const customer = (await this.prisma.customer.findFirst({
+    const customer = await this.prisma.customer.findFirst({
       where: { id },
       include: {
         commercialPolicy: true,
@@ -353,7 +354,7 @@ export class CustomersService {
         payments: true,
         billingRequests: true,
       },
-    })) as CustomerRecord | null;
+    });
 
     if (!customer) {
       throw new NotFoundException('Customer not found');
@@ -376,9 +377,9 @@ export class CustomersService {
   private async findActiveCustomerForMutation(
     id: string,
   ): Promise<CustomerListRecord> {
-    const customer = (await this.prisma.customer.findFirst({
+    const customer = await this.prisma.customer.findFirst({
       where: { id, isActive: true },
-    })) as CustomerListRecord | null;
+    });
 
     if (!customer) {
       throw new NotFoundException('Customer not found');
@@ -401,9 +402,10 @@ export class CustomersService {
     }
   }
 
-  private async assertReferencedRelationsAvailable(
-    data: { assignedRouteId?: unknown; commercialPolicyId?: unknown },
-  ): Promise<void> {
+  private async assertReferencedRelationsAvailable(data: {
+    assignedRouteId?: unknown;
+    commercialPolicyId?: unknown;
+  }): Promise<void> {
     if (typeof data.assignedRouteId === 'string') {
       const route = await this.prisma.deliveryRoute.findFirst({
         where: { id: data.assignedRouteId },
@@ -533,7 +535,9 @@ export class CustomersService {
       ...(dto.priceListId !== undefined
         ? { priceListId: this.normalizeOptionalText(dto.priceListId) }
         : {}),
-      ...(dto.creditLimit !== undefined ? { creditLimit: dto.creditLimit } : {}),
+      ...(dto.creditLimit !== undefined
+        ? { creditLimit: dto.creditLimit }
+        : {}),
       ...(dto.creditDays !== undefined ? { creditDays: dto.creditDays } : {}),
       ...(dto.creditStatus !== undefined
         ? { creditStatus: dto.creditStatus }
@@ -557,7 +561,11 @@ export class CustomersService {
         ? { assignedRouteId: this.normalizeOptionalText(dto.assignedRouteId) }
         : {}),
       ...(dto.commercialPolicyId !== undefined
-        ? { commercialPolicyId: this.normalizeOptionalText(dto.commercialPolicyId) }
+        ? {
+            commercialPolicyId: this.normalizeOptionalText(
+              dto.commercialPolicyId,
+            ),
+          }
         : {}),
     };
   }
@@ -582,24 +590,35 @@ export class CustomersService {
       commercialPolicy,
       ...publicCustomer
     } = customer as CustomerRecord;
+    void _accountReceivables;
+    void _payments;
+    void _billingRequests;
     const response = {
       ...publicCustomer,
-      creditLimit: customer.creditLimit?.toString() ?? null,
+      creditLimit:
+        customer.creditLimit === null
+          ? null
+          : toMoneyString(customer.creditLimit),
       isBlockedForCredit: customer.creditStatus !== CreditStatus.ACTIVE,
     } as CustomerResponse;
 
     if (detailRecord) {
-      response.commercialPolicy = commercialPolicy ? {
-        id: commercialPolicy.id,
-        name: commercialPolicy.name,
-        overdueBlockingMode: commercialPolicy.overdueBlockingMode,
-        allowAdministrativeOverride: commercialPolicy.allowAdministrativeOverride,
-        isActive: commercialPolicy.isActive,
-        effectiveFrom: commercialPolicy.effectiveFrom,
-        effectiveTo: commercialPolicy.effectiveTo,
-      } : null;
+      response.commercialPolicy = commercialPolicy
+        ? {
+            id: commercialPolicy.id,
+            name: commercialPolicy.name,
+            overdueBlockingMode: commercialPolicy.overdueBlockingMode,
+            allowAdministrativeOverride:
+              commercialPolicy.allowAdministrativeOverride,
+            isActive: commercialPolicy.isActive,
+            effectiveFrom: commercialPolicy.effectiveFrom,
+            effectiveTo: commercialPolicy.effectiveTo,
+          }
+        : null;
       response.creditSummary = this.buildCreditSummary(customer);
-      response.isBlockedForCredit = response.creditSummary?.isBlockedForCredit ?? response.isBlockedForCredit;
+      response.isBlockedForCredit =
+        response.creditSummary?.isBlockedForCredit ??
+        response.isBlockedForCredit;
       response.billingSummary = this.buildBillingSummary(customer);
     }
 
@@ -612,7 +631,9 @@ export class CustomersService {
     return 'accountReceivables' in customer && 'payments' in customer;
   }
 
-  private buildCreditSummary(customer: CustomerRecord): CustomerResponse['creditSummary'] {
+  private buildCreditSummary(
+    customer: CustomerRecord,
+  ): CustomerResponse['creditSummary'] {
     return this.buildCreditSummaryResponse(customer);
   }
 
@@ -626,8 +647,8 @@ export class CustomersService {
       policy: customer.commercialPolicy,
       asOf: new Date(),
     });
-    const outstandingAmount = creditState.currentExposure;
-    const overdueAmount = creditState.overdueAmount;
+    const outstandingAmount = Money.from(creditState.currentExposure);
+    const overdueAmount = Money.from(creditState.overdueAmount);
     const payments = this.customerPayments(customer);
     const lastPaymentDate = payments.reduce<Date | null>(
       (latestDate, payment) =>
@@ -636,17 +657,25 @@ export class CustomersService {
           : latestDate,
       null,
     );
-    const creditLimit = customer.creditLimit === null ? null : Number(customer.creditLimit);
+    const creditLimit =
+      customer.creditLimit === null ? null : Money.from(customer.creditLimit);
     const availableCredit =
-      creditLimit === null ? null : Math.max(creditLimit - outstandingAmount, 0);
+      creditLimit === null
+        ? null
+        : creditLimit.subtract(outstandingAmount).compare(Money.zero()) > 0
+          ? creditLimit.subtract(outstandingAmount)
+          : Money.zero();
     const daysOverdue = creditState.maximumDaysOverdue;
-    const hasOverdueBalance = overdueAmount > 0;
+    const hasOverdueBalance = overdueAmount.isPositive();
     const isBlocked = creditState.effectiveCreditStatus === 'BLOCKED';
 
     return {
       customerId: customer.id,
       creditStatus: customer.creditStatus,
-      creditLimit: customer.creditLimit?.toString() ?? null,
+      creditLimit:
+        customer.creditLimit === null
+          ? null
+          : toMoneyString(customer.creditLimit),
       creditDays: customer.creditDays,
       paymentTermsDays: customer.creditDays,
       agingStatus: creditState.agingStatus,
@@ -654,7 +683,8 @@ export class CustomersService {
       globalBalance: outstandingAmount.toString(),
       outstandingAmount: outstandingAmount.toString(),
       overdueAmount: overdueAmount.toString(),
-      availableCredit: availableCredit === null ? null : availableCredit.toString(),
+      availableCredit:
+        availableCredit === null ? null : availableCredit.toString(),
       hasOverdueBalance,
       isBlocked,
       isBlockedForCredit: isBlocked,
@@ -682,7 +712,8 @@ export class CustomersService {
   private resolveCollectionStatus(customer: CustomerRecord): CollectionStatus {
     if (
       this.activeReceivables(customer).some(
-        (accountReceivable) => accountReceivable.status === CollectionStatus.UNPAID,
+        (accountReceivable) =>
+          accountReceivable.status === CollectionStatus.UNPAID,
       )
     ) {
       return CollectionStatus.UNPAID;
@@ -721,7 +752,7 @@ export class CustomersService {
     }
 
     for (const accountReceivable of customer.accountReceivables) {
-      const payments = (accountReceivable as typeof accountReceivable & { payments?: CustomerRecord['payments'] }).payments ?? [];
+      const payments = accountReceivable.payments ?? [];
       for (const payment of payments) {
         if ('id' in payment && payment.id) {
           paymentsById.set(payment.id, payment);
@@ -789,7 +820,8 @@ export class CustomersService {
   ): CustomerResponse['billingSummary'] {
     const receivables = this.activeReceivables(customer);
     const billedAmount = receivables.reduce(
-      (total, accountReceivable) => total + Number(accountReceivable.originalAmount),
+      (total, accountReceivable) =>
+        total + Number(accountReceivable.originalAmount),
       0,
     );
     const outstandingAmount = receivables.reduce(
@@ -814,7 +846,9 @@ export class CustomersService {
 
   private throwUniqueConflict(error: unknown): void {
     if (this.isUniqueConstraintError(error)) {
-      throw new ConflictException('Customer unique field is already registered');
+      throw new ConflictException(
+        'Customer unique field is already registered',
+      );
     }
   }
 

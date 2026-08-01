@@ -84,6 +84,26 @@ Propósito: consultar o registrar terminales persistentes administradas.
 - `deviceId` es globalmente único; `code` es único dentro de la ubicación.
 - El nombre o código no sustituyen la prueba de dispositivo.
 
+## POST /api/cash-terminal-activations
+
+Propósito: solicitar desde el navegador bloqueado un código temporal para cutover supervisado.
+
+- Permite `ADMIN` y `SELLER` autenticados con ubicación operativa asignada.
+- Recibe `deviceId` y `operationalLocationId` opcional. Para `SELLER` la ubicación siempre se deriva del usuario; `ADMIN` puede indicar la ubicación que está recuperando.
+- Invalida cualquier código pendiente previo para el mismo dispositivo.
+- Devuelve un código de un solo uso y `expiresAt`; el código vence a los 15 minutos y solo se almacena su hash.
+- No vincula una terminal ni permite abrir turno por sí mismo.
+
+## POST /api/cash-terminals/:id/activate
+
+Propósito: vincular de forma supervisada una terminal migrada al navegador que solicitó el código.
+
+- Requiere `ADMIN` y recibe `activationCode`.
+- La terminal debe conservar un `deviceId` con prefijo `legacy:`.
+- El código debe existir, estar vigente, no consumido y pertenecer a la misma ubicación de la terminal.
+- La actualización de terminal y consumo del código son atómicos.
+- Conserva el identificador e historial de la terminal y mantiene la unicidad global de `deviceId`.
+
 ## GET /api/cash-shifts/current
 
 Propósito: obtener exclusivamente el turno abierto del usuario autenticado para `deviceId`.

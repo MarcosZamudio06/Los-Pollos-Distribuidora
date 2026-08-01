@@ -304,9 +304,31 @@ model Role {
   id          String   @id @default(cuid())
   name        String   @unique
   description String?
+  version     Int      @default(1)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
 }
 
 model User {
@@ -368,6 +390,7 @@ model User {
   reversedInvoiceItemApplications InvoiceSaleItemApplication[] @relation("InvoiceSaleItemApplicationReversedBy")
   resolvedBillingRemediations     BillingDataRemediation[]     @relation("BillingDataRemediationResolvedBy")
   billingAuditLogs                BillingAuditLog[]            @relation("BillingAuditActor")
+  accessControlAuditLogs          AccessControlAuditLog[]      @relation("AccessControlAuditActor")
   collectedReceivables            AccountReceivable[]          @relation("AccountReceivableCollector")
   routeSettlements                RouteSettlement[]            @relation("RouteSettlementDriver")
   reopenedRouteSettlements        RouteSettlement[]            @relation("RouteSettlementReopenedBy")
@@ -385,6 +408,8 @@ model User {
   cashMovements                   CashMovement[]
   cashShifts                      CashShift[]                  @relation("CashShiftCashier")
   closedCashShifts                CashShift[]                  @relation("CashShiftClosedBy")
+  requestedTerminalActivations    CashTerminalActivation[]    @relation("CashTerminalActivationRequestedBy")
+  consumedTerminalActivations     CashTerminalActivation[]    @relation("CashTerminalActivationConsumedBy")
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
   grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
@@ -440,6 +465,7 @@ model OperationalLocation {
   saleDocuments         SaleDocument[]
   dailyCloses           PointOfSaleDailyClose[]
   cashTerminals         CashTerminal[]
+  cashTerminalActivations CashTerminalActivation[]
   cashShifts            CashShift[]
   dailyCloseLines       PointOfSaleDailyCloseLine[]
   cashMovements         CashMovement[]
@@ -1215,9 +1241,32 @@ model CashTerminal {
   operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
   shifts                CashShift[]
   sales                 Sale[]
+  activations           CashTerminalActivation[]
 
   @@unique([operationalLocationId, code])
   @@index([operationalLocationId, isActive])
+}
+
+model CashTerminalActivation {
+  id                    String              @id @default(cuid())
+  operationalLocationId String
+  requestedByUserId     String
+  deviceId              String
+  codeHash              String              @unique
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  consumedByUserId      String?
+  cashTerminalId        String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
+  requestedBy           User                @relation("CashTerminalActivationRequestedBy", fields: [requestedByUserId], references: [id])
+  consumedBy            User?               @relation("CashTerminalActivationConsumedBy", fields: [consumedByUserId], references: [id])
+  cashTerminal          CashTerminal?       @relation(fields: [cashTerminalId], references: [id])
+
+  @@index([deviceId, consumedAt])
+  @@index([operationalLocationId, consumedAt, expiresAt])
+  @@index([cashTerminalId])
 }
 
 model CashShift {
@@ -1698,4 +1747,26 @@ model BillingAuditLog {
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
   @@index([correlationId])
+}
+
+model AccessControlAuditLog {
+  id                  String   @id @default(cuid())
+  actorUserId         String
+  action              String
+  targetType          String
+  targetId            String
+  before              Json?
+  after               Json?
+  reason              String
+  affectedUserCount   Int      @default(0)
+  revokedSessionCount Int      @default(0)
+  requestId           String?
+  ipAddress           String?
+  createdAt           DateTime @default(now())
+  actor               User     @relation("AccessControlAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([requestId])
 }

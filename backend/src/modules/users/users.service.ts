@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import {
   CreateUserDto,
   DeactivateUserDto,
@@ -56,25 +58,45 @@ type UserRecord = {
 type UserResponse = Omit<UserRecord, 'passwordHash'>;
 type CreatedUserResponse = UserResponse & { temporaryPassword: string };
 
-type UsersTransactionClient = Pick<PrismaService, 'user' | 'role' | 'operationalLocation'>;
+type UsersTransactionClient = Pick<
+  PrismaService,
+  'user' | 'role' | 'operationalLocation' | 'authSession'
+>;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly sessionRevocationRegistry?: SessionRevocationRegistry,
+  ) {}
 
-  async findAll(query: ListUsersQueryDto): Promise<{ items: UserResponse[]; total: number; page: number; limit: number }> {
+  async findAll(query: ListUsersQueryDto): Promise<{
+    items: UserResponse[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const where = this.buildListWhere(query);
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const [users, total] = await Promise.all([this.prisma.user.findMany({
-      where,
-      include: { role: true, operationalLocation: true },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    }), this.prisma.user.count({ where })]);
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        include: { role: true, operationalLocation: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
-    return { items: users.map((user) => this.toUserResponse(user)), total, page, limit };
+    return {
+      items: users.map((user) => this.toUserResponse(user)),
+      total,
+      page,
+      limit,
+    };
   }
 
   async findRoles(): Promise<RoleRecord[]> {
@@ -132,6 +154,12 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<UserResponse> {
+    if (dto.roleId !== undefined) {
+      throw new BadRequestException(
+        'Use the access-profile endpoint to change a user profile',
+      );
+    }
+
     return this.prisma
       .$transaction(async (tx) => {
         const client = tx as UsersTransactionClient;
@@ -140,21 +168,13 @@ export class UsersService {
           await this.assertEmailAvailable(email, id, client);
         }
 
-        const nextRole = dto.roleId
-          ? await this.assertRoleExists(dto.roleId, client)
-          : undefined;
-        const currentUser = await this.findActiveUserForMutation(id, client);
-
-        if (nextRole && nextRole.name !== ADMIN_ROLE_NAME) {
-          await this.assertNotLastActiveAdmin(currentUser, client);
-        }
+        await this.findActiveUserForMutation(id, client);
 
         const user = await client.user.update({
           where: { id },
           data: {
             ...(dto.name !== undefined ? { name: dto.name } : {}),
             ...(email !== undefined ? { email } : {}),
-            ...(dto.roleId !== undefined ? { roleId: dto.roleId } : {}),
           },
           include: { role: true, operationalLocation: true },
         });
@@ -179,15 +199,25 @@ export class UsersService {
       PASSWORD_HASH_ROUNDS,
     );
 
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: {
-        passwordHash,
-        mustChangePassword: true,
-      },
-      include: { role: true, operationalLocation: true },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const client = tx as UsersTransactionClient;
+      const updated = await client.user.update({
+        where: { id },
+        data: {
+          passwordHash,
+          mustChangePassword: true,
+          sessionVersion: { increment: 1 },
+        },
+        include: { role: true, operationalLocation: true },
+      });
+      await client.authSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return updated;
     });
 
+    this.sessionRevocationRegistry?.notify([id]);
     return this.toUserResponse(user);
   }
 
@@ -196,7 +226,7 @@ export class UsersService {
     actorUserId: string,
     dto: DeactivateUserDto,
   ): Promise<UserResponse> {
-    return this.prisma.$transaction(async (tx) => {
+    const user = await this.prisma.$transaction(async (tx) => {
       const client = tx as UsersTransactionClient;
       const currentUser = await this.findActiveUserForMutation(id, client);
       await this.assertNotLastActiveAdmin(currentUser, client);
@@ -205,15 +235,22 @@ export class UsersService {
         where: { id },
         data: {
           isActive: false,
+          sessionVersion: { increment: 1 },
           deactivatedAt: new Date(),
           deactivatedByUserId: actorUserId,
           deactivationReason: dto.reason ?? null,
         },
         include: { role: true, operationalLocation: true },
       });
+      await client.authSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
 
       return this.toUserResponse(user);
     }, LAST_ADMIN_TRANSACTION_OPTIONS);
+    this.sessionRevocationRegistry?.notify([id]);
+    return user;
   }
 
   private toUserResponse(user: UserRecord): UserResponse {
@@ -238,19 +275,29 @@ export class UsersService {
   }
 
   private buildListWhere(query: ListUsersQueryDto): Prisma.UserWhereInput {
-    const status = query.status === 'all' || query.includeInactive === true
-      ? undefined : query.status === 'inactive' ? false : true;
+    const status =
+      query.status === 'all' || query.includeInactive === true
+        ? undefined
+        : query.status === 'inactive'
+          ? false
+          : true;
     const search = query.search?.trim();
     return {
       ...(status === undefined ? {} : { isActive: status }),
       ...(query.roleId ? { roleId: query.roleId } : {}),
-      ...(query.operationalLocationId ? { operationalLocationId: query.operationalLocationId } : {}),
-      ...(search ? { OR: [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-        { controlNumber: { contains: search, mode: 'insensitive' } },
-      ] } : {}),
+      ...(query.operationalLocationId
+        ? { operationalLocationId: query.operationalLocationId }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search, mode: 'insensitive' } },
+              { controlNumber: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
   }
 
@@ -267,9 +314,9 @@ export class UsersService {
   }
 
   private async nextControlNumber(): Promise<string> {
-    const rows = await this.prisma.$queryRawUnsafe<Array<{ value: bigint | number }>>(
-      'SELECT nextval(\'"User_controlNumber_seq"\') AS value',
-    );
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{ value: bigint | number }>
+    >('SELECT nextval(\'"User_controlNumber_seq"\') AS value');
     return `EPDP-${String(rows[0].value).padStart(6, '0')}`;
   }
 
@@ -279,9 +326,17 @@ export class UsersService {
   }
 
   private async assertEmployeeLocation(locationId: string): Promise<void> {
-    const location = await this.prisma.operationalLocation.findUnique({ where: { id: locationId } });
-    if (!location || !location.isActive || !EMPLOYEE_LOCATION_TYPES.includes(location.type)) {
-      throw new BadRequestException('Operational location is not available for employees');
+    const location = await this.prisma.operationalLocation.findUnique({
+      where: { id: locationId },
+    });
+    if (
+      !location ||
+      !location.isActive ||
+      !EMPLOYEE_LOCATION_TYPES.includes(location.type)
+    ) {
+      throw new BadRequestException(
+        'Operational location is not available for employees',
+      );
     }
   }
 
@@ -376,11 +431,17 @@ export class UsersService {
   }
 
   private getUniqueConstraintTarget(error: unknown): string[] {
-    if (typeof error !== 'object' || error === null || !('meta' in error)) return [];
+    if (typeof error !== 'object' || error === null || !('meta' in error))
+      return [];
     const meta = error.meta;
-    if (typeof meta !== 'object' || meta === null || !('target' in meta)) return [];
+    if (typeof meta !== 'object' || meta === null || !('target' in meta))
+      return [];
     const target = meta.target;
-    return Array.isArray(target) ? target.filter((value): value is string => typeof value === 'string') : typeof target === 'string' ? [target] : [];
+    return Array.isArray(target)
+      ? target.filter((value): value is string => typeof value === 'string')
+      : typeof target === 'string'
+        ? [target]
+        : [];
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

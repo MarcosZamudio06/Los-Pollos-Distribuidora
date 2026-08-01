@@ -29,6 +29,28 @@ type SessionRecord = {
   user: UserRecord;
 };
 
+type AuthSessionCreateArgs = {
+  data: Pick<
+    SessionRecord,
+    'id' | 'userId' | 'refreshTokenHash' | 'absoluteExpiresAt'
+  >;
+};
+type AuthSessionUpdateArgs = {
+  where: Partial<
+    Pick<SessionRecord, 'id' | 'userId' | 'refreshTokenHash' | 'tokenVersion'>
+  > & { revokedAt?: Date | null };
+  data: Partial<
+    Pick<SessionRecord, 'refreshTokenHash' | 'lastUsedAt' | 'revokedAt'>
+  > & {
+    tokenVersion?: { increment: number };
+  };
+};
+type UserUpdateArgs = {
+  data: Pick<UserRecord, 'passwordHash' | 'mustChangePassword'> & {
+    sessionVersion?: { increment: number };
+  };
+};
+
 function createUser(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
     id: 'user-1',
@@ -54,7 +76,7 @@ function createService(user = createUser()) {
   let tokenSequence = 0;
 
   const authSession = {
-    create: jest.fn(async ({ data }: any) => {
+    create: jest.fn(({ data }: AuthSessionCreateArgs) => {
       state.session = {
         ...data,
         tokenVersion: 0,
@@ -64,8 +86,8 @@ function createService(user = createUser()) {
       };
       return state.session;
     }),
-    findUnique: jest.fn(async () => state.session),
-    updateMany: jest.fn(async ({ where, data }: any) => {
+    findUnique: jest.fn(() => state.session),
+    updateMany: jest.fn(({ where, data }: AuthSessionUpdateArgs) => {
       const session = state.session;
       if (
         !session ||
@@ -85,8 +107,8 @@ function createService(user = createUser()) {
     }),
   };
   const userDelegate = {
-    findUnique: jest.fn(async () => state.user),
-    update: jest.fn(async ({ data }: any) => {
+    findUnique: jest.fn(() => state.user),
+    update: jest.fn(({ data }: UserUpdateArgs) => {
       state.user = {
         ...state.user,
         passwordHash: data.passwordHash,
@@ -101,17 +123,22 @@ function createService(user = createUser()) {
   const prisma = {
     authSession,
     user: userDelegate,
-    $transaction: jest.fn(async (callback: (tx: any) => unknown) =>
-      callback({ authSession, user: userDelegate }),
+    $transaction: jest.fn(
+      (
+        callback: (tx: {
+          authSession: typeof authSession;
+          user: typeof userDelegate;
+        }) => unknown,
+      ) => callback({ authSession, user: userDelegate }),
     ),
   };
   const jwtService = {
-    signAsync: jest.fn(async (payload: TokenPayload) => {
+    signAsync: jest.fn((payload: TokenPayload) => {
       const token = `${payload.type}-token-${tokenSequence++}`;
       signedPayloads.set(token, payload);
       return token;
     }),
-    verifyAsync: jest.fn(async (token: string) => {
+    verifyAsync: jest.fn((token: string) => {
       const payload = signedPayloads.get(token);
       if (!payload) throw new Error('invalid signature');
       return payload;

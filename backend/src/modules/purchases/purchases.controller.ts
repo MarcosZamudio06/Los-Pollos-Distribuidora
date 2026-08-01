@@ -1,10 +1,25 @@
-import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CancelPurchaseDto, CreatePurchaseDto, ListPurchasesQueryDto } from './dto';
+import {
+  CancelPurchaseDto,
+  CreatePurchaseDto,
+  ListPurchasesQueryDto,
+} from './dto';
 import { PurchasesService } from './purchases.service';
 
 @Controller('purchases')
@@ -46,7 +61,11 @@ export class PurchasesController {
     return {
       success: true,
       message: 'Purchase created successfully',
-      data: await this.purchasesService.create(body, currentUser, idempotencyKey.trim()),
+      data: await this.purchasesService.create(
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 
@@ -70,7 +89,12 @@ export class PurchasesController {
     return {
       success: true,
       message: 'Purchase cancelled successfully',
-      data: await this.purchasesService.cancel(id, body, currentUser, idempotencyKey.trim()),
+      data: await this.purchasesService.cancel(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

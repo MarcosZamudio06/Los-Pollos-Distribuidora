@@ -29,7 +29,11 @@ export type BillingBlockingCode =
   | 'OVER_REQUESTED'
   | 'OVER_INVOICED';
 
-export type SaleDocumentType = 'SCALE_TICKET' | 'SIMPLE_NOTE' | 'LARGE_NOTE' | 'INTERNAL_RECEIPT';
+export type SaleDocumentType =
+  | 'SCALE_TICKET'
+  | 'SIMPLE_NOTE'
+  | 'LARGE_NOTE'
+  | 'INTERNAL_RECEIPT';
 export type BillingPolicyRules = {
   billableDocumentTypes: readonly SaleDocumentType[];
   allowInternalReceipt: boolean;
@@ -38,7 +42,12 @@ export type BillingPolicyRules = {
   deadlineBasis: 'ISSUED_AT' | 'DELIVERED_AT';
   timezone: string;
 };
-type BillingRequestStatus = 'REQUESTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+type BillingRequestStatus =
+  | 'REQUESTED'
+  | 'IN_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
 
 export interface BillabilityInput {
   sale: {
@@ -64,7 +73,14 @@ export interface BillabilityInput {
     billingEmail: string | null;
   } | null;
   delivery: {
-    status: 'PENDING' | 'IN_ROUTE' | 'DELIVERED' | 'NOT_DELIVERED' | 'CANCELLED' | 'PARTIALLY_REJECTED' | 'RETURNED';
+    status:
+      | 'PENDING'
+      | 'IN_ROUTE'
+      | 'DELIVERED'
+      | 'NOT_DELIVERED'
+      | 'CANCELLED'
+      | 'PARTIALLY_REJECTED'
+      | 'RETURNED';
     deliveredAt: Date | null;
   } | null;
   policy: BillingPolicyRules;
@@ -101,7 +117,11 @@ export interface BillabilityResult {
 
 export class BillingBalanceError extends Error {
   constructor(
-    readonly code: 'INVALID_REQUESTED_AMOUNT' | 'OVER_REQUESTED' | 'INVALID_APPLIED_AMOUNT' | 'OVER_INVOICED',
+    readonly code:
+      | 'INVALID_REQUESTED_AMOUNT'
+      | 'OVER_REQUESTED'
+      | 'INVALID_APPLIED_AMOUNT'
+      | 'OVER_INVOICED',
   ) {
     super(code);
     this.name = 'BillingBalanceError';
@@ -109,7 +129,11 @@ export class BillingBalanceError extends Error {
 }
 
 const ZERO = new Prisma.Decimal(0);
-const ACTIVE_REQUEST_STATUSES: readonly BillingRequestStatus[] = ['REQUESTED', 'IN_REVIEW', 'APPROVED'];
+const ACTIVE_REQUEST_STATUSES: readonly BillingRequestStatus[] = [
+  'REQUESTED',
+  'IN_REVIEW',
+  'APPROVED',
+];
 
 const sumDecimals = (values: readonly Prisma.Decimal[]) =>
   values.reduce((total, value) => total.plus(value), ZERO);
@@ -123,7 +147,8 @@ const localDateParts = (date: Date, timezone: string) => {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(date);
-  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
   return { year: value('year'), month: value('month'), day: value('day') };
 };
 
@@ -137,7 +162,10 @@ const addCalendarDays = (date: Date, days: number, timezone: string) => {
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days, 12));
 };
 
-export const isDocumentTypeBillable = (documentType: SaleDocumentType, policy: BillingPolicyRules) =>
+export const isDocumentTypeBillable = (
+  documentType: SaleDocumentType,
+  policy: BillingPolicyRules,
+) =>
   policy.billableDocumentTypes.includes(documentType) &&
   (documentType !== 'INTERNAL_RECEIPT' || policy.allowInternalReceipt);
 
@@ -146,57 +174,115 @@ export const calculateBillingDeadline = (
   deliveredAt: Date | null | undefined,
   policy: BillingPolicyRules,
 ) => {
-  const basis = policy.deadlineBasis === 'DELIVERED_AT' ? deliveredAt : issuedAt;
-  return basis && policy.deadlineDays !== null ? addCalendarDays(basis, policy.deadlineDays, policy.timezone) : null;
+  const basis =
+    policy.deadlineBasis === 'DELIVERED_AT' ? deliveredAt : issuedAt;
+  return basis && policy.deadlineDays !== null
+    ? addCalendarDays(basis, policy.deadlineDays, policy.timezone)
+    : null;
 };
 
-export const isBillingDeadlineExpired = (deadline: Date | null, evaluatedAt: Date, timezone: string) =>
-  Boolean(deadline && calendarKey(evaluatedAt, timezone) > calendarKey(deadline, timezone));
+export const isBillingDeadlineExpired = (
+  deadline: Date | null,
+  evaluatedAt: Date,
+  timezone: string,
+) =>
+  Boolean(
+    deadline &&
+    calendarKey(evaluatedAt, timezone) > calendarKey(deadline, timezone),
+  );
 
-export function validateRequestedAmount(amount: Prisma.Decimal, availableBalance: Prisma.Decimal): void {
-  if (amount.lessThanOrEqualTo(ZERO)) throw new BillingBalanceError('INVALID_REQUESTED_AMOUNT');
-  if (amount.greaterThan(availableBalance)) throw new BillingBalanceError('OVER_REQUESTED');
+export function validateRequestedAmount(
+  amount: Prisma.Decimal,
+  availableBalance: Prisma.Decimal,
+): void {
+  if (amount.lessThanOrEqualTo(ZERO))
+    throw new BillingBalanceError('INVALID_REQUESTED_AMOUNT');
+  if (amount.greaterThan(availableBalance))
+    throw new BillingBalanceError('OVER_REQUESTED');
 }
 
-export function validateAppliedAmount(amount: Prisma.Decimal, availableBalance: Prisma.Decimal): void {
-  if (amount.lessThanOrEqualTo(ZERO)) throw new BillingBalanceError('INVALID_APPLIED_AMOUNT');
-  if (amount.greaterThan(availableBalance)) throw new BillingBalanceError('OVER_INVOICED');
+export function validateAppliedAmount(
+  amount: Prisma.Decimal,
+  availableBalance: Prisma.Decimal,
+): void {
+  if (amount.lessThanOrEqualTo(ZERO))
+    throw new BillingBalanceError('INVALID_APPLIED_AMOUNT');
+  if (amount.greaterThan(availableBalance))
+    throw new BillingBalanceError('OVER_INVOICED');
 }
 
-export function evaluateBillability(input: BillabilityInput): BillabilityResult {
+export function evaluateBillability(
+  input: BillabilityInput,
+): BillabilityResult {
   const billable = input.sale.total;
   const activeRequests = input.requests.filter(
-    (request) => !request.reversedAt && ACTIVE_REQUEST_STATUSES.includes(request.status),
+    (request) =>
+      !request.reversedAt && ACTIVE_REQUEST_STATUSES.includes(request.status),
   );
-  const activeRequested = sumDecimals(activeRequests.map((request) => request.requestedTotal));
+  const activeRequested = sumDecimals(
+    activeRequests.map((request) => request.requestedTotal),
+  );
   const activeInvoiced = sumDecimals(
     input.applications
-      .filter((application) => !application.reversedAt && application.invoiceStatus === 'ACTIVE')
+      .filter(
+        (application) =>
+          !application.reversedAt && application.invoiceStatus === 'ACTIVE',
+      )
       .map((application) => application.totalApplied),
   );
   const activePaid = sumDecimals(
-    input.payments.filter((payment) => payment.status !== 'CANCELLED').map((payment) => payment.amount),
+    input.payments
+      .filter((payment) => payment.status !== 'CANCELLED')
+      .map((payment) => payment.amount),
   );
-  const pendingInvoice = Prisma.Decimal.max(ZERO, billable.minus(activeInvoiced));
-  const collectionBalance = Prisma.Decimal.max(ZERO, billable.minus(activePaid));
+  const pendingInvoice = Prisma.Decimal.max(
+    ZERO,
+    billable.minus(activeInvoiced),
+  );
+  const collectionBalance = Prisma.Decimal.max(
+    ZERO,
+    billable.minus(activePaid),
+  );
   const blockingCodes: BillingBlockingCode[] = [];
 
-  const result = (status: BillingStatus, deadline: Date | null = null): BillabilityResult => ({
+  const result = (
+    status: BillingStatus,
+    deadline: Date | null = null,
+  ): BillabilityResult => ({
     status,
     blockingCodes,
-    amounts: { billable, activeRequested, activeInvoiced, pendingInvoice, activePaid, collectionBalance },
+    amounts: {
+      billable,
+      activeRequested,
+      activeInvoiced,
+      pendingInvoice,
+      activePaid,
+      collectionBalance,
+    },
     deadline,
   });
 
-  if (input.sale.status === 'CANCELLED' || input.document.status === 'CANCELLED') {
-    blockingCodes.push(input.sale.status === 'CANCELLED' ? 'SALE_CANCELLED' : 'DOCUMENT_CANCELLED');
+  if (
+    input.sale.status === 'CANCELLED' ||
+    input.document.status === 'CANCELLED'
+  ) {
+    blockingCodes.push(
+      input.sale.status === 'CANCELLED'
+        ? 'SALE_CANCELLED'
+        : 'DOCUMENT_CANCELLED',
+    );
     return result('CANCELLED');
   }
 
-  if (input.sale.status !== 'CONFIRMED') blockingCodes.push('SALE_NOT_CONFIRMED');
+  if (input.sale.status !== 'CONFIRMED')
+    blockingCodes.push('SALE_NOT_CONFIRMED');
   if (!input.sale.customerId) blockingCodes.push('MISSING_CUSTOMER');
-  if (billable.lessThanOrEqualTo(ZERO)) blockingCodes.push(billable.isZero() ? 'ZERO_BALANCE' : 'INVALID_TOTAL');
-  const typeAllowed = isDocumentTypeBillable(input.document.documentType, input.policy);
+  if (billable.lessThanOrEqualTo(ZERO))
+    blockingCodes.push(billable.isZero() ? 'ZERO_BALANCE' : 'INVALID_TOTAL');
+  const typeAllowed = isDocumentTypeBillable(
+    input.document.documentType,
+    input.policy,
+  );
   if (!typeAllowed) blockingCodes.push('DOCUMENT_TYPE_NOT_BILLABLE');
   if (blockingCodes.length) return result('NOT_BILLABLE');
 
@@ -214,22 +300,39 @@ export function evaluateBillability(input: BillabilityInput): BillabilityResult 
   }
   if (!present(input.sale.currencyCode)) blockingCodes.push('MISSING_CURRENCY');
   if (!input.sale.legalEntityId) blockingCodes.push('MISSING_LEGAL_ENTITY');
-  if (input.policy.requireConfirmedDelivery && input.delivery?.status !== 'DELIVERED') {
+  if (
+    input.policy.requireConfirmedDelivery &&
+    input.delivery?.status !== 'DELIVERED'
+  ) {
     blockingCodes.push('DELIVERY_PENDING');
   }
   if (blockingCodes.length) return result('PENDING_INFORMATION');
 
-  const deadline = calculateBillingDeadline(input.document.issuedAt, input.delivery?.deliveredAt, input.policy);
-  if (isBillingDeadlineExpired(deadline, input.evaluatedAt, input.policy.timezone)) {
+  const deadline = calculateBillingDeadline(
+    input.document.issuedAt,
+    input.delivery?.deliveredAt,
+    input.policy,
+  );
+  if (
+    isBillingDeadlineExpired(deadline, input.evaluatedAt, input.policy.timezone)
+  ) {
     blockingCodes.push('BILLING_DEADLINE_EXPIRED');
   }
   if (activeInvoiced.greaterThan(billable)) blockingCodes.push('OVER_INVOICED');
-  if (activeRequested.greaterThan(pendingInvoice)) blockingCodes.push('OVER_REQUESTED');
+  if (activeRequested.greaterThan(pendingInvoice))
+    blockingCodes.push('OVER_REQUESTED');
   if (blockingCodes.length) return result('BLOCKED', deadline);
 
-  if (activeInvoiced.equals(billable)) return result('FULLY_INVOICED', deadline);
-  if (activeInvoiced.greaterThan(ZERO)) return result('PARTIALLY_INVOICED', deadline);
-  if (activeRequests.some((request) => request.status === 'IN_REVIEW' || request.status === 'APPROVED')) {
+  if (activeInvoiced.equals(billable))
+    return result('FULLY_INVOICED', deadline);
+  if (activeInvoiced.greaterThan(ZERO))
+    return result('PARTIALLY_INVOICED', deadline);
+  if (
+    activeRequests.some(
+      (request) =>
+        request.status === 'IN_REVIEW' || request.status === 'APPROVED',
+    )
+  ) {
     return result('IN_PROCESS', deadline);
   }
   if (activeRequests.length) return result('REQUESTED', deadline);

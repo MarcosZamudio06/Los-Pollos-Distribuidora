@@ -1,16 +1,31 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { AccountsReceivableService } from './accounts-receivable.service';
-import { ListAccountsReceivableQueryDto, RegisterReceivablePaymentDto } from './dto';
+import {
+  ListAccountsReceivableQueryDto,
+  RegisterReceivablePaymentDto,
+} from './dto';
 
 @Controller('accounts-receivable')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AccountsReceivableController {
-  constructor(private readonly accountsReceivableService: AccountsReceivableService) {}
+  constructor(
+    private readonly accountsReceivableService: AccountsReceivableService,
+  ) {}
 
   @Get()
   @Roles('ADMIN', 'COLLECTIONS')
@@ -53,7 +68,12 @@ export class AccountsReceivableController {
     return {
       success: true,
       message: 'Payment registered successfully',
-      data: await this.accountsReceivableService.registerPayment(id, body, currentUser, idempotencyKey.trim()),
+      data: await this.accountsReceivableService.registerPayment(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

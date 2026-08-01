@@ -17,9 +17,21 @@ import {
 } from '../../prisma/seed';
 
 const packageJsonPath = resolve(__dirname, '../../package.json');
+const developmentComposePath = resolve(
+  __dirname,
+  '../../../docker-compose.yml',
+);
+const productionComposePath = resolve(
+  __dirname,
+  '../../../docker-compose.production.yml',
+);
 type UpsertMock<TArgs> = jest.MockedFunction<(args: TArgs) => Promise<unknown>>;
 type PrismaSeedMockClient = {
-  role: { upsert: UpsertMock<Prisma.RoleUpsertArgs> };
+  role: {
+    upsert: UpsertMock<Prisma.RoleUpsertArgs>;
+    update: UpsertMock<Prisma.RoleUpdateArgs>;
+  };
+  permission: { upsert: UpsertMock<Prisma.PermissionUpsertArgs> };
   user: {
     upsert: UpsertMock<Prisma.UserUpsertArgs>;
   };
@@ -42,7 +54,11 @@ function createPrismaSeedMock(): {
     .fn<Promise<unknown>, [Prisma.UserUpsertArgs]>()
     .mockResolvedValue(undefined);
   const prisma: PrismaSeedMockClient = {
-    role: { upsert: createUpsertMock<Prisma.RoleUpsertArgs>() },
+    role: {
+      upsert: createUpsertMock<Prisma.RoleUpsertArgs>(),
+      update: createUpsertMock<Prisma.RoleUpdateArgs>(),
+    },
+    permission: { upsert: createUpsertMock<Prisma.PermissionUpsertArgs>() },
     user: { upsert: userUpsertMock },
     operationalLocation: {
       upsert: createUpsertMock<Prisma.OperationalLocationUpsertArgs>(),
@@ -111,7 +127,6 @@ describe('Prisma seed contract', () => {
     expect(userUpsertMock).not.toHaveBeenCalled();
   });
 
-
   it('defines development role test users for the remaining canonical roles', () => {
     expect(initialRoleTestUsers.map((user) => user.roleName)).toEqual([
       'SELLER',
@@ -148,7 +163,9 @@ describe('Prisma seed contract', () => {
       process.env.NODE_ENV = previousNodeEnv;
     }
 
-    const roleUserUpserts = userUpsertMock.mock.calls.slice(1).map((call) => call[0]);
+    const roleUserUpserts = userUpsertMock.mock.calls
+      .slice(1)
+      .map((call) => call[0]);
 
     expect(roleUserUpserts).toHaveLength(initialRoleTestUsers.length);
 
@@ -325,13 +342,34 @@ describe('Prisma seed contract', () => {
   it('registers the Prisma seed command minimally', () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       prisma?: { seed?: string };
-      scripts?: { 'start:docker'?: string };
+      scripts?: {
+        'migrate:deploy'?: string;
+        'start:docker'?: string;
+      };
     };
 
     expect(packageJson.prisma?.seed).toBe('ts-node prisma/seed.ts');
-    expect(packageJson.scripts?.['start:docker']).toBe(
-      'prisma migrate deploy && npm run start:prod',
+    expect(packageJson.scripts?.['migrate:deploy']).toBe(
+      'prisma migrate deploy',
     );
+    expect(packageJson.scripts?.['start:docker']).toBe('npm run start:prod');
+    expect(packageJson.scripts?.['start:docker']).not.toContain('migrate');
     expect(packageJson.scripts?.['start:docker']).not.toContain('seed');
+  });
+
+  it('runs migrations as a separate deployment job', () => {
+    const developmentCompose = readFileSync(developmentComposePath, 'utf8');
+    const productionCompose = readFileSync(productionComposePath, 'utf8');
+
+    expect(developmentCompose).toContain('  migrate:\n');
+    expect(developmentCompose).toContain('npm run migrate:deploy');
+    expect(developmentCompose).toContain(
+      'condition: service_completed_successfully',
+    );
+    expect(developmentCompose).not.toContain('command: npm run start:docker');
+    expect(productionCompose).toContain('  migrate:\n');
+    expect(productionCompose).toContain('profiles: ["migration"]');
+    expect(productionCompose).toContain('npm run migrate:deploy');
+    expect(productionCompose).not.toContain('command: npm run start:docker');
   });
 });

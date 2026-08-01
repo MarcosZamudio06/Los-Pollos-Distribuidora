@@ -7,12 +7,13 @@ import {
   Post,
   Res,
   UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AllowPasswordChangeRequired } from '../../common/decorators/allow-password-change-required.decorator';
+import { Authenticated } from '../../common/decorators/authenticated.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Public } from '../../common/decorators/public.decorator';
+import { RateLimitPolicy } from '../../common/decorators/rate-limit-policy.decorator';
 import { AuthService } from './auth.service';
 import type {
   AuthenticatedPrincipal,
@@ -30,7 +31,9 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @Public()
   @HttpCode(200)
+  @RateLimitPolicy('login')
   async login(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -45,7 +48,9 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Public()
   @HttpCode(200)
+  @RateLimitPolicy('refresh')
   async refresh(
     @Headers('cookie') cookieHeader: string | undefined,
     @Res({ passthrough: true }) response: Response,
@@ -66,7 +71,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   async logout(
     @CurrentUser() user: AuthenticatedPrincipal,
     @Res({ passthrough: true }) response: Response,
@@ -82,7 +87,7 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(200)
   @AllowPasswordChangeRequired()
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   async changePassword(
     @CurrentUser() user: AuthenticatedPrincipal,
     @Body() body: ChangeOwnPasswordDto,
@@ -99,9 +104,10 @@ export class AuthController {
 
   @Get('me')
   @AllowPasswordChangeRequired()
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   me(@CurrentUser() user: AuthenticatedPrincipal) {
-    const { authSessionId: _authSessionId, ...authenticatedUser } = user;
+    const { authSessionId, ...authenticatedUser } = user;
+    void authSessionId;
     return {
       success: true,
       message: 'Usuario autenticado',

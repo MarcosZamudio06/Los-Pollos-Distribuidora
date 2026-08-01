@@ -1,4 +1,12 @@
-import { BadRequestException, Body, Controller, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -26,7 +34,12 @@ export class RouteSettlementsController {
     return {
       success: true,
       message: 'Route settlement closed successfully',
-      data: await this.deliveryService.closeSettlement(id, body, currentUser, idempotencyKey),
+      data: await this.deliveryService.closeSettlement(
+        id,
+        body,
+        currentUser,
+        idempotencyKey,
+      ),
     };
   }
 
@@ -44,7 +57,12 @@ export class RouteSettlementsController {
     return {
       success: true,
       message: 'Route settlement reopened successfully',
-      data: await this.deliveryService.reopenSettlement(id, body, currentUser, idempotencyKey),
+      data: await this.deliveryService.reopenSettlement(
+        id,
+        body,
+        currentUser,
+        idempotencyKey,
+      ),
     };
   }
 }

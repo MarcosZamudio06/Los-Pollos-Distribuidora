@@ -14,8 +14,20 @@ import { RoutingTechnicalStatusService } from './routing-technical-status.servic
 
 @Module({
   imports: [AuthModule, ConfigModule],
-  controllers: [DeliveryController, DeliveryOrdersController, RouteSettlementsController, DeliveryRoutePlanningController, GeocodingController, RoutingTechnicalStatusController],
-  providers: [DeliveryService, DeliveryRoutePlanningService, RoutingProvidersService, RoutingTechnicalStatusService],
+  controllers: [
+    DeliveryController,
+    DeliveryOrdersController,
+    RouteSettlementsController,
+    DeliveryRoutePlanningController,
+    GeocodingController,
+    RoutingTechnicalStatusController,
+  ],
+  providers: [
+    DeliveryService,
+    DeliveryRoutePlanningService,
+    RoutingProvidersService,
+    RoutingTechnicalStatusService,
+  ],
   exports: [DeliveryService],
 })
 export class DeliveryModule {}

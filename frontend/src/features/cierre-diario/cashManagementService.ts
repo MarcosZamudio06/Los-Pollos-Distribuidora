@@ -29,11 +29,21 @@ export type CashShift = {
   cashier: { id: string; name: string }
 }
 
+export type CashTerminalActivation = {
+  activationCode: string
+  expiresAt: string
+  operationalLocationId: string
+  deviceId: string
+}
+
 export const cashManagementService = {
   listTerminals: async (operationalLocationId: string, deviceId: string, token: string | null) => {
     const query = new URLSearchParams({ operationalLocationId, deviceId, isActive: 'true' })
     return (await apiClient.get<Envelope<CashTerminal[]>>(`/cash-terminals?${query}`, { headers: headers(token) })).data
   },
+  requestTerminalActivation: async (body: { deviceId: string; operationalLocationId: string }, token: string | null) => (
+    await apiClient.post<Envelope<CashTerminalActivation>, typeof body>('/cash-terminal-activations', { body, headers: headers(token) })
+  ).data,
   currentShift: async (deviceId: string, token: string | null) => {
     const query = new URLSearchParams({ deviceId })
     return (await apiClient.get<Envelope<CashShift | null>>(`/cash-shifts/current?${query}`, { headers: headers(token) })).data

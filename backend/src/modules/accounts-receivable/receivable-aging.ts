@@ -1,4 +1,5 @@
 import { AgingStatus } from '@prisma/client';
+import { Money, type DecimalInput } from '../../../../shared/money';
 
 const DEFAULT_BUSINESS_TIME_ZONE = 'America/Mexico_City';
 const DUE_SOON_DAYS = 7;
@@ -14,26 +15,36 @@ function businessDayNumber(date: Date, timeZone: string): number {
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     Number(parts.find((part) => part.type === type)?.value);
 
-  return Date.UTC(value('year'), value('month') - 1, value('day')) / MILLISECONDS_PER_DAY;
+  return (
+    Date.UTC(value('year'), value('month') - 1, value('day')) /
+    MILLISECONDS_PER_DAY
+  );
 }
 
 export function calculateReceivableAging(
   dueDate: Date,
-  outstandingAmount: number,
+  outstandingAmount: DecimalInput,
   asOf = new Date(),
   timeZone = process.env.APP_TIMEZONE?.trim() || DEFAULT_BUSINESS_TIME_ZONE,
 ) {
-  if (outstandingAmount <= 0) {
+  if (!Money.from(outstandingAmount).isPositive()) {
     return { agingStatus: AgingStatus.CURRENT, daysOverdue: 0 };
   }
 
-  const daysUntilDue = businessDayNumber(dueDate, timeZone) - businessDayNumber(asOf, timeZone);
+  const daysUntilDue =
+    businessDayNumber(dueDate, timeZone) - businessDayNumber(asOf, timeZone);
   if (daysUntilDue < 0) {
-    return { agingStatus: AgingStatus.OVERDUE, daysOverdue: Math.abs(daysUntilDue) };
+    return {
+      agingStatus: AgingStatus.OVERDUE,
+      daysOverdue: Math.abs(daysUntilDue),
+    };
   }
 
   return {
-    agingStatus: daysUntilDue <= DUE_SOON_DAYS ? AgingStatus.DUE_SOON : AgingStatus.CURRENT,
+    agingStatus:
+      daysUntilDue <= DUE_SOON_DAYS
+        ? AgingStatus.DUE_SOON
+        : AgingStatus.CURRENT,
     daysOverdue: 0,
   };
 }

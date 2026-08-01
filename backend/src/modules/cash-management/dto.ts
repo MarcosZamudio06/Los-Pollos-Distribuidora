@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { CashMovementType } from '@prisma/client';
 
 export class CreateCashTerminalDto {
@@ -22,11 +31,24 @@ export class UpdateCashTerminalDto {
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
+export class RequestCashTerminalActivationDto {
+  @IsString() @IsNotEmpty() deviceId!: string;
+  @IsOptional() @IsString() @IsNotEmpty() operationalLocationId?: string;
+}
+
+export class ActivateMigratedCashTerminalDto {
+  @IsString() @IsNotEmpty() activationCode!: string;
+}
+
 export class OpenCashShiftDto {
   @IsString() @IsNotEmpty() terminalId!: string;
   @IsString() @IsNotEmpty() deviceId!: string;
   @IsDateString() businessDate!: string;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashFund?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  initialCashFund?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashIn?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) initialCashOut?: number;
   @IsOptional() @IsString() notes?: string;

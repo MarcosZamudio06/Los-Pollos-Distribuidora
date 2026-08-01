@@ -1,15 +1,34 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
-import { CollectionStatus, PaymentStatus, Prisma, type AccountReceivable, type Payment } from '@prisma/client';
+import {
+  CollectionStatus,
+  PaymentStatus,
+  Prisma,
+  type AccountReceivable,
+  type Payment,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { calculateReceivableAging } from '../accounts-receivable/receivable-aging';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CancelPaymentDto } from './dto';
+import { Money, toMoneyString } from '../../../../shared/money';
 
-type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
 type PaymentWithReceivable = Payment & {
-  accountReceivable?: Pick<AccountReceivable, 'id' | 'saleId' | 'outstandingAmount' | 'originalAmount' | 'dueDate' | 'status'> | null;
+  accountReceivable?: Pick<
+    AccountReceivable,
+    | 'id'
+    | 'saleId'
+    | 'outstandingAmount'
+    | 'originalAmount'
+    | 'dueDate'
+    | 'status'
+  > | null;
   version?: number;
   cancellationPayloadHash?: string | null;
   cancellationReason?: string | null;
@@ -17,13 +36,16 @@ type PaymentWithReceivable = Payment & {
   cancelledByUserId?: string | null;
 };
 
-type LastPaymentDate = { paidAt: Date } | null;
-
 @Injectable()
 export class PaymentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async cancel(id: string, dto: CancelPaymentDto, currentUser: Actor, idempotencyKey: string) {
+  async cancel(
+    id: string,
+    dto: CancelPaymentDto,
+    currentUser: Actor,
+    idempotencyKey: string,
+  ) {
     const reason = dto.reason?.trim();
     if (!reason) {
       throw new BadRequestException('reason is required');
@@ -33,71 +55,84 @@ export class PaymentsService {
       throw new BadRequestException('expectedVersion is required');
     }
 
-    const payloadHash = this.hashPayload(this.buildCancelPayload(id, currentUser.id, reason, dto.expectedVersion));
+    const payloadHash = this.hashPayload(
+      this.buildCancelPayload(id, currentUser.id, reason, dto.expectedVersion),
+    );
 
     try {
       return await this.prisma.$transaction(
         async (tx) => {
-        const existingCancellation = (await tx.payment.findFirst({
-          where: { cancellationIdempotencyKey: idempotencyKey },
-          include: { accountReceivable: true },
-        })) as PaymentWithReceivable | null;
+          const existingCancellation = (await tx.payment.findFirst({
+            where: { cancellationIdempotencyKey: idempotencyKey },
+            include: { accountReceivable: true },
+          })) as PaymentWithReceivable | null;
 
-        if (existingCancellation) {
-          this.assertSameIdempotencyPayload(
-            existingCancellation.cancellationPayloadHash,
-            payloadHash,
-            'Idempotency-Key was already used for a different payment cancellation payload',
-          );
-          return this.buildCancellationResponse(tx, existingCancellation);
-        }
-
-        const payment = (await tx.payment.findUnique({
-          where: { id },
-          include: { accountReceivable: true },
-        })) as PaymentWithReceivable | null;
-
-        if (!payment) {
-          throw new NotFoundException('Payment not found');
-        }
-
-        if (payment.status === PaymentStatus.CANCELLED) {
-          throw new BadRequestException('Payment is already cancelled');
-        }
-
-        if (payment.version !== dto.expectedVersion) {
-          throw new ConflictException('Payment version does not match expectedVersion');
-        }
-
-        const cancelledPayment = await this.updatePaymentCancellation(tx, {
-          where: { id, version: dto.expectedVersion },
-          data: {
-            status: PaymentStatus.CANCELLED,
-            cancelledAt: new Date(),
-            cancelledByUserId: currentUser.id,
-            cancellationReason: reason,
-            cancellationIdempotencyKey: idempotencyKey,
-            cancellationPayloadHash: payloadHash,
-            version: { increment: 1 },
-          },
-        });
-
-          if (!payment.accountReceivable) {
-            return { payment: this.toPaymentResponse(cancelledPayment), accountReceivable: null };
+          if (existingCancellation) {
+            this.assertSameIdempotencyPayload(
+              existingCancellation.cancellationPayloadHash,
+              payloadHash,
+              'Idempotency-Key was already used for a different payment cancellation payload',
+            );
+            return this.buildCancellationResponse(tx, existingCancellation);
           }
 
-          return this.restoreReceivableAfterCancellation(tx, cancelledPayment, payment.accountReceivable);
+          const payment = (await tx.payment.findUnique({
+            where: { id },
+            include: { accountReceivable: true },
+          })) as PaymentWithReceivable | null;
+
+          if (!payment) {
+            throw new NotFoundException('Payment not found');
+          }
+
+          if (payment.status === PaymentStatus.CANCELLED) {
+            throw new BadRequestException('Payment is already cancelled');
+          }
+
+          if (payment.version !== dto.expectedVersion) {
+            throw new ConflictException(
+              'Payment version does not match expectedVersion',
+            );
+          }
+
+          const cancelledPayment = await this.updatePaymentCancellation(tx, {
+            where: { id, version: dto.expectedVersion },
+            data: {
+              status: PaymentStatus.CANCELLED,
+              cancelledAt: new Date(),
+              cancelledByUserId: currentUser.id,
+              cancellationReason: reason,
+              cancellationIdempotencyKey: idempotencyKey,
+              cancellationPayloadHash: payloadHash,
+              version: { increment: 1 },
+            },
+          });
+
+          if (!payment.accountReceivable) {
+            return {
+              payment: this.toPaymentResponse(cancelledPayment),
+              accountReceivable: null,
+            };
+          }
+
+          return this.restoreReceivableAfterCancellation(
+            tx,
+            cancelledPayment,
+            payment.accountReceivable,
+          );
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
       if (this.isIdempotencyRaceError(error)) {
-        return this.resolveExistingCancellationByKey(idempotencyKey, payloadHash);
+        return this.resolveExistingCancellationByKey(
+          idempotencyKey,
+          payloadHash,
+        );
       }
       throw error;
     }
   }
-
 
   private async updatePaymentCancellation(
     tx: Prisma.TransactionClient | PrismaService,
@@ -107,20 +142,27 @@ export class PaymentsService {
       return await tx.payment.update(args);
     } catch (error) {
       if (this.isStaleUpdateError(error)) {
-        throw new ConflictException('Payment version does not match expectedVersion');
+        throw new ConflictException(
+          'Payment version does not match expectedVersion',
+        );
       }
       throw error;
     }
   }
 
-  private async resolveExistingCancellationByKey(idempotencyKey: string, payloadHash: string) {
+  private async resolveExistingCancellationByKey(
+    idempotencyKey: string,
+    payloadHash: string,
+  ) {
     const existingCancellation = (await this.prisma.payment.findFirst({
       where: { cancellationIdempotencyKey: idempotencyKey },
       include: { accountReceivable: true },
     })) as PaymentWithReceivable | null;
 
     if (!existingCancellation) {
-      throw new ConflictException('Concurrent payment cancellation is still in progress; retry with the same Idempotency-Key');
+      throw new ConflictException(
+        'Concurrent payment cancellation is still in progress; retry with the same Idempotency-Key',
+      );
     }
 
     this.assertSameIdempotencyPayload(
@@ -154,34 +196,57 @@ export class PaymentsService {
     payment: PaymentWithReceivable,
   ) {
     if (!payment.accountReceivable) {
-      return { payment: this.toPaymentResponse(payment), accountReceivable: null };
+      return {
+        payment: this.toPaymentResponse(payment),
+        accountReceivable: null,
+      };
     }
 
-    const receivable = (await tx.accountReceivable.findUnique({
+    const receivable = await tx.accountReceivable.findUnique({
       where: { id: payment.accountReceivable.id },
-    })) as AccountReceivable | null;
+    });
 
     return {
       payment: this.toPaymentResponse(payment),
-      accountReceivable: receivable ? this.toReceivableResponse(receivable) : null,
+      accountReceivable: receivable
+        ? this.toReceivableResponse(receivable)
+        : null,
     };
   }
 
   private async restoreReceivableAfterCancellation(
     tx: Prisma.TransactionClient,
     cancelledPayment: Payment,
-    accountReceivable: Pick<AccountReceivable, 'id' | 'saleId' | 'outstandingAmount' | 'originalAmount' | 'dueDate' | 'status'>,
+    accountReceivable: Pick<
+      AccountReceivable,
+      | 'id'
+      | 'saleId'
+      | 'outstandingAmount'
+      | 'originalAmount'
+      | 'dueDate'
+      | 'status'
+    >,
   ) {
-    const originalAmount = this.toNumber(accountReceivable.originalAmount);
-    const restoredOutstanding = Math.min(
-      originalAmount,
-      this.roundMoney(this.toNumber(accountReceivable.outstandingAmount) + this.toNumber(cancelledPayment.amount)),
+    const originalAmount = Money.from(accountReceivable.originalAmount);
+    const restoredOutstanding =
+      Money.sum([
+        accountReceivable.outstandingAmount,
+        cancelledPayment.amount,
+      ]).compare(originalAmount) > 0
+        ? originalAmount
+        : Money.sum([
+            accountReceivable.outstandingAmount,
+            cancelledPayment.amount,
+          ]);
+    const nextStatus =
+      restoredOutstanding.compare(originalAmount) >= 0
+        ? CollectionStatus.UNPAID
+        : CollectionStatus.PARTIALLY_PAID;
+    const aging = calculateReceivableAging(
+      accountReceivable.dueDate,
+      restoredOutstanding,
     );
-    const nextStatus = restoredOutstanding >= originalAmount
-      ? CollectionStatus.UNPAID
-      : CollectionStatus.PARTIALLY_PAID;
-    const aging = calculateReceivableAging(accountReceivable.dueDate, restoredOutstanding);
-    const lastPayment = (await tx.payment.findFirst({
+    const lastPayment = await tx.payment.findFirst({
       where: {
         accountReceivableId: accountReceivable.id,
         status: { not: PaymentStatus.CANCELLED },
@@ -189,12 +254,12 @@ export class PaymentsService {
       },
       orderBy: { paidAt: 'desc' },
       select: { paidAt: true },
-    })) as LastPaymentDate;
+    });
 
     const updatedReceivable = await tx.accountReceivable.update({
       where: { id: accountReceivable.id },
       data: {
-        outstandingAmount: restoredOutstanding,
+        outstandingAmount: restoredOutstanding.toString(),
         status: nextStatus,
         ...aging,
         lastPaymentDate: lastPayment?.paidAt ?? null,
@@ -213,7 +278,12 @@ export class PaymentsService {
     };
   }
 
-  private buildCancelPayload(paymentId: string, userId: string, reason: string, expectedVersion?: number) {
+  private buildCancelPayload(
+    paymentId: string,
+    userId: string,
+    reason: string,
+    expectedVersion?: number,
+  ) {
     return {
       operation: 'CANCEL_PAYMENT',
       paymentId,
@@ -223,7 +293,11 @@ export class PaymentsService {
     };
   }
 
-  private assertSameIdempotencyPayload(existingHash: string | null | undefined, expectedHash: string, message: string): void {
+  private assertSameIdempotencyPayload(
+    existingHash: string | null | undefined,
+    expectedHash: string,
+    message: string,
+  ): void {
     if (existingHash !== expectedHash) {
       throw new ConflictException(message);
     }
@@ -239,7 +313,7 @@ export class PaymentsService {
       accountReceivableId: payment.accountReceivableId,
       saleId: payment.saleId,
       customerId: payment.customerId,
-      amount: this.toMoneyString(payment.amount),
+      amount: toMoneyString(payment.amount),
       paymentMethod: payment.paymentMethod,
       bankName: payment.bankName,
       referenceNumber: payment.referenceNumber,
@@ -256,25 +330,18 @@ export class PaymentsService {
     };
   }
 
-  private toReceivableResponse(receivable: Pick<AccountReceivable, 'id' | 'outstandingAmount' | 'daysOverdue' | 'lastPaymentDate' | 'status'>) {
+  private toReceivableResponse(
+    receivable: Pick<
+      AccountReceivable,
+      'id' | 'outstandingAmount' | 'daysOverdue' | 'lastPaymentDate' | 'status'
+    >,
+  ) {
     return {
       id: receivable.id,
-      outstandingAmount: this.toMoneyString(receivable.outstandingAmount),
+      outstandingAmount: toMoneyString(receivable.outstandingAmount),
       daysOverdue: receivable.daysOverdue,
       lastPaymentDate: receivable.lastPaymentDate,
       status: receivable.status,
     };
-  }
-
-  private toNumber(value: DecimalLike): number {
-    return Number(value?.toString() ?? 0);
-  }
-
-  private toMoneyString(value: DecimalLike): string {
-    return this.toNumber(value).toString();
-  }
-
-  private roundMoney(value: number): number {
-    return Math.round(value * 100) / 100;
   }
 }

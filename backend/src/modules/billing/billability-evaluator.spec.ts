@@ -32,7 +32,10 @@ const baseInput = (): BillabilityInput => ({
     fiscalUseCode: 'G03',
     billingEmail: 'billing@example.com',
   },
-  delivery: { status: 'DELIVERED' as const, deliveredAt: new Date('2026-07-02T12:00:00.000Z') },
+  delivery: {
+    status: 'DELIVERED' as const,
+    deliveredAt: new Date('2026-07-02T12:00:00.000Z'),
+  },
   policy: {
     billableDocumentTypes: ['SIMPLE_NOTE', 'LARGE_NOTE'] as const,
     allowInternalReceipt: false,
@@ -68,13 +71,21 @@ describe('evaluateBillability', () => {
     input.requests = [
       { status: 'REQUESTED', requestedTotal: decimal(200) },
       { status: 'REJECTED', requestedTotal: decimal(300) },
-      { status: 'APPROVED', requestedTotal: decimal(50), reversedAt: new Date() },
+      {
+        status: 'APPROVED',
+        requestedTotal: decimal(50),
+        reversedAt: new Date(),
+      },
     ];
     input.applications = [
       { invoiceStatus: 'ACTIVE', totalApplied: decimal(250) },
       { invoiceStatus: 'CANCELLED', totalApplied: decimal(150) },
       { invoiceStatus: 'SUBSTITUTED', totalApplied: decimal(100) },
-      { invoiceStatus: 'ACTIVE', totalApplied: decimal(50), reversedAt: new Date() },
+      {
+        invoiceStatus: 'ACTIVE',
+        totalApplied: decimal(50),
+        reversedAt: new Date(),
+      },
     ];
     input.payments = [
       { status: 'APPLIED', amount: decimal(400) },
@@ -112,13 +123,20 @@ describe('evaluateBillability', () => {
     const result = evaluateBillability(input);
 
     expect(result.status).toBe('PENDING_INFORMATION');
-    expect(result.blockingCodes).toEqual(['MISSING_TAX_ID', 'MISSING_FISCAL_PROFILE']);
+    expect(result.blockingCodes).toEqual([
+      'MISSING_TAX_ID',
+      'MISSING_FISCAL_PROFILE',
+    ]);
   });
 
   it('enforces document, delivery, and calendar deadline policy', () => {
     const input = baseInput();
     input.document.documentType = 'INTERNAL_RECEIPT';
-    input.policy.billableDocumentTypes = ['SIMPLE_NOTE', 'LARGE_NOTE', 'INTERNAL_RECEIPT'];
+    input.policy.billableDocumentTypes = [
+      'SIMPLE_NOTE',
+      'LARGE_NOTE',
+      'INTERNAL_RECEIPT',
+    ];
     expect(evaluateBillability(input).status).toBe('NOT_BILLABLE');
 
     input.policy.allowInternalReceipt = true;
@@ -129,7 +147,10 @@ describe('evaluateBillability', () => {
       blockingCodes: ['DELIVERY_PENDING'],
     });
 
-    input.delivery = { status: 'DELIVERED', deliveredAt: new Date('2026-07-02T12:00:00.000Z') };
+    input.delivery = {
+      status: 'DELIVERED',
+      deliveredAt: new Date('2026-07-02T12:00:00.000Z'),
+    };
     input.policy.deadlineDays = 5;
     input.policy.deadlineBasis = 'DELIVERED_AT';
     input.evaluatedAt = new Date('2026-07-08T06:01:00.000Z');
@@ -145,18 +166,24 @@ describe('evaluateBillability', () => {
     expect(evaluateBillability(cancelled).status).toBe('CANCELLED');
 
     const fullyInvoiced = baseInput();
-    fullyInvoiced.applications = [{ invoiceStatus: 'ACTIVE', totalApplied: decimal(1000) }];
+    fullyInvoiced.applications = [
+      { invoiceStatus: 'ACTIVE', totalApplied: decimal(1000) },
+    ];
     expect(evaluateBillability(fullyInvoiced).status).toBe('FULLY_INVOICED');
 
     const overInvoiced = baseInput();
-    overInvoiced.applications = [{ invoiceStatus: 'ACTIVE', totalApplied: decimal(1000.01) }];
+    overInvoiced.applications = [
+      { invoiceStatus: 'ACTIVE', totalApplied: decimal(1000.01) },
+    ];
     expect(evaluateBillability(overInvoiced)).toMatchObject({
       status: 'BLOCKED',
       blockingCodes: ['OVER_INVOICED'],
     });
 
     const overRequested = baseInput();
-    overRequested.requests = [{ status: 'REQUESTED', requestedTotal: decimal(1000.01) }];
+    overRequested.requests = [
+      { status: 'REQUESTED', requestedTotal: decimal(1000.01) },
+    ];
     expect(evaluateBillability(overRequested)).toMatchObject({
       status: 'BLOCKED',
       blockingCodes: ['OVER_REQUESTED'],
@@ -167,7 +194,9 @@ describe('evaluateBillability', () => {
     const input = baseInput();
     input.sale.total = decimal('0.30');
     input.requests = [{ status: 'REQUESTED', requestedTotal: decimal('0.10') }];
-    input.applications = [{ invoiceStatus: 'ACTIVE', totalApplied: decimal('0.20') }];
+    input.applications = [
+      { invoiceStatus: 'ACTIVE', totalApplied: decimal('0.20') },
+    ];
     input.payments = [
       { status: 'APPLIED', amount: decimal('0.10') },
       { status: 'APPLIED', amount: decimal('0.20') },
@@ -185,19 +214,29 @@ describe('evaluateBillability', () => {
 describe('billing balance validation', () => {
   it('rejects non-positive and over-requested amounts with stable codes', () => {
     expect(() => validateRequestedAmount(decimal(0), decimal(100))).toThrow(
-      expect.objectContaining<Partial<BillingBalanceError>>({ code: 'INVALID_REQUESTED_AMOUNT' }),
+      expect.objectContaining<Partial<BillingBalanceError>>({
+        code: 'INVALID_REQUESTED_AMOUNT',
+      }),
     );
-    expect(() => validateRequestedAmount(decimal(100.01), decimal(100))).toThrow(
-      expect.objectContaining<Partial<BillingBalanceError>>({ code: 'OVER_REQUESTED' }),
+    expect(() =>
+      validateRequestedAmount(decimal(100.01), decimal(100)),
+    ).toThrow(
+      expect.objectContaining<Partial<BillingBalanceError>>({
+        code: 'OVER_REQUESTED',
+      }),
     );
   });
 
   it('rejects non-positive and over-applied amounts with stable codes', () => {
     expect(() => validateAppliedAmount(decimal(-1), decimal(100))).toThrow(
-      expect.objectContaining<Partial<BillingBalanceError>>({ code: 'INVALID_APPLIED_AMOUNT' }),
+      expect.objectContaining<Partial<BillingBalanceError>>({
+        code: 'INVALID_APPLIED_AMOUNT',
+      }),
     );
     expect(() => validateAppliedAmount(decimal(100.01), decimal(100))).toThrow(
-      expect.objectContaining<Partial<BillingBalanceError>>({ code: 'OVER_INVOICED' }),
+      expect.objectContaining<Partial<BillingBalanceError>>({
+        code: 'OVER_INVOICED',
+      }),
     );
   });
 });

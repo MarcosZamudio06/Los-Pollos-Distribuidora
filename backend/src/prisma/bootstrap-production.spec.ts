@@ -16,15 +16,35 @@ function upsertMock<T>(): UpsertMock<T> {
 
 function createClient() {
   const roleUpsert = upsertMock<Prisma.RoleUpsertArgs>();
+  const roleFindUnique = jest
+    .fn<Promise<{ id: string }>, [Prisma.RoleFindUniqueArgs]>()
+    .mockResolvedValue({ id: 'role-id' });
+  const permissionUpsert = upsertMock<Prisma.PermissionUpsertArgs>();
+  const permissionFindUnique = jest
+    .fn<Promise<{ id: string }>, [Prisma.PermissionFindUniqueArgs]>()
+    .mockResolvedValue({ id: 'permission-id' });
+  const rolePermissionCreateMany =
+    upsertMock<Prisma.RolePermissionCreateManyArgs>();
   const locationUpsert = upsertMock<Prisma.OperationalLocationUpsertArgs>();
   const userUpsert = upsertMock<Prisma.UserUpsertArgs>();
   const client: ProductionBootstrapClient = {
-    role: { upsert: roleUpsert },
+    role: { upsert: roleUpsert, findUnique: roleFindUnique },
+    permission: { upsert: permissionUpsert, findUnique: permissionFindUnique },
+    rolePermission: { createMany: rolePermissionCreateMany },
     operationalLocation: { upsert: locationUpsert },
     user: { upsert: userUpsert },
   };
 
-  return { client, roleUpsert, locationUpsert, userUpsert };
+  return {
+    client,
+    roleUpsert,
+    roleFindUnique,
+    permissionUpsert,
+    permissionFindUnique,
+    rolePermissionCreateMany,
+    locationUpsert,
+    userUpsert,
+  };
 }
 
 describe('Production bootstrap contract', () => {
@@ -78,7 +98,9 @@ describe('Production bootstrap contract', () => {
     await expect(bcrypt.compare('  intentional secret  ', hash)).resolves.toBe(
       true,
     );
-    await expect(bcrypt.compare('intentional secret', hash)).resolves.toBe(false);
+    await expect(bcrypt.compare('intentional secret', hash)).resolves.toBe(
+      false,
+    );
   });
 
   it('rejects non-production execution without changing the development seed guard', async () => {
@@ -98,8 +120,17 @@ describe('Production bootstrap contract', () => {
     expect(() => assertSeedEnvironment('development')).not.toThrow();
   });
 
-  it('idempotently upserts only roles, the initial location, and the administrator', async () => {
-    const { client, roleUpsert, locationUpsert, userUpsert } = createClient();
+  it('idempotently upserts access data, the initial location, and the administrator', async () => {
+    const {
+      client,
+      roleUpsert,
+      roleFindUnique,
+      permissionUpsert,
+      permissionFindUnique,
+      rolePermissionCreateMany,
+      locationUpsert,
+      userUpsert,
+    } = createClient();
     const env = {
       NODE_ENV: 'production',
       SEED_ADMIN_PASSWORD: 'production-secret',
@@ -108,12 +139,20 @@ describe('Production bootstrap contract', () => {
     await bootstrapProduction(client, env);
     await bootstrapProduction(client, env);
 
-    expect(roleUpsert).toHaveBeenCalledTimes(10);
+    expect(roleUpsert).toHaveBeenCalledTimes(12);
+    expect(roleFindUnique).toHaveBeenCalledTimes(12);
+    expect(permissionUpsert).toHaveBeenCalledTimes(22);
+    expect(permissionFindUnique).toHaveBeenCalled();
+    expect(rolePermissionCreateMany).toHaveBeenCalledTimes(12);
     expect(locationUpsert).toHaveBeenCalledTimes(2);
     expect(userUpsert).toHaveBeenCalledTimes(2);
     for (const call of roleUpsert.mock.calls) {
       const upsert = call[0];
       expect(upsert.where).toEqual({ name: upsert.create.name });
+    }
+    for (const call of rolePermissionCreateMany.mock.calls) {
+      expect(call[0].skipDuplicates).toBe(true);
+      expect(call[0]).not.toHaveProperty('data.deleteMany');
     }
     for (const call of locationUpsert.mock.calls) {
       expect(call[0]).toMatchObject({
@@ -146,7 +185,9 @@ describe('Production bootstrap contract', () => {
       expect(adminUpsert.update).not.toHaveProperty('passwordHash');
       const hash = adminUpsert.create.passwordHash;
       if (typeof hash !== 'string') throw new Error('Expected password hash');
-      await expect(bcrypt.compare('production-secret', hash)).resolves.toBe(true);
+      await expect(bcrypt.compare('production-secret', hash)).resolves.toBe(
+        true,
+      );
       expect(hash).toMatch(/^\$2[aby]\$12\$/);
     }
     expect(userUpsert.mock.calls[0]?.[0].create.passwordHash).not.toBe(

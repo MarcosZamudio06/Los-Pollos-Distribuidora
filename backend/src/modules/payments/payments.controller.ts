@@ -1,19 +1,24 @@
-import { BadRequestException, Body, Controller, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CancelPaymentDto } from './dto';
 import { PaymentsService } from './payments.service';
 
 @Controller('payments')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post(':id/cancel')
-  @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.PAYMENTS_CANCEL)
   async cancel(
     @Param('id') id: string,
     @Body() body: CancelPaymentDto,
@@ -27,7 +32,12 @@ export class PaymentsController {
     return {
       success: true,
       message: 'Payment cancelled successfully',
-      data: await this.paymentsService.cancel(id, body, currentUser, idempotencyKey.trim()),
+      data: await this.paymentsService.cancel(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

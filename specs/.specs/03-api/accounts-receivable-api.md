@@ -55,7 +55,7 @@ Body importante:
 ```json
 {
   "accountReceivableId": "string",
-  "amount": 1500,
+  "amount": "1500.00",
   "paymentMethod": "TRANSFER",
   "cashShiftId": "string requerido para CASH recibido en punto fijo",
   "deviceId": "string requerido para CASH recibido en punto fijo",
@@ -79,6 +79,7 @@ Validaciones:
 
 - `accountReceivableId` requerido y debe coincidir con `:id`.
 - `amount > 0`.
+- `amount` debe ser un string monetario canónico con dos decimales.
 - `paymentMethod` requerido.
 - No permitir pago mayor al saldo pendiente salvo regla futura explícita para anticipos o saldos a favor.
 - No registrar pagos sobre cuentas canceladas o pagadas.
@@ -86,6 +87,7 @@ Validaciones:
 - Permitir capturar `collectionPass` y `collectedByUserId` cuando la cobranza ocurra en segunda vuelta.
 - Si aplica documento, debe conservar relación con la nota o relación administrativa interna.
 - `Payment` es la única fuente monetaria del cobro recibido.
+- Todos los importes monetarios de respuesta se serializan como strings canónicos con dos decimales.
 - Un pago `CASH` de una ubicación fija requiere turno abierto del cajero y dispositivo registrados; conserva `cashShiftId` y deriva `pointOfSaleDailyCloseId`. Los cobros de ruta siguen `RouteSettlement`.
 
 ## POST /api/payments/:id/cancel

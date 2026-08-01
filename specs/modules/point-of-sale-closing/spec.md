@@ -82,6 +82,26 @@ Cada caja física o navegador autorizado debe existir como `CashTerminal`, perte
 - Entonces el backend responde `CASH_TERMINAL_DEVICE_MISMATCH`
 - Y no crea turno, venta, pago ni movimiento.
 
+### Requirement: Cutover supervisado de terminales migradas
+
+Una terminal migrada con identidad `legacy:*` no puede operar hasta ser vinculada a un navegador real. Un usuario `ADMIN` o `SELLER` autenticado puede solicitar desde ese navegador un código temporal de un solo uso, ligado a su ubicación operativa y `deviceId`. Solo `ADMIN` puede consumirlo para vincular una terminal migrada de la misma ubicación. El código expira a los 15 minutos y solo se persiste su hash.
+
+#### Scenario: Vinculación supervisada válida
+
+- Dada una terminal migrada de la misma ubicación que el solicitante
+- Y un código vigente que no ha sido consumido
+- Cuando `ADMIN` confirma la vinculación
+- Entonces la terminal conserva su identificador, código, nombre e historial
+- Y reemplaza `legacy:*` por el `deviceId` real
+- Y el código queda consumido sin poder reutilizarse.
+
+#### Scenario: Código inválido o terminal ya vinculada
+
+- Dado un código vencido, consumido o de otra ubicación
+- O una terminal cuyo `deviceId` ya no inicia con `legacy:`
+- Cuando se intenta confirmar la vinculación
+- Entonces no cambia la terminal ni habilita la apertura de turno.
+
 ### Requirement: Turno monetario independiente
 
 Cada apertura debe crear un `CashShift` asociado a un `CashTerminal`, al `PointOfSaleDailyClose` de la sucursal y fecha, y al cajero autenticado. El turno conserva `cashierUserId`, `businessDate`, `openedAt`, `closedAt`, `status`, `initialCashFund`, `initialCashIn`, `initialCashOut`, ventas, pagos, entradas, retiros, gastos, conteo y diferencia.
@@ -372,7 +392,7 @@ Los costos de compra, la utilidad bruta, la utilidad neta, la calidad del costo 
 - Cierre único por día frente a turnos o cajas múltiples.
 - Tolerancias de kilos y dinero y su impacto en el cierre.
 - Fórmulas oficiales de costo, utilidad bruta, utilidad neta y utilidad por pollo.
-- Política exacta de redondeo.
+- La política monetaria usa aritmética decimal exacta, importes en strings canónicos con dos decimales y redondeo `HALF_UP` centralizado.
 - Catálogo final de entradas, salidas, gastos, métodos y bancos.
 - Política de folios por ubicación y documento.
 - Reglas de reapertura y bloqueo de periodos.

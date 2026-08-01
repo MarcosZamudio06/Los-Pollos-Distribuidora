@@ -27,6 +27,7 @@ import { toast } from 'sonner'
 import { documentTypeLabel, paymentMethodLabel, paymentTypeLabel, saleChannelLabel } from './saleLabels'
 import { finishPosMeasurement, startPosMeasurement } from './posPerformance'
 import { getPosDeviceId } from '../../lib/deviceIdentity'
+import { Money } from '../../lib/money'
 
 function canAccessPos(role?: string | null) {
   return role === 'ADMIN' || role === 'SELLER'
@@ -57,8 +58,8 @@ function productToOption(product: Product, locationId: string): ProductOption {
     barcode: product.barcode,
     presentationType: product.presentationType ?? product.presentation ?? 'CUT',
     unit: product.unit ?? product.operationalUnit ?? 'KG',
-    salePrice: asNumber(product.salePrice),
-    unitPrice: asNumber(product.salePrice),
+     salePrice: String(product.salePrice),
+     unitPrice: String(product.salePrice),
     locationId: balance?.locationId ?? locationId,
     locationName: balance?.locationName,
     availableKg: asNumber(balance?.quantityKg),
@@ -115,7 +116,7 @@ type PendingSale = {
   billingRequestReason: string
   billingRequestNotes: string
   locationId: string
-  total: number
+   total: Money
 }
 
 type ConfirmedSale = {
@@ -124,7 +125,7 @@ type ConfirmedSale = {
   saleId: string
   saleNumber: string
   customerName: string
-  total: number
+   total: string
 }
 
 type ScanFeedbackTone = 'success' | 'attention' | 'warning'
@@ -216,7 +217,7 @@ function getPosTransactionState({
   payments: SalePaymentInput[]
   selectedCustomer: CustomerOption | null
   submitBlocker: string | null
-  total: number
+  total: Money
 }): PosTransactionState {
   if (isSubmitting) return 'PROCESSING'
   if (!isOnline) return 'BLOCKED'
@@ -229,7 +230,7 @@ function getPosTransactionState({
 
   const paid = calculatePaymentsTotal(payments)
   if (paymentType === 'CASH_SALE' && payments.length === 0) return 'CART_ACTIVE'
-  if (paymentType === 'CASH_SALE' && paid < total) return 'PAYMENT_PENDING'
+   if (paymentType === 'CASH_SALE' && paid.compare(total) < 0) return 'PAYMENT_PENDING'
   if (submitBlocker?.includes('pago') || submitBlocker?.includes('liquidarse')) return 'PAYMENT_PENDING'
   if (submitBlocker) return 'BLOCKED'
   return 'READY_TO_CHARGE'
@@ -246,7 +247,7 @@ function buildProvisionalTicket(response: CreateSaleResponse, pendingSale: Pendi
       quantityKg: item.quantityKg ?? pendingSale.cart[index]?.quantityKg,
       quantityPieces: item.quantityPieces ?? pendingSale.cart[index]?.quantityPieces,
       unitPrice: item.unitPrice ?? pendingSale.cart[index]?.unitPrice,
-      subtotal: item.subtotal ?? (pendingSale.cart[index] ? calculateItemSubtotal(pendingSale.cart[index]) : undefined),
+       subtotal: item.subtotal ?? (pendingSale.cart[index] ? calculateItemSubtotal(pendingSale.cart[index]).toString() : undefined),
     }))
     : pendingSale.cart.map((item) => ({
       productName: item.name,
@@ -255,11 +256,11 @@ function buildProvisionalTicket(response: CreateSaleResponse, pendingSale: Pendi
       quantityKg: item.quantityKg,
       quantityPieces: item.quantityPieces,
       unitPrice: item.unitPrice,
-      subtotal: calculateItemSubtotal(item),
+       subtotal: calculateItemSubtotal(item).toString(),
     }))
   const payments = response.payments ?? (response.payment ? [response.payment] : [])
-  const paid = payments.reduce((sum, payment) => sum + asNumber(payment.amount), 0)
-  const total = asNumber(sale?.total ?? pendingSale.total)
+  const paid = Money.sum(payments.map((payment) => payment.amount))
+  const total = Money.from(sale?.total ?? pendingSale.total)
 
   return {
     ticketId: response.ticketId ?? undefined,
@@ -274,12 +275,12 @@ function buildProvisionalTicket(response: CreateSaleResponse, pendingSale: Pendi
     locationId: sale?.locationId ?? pendingSale.locationId,
     locationName: pendingSale.locationName,
     items,
-    subtotal: sale?.subtotal ?? total,
-    discount: sale?.discount ?? 0,
-    tax: sale?.tax ?? 0,
-    total,
-    paid,
-    outstanding: response.accountReceivable?.balance ?? response.accountReceivable?.outstandingAmount ?? Math.max(total - paid, 0),
+    subtotal: sale?.subtotal ?? total.toString(),
+    discount: sale?.discount ?? '0.00',
+    tax: sale?.tax ?? '0.00',
+    total: total.toString(),
+    paid: paid.toString(),
+    outstanding: response.accountReceivable?.balance ?? response.accountReceivable?.outstandingAmount ?? (total.subtract(paid).compare(Money.zero()) > 0 ? total.subtract(paid).toString() : '0.00'),
     dueDate: response.accountReceivable?.dueDate ?? null,
     paymentType: sale?.paymentType ?? pendingSale.paymentType,
     collectionStatus: sale?.collectionStatus,
@@ -696,7 +697,7 @@ export function SalesPosPage() {
         saleId,
         saleNumber: sale?.saleNumber ?? saleId,
         customerName: sale?.customerName ?? pendingSale.customerName,
-        total: asNumber(sale?.total ?? pendingSale.total),
+     total: Money.from(sale?.total ?? pendingSale.total).toString(),
       })
       setShowTicket(false)
       clearSaleDraft()
@@ -799,8 +800,10 @@ export function SalesPosPage() {
     return () => window.removeEventListener('keydown', handleShortcut)
   })
 
-  const pendingPaid = pendingSale?.payments.reduce((sum, payment) => sum + payment.amount, 0) ?? 0
-  const pendingOutstanding = Math.max((pendingSale?.total ?? 0) - pendingPaid, 0)
+  const pendingPaid = pendingSale ? calculatePaymentsTotal(pendingSale.payments) : Money.zero()
+  const pendingOutstanding = pendingSale && pendingSale.total.subtract(pendingPaid).compare(Money.zero()) > 0
+    ? pendingSale.total.subtract(pendingPaid)
+    : Money.zero()
   const pendingCustomerBalance = pendingSale?.customer?.creditSummary?.outstandingAmount
   const ticketLoading = Boolean(ticket.isLoading || ticket.isFetching)
   const printStatus = confirmedSale
