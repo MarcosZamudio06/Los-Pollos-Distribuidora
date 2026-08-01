@@ -27,7 +27,7 @@ export function DailyCloseHeader({ close }: { close: DailyClose }) {
   const shifts = close.cashShifts ?? []
   const terminalCount = new Set(shifts.map((shift) => shift.terminalId)).size
   const openShiftCount = shifts.filter((shift) => shift.status === 'OPEN').length
-  return <header className="sticky top-2 z-20 overflow-hidden rounded-2xl border border-[var(--erp-border)] bg-[color:var(--erp-surface-elevated)]/95 p-4 shadow-md backdrop-blur-md">
+  return <header className="relative z-0 overflow-hidden rounded-2xl border border-[var(--erp-border)] bg-[color:var(--erp-surface-elevated)]/95 p-4 shadow-md backdrop-blur-md">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="min-w-0">
         <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[var(--erp-brand-red)]">Control de jornada</p>

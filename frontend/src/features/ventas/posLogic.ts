@@ -133,8 +133,7 @@ export function getPaymentsValidationError(
   for (const payment of payments) {
     if (payment.cashTendered !== undefined) {
       if (payment.paymentMethod !== 'CASH') return 'El efectivo entregado solo aplica a pagos en efectivo.'
-      if (!Number.isFinite(payment.cashTendered)) return 'El efectivo entregado no puede ser menor al monto aplicado.'
-      const cashTendered = Money.from(payment.cashTendered)
+      const cashTendered = moneyFrom(payment.cashTendered)
       const appliedAmount = Money.from(payment.amount)
       if (!cashTendered.isPositive() || cashTendered.compare(appliedAmount) < 0) {
         return 'El efectivo entregado no puede ser menor al monto aplicado.'

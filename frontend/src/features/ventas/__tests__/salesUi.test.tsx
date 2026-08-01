@@ -412,6 +412,17 @@ describe('TASK-055 sales UI behavior', () => {
     expect(footer?.className).toContain('min-[1280px]:h-36')
     expect(grid?.className).toContain('min-[1024px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]')
     expect(grid?.className).toContain('min-[1280px]:grid-rows-1')
+
+    const primaryAction = dock.querySelector('button[data-pos-primary-action]')
+    const actionWrapper = primaryAction?.parentElement
+    const summaryWrapper = dock.querySelector('[aria-label="Resumen de transacción y total"]')?.parentElement
+    expect(primaryAction?.className).toContain('w-[clamp(220px,18vw,260px)]')
+    expect(primaryAction?.className).toContain('rounded-[14px]')
+    expect(primaryAction?.className).toContain('active:scale-95')
+    expect(primaryAction?.className).toContain('disabled:opacity-50')
+    expect(actionWrapper?.className).toContain('min-[1280px]:col-start-5')
+    expect(actionWrapper?.className).not.toContain('bg-[var(--pos-action)]')
+    expect(summaryWrapper?.className).toContain('min-[1280px]:col-start-4')
   })
 
   it('captura efectivo rápido, bloquea denominaciones insuficientes y enfoca Cobrar', async () => {
@@ -442,6 +453,29 @@ describe('TASK-055 sales UI behavior', () => {
       expect(change?.className).toContain('text-[var(--pos-success)]')
       expect(container.querySelector('[aria-label="Captura de pagos"]')).toBeNull()
       expect(document.activeElement).toBe(confirmButtonRef.current)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  it('habilita Confirmar venta al capturar efectivo manualmente', async () => {
+    mockState.locations = { data: [{ id: 'loc-counter', name: 'Mostrador', code: 'MOST', type: 'BRANCH' }], error: null, isLoading: false }
+    mockState.products = { data: [{ id: 'prod-1', name: 'Pollo entero', sku: 'POL-1', presentationType: 'WHOLE', unit: 'PIECE', salePrice: 92, inventoryBalance: { locationId: 'loc-counter', quantityKg: 0, quantityPieces: 8 } }], error: null, isLoading: false, refetch: vi.fn() }
+    const { container, root } = await renderDom(<MemoryRouter initialEntries={['/sales']}><SalesPosPage /></MemoryRouter>)
+
+    try {
+      const locationSelect = getSelectByLabelText(container, 'Ubicación operativa')
+      await act(async () => { locationSelect.value = 'loc-counter'; locationSelect.dispatchEvent(new Event('change', { bubbles: true })); getButtonByText(container, 'Agregar').click() })
+      await addPosPayment(container)
+
+      const cashTendered = container.querySelector<HTMLInputElement>('input[aria-label="Efectivo entregado del pago 1"]')
+      expect(cashTendered).toBeTruthy()
+      await act(async () => { changeInput(cashTendered as HTMLInputElement, '100.00') })
+
+      const primaryAction = getPosPrimaryAction(container)
+      expect(primaryAction.disabled).toBe(false)
+      expect(primaryAction.textContent).toContain('Confirmar venta')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
