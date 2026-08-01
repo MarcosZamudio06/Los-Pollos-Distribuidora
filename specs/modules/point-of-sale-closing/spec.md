@@ -142,6 +142,31 @@ El `PointOfSaleDailyClose` debe consolidar todos los turnos de sus terminales pa
 - Entonces ambos turnos operan simultáneamente bajo el mismo cierre diario
 - Y cada venta permanece atribuida a una sola terminal, turno y cajero.
 
+### Requirement: Cierre explícito de turnos antes de la jornada
+
+La jornada debe cerrar sus turnos de caja de forma individual antes de permitir la transición del `PointOfSaleDailyClose` a `CLOSED`. Cada cajero captura el efectivo contado de su turno mediante `PATCH /api/cash-shifts/:id/close`; el sistema calcula y conserva la diferencia del turno y el resumen diario se actualiza desde esos turnos.
+
+#### Scenario: Cajero cierra su turno
+
+- Dado un `CashShift` abierto del cajero autenticado en el dispositivo registrado
+- Cuando captura el efectivo contado y ejecuta `PATCH /api/cash-shifts/:id/close`
+- Entonces el turno pasa a `CLOSED` con conteo, diferencia, actor y fecha
+- Y el resumen diario refleja el turno cerrado y sus diferencias.
+
+#### Scenario: Jornada con turnos abiertos
+
+- Dado un cierre diario con uno o más `CashShift` en estado `OPEN`
+- Cuando se intenta validar o cerrar la jornada
+- Entonces la operación permanece bloqueada con `DAILY_CLOSE_HAS_OPEN_SHIFTS`
+- Y la UI muestra "Hay turnos de caja abiertos. Cierra todos los turnos antes de finalizar la jornada.".
+
+#### Scenario: Turno abandonado o terminal inaccesible
+
+- Dado un turno abierto cuyo cajero o terminal no puede ejecutar el cierre normal
+- Cuando un usuario con `cash_shifts.administrative_close` captura el efectivo y un motivo administrativo
+- Entonces el mismo endpoint cierra el turno sin requerir el `deviceId` original
+- Y conserva modo administrativo, motivo, actor, fecha, conteo y diferencia en la auditoría.
+
 ### Requirement: Inventario por ubicación
 
 Toda venta, entrada, salida, ajuste o traspaso conciliado debe pertenecer a la misma ubicación del cierre.

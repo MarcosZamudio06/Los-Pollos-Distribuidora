@@ -41,6 +41,7 @@ function createPrisma() {
     },
     payment: { aggregate: jest.fn() },
     pointOfSaleDailyClose: { create: jest.fn(), findFirst: jest.fn() },
+    dailyCloseEvent: { create: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
   };
   return prisma;
@@ -49,7 +50,10 @@ function createPrisma() {
 const admin = {
   id: 'admin-1',
   role: 'ADMIN',
-  permissions: [PERMISSIONS.CASH_TERMINALS_REASSIGN],
+  permissions: [
+    PERMISSIONS.CASH_TERMINALS_REASSIGN,
+    PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE,
+  ],
   operationalLocationId: 'loc-1',
 } as never;
 const cashier = {
@@ -569,9 +573,94 @@ describe('CashManagementService', () => {
     });
     expect(prisma.cashShift.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { cashCountedTotal: 165, cashDifferenceTotal: 5 },
+        data: expect.objectContaining({
+          cashCountedTotal: 165,
+          cashDifferenceTotal: 5,
+          closeMode: 'CASHIER',
+          closeReason: null,
+        }),
       }),
     );
+  });
+
+  it('allows an authorized administrator to close a shift without the original device', async () => {
+    const prisma = createPrisma();
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-abandoned',
+      status: 'OPEN',
+      cashierUserId: 'cashier-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      initialCashFund: 100,
+      initialCashIn: 0,
+      initialCashOut: 0,
+      terminal: { deviceId: 'unreachable-device' },
+    });
+    prisma.cashShift.updateMany.mockResolvedValue({ count: 1 });
+    prisma.payment.aggregate.mockResolvedValue({ _sum: { amount: 50 } });
+    prisma.cashMovement.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
+    prisma.cashShift.update.mockResolvedValue({
+      id: 'shift-abandoned',
+      status: 'CLOSED',
+      closeMode: 'ADMINISTRATIVE',
+    });
+
+    const service = new CashManagementService(
+      prisma as unknown as PrismaService,
+    );
+
+    await service.closeShift(
+      'shift-abandoned',
+      {
+        cashCountedTotal: 145,
+        administrativeReason: 'Terminal inaccesible; conteo físico verificado',
+      },
+      admin,
+    );
+
+    expect(prisma.cashShift.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          closeMode: 'ADMINISTRATIVE',
+          closeReason: 'Terminal inaccesible; conteo físico verificado',
+        }),
+      }),
+    );
+    expect(prisma.dailyCloseEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pointOfSaleDailyCloseId: 'close-1',
+          type: 'CASH_SHIFT_CLOSED',
+          createdByUserId: 'admin-1',
+        }),
+      }),
+    );
+  });
+
+  it('rejects administrative closure without its critical permission', async () => {
+    const prisma = createPrisma();
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-abandoned',
+      status: 'OPEN',
+      cashierUserId: 'cashier-1',
+      terminal: { deviceId: 'unreachable-device' },
+    });
+    const service = new CashManagementService(
+      prisma as unknown as PrismaService,
+    );
+
+    await expect(
+      service.closeShift(
+        'shift-abandoned',
+        {
+          cashCountedTotal: 145,
+          administrativeReason: 'Terminal inaccesible',
+        },
+        { ...admin, permissions: [] },
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException('CASH_SHIFT_ADMINISTRATIVE_PERMISSION_REQUIRED'),
+    );
+    expect(prisma.cashShift.updateMany).not.toHaveBeenCalled();
   });
 
   it('replays an idempotent movement without creating a duplicate', async () => {

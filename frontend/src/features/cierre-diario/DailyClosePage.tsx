@@ -19,6 +19,7 @@ import { DailyCloseTransitionDialog } from './DailyCloseTransitionDialog'
 import { dailyCloseService } from './dailyCloseService'
 import { cashManagementService, type CashTerminal, type CashTerminalActivation } from './cashManagementService'
 import { CashShiftSummary } from './CashShiftSummary'
+import { dailyCloseErrorMessage } from './dailyCloseErrors'
 import type { DailyCloseReportAction } from './dailyCloseTransition'
 import { canAutoRefreshDailyClose, canUseLocationForDailyClose, canValidateDailyClose, type DailyClose, type DailyCloseInventoryReconciliation as InventoryReconciliation, type DailyCloseValidationResult } from './types'
 
@@ -103,7 +104,7 @@ export function DailyClosePage() {
         setInventoryReconciliation(null)
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible cargar los cierres.')
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible cargar los cierres.'))
     } finally {
       setLoading(false)
     }
@@ -123,7 +124,7 @@ export function DailyClosePage() {
         }
       })
       .catch((error: unknown) => {
-        if (active) toast.error(error instanceof Error ? error.message : 'No fue posible cargar los cierres.')
+        if (active) toast.error(dailyCloseErrorMessage(error, 'No fue posible cargar los cierres.'))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -163,7 +164,7 @@ export function DailyClosePage() {
         }))
       })
       .catch((error: unknown) => {
-        if (active) toast.error(error instanceof Error ? error.message : 'No fue posible consultar las terminales.')
+        if (active) toast.error(dailyCloseErrorMessage(error, 'No fue posible consultar las terminales.'))
       })
       .finally(() => {
         if (active) setTerminalsLoading(false)
@@ -180,7 +181,7 @@ export function DailyClosePage() {
       setActivation(await cashManagementService.requestTerminalActivation({ deviceId, operationalLocationId: locationId }, accessToken))
       toast.success('Código temporal generado. Entrégalo a un administrador.')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible generar el código temporal.')
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible generar el código temporal.'))
     } finally {
       setActivationLoading(false)
     }
@@ -194,7 +195,7 @@ export function DailyClosePage() {
       toast.success(message)
       return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible completar la operación.')
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible completar la operación.'))
       return false
     }
   }
@@ -219,7 +220,7 @@ export function DailyClosePage() {
       await load()
       toast.success('Turno abierto y listo para vender.')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible abrir el turno.')
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible abrir el turno.'))
     }
   }
   const addExpense = async (event: FormEvent) => {
@@ -234,7 +235,24 @@ export function DailyClosePage() {
       await selectClose(selected)
       toast.success('Gasto registrado en el turno actual.')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible registrar el gasto.')
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible registrar el gasto.'))
+    }
+  }
+  const closeCashShift = async (shiftId: string, body: { cashCountedTotal: number; administrativeReason?: string }) => {
+    try {
+      await cashManagementService.closeShift(
+        shiftId,
+        {
+          ...body,
+          ...(body.administrativeReason ? {} : { deviceId }),
+        },
+        accessToken,
+      )
+      if (selected) await selectClose(selected)
+      toast.success(body.administrativeReason ? 'Turno cerrado administrativamente.' : 'Turno cerrado y diferencia calculada.')
+    } catch (error) {
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible cerrar el turno.'))
+      throw error
     }
   }
   const addTicket = (event: FormEvent) => {
@@ -300,15 +318,20 @@ export function DailyClosePage() {
       if (result.valid) toast.success('Cierre validado.')
       else toast.error('La validación detectó bloqueantes.')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible validar el cierre.')
+      toast.error(dailyCloseErrorMessage(error, 'No fue posible validar el cierre.'))
     }
   }
+  const openShiftCount = selected?.cashShifts?.filter((shift) => shift.status === 'OPEN').length ?? 0
   const transition = (action: 'validate' | 'review' | 'close' | 'cancel' | 'reopen') => {
     if (action === 'validate') {
       void validate()
       return
     }
     if (!selected) return
+    if (action === 'close' && openShiftCount > 0) {
+      toast.error('Hay turnos de caja abiertos. Cierra todos los turnos antes de finalizar la jornada.')
+      return
+    }
     if (action === 'close' || action === 'reopen') {
       if (action === 'close') setActiveStep('signoff')
       setReportAction(action)
@@ -325,8 +348,9 @@ export function DailyClosePage() {
   }
 
   const editable = canEditDraft && selected?.status === 'DRAFT'
+  const canCloseDaily = user?.role === 'ADMIN' && selected?.status === 'REVIEWED' && openShiftCount === 0
   const cashCountForm =
-    editable && selected ? (
+    editable && selected && (selected.cashShifts?.length ?? 0) === 0 ? (
       <form className="space-y-3 rounded-2xl border border-[var(--erp-brand-red)] bg-[var(--erp-surface-elevated)] p-5" onSubmit={recordCashCount}>
         <h3 className="font-bold">Registrar efectivo contado</h3>
         <p className="text-sm text-[var(--erp-muted-foreground)]">
@@ -484,7 +508,7 @@ export function DailyClosePage() {
         ) : (
           <section className="space-y-5">
             <DailyCloseHeader close={selected} />
-            <CashShiftSummary close={selected} />
+            <CashShiftSummary canAdministrativelyClose={hasPermission(user, PERMISSIONS.cashShiftsAdministrativeClose)} close={selected} currentUserId={user?.id} onCloseShift={closeCashShift} />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm text-[var(--erp-muted-foreground)]">Las acciones administrativas respetan la versión y la validación vigente.</p>
@@ -502,7 +526,7 @@ export function DailyClosePage() {
                 )}
                 {user?.role === 'ADMIN' && selected.status === 'DRAFT' && <Button onClick={() => transition('review')}>Marcar revisado</Button>}
                 {user?.role === 'ADMIN' && selected.status === 'REVIEWED' && (
-                  <Button onClick={() => transition('close')}>
+                  <Button disabled={openShiftCount > 0} onClick={() => transition('close')}>
                     <CheckCircle2 size={16} /> Cerrar jornada
                   </Button>
                 )}
@@ -518,7 +542,7 @@ export function DailyClosePage() {
                 )}
               </div>
             </div>
-            <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={canAuthorizeDifferences && selected.status === 'DRAFT'} canClose={user?.role === 'ADMIN' && selected.status === 'REVIEWED'} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
+             <DailyCloseGuidedFlow activeStep={activeStep} canAuthorizeDifferences={canAuthorizeDifferences && selected.status === 'DRAFT'} canClose={canCloseDaily} canEditDifferences={Boolean(editable)} canEditInventory={Boolean(editable)} canViewFinancials={canViewFinancials} canViewInventory={canViewInventory} canViewProfit={user?.role === 'ADMIN'} close={selected} expenseForm={expenseForm} inventoryReconciliation={inventoryReconciliation} onAuthorizeDifference={authorizeDifference} onDeleteInventoryCount={deleteInventoryCount} onJustifyDifference={justifyDifference} onRequestClose={() => transition('close')} onSaveInventoryCount={saveInventoryCount} onStepChange={setActiveStep} products={products.data ?? []} scaleTicketForm={scaleTicketForm} validationResult={validationResult} cashCountForm={cashCountForm} />
           </section>
         )}
       </div>

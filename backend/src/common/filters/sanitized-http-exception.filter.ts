@@ -116,6 +116,12 @@ export class SanitizedHttpExceptionFilter implements ExceptionFilter {
     ) {
       return payload.error;
     }
+    if (
+      typeof payload.message === 'string' &&
+      /^[A-Z][A-Z0-9_]*$/.test(payload.message.trim())
+    ) {
+      return payload.message.trim();
+    }
     return STATUS_CODES[status] ?? `HTTP_${status}`;
   }
 
@@ -125,6 +131,16 @@ export class SanitizedHttpExceptionFilter implements ExceptionFilter {
     const extensions: Record<string, unknown> = {};
     if (typeof payload.code === 'string' && payload.code.trim()) {
       extensions.code = payload.code;
+    } else if (
+      typeof payload.error === 'string' &&
+      /^[A-Z][A-Z0-9_]*$/.test(payload.error.trim())
+    ) {
+      extensions.code = payload.error.trim();
+    } else if (
+      typeof payload.message === 'string' &&
+      /^[A-Z][A-Z0-9_]*$/.test(payload.message.trim())
+    ) {
+      extensions.code = payload.message.trim();
     }
     for (const key of ['blockers', 'errors', 'findings', 'saleIds'] as const) {
       if (Array.isArray(payload[key])) extensions[key] = payload[key];

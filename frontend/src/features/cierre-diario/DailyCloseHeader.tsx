@@ -44,7 +44,7 @@ export function DailyCloseHeader({ close }: { close: DailyClose }) {
       </dl>
     </div>
     <div className="mt-3 flex items-center justify-between border-t border-[var(--erp-border)] pt-3 text-xs text-[var(--erp-muted-foreground)]">
-      <span>{openShiftCount > 0 ? `${openShiftCount} turno(s) deben cerrar antes del cierre diario.` : 'Todos los turnos están cerrados o no hay turnos registrados.'}</span>
+       <span role={openShiftCount > 0 ? 'alert' : undefined}>{openShiftCount > 0 ? 'Hay turnos de caja abiertos. Cierra todos los turnos antes de finalizar la jornada.' : 'Todos los turnos están cerrados o no hay turnos registrados.'}</span>
       <strong className="font-bold text-[var(--erp-foreground)]">Versión {close.version}</strong>
     </div>
   </header>

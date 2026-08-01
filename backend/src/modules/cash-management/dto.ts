@@ -59,8 +59,9 @@ export class CurrentCashShiftQueryDto {
 }
 
 export class CloseCashShiftDto {
-  @IsString() @IsNotEmpty() deviceId!: string;
+  @IsOptional() @IsString() @IsNotEmpty() deviceId?: string;
   @Type(() => Number) @IsNumber() @Min(0) cashCountedTotal!: number;
+  @IsOptional() @IsString() @IsNotEmpty() administrativeReason?: string;
 }
 
 export class CreateCashShiftMovementDto {

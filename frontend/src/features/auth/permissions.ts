@@ -3,6 +3,7 @@ import type { AuthUser } from './types'
 export const PERMISSIONS = {
   accessAuditRead: 'access_audit.read',
   accessProfilesManage: 'access_profiles.manage',
+  cashShiftsAdministrativeClose: 'cash_shifts.administrative_close',
   cashTerminalsReassign: 'cash_terminals.reassign',
   costsRead: 'costs.read',
   dailyCloseDifferencesAuthorize: 'daily_closes.differences.authorize',

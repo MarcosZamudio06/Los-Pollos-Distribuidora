@@ -33,6 +33,8 @@ Permitir capturar, revisar y conciliar la operación diaria de un punto externo 
 7. Revisar diferencias, capturar motivo y evidencia, y solicitar autorización cuando aplique.
 8. Firmar y cerrar con permisos administrativos.
 
+Antes de firmar la jornada, la pantalla muestra los turnos abiertos agrupados por terminal y cajero. El cajero puede capturar el efectivo contado de su turno y ejecutar `PATCH /api/cash-shifts/:id/close`; después se actualizan el resumen diario, el conteo y la diferencia. Un usuario con `cash_shifts.administrative_close` puede ejecutar el mismo cierre con motivo cuando el turno está abandonado o la terminal es inaccesible.
+
 ## Encabezado
 
 Debe mostrar:
@@ -44,6 +46,7 @@ Debe mostrar:
 - Última validación y versión.
 - Metadatos de frescura de los datos operativos.
 - `Sucursal`, `Terminal`, `Turno` y `Cierre diario` se muestran como niveles separados. El cierre lista cada terminal y sus turnos con cajero, estado, fondo, ventas, movimientos, conteo y diferencia.
+- Los turnos abiertos tienen una acción visible de cierre y muestran efectivo contado pendiente; los turnos cerrados muestran conteo, diferencia y si el cierre fue administrativo.
 
 La selección se limita a ubicaciones activas dentro del alcance del usuario. No debe ofrecer stock global.
 
@@ -162,9 +165,11 @@ Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante 
 - Importes deben ser mayores o iguales a cero; gastos requieren importe mayor a cero.
 - Motivo requerido para gastos, cancelación y reapertura.
 - No cerrar con errores bloqueantes o validación obsoleta.
+- Deshabilitar visualmente "Cerrar jornada" mientras exista cualquier turno abierto y mostrar: "Hay turnos de caja abiertos. Cierra todos los turnos antes de finalizar la jornada.".
 - No asociar operaciones de otra ubicación.
 - Deshabilitar acciones durante solicitudes.
 - Mostrar errores estándar de API sin sustituir reglas del backend.
+- Mapear códigos estables de cierre a mensajes operativos; no mostrar directamente códigos como `DAILY_CLOSE_HAS_OPEN_SHIFTS` en toasts.
 
 ## Accesibilidad y revisión
 
@@ -187,3 +192,4 @@ Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante 
 - Fórmula oficial de utilidad y utilidad por pollo.
 - Catálogo final de gastos y otros conceptos.
 - Política de reapertura y periodos bloqueados.
+- El procedimiento administrativo para turnos abandonados o terminales inaccesibles se documenta en `docs/runbooks/abandoned-cash-shift.md`.

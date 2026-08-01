@@ -126,10 +126,17 @@ Body: `terminalId`, `deviceId`, `businessDate`, `initialCashFund`, `initialCashI
 
 Propósito: cerrar el turno con conteo independiente.
 
-Body: `deviceId`, `cashCountedTotal`.
+Body normal: `deviceId`, `cashCountedTotal`.
+
+Body administrativo para un turno abandonado o una terminal inaccesible: `cashCountedTotal`, `administrativeReason`. No se envía ni se inventa el `deviceId` original.
 
 El backend valida cajero o privilegio administrativo, calcula efectivo esperado y persiste `cashDifferenceTotal` sin alterar las diferencias de otros turnos.
 Los depósitos y retiros iniciales se representan también como movimientos auditables, pero se contabilizan una sola vez en el efectivo esperado.
+
+- El cierre normal exige cajero propietario y coincidencia exacta del `deviceId`.
+- El cierre administrativo exige `cash_shifts.administrative_close`, motivo no vacío y conserva `closeMode=ADMINISTRATIVE` y `closeReason`.
+- Toda modalidad conserva actor, fecha, conteo y diferencia; el cierre administrativo registra además un evento auditable asociado al cierre diario.
+- Los códigos `CASH_SHIFT_NOT_OPEN`, `CASH_SHIFT_CASHIER_MISMATCH`, `CASH_TERMINAL_DEVICE_MISMATCH`, `CASH_SHIFT_ADMINISTRATIVE_REASON_REQUIRED` y `CASH_SHIFT_ADMINISTRATIVE_PERMISSION_REQUIRED` son estables.
 
 ## POST /api/cash-shifts/:id/movements
 

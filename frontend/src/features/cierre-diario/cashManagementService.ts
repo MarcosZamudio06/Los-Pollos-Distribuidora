@@ -25,6 +25,11 @@ export type CashShift = {
   initialCashFund: string
   initialCashIn: string
   initialCashOut: string
+  cashCountedTotal?: string | null
+  cashDifferenceTotal?: string | null
+  closeMode?: 'CASHIER' | 'ADMINISTRATIVE' | null
+  closeReason?: string | null
+  closedAt?: string | null
   terminal: CashTerminal
   cashier: { id: string; name: string }
 }
@@ -50,6 +55,9 @@ export const cashManagementService = {
   },
   openShift: async (body: { terminalId: string; deviceId: string; businessDate: string; initialCashFund: number; initialCashIn: number; initialCashOut: number; notes?: string }, token: string | null) => (
     await apiClient.post<Envelope<CashShift>, typeof body>('/cash-shifts', { body, headers: headers(token) })
+  ).data,
+  closeShift: async (shiftId: string, body: { deviceId?: string; cashCountedTotal: number; administrativeReason?: string }, token: string | null) => (
+    await apiClient.patch<Envelope<CashShift>, typeof body>(`/cash-shifts/${shiftId}/close`, { body, headers: headers(token) })
   ).data,
   recordMovement: async (shiftId: string, body: { deviceId: string; type: 'EXPENSE' | 'CASH_IN' | 'CASH_OUT'; amount: number; reason: string; reference?: string }, token: string | null, idempotencyKey: string) => (
     await apiClient.post<Envelope<unknown>, typeof body>(`/cash-shifts/${shiftId}/movements`, { body, headers: idempotencyHeaders(token, idempotencyKey) })

@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BillingReportableNotesPage } from '../BillingReportableNotesPage'
 import { getDetailPropertyLabel } from '../detailLabels'
 import { areNotesCompatible, isRequestableNote } from '../selection'
@@ -25,6 +25,8 @@ vi.mock('../hooks', () => ({
 }))
 
 vi.mock('../../auth', () => ({ useAuth: () => mockState.auth }))
+
+afterEach(() => vi.unstubAllGlobals())
 
 const note = {
   saleDocumentId: 'doc-1', customerId: 'customer-1', currencyCode: 'MXN', legalEntityId: 'legal-1',
@@ -157,6 +159,16 @@ describe('billing reportable notes UI contracts', () => {
   })
 
   it('keeps the detail panel mounted while its closing animation finishes', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
     mockState.report = { ...mockState.report, data: reportData }
     mockState.detail = {
       data: normalizeBillingReportDetail({ ...reportData.items[0], items: [], requests: [], activeInvoices: [{ id: 'invoice-active', status: 'ACTIVE' }], invoiceHistory: [{ id: 'invoice-old', status: 'CANCELLED' }], payments: [], delivery: null, audit: [] }),

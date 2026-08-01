@@ -1189,6 +1189,8 @@ Reglas:
 - `CashShift` requiere terminal, ubicación, cierre diario, cajero, fecha de negocio, estado, apertura y fondos iniciales.
 - PostgreSQL impone un solo turno `OPEN` por terminal mediante índice único parcial.
 - `CashShift` conserva conteo y diferencia independientes; ventas, pagos y movimientos monetarios referencian el turno.
+- `CashShift.closeMode` distingue `CASHIER` de `ADMINISTRATIVE`; `closeReason` es obligatorio para el modo administrativo.
+- Un cierre administrativo puede omitir el `deviceId` original únicamente con el permiso crítico `cash_shifts.administrative_close`; conserva actor, fecha, conteo, diferencia y evento auditable.
 - `CashTerminalActivation` conserva `operationalLocationId`, `requestedByUserId`, `deviceId`, `codeHash` único, vencimiento, consumo y actor administrativo. El código en claro nunca se persiste.
 - Solo una activación vigente y no consumida puede vincular una terminal cuyo `deviceId` todavía inicia con `legacy:`; terminal, activación y ubicación deben coincidir dentro de una transacción.
 
