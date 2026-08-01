@@ -30,7 +30,10 @@ export type BillingBlockingCode =
   | 'OVER_INVOICED';
 
 export type SaleDocumentType =
-  'SCALE_TICKET' | 'SIMPLE_NOTE' | 'LARGE_NOTE' | 'INTERNAL_RECEIPT';
+  | 'SCALE_TICKET'
+  | 'SIMPLE_NOTE'
+  | 'LARGE_NOTE'
+  | 'INTERNAL_RECEIPT';
 export type BillingPolicyRules = {
   billableDocumentTypes: readonly SaleDocumentType[];
   allowInternalReceipt: boolean;
@@ -40,7 +43,11 @@ export type BillingPolicyRules = {
   timezone: string;
 };
 type BillingRequestStatus =
-  'REQUESTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  | 'REQUESTED'
+  | 'IN_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
 
 export interface BillabilityInput {
   sale: {

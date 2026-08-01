@@ -87,7 +87,8 @@ export class BillingReportService {
     `);
     const total = Number(rows[0]?.totalCount ?? 0);
     const dates = rows.map((row) => row.updatedAt).filter(Boolean) as (
-      Date | string
+      | Date
+      | string
     )[];
     return {
       items: rows.map((row) => this.toItem(row, user)),

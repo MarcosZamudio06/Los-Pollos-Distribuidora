@@ -444,7 +444,9 @@ export class BillingRequestsService {
                 saleItem: (typeof selectedItems)[number],
                 invoiceField: 'subtotalApplied' | 'taxApplied' | 'totalApplied',
                 requestField:
-                  'requestedSubtotal' | 'requestedTax' | 'requestedTotal',
+                  | 'requestedSubtotal'
+                  | 'requestedTax'
+                  | 'requestedTotal',
                 original: Prisma.Decimal,
               ) => {
                 const applied = saleItem.invoiceApplications

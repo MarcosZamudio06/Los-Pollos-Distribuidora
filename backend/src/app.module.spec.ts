@@ -18,7 +18,8 @@ import { DeliveryModule } from './modules/delivery/delivery.module';
 describe('AppModule', () => {
   it('registers backend modules without starter controllers or providers', () => {
     const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, AppModule) as
-      unknown[] | undefined;
+      | unknown[]
+      | undefined;
     const controllers = Reflect.getMetadata(
       MODULE_METADATA.CONTROLLERS,
       AppModule,
