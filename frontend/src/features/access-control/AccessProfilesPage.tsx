@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { History, KeyRound, LockKeyhole, ShieldCheck, Users, X } from 'lucide-react'
+import { ArrowLeft, History, KeyRound, LockKeyhole, ShieldCheck, Users, X } from 'lucide-react'
 import { Button, Input, Select } from '../../components/ui'
 import { apiClient } from '../../lib/api'
 import { hasPermission, PERMISSIONS, useAuth } from '../auth'
@@ -60,6 +60,82 @@ const riskClass: Record<Permission['risk'], string> = {
   standard: 'bg-slate-100 text-slate-700',
   sensitive: 'bg-amber-100 text-amber-800',
   critical: 'bg-red-100 text-red-800',
+}
+
+const permissionCopy: Record<string, { label: string; description: string }> = {
+  'access_audit.read': {
+    label: 'Consultar auditoría de accesos',
+    description: 'Consultar el historial de auditoría de accesos.',
+  },
+  'access_profiles.manage': {
+    label: 'Administrar perfiles de acceso',
+    description: 'Administrar perfiles de acceso y sus permisos.',
+  },
+  'cash_terminals.reassign': {
+    label: 'Reasignar terminales de caja',
+    description: 'Reasignar terminales de caja a una ubicación operativa.',
+  },
+  'costs.read': {
+    label: 'Consultar costos y márgenes',
+    description: 'Consultar costos de compra e información de márgenes.',
+  },
+  'daily_closes.differences.authorize': {
+    label: 'Autorizar diferencias de cierre',
+    description: 'Autorizar diferencias del cierre diario.',
+  },
+  'daily_closes.reopen': {
+    label: 'Reabrir cierre diario',
+    description: 'Reabrir un cierre diario ya realizado.',
+  },
+  'fiscal_information.export': {
+    label: 'Exportar información fiscal',
+    description: 'Exportar información fiscal.',
+  },
+  'payments.cancel': {
+    label: 'Cancelar pagos registrados',
+    description: 'Cancelar pagos registrados.',
+  },
+  'roles.read': {
+    label: 'Consultar perfiles de acceso',
+    description: 'Consultar perfiles de acceso.',
+  },
+  'users.manage': {
+    label: 'Administrar usuarios internos',
+    description: 'Administrar usuarios internos.',
+  },
+  'user_sessions.revoke': {
+    label: 'Revocar sesiones activas',
+    description: 'Revocar sesiones activas de usuarios internos.',
+  },
+}
+
+const permissionGroupLabels: Record<string, string> = {
+  Access: 'Acceso',
+  Cash: 'Caja',
+  Finance: 'Finanzas',
+  Information: 'Información',
+  Security: 'Seguridad',
+}
+
+const profileDescriptionTranslations: Record<string, string> = {
+  ADMIN: 'Administrador del sistema con acceso completo.',
+  BILLING: 'Usuario de revisión de facturación, conciliación y vinculación de facturas.',
+  COLLECTIONS: 'Usuario de cuentas por cobrar y cobranza.',
+  DRIVER: 'Usuario de operaciones de reparto en ruta.',
+  SELLER: 'Usuario de punto de venta y operaciones de venta.',
+  WAREHOUSE: 'Usuario de inventario y operaciones de almacén.',
+}
+
+function getPermissionCopy(permission: Permission) {
+  return permissionCopy[permission.key] ?? {
+    label: 'Permiso de acceso',
+    description: 'Permiso de acceso sin descripción disponible.',
+  }
+}
+
+function getProfileDescription(profile: AccessProfile | null) {
+  if (!profile) return 'Selecciona un perfil para revisar sus permisos.'
+  return profileDescriptionTranslations[profile.name] ?? profile.description ?? 'Perfil de acceso operativo.'
 }
 
 function authHeaders(token?: string | null): Record<string, string> {
@@ -226,16 +302,17 @@ export function AccessProfilesPage() {
   return (
     <main className="min-h-full bg-[var(--erp-background)] p-4 text-[var(--erp-foreground)] sm:p-6 lg:p-8">
       <div className="mx-auto grid max-w-[1480px] gap-6">
-        <header className="overflow-hidden rounded-[1.6rem] border border-[color:var(--erp-border)] bg-[linear-gradient(120deg,#1a211c_0%,#26342b_62%,#394b3b_100%)] p-6 text-white shadow-[var(--erp-shadow)] sm:p-8">
+        <header className="overflow-hidden rounded-[1.6rem] border border-[color:var(--erp-border)] border-t-4 border-t-[var(--erp-brand-gold)] bg-white p-6 text-[var(--erp-foreground)] shadow-[var(--erp-shadow)] sm:p-8">
           <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
             <div>
-              <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-[#e6b84f]"><LockKeyhole className="h-4 w-4" /> Gobierno de acceso</p>
-              <h1 className="mt-4 max-w-3xl text-3xl font-black tracking-[-.05em] sm:text-5xl">Perfiles que dejan huella.</h1>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/70">Administra capacidades canónicas, revisa el impacto antes de guardar y cierra sesiones que ya no deben operar.</p>
+              <Link className="inline-flex items-center gap-2 text-sm font-bold text-[var(--erp-muted-foreground)] transition hover:text-[var(--erp-brand-red)]" to="/admin/employees"><ArrowLeft className="h-4 w-4" /> Volver a configuración de empleados</Link>
+              <p className="mt-6 flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-[var(--erp-brand-gold-deep)]"><LockKeyhole className="h-4 w-4" /> Gobierno de acceso</p>
+              <h1 className="mt-4 max-w-3xl text-3xl font-black tracking-[-.05em] text-[var(--erp-foreground)] sm:text-5xl">Perfiles que dejan huella.</h1>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--erp-muted-foreground)]">Administra capacidades canónicas, revisa el impacto antes de guardar y cierra sesiones que ya no deben operar.</p>
             </div>
-            <div className="grid min-w-64 grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10">
-              <div className="bg-white/5 p-4"><p className="text-xs uppercase tracking-[.14em] text-white/50">Perfiles</p><p className="mt-2 text-3xl font-black">{profiles.length}</p></div>
-              <div className="bg-white/5 p-4"><p className="text-xs uppercase tracking-[.14em] text-white/50">Permisos</p><p className="mt-2 text-3xl font-black">{permissions.length}</p></div>
+            <div className="grid min-w-64 grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]">
+              <div className="bg-white p-4"><p className="text-xs uppercase tracking-[.14em] text-[var(--erp-muted-foreground)]">Perfiles</p><p className="mt-2 text-3xl font-black">{profiles.length}</p></div>
+              <div className="bg-white p-4"><p className="text-xs uppercase tracking-[.14em] text-[var(--erp-muted-foreground)]">Permisos</p><p className="mt-2 text-3xl font-black">{permissions.length}</p></div>
             </div>
           </div>
         </header>
@@ -247,14 +324,14 @@ export function AccessProfilesPage() {
           <aside className="rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white p-3 shadow-[var(--erp-shadow)]">
             <div className="px-3 py-3"><p className="text-xs font-black uppercase tracking-[.16em] text-[var(--erp-brand-red)]">Perfiles canónicos</p><p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">El puesto permanece estable; sus capacidades son explícitas.</p></div>
             <div className="grid gap-1">
-              {profiles.map((profile) => <button className={`rounded-xl px-3 py-3 text-left transition ${profile.id === selectedId ? 'bg-[var(--erp-graphite)] text-white shadow-lg' : 'hover:bg-[var(--erp-surface-muted)]'}`} key={profile.id} onClick={() => selectProfile(profile)} type="button"><span className="flex items-center justify-between gap-2"><span className="font-black">{profile.name}</span><span className="font-mono text-xs opacity-70">v{profile.version}</span></span><span className="mt-1 block text-xs opacity-65">{profile.userCount} empleados · {profile.activeSessionCount} sesiones</span></button>)}
+              {profiles.map((profile) => <button aria-pressed={profile.id === selectedId} className={`rounded-xl border px-3 py-3 text-left transition ${profile.id === selectedId ? 'border-[var(--erp-brand-gold)] bg-white text-[var(--erp-foreground)] shadow-[0_10px_24px_rgba(17,24,21,0.07)]' : 'border-transparent text-[var(--erp-foreground)] hover:bg-[var(--erp-surface-muted)]'}`} key={profile.id} onClick={() => selectProfile(profile)} type="button"><span className="flex items-center justify-between gap-2"><span className="font-black">{profile.name}</span><span className="font-mono text-xs text-[var(--erp-muted-foreground)]">v{profile.version}</span></span><span className="mt-1 block text-xs text-[var(--erp-muted-foreground)]">{profile.userCount} empleados · {profile.activeSessionCount} sesiones</span></button>)}
             </div>
           </aside>
 
           <section className="rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white shadow-[var(--erp-shadow)]">
-            <div className="border-b border-[color:var(--erp-border)] p-5 sm:p-6"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-black uppercase tracking-[.16em] text-[var(--erp-brand-gold-deep)]">Editor de capacidades</p><h2 className="mt-2 text-2xl font-black">{selectedProfile?.name ?? (loading ? 'Cargando...' : 'Sin perfil')}</h2><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">{selectedProfile?.description ?? 'Selecciona un perfil para revisar sus permisos.'}</p></div>{selectedProfile && <div className="rounded-xl bg-[var(--erp-surface-muted)] px-3 py-2 text-right text-xs"><p className="text-[var(--erp-muted-foreground)]">Sesiones que se cerrarían</p><p className="font-black">{selectedProfile.activeSessionCount}</p></div>}</div></div>
+             <div className="border-b border-[color:var(--erp-border)] p-5 sm:p-6"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-black uppercase tracking-[.16em] text-[var(--erp-brand-gold-deep)]">Editor de capacidades</p><h2 className="mt-2 text-2xl font-black">{selectedProfile?.name ?? (loading ? 'Cargando...' : 'Sin perfil')}</h2><p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">{getProfileDescription(selectedProfile)}</p></div>{selectedProfile && <div className="rounded-xl bg-[var(--erp-surface-muted)] px-3 py-2 text-right text-xs"><p className="text-[var(--erp-muted-foreground)]">Sesiones que se cerrarían</p><p className="font-black">{selectedProfile.activeSessionCount}</p></div>}</div></div>
             <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
-              {Object.entries(groupedPermissions).map(([group, groupPermissions]) => <div className="rounded-xl border border-[color:var(--erp-border)] p-4" key={group}><div className="mb-3 flex items-center justify-between"><h3 className="font-black">{group}</h3><span className="text-xs text-[var(--erp-muted-foreground)]">{groupPermissions.filter((permission) => selectedKeys.has(permission.key)).length}/{groupPermissions.length}</span></div><div className="grid gap-2">{groupPermissions.map((permission) => <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 transition hover:bg-[var(--erp-surface-muted)]" key={permission.key}><input checked={selectedKeys.has(permission.key)} className="mt-1 h-4 w-4 accent-[var(--erp-brand-red)]" disabled={!canManageProfiles || saving} onChange={() => togglePermission(permission.key)} type="checkbox" /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold">{permission.key}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${riskClass[permission.risk]}`}>{riskLabel[permission.risk]}</span></span><span className="mt-1 block text-xs leading-5 text-[var(--erp-muted-foreground)]">{permission.description}</span></span></label>)}</div></div>)}
+               {Object.entries(groupedPermissions).map(([group, groupPermissions]) => <div className="rounded-xl border border-[color:var(--erp-border)] p-4" key={group}><div className="mb-3 flex items-center justify-between"><h3 className="font-black">{permissionGroupLabels[group] ?? 'Otros permisos'}</h3><span className="text-xs text-[var(--erp-muted-foreground)]">{groupPermissions.filter((permission) => selectedKeys.has(permission.key)).length}/{groupPermissions.length}</span></div><div className="grid gap-2">{groupPermissions.map((permission) => { const copy = getPermissionCopy(permission); return <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 transition hover:bg-[var(--erp-surface-muted)]" key={permission.key}><input checked={selectedKeys.has(permission.key)} className="mt-1 h-4 w-4 accent-[var(--erp-brand-red)]" disabled={!canManageProfiles || saving} onChange={() => togglePermission(permission.key)} type="checkbox" /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="font-semibold">{copy.label}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${riskClass[permission.risk]}`}>{riskLabel[permission.risk]}</span></span><span className="mt-1 block text-xs leading-5 text-[var(--erp-muted-foreground)]">{copy.description}</span></span></label> })}</div></div>)}
             </div>
             <div className="border-t border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] p-5 sm:p-6"><div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"><label className="grid gap-1.5 text-sm font-bold">Motivo obligatorio<Input disabled={!canManageProfiles || saving} maxLength={300} placeholder="Ej. Separación de revisión financiera" value={reason} onChange={(event) => setReason(event.target.value)} /></label><Button disabled={!selectedProfile || !canManageProfiles || !reason.trim() || saving || (added.length === 0 && removed.length === 0)} onClick={() => void savePermissions()}><ShieldCheck className="h-4 w-4" /> Guardar cambios</Button></div><div className="mt-4 flex flex-wrap gap-2 text-xs">{added.length > 0 && <span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">+{added.length} permisos</span>}{removed.length > 0 && <span className="rounded-full bg-red-100 px-3 py-1 font-bold text-red-800">-{removed.length} permisos</span>}{selectedProfile && <span className="rounded-full bg-white px-3 py-1 font-semibold text-[var(--erp-muted-foreground)]">Afecta {selectedProfile.userCount} empleados</span>}</div></div>
           </section>
