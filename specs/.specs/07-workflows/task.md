@@ -51,14 +51,14 @@ Cada TASK incluye una sección `Relación resultado esperado ↔ specs` para exp
 
 Usa únicamente estos nombres canónicos para planear e implementar:
 
-| Dominio | Spec canónico | Estado de aliases |
-|---------|----------------|-------------------|
-| Inventory | `specs/modules/inventory/spec.md` | `specs/modules/inventario/spec.md` deprecated |
-| Sales | `specs/modules/sales/spec.md` | `specs/modules/ventas/spec.md` deprecated |
-| Sales Documents | `specs/modules/sales-documents/spec.md` | `specs/modules/facturacion/spec.md` deprecated para ticket/comprobante interno |
-| Billing Requests | `specs/modules/billing-requests/spec.md` | `specs/modules/facturacion/spec.md` deprecated para solicitud administrativa |
-| Reports | `specs/modules/reports/spec.md` | `specs/modules/reportes/spec.md` deprecated |
-| Routes / Delivery | `specs/modules/routes-delivery/spec.md` | `specs/modules/routes/spec.md` y `specs/modules/rutas-reparto/spec.md` deprecated |
+| Dominio           | Spec canónico                            | Estado de aliases                                                                 |
+| ----------------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
+| Inventory         | `specs/modules/inventory/spec.md`        | `specs/modules/inventario/spec.md` deprecated                                     |
+| Sales             | `specs/modules/sales/spec.md`            | `specs/modules/ventas/spec.md` deprecated                                         |
+| Sales Documents   | `specs/modules/sales-documents/spec.md`  | `specs/modules/facturacion/spec.md` deprecated para ticket/comprobante interno    |
+| Billing Requests  | `specs/modules/billing-requests/spec.md` | `specs/modules/facturacion/spec.md` deprecated para solicitud administrativa      |
+| Reports           | `specs/modules/reports/spec.md`          | `specs/modules/reportes/spec.md` deprecated                                       |
+| Routes / Delivery | `specs/modules/routes-delivery/spec.md`  | `specs/modules/routes/spec.md` y `specs/modules/rutas-reparto/spec.md` deprecated |
 
 Si una tarea apunta a un alias deprecated, debes redirigir la lectura al spec canónico antes de continuar.
 
@@ -236,7 +236,6 @@ Ninguna tarea de implementación que contradiga estos canones está lista para i
 ---
 
 # 10.2 Fase 0.1 — Canonización obligatoria antes de implementar
-
 
 ### TASK-005 — Canonizar inventario de rutas con `ROUTE_STOCK`
 

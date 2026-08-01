@@ -1,19 +1,22 @@
-import { Link, useLocation } from 'react-router-dom'
-import { Circle, Menu, Search } from 'lucide-react'
-import { Badge } from '../ui'
-import { useAuth } from '../../features/auth'
-import { getActiveNavigationItem, getQuickActionsForRole } from './roleNavigation'
+import { Link, useLocation } from "react-router-dom";
+import { Circle, Menu, Search } from "lucide-react";
+import { Badge } from "../ui";
+import { useAuth } from "../../features/auth";
+import {
+  getActiveNavigationItem,
+  getQuickActionsForRole,
+} from "./roleNavigation";
 
 type TopBarProps = {
-  onMenuClick: () => void
-  sidebarOpen: boolean
-}
+  onMenuClick: () => void;
+  sidebarOpen: boolean;
+};
 
 export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
-  const { user } = useAuth()
-  const location = useLocation()
-  const activeItem = getActiveNavigationItem(location.pathname)
-  const quickActions = getQuickActionsForRole(user?.role).slice(0, 2)
+  const { user } = useAuth();
+  const location = useLocation();
+  const activeItem = getActiveNavigationItem(location.pathname);
+  const quickActions = getQuickActionsForRole(user?.role).slice(0, 2);
 
   return (
     <header className="erp-topbar sticky top-0 z-40 shrink-0 border-b border-[color:var(--erp-border)] shadow-[0_18px_45px_rgba(17,24,21,0.06)]">
@@ -33,8 +36,14 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--erp-muted-foreground)]">
               {activeItem.description}
             </p>
-            <Badge tone="green" className="hidden border-[rgba(63,123,65,0.18)] bg-[rgba(63,123,65,0.08)] normal-case tracking-normal sm:inline-flex">
-              <Circle aria-hidden="true" className="mr-1.5 h-2 w-2 fill-current" />
+            <Badge
+              tone="green"
+              className="hidden border-[rgba(63,123,65,0.18)] bg-[rgba(63,123,65,0.08)] normal-case tracking-normal sm:inline-flex"
+            >
+              <Circle
+                aria-hidden="true"
+                className="mr-1.5 h-2 w-2 fill-current"
+              />
               Datos actualizados
             </Badge>
           </div>
@@ -65,5 +74,5 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
         </button>
       </div>
     </header>
-  )
+  );
 }

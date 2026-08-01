@@ -1,10 +1,10 @@
-import { Link } from 'react-router-dom'
-import { ArrowLeft, LockKeyhole, ShieldAlert } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui'
-import { useAuth } from '../useAuth'
+import { Link } from "react-router-dom";
+import { ArrowLeft, LockKeyhole, ShieldAlert } from "lucide-react";
+import { Card, CardContent } from "@/components/ui";
+import { useAuth } from "../useAuth";
 
 export function ForbiddenPage() {
-  const { user } = useAuth()
+  const { user } = useAuth();
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--erp-background)] px-5 py-10 text-[var(--erp-foreground)]">
@@ -18,13 +18,16 @@ export function ForbiddenPage() {
               <ShieldAlert className="h-7 w-7" />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--erp-danger)]">Error 403</p>
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--erp-danger)]">
+                Error 403
+              </p>
               <h1 className="mt-3 text-4xl font-black tracking-[-0.06em] text-[var(--erp-foreground)]">
                 No tienes acceso a este módulo
               </h1>
               <p className="mt-4 max-w-xl leading-7 text-[var(--erp-muted-foreground)]">
-                Tu sesión está activa{user ? ` como ${user.role}` : ''}, pero este módulo requiere otro permiso.
-                Pide a un ADMIN que revise tu rol si necesitas operar aquí.
+                Tu sesión está activa{user ? ` como ${user.role}` : ""}, pero
+                este módulo requiere otro permiso. Pide a un ADMIN que revise tu
+                rol si necesitas operar aquí.
               </p>
             </div>
           </div>
@@ -35,7 +38,8 @@ export function ForbiddenPage() {
               La autorización del módulo se mantiene protegida.
             </p>
             <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">
-              Esta pantalla solo informa el bloqueo; no cambia permisos ni rutas protegidas.
+              Esta pantalla solo informa el bloqueo; no cambia permisos ni rutas
+              protegidas.
             </p>
           </div>
 
@@ -49,5 +53,5 @@ export function ForbiddenPage() {
         </CardContent>
       </Card>
     </main>
-  )
+  );
 }

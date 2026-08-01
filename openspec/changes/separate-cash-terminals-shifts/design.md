@@ -16,15 +16,15 @@ PointOfSaleDailyClose (location + business date)
 
 ## Decisions
 
-| Concern | Decision |
-| --- | --- |
-| Terminal identity | `CashTerminal.deviceId` is globally unique and administratively registered. Labels are not security identities. |
-| Concurrent operation | One open shift per terminal; multiple terminals may have open shifts concurrently. |
-| Cashier ownership | The authenticated user must equal `CashShift.cashierUserId` when registering a sale. |
-| Sale attribution | Backend derives terminal, cashier, business date, registration time, daily close, and device from the validated shift. |
-| Daily closing | One branch aggregate per location/date; it cannot close while any child shift is open. |
-| Inventory | Inventory remains reconciled at branch daily-close level, while money and sales retain shift attribution. |
-| Existing data | Migrations create legacy terminal/shift records and backfill references; historical audit records are never deleted. |
+| Concern              | Decision                                                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Terminal identity    | `CashTerminal.deviceId` is globally unique and administratively registered. Labels are not security identities.        |
+| Concurrent operation | One open shift per terminal; multiple terminals may have open shifts concurrently.                                     |
+| Cashier ownership    | The authenticated user must equal `CashShift.cashierUserId` when registering a sale.                                   |
+| Sale attribution     | Backend derives terminal, cashier, business date, registration time, daily close, and device from the validated shift. |
+| Daily closing        | One branch aggregate per location/date; it cannot close while any child shift is open.                                 |
+| Inventory            | Inventory remains reconciled at branch daily-close level, while money and sales retain shift attribution.              |
+| Existing data        | Migrations create legacy terminal/shift records and backfill references; historical audit records are never deleted.   |
 
 ## Request Boundary
 

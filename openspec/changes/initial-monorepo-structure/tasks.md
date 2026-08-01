@@ -2,14 +2,14 @@
 
 ## Review Workload Forecast
 
-| Field | Value |
-|-------|-------|
-| Estimated changed lines | 220-320 |
-| 400-line budget risk | Medium |
-| Chained PRs recommended | No |
-| Suggested split | Single PR: structure-only scaffold plus tests/docs |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Field                   | Value                                              |
+| ----------------------- | -------------------------------------------------- |
+| Estimated changed lines | 220-320                                            |
+| 400-line budget risk    | Medium                                             |
+| Chained PRs recommended | No                                                 |
+| Suggested split         | Single PR: structure-only scaffold plus tests/docs |
+| Delivery strategy       | ask-on-risk                                        |
+| Chain strategy          | pending                                            |
 
 Decision needed before apply: No
 Chained PRs recommended: No
@@ -18,9 +18,9 @@ Chain strategy: pending
 
 ### Suggested Work Units
 
-| Unit | Goal | Likely PR | Notes |
-|------|------|-----------|-------|
-| 1 | Root orchestration, starter cleanup, bootstrap tests, docs | PR 1 | Single slice; stop on spec conflict |
+| Unit | Goal                                                       | Likely PR | Notes                               |
+| ---- | ---------------------------------------------------------- | --------- | ----------------------------------- |
+| 1    | Root orchestration, starter cleanup, bootstrap tests, docs | PR 1      | Single slice; stop on spec conflict |
 
 ## Phase 1: Spec Gate and Command Inventory
 

@@ -1327,19 +1327,15 @@ describe('PointOfSaleDailyCloseService', () => {
     };
     const admin = { id: 'admin-1', role: 'ADMIN' } as never;
 
-    jest
-      .spyOn(privateService, 'requireCloseAccess')
-      .mockResolvedValue(current);
-    jest
-      .spyOn(privateService, 'transition')
-      .mockResolvedValue(transitioned);
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(current);
+    jest.spyOn(privateService, 'transition').mockResolvedValue(transitioned);
     jest
       .spyOn(privateService, 'projectDetailForRole')
       .mockResolvedValue(projected);
 
-    await expect(
-      service.close('close-1', { version: 4 }, admin),
-    ).resolves.toBe(projected);
+    await expect(service.close('close-1', { version: 4 }, admin)).resolves.toBe(
+      projected,
+    );
     expect(privateService.projectDetailForRole).toHaveBeenCalledWith(
       transitioned,
       admin,

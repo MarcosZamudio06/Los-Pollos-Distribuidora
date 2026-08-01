@@ -258,7 +258,7 @@ Body:
   "saleDocumentId": "string opcional",
   "productId": "string opcional",
   "grossWeightKg": 1.835,
-  "tareWeightKg": 0.100,
+  "tareWeightKg": 0.1,
   "netWeightKg": 1.735,
   "pieceCount": 0,
   "unitPrice": 49,
@@ -380,7 +380,7 @@ Body:
 
 ```json
 {
-  "cashCountedTotal": 1200.00
+  "cashCountedTotal": 1200.0
 }
 ```
 

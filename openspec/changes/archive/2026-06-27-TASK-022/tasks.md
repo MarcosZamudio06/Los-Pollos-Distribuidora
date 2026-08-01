@@ -2,14 +2,14 @@
 
 ## Review Workload Forecast
 
-| Field | Value |
-|-------|-------|
-| Estimated changed lines | 650-900 |
-| 400-line budget risk | High |
-| Chained PRs recommended | Yes |
-| Suggested split | PR 1 persistencia/Auth → PR 2 servicio Users → PR 3 API/verificación |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | stacked-to-main |
+| Field                   | Value                                                                |
+| ----------------------- | -------------------------------------------------------------------- |
+| Estimated changed lines | 650-900                                                              |
+| 400-line budget risk    | High                                                                 |
+| Chained PRs recommended | Yes                                                                  |
+| Suggested split         | PR 1 persistencia/Auth → PR 2 servicio Users → PR 3 API/verificación |
+| Delivery strategy       | ask-on-risk                                                          |
+| Chain strategy          | stacked-to-main                                                      |
 
 Decision needed before apply: Yes
 Chained PRs recommended: Yes
@@ -18,11 +18,11 @@ Chain strategy: stacked-to-main
 
 ### Suggested Work Units
 
-| Unit | Goal | Likely PR | Notes |
-|------|------|-----------|-------|
-| 1 | Persistir estado User y bloquear acceso inactivo/password pendiente | PR 1 | Stacked-to-main; target `main`; incluye pruebas Auth/Prisma. |
-| 2 | Implementar reglas de negocio `UsersService` y DTOs | PR 2 | Stacked-to-main; target `main` después de mergear PR 1; incluye unit tests. |
-| 3 | Exponer endpoints ADMIN y verificación final | PR 3 | Stacked-to-main; target `main` después de mergear PR 2; incluye controller tests y `npm --prefix backend test`. |
+| Unit | Goal                                                                | Likely PR | Notes                                                                                                           |
+| ---- | ------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| 1    | Persistir estado User y bloquear acceso inactivo/password pendiente | PR 1      | Stacked-to-main; target `main`; incluye pruebas Auth/Prisma.                                                    |
+| 2    | Implementar reglas de negocio `UsersService` y DTOs                 | PR 2      | Stacked-to-main; target `main` después de mergear PR 1; incluye unit tests.                                     |
+| 3    | Exponer endpoints ADMIN y verificación final                        | PR 3      | Stacked-to-main; target `main` después de mergear PR 2; incluye controller tests y `npm --prefix backend test`. |
 
 ## Phase 1: Preparación y persistencia RED/GREEN
 

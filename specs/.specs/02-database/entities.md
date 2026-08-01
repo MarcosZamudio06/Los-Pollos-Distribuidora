@@ -576,6 +576,7 @@ Validaciones:
 - No genera movimientos de inventario ni CFDI.
 
 ## Decisiones abiertas del modelo de cierre
+
 - Tolerancias de kilos e importes y su efecto en transiciones de estado.
 - Fórmulas oficiales de costo y utilidad.
 - Catálogo final de conceptos de línea y movimientos de caja.

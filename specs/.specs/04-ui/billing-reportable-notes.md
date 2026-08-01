@@ -34,6 +34,7 @@ CSV y XLSX respetan exactamente filtros, alcance y totales visibles. Las descarg
 La ruta protegida `/billing/remediations` presenta una bandeja administrativa para `ADMIN` y lectura para `BILLING`. Muestra estado, código, venta, contexto de la inconsistencia, fecha de detección y resolución. `ADMIN` puede abrir un diálogo de resolución con motivo obligatorio y los campos de corrección correspondientes al código.
 
 La interfaz nunca ofrece un cierre declarativo. Explica que el backend validará nuevamente los datos y solo marcará el caso como resuelto cuando la inconsistencia haya desaparecido. Tras una resolución válida refresca tanto la bandeja como las notas facturables para mostrar la facturabilidad recalculada.
+
 # Selección fiscal de partidas
 
 Al crear una solicitud, el operador selecciona partidas completas con saldo disponible. La interfaz muestra el total pendiente de cada partida y envía el desglose exacto de base, impuesto y total. No permite capturar manualmente un total documental ni asumir impuesto cero; cada nota seleccionada debe conservar al menos una partida.

@@ -1,1 +1,1 @@
-export { Sidebar as RoleSidebar } from './Sidebar'
+export { Sidebar as RoleSidebar } from "./Sidebar";

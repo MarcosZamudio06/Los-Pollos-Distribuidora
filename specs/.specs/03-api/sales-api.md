@@ -102,8 +102,18 @@ Body importante:
   "paymentType": "CASH_SALE",
   "payments": [
     { "amount": "500.00", "paymentMethod": "CASH", "cashTendered": "600.00" },
-    { "amount": "700.00", "paymentMethod": "TRANSFER", "bankName": "Banco Norte", "referenceNumber": "TRANSFER-001" },
-    { "amount": "300.00", "paymentMethod": "CARD", "referenceNumber": "AUTH-123", "cardLastFour": "4242" }
+    {
+      "amount": "700.00",
+      "paymentMethod": "TRANSFER",
+      "bankName": "Banco Norte",
+      "referenceNumber": "TRANSFER-001"
+    },
+    {
+      "amount": "300.00",
+      "paymentMethod": "CARD",
+      "referenceNumber": "AUTH-123",
+      "cardLastFour": "4242"
+    }
   ],
   "discountAuthorizationId": "string opcional; autorización creada por ADMIN",
   "commercialPolicyId": "string opcional",

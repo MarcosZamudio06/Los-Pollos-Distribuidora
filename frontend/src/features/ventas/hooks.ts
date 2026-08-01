@@ -1,92 +1,119 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../auth'
-import { salesService } from './salesService'
-import type { CancelSalePayload, CreateSalePayload, ListSalesFilters } from './types'
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../auth";
+import { salesService } from "./salesService";
+import type {
+  CancelSalePayload,
+  CreateSalePayload,
+  ListSalesFilters,
+} from "./types";
 
 export function useSales(filters: ListSalesFilters) {
-  const { accessToken } = useAuth()
+  const { accessToken } = useAuth();
   return useQuery({
-    queryKey: ['sales', filters],
+    queryKey: ["sales", filters],
     queryFn: () => salesService.listSales(filters, accessToken),
-  })
+  });
 }
 
 export function useSale(saleId?: string) {
-  const { accessToken } = useAuth()
+  const { accessToken } = useAuth();
   return useQuery({
     enabled: Boolean(saleId),
-    queryKey: ['sales', saleId],
+    queryKey: ["sales", saleId],
     queryFn: () => salesService.getSale(saleId as string, accessToken),
-  })
+  });
 }
 
 export function useCreateSale() {
-  const { accessToken } = useAuth()
-  const queryClient = useQueryClient()
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ idempotencyKey, payload }: { idempotencyKey: string; payload: CreateSalePayload }) => salesService.createSale(payload, idempotencyKey, accessToken),
+    mutationFn: ({
+      idempotencyKey,
+      payload,
+    }: {
+      idempotencyKey: string;
+      payload: CreateSalePayload;
+    }) => salesService.createSale(payload, idempotencyKey, accessToken),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['products'] })
-      void queryClient.invalidateQueries({ queryKey: ['inventory-balances'] })
-      void queryClient.invalidateQueries({ queryKey: ['sales'] })
-      void queryClient.invalidateQueries({ queryKey: ['daily-close'] })
+      void queryClient.invalidateQueries({ queryKey: ["products"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-balances"] });
+      void queryClient.invalidateQueries({ queryKey: ["sales"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-close"] });
     },
-  })
+  });
 }
 
 export function useSaleTicket(saleId?: string, documentId?: string) {
-  const { accessToken } = useAuth()
+  const { accessToken } = useAuth();
   return useQuery({
     enabled: Boolean(saleId && documentId),
-    queryKey: ['sales', saleId, 'documents', documentId, 'print'],
-    queryFn: () => salesService.getTicket(saleId as string, documentId as string, accessToken),
-  })
+    queryKey: ["sales", saleId, "documents", documentId, "print"],
+    queryFn: () =>
+      salesService.getTicket(
+        saleId as string,
+        documentId as string,
+        accessToken,
+      ),
+  });
 }
 
 export function useSaleDocuments(saleId?: string) {
-  const { accessToken } = useAuth()
+  const { accessToken } = useAuth();
   return useQuery({
     enabled: Boolean(saleId),
-    queryKey: ['sales', saleId, 'documents'],
+    queryKey: ["sales", saleId, "documents"],
     queryFn: () => salesService.getSaleDocuments(saleId as string, accessToken),
-  })
+  });
 }
 
 export function useSaleVoidPreview(saleId?: string, enabled = true) {
-  const { accessToken } = useAuth()
+  const { accessToken } = useAuth();
   return useQuery({
     enabled: Boolean(saleId && enabled),
-    queryKey: ['sales', saleId, 'void-preview'],
+    queryKey: ["sales", saleId, "void-preview"],
     queryFn: () => salesService.getVoidPreview(saleId as string, accessToken),
-  })
+  });
 }
 
 export function useCancelSale(saleId: string) {
-  const { accessToken } = useAuth()
-  const queryClient = useQueryClient()
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ idempotencyKey, payload }: { idempotencyKey: string; payload: CancelSalePayload }) => salesService.cancelSale(saleId, payload, idempotencyKey, accessToken),
+    mutationFn: ({
+      idempotencyKey,
+      payload,
+    }: {
+      idempotencyKey: string;
+      payload: CancelSalePayload;
+    }) => salesService.cancelSale(saleId, payload, idempotencyKey, accessToken),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sales'] })
-      void queryClient.invalidateQueries({ queryKey: ['inventory-balances'] })
-      void queryClient.invalidateQueries({ queryKey: ['accounts-receivable'] })
+      void queryClient.invalidateQueries({ queryKey: ["sales"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-balances"] });
+      void queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
     },
-  })
+  });
 }
 
 export function useVoidSale(saleId: string) {
-  const { accessToken } = useAuth()
-  const queryClient = useQueryClient()
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ idempotencyKey, payload }: { idempotencyKey: string; payload: CancelSalePayload }) => salesService.voidSale(saleId, payload, idempotencyKey, accessToken),
+    mutationFn: ({
+      idempotencyKey,
+      payload,
+    }: {
+      idempotencyKey: string;
+      payload: CancelSalePayload;
+    }) => salesService.voidSale(saleId, payload, idempotencyKey, accessToken),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['sales'] })
-      void queryClient.invalidateQueries({ queryKey: ['inventory-balances'] })
-      void queryClient.invalidateQueries({ queryKey: ['products'] })
-      void queryClient.invalidateQueries({ queryKey: ['accounts-receivable'] })
-      void queryClient.invalidateQueries({ queryKey: ['billing-requests'] })
-      void queryClient.invalidateQueries({ queryKey: ['daily-close'] })
-      void queryClient.invalidateQueries({ queryKey: ['route-settlements'] })
+      void queryClient.invalidateQueries({ queryKey: ["sales"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-balances"] });
+      void queryClient.invalidateQueries({ queryKey: ["products"] });
+      void queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-close"] });
+      void queryClient.invalidateQueries({ queryKey: ["route-settlements"] });
     },
-  })
+  });
 }

@@ -1,6 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { AppShell } from '../components/layout/AppShell'
-import { ROUTE_ACCESS_ROLES } from '../components/layout/routeAccess'
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AppShell } from "../components/layout/AppShell";
+import { ROUTE_ACCESS_ROLES } from "../components/layout/routeAccess";
 import {
   ForbiddenPage,
   ChangePasswordPage,
@@ -10,23 +10,42 @@ import {
   PERMISSIONS,
   ProtectedRoute,
   RoleRoute,
-} from '../features/auth'
-import { CustomersPage } from '../features/clientes'
-import { AccountsReceivablePage } from '../features/cobranza'
-import { PurchaseDetailPage, PurchaseFormPage, PurchasesPage, SuppliersPage } from '../features/compras'
-import { DashboardPage } from '../features/dashboard'
-import { ReportsPage } from '../features/reportes'
-import { ProductListPage } from '../features/inventario'
-import { EmployeesPage } from '../features/employees'
-import { DeliveryRoutesPage, MyRoutesPage, RouteDetailPage, RouteEvidenceReview, RoutePlannerPage, RouteSettlementView } from '../features/rutas-reparto'
-import { SaleDetailPage, SalesHistoryPage, SalesPosPage } from '../features/ventas'
-import { BillingRequestDetailPage, BillingRequestsPage } from '../features/billing-requests'
-import { BillingReportableNotesPage } from '../features/billing-reportable-notes'
-import { BillingRemediationsPage } from '../features/billing-remediations'
-import { DailyClosePage } from '../features/cierre-diario'
-import { PedidosPage } from '../features/pedidos'
-import { PosTerminalsPage } from '../features/terminales-pos'
-import { AccessProfilesPage } from '../features/access-control'
+} from "../features/auth";
+import { CustomersPage } from "../features/clientes";
+import { AccountsReceivablePage } from "../features/cobranza";
+import {
+  PurchaseDetailPage,
+  PurchaseFormPage,
+  PurchasesPage,
+  SuppliersPage,
+} from "../features/compras";
+import { DashboardPage } from "../features/dashboard";
+import { ReportsPage } from "../features/reportes";
+import { ProductListPage } from "../features/inventario";
+import { EmployeesPage } from "../features/employees";
+import {
+  DeliveryRoutesPage,
+  MyRoutesPage,
+  RouteDetailPage,
+  RouteEvidenceReview,
+  RoutePlannerPage,
+  RouteSettlementView,
+} from "../features/rutas-reparto";
+import {
+  SaleDetailPage,
+  SalesHistoryPage,
+  SalesPosPage,
+} from "../features/ventas";
+import {
+  BillingRequestDetailPage,
+  BillingRequestsPage,
+} from "../features/billing-requests";
+import { BillingReportableNotesPage } from "../features/billing-reportable-notes";
+import { BillingRemediationsPage } from "../features/billing-remediations";
+import { DailyClosePage } from "../features/cierre-diario";
+import { PedidosPage } from "../features/pedidos";
+import { PosTerminalsPage } from "../features/terminales-pos";
+import { AccessProfilesPage } from "../features/access-control";
 
 export function AppRouter() {
   return (
@@ -49,10 +68,38 @@ export function AppRouter() {
         }
       >
         <Route path="/403" element={<ForbiddenPage />} />
-        <Route path="/billing-requests/:id" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestDetailPage /></RoleRoute>} />
-        <Route path="/billing-requests" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}><BillingRequestsPage /></RoleRoute>} />
-        <Route path="/billing/reportable-notes" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingReportableNotes}><BillingReportableNotesPage /></RoleRoute>} />
-        <Route path="/billing/remediations" element={<RoleRoute roles={ROUTE_ACCESS_ROLES.billingRemediations}><BillingRemediationsPage /></RoleRoute>} />
+        <Route
+          path="/billing-requests/:id"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}>
+              <BillingRequestDetailPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/billing-requests"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.billingRequests}>
+              <BillingRequestsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/billing/reportable-notes"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.billingReportableNotes}>
+              <BillingReportableNotesPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/billing/remediations"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.billingRemediations}>
+              <BillingRemediationsPage />
+            </RoleRoute>
+          }
+        />
         <Route
           path="/customers"
           element={
@@ -143,11 +190,19 @@ export function AppRouter() {
         />
         <Route
           path="/delivery-routes/new"
-          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}><RoutePlannerPage /></RoleRoute>}
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}>
+              <RoutePlannerPage />
+            </RoleRoute>
+          }
         />
         <Route
           path="/delivery-routes/:routeId/reoptimize"
-          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}><RoutePlannerPage /></RoleRoute>}
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}>
+              <RoutePlannerPage />
+            </RoleRoute>
+          }
         />
         <Route
           path="/delivery-routes/:routeId/evidence"
@@ -175,11 +230,19 @@ export function AppRouter() {
         />
         <Route
           path="/orders"
-          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.orders}><PedidosPage /></RoleRoute>}
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.orders}>
+              <PedidosPage />
+            </RoleRoute>
+          }
         />
         <Route
           path="/daily-close"
-          element={<RoleRoute roles={ROUTE_ACCESS_ROLES.dailyClose}><DailyClosePage /></RoleRoute>}
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.dailyClose}>
+              <DailyClosePage />
+            </RoleRoute>
+          }
         />
         <Route
           path="/reports"
@@ -225,5 +288,5 @@ export function AppRouter() {
         <Route path="*" element={<Navigate replace to="/" />} />
       </Route>
     </Routes>
-  )
+  );
 }

@@ -24,13 +24,13 @@ This document is an exploration, not yet a canonical business rule. The open pol
 
 The POS must use explicit operational states rather than a boolean online flag:
 
-| State | Meaning | Checkout behavior |
-| --- | --- | --- |
-| `READY_SYNCED` | Branch API and local database accept transactions; central synchronization is current. | Normal policy. |
-| `READY_LOCAL` | Branch API and local database accept transactions; cloud synchronization is unavailable or delayed. | Approved contingency policy. |
-| `RESTRICTED_LOCAL` | Local transactions work, but a freshness, folio, auth, disk, or backlog threshold is near its limit. | Cash-only restricted policy. |
-| `RECOVERING` | Connectivity returned and the node is draining/reconciling its backlog. | Local sales continue unless a specific aggregate is conflicted. |
-| `BLOCKED` | Branch API, local database, terminal provisioning, or a mandatory local dependency cannot guarantee a durable commit. | No sale registration. Preserve the draft cart. |
+| State              | Meaning                                                                                                               | Checkout behavior                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `READY_SYNCED`     | Branch API and local database accept transactions; central synchronization is current.                                | Normal policy.                                                  |
+| `READY_LOCAL`      | Branch API and local database accept transactions; cloud synchronization is unavailable or delayed.                   | Approved contingency policy.                                    |
+| `RESTRICTED_LOCAL` | Local transactions work, but a freshness, folio, auth, disk, or backlog threshold is near its limit.                  | Cash-only restricted policy.                                    |
+| `RECOVERING`       | Connectivity returned and the node is draining/reconciling its backlog.                                               | Local sales continue unless a specific aggregate is conflicted. |
+| `BLOCKED`          | Branch API, local database, terminal provisioning, or a mandatory local dependency cannot guarantee a durable commit. | No sale registration. Preserve the draft cart.                  |
 
 `navigator.onLine` may remain a diagnostic hint, but it must never authorize or reject a sale. A short-lived `GET /api/pos/readiness` probe should report the state, while the sale command remains the final authority to avoid time-of-check/time-of-use errors.
 
@@ -82,13 +82,13 @@ The branch edge node should provide:
 
 The central requirement is single-writer ownership, not merely data replication.
 
-| Aggregate | Writer during normal and contingency operation |
-| --- | --- |
-| Branch POS sales, immediate payments, branch inventory movements | Branch edge node |
-| Branch cash shifts and daily close | Branch edge node |
-| Product and price master data | Central ERP, replicated as versioned effective-dated data |
-| Customer and credit policy | Central ERP; only approved snapshots or grants may be used locally |
-| Cross-branch transfer workflow | Central orchestration with explicit origin and destination acknowledgements |
+| Aggregate                                                        | Writer during normal and contingency operation                              |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Branch POS sales, immediate payments, branch inventory movements | Branch edge node                                                            |
+| Branch cash shifts and daily close                               | Branch edge node                                                            |
+| Product and price master data                                    | Central ERP, replicated as versioned effective-dated data                   |
+| Customer and credit policy                                       | Central ERP; only approved snapshots or grants may be used locally          |
+| Cross-branch transfer workflow                                   | Central orchestration with explicit origin and destination acknowledgements |
 
 The cloud must not directly mutate a branch-owned inventory aggregate while that branch is partitioned. Cloud orders affecting that branch remain pending until the edge acknowledges reservation or fulfillment. Central inventory views must show their `asOf` time and sync state rather than presenting stale balances as current.
 
@@ -121,15 +121,15 @@ Use application-level events, not uncoordinated table replication.
 
 Conflict handling must be deterministic:
 
-| Conflict | Resolution |
-| --- | --- |
-| Duplicate event | Automatic inbox deduplication. |
-| Reused idempotency key with another payload | Reject and require supervisor investigation. |
-| Folio collision | Prevent through central range leasing; never renumber a committed sale. |
-| Stale product or price version | Apply the price snapshot used by the committed sale and flag policy drift for review. |
-| Negative local inventory | Reject locally before commit; never repair with last-write-wins. |
-| Central order competing for offline branch stock | Keep central order pending until branch acknowledgement. |
-| Clock difference | Preserve edge commit time and central receipt time; alert on excessive skew. |
+| Conflict                                         | Resolution                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| Duplicate event                                  | Automatic inbox deduplication.                                                        |
+| Reused idempotency key with another payload      | Reject and require supervisor investigation.                                          |
+| Folio collision                                  | Prevent through central range leasing; never renumber a committed sale.               |
+| Stale product or price version                   | Apply the price snapshot used by the committed sale and flag policy drift for review. |
+| Negative local inventory                         | Reject locally before commit; never repair with last-write-wins.                      |
+| Central order competing for offline branch stock | Keep central order pending until branch acknowledgement.                              |
+| Clock difference                                 | Preserve edge commit time and central receipt time; alert on excessive skew.          |
 
 ### Folios and identifiers
 
@@ -154,19 +154,19 @@ The current short-lived cloud JWT flow is insufficient for a prolonged outage by
 
 Recommended initial policy:
 
-| Operation | `READY_SYNCED` | `READY_LOCAL` | `RESTRICTED_LOCAL` |
-| --- | --- | --- | --- |
-| Cash sale with local stock | Allow | Allow | Allow within configured limits |
-| Card payment | Allow with acquirer approval | Allow only if the acquirer independently authorizes | Block otherwise |
-| Transfer/deposit as immediate payment | Allow under normal validation | Block unless independently verifiable | Block |
-| Credit sale | Allow under central credit checks | Block by default | Block |
-| Standard effective price | Allow | Allow from versioned local snapshot | Allow until snapshot expiry |
-| Manual or sensitive discount | Allow with normal authorization | Block unless backed by an unexpired one-use grant | Block |
-| New customer or credit change | Allow | Block | Block |
-| Void of an unsynchronized local sale | Allow with audit and role checks | Allow with local supervisor policy | Restrict to supervisor |
-| Void of a synchronized or external sale | Normal central workflow | Block | Block |
-| Shift close | Allow | Allow locally and mark pending sync | Allow if backlog policy permits |
-| Final branch daily close | Allow | Local close may be pending; central finalization waits for reconciliation | Block if backlog/freshness limits are exceeded |
+| Operation                               | `READY_SYNCED`                    | `READY_LOCAL`                                                             | `RESTRICTED_LOCAL`                             |
+| --------------------------------------- | --------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------- |
+| Cash sale with local stock              | Allow                             | Allow                                                                     | Allow within configured limits                 |
+| Card payment                            | Allow with acquirer approval      | Allow only if the acquirer independently authorizes                       | Block otherwise                                |
+| Transfer/deposit as immediate payment   | Allow under normal validation     | Block unless independently verifiable                                     | Block                                          |
+| Credit sale                             | Allow under central credit checks | Block by default                                                          | Block                                          |
+| Standard effective price                | Allow                             | Allow from versioned local snapshot                                       | Allow until snapshot expiry                    |
+| Manual or sensitive discount            | Allow with normal authorization   | Block unless backed by an unexpired one-use grant                         | Block                                          |
+| New customer or credit change           | Allow                             | Block                                                                     | Block                                          |
+| Void of an unsynchronized local sale    | Allow with audit and role checks  | Allow with local supervisor policy                                        | Restrict to supervisor                         |
+| Void of a synchronized or external sale | Normal central workflow           | Block                                                                     | Block                                          |
+| Shift close                             | Allow                             | Allow locally and mark pending sync                                       | Allow if backlog policy permits                |
+| Final branch daily close                | Allow                             | Local close may be pending; central finalization waits for reconciliation | Block if backlog/freshness limits are exceeded |
 
 This matrix is intentionally conservative. Credit, discounts, card terminal behavior, and maximum isolation time are business-risk decisions, not technical defaults.
 

@@ -1,19 +1,25 @@
-import type { ReactNode } from 'react'
-import { cn } from '../../lib/utils'
+import type { ReactNode } from "react";
+import { cn } from "../../lib/utils";
 
 type PageHeaderProps = {
-  actions?: ReactNode
-  eyebrow?: string
-  title: string
-  description?: string
-  className?: string
-}
+  actions?: ReactNode;
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  className?: string;
+};
 
-export function PageHeader({ actions, className, description, eyebrow, title }: PageHeaderProps) {
+export function PageHeader({
+  actions,
+  className,
+  description,
+  eyebrow,
+  title,
+}: PageHeaderProps) {
   return (
     <header
       className={cn(
-        'rounded-[1.75rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[0_18px_60px_rgba(17,24,21,0.08)] md:p-6',
+        "rounded-[1.75rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[0_18px_60px_rgba(17,24,21,0.08)] md:p-6",
         className,
       )}
     >
@@ -33,8 +39,12 @@ export function PageHeader({ actions, className, description, eyebrow, title }: 
             </p>
           )}
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        {actions && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {actions}
+          </div>
+        )}
       </div>
     </header>
-  )
+  );
 }

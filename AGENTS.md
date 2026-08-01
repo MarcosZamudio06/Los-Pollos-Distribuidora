@@ -23,6 +23,7 @@ Debes actuar como:
 
 La prioridad es mantener congruencia entre negocio real, arquitectura, base de datos, API, UI, pruebas y roadmap, pero sin cargar documentación global cuando la TASK no lo requiere.
 ---
+
 ### Fuentes canónicas
 
 Los specs canónicos viven en:
@@ -55,15 +56,16 @@ docs/documents.md
 docs/validation.md
 docs/open-decisions.md
 ```
+
 ---
 
 ## Regla de autoridad ante conflictos
 
 1. Si hay conflicto entre código y specs, prevalecen los specs.
 2. Si hay conflicto entre specs canónicos y documentos auxiliares, prevalecen los specs canónicos.
-4. Si hay conflicto entre roadmap, OpenSpec o archivos archivados, no implementar hasta reportar la contradicción.
-5. Si una regla de negocio no está documentada, no inventarla.
-6. Si una TASK requiere cambiar una regla de negocio, primero debe actualizarse el spec correspondiente.
+3. Si hay conflicto entre roadmap, OpenSpec o archivos archivados, no implementar hasta reportar la contradicción.
+4. Si una regla de negocio no está documentada, no inventarla.
+5. Si una TASK requiere cambiar una regla de negocio, primero debe actualizarse el spec correspondiente.
 
 ---
 
@@ -208,6 +210,7 @@ Si una TASK no cumple esto, reportar bloqueo documental antes de implementar.
 ## Definition of Done
 
 Marca la tarea como `COMPLETED` únicamente si:
+
 1. Se cumplió el objetivo exacto de la tarea.
 2. Se respetaron dependencias.
 3. Se respetaron los specs.
@@ -219,7 +222,7 @@ Marca la tarea como `COMPLETED` únicamente si:
 9. No se rompieron tareas anteriores.
 10. El reporte final sigue el formato obligatorio de `task.md`.
 11. Comandos a ejecutar para probarla la implementación por mí mismo.
-Si algo queda incompleto, no marques la tarea como completada.
+    Si algo queda incompleto, no marques la tarea como completada.
 
 ---
 
@@ -246,27 +249,36 @@ docs/validation.md
 ## Decisiones abiertas actuales
 
 Consultar solo cuando una TASK toque una decisión no cerrada:
+
 ```text
 docs/open-decisions.md
 ```
+
 ---
+
 ## Dependencias locales y node_modules
+
 El proyecto puede tener `node_modules` instalados para ejecutar pruebas y compilación.
 Está permitido ejecutar comandos npm que usen `node_modules` indirectamente, por ejemplo:
+
 ```bash
 npm --prefix backend test -- --runInBand
 npm --prefix backend run build
 npm --prefix backend exec tsc -- --noEmit
 npm --prefix frontend run build
 ```
+
 Está prohibido leer, abrir, listar, buscar o resumir archivos dentro de:
+
 ```text
 node_modules/
 backend/node_modules/
 frontend/node_modules/
 **/node_modules/
 ```
+
 No usar:
+
 ```bash
 cat node_modules/...
 sed node_modules/...
@@ -275,19 +287,27 @@ find . sin exclusiones
 ./node_modules/.bin/jest
 ./node_modules/.bin/tsc
 ```
+
 Para validar backend usar siempre:
+
 ```bash
 OPENSSL_CONF=/dev/null npm --prefix backend test -- --runInBand
 OPENSSL_CONF=/dev/null npm --prefix backend run build
 ```
+
 Para TypeScript usar:
+
 ```bash
 OPENSSL_CONF=/dev/null npm --prefix backend exec tsc -- --noEmit
 ```
+
 Si se necesita buscar archivos, excluir `node_modules`, `dist`, `.git`, `.next`, `coverage` y builds generados.
 ---
+
 ## Formato final recomendado para ejecución de TASK
+
 Al terminar, responde exactamente con este formato:
+
 ```text
 TASK-ID: [TASK-ID]
 Estado: COMPLETED / PARTIAL / BLOCKED / NEEDS_REVIEW
@@ -308,5 +328,7 @@ Comandos ejecutados:
 Riesgos o pendientes:
 - pendiente o riesgo
 ```
+
 ## Manera de trabajar
+
 Siempre trabaja de manera lineal, sin sub agentes

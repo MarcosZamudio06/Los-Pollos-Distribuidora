@@ -13,12 +13,12 @@ Permitir ejecución local y despliegue productivo mediante Docker.
 
 ## Puertos sugeridos
 
-| Servicio | Puerto interno | Puerto externo |
-|---|---:|---:|
-| Frontend | 3000 | 3000 |
-| Backend | 4000 | 4000 |
-| PostgreSQL | 5432 | 5432 |
-| Nginx | 80/443 | 80/443 |
+| Servicio   | Puerto interno | Puerto externo |
+| ---------- | -------------: | -------------: |
+| Frontend   |           3000 |           3000 |
+| Backend    |           4000 |           4000 |
+| PostgreSQL |           5432 |           5432 |
+| Nginx      |         80/443 |         80/443 |
 
 ## Ambientes
 

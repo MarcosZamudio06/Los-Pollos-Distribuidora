@@ -1,353 +1,353 @@
 - generic [ref=f1e2]:
-  - generic [ref=f1e43]:
-    - complementary "Navegación principal" [ref=f1e45]:
-      - link "Ir al inicio" [ref=f1e47] [cursor=pointer]:
-        - /url: /
-      - separator [ref=f1e50]
-      - navigation "Accesos por rol" [ref=f1e52]:
-        - generic [ref=f1e53]:
-          - link "Inicio" [ref=f1e54] [cursor=pointer]:
-            - /url: /
-          - link "Inventario" [ref=f1e60] [cursor=pointer]:
-            - /url: /inventory
-          - link "Compras" [ref=f1e67] [cursor=pointer]:
-            - /url: /purchases
-          - link "Proveedores" [ref=f1e76] [cursor=pointer]:
-            - /url: /purchases/suppliers
-          - link "Nueva compra" [ref=f1e83] [cursor=pointer]:
-            - /url: /purchases/new
-          - link "Planificar ruta" [ref=f1e89] [cursor=pointer]:
-            - /url: /delivery-routes/new
-          - link "Reparto / Rutas" [ref=f1e96] [cursor=pointer]:
-            - /url: /delivery-routes
-        - generic [ref=f1e103]:
-          - link "Ventas POS" [ref=f1e104] [cursor=pointer]:
-            - /url: /sales
-          - link "Historial de ventas" [ref=f1e111] [cursor=pointer]:
-            - /url: /sales/history
-          - link "Clientes" [ref=f1e118] [cursor=pointer]:
-            - /url: /customers
-        - generic [ref=f1e126]:
-          - link "Cuentas por cobrar" [ref=f1e127] [cursor=pointer]:
-            - /url: /accounts-receivable
-          - link "Solicitudes de facturación" [ref=f1e133] [cursor=pointer]:
-            - /url: /billing-requests
-          - link "Notas facturables" [ref=f1e140] [cursor=pointer]:
-            - /url: /billing/reportable-notes
-          - link "Remediaciones contables" [ref=f1e147] [cursor=pointer]:
-            - /url: /billing/remediations
-          - link "Cierre diario" [ref=f1e153] [cursor=pointer]:
-            - /url: /daily-close
-          - link "Reportes" [ref=f1e160] [cursor=pointer]:
-            - /url: /reports
-        - link "Empleados" [ref=f1e166] [cursor=pointer]:
-          - /url: /admin/employees
-      - link "Cerrar sesión" [ref=f1e173] [cursor=pointer]:
-        - /url: /logout
-    - generic [ref=f1e178]:
-      - banner [ref=f1e179]:
-        - generic [ref=f1e180]:
-          - button "Abrir menú lateral" [ref=f1e181]
-          - generic [ref=f1e183]:
-            - generic [ref=f1e184]:
-              - paragraph [ref=f1e185]: Punto de venta
-              - generic [ref=f1e186]: Datos actualizados
-            - heading "Ventas POS" [level=1] [ref=f1e189]
-          - generic [ref=f1e190]:
-            - link "Ventas POS" [ref=f1e191] [cursor=pointer]:
-              - /url: /sales
-            - link "Nueva compra" [ref=f1e196] [cursor=pointer]:
-              - /url: /purchases/new
-          - button "Buscar en el ERP" [ref=f1e200]
-      - main [ref=f1e204]:
-        - main [ref=f1e205]:
-          - generic [ref=f1e206]:
-            - generic "Estado operativo del POS" [ref=f1e207]:
-              - generic [ref=f1e208]:
-                - generic [ref=f1e212]: Ubicación operativa
-                - combobox "Ubicación operativa" [ref=f1e213]:
-                  - option "Selecciona ubicación"
-                  - option "Alvarado · ALV" [selected]
-                  - option "Asignación pendiente · LEGACY-EMPLOYEES"
-                  - option "Boca del Río · BDR"
-                  - option "Development Main Location · DEV-MAIN"
-                  - option "Punto de venta externo Mercado Zaragoza · POS-MZG"
-                  - option "Punto de venta externo Plaza Américas · POS-PLA"
-                  - option "Veracruz · VER"
-              - generic [ref=f1e214]: Caja sin abrir
-              - generic [ref=f1e422]: Development Admin
-              - generic [ref=f1e423]: 09:35 p.m.
-              - generic [ref=f1e220]: En línea
-              - button "Activar pantalla completa" [ref=f1e226]
-              - button "Nueva venta F9" [ref=f1e232]
-              - paragraph [ref=f1e233]: "Impresora: no configurada. Báscula: captura manual."
-            - region "Escáner y búsqueda" [ref=f1e234]:
-              - generic [ref=f1e235]:
-                - generic [ref=f1e236]: Búsqueda de productos por código de barras, SKU o nombre
-                - textbox "Búsqueda de productos por código de barras, SKU o nombre" [active] [ref=f1e237]:
-                  - /placeholder: Escanea código, SKU o busca producto
-                - generic: Listo · F2
-            - status [ref=f1e476]: "Agregado: Alitas"
-            - generic [ref=f1e238]:
-              - region "Resultados de productos" [ref=f1e239]:
-                - generic [ref=f1e240]:
-                  - generic [ref=f1e241]: Resultados
-                  - generic "Vistas rápidas de productos" [ref=f1e250]:
-                    - button "Frecuentes recientes" [ref=f1e251]
-                    - button "Todos" [pressed] [ref=f1e252]
-                  - table [ref=f1e255]:
-                    - caption [ref=f1e256]: Productos disponibles en la ubicación operativa seleccionada
-                    - rowgroup [ref=f1e257]:
-                      - row [ref=f1e424]:
-                        - columnheader "Producto" [ref=f1e259]
-                        - columnheader "SKU" [ref=f1e425]
-                        - columnheader "Unidad" [ref=f1e260]
-                        - columnheader "Precio" [ref=f1e261]
-                        - columnheader "Existencia" [ref=f1e262]
-                        - columnheader "Acción" [ref=f1e263]
-                    - rowgroup [ref=f1e427]:
-                      - row [ref=f1e428]:
-                        - cell [ref=f1e429]:
-                          - paragraph [ref=f1e430]: Alita
-                        - cell "POL-23123" [ref=f1e431]
-                        - cell "PIECE" [ref=f1e432]
-                        - cell "$1,239.00" [ref=f1e433]
-                        - cell "Sin stock" [ref=f1e434]
-                        - cell [ref=f1e435]:
-                          - button "Agregar" [disabled] [ref=f1e436]
-                      - row [ref=f1e437]:
-                        - cell [ref=f1e438]:
-                          - paragraph [ref=f1e439]: Alitas
-                        - cell "213" [ref=f1e440]
-                        - cell "KG" [ref=f1e441]
-                        - cell "$21.00" [ref=f1e442]
-                        - cell "66 kg · 0 pz" [ref=f1e443]
-                        - cell [ref=f1e444]:
-                          - button "Agregar" [ref=f1e445]
-                      - row [ref=f1e446]:
-                        - cell [ref=f1e447]:
-                          - paragraph [ref=f1e448]: Chicken breast by kg
-                          - paragraph [ref=f1e449]: Stock bajo
-                        - cell "DEV-BREAST-KG" [ref=f1e450]
-                        - cell "KG" [ref=f1e451]
-                        - cell "$95.00" [ref=f1e452]
-                        - cell "4.9 kg · 0 pz" [ref=f1e453]
-                        - cell [ref=f1e454]:
-                          - button "Agregar" [ref=f1e455]
-                      - row [ref=f1e456]:
-                        - cell [ref=f1e457]:
-                          - paragraph [ref=f1e458]: Chicken wings by piece
-                          - paragraph [ref=f1e459]: Stock bajo
-                        - cell "DEV-WINGS-PIECE" [ref=f1e460]
-                        - cell "PIECE" [ref=f1e461]
-                        - cell "$12.00" [ref=f1e462]
-                        - cell "0 kg · 1710 pz" [ref=f1e463]
-                        - cell [ref=f1e464]:
-                          - button "Agregar" [ref=f1e465]
-                      - row [ref=f1e466]:
-                        - cell [ref=f1e467]:
-                          - paragraph [ref=f1e468]: Whole chicken by kg
-                          - paragraph [ref=f1e469]: Stock bajo
-                        - cell "DEV-WHOLE-CHICKEN-KG" [ref=f1e470]
-                        - cell "KG" [ref=f1e471]
-                        - cell "$58.00" [ref=f1e472]
-                        - cell "1.5 kg · 0 pz" [ref=f1e473]
-                        - cell [ref=f1e474]:
-                          - button "Agregar" [ref=f1e475]
-              - region "Carrito y captura de cantidades" [ref=f1e264]:
-                - generic [ref=f1e265]:
-                  - generic [ref=f1e267]:
-                    - heading "Carrito" [level=2] [ref=f1e268]
-                    - generic [ref=f1e269]: 1 en carrito
-                  - table [ref=f1e478]:
-                    - caption [ref=f1e479]: Partidas activas de la venta
-                    - rowgroup [ref=f1e480]:
-                      - row [ref=f1e481]:
-                        - columnheader "Producto" [ref=f1e482]
-                        - columnheader "Cantidad" [ref=f1e483]
-                        - columnheader "Precio" [ref=f1e484]
-                        - columnheader "Importe" [ref=f1e485]
-                        - columnheader "Acciones" [ref=f1e486]
-                    - rowgroup [ref=f1e488]:
-                      - row [selected] [ref=f1e489]:
-                        - cell [ref=f1e490]:
-                          - paragraph [ref=f1e491]: Alitas
-                          - paragraph [ref=f1e492]: KG
-                        - cell [ref=f1e493]:
-                          - generic [ref=f1e495]:
-                            - text: Kg
-                            - spinbutton "Kilos capturados de Alitas" [ref=f1e496]: "1"
-                        - cell "$21.00" [ref=f1e497]
-                        - cell "$21.00" [ref=f1e498]
-                        - cell [ref=f1e499]:
-                          - button "Eliminar Alitas" [ref=f1e500]
-                - region "Teclado numérico" [ref=f1e505]:
-                  - generic [ref=f1e506]:
-                    - generic [ref=f1e507]:
-                      - paragraph [ref=f1e508]: Entrada rápida
-                      - heading "Alitas · kilos" [level=3] [ref=f1e509]
-                    - status [ref=f1e510]: "1"
-                  - generic [ref=f1e511]:
-                    - button "7" [ref=f1e512]
-                    - button "8" [ref=f1e513]
-                    - button "9" [ref=f1e514]
-                    - button "4" [ref=f1e515]
-                    - button "5" [ref=f1e516]
-                    - button "6" [ref=f1e517]
-                    - button "1" [ref=f1e518]
-                    - button "2" [ref=f1e519]
-                    - button "3" [ref=f1e520]
-                    - button "." [ref=f1e521]
-                    - button "0" [ref=f1e522]
-                    - button "Borrar último dígito" [ref=f1e523]: ←
-                  - button "Limpiar entrada" [ref=f1e524]
-            - group [ref=f1e275]:
-              - generic "Opciones de venta" [ref=f1e276] [cursor=pointer]
-              - option "Mostrador" [selected]
-              - option "Institucional"
-              - option "Mayoreo"
-              - option "Ticket de báscula"
-              - option "Nota sencilla" [selected]
-              - option "Nota grande"
-              - option "Comprobante interno"
-            - generic "Confirmación de venta" [ref=f1e277]:
-              - generic [ref=f1e278]:
-                - generic [ref=f1e279]:
-                  - generic [ref=f1e280]:
-                    - generic [ref=f1e281]:
-                      - paragraph [ref=f1e282]: Cliente
-                      - heading "Cliente" [level=2] [ref=f1e283]
-                    - generic [ref=f1e284]: F4
-                  - textbox "Buscar cliente registrado" [ref=f1e285]:
-                    - /placeholder: Público general o cliente registrado
-                  - generic [ref=f1e286]:
-                    - button "Ana Torres Advertencia de crédito RETAIL · Disponible $1,323.60" [ref=f1e287]:
-                      - generic [ref=f1e288]:
-                        - generic [ref=f1e289]: Ana Torres
-                        - generic [ref=f1e290]: Advertencia de crédito
-                      - generic [ref=f1e291]: RETAIL · Disponible $1,323.60
-                    - button "Aves México Crédito bloqueado WHOLESALE · Disponible $2,742.20" [ref=f1e292]:
-                      - generic [ref=f1e293]:
-                        - generic [ref=f1e294]: Aves México
-                        - generic [ref=f1e295]: Crédito bloqueado
-                      - generic [ref=f1e296]: WHOLESALE · Disponible $2,742.20
-                    - button "Aves del Bajío Crédito bloqueado WHOLESALE · Disponible $16,975.95" [ref=f1e297]:
-                      - generic [ref=f1e298]:
-                        - generic [ref=f1e299]: Aves del Bajío
-                        - generic [ref=f1e300]: Crédito bloqueado
-                      - generic [ref=f1e301]: WHOLESALE · Disponible $16,975.95
-                    - button "Carmen Ruíz Crédito bloqueado RETAIL · Disponible $1,421.20" [ref=f1e302]:
-                      - generic [ref=f1e303]:
-                        - generic [ref=f1e304]: Carmen Ruíz
-                        - generic [ref=f1e305]: Crédito bloqueado
-                      - generic [ref=f1e306]: RETAIL · Disponible $1,421.20
-                    - button "Colegio Cervantes Crédito disponible INSTITUTIONAL · Disponible $24,479.38" [ref=f1e307]:
-                      - generic [ref=f1e308]:
-                        - generic [ref=f1e309]: Colegio Cervantes
-                        - generic [ref=f1e310]: Crédito disponible
-                      - generic [ref=f1e311]: INSTITUTIONAL · Disponible $24,479.38
-                    - button "Comedor Universitario UV Crédito bloqueado INSTITUTIONAL · Disponible $53,809.38" [ref=f1e312]:
-                      - generic [ref=f1e313]:
-                        - generic [ref=f1e314]: Comedor Universitario UV
-                        - generic [ref=f1e315]: Crédito bloqueado
-                      - generic [ref=f1e316]: INSTITUTIONAL · Disponible $53,809.38
-                    - button "Distribuciones del Puerto Crédito bloqueado WHOLESALE · Disponible $39,107.30" [ref=f1e317]:
-                      - generic [ref=f1e318]:
-                        - generic [ref=f1e319]: Distribuciones del Puerto
-                        - generic [ref=f1e320]: Crédito bloqueado
-                      - generic [ref=f1e321]: WHOLESALE · Disponible $39,107.30
-                    - button "Escuela Secundaria 10 Crédito bloqueado INSTITUTIONAL · Disponible $75,161.50" [ref=f1e322]:
-                      - generic [ref=f1e323]:
-                        - generic [ref=f1e324]: Escuela Secundaria 10
-                        - generic [ref=f1e325]: Crédito bloqueado
-                      - generic [ref=f1e326]: INSTITUTIONAL · Disponible $75,161.50
-                    - button "Fernanda Velázquez Advertencia de crédito RETAIL · Disponible $0.00" [ref=f1e327]:
-                      - generic [ref=f1e328]:
-                        - generic [ref=f1e329]: Fernanda Velázquez
-                        - generic [ref=f1e330]: Advertencia de crédito
-                      - generic [ref=f1e331]: RETAIL · Disponible $0.00
-                    - button "Gabriel Mora Crédito bloqueado RETAIL · Disponible $636.80" [ref=f1e332]:
-                      - generic [ref=f1e333]:
-                        - generic [ref=f1e334]: Gabriel Mora
-                        - generic [ref=f1e335]: Crédito bloqueado
-                      - generic [ref=f1e336]: RETAIL · Disponible $636.80
-                    - button "Hospital Regional Veracruz Crédito bloqueado INSTITUTIONAL · Disponible $109,842.32" [ref=f1e337]:
-                      - generic [ref=f1e338]:
-                        - generic [ref=f1e339]: Hospital Regional Veracruz
-                        - generic [ref=f1e340]: Crédito bloqueado
-                      - generic [ref=f1e341]: INSTITUTIONAL · Disponible $109,842.32
-                    - button "José Hernández Advertencia de crédito RETAIL · Disponible $1,111.68" [ref=f1e342]:
-                      - generic [ref=f1e343]:
-                        - generic [ref=f1e344]: José Hernández
-                        - generic [ref=f1e345]: Advertencia de crédito
-                      - generic [ref=f1e346]: RETAIL · Disponible $1,111.68
-                    - button "Juan Pérez Advertencia de crédito RETAIL · Disponible $2,349.60" [ref=f1e347]:
-                      - generic [ref=f1e348]:
-                        - generic [ref=f1e349]: Juan Pérez
-                        - generic [ref=f1e350]: Advertencia de crédito
-                      - generic [ref=f1e351]: RETAIL · Disponible $2,349.60
-                    - button "Luis Ortiz Advertencia de crédito RETAIL · Disponible $0.00" [ref=f1e352]:
-                      - generic [ref=f1e353]:
-                        - generic [ref=f1e354]: Luis Ortiz
-                        - generic [ref=f1e355]: Advertencia de crédito
-                      - generic [ref=f1e356]: RETAIL · Disponible $0.00
-                    - button "María López Advertencia de crédito RETAIL · Disponible $2,582.44" [ref=f1e357]:
-                      - generic [ref=f1e358]:
-                        - generic [ref=f1e359]: María López
-                        - generic [ref=f1e360]: Advertencia de crédito
-                      - generic [ref=f1e361]: RETAIL · Disponible $2,582.44
-                    - button "Pablo Castro Crédito disponible RETAIL · Disponible $1,200.00" [ref=f1e362]:
-                      - generic [ref=f1e363]:
-                        - generic [ref=f1e364]: Pablo Castro
-                        - generic [ref=f1e365]: Crédito disponible
-                      - generic [ref=f1e366]: RETAIL · Disponible $1,200.00
-                    - button "Pedro Díaz Advertencia de crédito RETAIL · Disponible $1,875.36" [ref=f1e367]:
-                      - generic [ref=f1e368]:
-                        - generic [ref=f1e369]: Pedro Díaz
-                        - generic [ref=f1e370]: Advertencia de crédito
-                      - generic [ref=f1e371]: RETAIL · Disponible $1,875.36
-                    - button "Pollería La Gallina Feliz Crédito bloqueado WHOLESALE · Disponible $28,323.29" [ref=f1e372]:
-                      - generic [ref=f1e373]:
-                        - generic [ref=f1e374]: Pollería La Gallina Feliz
-                        - generic [ref=f1e375]: Crédito bloqueado
-                      - generic [ref=f1e376]: WHOLESALE · Disponible $28,323.29
-                    - button "Pollo y Más Crédito bloqueado WHOLESALE · Disponible $13,158.83" [ref=f1e377]:
-                      - generic [ref=f1e378]:
-                        - generic [ref=f1e379]: Pollo y Más
-                        - generic [ref=f1e380]: Crédito bloqueado
-                      - generic [ref=f1e381]: WHOLESALE · Disponible $13,158.83
-                    - button "Rosa Martínez Advertencia de crédito RETAIL · Disponible $1,385.52" [ref=f1e382]:
-                      - generic [ref=f1e383]:
-                        - generic [ref=f1e384]: Rosa Martínez
-                        - generic [ref=f1e385]: Advertencia de crédito
-                      - generic [ref=f1e386]: RETAIL · Disponible $1,385.52
-                - generic [ref=f1e387]:
-                  - generic [ref=f1e388]:
-                    - generic [ref=f1e389]:
-                      - paragraph [ref=f1e390]: Condición de pago
-                      - heading "Contado / Crédito" [level=2] [ref=f1e391]
-                      - generic [ref=f1e392]: Tipo de venta y pago
-                    - generic [ref=f1e393]: F6
-                  - generic [ref=f1e394]:
-                    - button "Venta de contado" [pressed] [ref=f1e395]
-                    - button "Venta a crédito" [ref=f1e396]
-                  - generic [ref=f1e397]: Venta de contado Venta a crédito
-                - generic [ref=f1e398]:
-                  - generic [ref=f1e399]:
-                    - generic [ref=f1e400]:
-                      - paragraph [ref=f1e401]: Pago
-                      - heading "Pago recibido" [level=2] [ref=f1e402]
-                    - generic [ref=f1e403]: $0.00 / $21.00
-                  - button "Agregar pago" [ref=f1e405]
-                - generic [ref=f1e406]:
-                  - generic [ref=f1e407]:
-                    - generic [ref=f1e409]:
-                      - paragraph [ref=f1e410]: Total
-                      - status [ref=f1e411]: $21.00
-                      - generic [ref=f1e412]: Total en vivo Resumen sticky Resumen de la venta
-                    - group [ref=f1e416]:
-                      - generic "Ver validación · 1 partidas" [ref=f1e525] [cursor=pointer]
-                  - generic [ref=f1e418]:
-                    - button "Crédito no disponible" [disabled] [ref=f1e526]
-                    - status [ref=f1e420]: La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.
-  - region "Notifications alt+T"
+    - generic [ref=f1e43]:
+        - complementary "Navegación principal" [ref=f1e45]:
+            - link "Ir al inicio" [ref=f1e47] [cursor=pointer]:
+                - /url: /
+            - separator [ref=f1e50]
+            - navigation "Accesos por rol" [ref=f1e52]:
+                - generic [ref=f1e53]:
+                    - link "Inicio" [ref=f1e54] [cursor=pointer]:
+                        - /url: /
+                    - link "Inventario" [ref=f1e60] [cursor=pointer]:
+                        - /url: /inventory
+                    - link "Compras" [ref=f1e67] [cursor=pointer]:
+                        - /url: /purchases
+                    - link "Proveedores" [ref=f1e76] [cursor=pointer]:
+                        - /url: /purchases/suppliers
+                    - link "Nueva compra" [ref=f1e83] [cursor=pointer]:
+                        - /url: /purchases/new
+                    - link "Planificar ruta" [ref=f1e89] [cursor=pointer]:
+                        - /url: /delivery-routes/new
+                    - link "Reparto / Rutas" [ref=f1e96] [cursor=pointer]:
+                        - /url: /delivery-routes
+                - generic [ref=f1e103]:
+                    - link "Ventas POS" [ref=f1e104] [cursor=pointer]:
+                        - /url: /sales
+                    - link "Historial de ventas" [ref=f1e111] [cursor=pointer]:
+                        - /url: /sales/history
+                    - link "Clientes" [ref=f1e118] [cursor=pointer]:
+                        - /url: /customers
+                - generic [ref=f1e126]:
+                    - link "Cuentas por cobrar" [ref=f1e127] [cursor=pointer]:
+                        - /url: /accounts-receivable
+                    - link "Solicitudes de facturación" [ref=f1e133] [cursor=pointer]:
+                        - /url: /billing-requests
+                    - link "Notas facturables" [ref=f1e140] [cursor=pointer]:
+                        - /url: /billing/reportable-notes
+                    - link "Remediaciones contables" [ref=f1e147] [cursor=pointer]:
+                        - /url: /billing/remediations
+                    - link "Cierre diario" [ref=f1e153] [cursor=pointer]:
+                        - /url: /daily-close
+                    - link "Reportes" [ref=f1e160] [cursor=pointer]:
+                        - /url: /reports
+                - link "Empleados" [ref=f1e166] [cursor=pointer]:
+                    - /url: /admin/employees
+            - link "Cerrar sesión" [ref=f1e173] [cursor=pointer]:
+                - /url: /logout
+        - generic [ref=f1e178]:
+            - banner [ref=f1e179]:
+                - generic [ref=f1e180]:
+                    - button "Abrir menú lateral" [ref=f1e181]
+                    - generic [ref=f1e183]:
+                        - generic [ref=f1e184]:
+                            - paragraph [ref=f1e185]: Punto de venta
+                            - generic [ref=f1e186]: Datos actualizados
+                        - heading "Ventas POS" [level=1] [ref=f1e189]
+                    - generic [ref=f1e190]:
+                        - link "Ventas POS" [ref=f1e191] [cursor=pointer]:
+                            - /url: /sales
+                        - link "Nueva compra" [ref=f1e196] [cursor=pointer]:
+                            - /url: /purchases/new
+                    - button "Buscar en el ERP" [ref=f1e200]
+            - main [ref=f1e204]:
+                - main [ref=f1e205]:
+                    - generic [ref=f1e206]:
+                        - generic "Estado operativo del POS" [ref=f1e207]:
+                            - generic [ref=f1e208]:
+                                - generic [ref=f1e212]: Ubicación operativa
+                                - combobox "Ubicación operativa" [ref=f1e213]:
+                                    - option "Selecciona ubicación"
+                                    - option "Alvarado · ALV" [selected]
+                                    - option "Asignación pendiente · LEGACY-EMPLOYEES"
+                                    - option "Boca del Río · BDR"
+                                    - option "Development Main Location · DEV-MAIN"
+                                    - option "Punto de venta externo Mercado Zaragoza · POS-MZG"
+                                    - option "Punto de venta externo Plaza Américas · POS-PLA"
+                                    - option "Veracruz · VER"
+                            - generic [ref=f1e214]: Caja sin abrir
+                            - generic [ref=f1e422]: Development Admin
+                            - generic [ref=f1e423]: 09:35 p.m.
+                            - generic [ref=f1e220]: En línea
+                            - button "Activar pantalla completa" [ref=f1e226]
+                            - button "Nueva venta F9" [ref=f1e232]
+                            - paragraph [ref=f1e233]: "Impresora: no configurada. Báscula: captura manual."
+                        - region "Escáner y búsqueda" [ref=f1e234]:
+                            - generic [ref=f1e235]:
+                                - generic [ref=f1e236]: Búsqueda de productos por código de barras, SKU o nombre
+                                - textbox "Búsqueda de productos por código de barras, SKU o nombre" [active] [ref=f1e237]:
+                                    - /placeholder: Escanea código, SKU o busca producto
+                                - generic: Listo · F2
+                        - status [ref=f1e476]: "Agregado: Alitas"
+                        - generic [ref=f1e238]:
+                            - region "Resultados de productos" [ref=f1e239]:
+                                - generic [ref=f1e240]:
+                                    - generic [ref=f1e241]: Resultados
+                                    - generic "Vistas rápidas de productos" [ref=f1e250]:
+                                        - button "Frecuentes recientes" [ref=f1e251]
+                                        - button "Todos" [pressed] [ref=f1e252]
+                                    - table [ref=f1e255]:
+                                        - caption [ref=f1e256]: Productos disponibles en la ubicación operativa seleccionada
+                                        - rowgroup [ref=f1e257]:
+                                            - row [ref=f1e424]:
+                                                - columnheader "Producto" [ref=f1e259]
+                                                - columnheader "SKU" [ref=f1e425]
+                                                - columnheader "Unidad" [ref=f1e260]
+                                                - columnheader "Precio" [ref=f1e261]
+                                                - columnheader "Existencia" [ref=f1e262]
+                                                - columnheader "Acción" [ref=f1e263]
+                                        - rowgroup [ref=f1e427]:
+                                            - row [ref=f1e428]:
+                                                - cell [ref=f1e429]:
+                                                    - paragraph [ref=f1e430]: Alita
+                                                - cell "POL-23123" [ref=f1e431]
+                                                - cell "PIECE" [ref=f1e432]
+                                                - cell "$1,239.00" [ref=f1e433]
+                                                - cell "Sin stock" [ref=f1e434]
+                                                - cell [ref=f1e435]:
+                                                    - button "Agregar" [disabled] [ref=f1e436]
+                                            - row [ref=f1e437]:
+                                                - cell [ref=f1e438]:
+                                                    - paragraph [ref=f1e439]: Alitas
+                                                - cell "213" [ref=f1e440]
+                                                - cell "KG" [ref=f1e441]
+                                                - cell "$21.00" [ref=f1e442]
+                                                - cell "66 kg · 0 pz" [ref=f1e443]
+                                                - cell [ref=f1e444]:
+                                                    - button "Agregar" [ref=f1e445]
+                                            - row [ref=f1e446]:
+                                                - cell [ref=f1e447]:
+                                                    - paragraph [ref=f1e448]: Chicken breast by kg
+                                                    - paragraph [ref=f1e449]: Stock bajo
+                                                - cell "DEV-BREAST-KG" [ref=f1e450]
+                                                - cell "KG" [ref=f1e451]
+                                                - cell "$95.00" [ref=f1e452]
+                                                - cell "4.9 kg · 0 pz" [ref=f1e453]
+                                                - cell [ref=f1e454]:
+                                                    - button "Agregar" [ref=f1e455]
+                                            - row [ref=f1e456]:
+                                                - cell [ref=f1e457]:
+                                                    - paragraph [ref=f1e458]: Chicken wings by piece
+                                                    - paragraph [ref=f1e459]: Stock bajo
+                                                - cell "DEV-WINGS-PIECE" [ref=f1e460]
+                                                - cell "PIECE" [ref=f1e461]
+                                                - cell "$12.00" [ref=f1e462]
+                                                - cell "0 kg · 1710 pz" [ref=f1e463]
+                                                - cell [ref=f1e464]:
+                                                    - button "Agregar" [ref=f1e465]
+                                            - row [ref=f1e466]:
+                                                - cell [ref=f1e467]:
+                                                    - paragraph [ref=f1e468]: Whole chicken by kg
+                                                    - paragraph [ref=f1e469]: Stock bajo
+                                                - cell "DEV-WHOLE-CHICKEN-KG" [ref=f1e470]
+                                                - cell "KG" [ref=f1e471]
+                                                - cell "$58.00" [ref=f1e472]
+                                                - cell "1.5 kg · 0 pz" [ref=f1e473]
+                                                - cell [ref=f1e474]:
+                                                    - button "Agregar" [ref=f1e475]
+                            - region "Carrito y captura de cantidades" [ref=f1e264]:
+                                - generic [ref=f1e265]:
+                                    - generic [ref=f1e267]:
+                                        - heading "Carrito" [level=2] [ref=f1e268]
+                                        - generic [ref=f1e269]: 1 en carrito
+                                    - table [ref=f1e478]:
+                                        - caption [ref=f1e479]: Partidas activas de la venta
+                                        - rowgroup [ref=f1e480]:
+                                            - row [ref=f1e481]:
+                                                - columnheader "Producto" [ref=f1e482]
+                                                - columnheader "Cantidad" [ref=f1e483]
+                                                - columnheader "Precio" [ref=f1e484]
+                                                - columnheader "Importe" [ref=f1e485]
+                                                - columnheader "Acciones" [ref=f1e486]
+                                        - rowgroup [ref=f1e488]:
+                                            - row [selected] [ref=f1e489]:
+                                                - cell [ref=f1e490]:
+                                                    - paragraph [ref=f1e491]: Alitas
+                                                    - paragraph [ref=f1e492]: KG
+                                                - cell [ref=f1e493]:
+                                                    - generic [ref=f1e495]:
+                                                        - text: Kg
+                                                        - spinbutton "Kilos capturados de Alitas" [ref=f1e496]: "1"
+                                                - cell "$21.00" [ref=f1e497]
+                                                - cell "$21.00" [ref=f1e498]
+                                                - cell [ref=f1e499]:
+                                                    - button "Eliminar Alitas" [ref=f1e500]
+                                - region "Teclado numérico" [ref=f1e505]:
+                                    - generic [ref=f1e506]:
+                                        - generic [ref=f1e507]:
+                                            - paragraph [ref=f1e508]: Entrada rápida
+                                            - heading "Alitas · kilos" [level=3] [ref=f1e509]
+                                        - status [ref=f1e510]: "1"
+                                    - generic [ref=f1e511]:
+                                        - button "7" [ref=f1e512]
+                                        - button "8" [ref=f1e513]
+                                        - button "9" [ref=f1e514]
+                                        - button "4" [ref=f1e515]
+                                        - button "5" [ref=f1e516]
+                                        - button "6" [ref=f1e517]
+                                        - button "1" [ref=f1e518]
+                                        - button "2" [ref=f1e519]
+                                        - button "3" [ref=f1e520]
+                                        - button "." [ref=f1e521]
+                                        - button "0" [ref=f1e522]
+                                        - button "Borrar último dígito" [ref=f1e523]: ←
+                                    - button "Limpiar entrada" [ref=f1e524]
+                        - group [ref=f1e275]:
+                            - generic "Opciones de venta" [ref=f1e276] [cursor=pointer]
+                            - option "Mostrador" [selected]
+                            - option "Institucional"
+                            - option "Mayoreo"
+                            - option "Ticket de báscula"
+                            - option "Nota sencilla" [selected]
+                            - option "Nota grande"
+                            - option "Comprobante interno"
+                        - generic "Confirmación de venta" [ref=f1e277]:
+                            - generic [ref=f1e278]:
+                                - generic [ref=f1e279]:
+                                    - generic [ref=f1e280]:
+                                        - generic [ref=f1e281]:
+                                            - paragraph [ref=f1e282]: Cliente
+                                            - heading "Cliente" [level=2] [ref=f1e283]
+                                        - generic [ref=f1e284]: F4
+                                    - textbox "Buscar cliente registrado" [ref=f1e285]:
+                                        - /placeholder: Público general o cliente registrado
+                                    - generic [ref=f1e286]:
+                                        - button "Ana Torres Advertencia de crédito RETAIL · Disponible $1,323.60" [ref=f1e287]:
+                                            - generic [ref=f1e288]:
+                                                - generic [ref=f1e289]: Ana Torres
+                                                - generic [ref=f1e290]: Advertencia de crédito
+                                            - generic [ref=f1e291]: RETAIL · Disponible $1,323.60
+                                        - button "Aves México Crédito bloqueado WHOLESALE · Disponible $2,742.20" [ref=f1e292]:
+                                            - generic [ref=f1e293]:
+                                                - generic [ref=f1e294]: Aves México
+                                                - generic [ref=f1e295]: Crédito bloqueado
+                                            - generic [ref=f1e296]: WHOLESALE · Disponible $2,742.20
+                                        - button "Aves del Bajío Crédito bloqueado WHOLESALE · Disponible $16,975.95" [ref=f1e297]:
+                                            - generic [ref=f1e298]:
+                                                - generic [ref=f1e299]: Aves del Bajío
+                                                - generic [ref=f1e300]: Crédito bloqueado
+                                            - generic [ref=f1e301]: WHOLESALE · Disponible $16,975.95
+                                        - button "Carmen Ruíz Crédito bloqueado RETAIL · Disponible $1,421.20" [ref=f1e302]:
+                                            - generic [ref=f1e303]:
+                                                - generic [ref=f1e304]: Carmen Ruíz
+                                                - generic [ref=f1e305]: Crédito bloqueado
+                                            - generic [ref=f1e306]: RETAIL · Disponible $1,421.20
+                                        - button "Colegio Cervantes Crédito disponible INSTITUTIONAL · Disponible $24,479.38" [ref=f1e307]:
+                                            - generic [ref=f1e308]:
+                                                - generic [ref=f1e309]: Colegio Cervantes
+                                                - generic [ref=f1e310]: Crédito disponible
+                                            - generic [ref=f1e311]: INSTITUTIONAL · Disponible $24,479.38
+                                        - button "Comedor Universitario UV Crédito bloqueado INSTITUTIONAL · Disponible $53,809.38" [ref=f1e312]:
+                                            - generic [ref=f1e313]:
+                                                - generic [ref=f1e314]: Comedor Universitario UV
+                                                - generic [ref=f1e315]: Crédito bloqueado
+                                            - generic [ref=f1e316]: INSTITUTIONAL · Disponible $53,809.38
+                                        - button "Distribuciones del Puerto Crédito bloqueado WHOLESALE · Disponible $39,107.30" [ref=f1e317]:
+                                            - generic [ref=f1e318]:
+                                                - generic [ref=f1e319]: Distribuciones del Puerto
+                                                - generic [ref=f1e320]: Crédito bloqueado
+                                            - generic [ref=f1e321]: WHOLESALE · Disponible $39,107.30
+                                        - button "Escuela Secundaria 10 Crédito bloqueado INSTITUTIONAL · Disponible $75,161.50" [ref=f1e322]:
+                                            - generic [ref=f1e323]:
+                                                - generic [ref=f1e324]: Escuela Secundaria 10
+                                                - generic [ref=f1e325]: Crédito bloqueado
+                                            - generic [ref=f1e326]: INSTITUTIONAL · Disponible $75,161.50
+                                        - button "Fernanda Velázquez Advertencia de crédito RETAIL · Disponible $0.00" [ref=f1e327]:
+                                            - generic [ref=f1e328]:
+                                                - generic [ref=f1e329]: Fernanda Velázquez
+                                                - generic [ref=f1e330]: Advertencia de crédito
+                                            - generic [ref=f1e331]: RETAIL · Disponible $0.00
+                                        - button "Gabriel Mora Crédito bloqueado RETAIL · Disponible $636.80" [ref=f1e332]:
+                                            - generic [ref=f1e333]:
+                                                - generic [ref=f1e334]: Gabriel Mora
+                                                - generic [ref=f1e335]: Crédito bloqueado
+                                            - generic [ref=f1e336]: RETAIL · Disponible $636.80
+                                        - button "Hospital Regional Veracruz Crédito bloqueado INSTITUTIONAL · Disponible $109,842.32" [ref=f1e337]:
+                                            - generic [ref=f1e338]:
+                                                - generic [ref=f1e339]: Hospital Regional Veracruz
+                                                - generic [ref=f1e340]: Crédito bloqueado
+                                            - generic [ref=f1e341]: INSTITUTIONAL · Disponible $109,842.32
+                                        - button "José Hernández Advertencia de crédito RETAIL · Disponible $1,111.68" [ref=f1e342]:
+                                            - generic [ref=f1e343]:
+                                                - generic [ref=f1e344]: José Hernández
+                                                - generic [ref=f1e345]: Advertencia de crédito
+                                            - generic [ref=f1e346]: RETAIL · Disponible $1,111.68
+                                        - button "Juan Pérez Advertencia de crédito RETAIL · Disponible $2,349.60" [ref=f1e347]:
+                                            - generic [ref=f1e348]:
+                                                - generic [ref=f1e349]: Juan Pérez
+                                                - generic [ref=f1e350]: Advertencia de crédito
+                                            - generic [ref=f1e351]: RETAIL · Disponible $2,349.60
+                                        - button "Luis Ortiz Advertencia de crédito RETAIL · Disponible $0.00" [ref=f1e352]:
+                                            - generic [ref=f1e353]:
+                                                - generic [ref=f1e354]: Luis Ortiz
+                                                - generic [ref=f1e355]: Advertencia de crédito
+                                            - generic [ref=f1e356]: RETAIL · Disponible $0.00
+                                        - button "María López Advertencia de crédito RETAIL · Disponible $2,582.44" [ref=f1e357]:
+                                            - generic [ref=f1e358]:
+                                                - generic [ref=f1e359]: María López
+                                                - generic [ref=f1e360]: Advertencia de crédito
+                                            - generic [ref=f1e361]: RETAIL · Disponible $2,582.44
+                                        - button "Pablo Castro Crédito disponible RETAIL · Disponible $1,200.00" [ref=f1e362]:
+                                            - generic [ref=f1e363]:
+                                                - generic [ref=f1e364]: Pablo Castro
+                                                - generic [ref=f1e365]: Crédito disponible
+                                            - generic [ref=f1e366]: RETAIL · Disponible $1,200.00
+                                        - button "Pedro Díaz Advertencia de crédito RETAIL · Disponible $1,875.36" [ref=f1e367]:
+                                            - generic [ref=f1e368]:
+                                                - generic [ref=f1e369]: Pedro Díaz
+                                                - generic [ref=f1e370]: Advertencia de crédito
+                                            - generic [ref=f1e371]: RETAIL · Disponible $1,875.36
+                                        - button "Pollería La Gallina Feliz Crédito bloqueado WHOLESALE · Disponible $28,323.29" [ref=f1e372]:
+                                            - generic [ref=f1e373]:
+                                                - generic [ref=f1e374]: Pollería La Gallina Feliz
+                                                - generic [ref=f1e375]: Crédito bloqueado
+                                            - generic [ref=f1e376]: WHOLESALE · Disponible $28,323.29
+                                        - button "Pollo y Más Crédito bloqueado WHOLESALE · Disponible $13,158.83" [ref=f1e377]:
+                                            - generic [ref=f1e378]:
+                                                - generic [ref=f1e379]: Pollo y Más
+                                                - generic [ref=f1e380]: Crédito bloqueado
+                                            - generic [ref=f1e381]: WHOLESALE · Disponible $13,158.83
+                                        - button "Rosa Martínez Advertencia de crédito RETAIL · Disponible $1,385.52" [ref=f1e382]:
+                                            - generic [ref=f1e383]:
+                                                - generic [ref=f1e384]: Rosa Martínez
+                                                - generic [ref=f1e385]: Advertencia de crédito
+                                            - generic [ref=f1e386]: RETAIL · Disponible $1,385.52
+                                - generic [ref=f1e387]:
+                                    - generic [ref=f1e388]:
+                                        - generic [ref=f1e389]:
+                                            - paragraph [ref=f1e390]: Condición de pago
+                                            - heading "Contado / Crédito" [level=2] [ref=f1e391]
+                                            - generic [ref=f1e392]: Tipo de venta y pago
+                                        - generic [ref=f1e393]: F6
+                                    - generic [ref=f1e394]:
+                                        - button "Venta de contado" [pressed] [ref=f1e395]
+                                        - button "Venta a crédito" [ref=f1e396]
+                                    - generic [ref=f1e397]: Venta de contado Venta a crédito
+                                - generic [ref=f1e398]:
+                                    - generic [ref=f1e399]:
+                                        - generic [ref=f1e400]:
+                                            - paragraph [ref=f1e401]: Pago
+                                            - heading "Pago recibido" [level=2] [ref=f1e402]
+                                        - generic [ref=f1e403]: $0.00 / $21.00
+                                    - button "Agregar pago" [ref=f1e405]
+                                - generic [ref=f1e406]:
+                                    - generic [ref=f1e407]:
+                                        - generic [ref=f1e409]:
+                                            - paragraph [ref=f1e410]: Total
+                                            - status [ref=f1e411]: $21.00
+                                            - generic [ref=f1e412]: Total en vivo Resumen sticky Resumen de la venta
+                                        - group [ref=f1e416]:
+                                            - generic "Ver validación · 1 partidas" [ref=f1e525] [cursor=pointer]
+                                    - generic [ref=f1e418]:
+                                        - button "Crédito no disponible" [disabled] [ref=f1e526]
+                                        - status [ref=f1e420]: La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.
+    - region "Notifications alt+T"

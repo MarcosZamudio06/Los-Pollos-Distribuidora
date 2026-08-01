@@ -224,19 +224,19 @@ El cierre diario de punto de venta es distinto de `RouteSettlement`: el primero 
 
 ### 7.1 Glosario operativo
 
-| Término | Definición |
-| --- | --- |
-| Matriz | Ubicación principal desde donde se envía producto a pollerías externas o rutas. |
-| Punto de venta externo / pollería externa | `OperationalLocation` activa que vende al detalle a público general y clientes fijos fuera de la matriz. |
-| Ticket de báscula / etiqueta | Comprobante comercial interno generado por una báscula y capturado manualmente como referencia en el MVP; no implica integración con hardware. |
-| Nota de venta simple | Comprobante manual para cliente, sin validez fiscal. |
-| Nota grande | Nota manual usada para control administrativo, crédito o relación de factura administrativa; no genera CFDI ni timbrado en el MVP. |
-| Solicitud administrativa de factura | Relación comercial interna que prepara una futura factura administrativa sin emitir CFDI en el MVP. |
-| Cliente facturado | Cliente institucional o mayorista con RFC, razón social, alias/comercial, correo y número interno para control administrativo. |
-| Saldo global por cliente | Suma de cuentas por cobrar pendientes de un cliente, usada para cartera y bloqueo de crédito. |
-| Pago aplicado | Pago asociado a una sola cuenta por cobrar, con método, banco y referencia. |
-| Corte diario / cierre diario | Cierre operativo por ubicación y fecha que concilia kilos, ventas, ingresos, gastos, sobrantes, faltantes y utilidad. |
-| Sobrante / faltante | Diferencia operativa entre producto recibido, producto vendido, otras salidas y existencia disponible al cierre. |
+| Término                                   | Definición                                                                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Matriz                                    | Ubicación principal desde donde se envía producto a pollerías externas o rutas.                                                                |
+| Punto de venta externo / pollería externa | `OperationalLocation` activa que vende al detalle a público general y clientes fijos fuera de la matriz.                                       |
+| Ticket de báscula / etiqueta              | Comprobante comercial interno generado por una báscula y capturado manualmente como referencia en el MVP; no implica integración con hardware. |
+| Nota de venta simple                      | Comprobante manual para cliente, sin validez fiscal.                                                                                           |
+| Nota grande                               | Nota manual usada para control administrativo, crédito o relación de factura administrativa; no genera CFDI ni timbrado en el MVP.             |
+| Solicitud administrativa de factura       | Relación comercial interna que prepara una futura factura administrativa sin emitir CFDI en el MVP.                                            |
+| Cliente facturado                         | Cliente institucional o mayorista con RFC, razón social, alias/comercial, correo y número interno para control administrativo.                 |
+| Saldo global por cliente                  | Suma de cuentas por cobrar pendientes de un cliente, usada para cartera y bloqueo de crédito.                                                  |
+| Pago aplicado                             | Pago asociado a una sola cuenta por cobrar, con método, banco y referencia.                                                                    |
+| Corte diario / cierre diario              | Cierre operativo por ubicación y fecha que concilia kilos, ventas, ingresos, gastos, sobrantes, faltantes y utilidad.                          |
+| Sobrante / faltante                       | Diferencia operativa entre producto recibido, producto vendido, otras salidas y existencia disponible al cierre.                               |
 
 ### 7.2 Límites del alcance
 

@@ -6,12 +6,12 @@ Validar que el MVP cumpla reglas operativas críticas sin regresar al modelo ant
 
 ## Herramientas base
 
-| Capa | Herramienta esperada | Uso principal |
-|------|----------------------|---------------|
-| Backend unitario | Jest | Servicios, validadores, reglas de dominio y casos de error. |
-| Backend integración | Jest + Supertest + base de datos de prueba | Endpoints REST, transacciones, persistencia, permisos y formato API. |
-| Frontend unitario/interacción | Vitest + Testing Library | Componentes, formularios, guards de UI, estados remotos y errores. |
-| E2E prioritario | Playwright | Flujos de negocio completos de mayor riesgo. |
+| Capa                          | Herramienta esperada                       | Uso principal                                                        |
+| ----------------------------- | ------------------------------------------ | -------------------------------------------------------------------- |
+| Backend unitario              | Jest                                       | Servicios, validadores, reglas de dominio y casos de error.          |
+| Backend integración           | Jest + Supertest + base de datos de prueba | Endpoints REST, transacciones, persistencia, permisos y formato API. |
+| Frontend unitario/interacción | Vitest + Testing Library                   | Componentes, formularios, guards de UI, estados remotos y errores.   |
+| E2E prioritario               | Playwright                                 | Flujos de negocio completos de mayor riesgo.                         |
 
 La base de datos de pruebas debe aislar datos por ejecución. Las pruebas de integración que modifiquen ventas, inventario, pagos o liquidaciones deben verificar persistencia real y rollback lógico cuando la operación falle.
 
@@ -28,13 +28,13 @@ El criterio de latencia máxima de 60 segundos debe probarse sin esperas reales 
 
 La validación se distribuye por capa:
 
-| Capa | Qué valida | Método determinista |
-|------|------------|---------------------|
-| Contrato backend | El reporte expone una ventana verificable de datos o metadatos de actualización. | Validar `generatedAt`, `lastMovementAt`, `updatedAt` o marca equivalente definida en el contrato del reporte. |
-| Integración controlada | Una operación confirmada en `T0` aparece en el reporte dentro de `T0 + 60s`. | Usar reloj inyectado, transacción con timestamps controlados o base de datos de prueba con fechas fijas; consultar el reporte simulando `T0 + 60s`. |
-| Tolerancia temporal | El resultado no falla por milisegundos, serialización o precisión de base de datos. | Aceptar tolerancia pequeña y explícita de precisión técnica, sin extender el límite funcional de 60 segundos. |
-| Frontend interacción | La UI muestra datos y metadatos de actualización entregados por API. | Mockear respuestas con `generatedAt` o metadatos equivalentes; no medir el SLA de 60 segundos en componentes. |
-| E2E | El flujo completo refleja una operación confirmada en reportes autorizados. | Usar datos semilla/controlados y polling corto con timeout técnico acotado; no esperar 60 segundos reales como mecanismo de prueba. |
+| Capa                   | Qué valida                                                                          | Método determinista                                                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contrato backend       | El reporte expone una ventana verificable de datos o metadatos de actualización.    | Validar `generatedAt`, `lastMovementAt`, `updatedAt` o marca equivalente definida en el contrato del reporte.                                       |
+| Integración controlada | Una operación confirmada en `T0` aparece en el reporte dentro de `T0 + 60s`.        | Usar reloj inyectado, transacción con timestamps controlados o base de datos de prueba con fechas fijas; consultar el reporte simulando `T0 + 60s`. |
+| Tolerancia temporal    | El resultado no falla por milisegundos, serialización o precisión de base de datos. | Aceptar tolerancia pequeña y explícita de precisión técnica, sin extender el límite funcional de 60 segundos.                                       |
+| Frontend interacción   | La UI muestra datos y metadatos de actualización entregados por API.                | Mockear respuestas con `generatedAt` o metadatos equivalentes; no medir el SLA de 60 segundos en componentes.                                       |
+| E2E                    | El flujo completo refleja una operación confirmada en reportes autorizados.         | Usar datos semilla/controlados y polling corto con timeout técnico acotado; no esperar 60 segundos reales como mecanismo de prueba.                 |
 
 La prueba principal del criterio `<= 60 segundos` pertenece a integración backend controlada. El E2E solo verifica integración visible del flujo y no debe ser la fuente de verdad del SLA.
 
