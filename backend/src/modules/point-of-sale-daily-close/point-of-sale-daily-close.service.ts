@@ -1059,7 +1059,7 @@ export class PointOfSaleDailyCloseService {
     if (current.validatedSourceVersion !== current.version)
       throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
     const closedAt = new Date();
-    return this.transition(
+    const transitioned = await this.transition(
       id,
       dto.version,
       'CLOSED',
@@ -1072,6 +1072,7 @@ export class PointOfSaleDailyCloseService {
       },
       user,
     );
+    return this.projectDetailForRole(transitioned, user);
   }
 
   async cancel(

@@ -13,14 +13,14 @@ Este documento resume la arquitectura y las decisiones vigentes del proyecto a p
 
 ## Fuente de Verdad
 
-| Tema | Decisión |
-| --- | --- |
-| Specs canónicos | `specs/.specs/` y `specs/modules/` |
-| OpenSpec | `openspec/` guarda cambios SDD activos e históricos |
-| Regla central | Specs primero, código después, validación siempre |
-| Lenguaje de código | TypeScript; no JavaScript para aplicación |
-| Implementación | Solo lo explícitamente definido en specs |
-| Conflictos | Detenerse y reportar antes de programar |
+| Tema               | Decisión                                            |
+| ------------------ | --------------------------------------------------- |
+| Specs canónicos    | `specs/.specs/` y `specs/modules/`                  |
+| OpenSpec           | `openspec/` guarda cambios SDD activos e históricos |
+| Regla central      | Specs primero, código después, validación siempre   |
+| Lenguaje de código | TypeScript; no JavaScript para aplicación           |
+| Implementación     | Solo lo explícitamente definido en specs            |
+| Conflictos         | Detenerse y reportar antes de programar             |
 
 Reglas críticas:
 
@@ -71,14 +71,14 @@ Fuera del MVP:
 
 ## Stack Técnico
 
-| Capa | Stack |
-| --- | --- |
-| Frontend | React, Vite, TypeScript, React Router, TanStack Query, Tailwind CSS |
-| Backend | NestJS, TypeScript, Prisma, PostgreSQL |
-| Seguridad | JWT, refresh tokens, RBAC, bcrypt o Argon2 |
-| Validación | Class Validator en backend |
-| Documentación API | Swagger según specs |
-| Infraestructura | Docker, Docker Compose, PostgreSQL, Nginx |
+| Capa              | Stack                                                               |
+| ----------------- | ------------------------------------------------------------------- |
+| Frontend          | React, Vite, TypeScript, React Router, TanStack Query, Tailwind CSS |
+| Backend           | NestJS, TypeScript, Prisma, PostgreSQL                              |
+| Seguridad         | JWT, refresh tokens, RBAC, bcrypt o Argon2                          |
+| Validación        | Class Validator en backend                                          |
+| Documentación API | Swagger según specs                                                 |
+| Infraestructura   | Docker, Docker Compose, PostgreSQL, Nginx                           |
 
 ## Arquitectura General
 
@@ -126,23 +126,23 @@ Formato de error esperado:
 
 ## Dominios y Módulos
 
-| Dominio | Responsabilidad |
-| --- | --- |
-| Auth | Login, refresh, logout, usuario actual |
-| Usuarios | Usuarios, roles, permisos |
-| Inventario | Productos, categorías, saldos, movimientos, ajustes |
-| Ubicaciones | Sucursales/almacenes como ubicaciones operativas |
-| Traspasos | Transferencias entre ubicaciones |
-| Equivalencias | Conversión kilo-pieza por producto |
-| Ventas/POS | Ventas contado/crédito, cancelación, ticket interno |
-| Clientes | Minoristas, mayoristas, crédito y condiciones |
-| Cobranza | Cuentas por cobrar y pagos |
-| Compras | Proveedores, entradas de mercancía |
-| Rutas | Reparto, evidencia, cobros, incidencias |
-| Liquidación | Cierre operativo de rutas |
-| Facturación | Comprobante interno MVP, no CFDI |
-| Reportes | Dashboard, ventas, inventario, cobranza, reparto |
-| Configuración | Parámetros operativos administrables |
+| Dominio       | Responsabilidad                                     |
+| ------------- | --------------------------------------------------- |
+| Auth          | Login, refresh, logout, usuario actual              |
+| Usuarios      | Usuarios, roles, permisos                           |
+| Inventario    | Productos, categorías, saldos, movimientos, ajustes |
+| Ubicaciones   | Sucursales/almacenes como ubicaciones operativas    |
+| Traspasos     | Transferencias entre ubicaciones                    |
+| Equivalencias | Conversión kilo-pieza por producto                  |
+| Ventas/POS    | Ventas contado/crédito, cancelación, ticket interno |
+| Clientes      | Minoristas, mayoristas, crédito y condiciones       |
+| Cobranza      | Cuentas por cobrar y pagos                          |
+| Compras       | Proveedores, entradas de mercancía                  |
+| Rutas         | Reparto, evidencia, cobros, incidencias             |
+| Liquidación   | Cierre operativo de rutas                           |
+| Facturación   | Comprobante interno MVP, no CFDI                    |
+| Reportes      | Dashboard, ventas, inventario, cobranza, reparto    |
+| Configuración | Parámetros operativos administrables                |
 
 Roles principales:
 
@@ -198,23 +198,23 @@ Decisiones estructurales cerradas:
 
 ## Áreas API
 
-| Área | Specs |
-| --- | --- |
-| Convenciones | `specs/.specs/03-api/api-conventions.md` |
-| Auth | `auth-api.md` |
-| Inventario | `inventory-api.md` |
-| Ubicaciones | `locations-api.md` |
-| Equivalencias | `product-equivalences-api.md` |
-| Traspasos | `inventory-transfers-api.md` |
-| Clientes | `customers-api.md` |
-| Cuentas por cobrar | `accounts-receivable-api.md` |
-| Políticas comerciales | `commercial-policies-api.md` |
-| Configuración operativa | `operational-config-api.md` |
-| Ventas | `sales-api.md` |
-| Compras | `purchases-api.md` |
-| Reparto | `delivery-api.md` |
-| Liquidaciones | `route-settlements-api.md` |
-| Reportes | `reports-api.md` |
+| Área                    | Specs                                    |
+| ----------------------- | ---------------------------------------- |
+| Convenciones            | `specs/.specs/03-api/api-conventions.md` |
+| Auth                    | `auth-api.md`                            |
+| Inventario              | `inventory-api.md`                       |
+| Ubicaciones             | `locations-api.md`                       |
+| Equivalencias           | `product-equivalences-api.md`            |
+| Traspasos               | `inventory-transfers-api.md`             |
+| Clientes                | `customers-api.md`                       |
+| Cuentas por cobrar      | `accounts-receivable-api.md`             |
+| Políticas comerciales   | `commercial-policies-api.md`             |
+| Configuración operativa | `operational-config-api.md`              |
+| Ventas                  | `sales-api.md`                           |
+| Compras                 | `purchases-api.md`                       |
+| Reparto                 | `delivery-api.md`                        |
+| Liquidaciones           | `route-settlements-api.md`               |
+| Reportes                | `reports-api.md`                         |
 
 Reglas API importantes:
 
@@ -281,14 +281,14 @@ OpenSpec configura TDD estricto.
 
 Capas definidas:
 
-| Capa | Estado / Herramienta |
-| --- | --- |
-| Backend unit | Jest |
-| Backend integration | Nest testing + Supertest |
-| Backend E2E | Jest + Supertest |
-| Coverage | `npm --prefix backend run test:cov` |
-| Frontend tests | Esperado por specs, runner no configurado aún |
-| E2E browser | Esperado por specs, Playwright no configurado aún |
+| Capa                | Estado / Herramienta                              |
+| ------------------- | ------------------------------------------------- |
+| Backend unit        | Jest                                              |
+| Backend integration | Nest testing + Supertest                          |
+| Backend E2E         | Jest + Supertest                                  |
+| Coverage            | `npm --prefix backend run test:cov`               |
+| Frontend tests      | Esperado por specs, runner no configurado aún     |
+| E2E browser         | Esperado por specs, Playwright no configurado aún |
 
 Regresiones que no deben romperse:
 
@@ -372,19 +372,19 @@ Definition of Done:
 
 ## Roadmap Maestro
 
-| Fase | Enfoque | Tareas clave |
-| --- | --- | --- |
-| 0 | Preparación | TASK-000 a TASK-004 |
-| 1 | Base de datos | TASK-010 a TASK-013 |
-| 2 | Seguridad y usuarios | TASK-020 a TASK-023 |
-| 3 | Inventario | TASK-030 a TASK-036 |
-| 4 | Clientes y cobranza | TASK-040 a TASK-044 |
-| 5 | Ventas/POS | TASK-050 a TASK-055 |
-| 6 | Compras | TASK-060 a TASK-062 |
-| 7 | Rutas y reparto | TASK-070 a TASK-073 |
-| 8 | Facturación básica | TASK-080 |
-| 9 | Reportes | TASK-090 a TASK-092 |
-| 10 | Calidad y despliegue | TASK-100 a TASK-105 |
+| Fase | Enfoque              | Tareas clave        |
+| ---- | -------------------- | ------------------- |
+| 0    | Preparación          | TASK-000 a TASK-004 |
+| 1    | Base de datos        | TASK-010 a TASK-013 |
+| 2    | Seguridad y usuarios | TASK-020 a TASK-023 |
+| 3    | Inventario           | TASK-030 a TASK-036 |
+| 4    | Clientes y cobranza  | TASK-040 a TASK-044 |
+| 5    | Ventas/POS           | TASK-050 a TASK-055 |
+| 6    | Compras              | TASK-060 a TASK-062 |
+| 7    | Rutas y reparto      | TASK-070 a TASK-073 |
+| 8    | Facturación básica   | TASK-080            |
+| 9    | Reportes             | TASK-090 a TASK-092 |
+| 10   | Calidad y despliegue | TASK-100 a TASK-105 |
 
 Prioridad mínima funcional del MVP:
 

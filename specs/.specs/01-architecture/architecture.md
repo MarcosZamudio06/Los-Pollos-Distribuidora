@@ -142,29 +142,29 @@ La arquitectura debe distinguir entre decisiones estructurales del dominio y par
 
 Estas decisiones forman parte fija de los specs y no deben exponerse como toggles administrativos:
 
-| Decisión | Regla estructural |
-|----------|-------------------|
-| Inventario por ubicación | El stock se controla por producto y ubicación operativa; no se debe volver a un stock global único por producto. |
-| Referencia obligatoria a ubicación | Ventas, compras, ajustes, movimientos y traspasos deben conservar la ubicación operativa afectada. |
-| Traspasos como dominio propio | Un traspaso entre ubicaciones requiere encabezado, detalle, origen, destino, estado, responsable y movimientos trazables. |
-| Cuentas por cobrar | Toda venta a crédito genera una cuenta por cobrar como registro de dominio de primera clase. |
-| Pagos | Los pagos a cuentas por cobrar son registros de dominio independientes y trazables, no simples cambios de saldo sin historial. |
-| Soporte kilo/pieza | La capacidad de vender y controlar productos por kilo, pieza o ambas unidades es parte central del dominio. |
-| Equivalencias kilo-pieza | Las equivalencias oficiales deben persistirse y auditarse; no deben quedar como cálculo informal en frontend. |
-| Comprobantes del MVP | El MVP solo emite ticket, nota sencilla, nota grande o comprobante interno. No emite CFDI, no timbra y no integra SAT. |
+| Decisión                           | Regla estructural                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Inventario por ubicación           | El stock se controla por producto y ubicación operativa; no se debe volver a un stock global único por producto.               |
+| Referencia obligatoria a ubicación | Ventas, compras, ajustes, movimientos y traspasos deben conservar la ubicación operativa afectada.                             |
+| Traspasos como dominio propio      | Un traspaso entre ubicaciones requiere encabezado, detalle, origen, destino, estado, responsable y movimientos trazables.      |
+| Cuentas por cobrar                 | Toda venta a crédito genera una cuenta por cobrar como registro de dominio de primera clase.                                   |
+| Pagos                              | Los pagos a cuentas por cobrar son registros de dominio independientes y trazables, no simples cambios de saldo sin historial. |
+| Soporte kilo/pieza                 | La capacidad de vender y controlar productos por kilo, pieza o ambas unidades es parte central del dominio.                    |
+| Equivalencias kilo-pieza           | Las equivalencias oficiales deben persistirse y auditarse; no deben quedar como cálculo informal en frontend.                  |
+| Comprobantes del MVP               | El MVP solo emite ticket, nota sencilla, nota grande o comprobante interno. No emite CFDI, no timbra y no integra SAT.         |
 
 ### Parámetros configurables por administración
 
 Estos parámetros pueden vivir en un módulo administrativo de configuración porque modifican comportamiento operativo sin cambiar el modelo estructural:
 
-| Área | Parámetros configurables |
-|------|--------------------------|
-| Crédito y cobranza | Límite de crédito por cliente o política comercial, días de crédito, pago por documento, comportamiento ante mora, bloqueo por límite excedido, autorización administrativa excepcional. |
-| Facturación administrativa | Relación interna de solicitud administrativa de factura, folio comercial y estado de enlace con venta o cuenta por cobrar. |
-| Cálculo comercial | Modo de redondeo para kilos, equivalencias, subtotales, saldos y pagos dentro de los rangos aprobados por negocio. |
-| Inventario | Tolerancia de merma o diferencia de peso, umbrales de bajo inventario por producto/ubicación, estrategia predeterminada para seleccionar ubicación de descuento en venta. |
-| Reparto | Evidencia de entrega requerida, política de cobro en ruta, política offline del chofer si negocio la confirma como configurable. |
-| Reportes | Intervalo de refresco casi en tiempo real dentro del límite de negocio de 60 segundos. |
+| Área                       | Parámetros configurables                                                                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Crédito y cobranza         | Límite de crédito por cliente o política comercial, días de crédito, pago por documento, comportamiento ante mora, bloqueo por límite excedido, autorización administrativa excepcional. |
+| Facturación administrativa | Relación interna de solicitud administrativa de factura, folio comercial y estado de enlace con venta o cuenta por cobrar.                                                               |
+| Cálculo comercial          | Modo de redondeo para kilos, equivalencias, subtotales, saldos y pagos dentro de los rangos aprobados por negocio.                                                                       |
+| Inventario                 | Tolerancia de merma o diferencia de peso, umbrales de bajo inventario por producto/ubicación, estrategia predeterminada para seleccionar ubicación de descuento en venta.                |
+| Reparto                    | Evidencia de entrega requerida, política de cobro en ruta, política offline del chofer si negocio la confirma como configurable.                                                         |
+| Reportes                   | Intervalo de refresco casi en tiempo real dentro del límite de negocio de 60 segundos.                                                                                                   |
 
 El módulo de configuración administrativa debe auditar cambios, registrar usuario responsable y evitar que una configuración elimine requisitos estructurales. Por ejemplo, puede configurar el límite de crédito, pero no puede desactivar la existencia de cuentas por cobrar para ventas a crédito.
 
@@ -295,12 +295,12 @@ Reglas estructurales:
 
 `PointOfSaleDailyClose` es un agregado de dominio propio y distinto de `RouteSettlement`.
 
-| Agregado | Responsabilidad |
-| --- | --- |
-| `CashTerminal` | Identificar una terminal administrada y su dispositivo registrado dentro de una ubicación fija. |
-| `CashShift` | Conciliar la operación monetaria independiente de una terminal y cajero. |
-| `PointOfSaleDailyClose` | Consolidar por ubicación y fecha los turnos, producto, ventas, gastos y utilidad. |
-| `RouteSettlement` | Conciliar una ruta, repartidor, entregas, devoluciones, incidencias y cobros en tránsito. |
+| Agregado                | Responsabilidad                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `CashTerminal`          | Identificar una terminal administrada y su dispositivo registrado dentro de una ubicación fija. |
+| `CashShift`             | Conciliar la operación monetaria independiente de una terminal y cajero.                        |
+| `PointOfSaleDailyClose` | Consolidar por ubicación y fecha los turnos, producto, ventas, gastos y utilidad.               |
+| `RouteSettlement`       | Conciliar una ruta, repartidor, entregas, devoluciones, incidencias y cobros en tránsito.       |
 
 El módulo de cierre diario debe depender de contratos públicos de Ventas, Inventario, Pagos, Ubicaciones y Reportes. No debe duplicar ventas, pagos ni movimientos; conserva asociaciones y snapshots de totales para auditoría.
 

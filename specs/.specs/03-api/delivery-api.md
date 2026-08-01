@@ -265,7 +265,6 @@ Validaciones:
 - Las ventas de canal `ROUTE` deben usar `routeStockLocationId` como ubicación operativa de descuento.
 - Un plan expirado, consumido por otra operación o invalidado por concurrencia responde `409 Conflict` y no crea registros parciales.
 
-
 ## POST /api/delivery-routes/:id/orders
 
 Propósito: asignar ventas confirmadas adicionales a una ruta existente antes de que tenga liquidación asociada.

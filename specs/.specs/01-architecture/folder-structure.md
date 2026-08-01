@@ -134,20 +134,20 @@ shared/
 
 ## Mapeo de módulos por alcance de negocio
 
-| Alcance | Frontend | Backend | Nota |
-|---------|----------|---------|------|
-| Inventario por ubicación | `features/inventario/`, `features/ubicaciones/` | `modules/inventory/`, `modules/locations/` | Debe soportar stock por ubicación operativa. |
-| Sucursales y almacenes | `features/ubicaciones/` | `modules/locations/` | El modelo final sucursal-almacén sigue abierto; usar ubicación operativa como abstracción hasta decidir. |
-| Clientes mayoristas | `features/clientes/` | `modules/customers/` | Debe contemplar tipo de cliente, condiciones comerciales y crédito. |
-| Cuentas por cobrar | `features/cobranza/` | `modules/accounts-receivable/` | Debe manejar saldos, vencimientos, pagos y bloqueo de crédito. |
-| Pagos y cobranza | `features/cobranza/` | `modules/payments/`, `modules/accounts-receivable/` | Los pagos son registros trazables asociados a cuentas por cobrar, cliente, usuario y, si aplica, ruta o liquidación. |
-| Políticas comerciales | `features/clientes/` o configuración administrativa futura | `modules/commercial-policies/` | Debe manejar límites, días de crédito, listas de precio y reglas comerciales sin alterar invariantes del dominio. |
-| Configuración operativa | Configuración administrativa futura | `modules/operational-config/` | Debe manejar parámetros operativos auditables; no debe crear endpoints ni UI sin specs específicos. |
-| Reparto y rutas | `features/rutas-reparto/` | `modules/delivery-routes/` | Debe cubrir asignación, estados, incidencias y liquidación. |
-| Experiencia móvil de chofer | `features/chofer/` | `modules/driver-mobile/`, `modules/delivery-routes/` | Puede implementarse como app móvil, PWA o web móvil; offline queda pendiente. |
-| Reportes casi en tiempo real | `features/reportes/`, `features/dashboard/` | `modules/reports/` | Latencia máxima de 60 segundos en condiciones normales. |
-| Ticket interno | `features/ventas/` | `modules/sales-documents/`, `modules/sales/` | No equivale a CFDI ni factura fiscal. |
-| Solicitud administrativa de factura | `features/ventas/`, `features/clientes/` | `modules/billing-requests/`, `modules/sales/` | No es CFDI ni documento operativo de venta. |
+| Alcance                             | Frontend                                                   | Backend                                              | Nota                                                                                                                 |
+| ----------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Inventario por ubicación            | `features/inventario/`, `features/ubicaciones/`            | `modules/inventory/`, `modules/locations/`           | Debe soportar stock por ubicación operativa.                                                                         |
+| Sucursales y almacenes              | `features/ubicaciones/`                                    | `modules/locations/`                                 | El modelo final sucursal-almacén sigue abierto; usar ubicación operativa como abstracción hasta decidir.             |
+| Clientes mayoristas                 | `features/clientes/`                                       | `modules/customers/`                                 | Debe contemplar tipo de cliente, condiciones comerciales y crédito.                                                  |
+| Cuentas por cobrar                  | `features/cobranza/`                                       | `modules/accounts-receivable/`                       | Debe manejar saldos, vencimientos, pagos y bloqueo de crédito.                                                       |
+| Pagos y cobranza                    | `features/cobranza/`                                       | `modules/payments/`, `modules/accounts-receivable/`  | Los pagos son registros trazables asociados a cuentas por cobrar, cliente, usuario y, si aplica, ruta o liquidación. |
+| Políticas comerciales               | `features/clientes/` o configuración administrativa futura | `modules/commercial-policies/`                       | Debe manejar límites, días de crédito, listas de precio y reglas comerciales sin alterar invariantes del dominio.    |
+| Configuración operativa             | Configuración administrativa futura                        | `modules/operational-config/`                        | Debe manejar parámetros operativos auditables; no debe crear endpoints ni UI sin specs específicos.                  |
+| Reparto y rutas                     | `features/rutas-reparto/`                                  | `modules/delivery-routes/`                           | Debe cubrir asignación, estados, incidencias y liquidación.                                                          |
+| Experiencia móvil de chofer         | `features/chofer/`                                         | `modules/driver-mobile/`, `modules/delivery-routes/` | Puede implementarse como app móvil, PWA o web móvil; offline queda pendiente.                                        |
+| Reportes casi en tiempo real        | `features/reportes/`, `features/dashboard/`                | `modules/reports/`                                   | Latencia máxima de 60 segundos en condiciones normales.                                                              |
+| Ticket interno                      | `features/ventas/`                                         | `modules/sales-documents/`, `modules/sales/`         | No equivale a CFDI ni factura fiscal.                                                                                |
+| Solicitud administrativa de factura | `features/ventas/`, `features/clientes/`                   | `modules/billing-requests/`, `modules/sales/`        | No es CFDI ni documento operativo de venta.                                                                          |
 
 ## Decisiones pendientes que pueden modificar estructura
 

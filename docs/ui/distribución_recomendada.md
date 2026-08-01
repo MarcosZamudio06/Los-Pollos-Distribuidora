@@ -1,11 +1,11 @@
 ┌──────────────────────────────────────────────────────────────┐
-│ Sucursal | Caja abierta | Cajero | Conexión | Nueva venta    │
+│ Sucursal | Caja abierta | Cajero | Conexión | Nueva venta │
 ├───────────────────────┬──────────────────────────────────────┤
-│ Buscar / escanear     │ Carrito                              │
-│                       │ Producto | Cant. | Precio | Importe  │
-│ Categorías            │                                      │
-│ Productos frecuentes  │                                      │
-│ Resultados            │                                      │
+│ Buscar / escanear │ Carrito │
+│ │ Producto | Cant. | Precio | Importe │
+│ Categorías │ │
+│ Productos frecuentes │ │
+│ Resultados │ │
 ├───────────────────────┴──────────────────────────────────────┤
-│ Cliente | Contado/Crédito | Pago | Total | CONFIRMAR F8      │
+│ Cliente | Contado/Crédito | Pago | Total | CONFIRMAR F8 │
 └──────────────────────────────────────────────────────────────┘

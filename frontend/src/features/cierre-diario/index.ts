@@ -1,1 +1,1 @@
-export { DailyClosePage } from './DailyClosePage'
+export { DailyClosePage } from "./DailyClosePage";

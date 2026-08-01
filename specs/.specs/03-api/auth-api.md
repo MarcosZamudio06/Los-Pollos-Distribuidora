@@ -22,7 +22,7 @@ Respuesta 200:
   "success": true,
   "message": "Sesión iniciada correctamente",
   "data": {
-      "accessToken": "jwt",
+    "accessToken": "jwt",
     "user": {
       "id": "string",
       "name": "Administrador",

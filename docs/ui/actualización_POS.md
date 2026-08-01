@@ -16,11 +16,11 @@ La operación principal será:
 
 Toda decisión visual o técnica debe reducir:
 
-* Tiempo por venta.
-* Errores de cantidad, peso, precio y forma de pago.
-* Movimientos innecesarios del cursor.
-* Pérdida de foco del escáner.
-* Información técnica o administrativa irrelevante para el cajero.
+- Tiempo por venta.
+- Errores de cantidad, peso, precio y forma de pago.
+- Movimientos innecesarios del cursor.
+- Pérdida de foco del escáner.
+- Información técnica o administrativa irrelevante para el cajero.
 
 ## La interfaz utilizará una apariencia clara, profesional y de alta densidad. Se descarta tanto el diseño basado en tarjetas como una estética oscura tipo terminal. El carrito será el centro operativo y el buscador permanecerá visible y enfocado sin consumir espacio excesivo.
 
@@ -45,11 +45,11 @@ La pantalla se divide en cuatro zonas continuas:
 
 No se utilizarán tarjetas independientes para sucursal, caja, cajero, cliente, pago, total o confirmación. La separación se realizará mediante:
 
-* Divisores.
-* Cambios sutiles de fondo.
-* Alineación.
-* Jerarquía tipográfica.
-* Espaciado consistente.
+- Divisores.
+- Cambios sutiles de fondo.
+- Alineación.
+- Jerarquía tipográfica.
+- Espaciado consistente.
 
 ## 2.2 Dimensiones base
 
@@ -76,13 +76,13 @@ Se descarta un dock de 96 px porque no ofrece espacio suficiente para cliente, c
 
 Una sola línea compacta con:
 
-* Sucursal.
-* Caja.
-* Turno.
-* Usuario.
-* Estado de conexión.
-* Hora.
-* Acción `Nueva venta · F9`.
+- Sucursal.
+- Caja.
+- Turno.
+- Usuario.
+- Estado de conexión.
+- Hora.
+- Acción `Nueva venta · F9`.
 
 La información estable se presenta en texto neutral. Solo las excepciones reciben color.
 
@@ -93,11 +93,11 @@ Sucursal Alvarado · Caja 03 · Turno 104 · Marcos · ● En línea · 14:32
 
 ### Reglas
 
-* Sin tarjetas interiores.
-* Sin títulos grandes.
-* Sin fondos de alerta permanentes.
-* `Nueva venta` es una acción neutral, no roja.
-* Un cambio de sucursal con carrito activo requiere confirmación.
+- Sin tarjetas interiores.
+- Sin títulos grandes.
+- Sin fondos de alerta permanentes.
+- `Nueva venta` es una acción neutral, no roja.
+- Un cambio de sucursal con carrito activo requiere confirmación.
 
 ---
 
@@ -107,10 +107,10 @@ La barra ocupa todo el ancho y mantiene el foco operativo.
 
 Debe aceptar:
 
-* Código de barras.
-* SKU.
-* Nombre.
-* Comandos de teclado.
+- Código de barras.
+- SKU.
+- Nombre.
+- Comandos de teclado.
 
 ```text
 [icono escáner] Escanea código, SKU o busca producto…          Listo · F2
@@ -137,31 +137,31 @@ Se utilizará una tabla compacta, no tarjetas de producto.
 
 ### Columnas
 
-* Producto.
-* SKU.
-* Unidad.
-* Precio.
-* Existencia.
-* Promoción o excepción.
-* Acción.
+- Producto.
+- SKU.
+- Unidad.
+- Precio.
+- Existencia.
+- Promoción o excepción.
+- Acción.
 
 ### Fila base
 
-* Altura: 52 px.
-* Nombre: fuente UI.
-* SKU, unidad, precio y existencia: fuente monoespaciada cuando corresponda.
-* Acción primaria accesible mediante `Enter`.
-* Productos sin stock permanecen visibles, pero no se agregan sin autorización.
+- Altura: 52 px.
+- Nombre: fuente UI.
+- SKU, unidad, precio y existencia: fuente monoespaciada cuando corresponda.
+- Acción primaria accesible mediante `Enter`.
+- Productos sin stock permanecen visibles, pero no se agregan sin autorización.
 
 ### Información prohibida
 
 Nunca mostrar:
 
-* IDs internos.
-* CUID o UUID.
-* Estados técnicos como `DRAFT`.
-* Nombres de campos de base de datos.
-* Información duplicada de stock.
+- IDs internos.
+- CUID o UUID.
+- Estados técnicos como `DRAFT`.
+- Nombres de campos de base de datos.
+- Información duplicada de stock.
 
 La exposición de identificadores internos y estados de desarrollo debe corregirse como P0, antes del trabajo visual.
 
@@ -173,40 +173,40 @@ El carrito es la fuente visual de verdad de la operación.
 
 ### Encabezado
 
-* Folio provisional.
-* Número de partidas.
-* Estado de la venta.
-* Acciones secundarias autorizadas.
+- Folio provisional.
+- Número de partidas.
+- Estado de la venta.
+- Acciones secundarias autorizadas.
 
 ### Columnas
 
-* Producto.
-* Unidad o peso.
-* Cantidad.
-* Precio unitario.
-* Descuento.
-* Subtotal.
-* Acciones.
+- Producto.
+- Unidad o peso.
+- Cantidad.
+- Precio unitario.
+- Descuento.
+- Subtotal.
+- Acciones.
 
 ### Fila base
 
-* Altura: 56 px.
-* Scroll interno.
-* Encabezado fijo.
-* Valores monetarios alineados a la derecha.
-* Cantidad editable sin abrir otro formulario.
-* Promociones o autorizaciones en una segunda línea discreta.
-* Última partida escaneada resaltada brevemente.
-* La fila seleccionada muestra controles de edición y eliminación.
+- Altura: 56 px.
+- Scroll interno.
+- Encabezado fijo.
+- Valores monetarios alineados a la derecha.
+- Cantidad editable sin abrir otro formulario.
+- Promociones o autorizaciones en una segunda línea discreta.
+- Última partida escaneada resaltada brevemente.
+- La fila seleccionada muestra controles de edición y eliminación.
 
 ### Resumen fijo
 
 En la parte inferior del carrito:
 
-* Subtotal.
-* Descuentos.
-* Impuestos cuando correspondan.
-* Total provisional.
+- Subtotal.
+- Descuentos.
+- Impuestos cuando correspondan.
+- Total provisional.
 
 El resumen nunca desaparece durante el scroll.
 
@@ -229,30 +229,30 @@ El dock sustituye todas las tarjetas inferiores.
 
 Mostrar:
 
-* Nombre o `Público general`.
-* Tipo de cliente.
-* Crédito disponible cuando corresponda.
-* Bloqueos o restricciones.
-* Atajo `F4`.
+- Nombre o `Público general`.
+- Tipo de cliente.
+- Crédito disponible cuando corresponda.
+- Bloqueos o restricciones.
+- Atajo `F4`.
 
 ### Condición y método
 
 Mostrar:
 
-* Contado o crédito.
-* Efectivo, tarjeta, transferencia u otro método configurado.
-* Atajo `F7` para cambiar entre contado y crédito.
-* Acceso a pago combinado.
+- Contado o crédito.
+- Efectivo, tarjeta, transferencia u otro método configurado.
+- Atajo `F7` para cambiar entre contado y crédito.
+- Acceso a pago combinado.
 
 ### Pago
 
 Mostrar:
 
-* Importe recibido.
-* Importe pendiente.
-* Cambio.
-* Número de pagos registrados.
-* Atajo `F6` para abrir o editar pagos.
+- Importe recibido.
+- Importe pendiente.
+- Cambio.
+- Número de pagos registrados.
+- Atajo `F6` para abrir o editar pagos.
 
 ### Total y CTA
 
@@ -295,12 +295,12 @@ La jerarquía definitiva será:
 
 ## Reglas
 
-* Los estados normales permanecen visualmente silenciosos.
-* Los errores y bloqueos destacan.
-* El total debe reconocerse mediante visión periférica.
-* Los títulos de sección son discretos.
-* No se utilizarán mayúsculas con tracking amplio en toda la pantalla.
-* El color nunca será el único indicador de estado.
+- Los estados normales permanecen visualmente silenciosos.
+- Los errores y bloqueos destacan.
+- El total debe reconocerse mediante visión periférica.
+- Los títulos de sección son discretos.
+- No se utilizarán mayúsculas con tracking amplio en toda la pantalla.
+- El color nunca será el único indicador de estado.
 
 ---
 
@@ -331,18 +331,18 @@ Se descarta el modo oscuro como dirección principal. Aunque la propuesta oscura
 
 ## 5.2 Tipografía
 
-* UI general: `Inter` o `Geist Sans`.
-* Datos: `JetBrains Mono` o `IBM Plex Mono`.
+- UI general: `Inter` o `Geist Sans`.
+- Datos: `JetBrains Mono` o `IBM Plex Mono`.
 
 Usar monoespaciado en:
 
-* Precios.
-* Cantidades.
-* Pesos.
-* SKU.
-* Folios.
-* Horas.
-* Totales.
+- Precios.
+- Cantidades.
+- Pesos.
+- SKU.
+- Folios.
+- Horas.
+- Totales.
 
 ## 5.3 Densidad
 
@@ -448,26 +448,26 @@ PosShell
 
 ## Componentes auxiliares
 
-* `CustomerPicker`
-* `PaymentDrawer`
-* `MixedPaymentEditor`
-* `WeightCapture`
-* `SupervisorAuthorizationDialog`
-* `ExceptionBanner`
-* `ConfirmationDialog`
-* `PrintStatus`
-* `Toast`
-* `KeyboardShortcut`
-* `StatusBadge`
+- `CustomerPicker`
+- `PaymentDrawer`
+- `MixedPaymentEditor`
+- `WeightCapture`
+- `SupervisorAuthorizationDialog`
+- `ExceptionBanner`
+- `ConfirmationDialog`
+- `PrintStatus`
+- `Toast`
+- `KeyboardShortcut`
+- `StatusBadge`
 
 ## Reglas
 
-* Las tablas son el componente principal.
-* Las cards se reservan para diálogos, paneles flotantes y resúmenes.
-* Los modales se utilizan únicamente en acciones irreversibles o con autorización.
-* Los procesos rutinarios ocurren inline o mediante drawer.
-* Los componentes visuales no contienen reglas de negocio duplicadas.
-* Ningún componente inventa datos que no provengan del sistema.
+- Las tablas son el componente principal.
+- Las cards se reservan para diálogos, paneles flotantes y resúmenes.
+- Los modales se utilizan únicamente en acciones irreversibles o con autorización.
+- Los procesos rutinarios ocurren inline o mediante drawer.
+- Los componentes visuales no contienen reglas de negocio duplicadas.
+- Ningún componente inventa datos que no provengan del sistema.
 
 ---
 
@@ -475,36 +475,36 @@ PosShell
 
 Todos los componentes interactivos deben implementar:
 
-* `default`
-* `hover`
-* `focus-visible`
-* `pressed`
-* `disabled`
-* `loading`
-* `error`
-* `warning`
-* `success`
-* `selected`
+- `default`
+- `hover`
+- `focus-visible`
+- `pressed`
+- `disabled`
+- `loading`
+- `error`
+- `warning`
+- `success`
+- `selected`
 
 Estados operativos adicionales:
 
-* `scanned`
-* `modified`
-* `authorized`
-* `blocked`
-* `offline`
-* `pending-weight`
-* `pending-payment`
+- `scanned`
+- `modified`
+- `authorized`
+- `blocked`
+- `offline`
+- `pending-weight`
+- `pending-payment`
 
 ## Reglas
 
-* El foco tiene anillo visible de 2 px.
-* Los botones deshabilitados muestran motivo.
-* Los errores aparecen junto al elemento que los originó.
-* Una autorización muestra quién la realizó.
-* Una modificación de precio conserva trazabilidad.
-* Ningún estado depende exclusivamente de color.
-* Los estados de carga no desplazan el layout.
+- El foco tiene anillo visible de 2 px.
+- Los botones deshabilitados muestran motivo.
+- Los errores aparecen junto al elemento que los originó.
+- Una autorización muestra quién la realizó.
+- Una modificación de precio conserva trazabilidad.
+- Ningún estado depende exclusivamente de color.
+- Los estados de carga no desplazan el layout.
 
 ---
 
@@ -512,63 +512,63 @@ Estados operativos adicionales:
 
 ## Producto sin stock
 
-* Permanece visible.
-* La acción de agregar se bloquea.
-* Se muestra `Sin stock`.
-* Una venta excepcional requiere autorización del supervisor y debe conservar trazabilidad.
+- Permanece visible.
+- La acción de agregar se bloquea.
+- Se muestra `Sin stock`.
+- Una venta excepcional requiere autorización del supervisor y debe conservar trazabilidad.
 
 ## Producto por kilogramo
 
-* El carrito muestra `Peso pendiente` hasta recibir una lectura válida.
-* No se permite cobrar con partidas sin peso.
-* El peso y el subtotal usan monoespaciado.
+- El carrito muestra `Peso pendiente` hasta recibir una lectura válida.
+- No se permite cobrar con partidas sin peso.
+- El peso y el subtotal usan monoespaciado.
 
 ## Crédito insuficiente o bloqueado
 
-* La restricción se muestra dentro del dock.
-* El CTA indica el problema.
-* El cajero puede cambiar a contado.
-* Una excepción requiere autorización según las reglas existentes.
+- La restricción se muestra dentro del dock.
+- El CTA indica el problema.
+- El cajero puede cambiar a contado.
+- Una excepción requiere autorización según las reglas existentes.
 
 ## Promoción
 
-* Se aplica automáticamente cuando corresponda.
-* La fila muestra nombre o causa de la promoción.
-* El resumen refleja el descuento.
-* No se obliga al cajero a buscar promociones manualmente.
+- Se aplica automáticamente cuando corresponda.
+- La fila muestra nombre o causa de la promoción.
+- El resumen refleja el descuento.
+- No se obliga al cajero a buscar promociones manualmente.
 
 ## Precio modificado
 
-* Requiere permiso.
-* Muestra valor original y nuevo.
-* Registra al usuario autorizador.
-* Permanece identificable hasta cerrar la venta.
+- Requiere permiso.
+- Muestra valor original y nuevo.
+- Registra al usuario autorizador.
+- Permanece identificable hasta cerrar la venta.
 
 ## Cambio de sucursal
 
-* Con carrito vacío, el cambio es directo.
-* Con carrito activo, se solicita confirmación.
-* Confirmar elimina el carrito actual.
+- Con carrito vacío, el cambio es directo.
+- Con carrito activo, se solicita confirmación.
+- Confirmar elimina el carrito actual.
 
 ## Pérdida de conexión
 
-* Se conserva visualmente el carrito activo.
-* Se bloquea la confirmación de la venta.
-* Se muestra un estado persistente y textual.
-* No se simula una venta completada sin confirmación del backend.
+- Se conserva visualmente el carrito activo.
+- Se bloquea la confirmación de la venta.
+- Se muestra un estado persistente y textual.
+- No se simula una venta completada sin confirmación del backend.
 
 ## Pago incompleto
 
-* El dock muestra el importe pendiente.
-* El CTA permanece bloqueado.
-* Se permite agregar otro método mediante pago combinado.
+- El dock muestra el importe pendiente.
+- El CTA permanece bloqueado.
+- Se permite agregar otro método mediante pago combinado.
 
 ## Error de impresión
 
-* La venta no se vuelve a registrar.
-* Se muestra `Venta registrada · impresión pendiente`.
-* Se habilita reimpresión.
-* La reimpresión utiliza el folio ya creado.
+- La venta no se vuelve a registrar.
+- Se muestra `Venta registrada · impresión pendiente`.
+- Se habilita reimpresión.
+- La reimpresión utiliza el folio ya creado.
 
 ---
 
@@ -576,19 +576,19 @@ Estados operativos adicionales:
 
 ## Requisitos obligatorios
 
-* Operación completa mediante teclado.
-* Orden de tabulación igual al flujo visual.
-* Foco visible en todo momento.
-* Textos y controles con contraste suficiente.
-* Objetivos interactivos mínimos de 44 × 44 px.
-* Labels persistentes en campos no evidentes.
-* Mensajes de error asociados al control.
-* Icono y texto para estados críticos.
-* Lectura semántica de tablas.
-* Totales anunciados cuando cambien.
-* Respeto a `prefers-reduced-motion`.
-* Zoom de navegador al 150% sin pérdida funcional.
-* No depender de hover para mostrar acciones esenciales.
+- Operación completa mediante teclado.
+- Orden de tabulación igual al flujo visual.
+- Foco visible en todo momento.
+- Textos y controles con contraste suficiente.
+- Objetivos interactivos mínimos de 44 × 44 px.
+- Labels persistentes en campos no evidentes.
+- Mensajes de error asociados al control.
+- Icono y texto para estados críticos.
+- Lectura semántica de tablas.
+- Totales anunciados cuando cambien.
+- Respeto a `prefers-reduced-motion`.
+- Zoom de navegador al 150% sin pérdida funcional.
+- No depender de hover para mostrar acciones esenciales.
 
 ---
 
@@ -596,19 +596,19 @@ Estados operativos adicionales:
 
 ## 1280 px o más
 
-* Resultados: 38%.
-* Carrito: 62%.
-* Dock en una fila.
-* Todas las columnas operativas visibles.
+- Resultados: 38%.
+- Carrito: 62%.
+- Dock en una fila.
+- Todas las columnas operativas visibles.
 
 ## 1024–1279 px
 
-* Resultados: 40%.
-* Carrito: 60%.
-* Se ocultan metadatos secundarios.
-* Dock en dos filas.
-* Total y cobrar permanecen visibles.
-* Controles táctiles mantienen 44 px.
+- Resultados: 40%.
+- Carrito: 60%.
+- Se ocultan metadatos secundarios.
+- Dock en dos filas.
+- Total y cobrar permanecen visibles.
+- Controles táctiles mantienen 44 px.
 
 ## Menos de 1024 px
 
@@ -622,33 +622,33 @@ Se mostrará una vista informativa indicando que el POS operativo requiere una r
 
 ## Escaneo correcto
 
-* Confirmación visual inmediata.
-* Resaltado de la nueva fila: 500 ms.
-* Actualización del total: 120–160 ms.
-* Retorno automático del foco.
-* Sin animaciones de objetos “volando” al carrito.
+- Confirmación visual inmediata.
+- Resaltado de la nueva fila: 500 ms.
+- Actualización del total: 120–160 ms.
+- Retorno automático del foco.
+- Sin animaciones de objetos “volando” al carrito.
 
 ## Error
 
-* Mensaje inline.
-* Resaltado breve del campo.
-* Sin movimientos agresivos.
-* El valor capturado se conserva.
+- Mensaje inline.
+- Resaltado breve del campo.
+- Sin movimientos agresivos.
+- El valor capturado se conserva.
 
 ## Cobro exitoso
 
-* `Procesando…`
-* `Venta registrada`
-* La confirmación permanece visible hasta una acción explícita del cajero.
-* `Reimprimir`, `Nueva venta`, `Ir al historial` y `Cerrar ventana` son acciones visibles.
+- `Procesando…`
+- `Venta registrada`
+- La confirmación permanece visible hasta una acción explícita del cajero.
+- `Reimprimir`, `Nueva venta`, `Ir al historial` y `Cerrar ventana` son acciones visibles.
 
 ## Reglas
 
-* Hover: 80–100 ms.
-* Drawer: 180–220 ms.
-* Modal: 140–180 ms.
-* Movimiento reducido cuando el sistema lo solicite.
-* Audio desactivado por defecto; no forma parte del flujo obligatorio.
+- Hover: 80–100 ms.
+- Drawer: 180–220 ms.
+- Modal: 140–180 ms.
+- Movimiento reducido cuando el sistema lo solicite.
+- Audio desactivado por defecto; no forma parte del flujo obligatorio.
 
 ---
 
@@ -656,33 +656,33 @@ Se mostrará una vista informativa indicando que el POS operativo requiere una r
 
 ## P0 — Integridad operativa
 
-* Eliminar IDs internos y estados técnicos visibles.
-* Corregir cálculos, unidades y subtotales.
-* Implementar estado transaccional único.
-* Mantener foco del escáner.
-* Bloquear cobro con peso, cliente, crédito o pago pendientes.
-* Hacer visible la causa de cada bloqueo.
-* Implementar navegación crítica por teclado.
-* Corregir contraste y estados del CTA.
+- Eliminar IDs internos y estados técnicos visibles.
+- Corregir cálculos, unidades y subtotales.
+- Implementar estado transaccional único.
+- Mantener foco del escáner.
+- Bloquear cobro con peso, cliente, crédito o pago pendientes.
+- Hacer visible la causa de cada bloqueo.
+- Implementar navegación crítica por teclado.
+- Corregir contraste y estados del CTA.
 
 ## P1 — Arquitectura principal
 
-* Implementar las cuatro zonas.
-* Sustituir tarjetas por tablas y divisores.
-* Crear carrito dominante.
-* Crear dock de cobro.
-* Implementar cliente, crédito y pagos.
-* Soportar kilogramo, pieza y caja.
-* Integrar promociones, autorización e impresión.
+- Implementar las cuatro zonas.
+- Sustituir tarjetas por tablas y divisores.
+- Crear carrito dominante.
+- Crear dock de cobro.
+- Implementar cliente, crédito y pagos.
+- Soportar kilogramo, pieza y caja.
+- Integrar promociones, autorización e impresión.
 
 ## P2 — Sistema y calidad
 
-* Consolidar tokens y componentes.
-* Implementar responsive desde 1024 px.
-* Completar accesibilidad.
-* Añadir estados vacíos, loading, error y offline.
-* Implementar microinteracciones.
-* Agregar pruebas visuales y de teclado.
+- Consolidar tokens y componentes.
+- Implementar responsive desde 1024 px.
+- Completar accesibilidad.
+- Añadir estados vacíos, loading, error y offline.
+- Implementar microinteracciones.
+- Agregar pruebas visuales y de teclado.
 
 ---
 
@@ -690,21 +690,21 @@ Se mostrará una vista informativa indicando que el POS operativo requiere una r
 
 Todos los agentes trabajan sobre estas decisiones inmutables:
 
-* Tema claro de alta densidad.
-* Sin dashboard de tarjetas.
-* Barra operativa de 52 px.
-* Escáner de 64 px.
-* Workspace 38/62.
-* Carrito dominante.
-* Dock de 144 px.
-* Filas de 52–56 px.
-* Inter para UI.
-* JetBrains Mono para datos.
-* CTA contextual.
-* Teclado primero y táctil compatible.
-* Checkout mínimo desde 1024 px.
-* Estado transaccional centralizado.
-* Ningún dato inventado.
-* Ningún ID interno visible.
+- Tema claro de alta densidad.
+- Sin dashboard de tarjetas.
+- Barra operativa de 52 px.
+- Escáner de 64 px.
+- Workspace 38/62.
+- Carrito dominante.
+- Dock de 144 px.
+- Filas de 52–56 px.
+- Inter para UI.
+- JetBrains Mono para datos.
+- CTA contextual.
+- Teclado primero y táctil compatible.
+- Checkout mínimo desde 1024 px.
+- Estado transaccional centralizado.
+- Ningún dato inventado.
+- Ningún ID interno visible.
 
 ---

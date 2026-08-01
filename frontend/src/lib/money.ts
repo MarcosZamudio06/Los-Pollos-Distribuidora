@@ -1,16 +1,21 @@
-import { hasSubCentPrecision, Money, type DecimalInput, toMoneyString } from '../../../shared/money'
+import {
+  hasSubCentPrecision,
+  Money,
+  type DecimalInput,
+  toMoneyString,
+} from "../../../shared/money";
 
-export { hasSubCentPrecision, Money, toMoneyString }
+export { hasSubCentPrecision, Money, toMoneyString };
 
-export const moneyFormatter = new Intl.NumberFormat('es-MX', {
-  style: 'currency',
-  currency: 'MXN',
-})
+export const moneyFormatter = new Intl.NumberFormat("es-MX", {
+  style: "currency",
+  currency: "MXN",
+});
 
 export function formatMoney(value: DecimalInput | null | undefined) {
   try {
-    return moneyFormatter.format(Number(Money.from(value).toString()))
+    return moneyFormatter.format(Number(Money.from(value).toString()));
   } catch {
-    return moneyFormatter.format(0)
+    return moneyFormatter.format(0);
   }
 }

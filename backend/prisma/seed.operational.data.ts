@@ -88,7 +88,10 @@ export function seedTransferNumber(index: number): string {
   return `TRF-SEED-${String(index).padStart(6, '0')}`;
 }
 
-export function seedDailyCloseNumber(locationCode: string, businessDate: Date): string {
+export function seedDailyCloseNumber(
+  locationCode: string,
+  businessDate: Date,
+): string {
   const yyyymmdd = businessDate.toISOString().slice(0, 10).replace(/-/g, '');
   return `PDC-SEED-${locationCode}-${yyyymmdd}`;
 }
@@ -98,14 +101,22 @@ export function seedDailyCloseNumber(locationCode: string, businessDate: Date): 
  * plus the DUE_SOON enrichment the frontend expects (7 day window).
  * ------------------------------------------------------------------ */
 
-export function resolveAgingStatus(dueDate: Date, asOf: Date, outstanding: number): AgingStatus {
+export function resolveAgingStatus(
+  dueDate: Date,
+  asOf: Date,
+  outstanding: number,
+): AgingStatus {
   if (outstanding <= 0) return AgingStatus.CURRENT;
   if (asOf > dueDate) return AgingStatus.OVERDUE;
   if (daysBetween(asOf, dueDate) <= 7) return AgingStatus.DUE_SOON;
   return AgingStatus.CURRENT;
 }
 
-export function calculateDaysOverdue(dueDate: Date, asOf: Date, outstanding: number): number {
+export function calculateDaysOverdue(
+  dueDate: Date,
+  asOf: Date,
+  outstanding: number,
+): number {
   if (outstanding <= 0 || asOf <= dueDate) return 0;
   return daysBetween(dueDate, asOf);
 }
@@ -141,7 +152,8 @@ export const seedCommercialPolicies: SeedCommercialPolicy[] = [
   {
     id: seedId('policy-wholesale'),
     name: 'Política mayoreo',
-    description: 'Crédito intermedio para mayoristas con historial verificable.',
+    description:
+      'Crédito intermedio para mayoristas con historial verificable.',
     customerType: CustomerType.WHOLESALE,
     defaultCreditLimit: 45000,
     defaultCreditDays: 15,

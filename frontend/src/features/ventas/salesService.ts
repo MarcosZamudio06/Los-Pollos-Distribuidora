@@ -1,81 +1,137 @@
-import { apiClient } from '../../lib/api'
-import type { CancelSalePayload, CreateSalePayload, CreateSaleResponse, ListSalesFilters, SaleDetail, SaleDocument, SaleListItem, SaleVoidPreview, TicketData, VoidSaleResponse } from './types'
+import { apiClient } from "../../lib/api";
+import type {
+  CancelSalePayload,
+  CreateSalePayload,
+  CreateSaleResponse,
+  ListSalesFilters,
+  SaleDetail,
+  SaleDocument,
+  SaleListItem,
+  SaleVoidPreview,
+  TicketData,
+  VoidSaleResponse,
+} from "./types";
 
-type ApiEnvelope<T> = { success?: boolean; message?: string; data?: T }
-type ItemEnvelope<T> = ApiEnvelope<T> | T
+type ApiEnvelope<T> = { success?: boolean; message?: string; data?: T };
+type ItemEnvelope<T> = ApiEnvelope<T> | T;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 function unwrapItem<T>(response: ItemEnvelope<T>) {
-  const payload = response as unknown
-  if (isRecord(payload) && 'data' in payload) return payload.data as T
-  return payload as T
+  const payload = response as unknown;
+  if (isRecord(payload) && "data" in payload) return payload.data as T;
+  return payload as T;
 }
 
 function authHeaders(accessToken?: string | null, idempotencyKey?: string) {
   return {
     ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
-    ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
-  }
+    ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+  };
 }
 
 export const salesService = {
   async listSales(filters: ListSalesFilters, accessToken?: string | null) {
-    const searchParams = new URLSearchParams()
+    const searchParams = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') searchParams.set(key, String(value))
-    })
-    const queryString = searchParams.toString()
-    const response = await apiClient.get<ItemEnvelope<{ items: SaleListItem[] }>>(`/sales${queryString ? `?${queryString}` : ''}`, {
+      if (value !== undefined && value !== null && value !== "")
+        searchParams.set(key, String(value));
+    });
+    const queryString = searchParams.toString();
+    const response = await apiClient.get<
+      ItemEnvelope<{ items: SaleListItem[] }>
+    >(`/sales${queryString ? `?${queryString}` : ""}`, {
       headers: authHeaders(accessToken),
-    })
-    return unwrapItem(response)
+    });
+    return unwrapItem(response);
   },
   async getSale(id: string, accessToken?: string | null) {
-    const response = await apiClient.get<ItemEnvelope<SaleDetail>>(`/sales/${id}`, {
-      headers: authHeaders(accessToken),
-    })
-    return unwrapItem(response)
+    const response = await apiClient.get<ItemEnvelope<SaleDetail>>(
+      `/sales/${id}`,
+      {
+        headers: authHeaders(accessToken),
+      },
+    );
+    return unwrapItem(response);
   },
-  async createSale(payload: CreateSalePayload, idempotencyKey: string, accessToken?: string | null) {
-    const response = await apiClient.post<ItemEnvelope<CreateSaleResponse>, CreateSalePayload>('/sales', {
+  async createSale(
+    payload: CreateSalePayload,
+    idempotencyKey: string,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<CreateSaleResponse>,
+      CreateSalePayload
+    >("/sales", {
       body: payload,
       headers: authHeaders(accessToken, idempotencyKey),
-    })
-    return unwrapItem(response)
+    });
+    return unwrapItem(response);
   },
-  async getTicket(saleId: string, documentId: string, accessToken?: string | null) {
-    const response = await apiClient.get<ItemEnvelope<TicketData>>(`/sales/${saleId}/documents/${documentId}/print`, {
-      headers: authHeaders(accessToken),
-    })
-    return unwrapItem(response)
+  async getTicket(
+    saleId: string,
+    documentId: string,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.get<ItemEnvelope<TicketData>>(
+      `/sales/${saleId}/documents/${documentId}/print`,
+      {
+        headers: authHeaders(accessToken),
+      },
+    );
+    return unwrapItem(response);
   },
   async getSaleDocuments(saleId: string, accessToken?: string | null) {
-    const response = await apiClient.get<ItemEnvelope<{ items: SaleDocument[] }>>(`/sales/${saleId}/documents`, {
+    const response = await apiClient.get<
+      ItemEnvelope<{ items: SaleDocument[] }>
+    >(`/sales/${saleId}/documents`, {
       headers: authHeaders(accessToken),
-    })
-    return unwrapItem(response)
+    });
+    return unwrapItem(response);
   },
   async getVoidPreview(saleId: string, accessToken?: string | null) {
-    const response = await apiClient.get<ItemEnvelope<SaleVoidPreview>>(`/sales/${saleId}/void-preview`, {
-      headers: authHeaders(accessToken),
-    })
-    return unwrapItem(response)
+    const response = await apiClient.get<ItemEnvelope<SaleVoidPreview>>(
+      `/sales/${saleId}/void-preview`,
+      {
+        headers: authHeaders(accessToken),
+      },
+    );
+    return unwrapItem(response);
   },
-  async cancelSale(saleId: string, payload: CancelSalePayload, idempotencyKey: string, accessToken?: string | null) {
-    const response = await apiClient.post<ItemEnvelope<{ sale?: SaleDetail; inventoryMovements?: Array<Record<string, unknown>>; accountReceivable?: Record<string, unknown> | null }>, CancelSalePayload>(`/sales/${saleId}/cancel`, {
+  async cancelSale(
+    saleId: string,
+    payload: CancelSalePayload,
+    idempotencyKey: string,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<{
+        sale?: SaleDetail;
+        inventoryMovements?: Array<Record<string, unknown>>;
+        accountReceivable?: Record<string, unknown> | null;
+      }>,
+      CancelSalePayload
+    >(`/sales/${saleId}/cancel`, {
       body: payload,
       headers: authHeaders(accessToken, idempotencyKey),
-    })
-    return unwrapItem(response)
+    });
+    return unwrapItem(response);
   },
-  async voidSale(saleId: string, payload: CancelSalePayload, idempotencyKey: string, accessToken?: string | null) {
-    const response = await apiClient.post<ItemEnvelope<VoidSaleResponse>, CancelSalePayload>(`/sales/${saleId}/void`, {
+  async voidSale(
+    saleId: string,
+    payload: CancelSalePayload,
+    idempotencyKey: string,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<VoidSaleResponse>,
+      CancelSalePayload
+    >(`/sales/${saleId}/void`, {
       body: payload,
       headers: authHeaders(accessToken, idempotencyKey),
-    })
-    return unwrapItem(response)
+    });
+    return unwrapItem(response);
   },
-}
+};

@@ -1,1 +1,1 @@
-export { BillingRemediationsPage } from './BillingRemediationsPage'
+export { BillingRemediationsPage } from "./BillingRemediationsPage";

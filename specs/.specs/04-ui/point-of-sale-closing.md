@@ -135,16 +135,16 @@ Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante 
 
 ## Acciones y RBAC
 
-| Acción | ADMIN | SELLER | WAREHOUSE | COLLECTIONS |
-| --- | --- | --- | --- | --- |
-| Consultar cierre | Sí | Su ubicación | Datos de inventario | Datos de ingresos autorizados |
-| Crear borrador | Sí | Su ubicación | No | No |
-| Editar borrador | Sí | Su ubicación | Solo entradas autorizadas | No |
-| Capturar referencia de báscula | Sí | Su ubicación | No | No |
-| Registrar gasto | Sí | Conforme a política | No | No |
-| Revisar | Sí | No | No | No |
-| Cerrar | Sí | No | No | No |
-| Cancelar o reabrir | Sí | No | No | No |
+| Acción                         | ADMIN | SELLER              | WAREHOUSE                 | COLLECTIONS                   |
+| ------------------------------ | ----- | ------------------- | ------------------------- | ----------------------------- |
+| Consultar cierre               | Sí    | Su ubicación        | Datos de inventario       | Datos de ingresos autorizados |
+| Crear borrador                 | Sí    | Su ubicación        | No                        | No                            |
+| Editar borrador                | Sí    | Su ubicación        | Solo entradas autorizadas | No                            |
+| Capturar referencia de báscula | Sí    | Su ubicación        | No                        | No                            |
+| Registrar gasto                | Sí    | Conforme a política | No                        | No                            |
+| Revisar                        | Sí    | No                  | No                        | No                            |
+| Cerrar                         | Sí    | No                  | No                        | No                            |
+| Cancelar o reabrir             | Sí    | No                  | No                        | No                            |
 
 `CASHIER` no se agrega; queda como decisión abierta.
 

@@ -1,1 +1,1 @@
-export { PosTerminalsPage } from './PosTerminalsPage'
+export { PosTerminalsPage } from "./PosTerminalsPage";

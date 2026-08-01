@@ -8,15 +8,15 @@ WAL; este repositorio define cómo aceptar y comprobar esas capacidades.
 
 No liberar producción sin evidencia vigente de todos estos controles:
 
-| Control | Criterio mínimo |
-|---|---|
-| Alta disponibilidad | Réplica en otra zona y failover probado |
-| PITR | WAL continuo con RPO de 5 minutos o menor |
-| Respaldo completo | Automático, cifrado y fuera del primario |
-| Retención | 35 días o la política legal superior aplicable |
-| Monitoreo | Alertas por fallo, antigüedad y replication lag |
-| Recuperación | RTO de 60 minutos o menor |
-| Restore drill | Trimestral, aislado y con evidencia conservada |
+| Control             | Criterio mínimo                                 |
+| ------------------- | ----------------------------------------------- |
+| Alta disponibilidad | Réplica en otra zona y failover probado         |
+| PITR                | WAL continuo con RPO de 5 minutos o menor       |
+| Respaldo completo   | Automático, cifrado y fuera del primario        |
+| Retención           | 35 días o la política legal superior aplicable  |
+| Monitoreo           | Alertas por fallo, antigüedad y replication lag |
+| Recuperación        | RTO de 60 minutos o menor                       |
+| Restore drill       | Trimestral, aislado y con evidencia conservada  |
 
 ## Restore drill trimestral
 

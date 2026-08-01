@@ -12,10 +12,10 @@ Implementar en el ERP un módulo que permita identificar, consultar, validar, so
 
 El módulo debe funcionar como:
 
-* Reporte operativo de notas pendientes de facturación.
-* Bandeja de trabajo para el área de facturación.
-* Herramienta de conciliación entre ventas, facturas y cobranza.
-* Fuente auditable para detectar omisiones, duplicidades y sobrefacturación.
+- Reporte operativo de notas pendientes de facturación.
+- Bandeja de trabajo para el área de facturación.
+- Herramienta de conciliación entre ventas, facturas y cobranza.
+- Fuente auditable para detectar omisiones, duplicidades y sobrefacturación.
 
 El reporte no debe basarse únicamente en un campo booleano como `isInvoiced`.
 
@@ -31,10 +31,10 @@ Documento comercial que representa la venta original.
 
 Ejemplos:
 
-* `SIMPLE_NOTE`
-* `LARGE_NOTE`
-* `INTERNAL_RECEIPT`
-* `SCALE_TICKET`
+- `SIMPLE_NOTE`
+- `LARGE_NOTE`
+- `INTERNAL_RECEIPT`
+- `SCALE_TICKET`
 
 La nota continúa existiendo aunque posteriormente sea facturada.
 
@@ -66,23 +66,23 @@ permanece fuera del modelo.
 
 Una nota será facturable cuando:
 
-* La venta exista.
-* Se encuentre confirmada.
-* No esté cancelada.
-* Su tipo de documento permita facturación.
-* Tenga un cliente identificado.
-* Tenga un importe facturable mayor que cero.
-* No haya sido facturada completamente.
-* Cumpla las reglas comerciales, fiscales y operativas definidas.
-* El importe pendiente de facturar sea mayor que cero.
+- La venta exista.
+- Se encuentre confirmada.
+- No esté cancelada.
+- Su tipo de documento permita facturación.
+- Tenga un cliente identificado.
+- Tenga un importe facturable mayor que cero.
+- No haya sido facturada completamente.
+- Cumpla las reglas comerciales, fiscales y operativas definidas.
+- El importe pendiente de facturar sea mayor que cero.
 
 Los documentos facturables deben ser configurables.
 
 Inicialmente deben considerarse:
 
-* `SIMPLE_NOTE`
-* `LARGE_NOTE`
-* `INTERNAL_RECEIPT`, únicamente cuando la política comercial lo permita.
+- `SIMPLE_NOTE`
+- `LARGE_NOTE`
+- `INTERNAL_RECEIPT`, únicamente cuando la política comercial lo permita.
 
 `SCALE_TICKET` no debe considerarse facturable de forma independiente, salvo que el modelo actual del negocio lo requiera expresamente.
 
@@ -106,15 +106,15 @@ CANCELLED
 
 ### Reglas generales
 
-* `BILLABLE`: la nota cumple las condiciones para solicitar factura.
-* `PENDING_INFORMATION`: faltan datos fiscales o comerciales.
-* `REQUESTED`: existe una solicitud activa.
-* `IN_PROCESS`: la solicitud está siendo procesada.
-* `PARTIALLY_INVOICED`: una parte del importe ya fue facturada.
-* `FULLY_INVOICED`: el importe facturable fue cubierto completamente.
-* `BLOCKED`: existe una inconsistencia.
-* `NOT_BILLABLE`: la nota no debe facturarse.
-* `CANCELLED`: el proceso o documento fue cancelado.
+- `BILLABLE`: la nota cumple las condiciones para solicitar factura.
+- `PENDING_INFORMATION`: faltan datos fiscales o comerciales.
+- `REQUESTED`: existe una solicitud activa.
+- `IN_PROCESS`: la solicitud está siendo procesada.
+- `PARTIALLY_INVOICED`: una parte del importe ya fue facturada.
+- `FULLY_INVOICED`: el importe facturable fue cubierto completamente.
+- `BLOCKED`: existe una inconsistencia.
+- `NOT_BILLABLE`: la nota no debe facturarse.
+- `CANCELLED`: el proceso o documento fue cancelado.
 
 El estado debe derivarse de las relaciones y reglas de negocio. No debe depender únicamente de una selección manual del usuario.
 
@@ -134,10 +134,10 @@ Importe facturado vigente
 
 El importe facturado vigente debe excluir:
 
-* Facturas canceladas.
-* Facturas sustituidas sin efecto vigente.
-* Solicitudes rechazadas o canceladas.
-* Relaciones duplicadas o inválidas.
+- Facturas canceladas.
+- Facturas sustituidas sin efecto vigente.
+- Solicitudes rechazadas o canceladas.
+- Relaciones duplicadas o inválidas.
 
 También debe calcular:
 
@@ -163,10 +163,10 @@ Esto representa una posible sobrefacturación.
 
 La relación entre notas y facturas debe permitir:
 
-* Una factura con varias notas.
-* Una nota relacionada con varias facturas.
-* Facturación parcial.
-* Cancelación y sustitución de facturas.
+- Una factura con varias notas.
+- Una nota relacionada con varias facturas.
+- Facturación parcial.
+- Cancelación y sustitución de facturas.
 
 Por lo tanto, la relación debe ser muchos a muchos.
 
@@ -235,36 +235,36 @@ Una fila por documento de venta.
 
 Campos mínimos:
 
-* ID de venta.
-* Folio de nota.
-* Tipo de documento.
-* Fecha de emisión.
-* Fecha de entrega.
-* Cliente.
-* RFC o identificador fiscal.
-* Punto de venta.
-* Sucursal o ubicación.
-* Vendedor.
-* Ruta o reparto, cuando aplique.
-* Subtotal.
-* Descuento.
-* Impuestos.
-* Total.
-* Importe facturable.
-* Importe facturado.
-* Importe pendiente de facturar.
-* Importe pagado.
-* Saldo pendiente de cobro.
-* Estado de venta.
-* Estado de entrega.
-* Estado de pago.
-* Estado de facturación.
-* Motivo de bloqueo.
-* Fecha límite de facturación.
-* Días transcurridos.
-* Solicitud de facturación relacionada.
-* Facturas relacionadas.
-* Serie, folio y UUID fiscal, cuando existan.
+- ID de venta.
+- Folio de nota.
+- Tipo de documento.
+- Fecha de emisión.
+- Fecha de entrega.
+- Cliente.
+- RFC o identificador fiscal.
+- Punto de venta.
+- Sucursal o ubicación.
+- Vendedor.
+- Ruta o reparto, cuando aplique.
+- Subtotal.
+- Descuento.
+- Impuestos.
+- Total.
+- Importe facturable.
+- Importe facturado.
+- Importe pendiente de facturar.
+- Importe pagado.
+- Saldo pendiente de cobro.
+- Estado de venta.
+- Estado de entrega.
+- Estado de pago.
+- Estado de facturación.
+- Motivo de bloqueo.
+- Fecha límite de facturación.
+- Días transcurridos.
+- Solicitud de facturación relacionada.
+- Facturas relacionadas.
+- Serie, folio y UUID fiscal, cuando existan.
 
 ### Vista por partida
 
@@ -272,18 +272,18 @@ Una fila por producto o concepto vendido.
 
 Campos mínimos:
 
-* Folio de nota.
-* Producto.
-* Descripción.
-* Cantidad.
-* Unidad.
-* Precio unitario.
-* Descuento.
-* Base gravable.
-* Impuesto.
-* Total.
-* Cantidad o importe facturado.
-* Cantidad o importe pendiente.
+- Folio de nota.
+- Producto.
+- Descripción.
+- Cantidad.
+- Unidad.
+- Precio unitario.
+- Descuento.
+- Base gravable.
+- Impuesto.
+- Total.
+- Cantidad o importe facturado.
+- Cantidad o importe pendiente.
 
 ---
 
@@ -291,27 +291,27 @@ Campos mínimos:
 
 El reporte debe permitir filtrar por:
 
-* Rango de fechas.
-* Punto de venta.
-* Sucursal.
-* Cliente.
-* RFC.
-* Vendedor.
-* Ruta.
-* Tipo de nota.
-* Estado de facturación.
-* Estado de pago.
-* Estado de entrega.
-* Con solicitud.
-* Sin solicitud.
-* Facturación parcial.
-* Facturación completa.
-* Datos fiscales completos o incompletos.
-* Notas vencidas.
-* Notas bloqueadas.
-* Folio de nota.
-* Serie o folio de factura.
-* UUID fiscal.
+- Rango de fechas.
+- Punto de venta.
+- Sucursal.
+- Cliente.
+- RFC.
+- Vendedor.
+- Ruta.
+- Tipo de nota.
+- Estado de facturación.
+- Estado de pago.
+- Estado de entrega.
+- Con solicitud.
+- Sin solicitud.
+- Facturación parcial.
+- Facturación completa.
+- Datos fiscales completos o incompletos.
+- Notas vencidas.
+- Notas bloqueadas.
+- Folio de nota.
+- Serie o folio de factura.
+- UUID fiscal.
 
 La tabla debe incluir paginación, ordenamiento y búsqueda.
 
@@ -323,15 +323,15 @@ Los indicadores deben respetar los filtros activos.
 
 Como mínimo:
 
-* Número de notas facturables.
-* Importe total facturable.
-* Importe facturado.
-* Importe pendiente de facturar.
-* Notas con información incompleta.
-* Notas parcialmente facturadas.
-* Notas vencidas.
-* Notas bloqueadas.
-* Posibles casos de sobrefacturación.
+- Número de notas facturables.
+- Importe total facturable.
+- Importe facturado.
+- Importe pendiente de facturar.
+- Notas con información incompleta.
+- Notas parcialmente facturadas.
+- Notas vencidas.
+- Notas bloqueadas.
+- Posibles casos de sobrefacturación.
 
 ---
 
@@ -339,29 +339,29 @@ Como mínimo:
 
 Dependiendo del rol, el módulo debe permitir:
 
-* Consultar detalle de la nota.
-* Abrir la venta original.
-* Revisar datos fiscales.
-* Crear solicitud de facturación.
-* Agrupar notas compatibles.
-* Solicitar facturación parcial.
-* Consultar facturas relacionadas.
-* Consultar pagos relacionados.
-* Ver historial de cambios.
-* Exportar el reporte.
-* Marcar una nota como no facturable con motivo obligatorio.
-* Corregir incidencias.
-* Rechazar o cancelar solicitudes.
-* Reintentar solicitudes rechazadas.
+- Consultar detalle de la nota.
+- Abrir la venta original.
+- Revisar datos fiscales.
+- Crear solicitud de facturación.
+- Agrupar notas compatibles.
+- Solicitar facturación parcial.
+- Consultar facturas relacionadas.
+- Consultar pagos relacionados.
+- Ver historial de cambios.
+- Exportar el reporte.
+- Marcar una nota como no facturable con motivo obligatorio.
+- Corregir incidencias.
+- Rechazar o cancelar solicitudes.
+- Reintentar solicitudes rechazadas.
 
 Las notas solo podrán agruparse cuando compartan:
 
-* Cliente.
-* Perfil fiscal.
-* Entidad fiscal emisora.
-* Moneda.
-* Condiciones fiscales compatibles.
-* Ausencia de bloqueos.
+- Cliente.
+- Perfil fiscal.
+- Entidad fiscal emisora.
+- Moneda.
+- Condiciones fiscales compatibles.
+- Ausencia de bloqueos.
 
 ---
 
@@ -421,33 +421,33 @@ La interfaz puede mostrar mensajes descriptivos, pero el backend debe conservar 
 
 ### Vendedor
 
-* Consultar sus notas.
-* Consultar el estado de facturación.
-* Completar información permitida.
-* Crear solicitudes.
+- Consultar sus notas.
+- Consultar el estado de facturación.
+- Completar información permitida.
+- Crear solicitudes.
 
 ### Facturación o contabilidad
 
-* Consultar notas autorizadas.
-* Revisar solicitudes.
-* Aprobar, rechazar o bloquear.
-* Relacionar facturas.
-* Exportar información.
-* Resolver incidencias autorizadas.
+- Consultar notas autorizadas.
+- Revisar solicitudes.
+- Aprobar, rechazar o bloquear.
+- Relacionar facturas.
+- Exportar información.
+- Resolver incidencias autorizadas.
 
 ### Administrador
 
-* Consultar todas las ubicaciones.
-* Configurar reglas.
-* Autorizar excepciones.
-* Reabrir procesos.
-* Consultar auditoría completa.
+- Consultar todas las ubicaciones.
+- Configurar reglas.
+- Autorizar excepciones.
+- Reabrir procesos.
+- Consultar auditoría completa.
 
 ### Repartidor
 
-* Consultar información operativa de la entrega.
-* No acceder a información fiscal sensible.
-* No ejecutar procesos de facturación.
+- Consultar información operativa de la entrega.
+- No acceder a información fiscal sensible.
+- No ejecutar procesos de facturación.
 
 ---
 
@@ -455,28 +455,28 @@ La interfaz puede mostrar mensajes descriptivos, pero el backend debe conservar 
 
 Debe registrarse:
 
-* Usuario.
-* Fecha y hora.
-* Acción.
-* Entidad afectada.
-* Valor anterior.
-* Valor nuevo.
-* Motivo.
-* Dirección IP o contexto de sesión, cuando la arquitectura lo permita.
+- Usuario.
+- Fecha y hora.
+- Acción.
+- Entidad afectada.
+- Valor anterior.
+- Valor nuevo.
+- Motivo.
+- Dirección IP o contexto de sesión, cuando la arquitectura lo permita.
 
 Eventos auditables:
 
-* Cambio de facturabilidad.
-* Creación de solicitud.
-* Cambio de importe solicitado.
-* Aprobación.
-* Rechazo.
-* Cancelación.
-* Vinculación de factura.
-* Desvinculación.
-* Cancelación o sustitución de factura.
-* Autorización de una excepción.
-* Cambio de motivo de bloqueo.
+- Cambio de facturabilidad.
+- Creación de solicitud.
+- Cambio de importe solicitado.
+- Aprobación.
+- Rechazo.
+- Cancelación.
+- Vinculación de factura.
+- Desvinculación.
+- Cancelación o sustitución de factura.
+- Autorización de una excepción.
+- Cambio de motivo de bloqueo.
 
 Las relaciones contables no deben eliminarse físicamente sin conservar evidencia.
 
@@ -517,14 +517,14 @@ Acciones
 
 El detalle debe mostrar:
 
-* Información de la venta.
-* Partidas.
-* Datos fiscales.
-* Solicitudes.
-* Facturas.
-* Pagos.
-* Entregas.
-* Historial de auditoría.
+- Información de la venta.
+- Partidas.
+- Datos fiscales.
+- Solicitudes.
+- Facturas.
+- Pagos.
+- Entregas.
+- Historial de auditoría.
 
 ---
 
@@ -552,40 +552,40 @@ La implementación debe respetar la arquitectura y convenciones actuales del pro
 
 Formatos mínimos:
 
-* Excel.
-* CSV.
+- Excel.
+- CSV.
 
 PDF será opcional si el proyecto ya cuenta con una infraestructura de reportes.
 
 La exportación debe contener:
 
-* Fecha de generación.
-* Usuario.
-* Filtros aplicados.
-* Zona horaria.
-* Totales de control.
-* Identificadores internos.
-* Folios visibles.
-* Importes numéricos.
-* Estados de nota, solicitud y factura.
+- Fecha de generación.
+- Usuario.
+- Filtros aplicados.
+- Zona horaria.
+- Totales de control.
+- Identificadores internos.
+- Folios visibles.
+- Importes numéricos.
+- Estados de nota, solicitud y factura.
 
 ---
 
 ## 19. Requisitos no funcionales
 
-* Operaciones monetarias con `Decimal`, nunca con `float`.
-* Consultas paginadas.
-* Filtros ejecutados en backend.
-* Índices para fechas, cliente, ubicación y estados.
-* Protección por roles y permisos.
-* Transacciones en operaciones críticas.
-* Prevención de condiciones de carrera.
-* Auditoría persistente.
-* Exportaciones consistentes con los filtros.
-* No duplicar afectaciones de inventario.
-* No almacenar totales derivados innecesariamente si pueden calcularse de forma confiable.
-* Evitar consultas N+1.
-* Mantener compatibilidad con las convenciones actuales de NestJS, Prisma y React del proyecto.
+- Operaciones monetarias con `Decimal`, nunca con `float`.
+- Consultas paginadas.
+- Filtros ejecutados en backend.
+- Índices para fechas, cliente, ubicación y estados.
+- Protección por roles y permisos.
+- Transacciones en operaciones críticas.
+- Prevención de condiciones de carrera.
+- Auditoría persistente.
+- Exportaciones consistentes con los filtros.
+- No duplicar afectaciones de inventario.
+- No almacenar totales derivados innecesariamente si pueden calcularse de forma confiable.
+- Evitar consultas N+1.
+- Mantener compatibilidad con las convenciones actuales de NestJS, Prisma y React del proyecto.
 
 ---
 

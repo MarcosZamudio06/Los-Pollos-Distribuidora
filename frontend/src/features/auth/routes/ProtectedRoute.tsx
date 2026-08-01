@@ -1,13 +1,13 @@
-import { Navigate, useLocation } from 'react-router-dom'
-import { LoaderCircle, ShieldCheck } from 'lucide-react'
-import { useAuth } from '../useAuth'
-import type { PropsWithChildren } from 'react'
+import { Navigate, useLocation } from "react-router-dom";
+import { LoaderCircle, ShieldCheck } from "lucide-react";
+import { useAuth } from "../useAuth";
+import type { PropsWithChildren } from "react";
 
 export function ProtectedRoute({ children }: PropsWithChildren) {
-  const { isAuthenticated, status, user } = useAuth()
-  const location = useLocation()
+  const { isAuthenticated, status, user } = useAuth();
+  const location = useLocation();
 
-  if (status === 'checking') {
+  if (status === "checking") {
     return (
       <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--erp-background)] px-6 text-[var(--erp-foreground)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(214,155,45,0.20),transparent_22rem),radial-gradient(circle_at_70%_70%,rgba(182,42,34,0.10),transparent_20rem)]" />
@@ -31,16 +31,18 @@ export function ProtectedRoute({ children }: PropsWithChildren) {
           />
         </section>
       </main>
-    )
+    );
   }
 
   if (!isAuthenticated) {
-    return <Navigate replace state={{ from: location }} to="/login" />
+    return <Navigate replace state={{ from: location }} to="/login" />;
   }
 
-  if (user?.mustChangePassword && location.pathname !== '/change-password') {
-    return <Navigate replace state={{ from: location }} to="/change-password" />
+  if (user?.mustChangePassword && location.pathname !== "/change-password") {
+    return (
+      <Navigate replace state={{ from: location }} to="/change-password" />
+    );
   }
 
-  return children
+  return children;
 }

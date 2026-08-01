@@ -1,1 +1,1 @@
-export { AccessProfilesPage } from './AccessProfilesPage'
+export { AccessProfilesPage } from "./AccessProfilesPage";

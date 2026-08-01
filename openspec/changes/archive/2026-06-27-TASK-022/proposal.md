@@ -7,6 +7,7 @@ Habilitar administración backend de usuarios internos solo para ADMIN, con segu
 ## Scope
 
 ### In Scope
+
 - Endpoints ADMIN: `GET /api/users`, `GET /api/users/:id`, `POST /api/users`, `PATCH /api/users/:id`, `PATCH /api/users/:id/password`, `DELETE /api/users/:id`.
 - Baja lógica con `isActive=false`, `deactivatedAt`, `deactivatedByUserId` y `deactivationReason` opcional; sin borrado físico.
 - Listado de usuarios activos por defecto; inactivos solo con filtro explícito `status=inactive|all` o `includeInactive=true`.
@@ -15,16 +16,19 @@ Habilitar administración backend de usuarios internos solo para ADMIN, con segu
 - Bloqueo inmediato de login y endpoints protegidos para usuarios inactivos.
 
 ### Out of Scope
+
 - UI de administración de usuarios.
 - RBAC nuevo, recuperación de contraseña, MFA o políticas avanzadas fuera de `mustChangePassword`.
 
 ## Capabilities
 
 ### New Capabilities
+
 - `admin-user-management`: CRUD administrativo de usuarios con email único, ocultamiento de credenciales y baja lógica segura.
 - `user-access-status-enforcement`: rechazo de autenticación y acceso protegido para usuarios inactivos y exigencia de cambio de contraseña inicial.
 
 ### Modified Capabilities
+
 - None.
 
 ## Approach
@@ -33,19 +37,19 @@ Implementar el módulo Users y sus contratos ADMIN alineados con `specs/modules/
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `backend/src/users/**` | New/Modified | Endpoints, DTOs, servicio y reglas de negocio de usuarios |
-| `backend/src/auth/**` | Modified | Login, guards y validación de `isActive` / `mustChangePassword` |
-| `backend/prisma/schema.prisma` | Modified | Campos de desactivación y password temporal si faltan |
-| `backend/test/**` | Modified | Cobertura de seguridad, filtros y último ADMIN |
+| Area                           | Impact       | Description                                                     |
+| ------------------------------ | ------------ | --------------------------------------------------------------- |
+| `backend/src/users/**`         | New/Modified | Endpoints, DTOs, servicio y reglas de negocio de usuarios       |
+| `backend/src/auth/**`          | Modified     | Login, guards y validación de `isActive` / `mustChangePassword` |
+| `backend/prisma/schema.prisma` | Modified     | Campos de desactivación y password temporal si faltan           |
+| `backend/test/**`              | Modified     | Cobertura de seguridad, filtros y último ADMIN                  |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Romper acceso administrativo por regla de último ADMIN | Med | Casos límite y validaciones transaccionales |
-| Inconsistencia entre Users y Auth | Med | Criterios compartidos para login, guards y desactivación |
+| Risk                                                   | Likelihood | Mitigation                                               |
+| ------------------------------------------------------ | ---------- | -------------------------------------------------------- |
+| Romper acceso administrativo por regla de último ADMIN | Med        | Casos límite y validaciones transaccionales              |
+| Inconsistencia entre Users y Auth                      | Med        | Criterios compartidos para login, guards y desactivación |
 
 ## Rollback Plan
 

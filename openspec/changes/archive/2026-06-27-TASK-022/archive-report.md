@@ -6,13 +6,13 @@ TASK-022 se archivó intencionalmente después de validación final aprobada por
 
 ## Resumen rápido
 
-| Área | Estado | Detalle |
-|------|--------|---------|
-| Tareas | ✅ | 15/15 completadas; `tasks.md` no contiene tareas sin marcar. |
-| Verificación | ✅ | `verify-report.md` declara PASS y reporta `CRITICAL: None`, `WARNING: None`. |
-| Specs sincronizadas | ✅ | Se copiaron specs completas a `openspec/specs/admin-user-management/spec.md` y `openspec/specs/user-access-status-enforcement/spec.md` porque no existían specs principales previas. |
-| Archivo | ✅ | El cambio fue movido a `openspec/changes/archive/2026-06-27-TASK-022/`. |
-| Engram | ⚠️ | No disponible en el tooling actual; no fue posible persistir el reporte híbrido en memoria. |
+| Área                | Estado | Detalle                                                                                                                                                                              |
+| ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tareas              | ✅     | 15/15 completadas; `tasks.md` no contiene tareas sin marcar.                                                                                                                         |
+| Verificación        | ✅     | `verify-report.md` declara PASS y reporta `CRITICAL: None`, `WARNING: None`.                                                                                                         |
+| Specs sincronizadas | ✅     | Se copiaron specs completas a `openspec/specs/admin-user-management/spec.md` y `openspec/specs/user-access-status-enforcement/spec.md` porque no existían specs principales previas. |
+| Archivo             | ✅     | El cambio fue movido a `openspec/changes/archive/2026-06-27-TASK-022/`.                                                                                                              |
+| Engram              | ⚠️     | No disponible en el tooling actual; no fue posible persistir el reporte híbrido en memoria.                                                                                          |
 
 ## Artefactos verificados
 
@@ -26,9 +26,9 @@ TASK-022 se archivó intencionalmente después de validación final aprobada por
 
 ## Detalle de sincronización de specs
 
-| Dominio | Acción | Detalle |
-|---------|--------|---------|
-| `admin-user-management` | Creada | Spec principal creada desde la spec del cambio; 8 requisitos archivados como nueva fuente de verdad. |
+| Dominio                          | Acción | Detalle                                                                                              |
+| -------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `admin-user-management`          | Creada | Spec principal creada desde la spec del cambio; 8 requisitos archivados como nueva fuente de verdad. |
 | `user-access-status-enforcement` | Creada | Spec principal creada desde la spec del cambio; 3 requisitos archivados como nueva fuente de verdad. |
 
 ## Validaciones de cierre

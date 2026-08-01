@@ -1,5 +1,14 @@
-export { SalesPosPage } from './SalesPosPage'
-export { SalesHistoryPage } from './SalesHistoryPage'
-export { SaleDetailPage } from './SaleDetailPage'
-export { CancelSaleDialog } from './CancelSaleDialog'
-export { BillingRequestPanel, Cart, ConfirmSaleButton, CustomerSelector, PaymentMethodSelector, ProductSearch, SaleSummary, TicketModal } from './components'
+export { SalesPosPage } from "./SalesPosPage";
+export { SalesHistoryPage } from "./SalesHistoryPage";
+export { SaleDetailPage } from "./SaleDetailPage";
+export { CancelSaleDialog } from "./CancelSaleDialog";
+export {
+  BillingRequestPanel,
+  Cart,
+  ConfirmSaleButton,
+  CustomerSelector,
+  PaymentMethodSelector,
+  ProductSearch,
+  SaleSummary,
+  TicketModal,
+} from "./components";

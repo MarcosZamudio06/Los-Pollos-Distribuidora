@@ -1,19 +1,22 @@
-import type { AuthUser } from './types'
+import type { AuthUser } from "./types";
 
 export const PERMISSIONS = {
-  accessAuditRead: 'access_audit.read',
-  accessProfilesManage: 'access_profiles.manage',
-  cashShiftsAdministrativeClose: 'cash_shifts.administrative_close',
-  cashTerminalsReassign: 'cash_terminals.reassign',
-  costsRead: 'costs.read',
-  dailyCloseDifferencesAuthorize: 'daily_closes.differences.authorize',
-  dailyClosesReopen: 'daily_closes.reopen',
-  paymentsCancel: 'payments.cancel',
-  rolesRead: 'roles.read',
-  usersManage: 'users.manage',
-  userSessionsRevoke: 'user_sessions.revoke',
-} as const
+  accessAuditRead: "access_audit.read",
+  accessProfilesManage: "access_profiles.manage",
+  cashShiftsAdministrativeClose: "cash_shifts.administrative_close",
+  cashTerminalsReassign: "cash_terminals.reassign",
+  costsRead: "costs.read",
+  dailyCloseDifferencesAuthorize: "daily_closes.differences.authorize",
+  dailyClosesReopen: "daily_closes.reopen",
+  paymentsCancel: "payments.cancel",
+  rolesRead: "roles.read",
+  usersManage: "users.manage",
+  userSessionsRevoke: "user_sessions.revoke",
+} as const;
 
-export function hasPermission(user: AuthUser | null | undefined, permission: string) {
-  return user?.permissions?.includes(permission) ?? false
+export function hasPermission(
+  user: AuthUser | null | undefined,
+  permission: string,
+) {
+  return user?.permissions?.includes(permission) ?? false;
 }

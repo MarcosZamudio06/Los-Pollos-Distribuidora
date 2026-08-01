@@ -7,15 +7,15 @@
       "GHSA-mh99-v99m-4gvg": {
         "active": true,
         "expiry": "2026-08-31",
-        "notes": "Transitive ExcelJS archive tooling; user-controlled glob patterns are not accepted. Remove when ExcelJS updates its archive chain."
-      }
+        "notes": "Transitive ExcelJS archive tooling; user-controlled glob patterns are not accepted. Remove when ExcelJS updates its archive chain.",
+      },
     },
     {
       "GHSA-qwww-vcr4-c8h2": {
         "active": true,
         "expiry": "2026-08-31",
-        "notes": "React Router RSC actions are not used by this Vite SPA. Remove when an upstream patched release is available."
-      }
-    }
-  ]
+        "notes": "React Router RSC actions are not used by this Vite SPA. Remove when an upstream patched release is available.",
+      },
+    },
+  ],
 }

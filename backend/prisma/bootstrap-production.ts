@@ -43,11 +43,15 @@ const productionAdmin = {
 export type ProductionBootstrapClient = {
   role: {
     upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
-    findUnique: (args: Prisma.RoleFindUniqueArgs) => Promise<{ id: string } | null>;
+    findUnique: (
+      args: Prisma.RoleFindUniqueArgs,
+    ) => Promise<{ id: string } | null>;
   };
   permission: {
     upsert: (args: Prisma.PermissionUpsertArgs) => Promise<unknown>;
-    findUnique: (args: Prisma.PermissionFindUniqueArgs) => Promise<{ id: string } | null>;
+    findUnique: (
+      args: Prisma.PermissionFindUniqueArgs,
+    ) => Promise<{ id: string } | null>;
   };
   rolePermission: {
     createMany: (args: Prisma.RolePermissionCreateManyArgs) => Promise<unknown>;

@@ -1,1 +1,1 @@
-export { BillingReportableNotesPage } from './BillingReportableNotesPage'
+export { BillingReportableNotesPage } from "./BillingReportableNotesPage";

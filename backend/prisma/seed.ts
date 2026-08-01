@@ -36,7 +36,6 @@ export const initialAdminUser = {
   phone: '+520000000001',
 } as const;
 
-
 export const initialRoleTestUsers = [
   {
     roleName: 'SELLER',
@@ -44,7 +43,8 @@ export const initialRoleTestUsers = [
     email: 'dev.seller@pollos.local',
     isActive: true,
     mustChangePassword: false,
-    controlNumber: 'EPDP-000002', phone: '+520000000002',
+    controlNumber: 'EPDP-000002',
+    phone: '+520000000002',
   },
   {
     roleName: 'WAREHOUSE',
@@ -52,7 +52,8 @@ export const initialRoleTestUsers = [
     email: 'dev.warehouse@pollos.local',
     isActive: true,
     mustChangePassword: false,
-    controlNumber: 'EPDP-000003', phone: '+520000000003',
+    controlNumber: 'EPDP-000003',
+    phone: '+520000000003',
   },
   {
     roleName: 'DRIVER',
@@ -60,7 +61,8 @@ export const initialRoleTestUsers = [
     email: 'dev.driver@pollos.local',
     isActive: true,
     mustChangePassword: false,
-    controlNumber: 'EPDP-000004', phone: '+520000000004',
+    controlNumber: 'EPDP-000004',
+    phone: '+520000000004',
   },
   {
     roleName: 'COLLECTIONS',
@@ -68,7 +70,8 @@ export const initialRoleTestUsers = [
     email: 'dev.collections@pollos.local',
     isActive: true,
     mustChangePassword: false,
-    controlNumber: 'EPDP-000005', phone: '+520000000005',
+    controlNumber: 'EPDP-000005',
+    phone: '+520000000005',
   },
   {
     roleName: 'BILLING',
@@ -76,7 +79,8 @@ export const initialRoleTestUsers = [
     email: 'dev.billing@pollos.local',
     isActive: true,
     mustChangePassword: false,
-    controlNumber: 'EPDP-000006', phone: '+520000000006',
+    controlNumber: 'EPDP-000006',
+    phone: '+520000000006',
   },
 ] as const;
 
@@ -290,7 +294,6 @@ async function seedInitialLocation(prisma: SeedPrismaClient): Promise<void> {
   }
 }
 
-
 async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
   const passwordHash = await bcrypt.hash(DEVELOPMENT_ROLE_TEST_PASSWORD, 12);
 
@@ -319,7 +322,7 @@ async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
     });
   }
   await prisma.$executeRawUnsafe?.(
-    "SELECT setval('\"User_controlNumber_seq\"', GREATEST((SELECT COALESCE(MAX(SUBSTRING(\"controlNumber\" FROM 6)::bigint), 1) FROM \"User\"), 1), true)",
+    'SELECT setval(\'"User_controlNumber_seq"\', GREATEST((SELECT COALESCE(MAX(SUBSTRING("controlNumber" FROM 6)::bigint), 1) FROM "User"), 1), true)',
   );
 }
 

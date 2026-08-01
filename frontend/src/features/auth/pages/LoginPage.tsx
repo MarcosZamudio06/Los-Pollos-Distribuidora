@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from "react";
 import {
   AlertCircle,
   Eye,
@@ -6,49 +6,51 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
-} from 'lucide-react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Button, Card, CardContent, Input } from '@/components/ui'
-import { useAuth } from '../useAuth'
+} from "lucide-react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Alert, Button, Card, CardContent, Input } from "@/components/ui";
+import { useAuth } from "../useAuth";
 
 type LocationState = {
   from?: {
-    pathname?: string
-  }
-}
+    pathname?: string;
+  };
+};
 
 export function LoginPage() {
-  const { error, isAuthenticated, login } = useAuth()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
-  const state = location.state as LocationState | null
-  const nextPath = state?.from?.pathname ?? '/'
+  const { error, isAuthenticated, login } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const state = location.state as LocationState | null;
+  const nextPath = state?.from?.pathname ?? "/";
 
   if (isAuthenticated) {
-    return <Navigate replace to={nextPath} />
+    return <Navigate replace to={nextPath} />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setFormError(null)
-    setIsSubmitting(true)
+    event.preventDefault();
+    setFormError(null);
+    setIsSubmitting(true);
 
     try {
-      await login({ email, password })
-      navigate(nextPath, { replace: true })
+      await login({ email, password });
+      navigate(nextPath, { replace: true });
     } catch {
-      setFormError('Revisa tu correo y contraseña. Si el usuario está inactivo, pide reactivación a un ADMIN.')
+      setFormError(
+        "Revisa tu correo y contraseña. Si el usuario está inactivo, pide reactivación a un ADMIN.",
+      );
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
-  const activeError = formError ?? error
+  const activeError = formError ?? error;
 
   return (
     <main className="min-h-screen overflow-hidden bg-[var(--erp-background)] text-[var(--erp-foreground)]">
@@ -68,7 +70,8 @@ export function LoginPage() {
                 Control diario para una operación sin puntos ciegos.
               </h1>
               <p className="mt-5 max-w-md text-base leading-7 text-white/68">
-                Ventas, inventario, cobranza y reparto bajo una sesión segura del ERP.
+                Ventas, inventario, cobranza y reparto bajo una sesión segura
+                del ERP.
               </p>
             </div>
           </div>
@@ -99,7 +102,8 @@ export function LoginPage() {
                     Identifica tu turno
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-[var(--erp-muted-foreground)]">
-                    Usa tu correo interno. El sistema validará tu estado activo y permisos.
+                    Usa tu correo interno. El sistema validará tu estado activo
+                    y permisos.
                   </p>
 
                   <div className="mt-8 grid gap-5">
@@ -111,7 +115,9 @@ export function LoginPage() {
                       <div className="relative">
                         <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--erp-muted-foreground)]" />
                         <Input
-                          aria-describedby={activeError ? 'login-error' : undefined}
+                          aria-describedby={
+                            activeError ? "login-error" : undefined
+                          }
                           aria-invalid={Boolean(activeError)}
                           autoComplete="email"
                           className="h-12 rounded-2xl bg-[var(--erp-surface)] pl-10 text-base"
@@ -132,18 +138,24 @@ export function LoginPage() {
                       <div className="relative">
                         <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--erp-muted-foreground)]" />
                         <Input
-                          aria-describedby={activeError ? 'login-error' : undefined}
+                          aria-describedby={
+                            activeError ? "login-error" : undefined
+                          }
                           aria-invalid={Boolean(activeError)}
                           autoComplete="current-password"
                           className="h-12 rounded-2xl bg-[var(--erp-surface)] pl-10 pr-11 text-base"
                           id="password"
                           onChange={(event) => setPassword(event.target.value)}
                           required
-                          type={showPassword ? 'text' : 'password'}
+                          type={showPassword ? "text" : "password"}
                           value={password}
                         />
                         <button
-                          aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                          aria-label={
+                            showPassword
+                              ? "Ocultar contraseña"
+                              : "Mostrar contraseña"
+                          }
                           className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-[var(--erp-muted-foreground)] transition hover:bg-[var(--erp-surface-muted)] hover:text-[var(--erp-foreground)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
                           onClick={() => setShowPassword((value) => !value)}
                           type="button"
@@ -175,7 +187,7 @@ export function LoginPage() {
                     disabled={isSubmitting}
                     type="submit"
                   >
-                    {isSubmitting ? 'Validando acceso' : 'Entrar al sistema'}
+                    {isSubmitting ? "Validando acceso" : "Entrar al sistema"}
                   </Button>
                 </form>
               </CardContent>
@@ -184,5 +196,5 @@ export function LoginPage() {
         </div>
       </section>
     </main>
-  )
+  );
 }
