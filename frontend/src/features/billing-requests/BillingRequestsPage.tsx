@@ -148,14 +148,14 @@ export function BillingRequestsPage() {
   return (
     <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-6">
-        <header className="overflow-hidden rounded-[1.6rem] bg-[var(--erp-charcoal)] p-6 text-white shadow-[var(--erp-shadow-elevated)]">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-[var(--erp-brand-gold-soft)]">
+        <header className="overflow-hidden rounded-[1.6rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-[var(--erp-shadow-elevated)]">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-[var(--erp-brand-gold-deep)]">
             Control administrativo
           </p>
           <h1 className="mt-3 text-3xl font-black tracking-[-0.05em] sm:text-4xl">
             Solicitudes de facturación
           </h1>
-          <p className="mt-3 max-w-3xl text-sm text-white/70">
+          <p className="mt-3 max-w-3xl text-sm text-[var(--erp-muted-foreground)]">
             Seguimiento interno asociado a ventas. No representa CFDI, SAT,
             timbrado ni documento fiscal.
           </p>

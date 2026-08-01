@@ -228,9 +228,9 @@ export function BillingReportableNotesPage() {
   return (
     <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-[1500px] gap-5">
-        <header className="relative overflow-hidden rounded-[1.75rem] bg-[var(--erp-charcoal)] p-6 text-white shadow-[var(--erp-shadow-elevated)] sm:p-8">
+        <header className="relative overflow-hidden rounded-[1.75rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-[var(--erp-shadow-elevated)] sm:p-8">
           <div className="absolute inset-y-0 right-0 w-2 bg-[var(--erp-brand-gold)]" />
-          <p className="text-xs font-black uppercase tracking-[.22em] text-[var(--erp-brand-gold-soft)]">
+          <p className="text-xs font-black uppercase tracking-[.22em] text-[var(--erp-brand-gold-deep)]">
             Conciliación documental
           </p>
           <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
@@ -238,13 +238,13 @@ export function BillingReportableNotesPage() {
               <h1 className="text-3xl font-black tracking-[-.05em] sm:text-4xl">
                 Notas facturables
               </h1>
-              <p className="mt-2 max-w-3xl text-sm text-white/70">
+              <p className="mt-2 max-w-3xl text-sm text-[var(--erp-muted-foreground)]">
                 Controla solicitudes y facturas externas sin emitir CFDI ni
                 modificar ventas, pagos o inventario.
               </p>
             </div>
             {report.isFetching && !report.isLoading && (
-              <span className="flex items-center gap-2 text-sm font-bold text-white/70">
+              <span className="flex items-center gap-2 text-sm font-bold text-[var(--erp-muted-foreground)]">
                 <RefreshCw className="h-4 w-4 animate-spin" />
                 Actualizando
               </span>
