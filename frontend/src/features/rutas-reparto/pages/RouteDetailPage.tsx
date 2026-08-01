@@ -71,7 +71,7 @@ export function RouteDetailPage() {
           }
           eyebrow="Detalle de ruta"
           title={detail?.name ?? "Ruta de reparto"}
-          subtitle="Consulta pedidos, ROUTE_STOCK, evidencia capturada, cobros derivados de Payment y liquidación asociada cuando la API la devuelve."
+          subtitle=""
         />
 
         {route.isLoading && (
