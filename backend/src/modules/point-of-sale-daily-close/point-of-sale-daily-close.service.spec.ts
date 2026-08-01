@@ -1309,4 +1309,40 @@ describe('PointOfSaleDailyCloseService', () => {
       } as never),
     ).rejects.toThrow(new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS'));
   });
+
+  it('projects the closed daily close before returning it', async () => {
+    const current = {
+      id: 'close-1',
+      version: 4,
+      validatedSourceVersion: 4,
+    };
+    const transitioned = {
+      id: 'close-1',
+      status: 'CLOSED',
+    };
+    const projected = {
+      ...transitioned,
+      dataAsOf: new Date('2026-07-22T18:00:00.000Z'),
+      excludedOperations: [],
+    };
+    const admin = { id: 'admin-1', role: 'ADMIN' } as never;
+
+    jest
+      .spyOn(privateService, 'requireCloseAccess')
+      .mockResolvedValue(current);
+    jest
+      .spyOn(privateService, 'transition')
+      .mockResolvedValue(transitioned);
+    jest
+      .spyOn(privateService, 'projectDetailForRole')
+      .mockResolvedValue(projected);
+
+    await expect(
+      service.close('close-1', { version: 4 }, admin),
+    ).resolves.toBe(projected);
+    expect(privateService.projectDetailForRole).toHaveBeenCalledWith(
+      transitioned,
+      admin,
+    );
+  });
 });
