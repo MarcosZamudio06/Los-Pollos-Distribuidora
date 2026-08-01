@@ -21,7 +21,10 @@ vi.mock("../hooks", () => ({
           code: "MISSING_LEGAL_ENTITY_MAPPING",
           entityType: "Sale",
           entityId: "sale-1",
-          details: {},
+          details: {
+            operationalLocationId: "location-1",
+            currencyCode: "MXN",
+          },
           createdAt: "2026-07-19T12:00:00.000Z",
           updatedAt: "2026-07-19T12:00:00.000Z",
           resolvedAt: null,
@@ -84,6 +87,9 @@ describe("billing remediations UI contracts", () => {
     expect(html).toContain("Remediaciones contables");
     expect(html).toContain("V-1001");
     expect(html).toContain("Asignar entidad legal");
+    expect(html).toContain("Entidad legal pendiente");
+    expect(html).toContain("Ubicación operativa");
+    expect(html).toContain("Ver datos técnicos");
     expect(html).toContain("validará nuevamente");
   });
 

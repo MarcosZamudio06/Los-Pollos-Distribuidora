@@ -9,6 +9,7 @@ import {
 import { Button, Card } from "@/components/ui";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { ApiClientError } from "@/lib/api";
+import { formatMoney } from "@/lib/money";
 import { useAuth } from "../auth";
 import { useBillingRemediations, useResolveBillingRemediation } from "./hooks";
 import type {
@@ -25,6 +26,314 @@ const codeLabels: Record<string, string> = {
   UNALLOCATED_ITEM_AMOUNTS: "Distribuir importes legacy",
   INVALID_SALE_TOTAL: "Corregir totales inválidos",
 };
+const contextCopy: Record<string, { title: string; description: string }> = {
+  MISSING_LEGAL_ENTITY_MAPPING: {
+    title: "Entidad legal pendiente",
+    description: "La venta no tiene un emisor legal asignado.",
+  },
+  AMBIGUOUS_SALE_DOCUMENT: {
+    title: "Documentos duplicados",
+    description: "Hay más de un documento candidato para la venta.",
+  },
+  UNALLOCATED_ITEM_AMOUNTS: {
+    title: "Importes sin distribuir",
+    description: "Las partidas no reflejan correctamente los importes de la venta.",
+  },
+  INVALID_SALE_TOTAL: {
+    title: "Totales inconsistentes",
+    description: "La cabecera y las partidas no conservan la misma ecuación.",
+  },
+};
+const documentTypeLabels: Record<string, string> = {
+  LARGE_NOTE: "Nota grande",
+  SIMPLE_NOTE: "Nota sencilla",
+};
+const amountFields = [
+  ["subtotal", "Subtotal"],
+  ["discount", "Descuento"],
+  ["tax", "Impuesto"],
+  ["total", "Total"],
+] as const;
+
+type ContextMetric = { label: string; value: string };
+type ContextSnapshot = Record<string, unknown>;
+
+function asContextSnapshot(value: unknown): ContextSnapshot | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as ContextSnapshot)
+    : null;
+}
+
+function contextText(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  return "";
+}
+
+function contextMoney(value: unknown): string {
+  const text = contextText(value);
+  return text ? formatMoney(text) : "";
+}
+
+function contextKeyLabel(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+function contextDocumentType(value: unknown): string {
+  const text = contextText(value);
+  return text ? (documentTypeLabels[text] ?? text) : "";
+}
+
+function pushContextMetric(
+  metrics: ContextMetric[],
+  label: string,
+  value: unknown,
+  formatter: (value: unknown) => string = contextText,
+) {
+  const formatted = formatter(value);
+  if (formatted) metrics.push({ label, value: formatted });
+}
+
+function scalarContextMetrics(
+  details: ContextSnapshot,
+): ContextMetric[] {
+  return Object.entries(details).flatMap(([key, value]) => {
+    if (typeof value === "object" || value === null) return [];
+    const formatted = ["subtotal", "discount", "tax", "total"].includes(key)
+      ? contextMoney(value)
+      : contextText(value);
+    return formatted
+      ? [{ label: contextKeyLabel(key), value: formatted }]
+      : [];
+  });
+}
+
+function getContextMetrics(item: BillingRemediationItem): ContextMetric[] {
+  const details = item.details;
+  const metrics: ContextMetric[] = [];
+
+  if (item.code === "MISSING_LEGAL_ENTITY_MAPPING") {
+    pushContextMetric(
+      metrics,
+      "Ubicación operativa",
+      details.operationalLocationId,
+    );
+    pushContextMetric(metrics, "Moneda", details.currencyCode);
+  }
+  if (item.code === "AMBIGUOUS_SALE_DOCUMENT") {
+    pushContextMetric(
+      metrics,
+      "Tipo documental",
+      item.sale?.documentType ?? details.documentType,
+      contextDocumentType,
+    );
+    pushContextMetric(metrics, "Documentos encontrados", details.matchingDocuments);
+  }
+  if (item.code === "UNALLOCATED_ITEM_AMOUNTS") {
+    if (item.sale) {
+      pushContextMetric(
+        metrics,
+        "Partidas detectadas",
+        `${item.sale.items.length} partidas`,
+      );
+    }
+    pushContextMetric(
+      metrics,
+      "Descuento en venta",
+      details.discount ?? item.sale?.discount,
+      contextMoney,
+    );
+    pushContextMetric(
+      metrics,
+      "Impuesto en venta",
+      details.tax ?? item.sale?.tax,
+      contextMoney,
+    );
+  }
+  if (item.code === "INVALID_SALE_TOTAL") {
+    const hasComparison =
+      asContextSnapshot(details.header) || asContextSnapshot(details.items);
+    if (!hasComparison) {
+      for (const [key, label] of amountFields) {
+        pushContextMetric(
+          metrics,
+          label,
+          details[key] ?? item.sale?.[key],
+          contextMoney,
+        );
+      }
+    }
+  }
+
+  return metrics.length > 0 ? metrics : scalarContextMetrics(details);
+}
+
+function getAmountComparison(item: BillingRemediationItem) {
+  if (item.code !== "INVALID_SALE_TOTAL") return null;
+  const header = asContextSnapshot(item.details.header);
+  const items = asContextSnapshot(item.details.items);
+  return header || items ? { header: header ?? {}, items: items ?? {} } : null;
+}
+
+function getCandidateDocuments(item: BillingRemediationItem) {
+  if (item.code !== "AMBIGUOUS_SALE_DOCUMENT" || !item.sale) return [];
+  return item.sale.documents.filter(
+    (document) =>
+      document.documentType === item.sale?.documentType &&
+      document.status !== "CANCELLED",
+  );
+}
+
+function sameMoney(left: unknown, right: unknown): boolean {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  return (
+    Number.isFinite(leftNumber) &&
+    Number.isFinite(rightNumber) &&
+    Math.abs(leftNumber - rightNumber) < 0.005
+  );
+}
+
+function RemediationContext({ item }: { item: BillingRemediationItem }) {
+  const copy = contextCopy[item.code] ?? {
+    title: "Detalle de inconsistencia",
+    description: "Revisa la información registrada por el validador.",
+  };
+  const metrics = getContextMetrics(item);
+  const comparison = getAmountComparison(item);
+  const candidateDocuments = getCandidateDocuments(item);
+  const details = asContextSnapshot(item.details) ?? {};
+  const hasTechnicalDetails = Object.keys(details).length > 0;
+
+  return (
+    <div className="min-w-[15rem] max-w-[22rem]">
+      <div className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/70 p-3">
+        <div className="flex items-start gap-2.5">
+          <span
+            aria-hidden="true"
+            className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--erp-brand-gold)]"
+          />
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-[.08em] text-[var(--erp-foreground)]">
+              {copy.title}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[var(--erp-muted-foreground)]">
+              {copy.description}
+            </p>
+          </div>
+        </div>
+        {metrics.length > 0 && (
+          <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-[color:var(--erp-border)] pt-3">
+            {metrics.map((metric) => (
+              <div className="min-w-0" key={metric.label}>
+                <dt className="text-[10px] font-bold uppercase tracking-[.06em] text-[var(--erp-muted-foreground)]">
+                  {metric.label}
+                </dt>
+                <dd className="mt-0.5 break-words text-xs font-black text-[var(--erp-foreground)]">
+                  {metric.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {comparison && (
+          <div className="mt-3 overflow-hidden rounded-lg border border-[color:var(--erp-border)] bg-white">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 bg-[var(--erp-surface)] px-2.5 py-2 text-[10px] font-black uppercase tracking-[.06em] text-[var(--erp-muted-foreground)]">
+              <span />
+              <span>Venta</span>
+              <span>Partidas</span>
+            </div>
+            {amountFields.map(([key, label]) => {
+              const headerValue = comparison.header[key];
+              const itemValue = comparison.items[key];
+              const hasBothValues = headerValue != null && itemValue != null;
+              const mismatch = hasBothValues && !sameMoney(headerValue, itemValue);
+              return (
+                <div
+                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 border-t border-[color:var(--erp-border)] px-2.5 py-2 text-xs"
+                  key={key}
+                >
+                  <span className="font-bold text-[var(--erp-muted-foreground)]">
+                    {label}
+                  </span>
+                  <span
+                    className={
+                      mismatch
+                        ? "font-black text-[var(--erp-danger)]"
+                        : "font-bold text-[var(--erp-foreground)]"
+                    }
+                  >
+                    {contextMoney(headerValue) || "—"}
+                  </span>
+                  <span
+                    className={
+                      mismatch
+                        ? "font-black text-[var(--erp-danger)]"
+                        : "font-bold text-[var(--erp-foreground)]"
+                    }
+                  >
+                    {contextMoney(itemValue) || "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {candidateDocuments.length > 0 && (
+          <div className="mt-3 border-t border-[color:var(--erp-border)] pt-3">
+            <p className="text-[10px] font-bold uppercase tracking-[.06em] text-[var(--erp-muted-foreground)]">
+              Documentos candidatos
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {candidateDocuments.map((document) => {
+                const hasRelations =
+                  document._count.billingRequestDocuments > 0 ||
+                  document._count.invoiceDocuments > 0;
+                return (
+                  <span
+                    className={`inline-flex max-w-full items-center rounded-full px-2 py-1 text-[10px] font-black ${hasRelations ? "bg-amber-100 text-amber-900" : "bg-white text-[var(--erp-foreground)]"}`}
+                    key={document.id}
+                    title={
+                      hasRelations
+                        ? "Documento con relaciones contables"
+                        : "Documento sin relaciones contables"
+                    }
+                  >
+                    <span className="truncate">
+                      {document.physicalFolio ?? "Sin folio"}
+                    </span>
+                    {hasRelations && <span className="ml-1">· vinculado</span>}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {!metrics.length && !comparison && !candidateDocuments.length && (
+          <p className="mt-3 border-t border-[color:var(--erp-border)] pt-3 text-xs text-[var(--erp-muted-foreground)]">
+            Sin datos adicionales registrados.
+          </p>
+        )}
+        {hasTechnicalDetails && (
+          <details className="mt-3 border-t border-[color:var(--erp-border)] pt-2">
+            <summary className="cursor-pointer list-none text-[11px] font-black text-[var(--erp-info)]">
+              Ver datos técnicos
+            </summary>
+            <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--erp-charcoal)] p-2.5 font-mono text-[10px] leading-4 text-white/80">
+              {JSON.stringify(details, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function getRemediationErrorDetails(error: unknown): string[] {
   if (
     !(error instanceof ApiClientError) ||
@@ -290,10 +599,8 @@ export function BillingRemediationsPage() {
                           timeStyle: "short",
                         }).format(new Date(item.createdAt))}
                       </td>
-                      <td className="max-w-sm p-4">
-                        <pre className="whitespace-pre-wrap text-xs">
-                          {JSON.stringify(item.details, null, 2)}
-                        </pre>
+                      <td className="max-w-sm p-4 align-top">
+                        <RemediationContext item={item} />
                       </td>
                       <td className="p-4">
                         {canResolve && !item.resolvedAt ? (
