@@ -141,7 +141,7 @@ describe('Production bootstrap contract', () => {
 
     expect(roleUpsert).toHaveBeenCalledTimes(12);
     expect(roleFindUnique).toHaveBeenCalledTimes(12);
-    expect(permissionUpsert).toHaveBeenCalledTimes(22);
+    expect(permissionUpsert).toHaveBeenCalledTimes(24);
     expect(permissionFindUnique).toHaveBeenCalled();
     expect(rolePermissionCreateMany).toHaveBeenCalledTimes(12);
     expect(locationUpsert).toHaveBeenCalledTimes(2);

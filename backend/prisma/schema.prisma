@@ -212,6 +212,11 @@ enum CashShiftStatus {
   CANCELLED
 }
 
+enum CashShiftCloseMode {
+  CASHIER
+  ADMINISTRATIVE
+}
+
 enum DailyCloseSnapshotType {
   REVIEWED
   CLOSED
@@ -220,6 +225,7 @@ enum DailyCloseSnapshotType {
 
 enum DailyCloseEventType {
   CASH_COUNT_RECORDED
+  CASH_SHIFT_CLOSED
   DIFFERENCE_AUTHORIZED
   DIFFERENCE_JUSTIFIED
   EXPENSE_RECORDED
@@ -1285,6 +1291,8 @@ model CashShift {
   initialCashOut          Decimal               @default(0) @db.Decimal(14, 2)
   cashCountedTotal        Decimal?              @db.Decimal(14, 2)
   cashDifferenceTotal     Decimal?              @db.Decimal(14, 2)
+  closeMode               CashShiftCloseMode?
+  closeReason             String?
   notes                   String?
   version                 Int                   @default(1)
   createdAt               DateTime              @default(now())

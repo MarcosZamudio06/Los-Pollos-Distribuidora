@@ -1,6 +1,7 @@
 export const PERMISSIONS = {
   ACCESS_AUDIT_READ: 'access_audit.read',
   ACCESS_PROFILES_MANAGE: 'access_profiles.manage',
+  CASH_SHIFTS_ADMINISTRATIVE_CLOSE: 'cash_shifts.administrative_close',
   CASH_TERMINALS_REASSIGN: 'cash_terminals.reassign',
   COSTS_READ: 'costs.read',
   DAILY_CLOSES_DIFFERENCES_AUTHORIZE: 'daily_closes.differences.authorize',
@@ -39,6 +40,11 @@ export const PERMISSION_DEFINITIONS = [
   {
     key: PERMISSIONS.ACCESS_PROFILES_MANAGE,
     description: 'Manage access profiles and their permissions.',
+  },
+  {
+    key: PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE,
+    description:
+      'Close an abandoned or inaccessible cash shift administratively.',
   },
   {
     key: PERMISSIONS.CASH_TERMINALS_REASSIGN,
@@ -84,6 +90,10 @@ export const PERMISSION_METADATA: Record<
 > = {
   [PERMISSIONS.ACCESS_AUDIT_READ]: { group: 'Security', risk: 'sensitive' },
   [PERMISSIONS.ACCESS_PROFILES_MANAGE]: { group: 'Security', risk: 'critical' },
+  [PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE]: {
+    group: 'Cash',
+    risk: 'critical',
+  },
   [PERMISSIONS.CASH_TERMINALS_REASSIGN]: { group: 'Cash', risk: 'critical' },
   [PERMISSIONS.COSTS_READ]: { group: 'Information', risk: 'sensitive' },
   [PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE]: {

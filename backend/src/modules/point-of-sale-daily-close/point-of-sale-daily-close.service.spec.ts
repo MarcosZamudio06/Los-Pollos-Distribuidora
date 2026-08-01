@@ -758,6 +758,63 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(result.cashDifferenceTotal).toBe(-20);
   });
 
+  it('consolidates counted cash and opening funds from closed shifts', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      sales: [],
+      payments: [],
+      cashShifts: [
+        {
+          status: 'CLOSED',
+          initialCashFund: 100,
+          initialCashIn: 20,
+          initialCashOut: 0,
+          cashCountedTotal: 120,
+        },
+        {
+          status: 'CLOSED',
+          initialCashFund: 200,
+          initialCashIn: 0,
+          initialCashOut: 10,
+          cashCountedTotal: 190,
+        },
+      ],
+      cashCountedTotal: null,
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close);
+    prisma.$transaction.mockImplementation(
+      (callback: (transaction: typeof prisma) => unknown) => callback(prisma),
+    );
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue({
+      ...close,
+      netCashExpected: 310,
+      cashCountedTotal: 310,
+      cashDifferenceTotal: 0,
+    });
+
+    await privateService.recalculate('close-1');
+
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          netCashExpected: 310,
+          cashCountedTotal: 310,
+          cashDifferenceTotal: 0,
+        }),
+      }),
+    );
+  });
+
   it('persists a physical count without creating an inventory movement', async () => {
     prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
       id: 'close-1',

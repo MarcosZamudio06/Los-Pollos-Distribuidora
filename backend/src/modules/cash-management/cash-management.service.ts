@@ -6,7 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CashShiftCloseMode,
   CashShiftStatus,
+  DailyCloseEventType,
   OperationalLocationType,
   Prisma,
 } from '@prisma/client';
@@ -419,10 +421,26 @@ export class CashManagementService {
         if (!shift) throw new NotFoundException('CASH_SHIFT_NOT_FOUND');
         if (shift.status !== CashShiftStatus.OPEN)
           throw new ConflictException('CASH_SHIFT_NOT_OPEN');
-        if (shift.cashierUserId !== user.id && user.role !== 'ADMIN')
-          throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
-        if (shift.terminal.deviceId !== dto.deviceId.trim())
-          throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
+        const administrativeReason = dto.administrativeReason?.trim() || null;
+        if (dto.administrativeReason !== undefined && !administrativeReason)
+          throw new BadRequestException(
+            'CASH_SHIFT_ADMINISTRATIVE_REASON_REQUIRED',
+          );
+        const isAdministrativeClose = administrativeReason !== null;
+        if (isAdministrativeClose) {
+          this.requirePermission(
+            user,
+            PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE,
+            'CASH_SHIFT_ADMINISTRATIVE_PERMISSION_REQUIRED',
+          );
+        } else {
+          if (!dto.deviceId?.trim())
+            throw new BadRequestException('CASH_TERMINAL_DEVICE_REQUIRED');
+          if (shift.cashierUserId !== user.id && user.role !== 'ADMIN')
+            throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
+          if (shift.terminal.deviceId !== dto.deviceId.trim())
+            throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
+        }
         const closedAt = new Date();
         const transition = await tx.cashShift.updateMany({
           where: { id, status: CashShiftStatus.OPEN },
@@ -466,14 +484,35 @@ export class CashManagementService {
           this.money(cashOut._sum.amount) -
           this.money(expenses._sum.amount);
         const counted = this.money(dto.cashCountedTotal);
-        return tx.cashShift.update({
+        const closed = await tx.cashShift.update({
           where: { id },
           data: {
             cashCountedTotal: counted,
             cashDifferenceTotal: this.money(counted - expected),
+            closeMode: isAdministrativeClose
+              ? CashShiftCloseMode.ADMINISTRATIVE
+              : CashShiftCloseMode.CASHIER,
+            closeReason: administrativeReason,
           },
           include: shiftInclude,
         });
+        await tx.dailyCloseEvent.create({
+          data: {
+            pointOfSaleDailyCloseId: shift.pointOfSaleDailyCloseId,
+            type: DailyCloseEventType.CASH_SHIFT_CLOSED,
+            payload: {
+              cashShiftId: shift.id,
+              closeMode: isAdministrativeClose
+                ? CashShiftCloseMode.ADMINISTRATIVE
+                : CashShiftCloseMode.CASHIER,
+              cashCountedTotal: counted,
+              cashDifferenceTotal: this.money(counted - expected),
+              reason: administrativeReason,
+            },
+            createdByUserId: user.id,
+          },
+        });
+        return closed;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -573,9 +612,13 @@ export class CashManagementService {
     return createHash('sha256').update(value).digest('hex');
   }
 
-  private requirePermission(user: AuthenticatedUser, permission: string) {
+  private requirePermission(
+    user: AuthenticatedUser,
+    permission: string,
+    errorCode = 'CASH_TERMINAL_PERMISSION_REQUIRED',
+  ) {
     if (!user.permissions?.includes(permission)) {
-      throw new ForbiddenException('CASH_TERMINAL_PERMISSION_REQUIRED');
+      throw new ForbiddenException(errorCode);
     }
   }
 

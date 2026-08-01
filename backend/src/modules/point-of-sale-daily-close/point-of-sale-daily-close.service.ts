@@ -921,11 +921,21 @@ export class PointOfSaleDailyCloseService {
         code: 'OPERATION_LOCATION_MISMATCH',
         message: 'Hay operaciones de otra ubicación.',
       });
-    if (updated.cashCountedTotal === null)
+    const openShiftCount = (updated.cashShifts ?? []).filter(
+      (shift) => shift.status === 'OPEN',
+    ).length;
+    if (openShiftCount > 0) {
+      errors.push({
+        code: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
+        message:
+          'Hay turnos de caja abiertos. Cierra todos los turnos antes de finalizar la jornada.',
+      });
+    } else if (updated.cashCountedTotal === null) {
       errors.push({
         code: 'CASH_COUNT_REQUIRED',
         message: 'Registra el efectivo contado antes de validar el cierre.',
       });
+    }
     const storedDifferences = (
       (
         updated as {
@@ -1134,7 +1144,7 @@ export class PointOfSaleDailyCloseService {
       to,
     );
     close = await this.findClose(id, client);
-    const sum = (values: Array<Prisma.Decimal | null>, fallback = 0) =>
+    const sum = (values: Array<Prisma.Decimal | number | null>, fallback = 0) =>
       values.reduce<number>(
         (total, value) => total + Number(value ?? fallback),
         0,
@@ -1199,10 +1209,22 @@ export class PointOfSaleDailyCloseService {
         )
         .map((movement) => movement.amount),
     );
-    const openingCash =
-      Number(close.initialCashFund ?? 0) +
-      Number(close.initialCashIn ?? 0) -
-      Number(close.initialCashOut ?? 0);
+    const activeCashShifts = (close.cashShifts ?? []).filter(
+      (shift) => shift.status !== 'CANCELLED',
+    );
+    const hasCashShifts = activeCashShifts.length > 0;
+    const openingCash = hasCashShifts
+      ? sum(
+          activeCashShifts.map(
+            (shift) =>
+              Number(shift.initialCashFund) +
+              Number(shift.initialCashIn) -
+              Number(shift.initialCashOut),
+          ),
+        )
+      : Number(close.initialCashFund ?? 0) +
+        Number(close.initialCashIn ?? 0) -
+        Number(close.initialCashOut ?? 0);
     const cashInTotal = sum(
       close.cashMovements
         .filter(
@@ -1220,6 +1242,14 @@ export class PointOfSaleDailyCloseService {
         .map((movement) => movement.amount),
     );
     const reconciliation = await this.reconciliationForClose(close, client);
+    const cashCountedTotal = hasCashShifts
+      ? activeCashShifts.every(
+          (shift) =>
+            shift.status === 'CLOSED' && shift.cashCountedTotal !== null,
+        )
+        ? sum(activeCashShifts.map((shift) => shift.cashCountedTotal))
+        : null
+      : close.cashCountedTotal;
     const data = {
       totalInputKg: kilos.totalInputKg,
       totalSoldKg: kilos.totalSoldKg,
@@ -1244,10 +1274,11 @@ export class PointOfSaleDailyCloseService {
       grossSalesTotal,
       netCashExpected:
         openingCash + cashTotal + cashInTotal - cashOutTotal - cashExpenseTotal,
+      cashCountedTotal,
       cashDifferenceTotal:
-        close.cashCountedTotal === null
+        cashCountedTotal === null
           ? null
-          : Number(close.cashCountedTotal) -
+          : Number(cashCountedTotal) -
             (openingCash +
               cashTotal +
               cashInTotal -
@@ -1268,9 +1299,7 @@ export class PointOfSaleDailyCloseService {
           cashOutTotal -
           cashExpenseTotal,
         cashRecorded:
-          close.cashCountedTotal === null
-            ? null
-            : Number(close.cashCountedTotal),
+          cashCountedTotal === null ? null : Number(cashCountedTotal),
         scaleExpected: kilos.totalSoldKg,
         scaleRecorded: scaleReportedKg,
         inventory: reconciliation.items,

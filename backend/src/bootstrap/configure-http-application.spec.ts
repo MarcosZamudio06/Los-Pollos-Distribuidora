@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ConflictException,
   Get,
   Logger,
   Post,
@@ -45,6 +46,11 @@ class SecurityTestController {
   @Get('unknown-error')
   unknownError(): never {
     throw new Error('database-password-must-not-leak');
+  }
+
+  @Get('stable-message-code')
+  stableMessageCode(): never {
+    throw new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS');
   }
 
   @Get('ip')
@@ -210,6 +216,21 @@ describe('configureHttpApplication', () => {
     } finally {
       errorLog.mockRestore();
     }
+  });
+
+  it('promotes stable technical messages to the API error code', async () => {
+    await request(app.getHttpServer())
+      .get('/api/security-test/stable-message-code')
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            code: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
+            error: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
+            message: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
+          }),
+        );
+      });
   });
 
   it('uses the configured trusted proxy hop to resolve the client IP', async () => {
