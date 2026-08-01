@@ -170,6 +170,7 @@ describe('POS cart calculations and validation', () => {
     expect(calculateCashChange(120, 100).toString()).toBe('20.00')
     expect(getPaymentsValidationError([{ amount: 187.5, paymentMethod: 'CASH', cashTendered: 180 } as never], 187.5)).toBe('El efectivo entregado no puede ser menor al monto aplicado.')
     expect(getPaymentsValidationError([{ amount: 33.33, paymentMethod: 'CASH', cashTendered: 33.33 } as never], 100)).toBeNull()
+    expect(getPaymentsValidationError([{ amount: '100.00', paymentMethod: 'CASH', cashTendered: '100.00' }], 100)).toBeNull()
     expect(getPaymentsValidationError([{ amount: 100, paymentMethod: 'CARD', cashTendered: 100, referenceNumber: 'AUTH-1', cardLastFour: '4242' } as never], 100)).toBe('El efectivo entregado solo aplica a pagos en efectivo.')
   })
 

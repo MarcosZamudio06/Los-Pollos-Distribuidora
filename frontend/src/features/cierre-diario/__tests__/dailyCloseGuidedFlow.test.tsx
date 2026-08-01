@@ -2,6 +2,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { DailyCloseGuidedFlow } from '../DailyCloseGuidedFlow'
+import { DailyCloseHeader } from '../DailyCloseHeader'
 import type { DailyClose } from '../types'
 
 const close: DailyClose = {
@@ -42,6 +43,13 @@ function render(step: 'operations' | 'signoff') {
 }
 
 describe('guided daily close flow', () => {
+  it('deja que Control de jornada desaparezca al desplazar el contenido', () => {
+    const html = renderToStaticMarkup(<DailyCloseHeader close={close} />)
+
+    expect(html).toContain('relative z-0')
+    expect(html).not.toContain('sticky')
+  })
+
   it('presents the six operational steps while keeping the current detail focused', () => {
     const html = render('operations')
 

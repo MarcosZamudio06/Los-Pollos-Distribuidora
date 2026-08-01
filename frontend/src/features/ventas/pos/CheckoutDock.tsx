@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { ChevronDown, ChevronRight, LoaderCircle, Minus, ReceiptText, Search, UserRound, WalletCards } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, LoaderCircle, Minus, ReceiptText, Search, UserRound, WalletCards } from 'lucide-react'
 import { PaymentEntryControl } from '../components'
 import { calculateCashChange, calculatePaymentsTotal, getCreditRestriction, toMoney, type CreditRestrictionOptions } from '../posLogic'
 import { paymentMethodLabel } from '../saleLabels'
@@ -330,10 +330,9 @@ function PosPrimaryAction({ confirmButtonRef, customerSearchRef, isSubmitting, o
   })
 
   return (
-    <button aria-atomic="true" aria-busy={isBusy || undefined} aria-describedby={reason ? 'pos-primary-action-reason' : undefined} aria-keyshortcuts={isExecutable ? 'F8 Enter' : undefined} aria-live="polite" className="grid h-full min-h-14 w-full grid-cols-[3.25rem_minmax(0,1fr)_2rem] items-center bg-[var(--pos-action)] text-left text-white transition-[background-color,color,opacity,transform] duration-150 hover:bg-[#0d2e25] focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pos-focus)] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.72)]" data-pos-primary-action disabled={!isExecutable || isBusy} onClick={activate} ref={confirmButtonRef} type="button">
-      <span aria-hidden="true" className="grid h-14 w-[3.25rem] place-items-center border-r border-white/20">{isBusy ? <LoaderCircle className="size-4 animate-spin" /> : isExecutable ? <ChevronRight className="size-5" /> : <Minus className="size-5" />}</span>
-      <span className="min-w-0 px-2"><span className="block truncate text-sm font-black leading-4 tabular-nums">{action.label}</span>{reason && <span className="block truncate text-[0.65rem] font-semibold leading-3 text-white/75" id="pos-primary-action-reason">{reason}</span>}</span>
-      <span aria-hidden="true" className="justify-self-center font-mono text-[0.62rem] font-bold text-white/75">{isExecutable ? 'F8' : ''}</span>
+    <button aria-atomic="true" aria-busy={isBusy || undefined} aria-describedby={reason ? 'pos-primary-action-reason' : undefined} aria-keyshortcuts={isExecutable ? 'F8 Enter' : undefined} aria-live="polite" className="grid h-full min-h-14 w-[clamp(220px,18vw,260px)] shrink-0 grid-cols-[3.25rem_minmax(0,1fr)] items-center rounded-[14px] bg-[var(--pos-action)] text-left text-white shadow-[0_10px_22px_rgba(18,61,50,0.18)] transition-[background-color,color,opacity,transform,box-shadow] duration-150 hover:bg-[#1a4e40] hover:shadow-[0_12px_26px_rgba(18,61,50,0.24)] active:scale-95 focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pos-focus)] disabled:cursor-not-allowed disabled:bg-[rgba(96,112,107,0.72)] disabled:opacity-50 disabled:shadow-none" data-pos-primary-action disabled={!isExecutable || isBusy} onClick={activate} ref={confirmButtonRef} type="button">
+       <span aria-hidden="true" className="grid h-full w-[3.25rem] place-items-center border-r border-white/20">{isBusy ? <LoaderCircle className="size-4 animate-spin" /> : isExecutable ? <Check className="size-5" /> : <Minus className="size-5" />}</span>
+       <span className="min-w-0 px-4 text-left"><span className="block truncate text-sm font-black leading-4 tabular-nums">{action.label}</span>{reason && <span className="block truncate text-[0.65rem] font-semibold leading-3 text-white/75" id="pos-primary-action-reason">{reason}</span>}{isExecutable && <span className="mt-1 block font-mono text-[0.62rem] font-bold text-white/75">F8</span>}</span>
     </button>
   )
 }
@@ -409,8 +408,8 @@ export function CheckoutDock({
         <PosCustomerSummary customerSearch={customerSearch} customerSearchRef={customerSearchRef} customers={customers} customersError={customersError} customersLoading={customersLoading} onCustomerSearchChange={onCustomerSearchChange} onCustomerSelect={onCustomerSelect} selectedCustomer={selectedCustomer} visualState={visualState} />
         <PaymentConditionControl conditionPanelRef={conditionPanelRef} creditOptions={creditOptions} disabledReason={disabledReason} isSubmitting={isSubmitting} onPaymentTypeChange={onPaymentTypeChange} paymentType={paymentType} selectedCustomer={selectedCustomer} total={exactTotal} visualState={visualState} />
         <PaymentSummary confirmButtonRef={confirmButtonRef} onPaymentsChange={onPaymentsChange} paymentPanelRef={paymentPanelRef} paymentType={paymentType} payments={payments} total={exactTotal} visualState={visualState} />
-        <div className="col-start-2 row-start-2 min-w-0 min-[1024px]:col-start-1 min-[1024px]:col-span-2 min-[1024px]:row-start-2 min-[1440px]:col-start-auto min-[1440px]:col-span-1 min-[1440px]:row-auto"><TransactionSummaryArea cart={cart} total={exactTotal} /></div>
-        <div className="col-span-2 row-start-3 min-w-0 bg-[var(--pos-action)] min-[1024px]:col-start-3 min-[1024px]:col-span-1 min-[1024px]:row-start-2 min-[1440px]:col-start-auto min-[1440px]:row-start-2 min-[1440px]:col-start-auto min-[1440px]:row-auto"><PosPrimaryAction confirmButtonRef={confirmButtonRef} customerSearchRef={customerSearchRef} isSubmitting={isSubmitting} onConfirm={onConfirm} paymentPanelRef={paymentPanelRef} pendingAmount={pendingAmount} total={exactTotal} visualState={visualState} /></div>
+        <div className="col-start-2 row-start-2 min-w-0 min-[1024px]:col-start-1 min-[1024px]:col-span-2 min-[1024px]:row-start-2 min-[1280px]:col-start-4 min-[1280px]:col-span-1 min-[1280px]:row-start-1"><TransactionSummaryArea cart={cart} total={exactTotal} /></div>
+        <div className="col-span-2 row-start-3 flex min-w-0 justify-end bg-[var(--pos-surface)] min-[1024px]:col-start-3 min-[1024px]:col-span-1 min-[1024px]:row-start-2 min-[1280px]:col-start-5 min-[1280px]:col-span-1 min-[1280px]:row-start-1"><PosPrimaryAction confirmButtonRef={confirmButtonRef} customerSearchRef={customerSearchRef} isSubmitting={isSubmitting} onConfirm={onConfirm} paymentPanelRef={paymentPanelRef} pendingAmount={pendingAmount} total={exactTotal} visualState={visualState} /></div>
       </div>
     </footer>
   )
