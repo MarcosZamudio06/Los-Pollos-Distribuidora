@@ -103,7 +103,7 @@ function PosCustomerSummary({ customerSearch, customerSearchRef, customers, cust
   }
 
   return (
-    <section className="relative min-w-0 bg-[var(--pos-surface)] p-4" aria-label="Cliente de la venta">
+    <section className="relative min-h-0 min-w-0 bg-[var(--pos-surface)] p-4 min-[1024px]:max-[1279px]:p-3" aria-label="Cliente de la venta">
       <input aria-label="Abrir selección de cliente" className="sr-only" onFocus={() => setIsOpen(true)} ref={customerSearchRef} tabIndex={-1} />
       <button aria-controls="pos-customer-selection" aria-expanded={isOpen} className="block min-h-11 w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] focus-visible:ring-inset" onClick={() => setIsOpen(true)} ref={triggerRef} type="button">
          <span className="flex items-start gap-2"><UserRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--pos-neutral)]" /><span className="font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Cliente</span><span className="min-w-0 flex-1 break-words text-sm font-bold leading-tight text-[var(--pos-ink)]">{selectedCustomer?.name ?? 'Público general'}</span><span className="mt-0.5 shrink-0 font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F4</span></span>
@@ -161,7 +161,7 @@ function PaymentConditionControl({ conditionPanelRef, creditOptions, disabledRea
     : localCreditReason
 
   return (
-    <section aria-keyshortcuts="F7" className="grid min-w-0 grid-rows-[auto_2rem] bg-[var(--pos-surface)] p-4" aria-label="Condición comercial" ref={conditionPanelRef} title="Atajo F7: cambiar condición de venta">
+    <section aria-keyshortcuts="F7" className="grid min-h-0 min-w-0 grid-rows-[auto_2rem] bg-[var(--pos-surface)] p-4 min-[1024px]:max-[1279px]:p-3" aria-label="Condición comercial" ref={conditionPanelRef} title="Atajo F7: cambiar condición de venta">
       <div><div className="flex items-center justify-between gap-2"><p className="font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">Condición</p><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F7</span></div><div aria-keyshortcuts="F7" aria-label="Condición comercial" className="mt-2 grid h-11 grid-cols-2 border border-[var(--pos-steel)]" role="radiogroup" title="Atajo F7: cambiar condición de venta"><button aria-checked={paymentType === 'CASH_SALE'} className={`min-w-0 text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pos-focus)] ${paymentType === 'CASH_SALE' ? 'bg-[var(--pos-action)] text-white' : 'text-[var(--pos-muted)] hover:bg-[var(--pos-surface-secondary)]'} disabled:cursor-not-allowed disabled:bg-[var(--pos-surface-secondary)] disabled:text-[var(--pos-muted)]`} disabled={isSubmitting} onClick={() => onPaymentTypeChange('CASH_SALE')} role="radio" type="button">Contado</button><button aria-checked={paymentType === 'CREDIT_SALE'} aria-describedby={creditReason ? 'pos-credit-condition-reason' : undefined} aria-disabled={creditDisabled} className={`min-w-0 border-l border-[var(--pos-steel)] text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pos-focus)] ${paymentType === 'CREDIT_SALE' ? 'bg-[var(--pos-action)] text-white' : 'text-[var(--pos-muted)] hover:bg-[var(--pos-surface-secondary)]'} disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[var(--pos-surface-secondary)] disabled:text-[var(--pos-muted)]`} disabled={creditDisabled} onClick={() => onPaymentTypeChange('CREDIT_SALE')} role="radio" tabIndex={creditDisabled ? -1 : undefined} type="button">Crédito</button></div></div>
       <p aria-atomic="true" aria-live="polite" className="self-end text-[0.68rem] font-semibold leading-3 text-[var(--pos-red)]" id="pos-credit-condition-reason" role={creditReason ? 'status' : undefined}>{creditReason}</p>
     </section>
@@ -213,7 +213,7 @@ function PaymentSummary({ confirmButtonRef, onPaymentsChange, paymentPanelRef, p
   }
 
   return (
-    <section className="relative min-w-0 bg-[var(--pos-surface)] p-4" aria-label="Resumen de pago" ref={paymentPanelRef}>
+    <section className="relative min-h-0 min-w-0 bg-[var(--pos-surface)] p-4 min-[1024px]:max-[1279px]:p-3" aria-label="Resumen de pago" ref={paymentPanelRef}>
       <input aria-label="Abrir captura de pagos" className="sr-only" onFocus={openPanel} tabIndex={-1} />
       <button aria-controls="pos-payment-entry" aria-expanded={isOpen} aria-keyshortcuts="F6" className="block min-h-11 w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] focus-visible:ring-inset" onClick={openPanel} ref={triggerRef} title="Atajo F6: abrir o editar pagos" type="button">
         <span className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 font-mono text-[0.6rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]"><WalletCards aria-hidden="true" className="size-4 text-[var(--pos-neutral)]" />Pago</span><span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">F6</span></span>
@@ -342,7 +342,7 @@ type TransactionSummaryAreaProps = Pick<CheckoutDockProps, 'cart'> & { total: Mo
 
 function TransactionSummaryArea({ cart, total }: TransactionSummaryAreaProps) {
   return (
-    <section aria-label="Resumen de transacción y total" className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center bg-[var(--pos-surface)] px-2 py-1 min-[1440px]:grid-cols-1 min-[1440px]:grid-rows-[auto_1fr]">
+    <section aria-label="Resumen de transacción y total" className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center bg-[var(--pos-surface)] px-2 py-1 min-[1280px]:grid-cols-1 min-[1280px]:grid-rows-[auto_minmax(0,1fr)]">
       <TransactionSummaryDisclosure subtotal={total} />
       <PosTotal cart={cart} total={total} />
     </section>
@@ -404,8 +404,8 @@ export function CheckoutDock({
   }, [conditionPanelRef, customerSearchRef, paymentPanelRef])
 
   return (
-    <footer className="z-20 h-60 shrink-0 overflow-visible border-t border-[var(--pos-steel)] bg-[var(--pos-surface)] min-[1024px]:h-48 min-[1440px]:h-40" aria-label="Confirmación de venta">
-      <div className="grid h-full grid-cols-2 grid-rows-3 gap-px bg-[var(--pos-steel)] min-[1024px]:grid-cols-[20fr_13fr_22fr] min-[1024px]:grid-rows-2 min-[1440px]:grid-cols-[20fr_13fr_22fr_20fr_25fr] min-[1440px]:grid-rows-1">
+    <footer className="z-20 h-60 shrink-0 overflow-visible border-t border-[var(--pos-steel)] bg-[var(--pos-surface)] min-[1024px]:h-60 min-[1280px]:h-36" aria-label="Confirmación de venta">
+      <div className="grid h-full grid-cols-2 grid-rows-[repeat(3,minmax(0,1fr))] gap-px bg-[var(--pos-steel)] min-[1024px]:grid-cols-[20fr_13fr_22fr] min-[1024px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] min-[1280px]:grid-cols-[20fr_13fr_22fr_20fr_25fr] min-[1280px]:grid-rows-1">
         <PosCustomerSummary customerSearch={customerSearch} customerSearchRef={customerSearchRef} customers={customers} customersError={customersError} customersLoading={customersLoading} onCustomerSearchChange={onCustomerSearchChange} onCustomerSelect={onCustomerSelect} selectedCustomer={selectedCustomer} visualState={visualState} />
         <PaymentConditionControl conditionPanelRef={conditionPanelRef} creditOptions={creditOptions} disabledReason={disabledReason} isSubmitting={isSubmitting} onPaymentTypeChange={onPaymentTypeChange} paymentType={paymentType} selectedCustomer={selectedCustomer} total={exactTotal} visualState={visualState} />
         <PaymentSummary confirmButtonRef={confirmButtonRef} onPaymentsChange={onPaymentsChange} paymentPanelRef={paymentPanelRef} paymentType={paymentType} payments={payments} total={exactTotal} visualState={visualState} />

@@ -16,7 +16,7 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
   const quickActions = getQuickActionsForRole(user?.role).slice(0, 2)
 
   return (
-    <header className="erp-topbar sticky top-0 z-40 border-b border-[color:var(--erp-border)] shadow-[0_18px_45px_rgba(17,24,21,0.06)]">
+    <header className="erp-topbar sticky top-0 z-40 shrink-0 border-b border-[color:var(--erp-border)] shadow-[0_18px_45px_rgba(17,24,21,0.06)]">
       <div className="flex min-h-[4.5rem] items-center gap-3 px-4 py-3 md:px-6">
         <button
           aria-expanded={sidebarOpen}

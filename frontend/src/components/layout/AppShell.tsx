@@ -79,10 +79,10 @@ export function AppShell() {
   }, [mobileSidebarOpen])
 
   return (
-    <div className="erp-shell-bg min-h-screen text-[var(--erp-foreground)]">
-      <div className="flex min-h-screen">
+    <div className="erp-shell-bg flex h-dvh min-h-0 text-[var(--erp-foreground)]">
+      <div className="flex h-full min-h-0 w-full">
         <div
-          className="sticky top-0 z-30 hidden h-dvh self-start md:block"
+          className="sticky top-0 z-30 hidden h-dvh min-h-0 self-start md:block"
           onMouseEnter={() => setDesktopSidebarOpen(true)}
           onMouseLeave={() => setDesktopSidebarOpen(false)}
           ref={desktopSidebarRef}
@@ -121,7 +121,7 @@ export function AppShell() {
           )}
         </AnimatePresence>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <TopBar
             onMenuClick={() => {
               if (window.matchMedia(DESKTOP_MEDIA_QUERY).matches) {
@@ -134,7 +134,7 @@ export function AppShell() {
             sidebarOpen={isDesktopViewport ? desktopSidebarOpen : mobileSidebarOpen}
           />
 
-          <main className={cn('min-w-0 flex-1')} id="app-content">
+          <main className={cn('min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto')} id="app-content">
             <Outlet />
           </main>
         </div>
