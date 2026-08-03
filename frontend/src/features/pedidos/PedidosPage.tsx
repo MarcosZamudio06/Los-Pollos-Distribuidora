@@ -4,6 +4,7 @@ import {
   Boxes,
   CircleAlert,
   CircleCheck,
+  ExternalLink,
   Maximize2,
   Minimize2,
   Store,
@@ -223,6 +224,9 @@ export function PedidosPage() {
   const { accessToken, user } = useAuth();
   const queryClient = useQueryClient();
   const pageRef = useRef<HTMLElement | null>(null);
+  const shouldStartInFullscreen = useRef(
+    new URLSearchParams(window.location.search).get("fullscreen") === "1",
+  );
   const locations = usePurchaseLocations("");
   const [selectedLocationId, setSelectedLocationId] = useState(
     user?.role === "ADMIN" ? "" : (user?.operationalLocationId ?? ""),
@@ -252,6 +256,20 @@ export function PedidosPage() {
     document.addEventListener("fullscreenchange", updateFullscreen);
     return () =>
       document.removeEventListener("fullscreenchange", updateFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !shouldStartInFullscreen.current ||
+      !pageRef.current ||
+      document.fullscreenElement
+    ) {
+      return;
+    }
+
+    void pageRef.current.requestFullscreen().catch(() => {
+      // Browsers may block fullscreen when the request follows a new window.
+    });
   }, []);
 
   useEffect(() => {
@@ -304,6 +322,10 @@ export function PedidosPage() {
     await pageRef.current?.requestFullscreen();
   }
 
+  function openOrdersInNewWindow() {
+    window.open("/orders?fullscreen=1", "_blank", "noopener,noreferrer");
+  }
+
   return (
     <main
       className="min-h-screen bg-[var(--erp-background)] px-3 py-4 text-[var(--erp-foreground)] sm:px-4 lg:px-6"
@@ -334,6 +356,17 @@ export function PedidosPage() {
                 )}
                 {status.label}
               </Badge>
+              <Button
+                aria-label="Abrir pedidos en otra ventana"
+                className="h-11 gap-2 px-3 transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out hover:-translate-y-px hover:shadow-sm active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                onClick={openOrdersInNewWindow}
+                size="sm"
+                title="Abrir pedidos en otra ventana"
+                variant="outline"
+              >
+                <ExternalLink aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden sm:inline">Abrir ventana</span>
+              </Button>
               <Button
                 aria-label={
                   isFullscreen
