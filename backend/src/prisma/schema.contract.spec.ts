@@ -34,6 +34,10 @@ const cashTerminalCutoverMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260729220000_add_cash_terminal_cutover/migration.sql',
 );
+const branchSupplyCycleMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260804120000_add_branch_supply_cycle/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -48,6 +52,15 @@ function getModelBlock(modelName: string): string {
 
 function getModelNames(): string[] {
   return [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]);
+}
+
+function getEnumBlock(enumName: string): string {
+  const match = schema.match(
+    new RegExp(`enum\\s+${enumName}\\s+\\{([\\s\\S]*?)\\n\\}`, 'm'),
+  );
+
+  expect(match).not.toBeNull();
+  return match?.[1] ?? '';
 }
 
 describe('Prisma schema contract', () => {
@@ -108,16 +121,130 @@ describe('Prisma schema contract', () => {
       'InvoiceSaleItemApplication',
       'BillingDataRemediation',
       'BillingAuditLog',
+      'BranchSupplyCycle',
+      'BranchSupplyCycleTransfer',
+      'BranchSupplyCycleItem',
+      'BranchSupplyCycleEvent',
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(54);
+    expect(modelNames).toHaveLength(58);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
     expect(getModelBlock('Product')).not.toMatch(/\bstock\b/);
     expect(getModelBlock('Role')).toMatch(/version\s+Int\s+@default\(1\)/);
     expect(getModelBlock('AccessControlAuditLog')).toMatch(/reason\s+String/);
+  });
+
+  it('defines the branch supply cycle enums and snapshot models', () => {
+    const cycle = getModelBlock('BranchSupplyCycle');
+    const transfer = getModelBlock('BranchSupplyCycleTransfer');
+    const item = getModelBlock('BranchSupplyCycleItem');
+    const event = getModelBlock('BranchSupplyCycleEvent');
+    const operationalLocationType = getEnumBlock('OperationalLocationType');
+    const cycleStatus = getEnumBlock('BranchSupplyCycleStatus');
+    const transferRole = getEnumBlock('BranchSupplyTransferRole');
+    const eventType = getEnumBlock('BranchSupplyCycleEventType');
+    const migrationSql = readFileSync(branchSupplyCycleMigrationSqlPath, 'utf8');
+
+    expect(operationalLocationType).toMatch(/DISTRIBUTION_CENTER/);
+    expect(cycleStatus).toMatch(/OPEN/);
+    expect(cycleStatus).toMatch(/READY_FOR_REVIEW/);
+    expect(cycleStatus).toMatch(/CLOSED/);
+    expect(cycleStatus).toMatch(/CANCELLED/);
+    expect(transferRole).toMatch(/SUPPLY/);
+    expect(transferRole).toMatch(/RETURN/);
+    expect(eventType).toMatch(/REOPENED/);
+
+    expect(cycle).toMatch(
+      /distributionCenterLocationId\s+String[\s\S]*branchLocationId\s+String[\s\S]*businessDate\s+DateTime\s+@db\.Date/,
+    );
+    expect(cycle).toMatch(/pointOfSaleDailyCloseId\s+String\?/);
+    expect(cycle).toMatch(/status\s+BranchSupplyCycleStatus\s+@default\(OPEN\)/);
+    expect(cycle).toMatch(/version\s+Int\s+@default\(1\)/);
+    expect(cycle).toMatch(/totalDeliveredKg\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 3\)/);
+    expect(cycle).toMatch(/expectedSalesTotal\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
+    expect(cycle).toMatch(/actualProfitTotal\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
+
+    expect(transfer).toMatch(/inventoryTransferId\s+String\s+@unique/);
+    expect(transfer).toMatch(/role\s+BranchSupplyTransferRole/);
+    expect(item).toMatch(/productNameSnapshot\s+String/);
+    expect(item).toMatch(/productSkuSnapshot\s+String\?/);
+    expect(item).toMatch(/productUnitSnapshot\s+ProductUnit/);
+    expect(item).toMatch(/appliedEquivalentFactorSnapshot\s+Decimal\?/);
+    expect(item).toMatch(/deliveredPieces\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 3\)/);
+    expect(item).toMatch(/actualSalesAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
+    expect(item).toMatch(/actualProfitAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
+    expect(event).toMatch(/cycleVersion\s+Int/);
+    expect(event).toMatch(/payload\s+Json/);
+    expect(event).toMatch(/idempotencyKey\s+String\?/);
+
+    expect(migrationSql).toContain(
+      'ALTER TYPE "OperationalLocationType" ADD VALUE \'DISTRIBUTION_CENTER\'',
+    );
+    expect(migrationSql).toContain(
+      'CREATE TYPE "BranchSupplyCycleStatus" AS ENUM',
+    );
+    expect(migrationSql).toContain(
+      'CREATE TYPE "BranchSupplyTransferRole" AS ENUM',
+    );
+    expect(migrationSql).toContain(
+      'CREATE TYPE "BranchSupplyCycleEventType" AS ENUM',
+    );
+    expect(migrationSql).toContain('CREATE TABLE "BranchSupplyCycle"');
+    expect(migrationSql).toContain('CREATE TABLE "BranchSupplyCycleTransfer"');
+    expect(migrationSql).toContain('CREATE TABLE "BranchSupplyCycleItem"');
+    expect(migrationSql).toContain('CREATE TABLE "BranchSupplyCycleEvent"');
+  });
+
+  it('enforces branch supply cycle identity, linkage, and append-only contracts', () => {
+    const user = getModelBlock('User');
+    const location = getModelBlock('OperationalLocation');
+    const product = getModelBlock('Product');
+    const transfer = getModelBlock('InventoryTransfer');
+    const dailyClose = getModelBlock('PointOfSaleDailyClose');
+    const migrationSql = readFileSync(branchSupplyCycleMigrationSqlPath, 'utf8');
+
+    expect(user).toMatch(
+      /branchSupplyCyclesOpened\s+BranchSupplyCycle\[\]\s+@relation\("BranchSupplyCycleOpenedBy"\)/,
+    );
+    expect(user).toMatch(
+      /branchSupplyCycleEvents\s+BranchSupplyCycleEvent\[\]\s+@relation\("BranchSupplyCycleEventActor"\)/,
+    );
+    expect(location).toMatch(
+      /distributionCenterSupplyCycles\s+BranchSupplyCycle\[\]\s+@relation\("BranchSupplyCycleDistributionCenter"\)/,
+    );
+    expect(location).toMatch(
+      /branchSupplyCycles\s+BranchSupplyCycle\[\]\s+@relation\("BranchSupplyCycleBranch"\)/,
+    );
+    expect(product).toMatch(/branchSupplyCycleItems\s+BranchSupplyCycleItem\[\]/);
+    expect(transfer).toMatch(
+      /branchSupplyCycleTransfer\s+BranchSupplyCycleTransfer\?/,
+    );
+    expect(dailyClose).toMatch(
+      /branchSupplyCycle\s+BranchSupplyCycle\?\s+@relation\("BranchSupplyCycleDailyClose"\)/,
+    );
+
+    expect(migrationSql).toMatch(
+      /CREATE UNIQUE INDEX[\s\S]*\("distributionCenterLocationId", "branchLocationId", "businessDate"\)[\s\S]*WHERE "status" <> 'CANCELLED'/i,
+    );
+    expect(migrationSql).toContain(
+      'BranchSupplyCycleTransfer_inventoryTransferId_key',
+    );
+    expect(migrationSql).toContain('distribution_center_branch_must_differ');
+    expect(migrationSql).toContain('validate_branch_supply_cycle_locations');
+    expect(migrationSql).toContain(
+      'validate_branch_supply_cycle_daily_close_match',
+    );
+    expect(migrationSql).toContain(
+      'validate_branch_supply_cycle_transfer_direction',
+    );
+    expect(migrationSql).toContain('BranchSupplyCycleItem_append_only');
+    expect(migrationSql).toContain('BranchSupplyCycleEvent_append_only');
+    expect(migrationSql).toContain(
+      'BranchSupplyCycle_branchLocationId_businessDate_status_idx',
+    );
   });
 
   it('persists route planning coordinates and PostGIS search geometries', () => {
