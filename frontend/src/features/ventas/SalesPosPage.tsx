@@ -12,6 +12,7 @@ import {
   MapPin,
   Maximize2,
   Minimize2,
+  Settings2,
   ShieldCheck,
   Volume2,
   VolumeX,
@@ -1417,7 +1418,7 @@ export function SalesPosPage() {
         </div>
 
         <details
-          className="absolute right-3 top-[60px] z-40"
+          className="absolute inset-x-3 top-[60px] z-40 sm:inset-x-auto sm:right-3"
           onToggle={(event) =>
             setShowAdvancedSaleFields(event.currentTarget.open)
           }
@@ -1426,10 +1427,11 @@ export function SalesPosPage() {
             Boolean(canOverrideCredit || requiresAdministrativeInvoice)
           }
         >
-          <summary className="h-11 cursor-pointer list-none border border-[var(--pos-steel)] bg-white px-3 leading-[2.75rem] text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)]">
+          <summary className="flex h-11 w-full cursor-pointer list-none items-center justify-center gap-2 border border-[var(--pos-steel)] bg-white px-3 text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)] transition hover:text-[var(--pos-ink)] sm:w-auto sm:justify-start">
+            <Settings2 aria-hidden="true" className="size-4 shrink-0" />
             Opciones de venta
           </summary>
-          <div className="pos-drawer-enter absolute right-0 top-full mt-2 grid w-[min(96vw,58rem)] gap-3 border border-[var(--pos-steel)] bg-white p-3 shadow-[0_18px_40px_rgba(23,33,30,0.16)] lg:grid-cols-3">
+          <div className="pos-drawer-enter absolute left-0 right-0 top-full mt-2 grid max-h-[calc(100dvh-8rem)] w-full grid-cols-1 gap-3 overflow-y-auto border border-[var(--pos-steel)] bg-white p-3 shadow-[0_18px_40px_rgba(23,33,30,0.16)] sm:left-auto sm:w-[min(96vw,58rem)] sm:grid-cols-2 lg:grid-cols-3">
             <section className="rounded-xl border border-[var(--pos-steel)] bg-[var(--pos-porcelain)] p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
