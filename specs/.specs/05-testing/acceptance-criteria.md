@@ -61,6 +61,26 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado stock insuficiente en origen, cuando se confirma un traspaso, entonces se rechaza sin modificar saldos.
 - Dado un traspaso cancelado o ya confirmado, cuando se intenta confirmar de nuevo, entonces se rechaza.
 
+## Ciclos de suministro CEDIS-sucursal
+
+- Dado CEDIS y sucursal compatibles sin ciclo activo, cuando se abre el ciclo, entonces queda `OPEN` con actor, versión y evento auditables.
+- Dadas dos aperturas concurrentes para la misma sucursal y fecha, cuando ambas se ejecutan, entonces solo persiste un ciclo no cancelado.
+- Dado un ciclo mutable, cuando se registra un suministro, entonces crea y vincula un `InventoryTransfer` `REQUESTED` CEDIS → sucursal sin movimientos.
+- Dado un ciclo mutable, cuando se registra una devolución, entonces crea y vincula un `InventoryTransfer` `REQUESTED` sucursal → CEDIS sin movimientos.
+- Dado un ciclo con varios suministros y devoluciones, cuando se consulta, entonces cada transferencia aparece una sola vez con su estado real.
+- Dado un producto inactivo, cuando se intenta crear o confirmar una transferencia del ciclo, entonces se rechaza sin cambios parciales.
+- Dado un producto histórico que se desactivó después de confirmar, cuando se consulta o refresca, entonces conserva su snapshot y cantidades históricas.
+- Dado stock insuficiente, cuando se confirma una transferencia vinculada, entonces no cambia ningún balance, movimiento, transferencia o snapshot.
+- Dadas confirmaciones concurrentes sobre el mismo saldo, cuando solo una tiene stock disponible, entonces una confirma y la otra falla sin saldo negativo.
+- Dado un traspaso `DRAFT`, `REQUESTED` o `IN_TRANSIT`, cuando se cancela con motivo, entonces queda `CANCELLED`, invalida la proyección y no crea movimientos.
+- Dado un traspaso `CONFIRMED`, cuando se intenta cancelar, entonces se rechaza y conserva movimientos e historial.
+- Dado al menos un suministro confirmado, cero pendientes e integridad válida, cuando se refresca, entonces crea snapshot append-only y lleva el ciclo a `READY_FOR_REVIEW`.
+- Dado un refresh repetido con la misma clave y payload, cuando se reintenta, entonces devuelve la versión original sin duplicar snapshots ni eventos.
+- Dado la misma clave con payload distinto, cuando se reintenta cualquier comando CEDIS, entonces responde `IDEMPOTENCY_CONFLICT`.
+- Dado un ciclo `CLOSED` o `CANCELLED`, cuando se intenta suministrar, devolver o refrescar, entonces se rechaza sin modificar historial.
+- Dado una devolución confirmada, cuando se concilia el cierre, entonces participa una sola vez mediante `TRANSFER_OUT` en la sucursal.
+- Dado un cálculo que requiere conversión kilo/pieza sin equivalencia y redondeo aprobados, cuando se procesa, entonces se rechaza sin inventar el factor ni la regla.
+
 ## Clientes minoristas, mayoristas y políticas comerciales
 
 - Dado un cliente minorista válido, cuando se crea, entonces queda disponible para ventas conforme a permisos.

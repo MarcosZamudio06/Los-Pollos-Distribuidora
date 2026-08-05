@@ -49,6 +49,7 @@ modules/
   accounts-receivable/
   auth/
   billing-requests/
+  branch-supply-cycles/
   clientes/
   compras/
   inventory/

@@ -92,6 +92,7 @@ Módulos de dominio requeridos por alcance de negocio:
 - Productos, categorías e inventario por ubicación operativa.
 - Sucursales, almacenes o ubicaciones operativas, según decisión final del modelo sucursal-almacén.
 - Compras, entradas, ajustes, mermas y traspasos.
+- Ciclos de suministro CEDIS-sucursal que coordinan traspasos y cierre diario sin inventario paralelo.
 - Clientes, incluyendo clientes mayoristas, institucionales y facturados con condiciones comerciales.
 - Solicitudes administrativas de factura y relación interna de documentos.
 - Ventas/POS de contado y a crédito.
@@ -117,7 +118,9 @@ La base de datos debe tener integridad referencial mediante llaves foráneas, re
 
 El modelo de persistencia debe soportar inventario por ubicación operativa y no depender de un único stock global por producto. Cada venta, compra, ajuste, traspaso y movimiento de inventario debe quedar asociado a una ubicación operativa definida.
 
-Las operaciones críticas de venta, compra, cancelación, pago de cuenta por cobrar, ajuste de inventario, traspaso y liquidación de ruta deben ejecutarse con transacciones cuando modifiquen saldos, stock o estados relacionados.
+Las operaciones críticas de venta, compra, cancelación, pago de cuenta por cobrar, ajuste de inventario, traspaso, ciclo CEDIS y liquidación de ruta deben ejecutarse con transacciones cuando modifiquen saldos, stock o estados relacionados.
+
+`modules/cedis/` es un módulo de orquestación: abre ciclos, deriva dirección y alcance, vincula transferencias y reconstruye snapshots. `modules/inventory/` conserva la responsabilidad exclusiva de crear, confirmar y cancelar `InventoryTransfer`, balances y movimientos. La confirmación/cancelación pública continúa en los contratos de inventario para evitar dos autoridades sobre el mismo estado.
 
 ## 5.1 Decisiones abiertas que afectan arquitectura
 

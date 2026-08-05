@@ -75,6 +75,21 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Generar salida en origen y entrada en destino con cantidades por kilo/pieza.
 - Rechazar confirmación duplicada o sobre traspaso cancelado.
 
+### Ciclos CEDIS-sucursal
+
+- Validar unicidad no cancelada por sucursal/fecha y la carrera de dos aperturas concurrentes.
+- Validar múltiples suministros CEDIS → sucursal y devoluciones sucursal → CEDIS dentro del mismo ciclo.
+- Verificar que crear/vincular transferencias no cambie balances ni genere movimientos.
+- Confirmar transferencias vinculadas únicamente por `InventoryTransfersService` y comprobar salida/entrada atómicas.
+- Cancelar `DRAFT`, `REQUESTED` e `IN_TRANSIT` con motivo; rechazar cancelación de `CONFIRMED`.
+- Rechazar productos o ubicaciones inactivas en creación y confirmación, conservando historia ya confirmada.
+- Validar refresh desde transferencias/movimientos, snapshots append-only, bloqueantes y transición a `READY_FOR_REVIEW`.
+- Validar que `CLOSED` y `CANCELLED` sean de solo lectura para comandos operativos.
+- Validar idempotencia con mismo payload, conflicto por payload distinto y control por `expectedVersion`.
+- Probar confirmaciones concurrentes contra el mismo saldo sin stock negativo.
+- Mantener KG y PIECE separados y bloquear conversiones sin equivalencia y redondeo aprobados.
+- Verificar que una devolución no se descuente dos veces durante el cierre diario.
+
 ### Ventas
 
 - Rechazar carrito vacío.

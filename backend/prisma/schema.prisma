@@ -256,6 +256,7 @@ enum BranchSupplyCycleEventType {
   CANCELLED
   REOPENED
   TRANSFER_LINKED
+  TRANSFER_STATE_CHANGED
   ITEM_SNAPSHOT_CREATED
 }
 
@@ -330,22 +331,22 @@ enum MovementChannel {
 }
 
 model Role {
-  id          String   @id @default(cuid())
-  name        String   @unique
+  id          String           @id @default(cuid())
+  name        String           @unique
   description String?
-  version     Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  version     Int              @default(1)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   users       User[]
   permissions RolePermission[]
 }
 
 model Permission {
-  id          String   @id @default(cuid())
-  key         String   @unique
+  id          String           @id @default(cuid())
+  key         String           @unique
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   roles       RolePermission[]
 }
 
@@ -434,18 +435,18 @@ model User {
   dailyCloseSnapshots             DailyCloseSnapshot[]         @relation("DailyCloseSnapshotCreatedBy")
   justifiedDailyCloseDifferences  DailyCloseDifference[]       @relation("DailyCloseDifferenceJustifiedBy")
   authorizedDailyCloseDifferences DailyCloseDifference[]       @relation("DailyCloseDifferenceAuthorizedBy")
-  branchSupplyCyclesOpened        BranchSupplyCycle[]           @relation("BranchSupplyCycleOpenedBy")
-  branchSupplyCyclesReviewed      BranchSupplyCycle[]           @relation("BranchSupplyCycleReviewedBy")
-  branchSupplyCyclesClosed        BranchSupplyCycle[]           @relation("BranchSupplyCycleClosedBy")
-  branchSupplyCyclesCancelled     BranchSupplyCycle[]           @relation("BranchSupplyCycleCancelledBy")
-  branchSupplyCyclesReopened      BranchSupplyCycle[]           @relation("BranchSupplyCycleReopenedBy")
-  branchSupplyCycleTransfers      BranchSupplyCycleTransfer[]   @relation("BranchSupplyCycleTransferLinkedBy")
-  branchSupplyCycleEvents         BranchSupplyCycleEvent[]      @relation("BranchSupplyCycleEventActor")
+  branchSupplyCyclesOpened        BranchSupplyCycle[]          @relation("BranchSupplyCycleOpenedBy")
+  branchSupplyCyclesReviewed      BranchSupplyCycle[]          @relation("BranchSupplyCycleReviewedBy")
+  branchSupplyCyclesClosed        BranchSupplyCycle[]          @relation("BranchSupplyCycleClosedBy")
+  branchSupplyCyclesCancelled     BranchSupplyCycle[]          @relation("BranchSupplyCycleCancelledBy")
+  branchSupplyCyclesReopened      BranchSupplyCycle[]          @relation("BranchSupplyCycleReopenedBy")
+  branchSupplyCycleTransfers      BranchSupplyCycleTransfer[]  @relation("BranchSupplyCycleTransferLinkedBy")
+  branchSupplyCycleEvents         BranchSupplyCycleEvent[]     @relation("BranchSupplyCycleEventActor")
   cashMovements                   CashMovement[]
   cashShifts                      CashShift[]                  @relation("CashShiftCashier")
   closedCashShifts                CashShift[]                  @relation("CashShiftClosedBy")
-  requestedTerminalActivations    CashTerminalActivation[]    @relation("CashTerminalActivationRequestedBy")
-  consumedTerminalActivations     CashTerminalActivation[]    @relation("CashTerminalActivationConsumedBy")
+  requestedTerminalActivations    CashTerminalActivation[]     @relation("CashTerminalActivationRequestedBy")
+  consumedTerminalActivations     CashTerminalActivation[]     @relation("CashTerminalActivationConsumedBy")
   capturedScaleTickets            ScaleTicketReference[]
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
   grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
@@ -472,43 +473,43 @@ model AuthSession {
 }
 
 model OperationalLocation {
-  id                    String                                @id @default(cuid())
-  name                  String
-  code                  String?                               @unique
-  type                  OperationalLocationType
-  parentId              String?
-  address               String?
-  latitude              Decimal?                              @db.Decimal(9, 6)
-  longitude             Decimal?                              @db.Decimal(9, 6)
-  locationPoint         Unsupported("geometry(Point, 4326)")?
-  isActive              Boolean                               @default(true)
-  createdAt             DateTime                              @default(now())
-  updatedAt             DateTime                              @updatedAt
-  parent                OperationalLocation?                  @relation("LocationHierarchy", fields: [parentId], references: [id])
-  children              OperationalLocation[]                 @relation("LocationHierarchy")
-  users                 User[]
-  inventoryBalances     InventoryBalance[]
-  sales                 Sale[]
-  purchases             Purchase[]
-  inventoryMovements    InventoryMovement[]
-  outboundTransfers     InventoryTransfer[]                   @relation("TransferOrigin")
-  inboundTransfers      InventoryTransfer[]                   @relation("TransferDestination")
-  operationalConfigs    OperationalConfig[]
-  originRoutes          DeliveryRoute[]                       @relation("RouteOriginLocation")
-  routePlans            DeliveryRoutePlanDraft[]              @relation("RoutePlanOriginLocation")
-  routeStockFor         DeliveryRoute?                        @relation("RouteStockLocation")
-  payments              Payment[]
-  saleDocuments         SaleDocument[]
-  dailyCloses           PointOfSaleDailyClose[]
-  distributionCenterSupplyCycles BranchSupplyCycle[]            @relation("BranchSupplyCycleDistributionCenter")
-  branchSupplyCycles     BranchSupplyCycle[]                    @relation("BranchSupplyCycleBranch")
-  cashTerminals         CashTerminal[]
-  cashTerminalActivations CashTerminalActivation[]
-  cashShifts            CashShift[]
-  dailyCloseLines       PointOfSaleDailyCloseLine[]
-  cashMovements         CashMovement[]
-  scaleTicketReferences ScaleTicketReference[]
-  legalEntityMappings   LegalEntityOperationalLocation[]
+  id                             String                                @id @default(cuid())
+  name                           String
+  code                           String?                               @unique
+  type                           OperationalLocationType
+  parentId                       String?
+  address                        String?
+  latitude                       Decimal?                              @db.Decimal(9, 6)
+  longitude                      Decimal?                              @db.Decimal(9, 6)
+  locationPoint                  Unsupported("geometry(Point, 4326)")?
+  isActive                       Boolean                               @default(true)
+  createdAt                      DateTime                              @default(now())
+  updatedAt                      DateTime                              @updatedAt
+  parent                         OperationalLocation?                  @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children                       OperationalLocation[]                 @relation("LocationHierarchy")
+  users                          User[]
+  inventoryBalances              InventoryBalance[]
+  sales                          Sale[]
+  purchases                      Purchase[]
+  inventoryMovements             InventoryMovement[]
+  outboundTransfers              InventoryTransfer[]                   @relation("TransferOrigin")
+  inboundTransfers               InventoryTransfer[]                   @relation("TransferDestination")
+  operationalConfigs             OperationalConfig[]
+  originRoutes                   DeliveryRoute[]                       @relation("RouteOriginLocation")
+  routePlans                     DeliveryRoutePlanDraft[]              @relation("RoutePlanOriginLocation")
+  routeStockFor                  DeliveryRoute?                        @relation("RouteStockLocation")
+  payments                       Payment[]
+  saleDocuments                  SaleDocument[]
+  dailyCloses                    PointOfSaleDailyClose[]
+  distributionCenterSupplyCycles BranchSupplyCycle[]                   @relation("BranchSupplyCycleDistributionCenter")
+  branchSupplyCycles             BranchSupplyCycle[]                   @relation("BranchSupplyCycleBranch")
+  cashTerminals                  CashTerminal[]
+  cashTerminalActivations        CashTerminalActivation[]
+  cashShifts                     CashShift[]
+  dailyCloseLines                PointOfSaleDailyCloseLine[]
+  cashMovements                  CashMovement[]
+  scaleTicketReferences          ScaleTicketReference[]
+  legalEntityMappings            LegalEntityOperationalLocation[]
 
   @@index([parentId, type, isActive])
 }
@@ -555,25 +556,26 @@ model Product {
 }
 
 model ProductUnitEquivalent {
-  id               String           @id @default(cuid())
-  productId        String
-  unitFrom         ProductUnit
-  unitTo           ProductUnit
-  factor           Decimal          @db.Decimal(18, 6)
-  roundingMode     String?
-  effectiveFrom    DateTime?
-  effectiveTo      DateTime?
-  status           EquivalentStatus @default(DRAFT)
-  approvedByUserId String?
-  createdByUserId  String
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  product          Product          @relation(fields: [productId], references: [id])
-  approvedBy       User?            @relation("EquivalentApprovedBy", fields: [approvedByUserId], references: [id])
-  createdBy        User             @relation("EquivalentCreatedBy", fields: [createdByUserId], references: [id])
-  saleItems        SaleItem[]
-  purchaseItems    PurchaseItem[]
+  id                     String                  @id @default(cuid())
+  productId              String
+  unitFrom               ProductUnit
+  unitTo                 ProductUnit
+  factor                 Decimal                 @db.Decimal(18, 6)
+  roundingMode           String?
+  effectiveFrom          DateTime?
+  effectiveTo            DateTime?
+  status                 EquivalentStatus        @default(DRAFT)
+  approvedByUserId       String?
+  createdByUserId        String
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  product                Product                 @relation(fields: [productId], references: [id])
+  approvedBy             User?                   @relation("EquivalentApprovedBy", fields: [approvedByUserId], references: [id])
+  createdBy              User                    @relation("EquivalentCreatedBy", fields: [createdByUserId], references: [id])
+  saleItems              SaleItem[]
+  purchaseItems          PurchaseItem[]
   branchSupplyCycleItems BranchSupplyCycleItem[]
+  inventoryTransferItems InventoryTransferItem[]
 
   @@index([productId, unitFrom, unitTo, status])
   @@index([effectiveFrom, effectiveTo])
@@ -871,26 +873,26 @@ model InventoryMovement {
 }
 
 model InventoryTransfer {
-  id                    String                  @id @default(cuid())
-  transferNumber        String                  @unique
-  originLocationId      String
-  destinationLocationId String
-  userId                String
-  status                InventoryTransferStatus @default(DRAFT)
-  notes                 String?
-  requestedAt           DateTime?
-  confirmedAt           DateTime?
-  cancelledAt           DateTime?
-  cancelledByUserId     String?
-  cancellationReason    String?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  originLocation        OperationalLocation     @relation("TransferOrigin", fields: [originLocationId], references: [id])
-  destinationLocation   OperationalLocation     @relation("TransferDestination", fields: [destinationLocationId], references: [id])
-  user                  User                    @relation("InventoryTransferCreatedBy", fields: [userId], references: [id])
-  cancelledBy           User?                   @relation("InventoryTransferCancelledBy", fields: [cancelledByUserId], references: [id])
-  items                 InventoryTransferItem[]
-  inventoryMovements    InventoryMovement[]
+  id                        String                     @id @default(cuid())
+  transferNumber            String                     @unique
+  originLocationId          String
+  destinationLocationId     String
+  userId                    String
+  status                    InventoryTransferStatus    @default(DRAFT)
+  notes                     String?
+  requestedAt               DateTime?
+  confirmedAt               DateTime?
+  cancelledAt               DateTime?
+  cancelledByUserId         String?
+  cancellationReason        String?
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  originLocation            OperationalLocation        @relation("TransferOrigin", fields: [originLocationId], references: [id])
+  destinationLocation       OperationalLocation        @relation("TransferDestination", fields: [destinationLocationId], references: [id])
+  user                      User                       @relation("InventoryTransferCreatedBy", fields: [userId], references: [id])
+  cancelledBy               User?                      @relation("InventoryTransferCancelledBy", fields: [cancelledByUserId], references: [id])
+  items                     InventoryTransferItem[]
+  inventoryMovements        InventoryMovement[]
   branchSupplyCycleTransfer BranchSupplyCycleTransfer?
 
   @@index([originLocationId, status])
@@ -898,16 +900,20 @@ model InventoryTransfer {
 }
 
 model InventoryTransferItem {
-  id             String            @id @default(cuid())
-  transferId     String
-  productId      String
-  quantityKg     Decimal?          @db.Decimal(14, 3)
-  quantityPieces Int?
-  unit           ProductUnit
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  transfer       InventoryTransfer @relation(fields: [transferId], references: [id])
-  product        Product           @relation(fields: [productId], references: [id])
+  id                      String                 @id @default(cuid())
+  transferId              String
+  productId               String
+  quantityKg              Decimal?               @db.Decimal(14, 3)
+  quantityPieces          Int?
+  unit                    ProductUnit
+  unitEquivalentId        String?
+  appliedEquivalentFactor Decimal?               @db.Decimal(18, 6)
+  roundingMode            String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  transfer                InventoryTransfer      @relation(fields: [transferId], references: [id])
+  product                 Product                @relation(fields: [productId], references: [id])
+  unitEquivalent          ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id])
 }
 
 model AccountReceivable {
@@ -1273,15 +1279,15 @@ model RouteSettlement {
 }
 
 model CashTerminal {
-  id                    String              @id @default(cuid())
+  id                    String                   @id @default(cuid())
   operationalLocationId String
   code                  String
   name                  String
-  deviceId              String              @unique
-  isActive              Boolean             @default(true)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id])
+  deviceId              String                   @unique
+  isActive              Boolean                  @default(true)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  operationalLocation   OperationalLocation      @relation(fields: [operationalLocationId], references: [id])
   shifts                CashShift[]
   sales                 Sale[]
   activations           CashTerminalActivation[]
@@ -1595,16 +1601,16 @@ model DailyCloseSnapshot {
 }
 
 model BranchSupplyCycle {
-  id                           String                   @id @default(cuid())
+  id                           String                      @id @default(cuid())
   distributionCenterLocationId String
   branchLocationId             String
-  businessDate                 DateTime                 @db.Date
-  pointOfSaleDailyCloseId      String?                  @unique
-  status                       BranchSupplyCycleStatus  @default(OPEN)
-  version                      Int                      @default(1)
+  businessDate                 DateTime                    @db.Date
+  pointOfSaleDailyCloseId      String?                     @unique
+  status                       BranchSupplyCycleStatus     @default(OPEN)
+  version                      Int                         @default(1)
   notes                        String?
   openedByUserId               String
-  openedAt                     DateTime                 @default(now())
+  openedAt                     DateTime                    @default(now())
   reviewedByUserId             String?
   reviewedAt                   DateTime?
   closedByUserId               String?
@@ -1615,32 +1621,32 @@ model BranchSupplyCycle {
   reopenedByUserId             String?
   reopenedAt                   DateTime?
   reopeningReason              String?
-  totalDeliveredKg             Decimal                  @default(0) @db.Decimal(14, 3)
-  totalDeliveredPieces         Decimal                  @default(0) @db.Decimal(14, 3)
-  totalReturnedKg              Decimal                  @default(0) @db.Decimal(14, 3)
-  totalReturnedPieces          Decimal                  @default(0) @db.Decimal(14, 3)
-  totalExpectedSoldKg          Decimal                  @default(0) @db.Decimal(14, 3)
-  totalExpectedSoldPieces      Decimal                  @default(0) @db.Decimal(14, 3)
-  totalActualSoldKg            Decimal                  @default(0) @db.Decimal(14, 3)
-  totalActualSoldPieces        Decimal                  @default(0) @db.Decimal(14, 3)
-  totalShrinkageKg             Decimal                  @default(0) @db.Decimal(14, 3)
-  totalShrinkagePieces         Decimal                  @default(0) @db.Decimal(14, 3)
-  totalDifferenceKg            Decimal                  @default(0) @db.Decimal(14, 3)
-  totalDifferencePieces        Decimal                  @default(0) @db.Decimal(14, 3)
-  expectedSalesTotal           Decimal                  @default(0) @db.Decimal(14, 2)
-  actualSalesTotal             Decimal                  @default(0) @db.Decimal(14, 2)
-  expectedProfitTotal          Decimal                  @default(0) @db.Decimal(14, 2)
-  actualProfitTotal            Decimal                  @default(0) @db.Decimal(14, 2)
-  createdAt                    DateTime                 @default(now())
-  updatedAt                    DateTime                 @updatedAt
-  distributionCenterLocation   OperationalLocation      @relation("BranchSupplyCycleDistributionCenter", fields: [distributionCenterLocationId], references: [id], onDelete: Restrict)
-  branchLocation               OperationalLocation      @relation("BranchSupplyCycleBranch", fields: [branchLocationId], references: [id], onDelete: Restrict)
-  pointOfSaleDailyClose        PointOfSaleDailyClose?   @relation("BranchSupplyCycleDailyClose", fields: [pointOfSaleDailyCloseId], references: [id], onDelete: Restrict)
-  openedBy                     User                     @relation("BranchSupplyCycleOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
-  reviewedBy                   User?                    @relation("BranchSupplyCycleReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
-  closedBy                     User?                    @relation("BranchSupplyCycleClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
-  cancelledBy                  User?                    @relation("BranchSupplyCycleCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
-  reopenedBy                   User?                    @relation("BranchSupplyCycleReopenedBy", fields: [reopenedByUserId], references: [id], onDelete: Restrict)
+  totalDeliveredKg             Decimal                     @default(0) @db.Decimal(14, 3)
+  totalDeliveredPieces         Decimal                     @default(0) @db.Decimal(14, 3)
+  totalReturnedKg              Decimal                     @default(0) @db.Decimal(14, 3)
+  totalReturnedPieces          Decimal                     @default(0) @db.Decimal(14, 3)
+  totalExpectedSoldKg          Decimal                     @default(0) @db.Decimal(14, 3)
+  totalExpectedSoldPieces      Decimal                     @default(0) @db.Decimal(14, 3)
+  totalActualSoldKg            Decimal                     @default(0) @db.Decimal(14, 3)
+  totalActualSoldPieces        Decimal                     @default(0) @db.Decimal(14, 3)
+  totalShrinkageKg             Decimal                     @default(0) @db.Decimal(14, 3)
+  totalShrinkagePieces         Decimal                     @default(0) @db.Decimal(14, 3)
+  totalDifferenceKg            Decimal                     @default(0) @db.Decimal(14, 3)
+  totalDifferencePieces        Decimal                     @default(0) @db.Decimal(14, 3)
+  expectedSalesTotal           Decimal                     @default(0) @db.Decimal(14, 2)
+  actualSalesTotal             Decimal                     @default(0) @db.Decimal(14, 2)
+  expectedProfitTotal          Decimal                     @default(0) @db.Decimal(14, 2)
+  actualProfitTotal            Decimal                     @default(0) @db.Decimal(14, 2)
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  distributionCenterLocation   OperationalLocation         @relation("BranchSupplyCycleDistributionCenter", fields: [distributionCenterLocationId], references: [id], onDelete: Restrict)
+  branchLocation               OperationalLocation         @relation("BranchSupplyCycleBranch", fields: [branchLocationId], references: [id], onDelete: Restrict)
+  pointOfSaleDailyClose        PointOfSaleDailyClose?      @relation("BranchSupplyCycleDailyClose", fields: [pointOfSaleDailyCloseId], references: [id], onDelete: Restrict)
+  openedBy                     User                        @relation("BranchSupplyCycleOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy                   User?                       @relation("BranchSupplyCycleReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  closedBy                     User?                       @relation("BranchSupplyCycleClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  cancelledBy                  User?                       @relation("BranchSupplyCycleCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
+  reopenedBy                   User?                       @relation("BranchSupplyCycleReopenedBy", fields: [reopenedByUserId], references: [id], onDelete: Restrict)
   transfers                    BranchSupplyCycleTransfer[]
   items                        BranchSupplyCycleItem[]
   events                       BranchSupplyCycleEvent[]
@@ -1651,21 +1657,21 @@ model BranchSupplyCycle {
 }
 
 model BranchSupplyCycleTransfer {
-  id                  String                  @id @default(cuid())
+  id                  String                   @id @default(cuid())
   branchSupplyCycleId String
-  inventoryTransferId String                  @unique
+  inventoryTransferId String                   @unique
   role                BranchSupplyTransferRole
   linkedByUserId      String
-  linkedAt            DateTime                @default(now())
-  branchSupplyCycle   BranchSupplyCycle      @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
-  inventoryTransfer   InventoryTransfer      @relation(fields: [inventoryTransferId], references: [id], onDelete: Restrict)
-  linkedBy            User                    @relation("BranchSupplyCycleTransferLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+  linkedAt            DateTime                 @default(now())
+  branchSupplyCycle   BranchSupplyCycle        @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
+  inventoryTransfer   InventoryTransfer        @relation(fields: [inventoryTransferId], references: [id], onDelete: Restrict)
+  linkedBy            User                     @relation("BranchSupplyCycleTransferLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
 
   @@index([branchSupplyCycleId, role, linkedAt])
 }
 
 model BranchSupplyCycleItem {
-  id                              String                   @id @default(cuid())
+  id                              String                 @id @default(cuid())
   branchSupplyCycleId             String
   cycleVersion                    Int
   snapshotKey                     String
@@ -1673,34 +1679,34 @@ model BranchSupplyCycleItem {
   productNameSnapshot             String
   productSkuSnapshot              String?
   productUnitSnapshot             ProductUnit
-  unitPriceSnapshot               Decimal                  @db.Decimal(14, 2)
-  unitCostSnapshot                Decimal                  @db.Decimal(14, 2)
+  unitPriceSnapshot               Decimal                @db.Decimal(14, 2)
+  unitCostSnapshot                Decimal                @db.Decimal(14, 2)
   unitEquivalentId                String?
   equivalenceFromUnitSnapshot     ProductUnit?
   equivalenceToUnitSnapshot       ProductUnit?
-  appliedEquivalentFactorSnapshot Decimal?                 @db.Decimal(18, 6)
+  appliedEquivalentFactorSnapshot Decimal?               @db.Decimal(18, 6)
   roundingModeSnapshot            String?
-  deliveredKg                     Decimal                  @default(0) @db.Decimal(14, 3)
-  deliveredPieces                 Decimal                  @default(0) @db.Decimal(14, 3)
-  returnedKg                      Decimal                  @default(0) @db.Decimal(14, 3)
-  returnedPieces                  Decimal                  @default(0) @db.Decimal(14, 3)
-  expectedSoldKg                  Decimal                  @default(0) @db.Decimal(14, 3)
-  expectedSoldPieces              Decimal                  @default(0) @db.Decimal(14, 3)
-  actualSoldKg                    Decimal                  @default(0) @db.Decimal(14, 3)
-  actualSoldPieces                Decimal                  @default(0) @db.Decimal(14, 3)
-  shrinkageKg                     Decimal                  @default(0) @db.Decimal(14, 3)
-  shrinkagePieces                 Decimal                  @default(0) @db.Decimal(14, 3)
-  differenceKg                    Decimal                  @default(0) @db.Decimal(14, 3)
-  differencePieces                Decimal                  @default(0) @db.Decimal(14, 3)
-  expectedSalesAmount             Decimal                  @default(0) @db.Decimal(14, 2)
-  actualSalesAmount               Decimal                  @default(0) @db.Decimal(14, 2)
-  expectedProfitAmount            Decimal                  @default(0) @db.Decimal(14, 2)
-  actualProfitAmount              Decimal                  @default(0) @db.Decimal(14, 2)
-  calculatedAt                    DateTime                 @default(now())
-  createdAt                       DateTime                 @default(now())
-  branchSupplyCycle               BranchSupplyCycle       @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
-  product                         Product                  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  unitEquivalent                  ProductUnitEquivalent?  @relation(fields: [unitEquivalentId], references: [id], onDelete: Restrict)
+  deliveredKg                     Decimal                @default(0) @db.Decimal(14, 3)
+  deliveredPieces                 Decimal                @default(0) @db.Decimal(14, 3)
+  returnedKg                      Decimal                @default(0) @db.Decimal(14, 3)
+  returnedPieces                  Decimal                @default(0) @db.Decimal(14, 3)
+  expectedSoldKg                  Decimal                @default(0) @db.Decimal(14, 3)
+  expectedSoldPieces              Decimal                @default(0) @db.Decimal(14, 3)
+  actualSoldKg                    Decimal                @default(0) @db.Decimal(14, 3)
+  actualSoldPieces                Decimal                @default(0) @db.Decimal(14, 3)
+  shrinkageKg                     Decimal                @default(0) @db.Decimal(14, 3)
+  shrinkagePieces                 Decimal                @default(0) @db.Decimal(14, 3)
+  differenceKg                    Decimal                @default(0) @db.Decimal(14, 3)
+  differencePieces                Decimal                @default(0) @db.Decimal(14, 3)
+  expectedSalesAmount             Decimal                @default(0) @db.Decimal(14, 2)
+  actualSalesAmount               Decimal                @default(0) @db.Decimal(14, 2)
+  expectedProfitAmount            Decimal                @default(0) @db.Decimal(14, 2)
+  actualProfitAmount              Decimal                @default(0) @db.Decimal(14, 2)
+  calculatedAt                    DateTime               @default(now())
+  createdAt                       DateTime               @default(now())
+  branchSupplyCycle               BranchSupplyCycle      @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
+  product                         Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unitEquivalent                  ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id], onDelete: Restrict)
 
   @@unique([branchSupplyCycleId, cycleVersion, snapshotKey])
   @@index([productId, cycleVersion])
@@ -1708,7 +1714,7 @@ model BranchSupplyCycleItem {
 }
 
 model BranchSupplyCycleEvent {
-  id                  String                  @id @default(cuid())
+  id                  String                     @id @default(cuid())
   branchSupplyCycleId String
   type                BranchSupplyCycleEventType
   cycleVersion        Int
@@ -1717,11 +1723,11 @@ model BranchSupplyCycleEvent {
   actorUserId         String
   reason              String?
   payload             Json
-  idempotencyKey      String?                 @unique
-  occurredAt          DateTime                @default(now())
-  createdAt           DateTime                @default(now())
-  branchSupplyCycle   BranchSupplyCycle      @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
-  actor               User                    @relation("BranchSupplyCycleEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  idempotencyKey      String?                    @unique
+  occurredAt          DateTime                   @default(now())
+  createdAt           DateTime                   @default(now())
+  branchSupplyCycle   BranchSupplyCycle          @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
+  actor               User                       @relation("BranchSupplyCycleEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@unique([branchSupplyCycleId, cycleVersion])
   @@index([branchSupplyCycleId, occurredAt])

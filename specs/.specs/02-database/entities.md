@@ -197,6 +197,49 @@ Validaciones:
 - `productId` requerido.
 - Debe registrar cantidad en kilo, pieza o ambas según producto.
 - `quantityPieces` debe ser entero cuando aplique.
+- `unitEquivalentId` es opcional y solo puede referenciar una equivalencia activa aplicable al producto y fecha de negocio.
+- `appliedEquivalentFactor` y `roundingMode` conservan la equivalencia aplicada sin sobrescribir su historial.
+
+## BranchSupplyCycle
+
+Validaciones:
+
+- `distributionCenterLocationId`, `branchLocationId`, `businessDate` y `openedByUserId` requeridos.
+- Solo un ciclo no cancelado por sucursal y fecha.
+- CEDIS activo `DISTRIBUTION_CENTER`; sucursal activa `BRANCH` hija directa del CEDIS.
+- CEDIS y sucursal distintos; `version >= 1`.
+- `CLOSED` y `CANCELLED` no admiten suministros, devoluciones ni refresh.
+- Cancelar requiere actor, fecha y motivo, sin cierre activo ni transferencias no canceladas.
+- Los totales del ciclo son snapshots derivados y no pueden usarse para modificar inventario.
+
+## BranchSupplyCycleTransfer
+
+Validaciones:
+
+- `branchSupplyCycleId`, `inventoryTransferId`, `role` y `linkedByUserId` requeridos.
+- `inventoryTransferId` único.
+- `SUPPLY` requiere CEDIS como origen y sucursal como destino.
+- `RETURN` requiere sucursal como origen y CEDIS como destino.
+- Transferencias confirmadas o canceladas permanecen vinculadas como historial.
+
+## BranchSupplyCycleItem
+
+Validaciones:
+
+- `branchSupplyCycleId`, `cycleVersion`, `snapshotKey`, `productId`, nombre, unidad, precio y costo snapshot requeridos.
+- Cantidades físicas y valores de referencia no negativos.
+- `appliedEquivalentFactorSnapshot > 0` cuando exista.
+- No convertir kilo/pieza sin equivalencia oficial aplicable y política de redondeo aprobada.
+- Append-only por ciclo, versión y clave de snapshot.
+
+## BranchSupplyCycleEvent
+
+Validaciones:
+
+- Ciclo, tipo, versión, actor y payload requeridos.
+- Una mutación por versión y clave idempotente con namespace de operación/recurso.
+- Reintento con misma clave y payload devuelve el resultado original; payload distinto produce conflicto.
+- Append-only; no permite actualización ni eliminación.
 
 ## Customer
 

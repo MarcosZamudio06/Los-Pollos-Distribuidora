@@ -27,21 +27,24 @@ Chain strategy: size:exception
 
 ## Phase 1: Spec Gate and Foundation
 
-- [ ] 1.1 Resolver el conflicto documental: localizar o sustituir la referencia ausente a `specs/.specs/01-architecture/ai-rules.md`.
-- [ ] 1.2 Escribir pruebas RED de unicidad, FK, tipos de ubicación e índices parciales antes de modificar Prisma.
-- [ ] 1.3 Agregar enums/modelos Prisma, migración SQL y permisos sin alterar saldos existentes.
+- [x] 1.1 Resolver el conflicto documental: `specs/.specs/01-architecture/ai-rules.md` existe y los specs CEDIS quedaron alineados.
+- [x] 1.2 Agregar pruebas de contrato para enums/modelos, FK, tipos de ubicación e índices parciales de la base CEDIS.
+- [x] 1.3 Agregar enums/modelos Prisma, migración SQL y siete permisos CEDIS sin alterar saldos existentes.
 - [ ] 1.4 Validar backfill con mapa explícito sucursal → CEDIS y reporte de ambigüedades.
+- [x] 1.5 Alinear el índice activo a `branchLocationId + businessDate` y agregar evento `TRANSFER_STATE_CHANGED` con migración no destructiva.
 
 ## Phase 2: Domain and API
 
-- [ ] 2.1 Crear `branch-supply-cycles` con DTOs, controller, service, alcance e idempotencia.
-- [ ] 2.2 Extender `InventoryTransfersService` para crear/vincular supply/return sin duplicar lógica de balances.
-- [ ] 2.3 Implementar estados, cancelación y bloqueantes de traspaso/cierre.
-- [ ] 2.4 Cubrir endpoints, errores, concurrencia y formulas con Jest.
+- [x] 2.1 Crear `backend/src/modules/cedis` con DTOs, controller `/api/cedis/branch-supply-cycles`, service, alcance e idempotencia.
+- [x] 2.2 Extraer operaciones de `InventoryTransfersService` reutilizables con `TransactionClient`; crear/vincular `SUPPLY`/`RETURN` como `REQUESTED` sin movimientos.
+- [x] 2.3 Proteger confirmación/cancelación vinculada, productos/ubicaciones activas, versión, invalidación y estados terminales.
+- [x] 2.4 Implementar refresh de snapshots, integridad y elegibilidad.
+- [ ] 2.5 Implementar la cancelación complementaria del ciclo fuera de los endpoints mínimos.
+- [ ] 2.6 Cubrir contratos, errores, múltiples transferencias, idempotencia, stock y concurrencia con Jest/Supertest/PostgreSQL.
 
 ## Phase 3: Existing Workflow Integration
 
-- [ ] 3.1 Extender `PointOfSaleDailyCloseService` para asociación, invalidación y finalización atómica.
+- [ ] 3.1 Extender `PointOfSaleDailyCloseService` para asociación, bloqueantes, cierre y reapertura atómicos.
 - [ ] 3.2 Extender `LocationsService`, `ReportsService` y dashboard con alcance y frescura.
 - [ ] 3.3 Verificar que las devoluciones se contabilicen solo como `TRANSFER_OUT` en la conciliación.
 
@@ -55,5 +58,5 @@ Chain strategy: size:exception
 
 - [x] 5.1 Add CEDIS location hierarchy validation, parent-cycle protection, coordinate DTO validation, scoped reads, and active direct-branch query.
 - [x] 5.2 Add CEDIS permissions, idempotent seed defaults, CEDIS/branch seed mapping, and hierarchy migration contract.
-- [x] 5.3 Synchronize frontend catalog labels/types and canonical/OpenSpec documentation without implementing the unrelated BranchSupplyCycle workflow.
+- [x] 5.3 Sincronizar catálogos frontend y documentación de jerarquía/permisos sin implementar todavía el flujo `BranchSupplyCycle`.
 - [x] 5.4 Add unit, controller, permission, seed, and schema contract coverage for the approved slice.

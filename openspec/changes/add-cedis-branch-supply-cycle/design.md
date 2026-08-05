@@ -1,81 +1,68 @@
-# Design: BranchSupplyCycle CEDIS-sucursal
+# Design: Módulo backend CEDIS
 
 ## Technical Approach
 
-Crear una capacidad nueva que agregue coordinación, no inventario. `BranchSupplyCycle` identifica CEDIS, sucursal y fecha; `BranchSupplyCycleTransfer` vincula cada `InventoryTransfer` confirmado o pendiente y clasifica `SUPPLY` o `RETURN`. Las cantidades se leen de `InventoryTransferItem` y los movimientos siguen siendo creados por `InventoryTransfersService`.
-
-El cierre diario continúa siendo el único agregado de conciliación de sucursal. Al abrirlo se enlaza el ciclo de la misma sucursal y fecha; al confirmar/cancelar traspasos se invalida la validación vigente del cierre en `DRAFT`. El ciclo solo pasa a `CLOSED` dentro de la transacción que lleva el cierre a `CLOSED`.
-
-Gap previo: no existe `BranchSupplyCycle` en Prisma, backend, frontend ni `openspec/specs/`; tampoco existe `specs/.specs/01-architecture/ai-rules.md` aunque `openspec/config.yaml` lo referencia. La implementación futura debe detenerse si aparece una regla canónica contradictoria.
+Crear `CedisModule` como orquestador de ciclos. `BranchSupplyCyclesService` deriva origen/destino desde el ciclo, valida alcance/estado/unidades y delega las reglas de transferencia a `InventoryTransfersService`. Prisma ya contiene los modelos de ciclo, vínculos, snapshots y eventos; la implementación debe completar las diferencias indicadas en migración.
 
 ## Architecture Decisions
 
-| Decisión | Alternativas rechazadas | Razón |
+| Decisión | Alternativa | Razón |
 |---|---|---|
-| CEDIS se modela con `OperationalLocation` `DISTRIBUTION_CENTER` | Reutilizar `WAREHOUSE` o `MIXED` | Expresa el CEDIS de forma canónica, con `parentId=null`; una sucursal directa es `BRANCH` con `parentId` del CEDIS. |
-| Vínculo separado ciclo-traspaso | Copiar partidas/cantidades en el ciclo | El traspaso y sus movimientos siguen siendo la única fuente de verdad. |
-| Un ciclo puede tener varios cierres históricos, pero uno no cancelado | Copiar totales del cierre al ciclo | Conserva reaperturas/cancelaciones sin duplicar conciliación. |
-| Finalización coordinada con el cierre | Endpoint independiente `complete` | Impide que ciclo y cierre queden en estados incompatibles. |
-| CEDIS usa permisos + alcance de ubicación | Crear un RBAC paralelo | Reutiliza `JwtAuthGuard`, `RolesGuard`, `PermissionsGuard` y `@RequirePermissions`. |
-
-El detalle de campos, relaciones Prisma, índices parciales y restricciones está en [domain-model.md](domain-model.md). La decisión importante es que el ciclo solo guarda identidad, estado, auditoría y vínculos; nunca cantidades ni saldos.
+| Controller `cedis/branch-supply-cycles` | Prefijo raíz anterior | Agrupa la capacidad bajo el permiso y dominio CEDIS acordados. |
+| Crear transferencias `REQUESTED` | Confirmar al capturar | La recepción física es una decisión separada y auditable. |
+| Confirmar/cancelar con endpoints de inventario | Duplicar comandos CEDIS | Mantiene una sola autoridad sobre saldos, movimientos y estado del traspaso. |
+| Núcleo de transferencias acepta `TransactionClient` | Transacciones anidadas | Permite transferencia, vínculo, evento y versión dentro de una sola transacción. |
+| Snapshots append-only reconstruibles | Totales como fuente de stock | Conserva auditoría sin competir con `InventoryBalance`/`InventoryMovement`. |
+| Sin reserva de pendientes | Descontar al solicitar | El servicio actual descuenta al confirmar; agregar reservas sería otro agregado. |
 
 ## Data Flow
 
 ```text
-CEDIS UI
-  -> BranchSupplyCyclesController
-  -> BranchSupplyCyclesService
-       -> LocationsService (activo/tipo/alcance)
-       -> InventoryTransfersService (crear/confirmar/cancelar/movimientos)
-       -> PointOfSaleDailyCloseService (vínculo/validación/transición)
-       -> Prisma/PostgreSQL
+POST supply/return
+  -> BranchSupplyCyclesService (lock/version/scope)
+  -> InventoryTransfersService.create(tx) [REQUESTED]
+  -> BranchSupplyCycleTransfer + event + version
 
-DailyClosePage -> PointOfSaleDailyCloseService (único cierre)
-ReportsService -> lecturas derivadas del ciclo + frescura existente
+POST inventory-transfers/:id/confirm
+  -> InventoryTransfersService (linked-cycle guard)
+  -> conditional balance decrement + TRANSFER_OUT/TRANSFER_IN
+  -> cycle OPEN/invalidation + version/event
+
+POST refresh
+  -> linked transfer items + movements
+  -> integrity/totals/source hash
+  -> append-only items/event + latest header projection
 ```
 
-## Reuse vs Extension
+## Transaction Boundaries
 
-| Componente actual | Acción futura | Uso explícito |
-|---|---|---|
-| `backend/prisma/schema.prisma` | Extender | Modelos, enums, relaciones e índice parcial. |
-| `InventoryTransfersService` | Reutilizar y extender | Mantener balance/movimientos/idempotencia; aceptar contexto de ciclo. |
-| `LocationsService` | Reutilizar y extender | Validar tipos, actividad y dependencias de desactivación. |
-| `PointOfSaleDailyCloseService` | Reutilizar y extender | Seguir calculando, validando y cerrando; asociar ciclo e invalidar versión. |
-| `ReportsService` | Extender | Consultas derivadas por rol, sin mutaciones. |
-| `frontend/src/features/inventario/components/InventoryTransferView.tsx` y `productService.ts` | Reutilizar y extender | Mostrar vínculo y dirigir operación CEDIS sin duplicar formularios base. |
-| `frontend/src/features/cierre-diario/DailyClosePage.tsx`, `DailyCloseDetailTabs.tsx`, `dailyCloseService.ts` | Extender | Mostrar ciclo y devoluciones; no crear otro cierre. |
-| `frontend/src/features/dashboard/DashboardPage.tsx`, `frontend/src/components/layout/navigation.ts`, `routeAccess.ts` | Extender | Card, navegación y protección por rol. |
-| `frontend/src/features/cedis/*` | Crear | Lista, detalle, tipos, servicio, hooks y pruebas de la nueva superficie. |
+- Abrir: ubicaciones, unicidad, ciclo y evento en `Serializable`.
+- Suministro/devolución: ciclo bloqueado o CAS por versión, transferencia, vínculo, evento y versión en la misma transacción.
+- Confirmar: ciclo/transferencia validables, decremento condicional, ambos movimientos, estado e invalidación del ciclo en la misma transacción.
+- Cancelar: estado, motivo, actor e invalidación del ciclo en la misma transacción.
+- Refresh: lectura consistente de fuentes, snapshot, evento, totales y estado en la misma transacción.
 
-## File Changes (future apply)
+Los conflictos `P2034` se reintentan de forma limitada con la misma clave. Índices únicos resuelven carreras de apertura y vínculo; `expectedVersion` resuelve escritores concurrentes.
 
-| Archivo | Acción futura |
+## File Changes
+
+| Archivo | Acción |
 |---|---|
-| `backend/prisma/schema.prisma` | Agregar modelos, enums y relaciones. |
-| `backend/prisma/migrations/*branch_supply_cycle*/migration.sql` | Crear tablas, FK, índices y restricciones. |
-| `backend/src/modules/branch-supply-cycles/**` | Crear módulo Nest, DTOs, controller, service y pruebas. |
-| `backend/src/common/authorization/permissions.ts` | Agregar permisos y defaults. |
-| `backend/src/modules/inventory/**` | Extender contexto y filtros del traspaso. |
-| `backend/src/modules/locations/**` | Bloquear desactivación con ciclos activos. |
-| `backend/src/modules/point-of-sale-daily-close/**` | Enlazar, invalidar y completar ciclo. |
-| `backend/src/modules/reports/**` | Exponer resumen CEDIS. |
-| `frontend/src/features/cedis/**` | Crear UI del módulo. |
-| `frontend/src/features/{inventario,cierre-diario,dashboard}/**` | Extender vistas existentes. |
+| `backend/src/modules/cedis/**` | Crear módulo, controller, service, DTOs y pruebas. |
+| `backend/src/modules/inventory/inventory-transfers.service.ts` | Extraer operaciones reutilizables con `TransactionClient` y validar ciclo vinculado. |
+| `backend/src/modules/inventory/inventory-transfers.controller.ts` | Exigir idempotencia y conservar contratos de confirmación/cancelación. |
+| `backend/src/app.module.ts` | Registrar `CedisModule`. |
+| `backend/prisma/schema.prisma` | Alinear unicidad activa y eventos de cambio de transferencia. |
+| `backend/prisma/migrations/*cedis_cycle_alignment*/migration.sql` | Aplicar cambios no destructivos de constraints/enums. |
 
-La navegación también extenderá `frontend/src/app/router.tsx` y `frontend/src/components/layout/Sidebar.tsx` solo mediante la matriz central existente; no habrá guard ni sidebar paralelo.
+## Units and Equivalences
+
+KG y PIECE se suman por separado. `KG_AND_PIECE` acepta cantidades medidas en una o ambas dimensiones. Una dimensión solo se deriva con equivalencia activa aplicable; mientras el redondeo siga abierto, la conversión automática responde `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`. El snapshot preserva equivalencia/factor cuando corresponda.
 
 ## Testing Strategy
 
-Unit tests cubrirán estados, fórmulas, dirección de transferencias y permisos. Contratos/controller cubrirán wrappers, idempotencia y errores. E2E cubrirá ciclo → suministros → devoluciones → cierre. La prueba de migración verificará índices parciales y backfill no destructivo.
-
-## Migration / Rollout
-
-Añadir tablas y FK opcionalmente, sembrar permisos, desplegar lecturas, desplegar comandos y finalmente ejecutar backfill con mapa aprobado. La jerarquía CEDIS-sucursal se aplica a ubicaciones y alcance; el backfill histórico de ciclos no infiere asociaciones desde `parentId`. No modificar `InventoryBalance`, `InventoryMovement` ni cierres históricos durante backfill.
+Jest unitario cubre estados, dirección, unidades e idempotencia. Contratos Supertest cubren rutas, permisos y errores. Pruebas con PostgreSQL cubren carreras de apertura, versión, vínculo único y confirmaciones contra el mismo stock. E2E cubre ciclo → varios suministros/devoluciones → confirmación/cancelación → refresh → cierre.
 
 ## Open Questions
 
-- [ ] Confirmar el mapa operativo de ubicaciones CEDIS antes del backfill.
-- [x] CEDIS canónico: `DISTRIBUTION_CENTER`; sucursal directa: `BRANCH` con padre CEDIS.
-- [ ] Resolver la ausencia de `specs/.specs/01-architecture/ai-rules.md` antes de aplicar código.
+- [ ] Definir política exacta de redondeo antes de habilitar conversiones kilo-pieza.

@@ -46,6 +46,14 @@ const cedisCycleHierarchyMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260804140000_enforce_cedis_cycle_branch_type/migration.sql',
 );
+const cedisCycleAlignmentMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260804150000_align_branch_supply_cycle_commands/migration.sql',
+);
+const inventoryTransferEquivalenceMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260804151000_add_inventory_transfer_equivalence/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -274,6 +282,38 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('BranchSupplyCycleEvent_append_only');
     expect(migrationSql).toContain(
       'BranchSupplyCycle_branchLocationId_businessDate_status_idx',
+    );
+  });
+
+  it('enforces cycle uniqueness by branch date and records linked transfer state changes', () => {
+    const cycleStatus = getEnumBlock('BranchSupplyCycleEventType');
+    const cycle = getModelBlock('BranchSupplyCycle');
+    const migrationSql = readFileSync(
+      cedisCycleAlignmentMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(cycleStatus).toMatch(/TRANSFER_STATE_CHANGED/);
+    expect(cycle).toMatch(
+      /@@index\(\[branchLocationId, businessDate, status\]\)/,
+    );
+    expect(migrationSql).toContain('BranchSupplyCycle_active_branch_date_uq');
+    expect(migrationSql).toContain('TRANSFER_STATE_CHANGED');
+  });
+
+  it('persists transfer equivalence metadata without making it required', () => {
+    const item = getModelBlock('InventoryTransferItem');
+    const migrationSql = readFileSync(
+      inventoryTransferEquivalenceMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(item).toMatch(/unitEquivalentId\s+String\?/);
+    expect(item).toMatch(/appliedEquivalentFactor\s+Decimal\?/);
+    expect(item).toMatch(/roundingMode\s+String\?/);
+    expect(migrationSql).toContain('ADD COLUMN "unitEquivalentId" TEXT');
+    expect(migrationSql).toContain(
+      'InventoryTransferItem_unitEquivalentId_fkey',
     );
   });
 

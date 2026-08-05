@@ -1,67 +1,55 @@
-# Proposal: Ciclo diario de suministro CEDIS-sucursal
+# Proposal: Ciclo de suministro CEDIS-sucursal
 
 ## Intent
 
-Documentar un agregado `BranchSupplyCycle` para coordinar la jornada diaria entre un CEDIS y una sucursal. El agregado debe vincular varios `InventoryTransfer` de suministro, varias devoluciones y el `PointOfSaleDailyClose` de la sucursal sin crear inventario paralelo ni reemplazar la lógica existente de cierre.
+Implementar un módulo backend `cedis` que abra ciclos y coordine múltiples suministros y devoluciones entre un CEDIS y una sucursal. El ciclo reutiliza `InventoryTransfersService`; no crea inventario, movimientos ni un cierre diario paralelo.
 
 ## Scope
 
 ### In Scope
 
-- Modelo, estados, invariantes, fórmulas y relaciones Prisma.
-- Contratos API, permisos, migración no destructiva y estrategia de backfill.
-- Integración documentada con inventario, ubicaciones, cierre diario, reportes, dashboard y navegación.
-- Criterios de aceptación, pruebas y orden futuro de implementación.
+- Contratos bajo `/api/cedis/branch-supply-cycles` para abrir, consultar, suministrar, devolver, refrescar y cancelar ciclos.
+- Creación transaccional de `InventoryTransfer` `REQUESTED` y su vínculo como `SUPPLY` o `RETURN`.
+- Reutilización de los comandos existentes de inventario para confirmar y cancelar transferencias.
+- Snapshots append-only derivados de transferencias y movimientos confirmados.
+- Idempotencia, control de versión, concurrencia, stock insuficiente, productos/ubicaciones inactivas y unidades KG/PIECE.
+- Coordinación con `PointOfSaleDailyClose` para bloquear, cerrar y reabrir de forma consistente.
 
 ### Out of Scope
 
-- Implementación del flujo completo de `BranchSupplyCycle` fuera de la protección de ubicaciones ya aprobada.
-- Saldos, movimientos, conteos, diferencias o fórmulas monetarias duplicadas.
-- CFDI, básculas, liquidación de rutas o `PaymentAllocation`.
+- Reservas de stock para transferencias pendientes.
+- Conversión kilo-pieza mientras no exista política de redondeo aprobada.
+- Reversa automática de transferencias confirmadas.
+- Inventario, caja, ventas, utilidades o cierres paralelos.
+- Devoluciones de ruta, que permanecen bajo `RouteSettlement` y `ROUTE_STOCK`.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `branch-supply-cycles`: Coordina el suministro diario CEDIS-sucursal y su relación con traspasos y cierre diario.
+- `branch-supply-cycles`: Coordina la jornada CEDIS-sucursal y sus transferencias vinculadas.
 
 ### Modified Capabilities
 
-- None. Las extensiones futuras de inventario, cierre diario, reportes y UI se especifican como integraciones requeridas por la nueva capacidad, sin modificar todavía sus specs principales.
+- None. Las integraciones requeridas con inventario y cierre diario se especifican dentro de la nueva capacidad y en los specs canónicos correspondientes.
 
 ## Approach
 
-Mantener `OperationalLocation`, `InventoryTransfer`, `InventoryMovement` y `PointOfSaleDailyClose` como fuentes de verdad. Agregar únicamente el agregado coordinador y una entidad de vínculo ciclo-traspaso. La confirmación de traspasos seguirá pasando por `InventoryTransfersService`; el cierre seguirá siendo responsabilidad exclusiva de `PointOfSaleDailyCloseService`.
+`BranchSupplyCycle` conserva identidad, estado, versión, auditoría y proyecciones derivadas. `BranchSupplyCycleTransfer` vincula cada `InventoryTransfer` una sola vez. Los saldos y movimientos permanecen exclusivamente en inventario; el cierre diario conserva conciliación, caja, ventas y diferencias.
 
-## Affected Areas
-
-| Área | Impacto futuro | Decisión documental |
-|---|---|---|
-| Prisma | Extendida | Nuevo agregado, vínculos y FK opcional al cierre. |
-| Inventario/ubicaciones | Extendida | Validación de dirección, alcance y bloqueo de desactivación. |
-| Cierre diario | Extendida | Asociación, invalidación y finalización coordinada. |
-| Reportes/dashboard | Extendida | Lecturas derivadas y filtradas por rol. |
-| Frontend | Nueva + extendida | Pantallas CEDIS; reutilización de componentes actuales. |
-
-## Risks
-
-- Inferir relaciones históricas de ciclo desde `parentId` puede asociar datos incorrectamente; la jerarquía aprobada sí identifica la sucursal directa de un CEDIS para consultas de ubicación.
-- Confirmar un traspaso sin invalidar la validación del cierre puede producir conciliaciones obsoletas.
-- Contabilizar una devolución además de `TRANSFER_OUT` duplicaría la salida.
-
-## Rollback Plan
-
-Desplegar primero únicamente la estructura nullable y permisos. Si la implementación futura falla, detener nuevas asociaciones, conservar los ciclos creados como historial y revertir solo columnas/tablas nuevas después de exportar dependencias; nunca borrar ni revertir automáticamente movimientos existentes.
+Crear suministro/devolución no confirma recepción: produce una transferencia `REQUESTED`. La confirmación ocurre mediante `/api/inventory-transfers/:id/confirm` cuando el destino recibe físicamente el producto. `refresh` reconstruye snapshots y elegibilidad; nunca confirma ni corrige operaciones.
 
 ## Dependencies
 
-- Specs canónicos de inventario, ubicaciones, traspasos, cierre diario y reportes.
-- PostgreSQL/Prisma y guards de autenticación/RBAC existentes.
-- Resolución operativa explícita del mapa sucursal → CEDIS antes del backfill.
+- `specs/modules/branch-supply-cycles/spec.md`.
+- `specs/.specs/03-api/branch-supply-cycles-api.md`.
+- Jerarquía CEDIS/sucursal y permisos CEDIS ya implementados.
+- `InventoryTransfersService`, Prisma/PostgreSQL y cierre diario existentes.
 
 ## Success Criteria
 
-- [ ] La capacidad define un ciclo único por sucursal y fecha, con múltiples suministros, devoluciones y un cierre diario.
-- [ ] Las fórmulas usan exclusivamente traspasos/movimientos y no crean stock paralelo.
-- [ ] Cada integración identifica qué componente actual se reutiliza y qué se extiende.
-- [ ] Esta fase modifica solo documentación dentro de este cambio OpenSpec.
+- [ ] Un ciclo único por sucursal/fecha admite múltiples suministros y devoluciones.
+- [ ] Crear/vincular no cambia stock; confirmar genera exactamente salida/entrada mediante inventario.
+- [ ] Reintentos, carreras y stock insuficiente no dejan efectos parciales ni duplicados.
+- [ ] Refresh produce snapshots coherentes sin conversiones o fórmulas inventadas.
+- [ ] Ciclos cerrados/cancelados preservan historia y rechazan mutaciones operativas.

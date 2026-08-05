@@ -90,6 +90,7 @@ backend/
       products/
       inventory/
       locations/
+      cedis/
       customers/
       accounts-receivable/
       payments/
@@ -137,7 +138,7 @@ shared/
 | Alcance                             | Frontend                                                   | Backend                                              | Nota                                                                                                                 |
 | ----------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Inventario por ubicación            | `features/inventario/`, `features/ubicaciones/`            | `modules/inventory/`, `modules/locations/`           | Debe soportar stock por ubicación operativa.                                                                         |
-| CEDIS, sucursales y almacenes       | `features/ubicaciones/`                                    | `modules/locations/`                                 | `DISTRIBUTION_CENTER` es raíz; las sucursales directas son `BRANCH` mediante `parentId`, sin ciclos.                  |
+| CEDIS, sucursales y almacenes       | `features/ubicaciones/`, `features/cedis/`                 | `modules/locations/`, `modules/cedis/`               | Locations gobierna jerarquía; CEDIS coordina ciclos y reutiliza `modules/inventory/`.                                |
 | Clientes mayoristas                 | `features/clientes/`                                       | `modules/customers/`                                 | Debe contemplar tipo de cliente, condiciones comerciales y crédito.                                                  |
 | Cuentas por cobrar                  | `features/cobranza/`                                       | `modules/accounts-receivable/`                       | Debe manejar saldos, vencimientos, pagos y bloqueo de crédito.                                                       |
 | Pagos y cobranza                    | `features/cobranza/`                                       | `modules/payments/`, `modules/accounts-receivable/`  | Los pagos son registros trazables asociados a cuentas por cobrar, cliente, usuario y, si aplica, ruta o liquidación. |
@@ -161,6 +162,7 @@ shared/
 Nombres canónicos de specs de módulo:
 
 - `specs/modules/inventory/spec.md`
+- `specs/modules/branch-supply-cycles/spec.md`
 - `specs/modules/sales/spec.md`
 - `specs/modules/sales-documents/spec.md`
 - `specs/modules/billing-requests/spec.md`

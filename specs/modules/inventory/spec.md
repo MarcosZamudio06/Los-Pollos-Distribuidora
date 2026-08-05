@@ -34,18 +34,24 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 - Una diferencia física debe quedar como ajuste trazable.
 - Un traspaso puede salir de matriz y llegar a pollería o a `ROUTE_STOCK`.
 - Crear, confirmar y cancelar traspasos debe soportar idempotencia para no duplicar movimientos.
+- Los traspasos vinculados a un ciclo CEDIS conservan las mismas reglas de inventario; el ciclo solo deriva dirección, alcance y trazabilidad.
+- Un suministro del ciclo se crea `REQUESTED` con dirección CEDIS → sucursal; una devolución se crea `REQUESTED` con dirección sucursal → CEDIS.
+- Confirmar o cancelar un traspaso vinculado debe validar que el ciclo no esté `CLOSED` ni `CANCELLED` e invalidar su proyección vigente.
 
 ## Permisos
 
 - ADMIN y WAREHOUSE.
 - `cedis.dispatch` autoriza abastecimientos desde el CEDIS asignado.
 - `cedis.receive_returns` autoriza devoluciones hacia el CEDIS asignado.
+- `cedis.reconcile` autoriza reconstruir snapshots y elegibilidad del ciclo.
 - `SELLER` solo consulta su sucursal con `cedis.view`; no recibe costos ni
   utilidad sin `cedis.view_costs`.
 
 ## API
 
 Las rutas exactas deben definirse en `specs/.specs/03-api/inventory-api.md` y `specs/.specs/03-api/inventory-transfers-api.md`.
+
+Los ciclos CEDIS se definen en `specs/modules/branch-supply-cycles/spec.md` y `specs/.specs/03-api/branch-supply-cycles-api.md`.
 
 ## UI
 
@@ -65,3 +71,5 @@ Las rutas exactas deben definirse en `specs/.specs/03-api/inventory-api.md` y `s
 - No existe doble decremento en carga más venta de ruta.
 - Reintento idempotente en creación, confirmación y cancelación de traspaso.
 - No se permite stock negativo.
+- Varios suministros y devoluciones dentro del mismo ciclo sin vínculos ni movimientos duplicados.
+- Confirmación/cancelación de traspaso vinculado invalida la proyección del ciclo.

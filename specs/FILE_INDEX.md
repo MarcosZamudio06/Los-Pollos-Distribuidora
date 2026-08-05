@@ -18,6 +18,7 @@
 .specs/03-api/api-conventions.md
 .specs/03-api/auth-api.md
 .specs/03-api/billing-requests-api.md
+.specs/03-api/branch-supply-cycles-api.md
 .specs/03-api/commercial-policies-api.md
 .specs/03-api/customers-api.md
 .specs/03-api/delivery-api.md
@@ -57,6 +58,7 @@ README.md
 modules/accounts-receivable/spec.md
 modules/auth/spec.md
 modules/billing-requests/spec.md
+modules/branch-supply-cycles/spec.md
 modules/clientes/spec.md
 modules/compras/spec.md
 modules/inventory/spec.md

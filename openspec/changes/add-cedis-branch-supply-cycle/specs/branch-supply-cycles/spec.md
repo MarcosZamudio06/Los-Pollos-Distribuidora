@@ -2,96 +2,83 @@
 
 ## Purpose
 
-Coordinar la jornada diaria de suministro entre un CEDIS y una sucursal mediante `BranchSupplyCycle`, sin reemplazar `InventoryTransfer`, `InventoryMovement` ni `PointOfSaleDailyClose`.
+Coordinar la jornada CEDIS-sucursal mediante transferencias de inventario vinculadas y snapshots derivados.
 
 ## Requirements
 
-### Requirement: Ciclo único por sucursal y fecha
+### Requirement: Ciclo único y autorizado
 
-El sistema MUST mantener como máximo un ciclo no cancelado para cada sucursal y fecha de negocio. El ciclo MUST registrar CEDIS, sucursal, fecha, versión y estado.
+El sistema MUST mantener como máximo un ciclo no cancelado por sucursal y fecha. CEDIS y sucursal MUST estar activos y formar una jerarquía `DISTRIBUTION_CENTER` → `BRANCH` directa.
 
-#### Scenario: Ciclo nuevo
+#### Scenario: Apertura concurrente
 
-- GIVEN dos ubicaciones activas, distintas y compatibles
-- WHEN un usuario autorizado crea el ciclo para una fecha sin ciclo activo
-- THEN se crea en `OPEN` y se conserva el actor de apertura.
+- GIVEN dos comandos para la misma sucursal y fecha
+- WHEN se ejecutan concurrentemente
+- THEN solo persiste un ciclo `OPEN`
+- AND el otro comando recibe `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`
 
-#### Scenario: Duplicado concurrente
+### Requirement: Transferencias vinculadas
 
-- GIVEN dos solicitudes para la misma sucursal y fecha
-- WHEN ambas superan la consulta inicial
-- THEN PostgreSQL conserva un solo ciclo no cancelado y la otra solicitud recibe conflicto.
-
-### Requirement: Traspasos vinculados sin inventario paralelo
-
-El sistema MUST vincular múltiples traspasos de suministro y devolución. Las cantidades MUST derivarse de `InventoryTransferItem`; el ciclo MUST NOT crear balances ni movimientos propios.
+El sistema MUST admitir múltiples `SUPPLY` CEDIS → sucursal y `RETURN` sucursal → CEDIS. Cada comando MUST crear un `InventoryTransfer` `REQUESTED` y vincularlo una sola vez, sin movimientos.
 
 #### Scenario: Suministro y devolución
 
-- GIVEN un ciclo activo
-- WHEN se crean y confirman suministros CEDIS → sucursal y devoluciones sucursal → CEDIS
-- THEN cada traspaso genera sus movimientos mediante el dominio de inventario y queda vinculado al ciclo.
+- GIVEN un ciclo mutable y partidas válidas
+- WHEN se registra cada operación
+- THEN transferencia, vínculo, evento y versión se persisten atómicamente
+- AND ningún balance cambia
 
-#### Scenario: Dirección inválida
+### Requirement: Ciclo de vida delegado a inventario
 
-- GIVEN un traspaso con origen/destino que no corresponden al ciclo
-- WHEN se intenta vincularlo o confirmarlo
-- THEN la API rechaza la operación sin modificar balances ni crear vínculo.
+El sistema MUST confirmar y cancelar transferencias mediante los contratos existentes de inventario. Confirmar MUST crear ambos movimientos; cancelar MUST limitarse a estados no confirmados.
 
-### Requirement: Integración con cierre diario único
+#### Scenario: Confirmación concurrente
 
-El sistema MUST asociar el ciclo al `PointOfSaleDailyClose` de la misma sucursal y fecha. El cierre diario MUST seguir siendo el único agregado que concilia ventas, caja, conteos y diferencias.
+- GIVEN transferencias que compiten por stock limitado
+- WHEN se confirman concurrentemente
+- THEN solo confirman las que tengan stock disponible
+- AND nunca existe saldo negativo ni efecto parcial
 
-#### Scenario: Cierre relacionado
+#### Scenario: Transferencia confirmada
 
-- GIVEN un ciclo activo y un cierre `DRAFT` de la misma sucursal y fecha
-- WHEN se crea o abre el otro agregado
-- THEN ambos quedan asociados sin copiar totales ni crear un segundo cierre.
+- GIVEN una transferencia `CONFIRMED`
+- WHEN se intenta cancelar
+- THEN se rechaza sin alterar movimientos ni vínculo
 
-#### Scenario: Cierre bloqueado
+### Requirement: Refresh derivado
 
-- GIVEN un ciclo con suministro o devolución pendiente
-- WHEN se valida o cierra la jornada
-- THEN la operación queda bloqueada con un error de ciclo pendiente.
+El sistema MUST crear snapshots append-only desde transferencias y movimientos. Solo `CONFIRMED` contribuye; `DRAFT`, `REQUESTED` e `IN_TRANSIT` bloquean revisión; `CANCELLED` aporta cero.
 
-### Requirement: Finalización y reapertura coordinadas
+#### Scenario: Elegibilidad
 
-El ciclo MUST pasar a `CLOSED` solo dentro de la transacción que cierra el cierre diario. Una reapertura auditada del cierre MUST devolverlo a `OPEN`.
+- GIVEN suministro confirmado, cero pendientes e integridad válida
+- WHEN se refresca con versión vigente
+- THEN crea una nueva versión y pasa a `READY_FOR_REVIEW`
 
-#### Scenario: Cierre válido
+#### Scenario: Integridad inválida
 
-- GIVEN ciclo elegible y cierre `REVIEWED` con versión validada vigente
-- WHEN `ADMIN` cierra el cierre
-- THEN el cierre pasa a `CLOSED` y el ciclo a `CLOSED` atómicamente.
+- GIVEN partidas y movimientos con totales diferentes
+- WHEN se refresca o valida el cierre
+- THEN se reporta `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`
+- AND no se marca listo ni se corrigen fuentes
 
-#### Scenario: Reapertura
+### Requirement: Estados terminales y cierre
 
-- GIVEN ciclo `CLOSED` y cierre `CLOSED`
-- WHEN `ADMIN` reabre con motivo y versión válidos
-- THEN el cierre vuelve a `DRAFT` y el ciclo a `OPEN`.
+El sistema MUST rechazar suministros, devoluciones y refresh en `CLOSED` o `CANCELLED`. El ciclo MUST cerrar y reabrir en la misma transacción que el cierre diario relacionado.
 
-### Requirement: Alcance y auditoría
+#### Scenario: Cierre coordinado
 
-Las lecturas y mutaciones MUST respetar rol, permiso, ubicación y versión. Toda mutación crítica MUST aceptar `Idempotency-Key` y conservar actor, fecha y motivo cuando corresponda.
+- GIVEN ciclo `READY_FOR_REVIEW` y cierre `REVIEWED` vigentes
+- WHEN `ADMIN` cierra la jornada
+- THEN ambos pasan a `CLOSED` atómicamente
 
-#### Scenario: Vendedor fuera de alcance
+### Requirement: Unidades, idempotencia y alcance
 
-- GIVEN un `SELLER` asignado a otra sucursal
-- WHEN consulta o muta un ciclo ajeno
-- THEN recibe `FORBIDDEN` o `LOCATION_NOT_AUTHORIZED` sin filtrar datos.
+El sistema MUST mantener KG y PIECE separados, MUST NOT convertir sin equivalencia/redondeo aprobados y MUST exigir idempotencia y versión en comandos. Lecturas y mutaciones MUST respetar permiso y ubicación.
 
-### Non-goals
+#### Scenario: Reintento con deriva
 
-- No se agrega stock global o inventario del ciclo.
-- No se agregan cierres, conteos, diferencias o utilidades paralelas.
-- No se modifican automáticamente inventario, ventas o pagos al cancelar/reabrir el ciclo.
-
-## Supporting Documents
-
-- [Reglas de negocio](../../business-rules.md)
-- [Contratos API](../../api-contracts.md)
-- [Criterios de aceptación](../../acceptance-criteria.md)
-- [Estados](../../state-diagram.md)
-- [Fórmulas](../../reconciliation-formulas.md)
-- [Migración](../../migration-strategy.md)
-- [Permisos](../../permissions-matrix.md)
+- GIVEN una clave ya aplicada
+- WHEN se repite con payload distinto
+- THEN responde `IDEMPOTENCY_CONFLICT`
+- AND no crea ciclo, transferencia, vínculo, snapshot o movimiento adicional

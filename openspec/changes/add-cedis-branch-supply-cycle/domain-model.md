@@ -1,73 +1,50 @@
-# Modelo de dominio y relaciones Prisma
+# Modelo de dominio: CEDIS-sucursal
 
-## `BranchSupplyCycle`
+## BranchSupplyCycle
 
-| Campo | Tipo / regla |
+Identifica `distributionCenterLocationId`, `branchLocationId`, `businessDate`, cierre opcional, estado, versión y auditoría. Conserva totales derivados de la versión vigente para lectura; nunca autoriza movimientos.
+
+Restricciones:
+
+- Índice parcial único por `(branchLocationId, businessDate)` cuando `status <> CANCELLED`.
+- CEDIS y sucursal distintos, activos y jerárquicamente compatibles.
+- `version >= 1` y `pointOfSaleDailyCloseId` único cuando exista.
+- Todas las FK usan `ON DELETE RESTRICT`.
+
+Estados: `OPEN`, `READY_FOR_REVIEW`, `CLOSED`, `CANCELLED`.
+
+## BranchSupplyCycleTransfer
+
+| Campo | Regla |
 |---|---|
-| `id` | `String @id @default(cuid())` |
-| `distributionCenterLocationId` | FK obligatoria a `OperationalLocation` de tipo `DISTRIBUTION_CENTER` |
-| `branchLocationId` | FK obligatoria a `OperationalLocation` |
-| `businessDate` | `DateTime @db.Date` |
-| `pointOfSaleDailyCloseId` | FK opcional al único cierre de la sucursal/fecha |
-| `status` | `BranchSupplyCycleStatus`, default `OPEN` |
-| `version` | `Int`, default `1` |
-| `notes` | `String?` |
-| `openedByUserId` | FK obligatoria a `User` |
-| `reviewedByUserId`, `closedByUserId` | FK opcionales a `User` |
-| `cancelledByUserId` | FK opcional a `User` |
-| `cancelledAt` | `DateTime?` |
-| `cancellationReason` | `String?`, obligatorio al cancelar |
-| `reopenedByUserId`, `reopenedAt`, `reopeningReason` | Auditoría de reapertura |
-| `createdAt`, `updatedAt` | Auditoría estándar |
+| `branchSupplyCycleId` | Ciclo obligatorio. |
+| `inventoryTransferId` | Transferencia obligatoria y única globalmente. |
+| `role` | `SUPPLY` o `RETURN`. |
+| `linkedByUserId`, `linkedAt` | Auditoría obligatoria. |
 
-Relaciones:
+La base protege dirección exacta según rol. El vínculo nunca se elimina al confirmar o cancelar.
 
-- `distributionCenterLocation` y `branchLocation` usan relaciones Prisma nombradas distintas hacia `OperationalLocation`.
-- `openedBy`, `reviewedBy`, `closedBy`, `cancelledBy` y `reopenedBy` usan relaciones Prisma nombradas distintas hacia `User`.
-- `transfers: BranchSupplyCycleTransfer[]`.
-- `pointOfSaleDailyClose` es opcional y conserva el vínculo con el cierre de la sucursal.
-- `items` y `events` conservan snapshots y auditoría append-only.
+## BranchSupplyCycleItem
 
-## `BranchSupplyCycleTransfer`
+Snapshot append-only por ciclo, versión, producto y clave. Conserva nombre/SKU/unidad/precio/costo, equivalencia aplicada y cantidades entregadas/devueltas. Campos de ventas, diferencias o utilidad solo se llenan desde fuentes y fórmulas aprobadas del cierre; suministro/refresh no inventan esos valores.
 
-| Campo | Tipo / regla |
-|---|---|
-| `id` | `String @id @default(cuid())` |
-| `branchSupplyCycleId` | FK obligatoria |
-| `inventoryTransferId` | FK obligatoria y `@unique` |
-| `role` | `SUPPLY` o `RETURN` |
-| `linkedByUserId` | FK obligatoria a `User` |
-| `linkedAt` | `DateTime @default(now())` |
+- Único `(branchSupplyCycleId, cycleVersion, snapshotKey)`.
+- Valores físicos/precio/costo no negativos; factor aplicado mayor a cero.
+- No permite `UPDATE` ni `DELETE`.
+- Sus totales son proyección reconstruible, no stock.
 
-Relaciones:
+## BranchSupplyCycleEvent
 
-- `branchSupplyCycle` → `BranchSupplyCycle`.
-- `inventoryTransfer` → `InventoryTransfer`.
-- `linkedBy` → `User`.
+Evento append-only por mutación y versión. Tipos actuales: `OPENED`, `TRANSFER_LINKED`, `ITEM_SNAPSHOT_CREATED`, `READY_FOR_REVIEW`, `CLOSED`, `CANCELLED`, `REOPENED`. Debe agregarse `TRANSFER_STATE_CHANGED` para invalidaciones por confirmación/cancelación sin reutilizar semánticas incorrectas.
 
-## Extensiones existentes
+- Único `(branchSupplyCycleId, cycleVersion)`.
+- `idempotencyKey` usa namespace de operación/recurso y es único.
+- `payload` conserva hash canónico, referencias y cambio de estado.
+- No permite `UPDATE` ni `DELETE`.
 
-- `PointOfSaleDailyClose.branchSupplyCycleId String?` y relación opcional a `BranchSupplyCycle`.
-- `InventoryTransfer.branchSupplyCycleTransfer BranchSupplyCycleTransfer?`.
-- `OperationalLocation.distributionCenterSupplyCycles` y `branchSupplyCycles` con nombres de relación explícitos.
-- `User` conserva relaciones de apertura, revisión, cierre, cancelación, reapertura y vínculo de transferencias.
+## Relaciones existentes
 
-## Restricciones
-
-- `distributionCenterLocationId <> branchLocationId`.
-- `version >= 1`.
-- Índice parcial único de ciclo por `(distributionCenterLocationId, branchLocationId, businessDate)` cuando `status <> 'CANCELLED'`.
-- Índice único de `pointOfSaleDailyCloseId` cuando no es nulo.
-- Todas las FK nuevas usan `ON DELETE RESTRICT`.
-- No se agregan columnas de cantidad, costo, utilidad o saldo al ciclo.
-
-## `OperationalLocation` CEDIS
-
-- Un CEDIS es `DISTRIBUTION_CENTER` y siempre tiene `parentId=null`.
-- Una sucursal CEDIS es `BRANCH` con `parentId` apuntando al CEDIS activo.
-- La relación padre/hija no permite ciclos directos ni transitivos.
-- La consulta de sucursales CEDIS solo devuelve hijas `BRANCH` activas directas.
-
-## Estados
-
-`OPEN`, `READY_FOR_REVIEW`, `CLOSED`, `CANCELLED`. El ciclo no replica los estados de `PointOfSaleDailyClose` ni de `InventoryTransfer`; expone esos estados en sus proyecciones.
+- `InventoryTransfer.branchSupplyCycleTransfer` es opcional 1:1.
+- `PointOfSaleDailyClose.branchSupplyCycle` es opcional 1:1.
+- `OperationalLocation` relaciona ciclos como CEDIS y sucursal mediante relaciones nombradas.
+- `Product` y `ProductUnitEquivalent` relacionan snapshots históricos.

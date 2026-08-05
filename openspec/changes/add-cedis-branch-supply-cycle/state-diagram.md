@@ -4,44 +4,46 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> OPEN: crear
-    OPEN --> READY_FOR_REVIEW: revisión
+    [*] --> OPEN: abrir
+    OPEN --> READY_FOR_REVIEW: refresh elegible
+    READY_FOR_REVIEW --> OPEN: nueva transferencia o cambio vinculado
     READY_FOR_REVIEW --> CLOSED: cierre diario CLOSED
     CLOSED --> OPEN: reapertura auditada
-    OPEN --> CANCELLED: cancelar con motivo
+    OPEN --> CANCELLED: cancelar ciclo elegible
+    READY_FOR_REVIEW --> CANCELLED: cancelar ciclo elegible
     CANCELLED --> [*]
 ```
 
-Reglas:
+- `OPEN` admite suministros, devoluciones y refresh.
+- `READY_FOR_REVIEW` exige suministro confirmado, cero pendientes e integridad válida. Una nueva operación permitida lo devuelve a `OPEN`.
+- `CLOSED` solo se obtiene al cerrar el `PointOfSaleDailyClose` relacionado.
+- `CANCELLED` exige motivo, ausencia de cierre activo y todas las transferencias canceladas.
+- `CLOSED` y `CANCELLED` son de solo lectura para operaciones del ciclo.
 
-- `OPEN` admite vínculos y comandos mientras el cierre relacionado sea inexistente o `DRAFT`.
-- `READY_FOR_REVIEW` exige suministro confirmado, cero transferencias pendientes e integridad válida.
-- `CLOSED` exige cierre `CLOSED` con versión vigente.
-- `CANCELLED` es final.
-- `CLOSED` no tiene endpoint propio: se obtiene dentro de `PointOfSaleDailyCloseService.close`.
-
-## Traspaso vinculado
+## Transferencia vinculada
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT: crear vínculo o traspaso
-    DRAFT --> REQUESTED: solicitar
-    REQUESTED --> IN_TRANSIT: salida operativa
+    [*] --> REQUESTED: crear desde ciclo
+    DRAFT --> REQUESTED: solicitar externa
+    REQUESTED --> IN_TRANSIT: traslado operativo
+    DRAFT --> CONFIRMED: confirmar recepción
+    REQUESTED --> CONFIRMED: confirmar recepción
     IN_TRANSIT --> CONFIRMED: confirmar recepción
-    DRAFT --> CANCELLED: cancelar
-    REQUESTED --> CANCELLED: cancelar
+    DRAFT --> CANCELLED: cancelar con motivo
+    REQUESTED --> CANCELLED: cancelar con motivo
+    IN_TRANSIT --> CANCELLED: cancelar con motivo
     CONFIRMED --> [*]
     CANCELLED --> [*]
 ```
 
-Un traspaso `CONFIRMED` es terminal en el MVP: no se cancela ni se revierte desde el ciclo. Una corrección posterior usa el dominio de inventario autorizado.
+`DRAFT`, `REQUESTED` e `IN_TRANSIT` no cambian stock. `CONFIRMED` aplica salida/entrada en una sola transacción y no puede cancelarse. El ciclo no redefine estos estados: observa y protege el traspaso vinculado.
 
-## Cierre diario relacionado
+## Cierre relacionado
 
 ```text
-DRAFT -> REVIEWED -> CLOSED
-  |                  |
-  +-> CANCELLED      +-> DRAFT (reapertura ADMIN)
-```
+Daily close DRAFT -> REVIEWED -> CLOSED
+Cycle      OPEN  -> READY     -> CLOSED
 
-El ciclo no redefine estas transiciones. Solo añade precondiciones de suministro/integridad y sincroniza `OPEN`/`CLOSED` dentro de la misma transacción.
+Reopen: Daily close CLOSED -> DRAFT; Cycle CLOSED -> OPEN
+```

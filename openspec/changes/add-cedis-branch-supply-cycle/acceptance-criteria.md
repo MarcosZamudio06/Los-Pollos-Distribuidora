@@ -1,32 +1,30 @@
 # Criterios de aceptación: CEDIS-sucursal
 
-Cada criterio es verificable como prueba unitaria, de contrato o E2E.
-
-- [ ] **AC-01 Unicidad:** Dado un ciclo no cancelado para sucursal y fecha, cuando se crea otro, entonces la API devuelve `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`.
-- [ ] **AC-02 Concurrencia:** Dadas dos creaciones simultáneas, PostgreSQL conserva un solo ciclo no cancelado.
-- [ ] **AC-03 Ubicaciones:** Una ubicación inactiva, un tipo incompatible o CEDIS igual a sucursal rechaza la operación sin escritura.
-- [ ] **AC-04 Alcance:** `WAREHOUSE` solo consulta/muta ciclos cuyo CEDIS sea su ubicación; `SELLER` solo consulta su sucursal.
-- [ ] **AC-05 Suministros:** Un suministro creado por el ciclo siempre usa CEDIS como origen y sucursal como destino.
-- [ ] **AC-06 Devoluciones:** Una devolución creada por el ciclo siempre usa sucursal como origen y CEDIS como destino.
-- [ ] **AC-07 Multiplicidad:** Un ciclo admite varios suministros y varias devoluciones, y cada traspaso solo se vincula una vez.
-- [ ] **AC-08 Fuente de inventario:** Crear/vincular un ciclo no crea `InventoryBalance` ni `InventoryMovement`.
-- [ ] **AC-09 Confirmación:** Confirmar una partida genera un `TRANSFER_OUT` y un `TRANSFER_IN` con cantidades iguales.
-- [ ] **AC-10 Idempotencia:** Repetir la misma clave y payload no duplica ciclo, vínculo ni movimientos; cambiar payload devuelve conflicto.
-- [ ] **AC-11 Integridad:** Faltan movimientos, hay cantidades distintas o hay producto distinto: el cierre queda bloqueado.
-- [ ] **AC-12 Pendientes:** Un `DRAFT`, `REQUESTED` o `IN_TRANSIT` vinculado bloquea validación/cierre.
-- [ ] **AC-13 Suministro mínimo:** Sin suministro confirmado, la jornada no puede cerrar.
-- [ ] **AC-14 Cierre único:** Abrir el ciclo no crea un segundo `PointOfSaleDailyClose`; reutiliza o enlaza el único cierre permitido.
-- [ ] **AC-15 Invalidación:** Confirmar/cancelar un traspaso vinculado invalida la validación del cierre `DRAFT` y aumenta su versión.
-- [ ] **AC-16 Finalización:** Cerrar un cierre elegible cambia ciclo y cierre atómicamente a `CLOSED`/`CLOSED`.
-- [ ] **AC-17 Reapertura:** Reabrir un cierre `CLOSED` devuelve ciclo a `OPEN` con auditoría existente conservada.
-- [ ] **AC-18 Cancelación:** El ciclo solo se cancela con motivo, sin cierre activo ni transferencias pendientes; no revierte inventario.
-- [ ] **AC-19 No doble conteo:** Una devolución participa una sola vez como salida `TRANSFER_OUT` en la conciliación del cierre.
-- [ ] **AC-20 No paralelismo:** No existen conteos, diferencias, saldos, snapshots ni cierre alternativos del ciclo.
-- [ ] **AC-21 Reportes:** Dashboard y detalle respetan alcance, frescura y ocultamiento de información sensible.
-- [ ] **AC-22 UI:** La pantalla CEDIS muestra loading, error, empty, success, unauthorized y conflict; el cierre mantiene un único botón de cierre.
-- [ ] **AC-23 Migración:** El backfill usa solo un mapa aprobado, es repetible, reporta ambigüedades y no modifica inventario histórico.
-- [x] **AC-24 Jerarquía:** `DISTRIBUTION_CENTER` siempre es raíz y una sucursal `BRANCH` requiere un padre CEDIS activo mediante `parentId`.
-- [x] **AC-25 Ciclos de parentId:** La API y la base rechazan autorreferencias y ciclos transitivos sin escribir la relación inválida.
-- [x] **AC-26 Sucursales directas:** La consulta CEDIS devuelve solo hijas `BRANCH` activas directas dentro del alcance autorizado.
-- [x] **AC-27 Desactivación:** Un CEDIS o sucursal no se desactiva con ciclos abiertos, transferencias `IN_TRANSIT`, cierres `DRAFT`/`REVIEWED` o hijos activos.
-- [x] **AC-28 Permisos:** `ADMIN` recibe los siete permisos CEDIS; `WAREHOUSE` recibe operación de abastecimiento/devolución; `SELLER` solo consulta y no recibe costos por default.
+- [ ] **AC-01 Unicidad:** Solo existe un ciclo no cancelado por sucursal/fecha, incluso con aperturas concurrentes.
+- [ ] **AC-02 Ubicaciones:** CEDIS/sucursal inactivos, incompatibles, iguales o fuera de jerarquía rechazan sin escritura.
+- [ ] **AC-03 Alcance:** `WAREHOUSE` opera su CEDIS; `SELLER` solo consulta su sucursal sin costos.
+- [ ] **AC-04 Dirección:** Suministro siempre CEDIS → sucursal; devolución siempre sucursal → CEDIS.
+- [ ] **AC-05 Estado inicial:** Cada suministro/devolución crea `InventoryTransfer` `REQUESTED`.
+- [ ] **AC-06 Multiplicidad:** Un ciclo admite varios suministros/devoluciones y cada transferencia se vincula una vez.
+- [ ] **AC-07 Sin movimiento temprano:** Crear/vincular no cambia balances ni genera movimientos.
+- [ ] **AC-08 Confirmación:** Inventario genera salida/entrada iguales y atómicas al confirmar recepción.
+- [ ] **AC-09 Stock:** Stock insuficiente o carrera concurrente nunca produce saldo negativo ni efecto parcial.
+- [ ] **AC-10 Productos:** Producto inactivo rechaza creación/confirmación; historia confirmada permanece visible si luego se desactiva.
+- [ ] **AC-11 Cancelación transferencia:** `DRAFT`, `REQUESTED`, `IN_TRANSIT` cancelan con motivo; `CONFIRMED` se rechaza.
+- [ ] **AC-12 Invalidación:** Confirmar/cancelar vinculada incrementa versión, devuelve ciclo a `OPEN` e invalida validación del cierre.
+- [ ] **AC-13 Refresh:** Solo confirmadas contribuyen; pendientes bloquean; canceladas aportan cero.
+- [ ] **AC-14 Integridad:** Diferencias entre partidas/salida/entrada bloquean refresh listo y cierre, sin reparación automática.
+- [ ] **AC-15 Elegibilidad:** Suministro confirmado + cero pendientes + integridad válida produce `READY_FOR_REVIEW`.
+- [ ] **AC-16 Estados terminales:** `CLOSED`/`CANCELLED` rechazan suministro, devolución y refresh.
+- [ ] **AC-17 Cancelación ciclo:** Exige `ADMIN`, permiso, versión y motivo, sin cierre activo ni transferencias no canceladas.
+- [ ] **AC-18 Cierre:** Cierre y ciclo pasan a `CLOSED` atómicamente; reapertura lleva cierre a `DRAFT` y ciclo a `OPEN`.
+- [ ] **AC-19 Idempotencia:** Misma clave/payload devuelve resultado previo; payload distinto produce conflicto.
+- [ ] **AC-20 Versión:** `expectedVersion` obsoleta no deja cambios parciales.
+- [ ] **AC-21 Unidades:** KG decimal y PIECE entera permanecen separadas; no hay conversión sin equivalencia/redondeo aprobados.
+- [ ] **AC-22 No doble conteo:** Devolución confirmada participa una sola vez como `TRANSFER_OUT` en sucursal.
+- [ ] **AC-23 Snapshots:** Items/eventos son append-only y no sustituyen inventario ni cierre.
+- [ ] **AC-24 Backfill:** Usa mapa aprobado, reporta ambigüedades y no modifica inventario histórico.
+- [x] **AC-25 Jerarquía:** `DISTRIBUTION_CENTER` raíz y `BRANCH` hija directa activa.
+- [x] **AC-26 Ciclos parentId:** API/base rechazan autorreferencia y ciclos transitivos.
+- [x] **AC-27 Desactivación:** CEDIS/sucursal con dependencias operativas no se desactiva.
+- [x] **AC-28 Permisos:** Siete permisos CEDIS canónicos sembrados por rol sin permisos paralelos.

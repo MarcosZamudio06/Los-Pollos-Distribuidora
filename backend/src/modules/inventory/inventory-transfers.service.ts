@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  BranchSupplyCycleStatus,
   InventoryMovementType,
   InventoryTransferStatus,
   Prisma,
@@ -34,6 +35,9 @@ type TransferItemRecord = {
   quantityKg?: DecimalLike;
   quantityPieces?: number | null;
   unit: ProductUnit;
+  unitEquivalentId?: string | null;
+  appliedEquivalentFactor?: DecimalLike;
+  roundingMode?: string | null;
   createdAt: Date;
   updatedAt: Date;
   product?: ProductRecord | null;
@@ -83,6 +87,20 @@ type TransferRecord = {
   destinationLocation?: { id: string; name: string } | null;
   items?: TransferItemRecord[];
   inventoryMovements?: MovementRecord[];
+  branchSupplyCycleTransfer?: {
+    id: string;
+    branchSupplyCycleId: string;
+    role: 'SUPPLY' | 'RETURN';
+    branchSupplyCycle?: {
+      id: string;
+      distributionCenterLocationId: string;
+      branchLocationId: string;
+      status: BranchSupplyCycleStatus;
+      version: number;
+      pointOfSaleDailyCloseId: string | null;
+      pointOfSaleDailyClose?: { id: string; status: string } | null;
+    } | null;
+  } | null;
 };
 
 type NormalizedQuantities = {
@@ -103,6 +121,9 @@ type TransferItemResponse = {
   unit: ProductUnit;
   quantityKg: number;
   quantityPieces: number;
+  unitEquivalentId: string | null;
+  appliedEquivalentFactor: number | null;
+  roundingMode: string | null;
 };
 
 type MovementResponse = {
@@ -131,7 +152,7 @@ type MovementResponse = {
   createdAt: Date;
 };
 
-type TransferResponse = {
+export type TransferResponse = {
   id: string;
   transferNumber: string;
   originLocationId: string;
@@ -156,12 +177,26 @@ type TransferListResponse = { items: TransferResponse[] };
 const TRANSFER_INCLUDE = {
   originLocation: true,
   destinationLocation: true,
-  items: { include: { product: true } },
+  items: { include: { product: true, unitEquivalent: true } },
   inventoryMovements: {
     include: { product: true, location: true },
     orderBy: { createdAt: 'asc' as const },
   },
+  branchSupplyCycleTransfer: {
+    include: {
+      branchSupplyCycle: { include: { pointOfSaleDailyClose: true } },
+    },
+  },
 } as const;
+
+export type InventoryTransferCreateOptions = {
+  tx?: Prisma.TransactionClient;
+  equivalenceDate?: Date;
+};
+
+export type InventoryTransferCommandOptions = {
+  tx?: Prisma.TransactionClient;
+};
 
 @Injectable()
 export class InventoryTransfersService {
@@ -190,6 +225,7 @@ export class InventoryTransfersService {
     dto: CreateInventoryTransferDto,
     userId: string,
     idempotencyKey?: string,
+    options: InventoryTransferCreateOptions = {},
   ): Promise<TransferResponse> {
     this.assertValidTransferShape(
       dto.originLocationId,
@@ -197,70 +233,28 @@ export class InventoryTransfersService {
       dto.items,
     );
 
-    return this.prisma.$transaction(
-      async (tx) => {
-        const idempotentTransferNumber =
-          this.resolveIdempotentTransferNumber(idempotencyKey);
-        if (idempotentTransferNumber) {
-          const existing = (await tx.inventoryTransfer.findUnique({
-            where: { transferNumber: idempotentTransferNumber },
-            include: TRANSFER_INCLUDE,
-          })) as TransferRecord | null;
+    if (options.tx) {
+      return this.createInTransaction(
+        options.tx,
+        dto,
+        userId,
+        idempotencyKey,
+        options.equivalenceDate,
+      );
+    }
 
-          if (existing) {
-            this.assertSameCreatePayload(existing, dto, userId);
-            return this.toTransferResponse(existing);
-          }
-        }
-
-        await this.assertLocationAvailable(tx, dto.originLocationId, 'origin');
-        await this.assertLocationAvailable(
-          tx,
-          dto.destinationLocationId,
-          'destination',
-        );
-
-        const items: Array<{
-          productId: string;
-          unit: ProductUnit;
-          quantityKg: number;
-          quantityPieces: number;
-        }> = [];
-        for (const item of dto.items) {
-          const product = await this.findProductOrThrow(tx, item.productId);
-          const quantities = this.normalizeItemQuantities(
-            item.unit,
-            product.unit,
-            item.quantityKg,
-            item.quantityPieces,
-          );
-
-          items.push({
-            productId: item.productId,
-            unit: item.unit,
-            quantityKg: quantities.quantityKg,
-            quantityPieces: quantities.quantityPieces,
-          });
-        }
-
-        const transfer = (await tx.inventoryTransfer.create({
-          data: {
-            transferNumber:
-              idempotentTransferNumber ?? this.generateTransferNumber(),
-            originLocationId: dto.originLocationId,
-            destinationLocationId: dto.destinationLocationId,
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.createInTransaction(
+            tx,
+            dto,
             userId,
-            status: InventoryTransferStatus.REQUESTED,
-            notes: this.normalizeOptionalText(dto.notes),
-            requestedAt: new Date(),
-            items: { create: items },
-          },
-          include: TRANSFER_INCLUDE,
-        })) as TransferRecord;
-
-        return this.toTransferResponse(transfer);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            idempotencyKey,
+            options.equivalenceDate,
+          ),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
     );
   }
 
@@ -268,88 +262,17 @@ export class InventoryTransfersService {
     id: string,
     userId: string,
     idempotencyKey?: string,
+    options: InventoryTransferCommandOptions = {},
   ): Promise<TransferResponse> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        const transfer = await this.findTransferOrThrow(id, tx);
-        if (transfer.status === InventoryTransferStatus.CONFIRMED) {
-          if (idempotencyKey) {
-            this.assertSameCompletedCommand(
-              'CONFIRM',
-              transfer,
-              this.buildCommandMarker('CONFIRM', idempotencyKey, {
-                transferId: id,
-                userId,
-              }),
-            );
-            return this.toTransferResponse(transfer);
-          }
-        }
-        this.assertCanConfirm(transfer);
+    if (options.tx) {
+      return this.confirmInTransaction(options.tx, id, userId, idempotencyKey);
+    }
 
-        for (const item of transfer.items ?? []) {
-          const quantities = this.normalizeExistingItemQuantities(item);
-          const reason = this.withCommandMarker(
-            `Inventory transfer ${transfer.transferNumber} confirmed`,
-            idempotencyKey
-              ? this.buildCommandMarker('CONFIRM', idempotencyKey, {
-                  transferId: id,
-                  userId,
-                })
-              : null,
-          );
-
-          const originChange = await this.applyBalanceChange(
-            tx,
-            item.productId,
-            transfer.originLocationId,
-            -1,
-            quantities,
-          );
-          await this.createMovement(
-            tx,
-            transfer,
-            item,
-            userId,
-            InventoryMovementType.TRANSFER_OUT,
-            transfer.originLocationId,
-            quantities,
-            originChange,
-            reason,
-          );
-
-          const destinationChange = await this.applyBalanceChange(
-            tx,
-            item.productId,
-            transfer.destinationLocationId,
-            1,
-            quantities,
-          );
-          await this.createMovement(
-            tx,
-            transfer,
-            item,
-            userId,
-            InventoryMovementType.TRANSFER_IN,
-            transfer.destinationLocationId,
-            quantities,
-            destinationChange,
-            reason,
-          );
-        }
-
-        const confirmed = (await tx.inventoryTransfer.update({
-          where: { id },
-          data: {
-            status: InventoryTransferStatus.CONFIRMED,
-            confirmedAt: new Date(),
-          },
-          include: TRANSFER_INCLUDE,
-        })) as TransferRecord;
-
-        return this.toTransferResponse(confirmed);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) => this.confirmInTransaction(tx, id, userId, idempotencyKey),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
     );
   }
 
@@ -358,55 +281,521 @@ export class InventoryTransfersService {
     dto: CancelInventoryTransferDto,
     userId: string,
     idempotencyKey?: string,
+    options: InventoryTransferCommandOptions = {},
   ): Promise<TransferResponse> {
     const reason = this.normalizeRequiredReason(dto.reason);
 
-    return this.prisma.$transaction(
-      async (tx) => {
-        const transfer = await this.findTransferOrThrow(id, tx);
-        if (transfer.status === InventoryTransferStatus.CANCELLED) {
-          if (idempotencyKey) {
-            this.assertSameCompletedCommand(
-              'CANCEL',
-              transfer,
-              this.buildCommandMarker('CANCEL', idempotencyKey, {
+    if (options.tx) {
+      return this.cancelInTransaction(
+        options.tx,
+        id,
+        reason,
+        userId,
+        idempotencyKey,
+      );
+    }
+
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.cancelInTransaction(tx, id, reason, userId, idempotencyKey),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+  }
+
+  private async createInTransaction(
+    tx: Prisma.TransactionClient,
+    dto: CreateInventoryTransferDto,
+    userId: string,
+    idempotencyKey?: string,
+    equivalenceDate?: Date,
+  ): Promise<TransferResponse> {
+    const idempotentTransferNumber =
+      this.resolveIdempotentTransferNumber(idempotencyKey);
+    if (idempotentTransferNumber) {
+      const existing = (await tx.inventoryTransfer.findUnique({
+        where: { transferNumber: idempotentTransferNumber },
+        include: TRANSFER_INCLUDE,
+      })) as TransferRecord | null;
+
+      if (existing) {
+        this.assertSameCreatePayload(existing, dto, userId);
+        return this.toTransferResponse(existing);
+      }
+    }
+
+    await this.assertLocationAvailable(tx, dto.originLocationId, 'origin');
+    await this.assertLocationAvailable(
+      tx,
+      dto.destinationLocationId,
+      'destination',
+    );
+
+    const items: Array<{
+      productId: string;
+      unit: ProductUnit;
+      quantityKg: number;
+      quantityPieces: number;
+      unitEquivalentId?: string;
+      appliedEquivalentFactor?: Prisma.Decimal;
+      roundingMode?: string | null;
+    }> = [];
+    for (const item of dto.items) {
+      const product = await this.findProductOrThrow(tx, item.productId);
+      const quantities = this.normalizeItemQuantities(
+        item.unit,
+        product.unit,
+        item.quantityKg,
+        item.quantityPieces,
+      );
+      const equivalence = await this.resolveItemEquivalence(
+        tx,
+        item.productId,
+        product.unit,
+        item.unitEquivalentId,
+        equivalenceDate,
+      );
+
+      items.push({
+        productId: item.productId,
+        unit: item.unit,
+        quantityKg: quantities.quantityKg,
+        quantityPieces: quantities.quantityPieces,
+        ...(equivalence ?? {}),
+      });
+    }
+
+    const transfer = (await tx.inventoryTransfer.create({
+      data: {
+        transferNumber:
+          idempotentTransferNumber ?? this.generateTransferNumber(),
+        originLocationId: dto.originLocationId,
+        destinationLocationId: dto.destinationLocationId,
+        userId,
+        status: InventoryTransferStatus.REQUESTED,
+        notes: this.normalizeOptionalText(dto.notes),
+        requestedAt: new Date(),
+        items: { create: items },
+      },
+      include: TRANSFER_INCLUDE,
+    })) as TransferRecord;
+
+    return this.toTransferResponse(transfer);
+  }
+
+  private async confirmInTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    userId: string,
+    idempotencyKey?: string,
+  ): Promise<TransferResponse> {
+    const transfer = await this.findTransferOrThrow(id, tx);
+    if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
+      throw new BadRequestException(
+        'Idempotency-Key is required for transfers linked to a branch supply cycle',
+      );
+    }
+    if (transfer.status === InventoryTransferStatus.CONFIRMED) {
+      if (idempotencyKey) {
+        this.assertSameCompletedCommand(
+          'CONFIRM',
+          transfer,
+          this.buildCommandMarker('CONFIRM', idempotencyKey, {
+            transferId: id,
+            userId,
+          }),
+        );
+        return this.toTransferResponse(transfer);
+      }
+    }
+
+    this.assertLinkedCycleCanChange(transfer);
+    this.assertLinkedTransferDirection(transfer);
+    await this.assertLocationAvailable(tx, transfer.originLocationId, 'origin');
+    await this.assertLocationAvailable(
+      tx,
+      transfer.destinationLocationId,
+      'destination',
+    );
+    await this.assertTransferProductsActive(tx, transfer);
+    this.assertCanConfirm(transfer);
+
+    for (const item of transfer.items ?? []) {
+      const quantities = this.normalizeExistingItemQuantities(item);
+      const reason = this.withCommandMarker(
+        `Inventory transfer ${transfer.transferNumber} confirmed`,
+        idempotencyKey
+          ? this.buildCommandMarker('CONFIRM', idempotencyKey, {
+              transferId: id,
+              userId,
+            })
+          : null,
+      );
+
+      const originChange = await this.applyBalanceChange(
+        tx,
+        item.productId,
+        transfer.originLocationId,
+        -1,
+        quantities,
+      );
+      await this.createMovement(
+        tx,
+        transfer,
+        item,
+        userId,
+        InventoryMovementType.TRANSFER_OUT,
+        transfer.originLocationId,
+        quantities,
+        originChange,
+        reason,
+      );
+
+      const destinationChange = await this.applyBalanceChange(
+        tx,
+        item.productId,
+        transfer.destinationLocationId,
+        1,
+        quantities,
+      );
+      await this.createMovement(
+        tx,
+        transfer,
+        item,
+        userId,
+        InventoryMovementType.TRANSFER_IN,
+        transfer.destinationLocationId,
+        quantities,
+        destinationChange,
+        reason,
+      );
+    }
+
+    const confirmed = (await tx.inventoryTransfer.update({
+      where: { id },
+      data: {
+        status: InventoryTransferStatus.CONFIRMED,
+        confirmedAt: new Date(),
+      },
+      include: TRANSFER_INCLUDE,
+    })) as TransferRecord;
+
+    await this.recordLinkedCycleStateChange(
+      tx,
+      transfer,
+      userId,
+      'CONFIRM',
+      idempotencyKey,
+    );
+
+    return this.toTransferResponse(confirmed);
+  }
+
+  private async cancelInTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    reason: string,
+    userId: string,
+    idempotencyKey?: string,
+  ): Promise<TransferResponse> {
+    const transfer = await this.findTransferOrThrow(id, tx);
+    if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
+      throw new BadRequestException(
+        'Idempotency-Key is required for transfers linked to a branch supply cycle',
+      );
+    }
+    if (transfer.status === InventoryTransferStatus.CANCELLED) {
+      if (idempotencyKey) {
+        this.assertSameCompletedCommand(
+          'CANCEL',
+          transfer,
+          this.buildCommandMarker('CANCEL', idempotencyKey, {
+            transferId: id,
+            userId,
+            reason,
+          }),
+        );
+        return this.toTransferResponse(transfer);
+      }
+
+      throw new BadRequestException(
+        'Cancelled inventory transfers cannot be cancelled again without a matching Idempotency-Key',
+      );
+    }
+
+    this.assertLinkedCycleCanChange(transfer);
+    this.assertLinkedTransferDirection(transfer);
+    this.assertCanCancel(transfer);
+
+    const cancelled = (await tx.inventoryTransfer.update({
+      where: { id },
+      data: {
+        status: InventoryTransferStatus.CANCELLED,
+        cancelledByUserId: userId,
+        cancellationReason: this.withCommandMarker(
+          reason,
+          idempotencyKey
+            ? this.buildCommandMarker('CANCEL', idempotencyKey, {
                 transferId: id,
                 userId,
                 reason,
-              }),
-            );
-            return this.toTransferResponse(transfer);
-          }
-
-          throw new BadRequestException(
-            'Cancelled inventory transfers cannot be cancelled again without a matching Idempotency-Key',
-          );
-        }
-        this.assertCanCancel(transfer);
-
-        const cancelled = (await tx.inventoryTransfer.update({
-          where: { id },
-          data: {
-            status: InventoryTransferStatus.CANCELLED,
-            cancelledByUserId: userId,
-            cancellationReason: this.withCommandMarker(
-              reason,
-              idempotencyKey
-                ? this.buildCommandMarker('CANCEL', idempotencyKey, {
-                    transferId: id,
-                    userId,
-                    reason,
-                  })
-                : null,
-            ),
-            cancelledAt: new Date(),
-          },
-          include: TRANSFER_INCLUDE,
-        })) as TransferRecord;
-
-        return this.toTransferResponse(cancelled);
+              })
+            : null,
+        ),
+        cancelledAt: new Date(),
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      include: TRANSFER_INCLUDE,
+    })) as TransferRecord;
+
+    await this.recordLinkedCycleStateChange(
+      tx,
+      transfer,
+      userId,
+      'CANCEL',
+      idempotencyKey,
+    );
+
+    return this.toTransferResponse(cancelled);
+  }
+
+  private async resolveItemEquivalence(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    productUnit: ProductUnit,
+    unitEquivalentId: string | undefined,
+    equivalenceDate = new Date(),
+  ): Promise<
+    | {
+        unitEquivalentId: string;
+        appliedEquivalentFactor: Prisma.Decimal;
+        roundingMode: string | null;
+      }
+    | undefined
+  > {
+    if (!unitEquivalentId) return undefined;
+
+    if (productUnit !== ProductUnit.KG_AND_PIECE) {
+      throw new BadRequestException(
+        'Unit equivalence is only valid for KG_AND_PIECE products',
+      );
+    }
+
+    const equivalent = await tx.productUnitEquivalent.findUnique({
+      where: { id: unitEquivalentId },
+      select: {
+        id: true,
+        productId: true,
+        unitFrom: true,
+        unitTo: true,
+        factor: true,
+        roundingMode: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+        status: true,
+      },
+    });
+
+    if (
+      !equivalent ||
+      equivalent.productId !== productId ||
+      equivalent.status !== 'ACTIVE' ||
+      ![
+        [ProductUnit.KG, ProductUnit.PIECE],
+        [ProductUnit.PIECE, ProductUnit.KG],
+      ].some(
+        ([from, to]) =>
+          equivalent.unitFrom === from && equivalent.unitTo === to,
+      ) ||
+      (equivalent.effectiveFrom &&
+        equivalent.effectiveFrom > equivalenceDate) ||
+      (equivalent.effectiveTo && equivalent.effectiveTo < equivalenceDate)
+    ) {
+      throw new BadRequestException('Unit equivalence is not applicable');
+    }
+
+    return {
+      unitEquivalentId: equivalent.id,
+      appliedEquivalentFactor: new Prisma.Decimal(equivalent.factor),
+      roundingMode: equivalent.roundingMode,
+    };
+  }
+
+  private async assertTransferProductsActive(
+    tx: Prisma.TransactionClient,
+    transfer: TransferRecord,
+  ): Promise<void> {
+    for (const item of transfer.items ?? []) {
+      if (item.product?.isActive === false) {
+        throw new BadRequestException(
+          'Inactive products cannot be transferred',
+        );
+      }
+      await this.findProductOrThrow(tx, item.productId);
+    }
+  }
+
+  private assertLinkedCycleCanChange(transfer: TransferRecord): void {
+    const cycle = transfer.branchSupplyCycleTransfer?.branchSupplyCycle;
+    if (
+      cycle &&
+      (cycle.status === BranchSupplyCycleStatus.CLOSED ||
+        cycle.status === BranchSupplyCycleStatus.CANCELLED)
+    ) {
+      throw new BadRequestException(
+        'Transfers linked to closed or cancelled cycles cannot change',
+      );
+    }
+  }
+
+  private assertLinkedTransferDirection(transfer: TransferRecord): void {
+    const link = transfer.branchSupplyCycleTransfer;
+    const cycle = link?.branchSupplyCycle;
+    if (!link || !cycle) return;
+
+    const expectedOrigin =
+      link.role === 'SUPPLY'
+        ? cycle.distributionCenterLocationId
+        : cycle.branchLocationId;
+    const expectedDestination =
+      link.role === 'SUPPLY'
+        ? cycle.branchLocationId
+        : cycle.distributionCenterLocationId;
+    if (
+      transfer.originLocationId !== expectedOrigin ||
+      transfer.destinationLocationId !== expectedDestination
+    ) {
+      throw new ConflictException({
+        code: 'BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID',
+        message: 'The linked transfer direction does not match its cycle role',
+      });
+    }
+  }
+
+  private async recordLinkedCycleStateChange(
+    tx: Prisma.TransactionClient,
+    transfer: TransferRecord,
+    userId: string,
+    action: 'CONFIRM' | 'CANCEL',
+    idempotencyKey?: string,
+  ): Promise<void> {
+    const link = transfer.branchSupplyCycleTransfer;
+    if (!link) return;
+
+    const cycle =
+      link.branchSupplyCycle ??
+      (await tx.branchSupplyCycle.findUnique({
+        where: { id: link.branchSupplyCycleId },
+        include: { pointOfSaleDailyClose: true },
+      }));
+    if (!cycle) {
+      throw new NotFoundException('Linked branch supply cycle not found');
+    }
+    if (
+      cycle.status === BranchSupplyCycleStatus.CLOSED ||
+      cycle.status === BranchSupplyCycleStatus.CANCELLED
+    ) {
+      throw new BadRequestException(
+        'Transfers linked to closed or cancelled cycles cannot change',
+      );
+    }
+
+    const nextStatus =
+      cycle.status === BranchSupplyCycleStatus.READY_FOR_REVIEW
+        ? BranchSupplyCycleStatus.OPEN
+        : cycle.status;
+    const nextVersion = cycle.version + 1;
+    const result = await tx.branchSupplyCycle.updateMany({
+      where: {
+        id: cycle.id,
+        version: cycle.version,
+        status: {
+          in: [
+            BranchSupplyCycleStatus.OPEN,
+            BranchSupplyCycleStatus.READY_FOR_REVIEW,
+          ],
+        },
+      },
+      data: {
+        version: { increment: 1 },
+        status: nextStatus,
+      },
+    });
+    if (result.count !== 1) {
+      throw new ConflictException('BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT');
+    }
+
+    if (cycle.pointOfSaleDailyClose?.status === 'DRAFT') {
+      await tx.pointOfSaleDailyClose.update({
+        where: { id: cycle.pointOfSaleDailyClose.id },
+        data: {
+          version: { increment: 1 },
+          lastValidatedAt: null,
+          validatedSourceVersion: null,
+        },
+      });
+    }
+
+    await tx.branchSupplyCycleEvent.create({
+      data: {
+        branchSupplyCycleId: cycle.id,
+        type: 'TRANSFER_STATE_CHANGED',
+        cycleVersion: nextVersion,
+        fromStatus: cycle.status,
+        toStatus: nextStatus,
+        actorUserId: userId,
+        reason: action,
+        payload: {
+          action,
+          transferId: transfer.id,
+          role: link.role,
+          fromTransferStatus: transfer.status,
+          idempotencyKey: idempotencyKey ?? null,
+        },
+        idempotencyKey: idempotencyKey
+          ? `inventory:${action}:${transfer.id}:${idempotencyKey}`
+          : null,
+      },
+    });
+  }
+
+  private async withSerializableRetry<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isRetryableConflict(error) || attempt === 3) {
+          if (this.isRetryableConflict(error)) {
+            throw new ConflictException(
+              'INVENTORY_TRANSFER_CONCURRENCY_CONFLICT',
+            );
+          }
+          throw error;
+        }
+      }
+    }
+
+    throw new ConflictException('INVENTORY_TRANSFER_CONCURRENCY_CONFLICT');
+  }
+
+  private isSerializableConflict(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2034'
+    );
+  }
+
+  private isRetryableConflict(error: unknown): boolean {
+    if (this.isSerializableConflict(error)) return true;
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2002'
     );
   }
 
@@ -485,6 +874,7 @@ export class InventoryTransfersService {
         unit: item.unit,
         quantityKg: this.toNumber(item.quantityKg),
         quantityPieces: item.quantityPieces ?? 0,
+        unitEquivalentId: item.unitEquivalentId ?? null,
       })),
     );
 
@@ -507,6 +897,7 @@ export class InventoryTransfersService {
       unit: ProductUnit;
       quantityKg?: number;
       quantityPieces?: number;
+      unitEquivalentId?: string | null;
     }>,
   ): string[] {
     return items
@@ -516,6 +907,7 @@ export class InventoryTransfersService {
           item.unit,
           item.quantityKg ?? 0,
           item.quantityPieces ?? 0,
+          item.unitEquivalentId ?? '',
         ].join('|'),
       )
       .sort();
@@ -871,6 +1263,11 @@ export class InventoryTransfersService {
       unit: item.unit,
       quantityKg: this.toNumber(item.quantityKg),
       quantityPieces: item.quantityPieces ?? 0,
+      unitEquivalentId: item.unitEquivalentId ?? null,
+      appliedEquivalentFactor: item.appliedEquivalentFactor
+        ? this.toNumber(item.appliedEquivalentFactor)
+        : null,
+      roundingMode: item.roundingMode ?? null,
     }));
 
     return {
