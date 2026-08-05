@@ -101,6 +101,15 @@ describe("role navigation", () => {
     expect(items.map((item) => item.to)).not.toContain(
       "/purchases/:purchaseId",
     );
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "cedis",
+          label: "CEDIS",
+          to: "/cedis",
+        }),
+      ]),
+    );
   });
 
   it("limita accesos por rol y deja fallback mínimo para roles desconocidos", () => {
@@ -192,6 +201,7 @@ describe("role navigation", () => {
 
     expect(html).toContain("El Pollo");
     expect(html).toContain("Pollos Distribuidora");
+    expect(html).toContain("CEDIS");
     expect(html).toContain("Cerrar sesión");
     expect(html).not.toContain("Cerrar menú lateral");
     expect(html).toContain('aria-current="page"');
