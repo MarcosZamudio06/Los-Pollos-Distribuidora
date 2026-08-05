@@ -11,6 +11,7 @@ import { InventoryTransfersService } from '../inventory/inventory-transfers.serv
 import { ReconciliationResult } from './branch-supply-cycle-reconciliation.service';
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
+import type { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 
 const businessDate = new Date('2026-08-04T00:00:00.000Z');
 
@@ -26,6 +27,13 @@ const warehouse = {
   role: 'WAREHOUSE',
   operationalLocationId: 'cedis-1',
   permissions: ['cedis.view', 'cedis.dispatch', 'cedis.receive_returns'],
+};
+
+const seller = {
+  id: 'seller-1',
+  role: 'SELLER',
+  operationalLocationId: 'branch-1',
+  permissions: ['cedis.view'],
 };
 
 function createCycle(overrides: Record<string, unknown> = {}) {
@@ -121,13 +129,18 @@ function createService() {
     Pick<InventoryTransfersService, 'create' | 'findOne'>
   >;
   const cycleReconciliation = new BranchSupplyCycleReconciliationService();
+  const dailyCloseService = {
+    closeWithinTransaction: jest.fn(),
+    reopenWithinTransaction: jest.fn(),
+  };
 
   const service = new BranchSupplyCyclesService(
     prisma as unknown as PrismaService,
     inventoryTransfers as unknown as InventoryTransfersService,
     cycleReconciliation,
+    dailyCloseService as unknown as PointOfSaleDailyCloseService,
   );
-  return { prisma, inventoryTransfers, service };
+  return { prisma, inventoryTransfers, dailyCloseService, service };
 }
 
 describe('BranchSupplyCyclesService', () => {
@@ -482,6 +495,155 @@ describe('BranchSupplyCyclesService', () => {
     );
   });
 
+  it('closes a reviewed daily close and the CEDIS cycle in the same transaction', async () => {
+    const { prisma, service } = createService();
+    const dailyCloseService = {
+      closeWithinTransaction: jest.fn().mockResolvedValue({
+        id: 'close-1',
+        version: 5,
+        status: 'CLOSED',
+      }),
+    };
+    (
+      service as unknown as { dailyCloseService: typeof dailyCloseService }
+    ).dailyCloseService = dailyCloseService;
+    const cycle = createCycle({
+      status: BranchSupplyCycleStatus.READY_FOR_REVIEW,
+      version: 2,
+      reconciledDailyCloseVersion: 4,
+    });
+    const closedCycle = createCycle({
+      status: BranchSupplyCycleStatus.CLOSED,
+      version: 3,
+      reconciledDailyCloseVersion: 5,
+    });
+    prisma.branchSupplyCycle.findUnique
+      .mockResolvedValueOnce(cycle)
+      .mockResolvedValueOnce(closedCycle);
+    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue({
+      id: 'close-1',
+      version: 4,
+      status: 'REVIEWED',
+      grossSalesTotal: 0,
+      netCashExpected: 0,
+      cashCountedTotal: 0,
+      cashDifferenceTotal: 0,
+      payments: [],
+      cashMovements: [],
+      cashShifts: [],
+      differences: [],
+    });
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+    const result = {
+      items: [],
+      totals: {
+        deliveredKg: 0,
+        deliveredPieces: 0,
+        returnedKg: 0,
+        returnedPieces: 0,
+        expectedSoldKg: 0,
+        expectedSoldPieces: 0,
+        actualSoldKg: 0,
+        actualSoldPieces: 0,
+        shrinkageKg: 0,
+        shrinkagePieces: 0,
+        differenceKg: 0,
+        differencePieces: 0,
+        expectedSalesTotal: '0.00',
+        expectedCostTotal: '0.00',
+        expectedProfitTotal: '0.00',
+        actualSalesTotal: '0.00',
+        actualCostTotal: '0.00',
+        actualProfitTotal: '0.00',
+        actualNetProfitTotal: '0.00',
+        expectedCashTotal: '0.00',
+        cashCountedTotal: '0.00',
+        cashDifferenceTotal: '0.00',
+        cardVoucherTotal: '0.00',
+        transferTotal: '0.00',
+        expenseTotal: '0.00',
+        cashInTotal: '0.00',
+        cashOutTotal: '0.00',
+        cashAdjustmentTotal: '0.00',
+      },
+      confirmedSupplyCount: 1,
+      confirmedReturnCount: 0,
+      pendingTransferCount: 0,
+      cancelledTransferCount: 0,
+      blockers: [],
+      readyForReview: true,
+      canClose: true,
+      cashMovements: [],
+      differences: [],
+    } as ReconciliationResult;
+    (
+      service as unknown as {
+        cycleReconciliation: { calculate: jest.Mock };
+      }
+    ).cycleReconciliation.calculate = jest.fn().mockReturnValue(result);
+
+    await service.close('cycle-1', { expectedVersion: 2 }, admin, 'close-key');
+
+    expect(dailyCloseService.closeWithinTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      'close-1',
+      4,
+      admin,
+    );
+    expect(prisma.branchSupplyCycle.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: BranchSupplyCycleStatus.CLOSED,
+          reconciledDailyCloseVersion: 5,
+        }),
+      }),
+    );
+  });
+
+  it('reopens the related daily close and CEDIS cycle together without reversing operations', async () => {
+    const { prisma, service } = createService();
+    const dailyCloseService = {
+      reopenWithinTransaction: jest.fn().mockResolvedValue({
+        id: 'close-1',
+        version: 6,
+        status: 'DRAFT',
+      }),
+    };
+    (
+      service as unknown as { dailyCloseService: typeof dailyCloseService }
+    ).dailyCloseService = dailyCloseService;
+    const cycle = createCycle({
+      status: BranchSupplyCycleStatus.CLOSED,
+      version: 5,
+      pointOfSaleDailyCloseId: 'close-1',
+      pointOfSaleDailyClose: { id: 'close-1', status: 'CLOSED', version: 5 },
+    });
+    const reopenedCycle = createCycle({
+      status: BranchSupplyCycleStatus.OPEN,
+      version: 6,
+      pointOfSaleDailyCloseId: 'close-1',
+    });
+    prisma.branchSupplyCycle.findUnique
+      .mockResolvedValueOnce(cycle)
+      .mockResolvedValueOnce(reopenedCycle);
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.reopen(
+      'cycle-1',
+      { expectedVersion: 5, reason: 'Corrección auditada' },
+      admin,
+      'reopen-key',
+    );
+
+    expect(dailyCloseService.reopenWithinTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      'close-1',
+      5,
+      admin,
+      'Corrección auditada',
+    );
+  });
+
   it.each([BranchSupplyCycleStatus.CLOSED, BranchSupplyCycleStatus.CANCELLED])(
     'rejects supply creation for a %s cycle before creating a transfer',
     async (status) => {
@@ -818,5 +980,46 @@ describe('BranchSupplyCyclesService', () => {
     ).resolves.toEqual(expect.objectContaining({ id: 'cycle-1' }));
 
     expect(prisma.branchSupplyCycle.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('redacts cycle costs and utility from a seller detail response', async () => {
+    const { prisma, service } = createService();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(
+      createCycle({
+        items: [
+          {
+            id: 'item-1',
+            cycleVersion: 2,
+            snapshotKey: 'product-1',
+            productId: 'product-1',
+            productNameSnapshot: 'Pollo snapshot',
+            productSkuSnapshot: 'POLLO-1',
+            productUnitSnapshot: ProductUnit.PIECE,
+            unitPriceSnapshot: 100,
+            unitCostSnapshot: 60,
+            expectedCostAmount: 420,
+            actualCostAmount: 420,
+            expectedProfitAmount: 280,
+            actualProfitAmount: 280,
+          },
+        ],
+        productSnapshots: [
+          {
+            id: 'price-snapshot-1',
+            productId: 'product-1',
+            unitPriceSnapshot: 100,
+            unitCostSnapshot: 60,
+          },
+        ],
+      }),
+    );
+
+    const result = await service.findOne('cycle-1', seller);
+
+    expect(result.snapshots[0]).not.toHaveProperty('unitCostSnapshot');
+    expect(result.snapshots[0]).not.toHaveProperty('expectedCostAmount');
+    expect(result.priceSnapshots[0]).not.toHaveProperty('unitCostSnapshot');
+    expect(result.totals).not.toHaveProperty('expectedCostTotal');
+    expect(result.totals).not.toHaveProperty('expectedProfitTotal');
   });
 });

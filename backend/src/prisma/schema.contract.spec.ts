@@ -54,6 +54,10 @@ const inventoryTransferEquivalenceMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260804151000_add_inventory_transfer_equivalence/migration.sql',
 );
+const inventoryBalanceIntegrityMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260805110000_harden_inventory_balance_integrity/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -325,6 +329,25 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain(
       'InventoryTransferItem_unitEquivalentId_fkey',
     );
+  });
+
+  it('protects inventory balances from negative physical quantities', () => {
+    const inventoryBalance = getModelBlock('InventoryBalance');
+    const migrationSql = readFileSync(
+      inventoryBalanceIntegrityMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(inventoryBalance).toMatch(/quantityKg\s+Decimal/);
+    expect(inventoryBalance).toMatch(/quantityPieces\s+Int/);
+    expect(migrationSql).toContain(
+      'InventoryBalance_quantityKg_non_negative_check',
+    );
+    expect(migrationSql).toContain(
+      'InventoryBalance_quantityPieces_non_negative_check',
+    );
+    expect(migrationSql).toContain('"quantityKg" >= 0');
+    expect(migrationSql).toContain('"quantityPieces" >= 0');
   });
 
   it('persists route planning coordinates and PostGIS search geometries', () => {

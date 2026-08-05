@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,7 +13,9 @@ import {
   ProductUnit,
 } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CancelInventoryTransferDto,
   CreateInventoryTransferDto,
@@ -196,6 +199,10 @@ export type InventoryTransferCreateOptions = {
 
 export type InventoryTransferCommandOptions = {
   tx?: Prisma.TransactionClient;
+  actor?: Pick<
+    AuthenticatedUser,
+    'id' | 'role' | 'operationalLocationId' | 'permissions'
+  >;
 };
 
 @Injectable()
@@ -265,12 +272,25 @@ export class InventoryTransfersService {
     options: InventoryTransferCommandOptions = {},
   ): Promise<TransferResponse> {
     if (options.tx) {
-      return this.confirmInTransaction(options.tx, id, userId, idempotencyKey);
+      return this.confirmInTransaction(
+        options.tx,
+        id,
+        userId,
+        idempotencyKey,
+        options.actor,
+      );
     }
 
     return this.withSerializableRetry(() =>
       this.prisma.$transaction(
-        (tx) => this.confirmInTransaction(tx, id, userId, idempotencyKey),
+        (tx) =>
+          this.confirmInTransaction(
+            tx,
+            id,
+            userId,
+            idempotencyKey,
+            options.actor,
+          ),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
@@ -292,13 +312,21 @@ export class InventoryTransfersService {
         reason,
         userId,
         idempotencyKey,
+        options.actor,
       );
     }
 
     return this.withSerializableRetry(() =>
       this.prisma.$transaction(
         (tx) =>
-          this.cancelInTransaction(tx, id, reason, userId, idempotencyKey),
+          this.cancelInTransaction(
+            tx,
+            id,
+            reason,
+            userId,
+            idempotencyKey,
+            options.actor,
+          ),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
@@ -389,8 +417,10 @@ export class InventoryTransfersService {
     id: string,
     userId: string,
     idempotencyKey?: string,
+    actor?: InventoryTransferCommandOptions['actor'],
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id, tx);
+    this.assertActorCanChangeLinkedTransfer(transfer, actor);
     if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
       throw new BadRequestException(
         'Idempotency-Key is required for transfers linked to a branch supply cycle',
@@ -498,8 +528,10 @@ export class InventoryTransfersService {
     reason: string,
     userId: string,
     idempotencyKey?: string,
+    actor?: InventoryTransferCommandOptions['actor'],
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id, tx);
+    this.assertActorCanChangeLinkedTransfer(transfer, actor);
     if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
       throw new BadRequestException(
         'Idempotency-Key is required for transfers linked to a branch supply cycle',
@@ -669,6 +701,35 @@ export class InventoryTransfersService {
         code: 'BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID',
         message: 'The linked transfer direction does not match its cycle role',
       });
+    }
+  }
+
+  private assertActorCanChangeLinkedTransfer(
+    transfer: TransferRecord,
+    actor?: InventoryTransferCommandOptions['actor'],
+  ): void {
+    const link = transfer.branchSupplyCycleTransfer;
+    if (!link || !actor) return;
+
+    const cycle = link.branchSupplyCycle;
+    if (!cycle) {
+      throw new NotFoundException('Linked branch supply cycle not found');
+    }
+
+    if (actor.role === 'ADMIN') return;
+    if (
+      actor.role !== 'WAREHOUSE' ||
+      actor.operationalLocationId !== cycle.distributionCenterLocationId
+    ) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
+
+    const permission =
+      link.role === 'SUPPLY'
+        ? PERMISSIONS.CEDIS_DISPATCH
+        : PERMISSIONS.CEDIS_RECEIVE_RETURNS;
+    if (!actor.permissions?.includes(permission)) {
+      throw new ForbiddenException('Insufficient permissions');
     }
   }
 

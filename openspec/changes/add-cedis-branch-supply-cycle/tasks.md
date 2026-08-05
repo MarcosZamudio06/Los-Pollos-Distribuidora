@@ -44,9 +44,9 @@ Chain strategy: size:exception
 
 ## Phase 3: Existing Workflow Integration
 
-- [ ] 3.1 Extender `PointOfSaleDailyCloseService` para asociación, bloqueantes, cierre y reapertura atómicos.
+- [x] 3.1 Extender `PointOfSaleDailyCloseService` para asociación, bloqueantes, cierre y reapertura atómicos.
 - [ ] 3.2 Extender `LocationsService`, `ReportsService` y dashboard con alcance y frescura.
-- [ ] 3.3 Verificar que las devoluciones se contabilicen solo como `TRANSFER_OUT` en la conciliación.
+- [x] 3.3 Verificar que las devoluciones se contabilicen solo como `TRANSFER_OUT` en la conciliación.
 
 ## Phase 4: Frontend and Verification
 

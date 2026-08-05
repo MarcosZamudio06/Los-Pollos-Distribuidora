@@ -122,6 +122,7 @@ const decreaseMovementTypes = new Set([
   'SHRINKAGE',
 ]);
 type DailyCloseClient = Prisma.TransactionClient | PrismaService;
+type DailyCloseActor = Pick<AuthenticatedUser, 'id' | 'role' | 'permissions'>;
 type DifferenceDefinition = {
   code: string;
   referenceKey: string;
@@ -1050,8 +1051,22 @@ export class PointOfSaleDailyCloseService {
     user: AuthenticatedUser,
   ) {
     this.admin(user);
-    const current = await this.requireCloseAccess(id, user);
-    const openShiftCount = await this.prisma.cashShift.count({
+    await this.requireCloseAccess(id, user);
+    const transitioned = await this.prisma.$transaction((tx) =>
+      this.closeWithinTransaction(tx, id, dto.version, user),
+    );
+    return this.projectDetailForRole(transitioned, user);
+  }
+
+  async closeWithinTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    version: number,
+    user: DailyCloseActor,
+  ) {
+    this.admin(user);
+    const current = await this.findClose(id, tx);
+    const openShiftCount = await tx.cashShift.count({
       where: { pointOfSaleDailyCloseId: id, status: 'OPEN' },
     });
     if (openShiftCount > 0)
@@ -1059,9 +1074,10 @@ export class PointOfSaleDailyCloseService {
     if (current.validatedSourceVersion !== current.version)
       throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
     const closedAt = new Date();
-    const transitioned = await this.transition(
+    return this.transitionWithin(
+      tx,
       id,
-      dto.version,
+      version,
       'CLOSED',
       {
         status: 'CLOSED',
@@ -1072,7 +1088,6 @@ export class PointOfSaleDailyCloseService {
       },
       user,
     );
-    return this.projectDetailForRole(transitioned, user);
   }
 
   async cancel(
@@ -1104,9 +1119,29 @@ export class PointOfSaleDailyCloseService {
     user: AuthenticatedUser,
   ) {
     this.requirePermission(user, PERMISSIONS.DAILY_CLOSES_REOPEN);
-    return this.transition(
+    return this.prisma.$transaction((tx) =>
+      this.reopenWithinTransaction(
+        tx,
+        id,
+        dto.version,
+        user,
+        dto.reason.trim(),
+      ),
+    );
+  }
+
+  async reopenWithinTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    version: number,
+    user: DailyCloseActor,
+    reason: string,
+  ) {
+    this.admin(user);
+    return this.transitionWithin(
+      tx,
       id,
-      dto.version,
+      version,
       'DRAFT',
       {
         status: 'DRAFT',
@@ -1114,7 +1149,7 @@ export class PointOfSaleDailyCloseService {
         cashSessionClosedAt: null,
         reopenedByUserId: user.id,
         reopenedAt: new Date(),
-        reopenedReason: dto.reason.trim(),
+        reopenedReason: reason.trim(),
         lastValidatedAt: null,
         validatedSourceVersion: null,
       },
@@ -1777,7 +1812,7 @@ export class PointOfSaleDailyCloseService {
     version: number,
     target: PointOfSaleDailyCloseStatus,
     data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput,
-    user: AuthenticatedUser,
+    user: DailyCloseActor,
   ) {
     return this.prisma.$transaction((tx) =>
       this.transitionWithin(tx, id, version, target, data, user),
@@ -1789,7 +1824,7 @@ export class PointOfSaleDailyCloseService {
     version: number,
     target: PointOfSaleDailyCloseStatus,
     data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput,
-    user: AuthenticatedUser,
+    user: DailyCloseActor,
   ) {
     const current = await this.findClose(id, tx);
     if (!dailyCloseTransitions[current.status].includes(target))
@@ -2198,7 +2233,7 @@ export class PointOfSaleDailyCloseService {
     }
     return result;
   }
-  private admin(user: AuthenticatedUser) {
+  private admin(user: DailyCloseActor) {
     if (user.role !== 'ADMIN')
       throw new ForbiddenException('DAILY_CLOSE_ADMIN_REQUIRED');
   }

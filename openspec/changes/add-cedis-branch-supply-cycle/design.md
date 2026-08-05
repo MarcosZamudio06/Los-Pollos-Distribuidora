@@ -32,6 +32,11 @@ POST refresh
   -> linked transfer items + movements
   -> integrity/totals/source hash
   -> append-only items/event + latest header projection
+
+POST close/reopen
+  -> PointOfSaleDailyCloseService transaction helpers
+  -> daily close and cycle status/version transition
+  -> append-only snapshots/events without reversing operations
 ```
 
 ## Transaction Boundaries
@@ -41,6 +46,7 @@ POST refresh
 - Confirmar: ciclo/transferencia validables, decremento condicional, ambos movimientos, estado e invalidación del ciclo en la misma transacción.
 - Cancelar: estado, motivo, actor e invalidación del ciclo en la misma transacción.
 - Refresh: lectura consistente de fuentes, snapshot, evento, totales y estado en la misma transacción.
+- Cierre/reapertura: el servicio CEDIS reutiliza helpers del cierre diario dentro de su transacción `Serializable`; cualquier error revierte ambos agregados.
 
 Los conflictos `P2034` se reintentan de forma limitada con la misma clave. Índices únicos resuelven carreras de apertura y vínculo; `expectedVersion` resuelve escritores concurrentes.
 
@@ -51,6 +57,7 @@ Los conflictos `P2034` se reintentan de forma limitada con la misma clave. Índi
 | `backend/src/modules/cedis/**` | Crear módulo, controller, service, DTOs y pruebas. |
 | `backend/src/modules/inventory/inventory-transfers.service.ts` | Extraer operaciones reutilizables con `TransactionClient` y validar ciclo vinculado. |
 | `backend/src/modules/inventory/inventory-transfers.controller.ts` | Exigir idempotencia y conservar contratos de confirmación/cancelación. |
+| `backend/src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service.ts` | Exponer helpers transaccionales de cierre y reapertura coordinados. |
 | `backend/src/app.module.ts` | Registrar `CedisModule`. |
 | `backend/prisma/schema.prisma` | Alinear unicidad activa y eventos de cambio de transferencia. |
 | `backend/prisma/migrations/*cedis_cycle_alignment*/migration.sql` | Aplicar cambios no destructivos de constraints/enums. |
@@ -61,7 +68,7 @@ KG y PIECE se suman por separado. `KG_AND_PIECE` acepta cantidades medidas en un
 
 ## Testing Strategy
 
-Jest unitario cubre estados, dirección, unidades e idempotencia. Contratos Supertest cubren rutas, permisos y errores. Pruebas con PostgreSQL cubren carreras de apertura, versión, vínculo único y confirmaciones contra el mismo stock. E2E cubre ciclo → varios suministros/devoluciones → confirmación/cancelación → refresh → cierre.
+Jest unitario cubre estados, dirección, unidades e idempotencia. Contratos Supertest cubren rutas, permisos y errores. Pruebas con PostgreSQL cubren carreras de apertura, versión, vínculo único y confirmaciones contra el mismo stock. E2E cubre ciclo → suministro/devolución → confirmación → refresh y conserva snapshots append-only.
 
 ## Open Questions
 

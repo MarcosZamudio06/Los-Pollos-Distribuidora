@@ -141,6 +141,41 @@ describe('BranchSupplyCycleReconciliationService', () => {
     expect(result.canClose).toBe(true);
   });
 
+  it('aggregates multiple supplies and returns while ignoring a cancelled transfer', () => {
+    const cancelledReturn = {
+      ...transfer('RETURN', 99),
+      transfer: {
+        ...transfer('RETURN', 99).transfer,
+        status: 'CANCELLED',
+      },
+    };
+    const result = service.calculate(
+      baseInput({
+        transfers: [
+          transfer('SUPPLY', 6),
+          transfer('SUPPLY', 4),
+          transfer('RETURN', 2),
+          transfer('RETURN', 1),
+          cancelledReturn,
+        ],
+      }),
+    );
+
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        deliveredPieces: 10,
+        returnedPieces: 3,
+        expectedSoldPieces: 7,
+        expectedSalesAmount: '700.00',
+        expectedCostAmount: '420.00',
+        expectedProfitAmount: '280.00',
+      }),
+    );
+    expect(result.confirmedSupplyCount).toBe(2);
+    expect(result.confirmedReturnCount).toBe(2);
+    expect(result.cancelledTransferCount).toBe(1);
+  });
+
   it('uses the first-supply price and cost snapshots after the catalog changes', () => {
     const changedCatalogInput = baseInput({
       transfers: [
@@ -273,6 +308,19 @@ describe('BranchSupplyCycleReconciliationService', () => {
         expect.objectContaining({ code: 'DAILY_CLOSE_DIFFERENCE_UNRESOLVED' }),
       ]),
     );
+  });
+
+  it('allows a reviewed daily close to be closed together with the CEDIS cycle', () => {
+    const result = service.calculate(
+      baseInput({ dailyClose: dailyClose({ status: 'REVIEWED' }) }),
+    );
+
+    expect(result.blockers).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'DAILY_CLOSE_NOT_CLOSED' }),
+      ]),
+    );
+    expect(result.canClose).toBe(true);
   });
 
   it('blocks closure when a first-supply snapshot has no valid price or cost', () => {

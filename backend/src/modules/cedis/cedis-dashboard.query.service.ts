@@ -281,7 +281,7 @@ export class CedisDashboardQueryService {
   ) {}
 
   async getDashboard(query: CedisDashboardQueryDto, actor: QueryActor) {
-    this.assertDashboardScope(query.cedisLocationId, actor);
+    await this.assertDashboardScope(query.cedisLocationId, actor);
     const businessDate = this.parseDateOnly(query.businessDate);
     const canViewCosts = this.canViewCosts(actor);
     const search = query.search?.trim() || undefined;
@@ -1076,7 +1076,10 @@ export class CedisDashboardQueryService {
     return actor.permissions?.includes(PERMISSIONS.CEDIS_VIEW_COSTS) ?? false;
   }
 
-  private assertDashboardScope(cedisLocationId: string, actor: QueryActor) {
+  private async assertDashboardScope(
+    cedisLocationId: string,
+    actor: QueryActor,
+  ): Promise<void> {
     if (actor.role === 'ADMIN') return;
     if (
       actor.role === 'WAREHOUSE' &&
@@ -1084,7 +1087,19 @@ export class CedisDashboardQueryService {
     ) {
       return;
     }
-    if (actor.role === 'SELLER' && actor.operationalLocationId) return;
+    if (actor.role === 'SELLER' && actor.operationalLocationId) {
+      const branch = await this.prisma.operationalLocation.findUnique({
+        where: { id: actor.operationalLocationId },
+        select: { id: true, type: true, parentId: true, isActive: true },
+      });
+      if (
+        branch?.type === 'BRANCH' &&
+        branch.isActive &&
+        branch.parentId === cedisLocationId
+      ) {
+        return;
+      }
+    }
     throw this.locationForbidden();
   }
 

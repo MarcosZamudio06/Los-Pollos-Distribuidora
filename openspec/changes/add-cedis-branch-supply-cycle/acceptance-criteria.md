@@ -2,27 +2,27 @@
 
 - [ ] **AC-01 Unicidad:** Solo existe un ciclo no cancelado por sucursal/fecha, incluso con aperturas concurrentes.
 - [ ] **AC-02 Ubicaciones:** CEDIS/sucursal inactivos, incompatibles, iguales o fuera de jerarquía rechazan sin escritura.
-- [ ] **AC-03 Alcance:** `WAREHOUSE` opera su CEDIS; `SELLER` solo consulta su sucursal sin costos.
+- [x] **AC-03 Alcance:** `WAREHOUSE` opera su CEDIS; `SELLER` solo consulta su sucursal sin costos.
 - [ ] **AC-04 Dirección:** Suministro siempre CEDIS → sucursal; devolución siempre sucursal → CEDIS.
 - [ ] **AC-05 Estado inicial:** Cada suministro/devolución crea `InventoryTransfer` `REQUESTED`.
-- [ ] **AC-06 Multiplicidad:** Un ciclo admite varios suministros/devoluciones y cada transferencia se vincula una vez.
+- [x] **AC-06 Multiplicidad:** Un ciclo admite varios suministros/devoluciones y cada transferencia se vincula una vez.
 - [ ] **AC-07 Sin movimiento temprano:** Crear/vincular no cambia balances ni genera movimientos.
 - [ ] **AC-08 Confirmación:** Inventario genera salida/entrada iguales y atómicas al confirmar recepción.
 - [ ] **AC-09 Stock:** Stock insuficiente o carrera concurrente nunca produce saldo negativo ni efecto parcial.
 - [ ] **AC-10 Productos:** Producto inactivo rechaza creación/confirmación; historia confirmada permanece visible si luego se desactiva.
 - [ ] **AC-11 Cancelación transferencia:** `DRAFT`, `REQUESTED`, `IN_TRANSIT` cancelan con motivo; `CONFIRMED` se rechaza.
 - [ ] **AC-12 Invalidación:** Confirmar/cancelar vinculada incrementa versión, devuelve ciclo a `OPEN` e invalida validación del cierre.
-- [ ] **AC-13 Refresh:** Solo confirmadas contribuyen; pendientes bloquean; canceladas aportan cero.
-- [ ] **AC-14 Integridad:** Diferencias entre partidas/salida/entrada bloquean refresh listo y cierre, sin reparación automática.
+- [x] **AC-13 Refresh:** Solo confirmadas contribuyen; pendientes bloquean; canceladas aportan cero.
+- [x] **AC-14 Integridad:** Diferencias entre partidas/salida/entrada bloquean refresh listo y cierre, sin reparación automática.
 - [ ] **AC-15 Elegibilidad:** Suministro confirmado + cero pendientes + integridad válida produce `READY_FOR_REVIEW`.
 - [ ] **AC-16 Estados terminales:** `CLOSED`/`CANCELLED` rechazan suministro, devolución y refresh.
 - [ ] **AC-17 Cancelación ciclo:** Exige `ADMIN`, permiso, versión y motivo, sin cierre activo ni transferencias no canceladas.
-- [ ] **AC-18 Cierre:** Cierre y ciclo pasan a `CLOSED` atómicamente; reapertura lleva cierre a `DRAFT` y ciclo a `OPEN`.
+- [x] **AC-18 Cierre:** Cierre y ciclo pasan a `CLOSED` atómicamente; reapertura lleva cierre a `DRAFT` y ciclo a `OPEN`.
 - [ ] **AC-19 Idempotencia:** Misma clave/payload devuelve resultado previo; payload distinto produce conflicto.
 - [ ] **AC-20 Versión:** `expectedVersion` obsoleta no deja cambios parciales.
 - [ ] **AC-21 Unidades:** KG decimal y PIECE entera permanecen separadas; no hay conversión sin equivalencia/redondeo aprobados.
-- [ ] **AC-22 No doble conteo:** Devolución confirmada participa una sola vez como `TRANSFER_OUT` en sucursal.
-- [ ] **AC-23 Snapshots:** Items/eventos son append-only y no sustituyen inventario ni cierre.
+- [x] **AC-22 No doble conteo:** Devolución confirmada participa una sola vez como `TRANSFER_OUT` en sucursal.
+- [x] **AC-23 Snapshots:** Items/eventos son append-only y no sustituyen inventario ni cierre.
 - [ ] **AC-24 Backfill:** Usa mapa aprobado, reporta ambigüedades y no modifica inventario histórico.
 - [x] **AC-25 Jerarquía:** `DISTRIBUTION_CENTER` raíz y `BRANCH` hija directa activa.
 - [x] **AC-26 Ciclos parentId:** API/base rechazan autorreferencia y ciclos transitivos.

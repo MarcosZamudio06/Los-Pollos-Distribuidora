@@ -64,7 +64,7 @@ function cycle(overrides: Record<string, unknown> = {}) {
 
 function createService() {
   const prisma = {
-    operationalLocation: { findMany: jest.fn() },
+    operationalLocation: { findMany: jest.fn(), findUnique: jest.fn() },
     pointOfSaleDailyClose: { findFirst: jest.fn() },
     branchSupplyCycle: {
       findMany: jest.fn(),
@@ -72,6 +72,12 @@ function createService() {
       findUnique: jest.fn(),
     },
   } as unknown as PrismaService;
+  prisma.operationalLocation.findUnique.mockResolvedValue({
+    id: 'branch-1',
+    type: 'BRANCH',
+    parentId: 'cedis-1',
+    isActive: true,
+  });
   const config = {
     get: jest.fn().mockReturnValue('America/Mexico_City'),
   };
@@ -142,6 +148,32 @@ describe('CedisDashboardQueryService', () => {
         warningCount: 0,
       }),
     );
+  });
+
+  it('rejects a seller whose branch is not a direct child of the requested CEDIS', async () => {
+    const { prisma, service } = createService();
+    (prisma.operationalLocation as { findUnique?: jest.Mock }).findUnique = jest
+      .fn()
+      .mockResolvedValue({
+        id: 'branch-1',
+        type: 'BRANCH',
+        parentId: 'other-cedis',
+        isActive: true,
+      });
+
+    await expect(
+      service.getDashboard(
+        { cedisLocationId: 'cedis-1', businessDate: '2026-08-04' },
+        seller,
+      ),
+    ).rejects.toEqual(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
+    expect(
+      (prisma.operationalLocation as unknown as { findMany: jest.Mock })
+        .findMany,
+    ).not.toHaveBeenCalled();
+    expect(
+      (prisma.branchSupplyCycle as unknown as { findMany: jest.Mock }).findMany,
+    ).not.toHaveBeenCalled();
   });
 
   it('keeps cost and utility columns out of unauthorized dashboard projections', async () => {

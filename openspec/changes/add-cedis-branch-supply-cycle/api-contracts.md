@@ -12,6 +12,8 @@ La fuente canónica exacta es `specs/.specs/03-api/branch-supply-cycles-api.md`.
 | `POST /api/cedis/branch-supply-cycles/:id/supplies` | Crear `REQUESTED` CEDIS → sucursal | `cedis.dispatch` |
 | `POST /api/cedis/branch-supply-cycles/:id/returns` | Crear `REQUESTED` sucursal → CEDIS | `cedis.receive_returns` |
 | `POST /api/cedis/branch-supply-cycles/:id/refresh` | Reconstruir snapshot/elegibilidad | `cedis.reconcile` |
+| `POST /api/cedis/branch-supply-cycles/:id/close` | Cerrar ciclo y cierre diario coordinados | `cedis.close` + `ADMIN` |
+| `POST /api/cedis/branch-supply-cycles/:id/reopen` | Reabrir ciclo y cierre diario coordinados | `cedis.close` + `ADMIN` |
 | `POST /api/cedis/branch-supply-cycles/:id/cancel` | Cancelar ciclo elegible | `cedis.close` + `ADMIN` |
 
 Todos los `POST` requieren `Idempotency-Key`. Los comandos sobre ciclo existente requieren `expectedVersion`. Suministro/devolución reciben `notes` e `items[]` con `productId`, `unit`, `quantityKg`, `quantityPieces` y `unitEquivalentId` opcional; no reciben ubicaciones.
@@ -32,6 +34,12 @@ Confirmar o cancelar una transferencia vinculada requiere `Idempotency-Key`, inc
 - Canceladas permanecen visibles con contribución cero.
 - Integridad compara sumas de partidas y movimientos por transferencia, producto y dimensión.
 - No confirma, cancela, revierte ni corrige fuentes.
+
+## Cierre coordinado
+
+- El ciclo debe estar en `READY_FOR_REVIEW` y el cierre diario en `REVIEWED`.
+- CEDIS y punto de venta pasan a `CLOSED` atómicamente y conservan snapshots/eventos append-only.
+- La reapertura administrativa lleva el cierre diario a `DRAFT` y el ciclo a `OPEN` sin revertir movimientos.
 
 ## Errores
 

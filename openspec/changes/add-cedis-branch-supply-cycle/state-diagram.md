@@ -7,7 +7,7 @@ stateDiagram-v2
     [*] --> OPEN: abrir
     OPEN --> READY_FOR_REVIEW: refresh elegible
     READY_FOR_REVIEW --> OPEN: nueva transferencia o cambio vinculado
-    READY_FOR_REVIEW --> CLOSED: cierre diario CLOSED
+    READY_FOR_REVIEW --> CLOSED: cierre diario REVIEWED y cierre coordinado
     CLOSED --> OPEN: reapertura auditada
     OPEN --> CANCELLED: cancelar ciclo elegible
     READY_FOR_REVIEW --> CANCELLED: cancelar ciclo elegible
@@ -16,7 +16,7 @@ stateDiagram-v2
 
 - `OPEN` admite suministros, devoluciones y refresh.
 - `READY_FOR_REVIEW` exige suministro confirmado, cero pendientes e integridad válida. Una nueva operación permitida lo devuelve a `OPEN`.
-- `CLOSED` solo se obtiene al cerrar el `PointOfSaleDailyClose` relacionado.
+- `CLOSED` solo se obtiene al cerrar el `PointOfSaleDailyClose` relacionado desde `REVIEWED`.
 - `CANCELLED` exige motivo, ausencia de cierre activo y todas las transferencias canceladas.
 - `CLOSED` y `CANCELLED` son de solo lectura para operaciones del ciclo.
 

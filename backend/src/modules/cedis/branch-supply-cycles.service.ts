@@ -16,6 +16,7 @@ import {
   ProductUnit,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -33,6 +34,7 @@ import {
   ReopenBranchSupplyCycleDto,
 } from './dto';
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import type {
   ReconciliationDailyClose,
   ReconciliationInput,
@@ -41,7 +43,7 @@ import type {
 
 type CycleActor = Pick<
   AuthenticatedUser,
-  'id' | 'role' | 'operationalLocationId'
+  'id' | 'role' | 'operationalLocationId' | 'permissions'
 >;
 
 type CycleClient = Prisma.TransactionClient | PrismaService;
@@ -177,12 +179,12 @@ type CycleResponse = {
     differenceKg: number;
     differencePieces: number;
     expectedSalesTotal: number;
-    expectedCostTotal: number;
-    expectedProfitTotal: number;
+    expectedCostTotal?: number;
+    expectedProfitTotal?: number;
     actualSalesTotal: number;
-    actualCostTotal: number;
-    actualProfitTotal: number;
-    actualNetProfitTotal: number;
+    actualCostTotal?: number;
+    actualProfitTotal?: number;
+    actualNetProfitTotal?: number;
     expectedCashTotal: number;
     cashCountedTotal: number | null;
     cashDifferenceTotal: number | null;
@@ -218,6 +220,7 @@ export class BranchSupplyCyclesService {
     private readonly prisma: PrismaService,
     private readonly inventoryTransfers: InventoryTransfersService,
     private readonly cycleReconciliation: BranchSupplyCycleReconciliationService,
+    private readonly dailyCloseService: PointOfSaleDailyCloseService,
   ) {}
 
   async open(
@@ -226,6 +229,7 @@ export class BranchSupplyCyclesService {
     idempotencyKey: string,
   ): Promise<CycleResponse> {
     const key = this.requireIdempotencyKey(idempotencyKey);
+    const canViewCosts = this.canViewCosts(actor);
     const payloadHash = this.hashPayload({ dto, actorId: actor.id });
     const eventKey = this.eventKey('OPEN', 'new', key);
 
@@ -236,6 +240,7 @@ export class BranchSupplyCyclesService {
             tx,
             eventKey,
             payloadHash,
+            canViewCosts,
           );
           if (replay) return replay;
 
@@ -296,7 +301,7 @@ export class BranchSupplyCyclesService {
             },
           });
 
-          return this.toCycleResponse(cycle);
+          return this.toCycleResponse(cycle, null, canViewCosts);
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -306,7 +311,7 @@ export class BranchSupplyCyclesService {
   async findOne(id: string, actor: CycleActor): Promise<CycleResponse> {
     const cycle = await this.findCycle(this.prisma, id);
     this.assertCycleReadScope(cycle, actor);
-    return this.toCycleResponse(cycle);
+    return this.toCycleResponse(cycle, null, this.canViewCosts(actor));
   }
 
   async createSupply(
@@ -346,6 +351,7 @@ export class BranchSupplyCyclesService {
     idempotencyKey: string,
   ): Promise<CycleResponse> {
     const key = this.requireIdempotencyKey(idempotencyKey);
+    const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey('REFRESH', cycleId, key);
 
     return this.withSerializableRetry(() =>
@@ -363,6 +369,7 @@ export class BranchSupplyCyclesService {
             tx,
             eventKey,
             payloadHash,
+            canViewCosts,
           );
           if (replay) return replay;
           this.assertMutableCycle(cycle, dto.expectedVersion);
@@ -502,6 +509,7 @@ export class BranchSupplyCyclesService {
           return this.toCycleResponse(
             await this.findCycle(tx, cycle.id),
             result,
+            canViewCosts,
           );
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -517,6 +525,7 @@ export class BranchSupplyCyclesService {
   ): Promise<CycleResponse> {
     this.assertAdministrativeActor(actor);
     const key = this.requireIdempotencyKey(idempotencyKey);
+    const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey('CLOSE', cycleId, key);
 
     return this.withSerializableRetry(() =>
@@ -533,6 +542,7 @@ export class BranchSupplyCyclesService {
             tx,
             eventKey,
             payloadHash,
+            canViewCosts,
           );
           if (replay) return replay;
 
@@ -567,6 +577,15 @@ export class BranchSupplyCyclesService {
             );
           }
 
+          const closedDailyClose =
+            dailyClose?.status === 'REVIEWED'
+              ? await this.dailyCloseService.closeWithinTransaction(
+                  tx,
+                  dailyClose.id,
+                  dailyClose.version,
+                  actor,
+                )
+              : dailyClose;
           const nextVersion = cycle.version + 1;
           const updateResult = await tx.branchSupplyCycle.updateMany({
             where: {
@@ -578,8 +597,8 @@ export class BranchSupplyCyclesService {
               version: { increment: 1 },
               status: BranchSupplyCycleStatus.CLOSED,
               pointOfSaleDailyCloseId:
-                dailyClose?.id ?? cycle.pointOfSaleDailyCloseId,
-              reconciledDailyCloseVersion: dailyClose?.version ?? null,
+                closedDailyClose?.id ?? cycle.pointOfSaleDailyCloseId,
+              reconciledDailyCloseVersion: closedDailyClose?.version ?? null,
               reconciledAt: new Date(),
               closedByUserId: actor.id,
               closedAt: new Date(),
@@ -596,8 +615,8 @@ export class BranchSupplyCyclesService {
             cycleId: cycle.id,
             sourceVersion: cycle.version,
             targetVersion: nextVersion,
-            dailyCloseId: dailyClose?.id ?? null,
-            dailyCloseVersion: dailyClose?.version ?? null,
+            dailyCloseId: closedDailyClose?.id ?? null,
+            dailyCloseVersion: closedDailyClose?.version ?? null,
             reconciliation: result,
           });
           const snapshotHash = this.hashPayload(snapshotPayload);
@@ -622,8 +641,8 @@ export class BranchSupplyCyclesService {
               payload: this.jsonPayload({
                 payloadHash,
                 snapshotHash,
-                dailyCloseId: dailyClose?.id ?? null,
-                dailyCloseVersion: dailyClose?.version ?? null,
+                dailyCloseId: closedDailyClose?.id ?? null,
+                dailyCloseVersion: closedDailyClose?.version ?? null,
               }),
               idempotencyKey: eventKey,
             },
@@ -632,6 +651,7 @@ export class BranchSupplyCyclesService {
           return this.toCycleResponse(
             await this.findCycle(tx, cycle.id),
             result,
+            canViewCosts,
           );
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -647,6 +667,7 @@ export class BranchSupplyCyclesService {
   ): Promise<CycleResponse> {
     this.assertAdministrativeActor(actor);
     const key = this.requireIdempotencyKey(idempotencyKey);
+    const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey('REOPEN', cycleId, key);
 
     return this.withSerializableRetry(() =>
@@ -663,6 +684,7 @@ export class BranchSupplyCyclesService {
             tx,
             eventKey,
             payloadHash,
+            canViewCosts,
           );
           if (replay) return replay;
           if (cycle.status !== BranchSupplyCycleStatus.CLOSED) {
@@ -675,6 +697,16 @@ export class BranchSupplyCyclesService {
             throw this.businessConflict(
               'BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT',
               'The branch supply cycle version is stale',
+            );
+          }
+
+          if (cycle.pointOfSaleDailyClose?.status === 'CLOSED') {
+            await this.dailyCloseService.reopenWithinTransaction(
+              tx,
+              cycle.pointOfSaleDailyClose.id,
+              cycle.pointOfSaleDailyClose.version,
+              actor,
+              dto.reason.trim(),
             );
           }
 
@@ -693,6 +725,8 @@ export class BranchSupplyCyclesService {
               reopeningReason: dto.reason.trim(),
               closedByUserId: null,
               closedAt: null,
+              reconciledDailyCloseVersion: null,
+              reconciledAt: null,
             },
           });
           if (updateResult.count !== 1) {
@@ -734,7 +768,11 @@ export class BranchSupplyCyclesService {
             },
           });
 
-          return this.toCycleResponse(await this.findCycle(tx, cycle.id));
+          return this.toCycleResponse(
+            await this.findCycle(tx, cycle.id),
+            null,
+            canViewCosts,
+          );
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -749,6 +787,7 @@ export class BranchSupplyCyclesService {
   ): Promise<CycleResponse> {
     this.assertAdministrativeActor(actor);
     const key = this.requireIdempotencyKey(idempotencyKey);
+    const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey('CANCEL', cycleId, key);
 
     return this.withSerializableRetry(() =>
@@ -765,6 +804,7 @@ export class BranchSupplyCyclesService {
             tx,
             eventKey,
             payloadHash,
+            canViewCosts,
           );
           if (replay) return replay;
 
@@ -845,7 +885,11 @@ export class BranchSupplyCyclesService {
             },
           });
 
-          return this.toCycleResponse(await this.findCycle(tx, cycle.id));
+          return this.toCycleResponse(
+            await this.findCycle(tx, cycle.id),
+            null,
+            canViewCosts,
+          );
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -860,6 +904,7 @@ export class BranchSupplyCyclesService {
     role: BranchSupplyTransferRole,
   ) {
     const key = this.requireIdempotencyKey(idempotencyKey);
+    const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey(role, cycleId, key);
 
     return this.withSerializableRetry(() =>
@@ -877,6 +922,7 @@ export class BranchSupplyCyclesService {
             tx,
             eventKey,
             payloadHash,
+            canViewCosts,
           );
           if (replay) {
             const transferId = this.payloadString(
@@ -983,7 +1029,11 @@ export class BranchSupplyCyclesService {
           });
 
           return {
-            cycle: this.toCycleResponse(await this.findCycle(tx, cycle.id)),
+            cycle: this.toCycleResponse(
+              await this.findCycle(tx, cycle.id),
+              null,
+              canViewCosts,
+            ),
             transfer,
           };
         },
@@ -1319,6 +1369,7 @@ export class BranchSupplyCyclesService {
     tx: Prisma.TransactionClient,
     eventKey: string,
     payloadHash: string,
+    canViewCosts: boolean,
   ): Promise<CycleResponse | null> {
     const event = await tx.branchSupplyCycleEvent.findUnique({
       where: { idempotencyKey: eventKey },
@@ -1332,7 +1383,7 @@ export class BranchSupplyCyclesService {
       );
     }
     const cycle = await this.findCycle(tx, event.branchSupplyCycleId);
-    return this.toCycleResponse(cycle);
+    return this.toCycleResponse(cycle, null, canViewCosts);
   }
 
   private async findCycle(
@@ -1448,6 +1499,10 @@ export class BranchSupplyCyclesService {
     }
   }
 
+  private canViewCosts(actor: CycleActor): boolean {
+    return actor.permissions?.includes(PERMISSIONS.CEDIS_VIEW_COSTS) ?? false;
+  }
+
   private assertMutableCycle(
     cycle: CycleRecord,
     expectedVersion: number,
@@ -1472,6 +1527,7 @@ export class BranchSupplyCyclesService {
   private toCycleResponse(
     cycle: CycleRecord,
     reconciliation: ReconciliationResult | null = null,
+    canViewCosts = true,
   ): CycleResponse {
     const transfers = cycle.transfers.map((link) => ({
       id: link.id,
@@ -1505,6 +1561,128 @@ export class BranchSupplyCyclesService {
         inventoryTransfer.status === InventoryTransferStatus.CANCELLED,
     ).length;
 
+    const totals: CycleResponse['totals'] = {
+      suppliedKg: supplied.kg,
+      suppliedPieces: supplied.pieces,
+      returnedKg: returned.kg,
+      returnedPieces: returned.pieces,
+      netKg: supplied.kg - returned.kg,
+      netPieces: supplied.pieces - returned.pieces,
+      expectedSoldKg:
+        reconciliation?.totals.expectedSoldKg ??
+        this.toNumber(cycle.totalExpectedSoldKg),
+      expectedSoldPieces:
+        reconciliation?.totals.expectedSoldPieces ??
+        this.toNumber(cycle.totalExpectedSoldPieces),
+      actualSoldKg:
+        reconciliation?.totals.actualSoldKg ??
+        this.toNumber(cycle.totalActualSoldKg),
+      actualSoldPieces:
+        reconciliation?.totals.actualSoldPieces ??
+        this.toNumber(cycle.totalActualSoldPieces),
+      shrinkageKg:
+        reconciliation?.totals.shrinkageKg ??
+        this.toNumber(cycle.totalShrinkageKg),
+      shrinkagePieces:
+        reconciliation?.totals.shrinkagePieces ??
+        this.toNumber(cycle.totalShrinkagePieces),
+      differenceKg:
+        reconciliation?.totals.differenceKg ??
+        this.toNumber(cycle.totalDifferenceKg),
+      differencePieces:
+        reconciliation?.totals.differencePieces ??
+        this.toNumber(cycle.totalDifferencePieces),
+      expectedSalesTotal: this.toNumber(
+        reconciliation?.totals.expectedSalesTotal ?? cycle.expectedSalesTotal,
+      ),
+      actualSalesTotal: this.toNumber(
+        reconciliation?.totals.actualSalesTotal ?? cycle.actualSalesTotal,
+      ),
+      expectedCashTotal: this.toNumber(
+        reconciliation?.totals.expectedCashTotal ?? cycle.expectedCashTotal,
+      ),
+      cashCountedTotal:
+        reconciliation?.totals.cashCountedTotal !== undefined
+          ? reconciliation.totals.cashCountedTotal === null
+            ? null
+            : this.toNumber(reconciliation.totals.cashCountedTotal)
+          : cycle.cashCountedTotal === null
+            ? null
+            : this.toNumber(cycle.cashCountedTotal),
+      cashDifferenceTotal:
+        reconciliation?.totals.cashDifferenceTotal !== undefined
+          ? reconciliation.totals.cashDifferenceTotal === null
+            ? null
+            : this.toNumber(reconciliation.totals.cashDifferenceTotal)
+          : cycle.cashDifferenceTotal === null
+            ? null
+            : this.toNumber(cycle.cashDifferenceTotal),
+      cardVoucherTotal: this.toNumber(
+        reconciliation?.totals.cardVoucherTotal ?? cycle.cardVoucherTotal,
+      ),
+      transferTotal: this.toNumber(
+        reconciliation?.totals.transferTotal ?? cycle.transferTotal,
+      ),
+      expenseTotal: this.toNumber(
+        reconciliation?.totals.expenseTotal ?? cycle.expenseTotal,
+      ),
+      cashInTotal: this.toNumber(
+        reconciliation?.totals.cashInTotal ?? cycle.cashInTotal,
+      ),
+      cashOutTotal: this.toNumber(
+        reconciliation?.totals.cashOutTotal ?? cycle.cashOutTotal,
+      ),
+      cashAdjustmentTotal: this.toNumber(
+        reconciliation?.totals.cashAdjustmentTotal ?? cycle.cashAdjustmentTotal,
+      ),
+    };
+
+    if (canViewCosts) {
+      Object.assign(totals, {
+        expectedCostTotal: this.toNumber(
+          reconciliation?.totals.expectedCostTotal ?? cycle.expectedCostTotal,
+        ),
+        expectedProfitTotal: this.toNumber(
+          reconciliation?.totals.expectedProfitTotal ??
+            cycle.expectedProfitTotal,
+        ),
+        actualCostTotal: this.toNumber(
+          reconciliation?.totals.actualCostTotal ?? cycle.actualCostTotal,
+        ),
+        actualProfitTotal: this.toNumber(
+          reconciliation?.totals.actualProfitTotal ?? cycle.actualProfitTotal,
+        ),
+        actualNetProfitTotal: this.toNumber(
+          reconciliation?.totals.actualNetProfitTotal ??
+            cycle.actualNetProfitTotal,
+        ),
+      });
+    }
+
+    const snapshots = cycle.items.map((item) => {
+      if (canViewCosts) return item;
+      const {
+        unitCostSnapshot,
+        expectedCostAmount,
+        actualCostAmount,
+        expectedProfitAmount,
+        actualProfitAmount,
+        ...publicItem
+      } = item;
+      void unitCostSnapshot;
+      void expectedCostAmount;
+      void actualCostAmount;
+      void expectedProfitAmount;
+      void actualProfitAmount;
+      return publicItem;
+    });
+    const priceSnapshots = (cycle.productSnapshots ?? []).map((snapshot) => {
+      if (canViewCosts) return snapshot;
+      const { unitCostSnapshot, ...publicSnapshot } = snapshot;
+      void unitCostSnapshot;
+      return publicSnapshot;
+    });
+
     return {
       id: cycle.id,
       distributionCenterLocationId: cycle.distributionCenterLocationId,
@@ -1521,99 +1699,7 @@ export class BranchSupplyCyclesService {
       confirmedReturnCount: confirmed.filter(
         ({ role }) => role === BranchSupplyTransferRole.RETURN,
       ).length,
-      totals: {
-        suppliedKg: supplied.kg,
-        suppliedPieces: supplied.pieces,
-        returnedKg: returned.kg,
-        returnedPieces: returned.pieces,
-        netKg: supplied.kg - returned.kg,
-        netPieces: supplied.pieces - returned.pieces,
-        expectedSoldKg:
-          reconciliation?.totals.expectedSoldKg ??
-          this.toNumber(cycle.totalExpectedSoldKg),
-        expectedSoldPieces:
-          reconciliation?.totals.expectedSoldPieces ??
-          this.toNumber(cycle.totalExpectedSoldPieces),
-        actualSoldKg:
-          reconciliation?.totals.actualSoldKg ??
-          this.toNumber(cycle.totalActualSoldKg),
-        actualSoldPieces:
-          reconciliation?.totals.actualSoldPieces ??
-          this.toNumber(cycle.totalActualSoldPieces),
-        shrinkageKg:
-          reconciliation?.totals.shrinkageKg ??
-          this.toNumber(cycle.totalShrinkageKg),
-        shrinkagePieces:
-          reconciliation?.totals.shrinkagePieces ??
-          this.toNumber(cycle.totalShrinkagePieces),
-        differenceKg:
-          reconciliation?.totals.differenceKg ??
-          this.toNumber(cycle.totalDifferenceKg),
-        differencePieces:
-          reconciliation?.totals.differencePieces ??
-          this.toNumber(cycle.totalDifferencePieces),
-        expectedSalesTotal: this.toNumber(
-          reconciliation?.totals.expectedSalesTotal ?? cycle.expectedSalesTotal,
-        ),
-        expectedCostTotal: this.toNumber(
-          reconciliation?.totals.expectedCostTotal ?? cycle.expectedCostTotal,
-        ),
-        expectedProfitTotal: this.toNumber(
-          reconciliation?.totals.expectedProfitTotal ??
-            cycle.expectedProfitTotal,
-        ),
-        actualSalesTotal: this.toNumber(
-          reconciliation?.totals.actualSalesTotal ?? cycle.actualSalesTotal,
-        ),
-        actualCostTotal: this.toNumber(
-          reconciliation?.totals.actualCostTotal ?? cycle.actualCostTotal,
-        ),
-        actualProfitTotal: this.toNumber(
-          reconciliation?.totals.actualProfitTotal ?? cycle.actualProfitTotal,
-        ),
-        actualNetProfitTotal: this.toNumber(
-          reconciliation?.totals.actualNetProfitTotal ??
-            cycle.actualNetProfitTotal,
-        ),
-        expectedCashTotal: this.toNumber(
-          reconciliation?.totals.expectedCashTotal ?? cycle.expectedCashTotal,
-        ),
-        cashCountedTotal:
-          reconciliation?.totals.cashCountedTotal !== undefined
-            ? reconciliation.totals.cashCountedTotal === null
-              ? null
-              : this.toNumber(reconciliation.totals.cashCountedTotal)
-            : cycle.cashCountedTotal === null
-              ? null
-              : this.toNumber(cycle.cashCountedTotal),
-        cashDifferenceTotal:
-          reconciliation?.totals.cashDifferenceTotal !== undefined
-            ? reconciliation.totals.cashDifferenceTotal === null
-              ? null
-              : this.toNumber(reconciliation.totals.cashDifferenceTotal)
-            : cycle.cashDifferenceTotal === null
-              ? null
-              : this.toNumber(cycle.cashDifferenceTotal),
-        cardVoucherTotal: this.toNumber(
-          reconciliation?.totals.cardVoucherTotal ?? cycle.cardVoucherTotal,
-        ),
-        transferTotal: this.toNumber(
-          reconciliation?.totals.transferTotal ?? cycle.transferTotal,
-        ),
-        expenseTotal: this.toNumber(
-          reconciliation?.totals.expenseTotal ?? cycle.expenseTotal,
-        ),
-        cashInTotal: this.toNumber(
-          reconciliation?.totals.cashInTotal ?? cycle.cashInTotal,
-        ),
-        cashOutTotal: this.toNumber(
-          reconciliation?.totals.cashOutTotal ?? cycle.cashOutTotal,
-        ),
-        cashAdjustmentTotal: this.toNumber(
-          reconciliation?.totals.cashAdjustmentTotal ??
-            cycle.cashAdjustmentTotal,
-        ),
-      },
+      totals,
       distributionCenterLocation: cycle.distributionCenterLocation,
       branchLocation: cycle.branchLocation,
       dailyClose: cycle.pointOfSaleDailyClose
@@ -1632,8 +1718,8 @@ export class BranchSupplyCyclesService {
       returns: transfers.filter(
         ({ role }) => role === BranchSupplyTransferRole.RETURN,
       ),
-      snapshots: cycle.items,
-      priceSnapshots: cycle.productSnapshots ?? [],
+      snapshots,
+      priceSnapshots,
       closeSnapshots: cycle.reconciliationSnapshots ?? [],
       events: cycle.events,
       reconciliation,

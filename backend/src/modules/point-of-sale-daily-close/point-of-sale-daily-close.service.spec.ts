@@ -1328,7 +1328,9 @@ describe('PointOfSaleDailyCloseService', () => {
     const admin = { id: 'admin-1', role: 'ADMIN' } as never;
 
     jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(current);
-    jest.spyOn(privateService, 'transition').mockResolvedValue(transitioned);
+    jest
+      .spyOn(privateService, 'closeWithinTransaction')
+      .mockResolvedValue(transitioned);
     jest
       .spyOn(privateService, 'projectDetailForRole')
       .mockResolvedValue(projected);

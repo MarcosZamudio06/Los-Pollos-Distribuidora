@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Authenticated } from '../../common/decorators/authenticated.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -22,6 +23,7 @@ import { InventoryTransfersService } from './inventory-transfers.service';
 
 @Controller('inventory-transfers')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Authenticated()
 export class InventoryTransfersController {
   constructor(
     private readonly inventoryTransfersService: InventoryTransfersService,
@@ -74,8 +76,12 @@ export class InventoryTransfersController {
       success: true,
       message: 'Inventory transfer confirmed successfully',
       data: await (idempotencyKey
-        ? this.inventoryTransfersService.confirm(id, user.id, idempotencyKey)
-        : this.inventoryTransfersService.confirm(id, user.id)),
+        ? this.inventoryTransfersService.confirm(id, user.id, idempotencyKey, {
+            actor: user,
+          })
+        : this.inventoryTransfersService.confirm(id, user.id, undefined, {
+            actor: user,
+          })),
     };
   }
 
@@ -96,8 +102,11 @@ export class InventoryTransfersController {
             body,
             user.id,
             idempotencyKey,
+            { actor: user },
           )
-        : this.inventoryTransfersService.cancel(id, body, user.id)),
+        : this.inventoryTransfersService.cancel(id, body, user.id, undefined, {
+            actor: user,
+          })),
     };
   }
 }

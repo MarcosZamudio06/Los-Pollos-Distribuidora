@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -451,6 +452,54 @@ describe('InventoryTransfersService', () => {
         }),
       }),
     );
+  });
+
+  it('rejects a linked confirmation outside the warehouse actor CEDIS scope', async () => {
+    const { service, prisma } = createService();
+    const cycleLink = {
+      id: 'cycle-transfer-1',
+      branchSupplyCycleId: 'cycle-1',
+      role: 'SUPPLY',
+      branchSupplyCycle: {
+        id: 'cycle-1',
+        distributionCenterLocationId: 'origin-1',
+        branchLocationId: 'destination-1',
+        status: 'OPEN',
+        version: 1,
+        pointOfSaleDailyCloseId: null,
+        pointOfSaleDailyClose: null,
+      },
+    };
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createTransfer({ branchSupplyCycleTransfer: cycleLink }),
+    );
+    prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      quantityKg: decimal(30),
+      quantityPieces: 10,
+    });
+    prisma.inventoryBalance.upsert.mockResolvedValue({});
+    prisma.inventoryMovement.create.mockResolvedValue({});
+    prisma.inventoryTransfer.update.mockResolvedValue(
+      createTransfer({
+        status: InventoryTransferStatus.CONFIRMED,
+        branchSupplyCycleTransfer: cycleLink,
+      }),
+    );
+
+    await expect(
+      service.confirm('transfer-1', 'warehouse-1', 'out-of-scope-key', {
+        actor: {
+          id: 'warehouse-1',
+          role: 'WAREHOUSE',
+          operationalLocationId: 'other-cedis',
+          permissions: ['cedis.dispatch'],
+        },
+      } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
   });
 
   it('does not confirm a transfer after its product becomes inactive', async () => {

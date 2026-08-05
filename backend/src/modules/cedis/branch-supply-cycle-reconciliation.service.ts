@@ -570,11 +570,11 @@ export class BranchSupplyCycleReconciliationService {
         CLOSE_BLOCKER_PHASE,
       );
     } else {
-      if (dailyClose.status !== 'CLOSED') {
+      if (dailyClose.status !== 'REVIEWED' && dailyClose.status !== 'CLOSED') {
         this.addBlocker(
           blockers,
           'DAILY_CLOSE_NOT_CLOSED',
-          'The daily close must be CLOSED before the CEDIS cycle can close.',
+          'The daily close must be REVIEWED before the CEDIS cycle can close.',
           CLOSE_BLOCKER_PHASE,
         );
       }

@@ -94,10 +94,12 @@ Requiere `ADMIN`, `cedis.close` e `Idempotency-Key`. Body:
 ```
 
 Solo acepta `READY_FOR_REVIEW`. Recalcula y bloquea si existen transferencias
-pendientes, turnos abiertos, cierre diario distinto de `CLOSED`, cantidades
-negativas, diferencias obligatorias no autorizadas o snapshots de precio/costo
-inválidos. Al cerrar incrementa la versión, crea un snapshot inmutable con hash y
-registra un evento `CLOSED` en la misma transacción.
+pendientes, turnos abiertos, cierre diario distinto de `REVIEWED` o `CLOSED`,
+cantidades negativas, diferencias obligatorias no autorizadas o snapshots de
+precio/costo inválidos. Con un cierre diario `REVIEWED`, el comando pasa el
+cierre diario y el ciclo a `CLOSED` dentro de la misma transacción. Al cerrar
+incrementa ambas versiones, crea snapshots inmutables con hash y registra los
+eventos `CLOSED` en la misma transacción.
 
 ## POST /api/cedis/branch-supply-cycles/:id/reopen
 
@@ -108,8 +110,9 @@ Requiere `ADMIN`, `cedis.close` e `Idempotency-Key`. Body:
 ```
 
 Solo acepta `CLOSED`. Incrementa la versión, conserva todos los snapshots y
-eventos anteriores, registra la reapertura y devuelve el ciclo a `OPEN` sin
-revertir inventario, ventas, pagos ni caja.
+eventos anteriores, reabre el cierre diario relacionado a `DRAFT`, registra la
+reapertura y devuelve el ciclo a `OPEN` sin revertir inventario, ventas, pagos
+ni caja.
 
 ## POST /api/cedis/branch-supply-cycles/:id/cancel
 

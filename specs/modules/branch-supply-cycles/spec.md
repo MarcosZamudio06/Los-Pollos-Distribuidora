@@ -84,8 +84,10 @@ El sistema MUST reconstruir snapshots append-only desde transferencias y movimie
 - THEN crea una nueva versión de snapshot y pasa a `READY_FOR_REVIEW`
 
 El cierre CEDIS MUST rechazar transferencias pendientes, turnos de caja abiertos,
-cierre diario no cerrado, cantidades negativas, diferencias obligatorias sin
-justificar y productos sin precio o costo snapshot válido.
+un cierre diario que no esté en `REVIEWED` o `CLOSED`, cantidades negativas,
+diferencias obligatorias sin justificar y productos sin precio o costo snapshot
+válido. Cuando el cierre diario esté en `REVIEWED`, el cierre CEDIS MUST
+coordinar la transición de ambos agregados a `CLOSED` en una sola transacción.
 
 El cierre MUST persistir un snapshot inmutable de la conciliación y un evento
 append-only. La reapertura administrativa MUST requerir `ADMIN`, motivo y

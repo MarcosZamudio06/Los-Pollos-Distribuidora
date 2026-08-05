@@ -403,6 +403,24 @@ describe("CEDIS branch detail page", () => {
     expect(html).toContain("Reintentar");
   });
 
+  it("expone semántica modal accesible para el comando de transferencia", () => {
+    const html = renderToStaticMarkup(
+      <CedisTransferCommandPanel
+        branch={card.branch}
+        cedis={summary.distributionCenter}
+        expectedVersion={summary.version}
+        mode="SUPPLY"
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        products={[product]}
+        productsLoading={false}
+      />,
+    );
+
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+  });
+
   it("muestra controles cuando el historial tiene varias páginas", () => {
     mockState.history.data = {
       ...(mockState.history.data as CedisBranchHistoryResponse),

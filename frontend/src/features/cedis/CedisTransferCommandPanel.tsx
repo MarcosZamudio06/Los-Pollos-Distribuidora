@@ -232,6 +232,7 @@ export function CedisTransferCommandPanel({
     return (
       <Card
         aria-labelledby="cedis-command-confirm-title"
+        aria-modal="true"
         className="border-[var(--erp-brand-gold)] p-5"
         role="dialog"
       >
@@ -329,7 +330,12 @@ export function CedisTransferCommandPanel({
   }
 
   return (
-    <Card aria-labelledby="cedis-command-title" className="p-5" role="dialog">
+    <Card
+      aria-labelledby="cedis-command-title"
+      aria-modal="true"
+      className="p-5"
+      role="dialog"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">
