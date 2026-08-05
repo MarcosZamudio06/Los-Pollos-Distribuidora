@@ -58,6 +58,10 @@ const inventoryBalanceIntegrityMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260805110000_harden_inventory_balance_integrity/migration.sql',
 );
+const cedisPermissionSyncMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260805120000_sync_cedis_permissions/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -348,6 +352,25 @@ describe('Prisma schema contract', () => {
     );
     expect(migrationSql).toContain('"quantityKg" >= 0');
     expect(migrationSql).toContain('"quantityPieces" >= 0');
+  });
+
+  it('grants the canonical CEDIS permissions to existing access profiles', () => {
+    const migrationSql = readFileSync(
+      cedisPermissionSyncMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(migrationSql).toContain("'cedis.view'");
+    expect(migrationSql).toContain("'cedis.manage'");
+    expect(migrationSql).toContain("'cedis.dispatch'");
+    expect(migrationSql).toContain("'cedis.receive_returns'");
+    expect(migrationSql).toContain("'cedis.reconcile'");
+    expect(migrationSql).toContain("'cedis.close'");
+    expect(migrationSql).toContain("'cedis.view_costs'");
+    expect(migrationSql).toMatch(/role\."name" = 'ADMIN'/);
+    expect(migrationSql).toMatch(/role\."name" = 'WAREHOUSE'/);
+    expect(migrationSql).toMatch(/role\."name" = 'SELLER'/);
+    expect(migrationSql).toContain('ON CONFLICT DO NOTHING');
   });
 
   it('persists route planning coordinates and PostGIS search geometries', () => {
