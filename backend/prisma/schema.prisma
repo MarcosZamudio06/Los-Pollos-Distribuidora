@@ -1676,7 +1676,9 @@ model BranchSupplyCycle {
   reconciliationSnapshots      BranchSupplyCycleSnapshot[]
 
   @@index([distributionCenterLocationId, branchLocationId, businessDate, status])
+  @@index([distributionCenterLocationId, businessDate, status, branchLocationId])
   @@index([branchLocationId, businessDate, status])
+  @@index([branchLocationId, businessDate, id])
   @@index([status, businessDate])
 }
 
