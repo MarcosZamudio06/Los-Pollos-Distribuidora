@@ -22,6 +22,30 @@ El sistema MUST mantener como máximo un ciclo no cancelado por sucursal y fecha
 - WHEN se ejecutan concurrentemente
 - THEN PostgreSQL conserva un solo ciclo activo y la otra solicitud recibe conflicto
 
+### Motor de conciliación
+
+El refresh MUST reconstruir la conciliación desde transferencias confirmadas,
+ventas confirmadas de la sucursal y fecha, cierre diario, pagos, movimientos de
+caja, gastos, mermas y diferencias. Por producto debe conservar las dimensiones
+KG y PIECE y calcular `entregado`, `devuelto`, `vendidoEsperado`, `ventaEsperada`,
+`costoEsperado` y `utilidadBrutaEsperada`. También debe proyectar vendido real,
+venta real, costo real, utilidad bruta y neta, merma documentada y diferencia no
+explicada.
+
+Los snapshots de precio y costo se crean al primer suministro del producto por
+ciclo. Son append-only y no se reemplazan si cambia el catálogo posteriormente.
+
+Para `KG_AND_PIECE`, una cantidad medida directamente en kilos tiene prioridad
+para valorar la operación; una cantidad capturada solo en piezas requiere una
+equivalencia activa y su factor/redondeo persistidos. No se suman dos veces las
+dimensiones equivalentes.
+
+#### Scenario: Ejemplo de piezas
+
+- GIVEN 10 piezas entregadas y 3 piezas devueltas
+- WHEN se refresca la conciliación
+- THEN `vendidoEsperado = 10 - 3 = 7` piezas
+
 ### Suministros y devoluciones
 
 El sistema MUST admitir múltiples suministros CEDIS → sucursal y múltiples devoluciones sucursal → CEDIS. Cada operación MUST crear un `InventoryTransfer` `REQUESTED` y vincularlo una sola vez al ciclo.
@@ -58,6 +82,15 @@ El sistema MUST reconstruir snapshots append-only desde transferencias y movimie
 - GIVEN al menos un suministro confirmado, cero pendientes e integridad válida
 - WHEN se refresca el ciclo
 - THEN crea una nueva versión de snapshot y pasa a `READY_FOR_REVIEW`
+
+El cierre CEDIS MUST rechazar transferencias pendientes, turnos de caja abiertos,
+cierre diario no cerrado, cantidades negativas, diferencias obligatorias sin
+justificar y productos sin precio o costo snapshot válido.
+
+El cierre MUST persistir un snapshot inmutable de la conciliación y un evento
+append-only. La reapertura administrativa MUST requerir `ADMIN`, motivo y
+`expectedVersion`, conservar los snapshots anteriores y llevar el ciclo a
+`OPEN` sin revertir operaciones.
 
 #### Scenario: Ciclo cerrado
 

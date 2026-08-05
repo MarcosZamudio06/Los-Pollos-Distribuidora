@@ -260,6 +260,11 @@ enum BranchSupplyCycleEventType {
   ITEM_SNAPSHOT_CREATED
 }
 
+enum BranchSupplyCycleSnapshotType {
+  CLOSED
+  REOPENED
+}
+
 enum DailyCloseDifferenceScope {
   CASH
   SCALE
@@ -442,6 +447,7 @@ model User {
   branchSupplyCyclesReopened      BranchSupplyCycle[]          @relation("BranchSupplyCycleReopenedBy")
   branchSupplyCycleTransfers      BranchSupplyCycleTransfer[]  @relation("BranchSupplyCycleTransferLinkedBy")
   branchSupplyCycleEvents         BranchSupplyCycleEvent[]     @relation("BranchSupplyCycleEventActor")
+  branchSupplyCycleSnapshots      BranchSupplyCycleSnapshot[]
   cashMovements                   CashMovement[]
   cashShifts                      CashShift[]                  @relation("CashShiftCashier")
   closedCashShifts                CashShift[]                  @relation("CashShiftClosedBy")
@@ -525,57 +531,59 @@ model Category {
 }
 
 model Product {
-  id                     String                      @id @default(cuid())
-  name                   String
-  sku                    String?                     @unique
-  barcode                String?                     @unique
-  description            String?
-  categoryId             String?
-  presentationType       ProductPresentationType
-  salePrice              Decimal                     @db.Decimal(14, 2)
-  purchaseCost           Decimal                     @db.Decimal(14, 2)
-  minStock               Decimal                     @default(0) @db.Decimal(14, 3)
-  unit                   ProductUnit
-  pieceWeightEquivalent  Decimal?                    @db.Decimal(14, 3)
-  equivalentPolicyStatus EquivalentStatus?
-  isActive               Boolean                     @default(true)
-  createdAt              DateTime                    @default(now())
-  updatedAt              DateTime                    @updatedAt
-  category               Category?                   @relation(fields: [categoryId], references: [id])
-  unitEquivalents        ProductUnitEquivalent[]
-  inventoryBalances      InventoryBalance[]
-  saleItems              SaleItem[]
-  purchaseItems          PurchaseItem[]
-  inventoryMovements     InventoryMovement[]
-  transferItems          InventoryTransferItem[]
-  dailyCloseLines        PointOfSaleDailyCloseLine[]
-  scaleTicketReferences  ScaleTicketReference[]
-  inventoryCounts        DailyCloseInventoryCount[]
-  dailyCloseDifferences  DailyCloseDifference[]
-  branchSupplyCycleItems BranchSupplyCycleItem[]
+  id                                String                             @id @default(cuid())
+  name                              String
+  sku                               String?                            @unique
+  barcode                           String?                            @unique
+  description                       String?
+  categoryId                        String?
+  presentationType                  ProductPresentationType
+  salePrice                         Decimal                            @db.Decimal(14, 2)
+  purchaseCost                      Decimal                            @db.Decimal(14, 2)
+  minStock                          Decimal                            @default(0) @db.Decimal(14, 3)
+  unit                              ProductUnit
+  pieceWeightEquivalent             Decimal?                           @db.Decimal(14, 3)
+  equivalentPolicyStatus            EquivalentStatus?
+  isActive                          Boolean                            @default(true)
+  createdAt                         DateTime                           @default(now())
+  updatedAt                         DateTime                           @updatedAt
+  category                          Category?                          @relation(fields: [categoryId], references: [id])
+  unitEquivalents                   ProductUnitEquivalent[]
+  inventoryBalances                 InventoryBalance[]
+  saleItems                         SaleItem[]
+  purchaseItems                     PurchaseItem[]
+  inventoryMovements                InventoryMovement[]
+  transferItems                     InventoryTransferItem[]
+  dailyCloseLines                   PointOfSaleDailyCloseLine[]
+  scaleTicketReferences             ScaleTicketReference[]
+  inventoryCounts                   DailyCloseInventoryCount[]
+  dailyCloseDifferences             DailyCloseDifference[]
+  branchSupplyCycleItems            BranchSupplyCycleItem[]
+  branchSupplyCycleProductSnapshots BranchSupplyCycleProductSnapshot[]
 }
 
 model ProductUnitEquivalent {
-  id                     String                  @id @default(cuid())
-  productId              String
-  unitFrom               ProductUnit
-  unitTo                 ProductUnit
-  factor                 Decimal                 @db.Decimal(18, 6)
-  roundingMode           String?
-  effectiveFrom          DateTime?
-  effectiveTo            DateTime?
-  status                 EquivalentStatus        @default(DRAFT)
-  approvedByUserId       String?
-  createdByUserId        String
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  product                Product                 @relation(fields: [productId], references: [id])
-  approvedBy             User?                   @relation("EquivalentApprovedBy", fields: [approvedByUserId], references: [id])
-  createdBy              User                    @relation("EquivalentCreatedBy", fields: [createdByUserId], references: [id])
-  saleItems              SaleItem[]
-  purchaseItems          PurchaseItem[]
-  branchSupplyCycleItems BranchSupplyCycleItem[]
-  inventoryTransferItems InventoryTransferItem[]
+  id                                String                             @id @default(cuid())
+  productId                         String
+  unitFrom                          ProductUnit
+  unitTo                            ProductUnit
+  factor                            Decimal                            @db.Decimal(18, 6)
+  roundingMode                      String?
+  effectiveFrom                     DateTime?
+  effectiveTo                       DateTime?
+  status                            EquivalentStatus                   @default(DRAFT)
+  approvedByUserId                  String?
+  createdByUserId                   String
+  createdAt                         DateTime                           @default(now())
+  updatedAt                         DateTime                           @updatedAt
+  product                           Product                            @relation(fields: [productId], references: [id])
+  approvedBy                        User?                              @relation("EquivalentApprovedBy", fields: [approvedByUserId], references: [id])
+  createdBy                         User                               @relation("EquivalentCreatedBy", fields: [createdByUserId], references: [id])
+  saleItems                         SaleItem[]
+  purchaseItems                     PurchaseItem[]
+  branchSupplyCycleItems            BranchSupplyCycleItem[]
+  branchSupplyCycleProductSnapshots BranchSupplyCycleProductSnapshot[]
+  inventoryTransferItems            InventoryTransferItem[]
 
   @@index([productId, unitFrom, unitTo, status])
   @@index([effectiveFrom, effectiveTo])
@@ -1601,16 +1609,16 @@ model DailyCloseSnapshot {
 }
 
 model BranchSupplyCycle {
-  id                           String                      @id @default(cuid())
+  id                           String                             @id @default(cuid())
   distributionCenterLocationId String
   branchLocationId             String
-  businessDate                 DateTime                    @db.Date
-  pointOfSaleDailyCloseId      String?                     @unique
-  status                       BranchSupplyCycleStatus     @default(OPEN)
-  version                      Int                         @default(1)
+  businessDate                 DateTime                           @db.Date
+  pointOfSaleDailyCloseId      String?                            @unique
+  status                       BranchSupplyCycleStatus            @default(OPEN)
+  version                      Int                                @default(1)
   notes                        String?
   openedByUserId               String
-  openedAt                     DateTime                    @default(now())
+  openedAt                     DateTime                           @default(now())
   reviewedByUserId             String?
   reviewedAt                   DateTime?
   closedByUserId               String?
@@ -1621,35 +1629,51 @@ model BranchSupplyCycle {
   reopenedByUserId             String?
   reopenedAt                   DateTime?
   reopeningReason              String?
-  totalDeliveredKg             Decimal                     @default(0) @db.Decimal(14, 3)
-  totalDeliveredPieces         Decimal                     @default(0) @db.Decimal(14, 3)
-  totalReturnedKg              Decimal                     @default(0) @db.Decimal(14, 3)
-  totalReturnedPieces          Decimal                     @default(0) @db.Decimal(14, 3)
-  totalExpectedSoldKg          Decimal                     @default(0) @db.Decimal(14, 3)
-  totalExpectedSoldPieces      Decimal                     @default(0) @db.Decimal(14, 3)
-  totalActualSoldKg            Decimal                     @default(0) @db.Decimal(14, 3)
-  totalActualSoldPieces        Decimal                     @default(0) @db.Decimal(14, 3)
-  totalShrinkageKg             Decimal                     @default(0) @db.Decimal(14, 3)
-  totalShrinkagePieces         Decimal                     @default(0) @db.Decimal(14, 3)
-  totalDifferenceKg            Decimal                     @default(0) @db.Decimal(14, 3)
-  totalDifferencePieces        Decimal                     @default(0) @db.Decimal(14, 3)
-  expectedSalesTotal           Decimal                     @default(0) @db.Decimal(14, 2)
-  actualSalesTotal             Decimal                     @default(0) @db.Decimal(14, 2)
-  expectedProfitTotal          Decimal                     @default(0) @db.Decimal(14, 2)
-  actualProfitTotal            Decimal                     @default(0) @db.Decimal(14, 2)
-  createdAt                    DateTime                    @default(now())
-  updatedAt                    DateTime                    @updatedAt
-  distributionCenterLocation   OperationalLocation         @relation("BranchSupplyCycleDistributionCenter", fields: [distributionCenterLocationId], references: [id], onDelete: Restrict)
-  branchLocation               OperationalLocation         @relation("BranchSupplyCycleBranch", fields: [branchLocationId], references: [id], onDelete: Restrict)
-  pointOfSaleDailyClose        PointOfSaleDailyClose?      @relation("BranchSupplyCycleDailyClose", fields: [pointOfSaleDailyCloseId], references: [id], onDelete: Restrict)
-  openedBy                     User                        @relation("BranchSupplyCycleOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
-  reviewedBy                   User?                       @relation("BranchSupplyCycleReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
-  closedBy                     User?                       @relation("BranchSupplyCycleClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
-  cancelledBy                  User?                       @relation("BranchSupplyCycleCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
-  reopenedBy                   User?                       @relation("BranchSupplyCycleReopenedBy", fields: [reopenedByUserId], references: [id], onDelete: Restrict)
+  totalDeliveredKg             Decimal                            @default(0) @db.Decimal(14, 3)
+  totalDeliveredPieces         Decimal                            @default(0) @db.Decimal(14, 3)
+  totalReturnedKg              Decimal                            @default(0) @db.Decimal(14, 3)
+  totalReturnedPieces          Decimal                            @default(0) @db.Decimal(14, 3)
+  totalExpectedSoldKg          Decimal                            @default(0) @db.Decimal(14, 3)
+  totalExpectedSoldPieces      Decimal                            @default(0) @db.Decimal(14, 3)
+  totalActualSoldKg            Decimal                            @default(0) @db.Decimal(14, 3)
+  totalActualSoldPieces        Decimal                            @default(0) @db.Decimal(14, 3)
+  totalShrinkageKg             Decimal                            @default(0) @db.Decimal(14, 3)
+  totalShrinkagePieces         Decimal                            @default(0) @db.Decimal(14, 3)
+  totalDifferenceKg            Decimal                            @default(0) @db.Decimal(14, 3)
+  totalDifferencePieces        Decimal                            @default(0) @db.Decimal(14, 3)
+  expectedSalesTotal           Decimal                            @default(0) @db.Decimal(14, 2)
+  expectedCostTotal            Decimal                            @default(0) @db.Decimal(14, 2)
+  actualSalesTotal             Decimal                            @default(0) @db.Decimal(14, 2)
+  actualCostTotal              Decimal                            @default(0) @db.Decimal(14, 2)
+  expectedProfitTotal          Decimal                            @default(0) @db.Decimal(14, 2)
+  actualProfitTotal            Decimal                            @default(0) @db.Decimal(14, 2)
+  actualNetProfitTotal         Decimal                            @default(0) @db.Decimal(14, 2)
+  expectedCashTotal            Decimal                            @default(0) @db.Decimal(14, 2)
+  cashCountedTotal             Decimal?                           @db.Decimal(14, 2)
+  cashDifferenceTotal          Decimal?                           @db.Decimal(14, 2)
+  cardVoucherTotal             Decimal                            @default(0) @db.Decimal(14, 2)
+  transferTotal                Decimal                            @default(0) @db.Decimal(14, 2)
+  expenseTotal                 Decimal                            @default(0) @db.Decimal(14, 2)
+  cashInTotal                  Decimal                            @default(0) @db.Decimal(14, 2)
+  cashOutTotal                 Decimal                            @default(0) @db.Decimal(14, 2)
+  cashAdjustmentTotal          Decimal                            @default(0) @db.Decimal(14, 2)
+  reconciledDailyCloseVersion  Int?
+  reconciledAt                 DateTime?
+  createdAt                    DateTime                           @default(now())
+  updatedAt                    DateTime                           @updatedAt
+  distributionCenterLocation   OperationalLocation                @relation("BranchSupplyCycleDistributionCenter", fields: [distributionCenterLocationId], references: [id], onDelete: Restrict)
+  branchLocation               OperationalLocation                @relation("BranchSupplyCycleBranch", fields: [branchLocationId], references: [id], onDelete: Restrict)
+  pointOfSaleDailyClose        PointOfSaleDailyClose?             @relation("BranchSupplyCycleDailyClose", fields: [pointOfSaleDailyCloseId], references: [id], onDelete: Restrict)
+  openedBy                     User                               @relation("BranchSupplyCycleOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy                   User?                              @relation("BranchSupplyCycleReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  closedBy                     User?                              @relation("BranchSupplyCycleClosedBy", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  cancelledBy                  User?                              @relation("BranchSupplyCycleCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
+  reopenedBy                   User?                              @relation("BranchSupplyCycleReopenedBy", fields: [reopenedByUserId], references: [id], onDelete: Restrict)
   transfers                    BranchSupplyCycleTransfer[]
+  productSnapshots             BranchSupplyCycleProductSnapshot[]
   items                        BranchSupplyCycleItem[]
   events                       BranchSupplyCycleEvent[]
+  reconciliationSnapshots      BranchSupplyCycleSnapshot[]
 
   @@index([distributionCenterLocationId, branchLocationId, businessDate, status])
   @@index([branchLocationId, businessDate, status])
@@ -1699,7 +1723,9 @@ model BranchSupplyCycleItem {
   differenceKg                    Decimal                @default(0) @db.Decimal(14, 3)
   differencePieces                Decimal                @default(0) @db.Decimal(14, 3)
   expectedSalesAmount             Decimal                @default(0) @db.Decimal(14, 2)
+  expectedCostAmount              Decimal                @default(0) @db.Decimal(14, 2)
   actualSalesAmount               Decimal                @default(0) @db.Decimal(14, 2)
+  actualCostAmount                Decimal                @default(0) @db.Decimal(14, 2)
   expectedProfitAmount            Decimal                @default(0) @db.Decimal(14, 2)
   actualProfitAmount              Decimal                @default(0) @db.Decimal(14, 2)
   calculatedAt                    DateTime               @default(now())
@@ -1711,6 +1737,48 @@ model BranchSupplyCycleItem {
   @@unique([branchSupplyCycleId, cycleVersion, snapshotKey])
   @@index([productId, cycleVersion])
   @@index([branchSupplyCycleId, cycleVersion])
+}
+
+model BranchSupplyCycleProductSnapshot {
+  id                              String                 @id @default(cuid())
+  branchSupplyCycleId             String
+  productId                       String
+  sourceTransferId                String
+  sourceCycleVersion              Int
+  productNameSnapshot             String
+  productSkuSnapshot              String?
+  productUnitSnapshot             ProductUnit
+  unitPriceSnapshot               Decimal                @db.Decimal(14, 2)
+  unitCostSnapshot                Decimal                @db.Decimal(14, 2)
+  unitEquivalentId                String?
+  equivalenceFromUnitSnapshot     ProductUnit?
+  equivalenceToUnitSnapshot       ProductUnit?
+  appliedEquivalentFactorSnapshot Decimal?               @db.Decimal(18, 6)
+  roundingModeSnapshot            String?
+  createdAt                       DateTime               @default(now())
+  branchSupplyCycle               BranchSupplyCycle      @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
+  product                         Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unitEquivalent                  ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id], onDelete: Restrict)
+
+  @@unique([branchSupplyCycleId, productId])
+  @@index([productId, createdAt])
+  @@index([branchSupplyCycleId, sourceCycleVersion])
+}
+
+model BranchSupplyCycleSnapshot {
+  id                  String                        @id @default(cuid())
+  branchSupplyCycleId String
+  sourceVersion       Int
+  snapshotType        BranchSupplyCycleSnapshotType
+  payload             Json
+  payloadHash         String
+  createdByUserId     String
+  createdAt           DateTime                      @default(now())
+  branchSupplyCycle   BranchSupplyCycle             @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
+  createdBy           User                          @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([branchSupplyCycleId, sourceVersion, snapshotType])
+  @@index([branchSupplyCycleId, createdAt])
 }
 
 model BranchSupplyCycleEvent {

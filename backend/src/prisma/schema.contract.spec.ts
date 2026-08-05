@@ -140,11 +140,13 @@ describe('Prisma schema contract', () => {
       'BranchSupplyCycle',
       'BranchSupplyCycleTransfer',
       'BranchSupplyCycleItem',
+      'BranchSupplyCycleProductSnapshot',
+      'BranchSupplyCycleSnapshot',
       'BranchSupplyCycleEvent',
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(58);
+    expect(modelNames).toHaveLength(60);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
@@ -157,6 +159,8 @@ describe('Prisma schema contract', () => {
     const cycle = getModelBlock('BranchSupplyCycle');
     const transfer = getModelBlock('BranchSupplyCycleTransfer');
     const item = getModelBlock('BranchSupplyCycleItem');
+    const productSnapshot = getModelBlock('BranchSupplyCycleProductSnapshot');
+    const cycleSnapshot = getModelBlock('BranchSupplyCycleSnapshot');
     const event = getModelBlock('BranchSupplyCycleEvent');
     const operationalLocationType = getEnumBlock('OperationalLocationType');
     const cycleStatus = getEnumBlock('BranchSupplyCycleStatus');
@@ -208,6 +212,12 @@ describe('Prisma schema contract', () => {
     );
     expect(item).toMatch(
       /actualProfitAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/,
+    );
+    expect(productSnapshot).toMatch(/unitPriceSnapshot\s+Decimal/);
+    expect(productSnapshot).toMatch(/unitCostSnapshot\s+Decimal/);
+    expect(cycleSnapshot).toMatch(/payloadHash\s+String/);
+    expect(cycleSnapshot).toMatch(
+      /snapshotType\s+BranchSupplyCycleSnapshotType/,
     );
     expect(event).toMatch(/cycleVersion\s+Int/);
     expect(event).toMatch(/payload\s+Json/);

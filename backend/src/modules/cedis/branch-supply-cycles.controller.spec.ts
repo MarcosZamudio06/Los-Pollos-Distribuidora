@@ -41,6 +41,8 @@ describe('BranchSupplyCyclesController API', () => {
       refresh: jest
         .fn()
         .mockResolvedValue({ id: 'cycle-1', status: 'READY_FOR_REVIEW' }),
+      close: jest.fn().mockResolvedValue({ id: 'cycle-1', status: 'CLOSED' }),
+      reopen: jest.fn().mockResolvedValue({ id: 'cycle-1', status: 'OPEN' }),
     } as unknown as jest.Mocked<BranchSupplyCyclesService>;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -131,6 +133,20 @@ describe('BranchSupplyCyclesController API', () => {
       .send({ expectedVersion: 3 })
       .expect(201);
 
+    await requestBuilder
+      .post('/api/cedis/branch-supply-cycles/cycle-1/close')
+      .set('Authorization', 'Bearer token')
+      .set('Idempotency-Key', 'close-1')
+      .send({ expectedVersion: 4 })
+      .expect(201);
+
+    await requestBuilder
+      .post('/api/cedis/branch-supply-cycles/cycle-1/reopen')
+      .set('Authorization', 'Bearer token')
+      .set('Idempotency-Key', 'reopen-1')
+      .send({ expectedVersion: 5, reason: 'Corrección administrativa' })
+      .expect(201);
+
     expect(service.open.mock.calls[0]).toEqual([
       expect.objectContaining({ branchLocationId: 'branch-1' }),
       adminUser,
@@ -153,6 +169,18 @@ describe('BranchSupplyCyclesController API', () => {
       { expectedVersion: 3 },
       adminUser,
       'refresh-1',
+    ]);
+    expect(service.close.mock.calls[0]).toEqual([
+      'cycle-1',
+      { expectedVersion: 4 },
+      adminUser,
+      'close-1',
+    ]);
+    expect(service.reopen.mock.calls[0]).toEqual([
+      'cycle-1',
+      { expectedVersion: 5, reason: 'Corrección administrativa' },
+      adminUser,
+      'reopen-1',
     ]);
   });
 });

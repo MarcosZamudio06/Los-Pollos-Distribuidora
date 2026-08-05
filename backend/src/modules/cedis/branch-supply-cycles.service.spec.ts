@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { InventoryTransfersService } from '../inventory/inventory-transfers.service';
+import { ReconciliationResult } from './branch-supply-cycle-reconciliation.service';
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
 
 const businessDate = new Date('2026-08-04T00:00:00.000Z');
@@ -92,8 +93,16 @@ function createPrisma() {
     },
     branchSupplyCycleTransfer: { create: jest.fn() },
     branchSupplyCycleItem: { createMany: jest.fn() },
+    branchSupplyCycleProductSnapshot: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
+    branchSupplyCycleSnapshot: { create: jest.fn() },
     pointOfSaleDailyClose: { findFirst: jest.fn(), update: jest.fn() },
+    sale: { findMany: jest.fn().mockResolvedValue([]) },
+    inventoryMovement: { findMany: jest.fn().mockResolvedValue([]) },
     product: { findUnique: jest.fn() },
+    productUnitEquivalent: { findUnique: jest.fn() },
   };
   prisma.$transaction.mockImplementation(
     (callback: (tx: Prisma.TransactionClient) => unknown) =>
@@ -247,6 +256,164 @@ describe('BranchSupplyCyclesService', () => {
         data: expect.objectContaining({
           role: BranchSupplyTransferRole.SUPPLY,
           inventoryTransferId: 'transfer-1',
+        }),
+      }),
+    );
+  });
+
+  it('creates the price and cost snapshot only on the first supply', async () => {
+    const { prisma, inventoryTransfers, service } = createService();
+    const cycle = createCycle();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(cycle);
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+    prisma.branchSupplyCycleProductSnapshot.findUnique.mockResolvedValue(null);
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1',
+      name: 'Pollo snapshot',
+      sku: 'SNAPSHOT-1',
+      unit: ProductUnit.PIECE,
+      salePrice: 100,
+      purchaseCost: 60,
+    });
+    inventoryTransfers.create.mockResolvedValue({
+      id: 'transfer-snapshot-1',
+      status: InventoryTransferStatus.REQUESTED,
+      originLocationId: 'cedis-1',
+      destinationLocationId: 'branch-1',
+      items: [
+        {
+          productId: 'product-1',
+          unitEquivalentId: null,
+          appliedEquivalentFactor: null,
+          roundingMode: null,
+        },
+      ],
+    });
+
+    await service.createSupply(
+      'cycle-1',
+      {
+        expectedVersion: 1,
+        items: [
+          {
+            productId: 'product-1',
+            unit: ProductUnit.PIECE,
+            quantityPieces: 10,
+          },
+        ],
+      },
+      warehouse,
+      'snapshot-key',
+    );
+
+    expect(prisma.branchSupplyCycleProductSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          branchSupplyCycleId: 'cycle-1',
+          productId: 'product-1',
+          sourceTransferId: 'transfer-snapshot-1',
+          unitPriceSnapshot: 100,
+          unitCostSnapshot: 60,
+        }),
+      }),
+    );
+  });
+
+  it('persists an immutable snapshot and CLOSED event when the cycle closes', async () => {
+    const { prisma, service } = createService();
+    const cycle = createCycle({
+      status: BranchSupplyCycleStatus.READY_FOR_REVIEW,
+      version: 2,
+      reconciledDailyCloseVersion: 4,
+    });
+    const closedCycle = createCycle({
+      status: BranchSupplyCycleStatus.CLOSED,
+      version: 3,
+      reconciledDailyCloseVersion: 4,
+    });
+    prisma.branchSupplyCycle.findUnique
+      .mockResolvedValueOnce(cycle)
+      .mockResolvedValueOnce(closedCycle);
+    prisma.pointOfSaleDailyClose.findFirst.mockResolvedValue({
+      id: 'close-1',
+      version: 4,
+      status: 'CLOSED',
+      grossSalesTotal: 0,
+      netCashExpected: 0,
+      cashCountedTotal: 0,
+      cashDifferenceTotal: 0,
+      payments: [],
+      cashMovements: [],
+      cashShifts: [],
+      differences: [],
+    });
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+    const result = {
+      items: [],
+      totals: {
+        deliveredKg: 0,
+        deliveredPieces: 0,
+        returnedKg: 0,
+        returnedPieces: 0,
+        expectedSoldKg: 0,
+        expectedSoldPieces: 0,
+        actualSoldKg: 0,
+        actualSoldPieces: 0,
+        shrinkageKg: 0,
+        shrinkagePieces: 0,
+        differenceKg: 0,
+        differencePieces: 0,
+        expectedSalesTotal: '0.00',
+        expectedCostTotal: '0.00',
+        expectedProfitTotal: '0.00',
+        actualSalesTotal: '0.00',
+        actualCostTotal: '0.00',
+        actualProfitTotal: '0.00',
+        actualNetProfitTotal: '0.00',
+        expectedCashTotal: '0.00',
+        cashCountedTotal: '0.00',
+        cashDifferenceTotal: '0.00',
+        cardVoucherTotal: '0.00',
+        transferTotal: '0.00',
+        expenseTotal: '0.00',
+        cashInTotal: '0.00',
+        cashOutTotal: '0.00',
+        cashAdjustmentTotal: '0.00',
+      },
+      confirmedSupplyCount: 1,
+      confirmedReturnCount: 0,
+      pendingTransferCount: 0,
+      cancelledTransferCount: 0,
+      blockers: [],
+      readyForReview: true,
+      canClose: true,
+      cashMovements: [],
+      differences: [],
+    } as ReconciliationResult;
+    (
+      service as unknown as {
+        cycleReconciliation: { calculate: jest.Mock };
+      }
+    ).cycleReconciliation.calculate = jest.fn().mockReturnValue(result);
+
+    await service.close('cycle-1', { expectedVersion: 2 }, admin, 'close-key');
+
+    expect(prisma.branchSupplyCycleSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          branchSupplyCycleId: 'cycle-1',
+          sourceVersion: 3,
+          snapshotType: 'CLOSED',
+          payloadHash: expect.any(String),
+        }),
+      }),
+    );
+    expect(prisma.branchSupplyCycleEvent.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'CLOSED',
+          cycleVersion: 3,
+          idempotencyKey: expect.stringContaining('close-key'),
         }),
       }),
     );

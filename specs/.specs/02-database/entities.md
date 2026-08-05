@@ -211,6 +211,22 @@ Validaciones:
 - `CLOSED` y `CANCELLED` no admiten suministros, devoluciones ni refresh.
 - Cancelar requiere actor, fecha y motivo, sin cierre activo ni transferencias no canceladas.
 - Los totales del ciclo son snapshots derivados y no pueden usarse para modificar inventario.
+- `expectedCostTotal`, `actualCostTotal`, `actualNetProfitTotal` y los totales de caja se reconstruyen desde las fuentes operativas.
+- `reconciledDailyCloseVersion` identifica la versión del cierre diario usada por la última conciliación.
+
+## BranchSupplyCycleProductSnapshot
+
+Snapshot append-only de precio, costo, unidad y equivalencia creado en el primer
+suministro de cada producto dentro del ciclo. La combinación
+`branchSupplyCycleId + productId` es única. Cambios posteriores en `Product` no
+modifican este registro.
+
+## BranchSupplyCycleSnapshot
+
+Snapshot append-only de una transición de conciliación del ciclo. Conserva
+`sourceVersion`, `snapshotType`, payload, hash, actor y fecha. Un snapshot
+`CLOSED` se crea dentro de la transacción de cierre; una reapertura conserva el
+historial y puede registrar un snapshot `REOPENED`.
 
 ## BranchSupplyCycleTransfer
 

@@ -7,6 +7,7 @@ import {
   IsString,
   Matches,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { CreateInventoryTransferItemDto } from '../../inventory/dto/create-inventory-transfer.dto';
@@ -50,4 +51,21 @@ export class RefreshBranchSupplyCycleDto {
   @IsInt()
   @Min(1)
   expectedVersion!: number;
+}
+
+export class CloseBranchSupplyCycleDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class ReopenBranchSupplyCycleDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  reason!: string;
 }

@@ -711,6 +711,8 @@ Campos principales:
 - cancelledByUserId, cancelledAt, cancellationReason
 - reopenedByUserId, reopenedAt, reopeningReason
 - totales físicos y monetarios derivados de la última proyección
+- totales de costo, utilidad neta, efectivo, tarjeta, transferencia, gastos y movimientos de caja
+- reconciledDailyCloseVersion, reconciledAt
 - createdAt, updatedAt
 
 Estados:
@@ -758,6 +760,18 @@ Reglas:
 - Cantidades, precios y costos no pueden ser negativos; las piezas operativas se derivan de cantidades enteras aunque el snapshot use decimal para agregación.
 - Un factor de equivalencia aplicado debe ser mayor a cero y conservar vigencia, unidades y redondeo usados.
 - No puede actualizarse ni eliminarse después de insertado.
+
+### BranchSupplyCycleProductSnapshot
+
+Snapshot append-only del primer suministro por producto y ciclo. Conserva precio,
+costo, identidad del producto, unidad, equivalencia aplicada, transferencia
+fuente y versión de ciclo de origen. No se recalcula cuando cambia el catálogo.
+
+### BranchSupplyCycleSnapshot
+
+Snapshot append-only de conciliación y transición. Conserva versión fuente,
+tipo (`CLOSED` o `REOPENED`), payload serializado, hash, actor y fecha. El
+snapshot `CLOSED` es obligatorio para cerrar el ciclo.
 
 ### BranchSupplyCycleEvent
 

@@ -17,8 +17,10 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   BranchSupplyCycleCommandDto,
+  CloseBranchSupplyCycleDto,
   OpenBranchSupplyCycleDto,
   RefreshBranchSupplyCycleDto,
+  ReopenBranchSupplyCycleDto,
 } from './dto';
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
 
@@ -115,6 +117,48 @@ export class BranchSupplyCyclesController {
       success: true,
       message: 'Branch supply cycle refreshed successfully',
       data: await this.service.refresh(
+        id,
+        body,
+        user,
+        this.requireIdempotencyKey(idempotencyKey),
+      ),
+    };
+  }
+
+  @Post(':id/close')
+  @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.CEDIS_CLOSE)
+  async close(
+    @Param('id') id: string,
+    @Body() body: CloseBranchSupplyCycleDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return {
+      success: true,
+      message: 'Branch supply cycle closed successfully',
+      data: await this.service.close(
+        id,
+        body,
+        user,
+        this.requireIdempotencyKey(idempotencyKey),
+      ),
+    };
+  }
+
+  @Post(':id/reopen')
+  @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.CEDIS_CLOSE)
+  async reopen(
+    @Param('id') id: string,
+    @Body() body: ReopenBranchSupplyCycleDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return {
+      success: true,
+      message: 'Branch supply cycle reopened successfully',
+      data: await this.service.reopen(
         id,
         body,
         user,

@@ -80,6 +80,37 @@ Reconstruye una nueva versión append-only desde las transferencias vinculadas. 
 
 Pasa a `READY_FOR_REVIEW` únicamente con al menos un suministro confirmado, cero pendientes e integridad válida. No confirma, cancela ni corrige transferencias.
 
+La respuesta de refresh incluye la conciliación por producto y sus totales
+monetarios y físicos. `actualSalesTotal` MUST provenir del cierre diario cuando
+exista; pagos, movimientos de caja, gastos, mermas y diferencias se conservan
+como fuentes de la versión calculada.
+
+## POST /api/cedis/branch-supply-cycles/:id/close
+
+Requiere `ADMIN`, `cedis.close` e `Idempotency-Key`. Body:
+
+```json
+{ "expectedVersion": 4 }
+```
+
+Solo acepta `READY_FOR_REVIEW`. Recalcula y bloquea si existen transferencias
+pendientes, turnos abiertos, cierre diario distinto de `CLOSED`, cantidades
+negativas, diferencias obligatorias no autorizadas o snapshots de precio/costo
+inválidos. Al cerrar incrementa la versión, crea un snapshot inmutable con hash y
+registra un evento `CLOSED` en la misma transacción.
+
+## POST /api/cedis/branch-supply-cycles/:id/reopen
+
+Requiere `ADMIN`, `cedis.close` e `Idempotency-Key`. Body:
+
+```json
+{ "expectedVersion": 5, "reason": "Corrección administrativa" }
+```
+
+Solo acepta `CLOSED`. Incrementa la versión, conserva todos los snapshots y
+eventos anteriores, registra la reapertura y devuelve el ciclo a `OPEN` sin
+revertir inventario, ventas, pagos ni caja.
+
 ## POST /api/cedis/branch-supply-cycles/:id/cancel
 
 Contrato complementario necesario para alcanzar `CANCELLED`. Requiere `ADMIN`, `cedis.close`, `expectedVersion` y motivo. Se rechaza si existe cierre no cancelado o cualquier transferencia no cancelada. No revierte inventario.
@@ -101,4 +132,4 @@ Contrato complementario necesario para alcanzar `CANCELLED`. Requiere `ADMIN`, `
 
 ## Errores estables
 
-`BRANCH_SUPPLY_CYCLE_NOT_FOUND`, `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`, `BRANCH_SUPPLY_CYCLE_LOCATION_INVALID`, `BRANCH_SUPPLY_CYCLE_CLOSED`, `BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE`, `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`, `BRANCH_SUPPLY_CYCLE_TRANSFER_ALREADY_LINKED`, `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`, `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`, `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`, `PRODUCT_INACTIVE`, `UNIT_MISMATCH`, `EQUIVALENCE_NOT_APPLICABLE`, `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`, `INSUFFICIENT_STOCK`, `LOCATION_NOT_AUTHORIZED`, `IDEMPOTENCY_CONFLICT`.
+`BRANCH_SUPPLY_CYCLE_NOT_FOUND`, `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`, `BRANCH_SUPPLY_CYCLE_LOCATION_INVALID`, `BRANCH_SUPPLY_CYCLE_CLOSED`, `BRANCH_SUPPLY_CYCLE_NOT_READY`, `BRANCH_SUPPLY_CYCLE_NOT_CLOSED`, `BRANCH_SUPPLY_CYCLE_CLOSING_BLOCKED`, `BRANCH_SUPPLY_CYCLE_REFRESH_REQUIRED`, `BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE`, `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`, `BRANCH_SUPPLY_CYCLE_TRANSFER_ALREADY_LINKED`, `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`, `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`, `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`, `PRODUCT_INACTIVE`, `UNIT_MISMATCH`, `EQUIVALENCE_NOT_APPLICABLE`, `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`, `INSUFFICIENT_STOCK`, `LOCATION_NOT_AUTHORIZED`, `IDEMPOTENCY_CONFLICT`.
