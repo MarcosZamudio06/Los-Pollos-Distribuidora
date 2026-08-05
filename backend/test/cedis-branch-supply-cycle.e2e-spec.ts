@@ -124,6 +124,9 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       })
       .expect(200);
     accessToken = loginResponse.body.data.accessToken as string;
+    expect(loginResponse.body.data.user.permissions).toEqual(
+      expect.arrayContaining(['cedis.view']),
+    );
   });
 
   it('confirms a supply and return while preserving inventory and cycle totals', async () => {
