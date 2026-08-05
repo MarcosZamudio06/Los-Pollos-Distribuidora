@@ -48,6 +48,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Validar RBAC para roles `ADMIN`, `SELLER`, `WAREHOUSE`, `DRIVER` y `COLLECTIONS`.
 - Validar que respuestas de usuario no expongan `passwordHash`.
 - Validar permisos por alcance: vendedor propio, repartidor asignado y ubicación autorizada cuando aplique.
+- Validar permisos CEDIS: `ADMIN` global, `WAREHOUSE` en su CEDIS y `SELLER` en su sucursal, sin costos para `SELLER`.
 
 ### Inventario y unidades
 
@@ -67,9 +68,27 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Rechazar traspaso sin productos.
 - Rechazar creación o solicitud de traspaso cuando origen o destino estén inactivos.
 - Rechazar confirmación de traspaso existente si origen o destino quedaron inactivos antes de confirmar.
+- Validar que `DISTRIBUTION_CENTER` sea raíz, que `BRANCH` tenga padre CEDIS activo y que `parentId` no forme ciclos.
+- Validar que la consulta de sucursales CEDIS devuelva únicamente hijas `BRANCH` activas directas.
+- Rechazar desactivación con ciclos CEDIS abiertos, traspasos `IN_TRANSIT`, cierres `DRAFT`/`REVIEWED` o hijos activos.
 - Rechazar confirmación sin stock suficiente en origen.
 - Generar salida en origen y entrada en destino con cantidades por kilo/pieza.
 - Rechazar confirmación duplicada o sobre traspaso cancelado.
+
+### Ciclos CEDIS-sucursal
+
+- Validar unicidad no cancelada por sucursal/fecha y la carrera de dos aperturas concurrentes.
+- Validar múltiples suministros CEDIS → sucursal y devoluciones sucursal → CEDIS dentro del mismo ciclo.
+- Verificar que crear/vincular transferencias no cambie balances ni genere movimientos.
+- Confirmar transferencias vinculadas únicamente por `InventoryTransfersService` y comprobar salida/entrada atómicas.
+- Cancelar `DRAFT`, `REQUESTED` e `IN_TRANSIT` con motivo; rechazar cancelación de `CONFIRMED`.
+- Rechazar productos o ubicaciones inactivas en creación y confirmación, conservando historia ya confirmada.
+- Validar refresh desde transferencias/movimientos, snapshots append-only, bloqueantes y transición a `READY_FOR_REVIEW`.
+- Validar que `CLOSED` y `CANCELLED` sean de solo lectura para comandos operativos.
+- Validar idempotencia con mismo payload, conflicto por payload distinto y control por `expectedVersion`.
+- Probar confirmaciones concurrentes contra el mismo saldo sin stock negativo.
+- Mantener KG y PIECE separados y bloquear conversiones sin equivalencia y redondeo aprobados.
+- Verificar que una devolución no se descuente dos veces durante el cierre diario.
 
 ### Ventas
 
@@ -320,6 +339,7 @@ Estos flujos deben mantenerse pocos y estables. No todo escenario debe ser E2E.
 6. **Compra**: registrar compra en ubicación receptora, verificar incremento de inventario y cancelación válida.
 7. **Reparto y liquidación**: asignar venta confirmada a ruta, marcar entrega, capturar evidencia permitida, registrar cobro con cuenta por cobrar y abrir/cerrar liquidación.
 8. **Reportes casi en tiempo real**: ejecutar una operación confirmada con datos controlados y verificar que dashboard o reporte autorizado la refleje usando metadatos de actualización, sin esperar 60 segundos reales.
+9. **Jerarquía CEDIS**: consultar sucursales directas con alcance `ADMIN`/`WAREHOUSE` y verificar rechazo para `SELLER` fuera de su sucursal.
 
 ## Validaciones de regresión obligatorias
 

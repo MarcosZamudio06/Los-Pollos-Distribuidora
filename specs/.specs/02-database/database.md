@@ -160,7 +160,7 @@ El registro es append-only mediante restricciones de base de datos. Nunca almace
 
 ### OperationalLocation
 
-Representa una ubicación operativa donde se controla inventario. Puede modelar sucursal, almacén o una combinación según la decisión final de negocio.
+Representa una ubicación operativa donde se controla inventario. `DISTRIBUTION_CENTER` representa un CEDIS raíz y `BRANCH` representa una sucursal directa de ese CEDIS.
 
 Campos:
 
@@ -170,13 +170,15 @@ Campos:
 - type
 - parentId
 - address
+- latitude
+- longitude
 - isActive
 - createdAt
 - updatedAt
 
 Relaciones requeridas:
 
-- OperationalLocation puede tener una ubicación padre mediante `parentId` si se confirma jerarquía sucursal-almacén.
+- OperationalLocation tiene una autorrelación padre/hijas mediante `parentId`.
 - OperationalLocation tiene muchos InventoryBalance.
 - OperationalLocation tiene muchos Sale como ubicación de descuento.
 - OperationalLocation tiene muchos Purchase como ubicación receptora.
@@ -188,15 +190,17 @@ Tipos sugeridos:
 
 - BRANCH
 - WAREHOUSE
+- DISTRIBUTION_CENTER
 - MIXED
 - EXTERNAL_POINT_OF_SALE
 - ROUTE_STOCK
 
 Notas:
 
-- `parentId` permite representar un almacén dentro de una sucursal si el negocio confirma ese modelo.
-- Si sucursal y almacén operan como entidades independientes, `parentId` puede quedar vacío.
-- No se debe asumir una jerarquía final hasta cerrar la decisión de negocio.
+- `DISTRIBUTION_CENTER` tiene `parentId` nulo.
+- `BRANCH` requiere un padre activo de tipo `DISTRIBUTION_CENTER`.
+- La relación padre no puede formar ciclos directos o transitivos. `ROUTE_STOCK` y `EXTERNAL_POINT_OF_SALE` conservan las relaciones operativas compatibles con su sucursal.
+- `latitude` y `longitude` son nulas en conjunto o están dentro de sus rangos geográficos; la base de datos aplica ambos checks.
 - `EXTERNAL_POINT_OF_SALE` es el tipo canónico para pollerías o puntos fijos externos.
 - `ROUTE_STOCK` representa inventario cargado a una ruta operativa y solo debe usarse asociado a `DeliveryRoute`.
 
@@ -674,6 +678,9 @@ Campos:
 - quantityKg
 - quantityPieces
 - unit
+- unitEquivalentId
+- appliedEquivalentFactor
+- roundingMode
 - createdAt
 - updatedAt
 
@@ -681,6 +688,124 @@ Reglas:
 
 - No confirmar si la ubicación origen no tiene stock suficiente.
 - Confirmar debe generar movimientos de salida y entrada trazables.
+- `unitEquivalentId`, cuando exista, debe pertenecer al producto, estar activa y ser aplicable a la fecha de negocio.
+- `appliedEquivalentFactor` y `roundingMode` conservan la equivalencia usada; son opcionales para transferencias sin conversión.
+
+### BranchSupplyCycle
+
+Coordina una jornada CEDIS-sucursal sin sustituir las fuentes de inventario ni el cierre diario.
+
+Campos principales:
+
+- id
+- distributionCenterLocationId
+- branchLocationId
+- businessDate
+- pointOfSaleDailyCloseId
+- status
+- version
+- notes
+- openedByUserId, openedAt
+- reviewedByUserId, reviewedAt
+- closedByUserId, closedAt
+- cancelledByUserId, cancelledAt, cancellationReason
+- reopenedByUserId, reopenedAt, reopeningReason
+- totales físicos y monetarios derivados de la última proyección
+- totales de costo, utilidad neta, efectivo, tarjeta, transferencia, gastos y movimientos de caja
+- reconciledDailyCloseVersion, reconciledAt
+- createdAt, updatedAt
+
+Estados:
+
+- OPEN
+- READY_FOR_REVIEW
+- CLOSED
+- CANCELLED
+
+Reglas:
+
+- Debe existir como máximo un ciclo no cancelado por `branchLocationId + businessDate`.
+- CEDIS y sucursal deben ser distintos, activos y respetar la jerarquía `DISTRIBUTION_CENTER` → `BRANCH` directa.
+- `version` debe ser mayor o igual a 1 y soportar control optimista.
+- Los totales son una proyección reconstruible; no autorizan movimientos ni sustituyen balances, movimientos o cierre diario.
+- `pointOfSaleDailyCloseId`, cuando exista, debe coincidir con sucursal y fecha y ser único.
+- Las relaciones usan `ON DELETE RESTRICT` para preservar historia.
+
+### BranchSupplyCycleTransfer
+
+Vincula una transferencia de inventario con un ciclo.
+
+Campos:
+
+- id
+- branchSupplyCycleId
+- inventoryTransferId
+- role: SUPPLY o RETURN
+- linkedByUserId
+- linkedAt
+
+Reglas:
+
+- `inventoryTransferId` es único y no puede pertenecer a dos ciclos.
+- `SUPPLY` exige CEDIS → sucursal; `RETURN` exige sucursal → CEDIS.
+- La dirección debe protegerse en aplicación y base de datos.
+
+### BranchSupplyCycleItem
+
+Snapshot append-only por producto y versión del ciclo. Conserva identidad y unidad del producto, equivalencia aplicada cuando exista, cantidades entregadas/devueltas y proyecciones derivadas necesarias para conciliación.
+
+Reglas:
+
+- La combinación `branchSupplyCycleId + cycleVersion + snapshotKey` es única.
+- Cantidades, precios y costos no pueden ser negativos; las piezas operativas se derivan de cantidades enteras aunque el snapshot use decimal para agregación.
+- Un factor de equivalencia aplicado debe ser mayor a cero y conservar vigencia, unidades y redondeo usados.
+- No puede actualizarse ni eliminarse después de insertado.
+
+### BranchSupplyCycleProductSnapshot
+
+Snapshot append-only del primer suministro por producto y ciclo. Conserva precio,
+costo, identidad del producto, unidad, equivalencia aplicada, transferencia
+fuente y versión de ciclo de origen. No se recalcula cuando cambia el catálogo.
+
+### BranchSupplyCycleSnapshot
+
+Snapshot append-only de conciliación y transición. Conserva versión fuente,
+tipo (`CLOSED` o `REOPENED`), payload serializado, hash, actor y fecha. El
+snapshot `CLOSED` es obligatorio para cerrar el ciclo.
+
+### BranchSupplyCycleEvent
+
+Bitácora append-only de apertura, vínculo, refresh, cambio de estado, cancelación, cierre y reapertura.
+
+Tipos:
+
+- OPENED
+- TRANSFER_LINKED
+- TRANSFER_STATE_CHANGED
+- ITEM_SNAPSHOT_CREATED
+- READY_FOR_REVIEW
+- CLOSED
+- CANCELLED
+- REOPENED
+
+Campos principales:
+
+- id
+- branchSupplyCycleId
+- type
+- cycleVersion
+- fromStatus, toStatus
+- actorUserId
+- reason
+- payload
+- idempotencyKey
+- occurredAt, createdAt
+
+Reglas:
+
+- Cada mutación incrementa la versión y produce como máximo un evento para esa versión.
+- `idempotencyKey` almacena una clave con namespace de operación/recurso; el payload conserva el hash canónico de la solicitud y referencias del resultado.
+- Los eventos no pueden actualizarse ni eliminarse.
 
 ### AccountReceivable
 
@@ -1021,6 +1146,8 @@ Notas:
 - OperationalLocation 1:N Purchase
 - OperationalLocation 1:N InventoryTransfer como origen
 - OperationalLocation 1:N InventoryTransfer como destino
+- OperationalLocation 1:N BranchSupplyCycle como CEDIS
+- OperationalLocation 1:N BranchSupplyCycle como sucursal
 - OperationalLocation 1:N DeliveryRoute como origen opcional
 - OperationalLocation 1:1 DeliveryRoute como stock de ruta cuando `type=ROUTE_STOCK`
 - OperationalLocation 1:N OperationalConfig como alcance opcional
@@ -1057,7 +1184,14 @@ Notas:
 - InventoryTransfer pertenece a OperationalLocation como origen y destino
 - InventoryTransfer 1:N InventoryTransferItem
 - InventoryTransfer 1:N InventoryMovement opcional
+- InventoryTransfer 1:1 BranchSupplyCycleTransfer opcional
 - Product 1:N InventoryTransferItem
+- BranchSupplyCycle 1:N BranchSupplyCycleTransfer
+- BranchSupplyCycle 1:N BranchSupplyCycleItem
+- BranchSupplyCycle 1:N BranchSupplyCycleEvent
+- BranchSupplyCycle 1:1 PointOfSaleDailyClose opcional
+- Product 1:N BranchSupplyCycleItem
+- ProductUnitEquivalent 1:N BranchSupplyCycleItem opcional
 - AccountReceivable 1:N Payment opcional
 - AccountReceivable 1:1 BillingRequest opcional
 - BillingRequest 1:1 Sale opcional

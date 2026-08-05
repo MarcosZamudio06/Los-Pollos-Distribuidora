@@ -54,6 +54,7 @@ Usa únicamente estos nombres canónicos para planear e implementar:
 | Dominio           | Spec canónico                            | Estado de aliases                                                                 |
 | ----------------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
 | Inventory         | `specs/modules/inventory/spec.md`        | `specs/modules/inventario/spec.md` deprecated                                     |
+| CEDIS Cycles      | `specs/modules/branch-supply-cycles/spec.md` | Sin alias deprecated                                                           |
 | Sales             | `specs/modules/sales/spec.md`            | `specs/modules/ventas/spec.md` deprecated                                         |
 | Sales Documents   | `specs/modules/sales-documents/spec.md`  | `specs/modules/facturacion/spec.md` deprecated para ticket/comprobante interno    |
 | Billing Requests  | `specs/modules/billing-requests/spec.md` | `specs/modules/facturacion/spec.md` deprecated para solicitud administrativa      |

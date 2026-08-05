@@ -15,6 +15,7 @@ import {
   ShoppingCart,
   Store,
   Users,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -25,6 +26,7 @@ import {
 
 export type NavigationItemKey =
   | "home"
+  | "cedis"
   | "sales"
   | "sales-history"
   | "orders"
@@ -79,6 +81,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Ventas POS",
     section: "commercial",
     to: "/sales",
+  },
+  {
+    activePaths: ["/cedis"],
+    allowedRoles: ROUTE_ACCESS_ROLES.cedis,
+    routeAccessKey: "cedis",
+    description: "Operación CEDIS y sucursales",
+    icon: Warehouse,
+    key: "cedis",
+    label: "CEDIS",
+    section: "operations",
+    to: "/cedis",
   },
   {
     activePaths: ["/sales/history", "/sales/"],

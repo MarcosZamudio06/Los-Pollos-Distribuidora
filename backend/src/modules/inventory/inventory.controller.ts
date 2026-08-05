@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Authenticated } from '../../common/decorators/authenticated.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -13,6 +14,7 @@ import { InventoryService } from './inventory.service';
 
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Authenticated()
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 

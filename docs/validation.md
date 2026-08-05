@@ -93,6 +93,46 @@ ejecuta sobre una base vacía antes de aprobar `CI Gate`.
 
 ---
 
+## Endurecimiento CEDIS
+
+El flujo CEDIS-sucursal conserva la trazabilidad de inventario, protege costos y
+utilidad por permiso, y coordina el cierre diario con el ciclo sin crear un
+segundo agregado de stock o conciliacion.
+
+Las invariantes principales son:
+
+- Suministros y devoluciones crean transferencias `REQUESTED`; no modifican
+  balances ni generan movimientos.
+- Solo `CONFIRMED` genera `TRANSFER_OUT` y `TRANSFER_IN` atomicos mediante
+  `InventoryTransfersService`.
+- Un vendedor consulta su sucursal hija directa y no recibe costos o utilidad
+  sin `cedis.view_costs`.
+- `InventoryBalance.quantityKg` y `quantityPieces` no pueden quedar negativos.
+- Eventos y snapshots de ciclo/producto son append-only.
+- `READY_FOR_REVIEW` mas cierre diario `REVIEWED` pasa ambos agregados a
+  `CLOSED` dentro de una transaccion `Serializable`; la reapertura pasa el
+  cierre a `DRAFT` y el ciclo a `OPEN` sin revertir operaciones.
+
+La migracion `20260805110000_harden_inventory_balance_integrity` ejecuta un
+preflight y falla antes de crear constraints si encuentra saldos negativos. Las
+diferencias deben corregirse con un ajuste auditable; no se permite ocultarlas
+mediante backfill automatico.
+
+`backend/test/cedis-branch-supply-cycle.e2e-spec.ts` ejecuta login, apertura,
+suministro, confirmacion, devolucion, confirmacion y refresh contra PostgreSQL
+real. Requiere `DATABASE_URL` explicita para evitar escribir por accidente en
+otra base. Comprueba cuatro movimientos, saldos finales 3/7 y venta esperada
+neta de 7 kg para 10 kg entregados y 3 kg devueltos. Usa producto, fecha e
+idempotency keys unicos. Los snapshots de prueba no se borran porque la base
+los protege con triggers append-only; ejecutar E2E sobre una base desechable o
+de CI.
+
+El backfill historico sucursal -> CEDIS requiere un mapa aprobado y reporte de
+ambiguedades. La conversion automatica kilo-pieza permanece bloqueada mientras
+la politica de redondeo no este aprobada.
+
+---
+
 ## Despliegue de automatización de crédito
 
 Aplicar en este orden para evitar incompatibilidad entre columnas y Prisma Client:

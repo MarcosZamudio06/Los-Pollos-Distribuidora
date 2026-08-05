@@ -1,0 +1,14 @@
+change: add-cedis-branch-supply-cycle
+phase: planning
+artifact_store: openspec
+artifacts:
+  proposal: true
+  specs: true
+  design: true
+  tasks: true
+  apply_progress: false
+  verify_report: false
+tasks_progress:
+  completed: []
+  pending: []
+last_updated: 2026-08-04

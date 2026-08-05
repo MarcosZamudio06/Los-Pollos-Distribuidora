@@ -6,5 +6,6 @@ import { AuthModule } from '../auth/auth.module';
   controllers: [PointOfSaleDailyCloseController],
   providers: [PointOfSaleDailyCloseService],
   imports: [AuthModule],
+  exports: [PointOfSaleDailyCloseService],
 })
 export class PointOfSaleDailyCloseModule {}

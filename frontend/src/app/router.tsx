@@ -46,6 +46,10 @@ import { DailyClosePage } from "../features/cierre-diario";
 import { PedidosPage } from "../features/pedidos";
 import { PosTerminalsPage } from "../features/terminales-pos";
 import { AccessProfilesPage } from "../features/access-control";
+import {
+  CedisBranchDetailPage,
+  CedisDashboardPage,
+} from "../features/cedis";
 
 export function AppRouter() {
   return (
@@ -241,6 +245,26 @@ export function AppRouter() {
           element={
             <RoleRoute roles={ROUTE_ACCESS_ROLES.dailyClose}>
               <DailyClosePage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/cedis/branches/:branchId"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.cedis}>
+              <PermissionRoute permission={PERMISSIONS.cedisView}>
+                <CedisBranchDetailPage />
+              </PermissionRoute>
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/cedis"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.cedis}>
+              <PermissionRoute permission={PERMISSIONS.cedisView}>
+                <CedisDashboardPage />
+              </PermissionRoute>
             </RoleRoute>
           }
         />

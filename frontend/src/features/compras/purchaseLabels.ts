@@ -48,6 +48,7 @@ export function presentationLabel(
 export function locationTypeLabel(type?: string | null) {
   if (type === "BRANCH") return "Sucursal";
   if (type === "WAREHOUSE") return "Almacén";
+  if (type === "DISTRIBUTION_CENTER") return "CEDIS";
   if (type === "MIXED") return "Mixta";
   if (type === "EXTERNAL_POINT_OF_SALE") return "Punto externo";
   if (type === "ROUTE_STOCK") return "Inventario de ruta";

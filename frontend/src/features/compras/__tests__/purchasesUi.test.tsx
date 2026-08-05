@@ -12,6 +12,7 @@ import { PurchaseLocationSelector } from "../PurchaseLocationSelector";
 import { PurchasesPage } from "../PurchasesPage";
 import { SuppliersPage } from "../SuppliersPage";
 import { SupplierSelector } from "../SupplierSelector";
+import { locationTypeLabel } from "../purchaseLabels";
 import type { PurchaseDetail, Supplier } from "../types";
 
 const mockState = vi.hoisted(() => ({
@@ -206,6 +207,10 @@ describe("TASK-062 purchase UI behavior", () => {
     expect(html).toContain("Almacén Principal");
     expect(html).not.toContain("Ruta 1");
     expect(html).toContain("No existe stock global");
+  });
+
+  it("muestra CEDIS como etiqueta de ubicación", () => {
+    expect(locationTypeLabel("DISTRIBUTION_CENTER")).toBe("CEDIS");
   });
 
   it("muestra selector de proveedor activo", () => {

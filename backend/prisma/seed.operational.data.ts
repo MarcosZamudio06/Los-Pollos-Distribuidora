@@ -215,10 +215,10 @@ export const seedSuppliers: SeedSupplier[] = [
 
 /**
  * Route stock locations. Each DeliveryRoute requires a ROUTE_STOCK
- * OperationalLocation (1:1 via routeStockLocationId). The branch
- * locations already exist from the base seed (VER, BDR, ALV); these
- * route stock sub-locations are created by the operational seed and
- * parented to the corresponding branch.
+ * OperationalLocation (1:1 via routeStockLocationId). The base seed creates
+ * CEDIS-VER and its direct branches (VER, BDR, ALV); these route stock
+ * sub-locations are created by the operational seed and parented to the
+ * corresponding branch.
  */
 export type SeedRouteStockLocation = {
   id: string;

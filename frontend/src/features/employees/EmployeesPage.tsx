@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Copy, Search, ShieldCheck, UserPlus } from "lucide-react";
 import { useAuth } from "../auth";
 import { PERMISSIONS } from "../auth/permissions";
+import { locationTypeLabel } from "../compras/purchaseLabels";
 import { apiClient } from "../../lib/api";
 import { Button, Input, Select } from "../../components/ui";
 import {
@@ -32,6 +33,8 @@ type Envelope<T> = { data: T };
 
 const usableLocationTypes = new Set([
   "BRANCH",
+  "WAREHOUSE",
+  "DISTRIBUTION_CENTER",
   "MIXED",
   "EXTERNAL_POINT_OF_SALE",
 ]);
@@ -71,6 +74,17 @@ export function EmployeesPage() {
     operationalLocationId: "",
   });
   const [formErrors, setFormErrors] = useState<EmployeeFormErrors>({});
+  const formLocations = useMemo(() => {
+    const selectedRole = roles.find((role) => role.id === form.roleId)?.name;
+    const allowedTypes =
+      selectedRole === "WAREHOUSE"
+        ? new Set(["WAREHOUSE", "DISTRIBUTION_CENTER", "MIXED"])
+        : selectedRole === "ADMIN"
+          ? usableLocationTypes
+          : new Set(["BRANCH", "MIXED", "EXTERNAL_POINT_OF_SALE"]);
+
+    return locations.filter((location) => allowedTypes.has(location.type));
+  }, [form.roleId, locations, roles]);
   const headers = useMemo(() => authHeaders(accessToken), [accessToken]);
 
   async function load() {
@@ -213,10 +227,10 @@ export function EmployeesPage() {
                   value={locationId}
                   onChange={(event) => setLocationId(event.target.value)}
                 >
-                  <option value="">Todos los puntos de venta</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
+                    <option value="">Todos los puntos de venta</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name} · {locationTypeLabel(location.type)}
                     </option>
                   ))}
                 </Select>
@@ -434,7 +448,11 @@ export function EmployeesPage() {
                   }
                   value={form.roleId}
                   onChange={(event) => {
-                    const nextForm = { ...form, roleId: event.target.value };
+                    const nextForm = {
+                      ...form,
+                      roleId: event.target.value,
+                      operationalLocationId: "",
+                    };
                     setForm(nextForm);
                     setFormErrors({
                       ...formErrors,
@@ -484,9 +502,9 @@ export function EmployeesPage() {
                   }}
                 >
                   <option value="">Selecciona un punto de venta</option>
-                  {locations.map((location) => (
+                  {formLocations.map((location) => (
                     <option key={location.id} value={location.id}>
-                      {location.name}
+                      {location.name} · {locationTypeLabel(location.type)}
                     </option>
                   ))}
                 </Select>

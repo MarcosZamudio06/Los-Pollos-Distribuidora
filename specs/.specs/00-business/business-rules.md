@@ -32,6 +32,22 @@
 - No se permite confirmar un traspaso si la ubicación origen no tiene stock suficiente.
 - Queda pendiente definir si el almacén de descuento de una venta se determina por vendedor, sucursal, caja, pedido o selección manual autorizada.
 
+## 1.2 Ciclos de suministro CEDIS-sucursal
+
+- `BranchSupplyCycle` coordina una sucursal, un CEDIS y una fecha de negocio; no es una ubicación ni una fuente de inventario.
+- Solo puede existir un ciclo no cancelado por sucursal y fecha.
+- Un ciclo admite múltiples suministros CEDIS → sucursal y múltiples devoluciones sucursal → CEDIS.
+- Cada suministro o devolución crea un `InventoryTransfer` `REQUESTED`; crear o vincular no modifica inventario.
+- La recepción física se confirma mediante el flujo existente de traspasos. Solo `CONFIRMED` genera `TRANSFER_OUT` y `TRANSFER_IN` en una transacción.
+- `DRAFT`, `REQUESTED` e `IN_TRANSIT` no cambian inventario y bloquean la revisión/cierre del ciclo.
+- Una transferencia no confirmada puede cancelarse con actor, fecha y motivo. Una confirmada requiere una operación compensatoria y nunca se revierte borrando o cancelando sus movimientos.
+- El ciclo conserva vínculos, eventos y snapshots derivados append-only. Estos datos no sustituyen `InventoryBalance`, `InventoryMovement` ni `PointOfSaleDailyClose`.
+- Refrescar el ciclo reconstruye su proyección; no confirma, cancela ni corrige transferencias.
+- Un ciclo `CLOSED` o `CANCELLED` es de solo lectura para suministros, devoluciones y refresh.
+- Una devolución confirmada se contabiliza una sola vez como `TRANSFER_OUT` en la sucursal; no se resta nuevamente en el cierre.
+- KG y PIECE se mantienen como dimensiones separadas. No debe existir conversión automática sin equivalencia oficial aplicable y política de redondeo aprobada.
+- Toda mutación crítica debe ser transaccional, idempotente y versionada.
+
 ## 2. Ventas
 
 - Una venta debe contener al menos un producto.

@@ -341,6 +341,22 @@ Las únicas transiciones permitidas son `DRAFT -> REVIEWED`, `DRAFT -> CANCELLED
 - Cuando se intenta cancelar la venta
 - Entonces el sistema exige reapertura versionada del cierre antes de permitir la cancelación operativa.
 
+### Requirement: Coordinación con ciclo CEDIS
+
+El cierre MUST asociar el `BranchSupplyCycle` de la misma sucursal y fecha cuando exista. La validación y cierre MUST bloquearse si el ciclo carece de suministro confirmado, contiene transferencias pendientes o presenta errores de integridad.
+
+#### Scenario: Cierre coordinado
+
+- Dado un cierre `REVIEWED` y un ciclo `READY_FOR_REVIEW` con versiones vigentes
+- Cuando `ADMIN` confirma el cierre
+- Entonces cierre y ciclo pasan a `CLOSED` dentro de la misma transacción.
+
+#### Scenario: Reapertura coordinada
+
+- Dado un cierre y ciclo `CLOSED`
+- Cuando `ADMIN` reabre el cierre con motivo y versión válidos
+- Entonces el cierre vuelve a `DRAFT`, el ciclo a `OPEN` y ambos conservan snapshots y auditoría previos.
+
 ### Requirement: Separación de liquidación de ruta
 
 El cierre fijo no debe incluir automáticamente cobros o devoluciones de ruta pendientes de `RouteSettlement`.

@@ -6,6 +6,7 @@ import {
   bootstrapProduction,
   ProductionBootstrapClient,
 } from '../../prisma/bootstrap-production';
+import { PERMISSION_DEFINITIONS } from '../common/authorization/permissions';
 import { assertSeedEnvironment } from '../../prisma/seed-guard';
 
 type UpsertMock<T> = jest.MockedFunction<(args: T) => Promise<unknown>>;
@@ -141,10 +142,12 @@ describe('Production bootstrap contract', () => {
 
     expect(roleUpsert).toHaveBeenCalledTimes(12);
     expect(roleFindUnique).toHaveBeenCalledTimes(12);
-    expect(permissionUpsert).toHaveBeenCalledTimes(24);
+    expect(permissionUpsert).toHaveBeenCalledTimes(
+      PERMISSION_DEFINITIONS.length * 2,
+    );
     expect(permissionFindUnique).toHaveBeenCalled();
     expect(rolePermissionCreateMany).toHaveBeenCalledTimes(12);
-    expect(locationUpsert).toHaveBeenCalledTimes(2);
+    expect(locationUpsert).toHaveBeenCalledTimes(4);
     expect(userUpsert).toHaveBeenCalledTimes(2);
     for (const call of roleUpsert.mock.calls) {
       const upsert = call[0];
@@ -156,10 +159,27 @@ describe('Production bootstrap contract', () => {
     }
     for (const call of locationUpsert.mock.calls) {
       expect(call[0]).toMatchObject({
-        where: { code: 'MAIN' },
-        create: { code: 'MAIN' },
+        create: expect.objectContaining({ code: expect.any(String) }),
       });
     }
+    expect(locationUpsert.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            where: { code: 'MAIN-CEDIS' },
+            create: expect.objectContaining({ type: 'DISTRIBUTION_CENTER' }),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            where: { code: 'MAIN' },
+            create: expect.objectContaining({
+              parent: { connect: { code: 'MAIN-CEDIS' } },
+            }),
+          }),
+        ],
+      ]),
+    );
     for (const call of userUpsert.mock.calls) {
       const adminUpsert = call[0];
       expect(adminUpsert).toMatchObject({

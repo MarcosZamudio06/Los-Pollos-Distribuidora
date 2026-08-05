@@ -669,9 +669,18 @@ async function loadSeedContext(prisma: PrismaClient): Promise<SeedContext> {
       }),
     ]);
 
-  const branchLocations = await prisma.operationalLocation.findMany({
-    where: { code: { in: ['VER', 'BDR', 'ALV'] } },
-  });
+  const [distributionCenter, branchLocations] = await Promise.all([
+    prisma.operationalLocation.findUnique({
+      where: { code: 'CEDIS-VER' },
+      select: { id: true, type: true, parentId: true, isActive: true },
+    }),
+    prisma.operationalLocation.findMany({
+      where: { code: { in: ['VER', 'BDR', 'ALV'] } },
+      include: {
+        parent: { select: { id: true, type: true, isActive: true } },
+      },
+    }),
+  ]);
   const products = await prisma.product.findMany({
     where: {
       sku: { in: ['DEV-WHOLE-CHICKEN-KG', 'DEV-BREAST-KG', 'DEV-WINGS-PIECE'] },
@@ -693,6 +702,24 @@ async function loadSeedContext(prisma: PrismaClient): Promise<SeedContext> {
   if (branchLocations.length !== 3) {
     throw new Error(
       'Missing base seed locations. Run backend/prisma/seed.ts first.',
+    );
+  }
+
+  if (
+    !distributionCenter ||
+    distributionCenter.type !== OperationalLocationType.DISTRIBUTION_CENTER ||
+    distributionCenter.parentId !== null ||
+    !distributionCenter.isActive ||
+    branchLocations.some(
+      (location) =>
+        location.type !== OperationalLocationType.BRANCH ||
+        location.parentId !== distributionCenter.id ||
+        location.parent?.type !== OperationalLocationType.DISTRIBUTION_CENTER ||
+        location.parent.isActive !== true,
+    )
+  ) {
+    throw new Error(
+      'Invalid base CEDIS hierarchy. Run backend/prisma/seed.ts first.',
     );
   }
 

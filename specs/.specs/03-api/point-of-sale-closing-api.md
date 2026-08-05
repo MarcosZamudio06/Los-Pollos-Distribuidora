@@ -340,6 +340,7 @@ Validaciones:
 - Bloquear si ventas, movimientos, pagos o caja carecen de ubicación.
 - Bloquear si datos asociados cambiaron durante la validación.
 - Bloquear con `CASH_COUNT_REQUIRED` si no existe efectivo contado.
+- Si existe ciclo CEDIS asociado, bloquear si no tiene suministro confirmado, contiene `DRAFT`, `REQUESTED` o `IN_TRANSIT`, no está refrescado para su versión vigente o presenta integridad inválida.
 - Solo una validación sin errores actualiza `validatedVersion` y `validatedAt`; todo intento registra `lastValidationAttemptAt` sin marcar el cierre como validado.
 
 ## PATCH /api/point-of-sale-daily-closes/:id/differences/:differenceId/justify
@@ -421,7 +422,8 @@ Validaciones:
 - Estado `REVIEWED` y versión validada vigente.
 - Sin operaciones asociadas sin ubicación.
 - Recalcular y persistir snapshot de kilos, ingresos, gastos y utilidad.
-- Ejecutar transición y asociaciones en transacción.
+- Si existe ciclo CEDIS asociado, exigirlo `READY_FOR_REVIEW` y con versión vigente.
+- Ejecutar transición del cierre y ciclo a `CLOSED`, snapshot y asociaciones en una sola transacción.
 - Requerir idempotencia para evitar doble cierre accidental.
 
 ## POST /api/point-of-sale-daily-closes/:id/cancel
@@ -448,6 +450,7 @@ Validaciones:
 - Registrar usuario, fecha, motivo y snapshot previo.
 - Rechazar si el periodo está bloqueado por una política administrativa futura.
 - No revertir ventas, pagos o inventario automáticamente.
+- Si el cierre estaba `CLOSED` y tiene ciclo CEDIS, devolver el ciclo a `OPEN` dentro de la misma transacción e invalidar su proyección vigente.
 - Requerir idempotencia para evitar doble reapertura.
 
 ## Códigos de error
@@ -462,6 +465,10 @@ Validaciones:
 - `DAILY_CLOSE_UNVALIDATED`
 - `OPERATION_LOCATION_MISMATCH`
 - `OPERATION_WITHOUT_LOCATION`
+- `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`
+- `BRANCH_SUPPLY_CYCLE_SUPPLY_REQUIRED`
+- `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`
+- `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`
 - `CASH_COUNT_REQUIRED`
 - `INITIAL_CASH_AMOUNT_INVALID`
 - `INITIAL_CASH_OUT_EXCEEDS_AVAILABLE`

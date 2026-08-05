@@ -19,6 +19,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { CedisModule } from './modules/cedis/cedis.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { CommercialPoliciesModule } from './modules/commercial-policies/commercial-policies.module';
 import { OperationalConfigModule } from './modules/operational-config/operational-config.module';
@@ -59,6 +60,7 @@ import { HealthModule } from './modules/health/health.module';
     CategoriesModule,
     LocationsModule,
     InventoryModule,
+    CedisModule,
     CustomersModule,
     CommercialPoliciesModule,
     OperationalConfigModule,

@@ -265,6 +265,8 @@ describe('InventoryTransfersController API', () => {
     expect(transfersService.confirm).toHaveBeenCalledWith(
       'transfer-1',
       'warehouse-1',
+      undefined,
+      { actor: warehouseUser },
     );
 
     await request(app.getHttpServer())
@@ -281,6 +283,8 @@ describe('InventoryTransfersController API', () => {
       'transfer-1',
       expect.objectContaining({ reason: 'Operational mistake' }),
       'warehouse-1',
+      undefined,
+      { actor: warehouseUser },
     );
   });
 

@@ -60,6 +60,11 @@ export class CreateInventoryTransferItemDto {
   unit!: ProductUnit;
 
   @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  unitEquivalentId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)

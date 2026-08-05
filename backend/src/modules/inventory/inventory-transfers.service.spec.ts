@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -30,6 +31,9 @@ type MockPrisma = {
     findUnique: jest.Mock;
   };
   inventoryMovement: { create: jest.Mock };
+  branchSupplyCycle: { findUnique: jest.Mock; updateMany: jest.Mock };
+  branchSupplyCycleEvent: { create: jest.Mock };
+  pointOfSaleDailyClose: { update: jest.Mock };
 };
 
 const now = new Date('2026-06-29T12:00:00.000Z');
@@ -55,8 +59,21 @@ function idempotencyMarker(
 function createPrisma(): MockPrisma {
   const prisma = {
     $transaction: jest.fn(),
-    operationalLocation: { findUnique: jest.fn() },
-    product: { findUnique: jest.fn() },
+    operationalLocation: {
+      findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+        Promise.resolve({ id: where.id, name: where.id, isActive: true }),
+      ),
+    },
+    product: {
+      findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+        Promise.resolve({
+          id: where.id,
+          name: 'Pollo mixto',
+          unit: ProductUnit.KG_AND_PIECE,
+          isActive: true,
+        }),
+      ),
+    },
     inventoryTransfer: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -70,6 +87,9 @@ function createPrisma(): MockPrisma {
       findUnique: jest.fn(),
     },
     inventoryMovement: { create: jest.fn() },
+    branchSupplyCycle: { findUnique: jest.fn(), updateMany: jest.fn() },
+    branchSupplyCycleEvent: { create: jest.fn() },
+    pointOfSaleDailyClose: { update: jest.fn() },
   };
   prisma.$transaction.mockImplementation(
     (callback: (tx: MockPrisma) => unknown) => callback(prisma),
@@ -366,6 +386,138 @@ describe('InventoryTransfersService', () => {
 
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
     expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
+  });
+
+  it('confirms a linked transfer through inventory and records the cycle state event', async () => {
+    const { service, prisma } = createService();
+    const cycleLink = {
+      id: 'cycle-transfer-1',
+      branchSupplyCycleId: 'cycle-1',
+      role: 'SUPPLY',
+      branchSupplyCycle: {
+        id: 'cycle-1',
+        distributionCenterLocationId: 'origin-1',
+        branchLocationId: 'destination-1',
+        status: 'OPEN',
+        version: 1,
+        pointOfSaleDailyCloseId: null,
+        pointOfSaleDailyClose: null,
+      },
+    };
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createTransfer({ branchSupplyCycleTransfer: cycleLink }),
+    );
+    prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        quantityKg: decimal(17.5),
+        quantityPieces: 7,
+      })
+      .mockResolvedValueOnce({
+        quantityKg: decimal(12.5),
+        quantityPieces: 3,
+      });
+    prisma.inventoryBalance.upsert.mockResolvedValue({});
+    prisma.inventoryMovement.create
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    prisma.inventoryTransfer.update.mockResolvedValue(
+      createTransfer({
+        status: InventoryTransferStatus.CONFIRMED,
+        confirmedAt: now,
+        branchSupplyCycleTransfer: cycleLink,
+      }),
+    );
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+    prisma.branchSupplyCycleEvent.create.mockResolvedValue({});
+
+    await expect(
+      service.confirm('transfer-1', 'warehouse-1', 'linked-confirm-key'),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: InventoryTransferStatus.CONFIRMED }),
+    );
+
+    expect(prisma.branchSupplyCycle.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'cycle-1', version: 1 }),
+        data: expect.objectContaining({ version: { increment: 1 } }),
+      }),
+    );
+    expect(prisma.branchSupplyCycleEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'TRANSFER_STATE_CHANGED',
+          cycleVersion: 2,
+          payload: expect.objectContaining({ transferId: 'transfer-1' }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects a linked confirmation outside the warehouse actor CEDIS scope', async () => {
+    const { service, prisma } = createService();
+    const cycleLink = {
+      id: 'cycle-transfer-1',
+      branchSupplyCycleId: 'cycle-1',
+      role: 'SUPPLY',
+      branchSupplyCycle: {
+        id: 'cycle-1',
+        distributionCenterLocationId: 'origin-1',
+        branchLocationId: 'destination-1',
+        status: 'OPEN',
+        version: 1,
+        pointOfSaleDailyCloseId: null,
+        pointOfSaleDailyClose: null,
+      },
+    };
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createTransfer({ branchSupplyCycleTransfer: cycleLink }),
+    );
+    prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      quantityKg: decimal(30),
+      quantityPieces: 10,
+    });
+    prisma.inventoryBalance.upsert.mockResolvedValue({});
+    prisma.inventoryMovement.create.mockResolvedValue({});
+    prisma.inventoryTransfer.update.mockResolvedValue(
+      createTransfer({
+        status: InventoryTransferStatus.CONFIRMED,
+        branchSupplyCycleTransfer: cycleLink,
+      }),
+    );
+
+    await expect(
+      service.confirm('transfer-1', 'warehouse-1', 'out-of-scope-key', {
+        actor: {
+          id: 'warehouse-1',
+          role: 'WAREHOUSE',
+          operationalLocationId: 'other-cedis',
+          permissions: ['cedis.dispatch'],
+        },
+      } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
+  });
+
+  it('does not confirm a transfer after its product becomes inactive', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(createTransfer());
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1',
+      name: 'Pollo mixto',
+      unit: ProductUnit.KG_AND_PIECE,
+      isActive: false,
+    });
+
+    await expect(
+      service.confirm('transfer-1', 'warehouse-1', 'inactive-product-key'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
   });
 
   it('cancels a non-confirmed transfer with actor, date, and reason but rejects confirmed transfers', async () => {

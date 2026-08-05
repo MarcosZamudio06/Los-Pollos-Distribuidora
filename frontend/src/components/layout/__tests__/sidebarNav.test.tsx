@@ -78,6 +78,7 @@ describe("role navigation", () => {
     expect(items.map((item) => item.to)).toEqual([
       "/",
       "/sales",
+      "/cedis",
       "/sales/history",
       "/orders",
       "/customers",
@@ -100,12 +101,22 @@ describe("role navigation", () => {
     expect(items.map((item) => item.to)).not.toContain(
       "/purchases/:purchaseId",
     );
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "cedis",
+          label: "CEDIS",
+          to: "/cedis",
+        }),
+      ]),
+    );
   });
 
   it("limita accesos por rol y deja fallback mínimo para roles desconocidos", () => {
     expect(getSidebarNavForRole("SELLER").map((item) => item.to)).toEqual([
       "/",
       "/sales",
+      "/cedis",
       "/sales/history",
       "/orders",
       "/customers",
@@ -117,6 +128,7 @@ describe("role navigation", () => {
     ]);
     expect(getSidebarNavForRole("WAREHOUSE").map((item) => item.to)).toEqual([
       "/",
+      "/cedis",
       "/inventory",
       "/purchases",
       "/purchases/suppliers",
@@ -174,6 +186,7 @@ describe("role navigation", () => {
     expect(getActiveSidebarItemKey("/delivery-routes/new")).toBe(
       "route-planner",
     );
+    expect(getActiveSidebarItemKey("/cedis/branches/branch-1")).toBe("cedis");
     expect(getActiveSidebarItemKey("/route-settlements/settlement-1")).toBe(
       "delivery-routes",
     );
@@ -188,6 +201,7 @@ describe("role navigation", () => {
 
     expect(html).toContain("El Pollo");
     expect(html).toContain("Pollos Distribuidora");
+    expect(html).toContain("CEDIS");
     expect(html).toContain("Cerrar sesión");
     expect(html).not.toContain("Cerrar menú lateral");
     expect(html).toContain('aria-current="page"');
