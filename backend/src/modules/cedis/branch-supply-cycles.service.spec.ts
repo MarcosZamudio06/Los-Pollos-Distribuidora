@@ -10,6 +10,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { InventoryTransfersService } from '../inventory/inventory-transfers.service';
 import { ReconciliationResult } from './branch-supply-cycle-reconciliation.service';
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
+import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
 
 const businessDate = new Date('2026-08-04T00:00:00.000Z');
 
@@ -119,9 +120,12 @@ function createService() {
   } as unknown as jest.Mocked<
     Pick<InventoryTransfersService, 'create' | 'findOne'>
   >;
+  const cycleReconciliation = new BranchSupplyCycleReconciliationService();
+
   const service = new BranchSupplyCyclesService(
     prisma as unknown as PrismaService,
     inventoryTransfers as unknown as InventoryTransfersService,
+    cycleReconciliation,
   );
   return { prisma, inventoryTransfers, service };
 }

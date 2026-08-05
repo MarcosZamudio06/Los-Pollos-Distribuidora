@@ -78,6 +78,7 @@ describe("role navigation", () => {
     expect(items.map((item) => item.to)).toEqual([
       "/",
       "/sales",
+      "/cedis",
       "/sales/history",
       "/orders",
       "/customers",
@@ -106,6 +107,7 @@ describe("role navigation", () => {
     expect(getSidebarNavForRole("SELLER").map((item) => item.to)).toEqual([
       "/",
       "/sales",
+      "/cedis",
       "/sales/history",
       "/orders",
       "/customers",
@@ -117,6 +119,7 @@ describe("role navigation", () => {
     ]);
     expect(getSidebarNavForRole("WAREHOUSE").map((item) => item.to)).toEqual([
       "/",
+      "/cedis",
       "/inventory",
       "/purchases",
       "/purchases/suppliers",
@@ -174,6 +177,7 @@ describe("role navigation", () => {
     expect(getActiveSidebarItemKey("/delivery-routes/new")).toBe(
       "route-planner",
     );
+    expect(getActiveSidebarItemKey("/cedis/branches/branch-1")).toBe("cedis");
     expect(getActiveSidebarItemKey("/route-settlements/settlement-1")).toBe(
       "delivery-routes",
     );

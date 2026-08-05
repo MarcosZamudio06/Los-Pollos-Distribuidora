@@ -31,8 +31,8 @@ import {
   RefreshBranchSupplyCycleDto,
   ReopenBranchSupplyCycleDto,
 } from './dto';
-import {
-  BranchSupplyCycleReconciliationService,
+import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
+import type {
   ReconciliationDailyClose,
   ReconciliationInput,
   ReconciliationResult,
@@ -216,7 +216,7 @@ export class BranchSupplyCyclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryTransfers: InventoryTransfersService,
-    private readonly cycleReconciliation = new BranchSupplyCycleReconciliationService(),
+    private readonly cycleReconciliation: BranchSupplyCycleReconciliationService,
   ) {}
 
   async open(
