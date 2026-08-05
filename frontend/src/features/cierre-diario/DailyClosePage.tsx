@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 import { PageContainer } from "../../components/layout/PageContainer";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -59,6 +60,8 @@ const today = getOperationalDate();
 
 export function DailyClosePage() {
   const { accessToken, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const requestedCloseId = searchParams.get("closeId");
   const [items, setItems] = useState<DailyClose[]>([]);
   const [selected, setSelected] = useState<DailyClose | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,9 +147,11 @@ export function DailyClosePage() {
       setLoading(true);
       const data = await dailyCloseService.list(accessToken);
       setItems(data);
-      const current = selected
-        ? data.find((item) => item.id === selected.id)
-        : data[0];
+      const current = requestedCloseId
+        ? data.find((item) => item.id === requestedCloseId)
+        : selected
+          ? data.find((item) => item.id === selected.id)
+          : data[0];
       if (current) await selectClose(current);
       else {
         setSelected(null);
@@ -168,8 +173,15 @@ export function DailyClosePage() {
       .then(async (data) => {
         if (!active) return;
         setItems(data);
-        if (data[0]) await selectClose(data[0], true);
-        else {
+        const requested = requestedCloseId
+          ? data.find((item) => item.id === requestedCloseId)
+          : undefined;
+        const initial = requested ?? data[0];
+        if (initial) {
+          setLocationId(initial.operationalLocationId);
+          setBusinessDate(initial.businessDate.slice(0, 10));
+          await selectClose(initial, true);
+        } else {
           setSelected(null);
           setInventoryReconciliation(null);
         }
@@ -186,7 +198,7 @@ export function DailyClosePage() {
     return () => {
       active = false;
     };
-  }, [accessToken, selectClose]);
+  }, [accessToken, requestedCloseId, selectClose]);
 
   useEffect(() => {
     if (!selected || !canAutoRefreshDailyClose(selected.status)) return;

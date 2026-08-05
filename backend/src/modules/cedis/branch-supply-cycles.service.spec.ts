@@ -176,6 +176,65 @@ describe('BranchSupplyCyclesService', () => {
     );
   });
 
+  it('cancels an empty mutable cycle with a versioned audit event', async () => {
+    const { prisma, service } = createService();
+    const cycle = createCycle();
+    const cancelled = createCycle({
+      status: BranchSupplyCycleStatus.CANCELLED,
+      version: 2,
+    });
+    prisma.branchSupplyCycle.findUnique
+      .mockResolvedValueOnce(cycle)
+      .mockResolvedValueOnce(cancelled);
+    prisma.branchSupplyCycleEvent.findUnique.mockResolvedValue(null);
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.cancel(
+        'cycle-1',
+        { expectedVersion: 1, reason: 'Operación cancelada' },
+        admin,
+        'cancel-key',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: BranchSupplyCycleStatus.CANCELLED }),
+    );
+
+    expect(prisma.branchSupplyCycleEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'CANCELLED',
+          cycleVersion: 2,
+          idempotencyKey: expect.stringContaining('cancel-key'),
+        }),
+      }),
+    );
+  });
+
+  it('rejects cancellation while a linked transfer is still active', async () => {
+    const { prisma, service } = createService();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(
+      createCycle({
+        transfers: [
+          {
+            inventoryTransfer: { status: InventoryTransferStatus.CONFIRMED },
+          },
+        ],
+      }),
+    );
+    prisma.branchSupplyCycleEvent.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.cancel(
+        'cycle-1',
+        { expectedVersion: 1, reason: 'Operación cancelada' },
+        admin,
+        'cancel-key',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.branchSupplyCycle.updateMany).not.toHaveBeenCalled();
+  });
+
   it('rejects a branch that does not belong directly to the requested CEDIS', async () => {
     const { prisma, service } = createService();
     prisma.branchSupplyCycleEvent.findUnique.mockResolvedValue(null);

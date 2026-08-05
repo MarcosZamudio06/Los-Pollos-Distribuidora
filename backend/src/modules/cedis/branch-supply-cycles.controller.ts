@@ -17,6 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   BranchSupplyCycleCommandDto,
+  CancelBranchSupplyCycleDto,
   CloseBranchSupplyCycleDto,
   OpenBranchSupplyCycleDto,
   RefreshBranchSupplyCycleDto,
@@ -159,6 +160,27 @@ export class BranchSupplyCyclesController {
       success: true,
       message: 'Branch supply cycle reopened successfully',
       data: await this.service.reopen(
+        id,
+        body,
+        user,
+        this.requireIdempotencyKey(idempotencyKey),
+      ),
+    };
+  }
+
+  @Post(':id/cancel')
+  @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.CEDIS_CLOSE)
+  async cancel(
+    @Param('id') id: string,
+    @Body() body: CancelBranchSupplyCycleDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return {
+      success: true,
+      message: 'Branch supply cycle cancelled successfully',
+      data: await this.service.cancel(
         id,
         body,
         user,

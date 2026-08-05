@@ -26,6 +26,7 @@ import {
 import { CreateInventoryTransferDto } from '../inventory/dto/create-inventory-transfer.dto';
 import {
   BranchSupplyCycleCommandDto,
+  CancelBranchSupplyCycleDto,
   CloseBranchSupplyCycleDto,
   OpenBranchSupplyCycleDto,
   RefreshBranchSupplyCycleDto,
@@ -729,6 +730,117 @@ export class BranchSupplyCyclesService {
               actorUserId: actor.id,
               reason: dto.reason.trim(),
               payload: this.jsonPayload({ payloadHash, snapshotHash }),
+              idempotencyKey: eventKey,
+            },
+          });
+
+          return this.toCycleResponse(await this.findCycle(tx, cycle.id));
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+  }
+
+  async cancel(
+    cycleId: string,
+    dto: CancelBranchSupplyCycleDto,
+    actor: CycleActor,
+    idempotencyKey: string,
+  ): Promise<CycleResponse> {
+    this.assertAdministrativeActor(actor);
+    const key = this.requireIdempotencyKey(idempotencyKey);
+    const eventKey = this.eventKey('CANCEL', cycleId, key);
+
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const cycle = await this.findCycle(tx, cycleId);
+          this.assertCycleReadScope(cycle, actor);
+          const payloadHash = this.hashPayload({
+            cycleId,
+            dto,
+            actorId: actor.id,
+          });
+          const replay = await this.findIdempotentCycle(
+            tx,
+            eventKey,
+            payloadHash,
+          );
+          if (replay) return replay;
+
+          if (
+            cycle.status === BranchSupplyCycleStatus.CLOSED ||
+            cycle.status === BranchSupplyCycleStatus.CANCELLED
+          ) {
+            throw this.businessConflict(
+              'BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE',
+              'Closed or already cancelled cycles cannot be cancelled',
+            );
+          }
+          if (cycle.version !== dto.expectedVersion) {
+            throw this.businessConflict(
+              'BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT',
+              'The branch supply cycle version is stale',
+            );
+          }
+          if (
+            cycle.pointOfSaleDailyClose &&
+            cycle.pointOfSaleDailyClose.status !== 'CANCELLED'
+          ) {
+            throw this.businessConflict(
+              'BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE',
+              'A non-cancelled daily close is related to this cycle',
+            );
+          }
+          if (
+            cycle.transfers.some(
+              ({ inventoryTransfer }) =>
+                inventoryTransfer.status !== InventoryTransferStatus.CANCELLED,
+            )
+          ) {
+            throw this.businessConflict(
+              'BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE',
+              'Every linked transfer must be cancelled first',
+            );
+          }
+
+          const nextVersion = cycle.version + 1;
+          const updateResult = await tx.branchSupplyCycle.updateMany({
+            where: {
+              id: cycle.id,
+              version: dto.expectedVersion,
+              status: {
+                in: [
+                  BranchSupplyCycleStatus.OPEN,
+                  BranchSupplyCycleStatus.READY_FOR_REVIEW,
+                ],
+              },
+            },
+            data: {
+              version: { increment: 1 },
+              status: BranchSupplyCycleStatus.CANCELLED,
+              cancelledByUserId: actor.id,
+              cancelledAt: new Date(),
+              cancellationReason: dto.reason.trim(),
+            },
+          });
+          if (updateResult.count !== 1) {
+            throw this.businessConflict(
+              'BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT',
+              'The branch supply cycle version is stale',
+            );
+          }
+
+          await tx.branchSupplyCycleEvent.create({
+            data: {
+              branchSupplyCycleId: cycle.id,
+              type: BranchSupplyCycleEventType.CANCELLED,
+              cycleVersion: nextVersion,
+              fromStatus: cycle.status,
+              toStatus: BranchSupplyCycleStatus.CANCELLED,
+              actorUserId: actor.id,
+              reason: dto.reason.trim(),
+              payload: this.jsonPayload({ payloadHash }),
               idempotencyKey: eventKey,
             },
           });

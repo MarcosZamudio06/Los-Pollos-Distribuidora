@@ -2,11 +2,15 @@ import { apiClient } from "../../lib/api";
 import type {
   CedisBranchHistoryFilters,
   CedisBranchHistoryResponse,
+  CedisCancelCycleCommand,
+  CedisCloseCycleCommand,
   CedisCycleCommand,
   CedisCycleSummary,
   CedisDashboardFilters,
   CedisDashboardResponse,
   CedisLocation,
+  CedisOpenCycleCommand,
+  CedisReopenCycleCommand,
   CedisRefreshCommand,
 } from "./types";
 
@@ -102,10 +106,9 @@ export const cedisService = {
   ) {
     const response = await apiClient.get<
       ApiEnvelope<CedisBranchHistoryResponse>
-    >(
-      withParams(`/cedis/branches/${branchId}/history`, filters),
-      { headers: authHeaders(accessToken) },
-    );
+    >(withParams(`/cedis/branches/${branchId}/history`, filters), {
+      headers: authHeaders(accessToken),
+    });
 
     return unwrap(response);
   },
@@ -119,16 +122,35 @@ export const cedisService = {
     return unwrap(response);
   },
 
+  async openCycle(
+    payload: CedisOpenCycleCommand,
+    accessToken: string | null,
+    idempotencyKey: string,
+  ) {
+    const response = await apiClient.post<
+      ApiEnvelope<unknown>,
+      CedisOpenCycleCommand
+    >("/cedis/branch-supply-cycles", {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
+
+    return unwrap(response);
+  },
+
   async createSupply(
     cycleId: string,
     payload: CedisCycleCommand,
     accessToken: string | null,
     idempotencyKey: string,
   ) {
-    const response = await apiClient.post<ApiEnvelope<unknown>, CedisCycleCommand>(
-      `/cedis/branch-supply-cycles/${cycleId}/supplies`,
-      { body: payload, headers: authHeaders(accessToken, idempotencyKey) },
-    );
+    const response = await apiClient.post<
+      ApiEnvelope<unknown>,
+      CedisCycleCommand
+    >(`/cedis/branch-supply-cycles/${cycleId}/supplies`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
 
     return unwrap(response);
   },
@@ -139,10 +161,13 @@ export const cedisService = {
     accessToken: string | null,
     idempotencyKey: string,
   ) {
-    const response = await apiClient.post<ApiEnvelope<unknown>, CedisCycleCommand>(
-      `/cedis/branch-supply-cycles/${cycleId}/returns`,
-      { body: payload, headers: authHeaders(accessToken, idempotencyKey) },
-    );
+    const response = await apiClient.post<
+      ApiEnvelope<unknown>,
+      CedisCycleCommand
+    >(`/cedis/branch-supply-cycles/${cycleId}/returns`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
 
     return unwrap(response);
   },
@@ -157,6 +182,57 @@ export const cedisService = {
       ApiEnvelope<unknown>,
       CedisRefreshCommand
     >(`/cedis/branch-supply-cycles/${cycleId}/refresh`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
+
+    return unwrap(response);
+  },
+
+  async closeCycle(
+    cycleId: string,
+    payload: CedisCloseCycleCommand,
+    accessToken: string | null,
+    idempotencyKey: string,
+  ) {
+    const response = await apiClient.post<
+      ApiEnvelope<unknown>,
+      CedisCloseCycleCommand
+    >(`/cedis/branch-supply-cycles/${cycleId}/close`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
+
+    return unwrap(response);
+  },
+
+  async reopenCycle(
+    cycleId: string,
+    payload: CedisReopenCycleCommand,
+    accessToken: string | null,
+    idempotencyKey: string,
+  ) {
+    const response = await apiClient.post<
+      ApiEnvelope<unknown>,
+      CedisReopenCycleCommand
+    >(`/cedis/branch-supply-cycles/${cycleId}/reopen`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
+
+    return unwrap(response);
+  },
+
+  async cancelCycle(
+    cycleId: string,
+    payload: CedisCancelCycleCommand,
+    accessToken: string | null,
+    idempotencyKey: string,
+  ) {
+    const response = await apiClient.post<
+      ApiEnvelope<unknown>,
+      CedisCancelCycleCommand
+    >(`/cedis/branch-supply-cycles/${cycleId}/cancel`, {
       body: payload,
       headers: authHeaders(accessToken, idempotencyKey),
     });

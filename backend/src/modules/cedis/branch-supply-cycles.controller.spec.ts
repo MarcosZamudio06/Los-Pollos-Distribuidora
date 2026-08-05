@@ -43,6 +43,9 @@ describe('BranchSupplyCyclesController API', () => {
         .mockResolvedValue({ id: 'cycle-1', status: 'READY_FOR_REVIEW' }),
       close: jest.fn().mockResolvedValue({ id: 'cycle-1', status: 'CLOSED' }),
       reopen: jest.fn().mockResolvedValue({ id: 'cycle-1', status: 'OPEN' }),
+      cancel: jest
+        .fn()
+        .mockResolvedValue({ id: 'cycle-1', status: 'CANCELLED' }),
     } as unknown as jest.Mocked<BranchSupplyCyclesService>;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -147,6 +150,13 @@ describe('BranchSupplyCyclesController API', () => {
       .send({ expectedVersion: 5, reason: 'Corrección administrativa' })
       .expect(201);
 
+    await requestBuilder
+      .post('/api/cedis/branch-supply-cycles/cycle-1/cancel')
+      .set('Authorization', 'Bearer token')
+      .set('Idempotency-Key', 'cancel-1')
+      .send({ expectedVersion: 6, reason: 'Operación cancelada' })
+      .expect(201);
+
     expect(service.open.mock.calls[0]).toEqual([
       expect.objectContaining({ branchLocationId: 'branch-1' }),
       adminUser,
@@ -181,6 +191,12 @@ describe('BranchSupplyCyclesController API', () => {
       { expectedVersion: 5, reason: 'Corrección administrativa' },
       adminUser,
       'reopen-1',
+    ]);
+    expect(service.cancel.mock.calls[0]).toEqual([
+      'cycle-1',
+      { expectedVersion: 6, reason: 'Operación cancelada' },
+      adminUser,
+      'cancel-1',
     ]);
   });
 });

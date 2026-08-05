@@ -79,10 +79,15 @@ export function branchDetailHref(
 }
 
 export function formatCoordinates(
-  latitude: number | null | undefined,
-  longitude: number | null | undefined,
+  latitude: number | string | null | undefined,
+  longitude: number | string | null | undefined,
 ) {
   if (latitude === null || latitude === undefined) return null;
   if (longitude === null || longitude === undefined) return null;
-  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+  const numericLatitude = Number(latitude);
+  const numericLongitude = Number(longitude);
+  if (Number.isNaN(numericLatitude) || Number.isNaN(numericLongitude)) {
+    return null;
+  }
+  return `${numericLatitude.toFixed(6)}, ${numericLongitude.toFixed(6)}`;
 }

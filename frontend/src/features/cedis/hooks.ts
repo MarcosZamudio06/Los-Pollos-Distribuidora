@@ -9,8 +9,13 @@ import { cedisQueryKeys } from "./queryKeys";
 import { cedisService } from "./cedisService";
 import type {
   CedisBranchHistoryFilters,
+  CedisCancelCycleCommand,
+  CedisCloseCycleCommand,
   CedisCycleCommand,
   CedisDashboardFilters,
+  CedisMutationInput,
+  CedisOpenCycleCommand,
+  CedisReopenCycleCommand,
   CedisRefreshCommand,
 } from "./types";
 
@@ -89,13 +94,14 @@ export function useCedisCycleSummary(cycleId: string | undefined) {
   return useQuery({
     enabled: Boolean(accessToken && cycleId),
     queryKey: cedisQueryKeys.cycleSummary(cycleId ?? "disabled"),
-    queryFn: () =>
-      cedisService.getCycleSummary(cycleId as string, accessToken),
+    queryFn: () => cedisService.getCycleSummary(cycleId as string, accessToken),
     refetchInterval: CEDIS_REFRESH_INTERVAL_MS,
   });
 }
 
-async function invalidateCedisDependencies(queryClient: ReturnType<typeof useQueryClient>) {
+async function invalidateCedisDependencies(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: cedisQueryKeys.all }),
     queryClient.invalidateQueries({ queryKey: ["inventory-balances"] }),
@@ -112,13 +118,19 @@ export function useCreateCedisSupply(cycleId: string) {
 
   return useMutation({
     mutationKey: cedisQueryKeys.mutations("supply"),
-    mutationFn: (payload: CedisCycleCommand) =>
-      cedisService.createSupply(
+    mutationFn: (
+      input: CedisCycleCommand | CedisMutationInput<CedisCycleCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.createSupply(
         cycleId,
-        payload,
+        command.payload,
         accessToken,
-        idempotencyKey(),
-      ),
+        command.idempotencyKey,
+      );
+    },
     onSuccess: () => invalidateCedisDependencies(queryClient),
   });
 }
@@ -129,13 +141,19 @@ export function useCreateCedisReturn(cycleId: string) {
 
   return useMutation({
     mutationKey: cedisQueryKeys.mutations("return"),
-    mutationFn: (payload: CedisCycleCommand) =>
-      cedisService.createReturn(
+    mutationFn: (
+      input: CedisCycleCommand | CedisMutationInput<CedisCycleCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.createReturn(
         cycleId,
-        payload,
+        command.payload,
         accessToken,
-        idempotencyKey(),
-      ),
+        command.idempotencyKey,
+      );
+    },
     onSuccess: () => invalidateCedisDependencies(queryClient),
   });
 }
@@ -146,13 +164,124 @@ export function useRefreshCedisCycle(cycleId: string) {
 
   return useMutation({
     mutationKey: cedisQueryKeys.mutations("refresh"),
-    mutationFn: (payload: CedisRefreshCommand) =>
-      cedisService.refreshCycle(
+    mutationFn: (
+      input: CedisRefreshCommand | CedisMutationInput<CedisRefreshCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.refreshCycle(
         cycleId,
-        payload,
+        command.payload,
         accessToken,
-        idempotencyKey(),
-      ),
+        command.idempotencyKey,
+      );
+    },
+    onSuccess: () => invalidateCedisDependencies(queryClient),
+  });
+}
+
+function isMutationInput<T>(
+  input: T | CedisMutationInput<T>,
+): input is CedisMutationInput<T> {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    "payload" in input &&
+    "idempotencyKey" in input
+  );
+}
+
+export function useOpenCedisCycle() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations("open"),
+    mutationFn: (
+      input: CedisOpenCycleCommand | CedisMutationInput<CedisOpenCycleCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.openCycle(
+        command.payload,
+        accessToken,
+        command.idempotencyKey,
+      );
+    },
+    onSuccess: () => invalidateCedisDependencies(queryClient),
+  });
+}
+
+export function useCloseCedisCycle(cycleId: string) {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations("close"),
+    mutationFn: (
+      input:
+        CedisCloseCycleCommand | CedisMutationInput<CedisCloseCycleCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.closeCycle(
+        cycleId,
+        command.payload,
+        accessToken,
+        command.idempotencyKey,
+      );
+    },
+    onSuccess: () => invalidateCedisDependencies(queryClient),
+  });
+}
+
+export function useReopenCedisCycle(cycleId: string) {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations("reopen"),
+    mutationFn: (
+      input:
+        CedisReopenCycleCommand | CedisMutationInput<CedisReopenCycleCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.reopenCycle(
+        cycleId,
+        command.payload,
+        accessToken,
+        command.idempotencyKey,
+      );
+    },
+    onSuccess: () => invalidateCedisDependencies(queryClient),
+  });
+}
+
+export function useCancelCedisCycle(cycleId: string) {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations("cancel"),
+    mutationFn: (
+      input:
+        CedisCancelCycleCommand | CedisMutationInput<CedisCancelCycleCommand>,
+    ) => {
+      const command = isMutationInput(input)
+        ? input
+        : { payload: input, idempotencyKey: idempotencyKey() };
+      return cedisService.cancelCycle(
+        cycleId,
+        command.payload,
+        accessToken,
+        command.idempotencyKey,
+      );
+    },
     onSuccess: () => invalidateCedisDependencies(queryClient),
   });
 }

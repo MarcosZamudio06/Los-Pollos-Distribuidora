@@ -69,3 +69,14 @@ export class ReopenBranchSupplyCycleDto {
   @MinLength(3)
   reason!: string;
 }
+
+export class CancelBranchSupplyCycleDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  reason!: string;
+}
