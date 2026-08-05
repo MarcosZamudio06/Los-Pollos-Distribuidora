@@ -27,6 +27,10 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 
 - No existe stock global.
 - Toda operación conserva ubicación operativa.
+- Un CEDIS es una `OperationalLocation` `DISTRIBUTION_CENTER`; sus sucursales
+  directas son `BRANCH` con `parentId` igual al CEDIS activo.
+- Las consultas de sucursales CEDIS solo devuelven hijas directas activas y
+  respetan el alcance de ubicación del usuario.
 - Una diferencia física debe quedar como ajuste trazable.
 - Un traspaso puede salir de matriz y llegar a pollería o a `ROUTE_STOCK`.
 - Crear, confirmar y cancelar traspasos debe soportar idempotencia para no duplicar movimientos.
@@ -34,6 +38,10 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 ## Permisos
 
 - ADMIN y WAREHOUSE.
+- `cedis.dispatch` autoriza abastecimientos desde el CEDIS asignado.
+- `cedis.receive_returns` autoriza devoluciones hacia el CEDIS asignado.
+- `SELLER` solo consulta su sucursal con `cedis.view`; no recibe costos ni
+  utilidad sin `cedis.view_costs`.
 
 ## API
 

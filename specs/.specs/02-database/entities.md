@@ -57,13 +57,16 @@ Validaciones:
 - `name` requerido.
 - `type` requerido.
 - `code` único si existe.
-- `parentId` opcional hasta cerrar el modelo final sucursal-almacén.
+- `DISTRIBUTION_CENTER` requiere `parentId=null`; `BRANCH` requiere un `parentId` activo de tipo `DISTRIBUTION_CENTER`.
+- El árbol de `parentId` no permite ciclos, incluidos los transitivos.
+- `latitude` y `longitude` son opcionales como par y deben estar en los rangos geográficos válidos.
 - Debe poder relacionarse con ventas, compras, inventario, movimientos, traspasos y configuración operativa por ubicación cuando aplique.
 
 Tipos sugeridos:
 
 - `BRANCH`.
 - `WAREHOUSE`.
+- `DISTRIBUTION_CENTER`.
 - `MIXED`.
 - `EXTERNAL_POINT_OF_SALE`.
 - `ROUTE_STOCK`.
@@ -71,7 +74,7 @@ Tipos sugeridos:
 Notas:
 
 - Esta entidad representa la abstracción temporal de ubicación operativa.
-- No debe asumirse que toda sucursal contiene almacenes ni que todo almacén pertenece a una sucursal hasta resolver la decisión de negocio.
+- Un CEDIS no se infiere por nombre ni por un tipo legado: es `DISTRIBUTION_CENTER`; sus sucursales directas son `BRANCH` con `parentId` igual al CEDIS.
 - La existencia de ubicación operativa para inventario es estructural y no configurable.
 - `ROUTE_STOCK` solo debe existir asociado a una `DeliveryRoute`.
 - `EXTERNAL_POINT_OF_SALE` reemplaza el alias documental `EXTERNAL_POINT`.

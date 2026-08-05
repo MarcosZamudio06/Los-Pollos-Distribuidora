@@ -8,7 +8,12 @@ import type {
 
 export type PurchaseStatus = "CONFIRMED" | "CANCELLED" | string;
 export type LocationType =
-  "BRANCH" | "WAREHOUSE" | "MIXED" | "EXTERNAL_POINT_OF_SALE" | "ROUTE_STOCK";
+  | "BRANCH"
+  | "WAREHOUSE"
+  | "DISTRIBUTION_CENTER"
+  | "MIXED"
+  | "EXTERNAL_POINT_OF_SALE"
+  | "ROUTE_STOCK";
 
 export type Supplier = {
   id: string;
@@ -44,6 +49,8 @@ export type OperationalLocation = {
   type: LocationType | string;
   parentId?: string | null;
   address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   isActive?: boolean;
 };
 

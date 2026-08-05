@@ -15,8 +15,7 @@ Documentar un agregado `BranchSupplyCycle` para coordinar la jornada diaria entr
 
 ### Out of Scope
 
-- Cambios de código de producción en `backend/` o `frontend/`.
-- Nuevo tipo obligatorio de `OperationalLocation` para CEDIS.
+- Implementación del flujo completo de `BranchSupplyCycle` fuera de la protección de ubicaciones ya aprobada.
 - Saldos, movimientos, conteos, diferencias o fórmulas monetarias duplicadas.
 - CFDI, básculas, liquidación de rutas o `PaymentAllocation`.
 
@@ -46,7 +45,7 @@ Mantener `OperationalLocation`, `InventoryTransfer`, `InventoryMovement` y `Poin
 
 ## Risks
 
-- Inferir CEDIS desde `parentId` puede asociar datos históricos incorrectamente.
+- Inferir relaciones históricas de ciclo desde `parentId` puede asociar datos incorrectamente; la jerarquía aprobada sí identifica la sucursal directa de un CEDIS para consultas de ubicación.
 - Confirmar un traspaso sin invalidar la validación del cierre puede producir conciliaciones obsoletas.
 - Contabilizar una devolución además de `TRANSFER_OUT` duplicaría la salida.
 

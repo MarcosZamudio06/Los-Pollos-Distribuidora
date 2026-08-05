@@ -39,6 +39,7 @@ export const initialAdminUser = {
 export const initialRoleTestUsers = [
   {
     roleName: 'SELLER',
+    operationalLocationCode: 'VER',
     name: 'Development Seller',
     email: 'dev.seller@pollos.local',
     isActive: true,
@@ -48,6 +49,7 @@ export const initialRoleTestUsers = [
   },
   {
     roleName: 'WAREHOUSE',
+    operationalLocationCode: 'CEDIS-VER',
     name: 'Development Warehouse',
     email: 'dev.warehouse@pollos.local',
     isActive: true,
@@ -57,6 +59,7 @@ export const initialRoleTestUsers = [
   },
   {
     roleName: 'DRIVER',
+    operationalLocationCode: 'VER',
     name: 'Development Driver',
     email: 'dev.driver@pollos.local',
     isActive: true,
@@ -66,6 +69,7 @@ export const initialRoleTestUsers = [
   },
   {
     roleName: 'COLLECTIONS',
+    operationalLocationCode: 'VER',
     name: 'Development Collections',
     email: 'dev.collections@pollos.local',
     isActive: true,
@@ -75,6 +79,7 @@ export const initialRoleTestUsers = [
   },
   {
     roleName: 'BILLING',
+    operationalLocationCode: 'VER',
     name: 'Development Billing',
     email: 'dev.billing@pollos.local',
     isActive: true,
@@ -86,9 +91,20 @@ export const initialRoleTestUsers = [
 
 export const initialSeedLocations = [
   {
+    name: 'CEDIS Veracruz',
+    code: 'CEDIS-VER',
+    type: 'DISTRIBUTION_CENTER',
+    parentCode: null,
+    address: 'Centro de distribución Veracruz',
+    latitude: 19.183,
+    longitude: -96.134,
+    isActive: true,
+  },
+  {
     name: 'Veracruz',
     code: 'VER',
     type: 'BRANCH',
+    parentCode: 'CEDIS-VER',
     address: 'Sucursal Veracruz',
     latitude: 19.183,
     longitude: -96.134,
@@ -98,6 +114,7 @@ export const initialSeedLocations = [
     name: 'Boca del Río',
     code: 'BDR',
     type: 'BRANCH',
+    parentCode: 'CEDIS-VER',
     address: 'Sucursal Boca del Río',
     latitude: 19.1065,
     longitude: -96.108,
@@ -107,6 +124,7 @@ export const initialSeedLocations = [
     name: 'Alvarado',
     code: 'ALV',
     type: 'BRANCH',
+    parentCode: 'CEDIS-VER',
     address: 'Sucursal Alvarado',
     latitude: 18.7735,
     longitude: -95.7615,
@@ -267,13 +285,13 @@ async function seedInitialAdmin(prisma: SeedPrismaClient): Promise<void> {
       isActive: initialAdminUser.isActive,
       mustChangePassword: initialAdminUser.mustChangePassword,
       role: { connect: { name: 'ADMIN' } },
-      operationalLocation: { connect: { code: 'VER' } },
+      operationalLocation: { connect: { code: 'CEDIS-VER' } },
     },
     create: {
       ...initialAdminUser,
       passwordHash,
       role: { connect: { name: 'ADMIN' } },
-      operationalLocation: { connect: { code: 'VER' } },
+      operationalLocation: { connect: { code: 'CEDIS-VER' } },
     },
   });
 
@@ -286,10 +304,19 @@ async function seedInitialAdmin(prisma: SeedPrismaClient): Promise<void> {
 
 async function seedInitialLocation(prisma: SeedPrismaClient): Promise<void> {
   for (const location of initialSeedLocations) {
+    const { parentCode, ...locationData } = location;
     await prisma.operationalLocation.upsert({
       where: { code: location.code },
-      update: location,
-      create: location,
+      update: {
+        ...locationData,
+        ...(parentCode
+          ? { parent: { connect: { code: parentCode } } }
+          : { parent: { disconnect: true } }),
+      },
+      create: {
+        ...locationData,
+        ...(parentCode ? { parent: { connect: { code: parentCode } } } : {}),
+      },
     });
   }
 }
@@ -306,7 +333,9 @@ async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
         isActive: user.isActive,
         mustChangePassword: user.mustChangePassword,
         role: { connect: { name: user.roleName } },
-        operationalLocation: { connect: { code: 'VER' } },
+        operationalLocation: {
+          connect: { code: user.operationalLocationCode },
+        },
       },
       create: {
         name: user.name,
@@ -317,7 +346,9 @@ async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
         isActive: user.isActive,
         mustChangePassword: user.mustChangePassword,
         role: { connect: { name: user.roleName } },
-        operationalLocation: { connect: { code: 'VER' } },
+        operationalLocation: {
+          connect: { code: user.operationalLocationCode },
+        },
       },
     });
   }

@@ -4,7 +4,7 @@
 
 Crear una capacidad nueva que agregue coordinación, no inventario. `BranchSupplyCycle` identifica CEDIS, sucursal y fecha; `BranchSupplyCycleTransfer` vincula cada `InventoryTransfer` confirmado o pendiente y clasifica `SUPPLY` o `RETURN`. Las cantidades se leen de `InventoryTransferItem` y los movimientos siguen siendo creados por `InventoryTransfersService`.
 
-El cierre diario continúa siendo el único agregado de conciliación de sucursal. Al abrirlo se enlaza el ciclo de la misma sucursal y fecha; al confirmar/cancelar traspasos se invalida la validación vigente del cierre en `DRAFT`. El ciclo solo pasa a `COMPLETED` dentro de la transacción que lleva el cierre a `CLOSED`.
+El cierre diario continúa siendo el único agregado de conciliación de sucursal. Al abrirlo se enlaza el ciclo de la misma sucursal y fecha; al confirmar/cancelar traspasos se invalida la validación vigente del cierre en `DRAFT`. El ciclo solo pasa a `CLOSED` dentro de la transacción que lleva el cierre a `CLOSED`.
 
 Gap previo: no existe `BranchSupplyCycle` en Prisma, backend, frontend ni `openspec/specs/`; tampoco existe `specs/.specs/01-architecture/ai-rules.md` aunque `openspec/config.yaml` lo referencia. La implementación futura debe detenerse si aparece una regla canónica contradictoria.
 
@@ -12,7 +12,7 @@ Gap previo: no existe `BranchSupplyCycle` en Prisma, backend, frontend ni `opens
 
 | Decisión | Alternativas rechazadas | Razón |
 |---|---|---|
-| CEDIS se modela con `OperationalLocation` `WAREHOUSE` o `MIXED` | Agregar enum `CEDIS` | Evita romper el catálogo y respeta la jerarquía sucursal-almacén aún abierta. |
+| CEDIS se modela con `OperationalLocation` `DISTRIBUTION_CENTER` | Reutilizar `WAREHOUSE` o `MIXED` | Expresa el CEDIS de forma canónica, con `parentId=null`; una sucursal directa es `BRANCH` con `parentId` del CEDIS. |
 | Vínculo separado ciclo-traspaso | Copiar partidas/cantidades en el ciclo | El traspaso y sus movimientos siguen siendo la única fuente de verdad. |
 | Un ciclo puede tener varios cierres históricos, pero uno no cancelado | Copiar totales del cierre al ciclo | Conserva reaperturas/cancelaciones sin duplicar conciliación. |
 | Finalización coordinada con el cierre | Endpoint independiente `complete` | Impide que ciclo y cierre queden en estados incompatibles. |
@@ -72,10 +72,10 @@ Unit tests cubrirán estados, fórmulas, dirección de transferencias y permisos
 
 ## Migration / Rollout
 
-Añadir tablas y FK opcionalmente, sembrar permisos, desplegar lecturas, desplegar comandos y finalmente ejecutar backfill con mapa aprobado. No inferir CEDIS desde `parentId`; no modificar `InventoryBalance`, `InventoryMovement` ni cierres históricos durante backfill.
+Añadir tablas y FK opcionalmente, sembrar permisos, desplegar lecturas, desplegar comandos y finalmente ejecutar backfill con mapa aprobado. La jerarquía CEDIS-sucursal se aplica a ubicaciones y alcance; el backfill histórico de ciclos no infiere asociaciones desde `parentId`. No modificar `InventoryBalance`, `InventoryMovement` ni cierres históricos durante backfill.
 
 ## Open Questions
 
 - [ ] Confirmar el mapa operativo de ubicaciones CEDIS antes del backfill.
-- [ ] Confirmar si algún CEDIS puede ser `BRANCH` además de `WAREHOUSE`/`MIXED`.
+- [x] CEDIS canónico: `DISTRIBUTION_CENTER`; sucursal directa: `BRANCH` con padre CEDIS.
 - [ ] Resolver la ausencia de `specs/.specs/01-architecture/ai-rules.md` antes de aplicar código.

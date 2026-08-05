@@ -14,7 +14,7 @@ El sistema MUST mantener como máximo un ciclo no cancelado para cada sucursal y
 
 - GIVEN dos ubicaciones activas, distintas y compatibles
 - WHEN un usuario autorizado crea el ciclo para una fecha sin ciclo activo
-- THEN se crea en `ACTIVE` y se conserva el actor de creación.
+- THEN se crea en `OPEN` y se conserva el actor de apertura.
 
 #### Scenario: Duplicado concurrente
 
@@ -56,19 +56,19 @@ El sistema MUST asociar el ciclo al `PointOfSaleDailyClose` de la misma sucursal
 
 ### Requirement: Finalización y reapertura coordinadas
 
-El ciclo MUST pasar a `COMPLETED` solo dentro de la transacción que cierra el cierre diario. Una reapertura auditada del cierre MUST devolverlo a `ACTIVE`.
+El ciclo MUST pasar a `CLOSED` solo dentro de la transacción que cierra el cierre diario. Una reapertura auditada del cierre MUST devolverlo a `OPEN`.
 
 #### Scenario: Cierre válido
 
 - GIVEN ciclo elegible y cierre `REVIEWED` con versión validada vigente
 - WHEN `ADMIN` cierra el cierre
-- THEN el cierre pasa a `CLOSED` y el ciclo a `COMPLETED` atómicamente.
+- THEN el cierre pasa a `CLOSED` y el ciclo a `CLOSED` atómicamente.
 
 #### Scenario: Reapertura
 
-- GIVEN ciclo `COMPLETED` y cierre `CLOSED`
+- GIVEN ciclo `CLOSED` y cierre `CLOSED`
 - WHEN `ADMIN` reabre con motivo y versión válidos
-- THEN el cierre vuelve a `DRAFT` y el ciclo a `ACTIVE`.
+- THEN el cierre vuelve a `DRAFT` y el ciclo a `OPEN`.
 
 ### Requirement: Alcance y auditoría
 

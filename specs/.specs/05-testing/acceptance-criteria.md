@@ -34,7 +34,9 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado una merma, devolución, rechazo parcial o pérdida operativa, cuando afecta inventario, entonces se registra como movimiento trazable con motivo obligatorio.
 - Dado stock insuficiente en una ubicación, cuando se intenta vender, ajustar salida o confirmar traspaso desde esa ubicación, entonces la operación se rechaza sin saldo negativo.
 - Dado un producto con bajo inventario, cuando se consulta bajo stock, entonces se evalúa por ubicación y por unidad aplicable.
-- Pendiente/condicional: dado que el modelo final sucursal-almacén sigue abierto, las pruebas deben validar `OperationalLocation` como abstracción sin asumir jerarquía obligatoria.
+- Dado un CEDIS, cuando se consulta su jerarquía, entonces es una raíz `DISTRIBUTION_CENTER` y sus sucursales directas son `BRANCH` con `parentId` igual al CEDIS.
+- Dado un cambio de `parentId`, cuando formaría una autorreferencia o ciclo transitivo, entonces la API y la base rechazan la escritura.
+- Dado un CEDIS o sucursal con ciclo CEDIS abierto, transferencia `IN_TRANSIT`, cierre `DRAFT`/`REVIEWED` o hijo activo, cuando se desactiva, entonces la operación se rechaza sin cambiar `isActive`.
 - Pendiente/condicional: dado que la regla exacta para seleccionar ubicación de descuento sigue abierta, las pruebas deben validar que la venta conserve `locationId` y no asumir selección automática no definida.
 
 ## Unidades kilo, pieza y equivalencias

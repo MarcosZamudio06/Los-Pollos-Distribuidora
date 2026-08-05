@@ -14,7 +14,7 @@
 
 Permisos: `branch_supply_cycles.read` y alcance por rol.
 
-Query: `cedisLocationId`, `branchLocationId`, `businessDate`, `dateFrom`, `dateTo`, `status`, `page`, `limit`.
+Query: `distributionCenterLocationId`, `branchLocationId`, `businessDate`, `dateFrom`, `dateTo`, `status`, `page`, `limit`.
 
 `data.items[]` MUST incluir: `id`, ubicaciones, `businessDate`, `status`, `version`, `confirmedSupplyCount`, `confirmedReturnCount`, `pendingTransferCount`, `dailyCloseId`, `dailyCloseStatus`, `createdAt`, `updatedAt`.
 
@@ -38,14 +38,14 @@ Body:
 
 ```json
 {
-  "cedisLocationId": "string",
+  "distributionCenterLocationId": "string",
   "branchLocationId": "string",
   "businessDate": "2026-08-04",
   "notes": "string opcional"
 }
 ```
 
-Valida ubicaciones, fecha, unicidad e idempotencia. Crea `ACTIVE` y enlaza un cierre `DRAFT` existente de la misma sucursal/fecha.
+Valida ubicaciones, fecha, unicidad e idempotencia. Crea `OPEN` y enlaza un cierre `DRAFT` existente de la misma sucursal/fecha.
 
 ### `POST /api/branch-supply-cycles/:id/supply-transfers`
 
@@ -88,7 +88,7 @@ La respuesta existente conserva todos sus campos. `data` agrega únicamente proy
 }
 ```
 
-`ADMIN` recibe el alcance global; `WAREHOUSE` recibe ciclos cuyo `cedisLocationId` sea su ubicación; `SELLER` recibe ciclos cuya `branchLocationId` sea su ubicación. `COLLECTIONS`, `DRIVER` y `BILLING` no reciben estos campos ni pueden inferirlos desde otros reportes.
+`ADMIN` recibe el alcance global; `WAREHOUSE` recibe ciclos cuyo `distributionCenterLocationId` sea su ubicación; `SELLER` recibe ciclos cuya `branchLocationId` sea su ubicación. `COLLECTIONS`, `DRIVER` y `BILLING` no reciben estos campos ni pueden inferirlos desde otros reportes.
 
 ## Errores estables
 

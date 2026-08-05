@@ -22,7 +22,15 @@ import {
 const ADMIN_ROLE_NAME = 'ADMIN';
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_TEMPORARY_PASSWORD_LENGTH = 10;
-const EMPLOYEE_LOCATION_TYPES = ['BRANCH', 'MIXED', 'EXTERNAL_POINT_OF_SALE'];
+const EMPLOYEE_LOCATION_TYPES = [
+  'BRANCH',
+  'WAREHOUSE',
+  'DISTRIBUTION_CENTER',
+  'MIXED',
+  'EXTERNAL_POINT_OF_SALE',
+];
+const WAREHOUSE_LOCATION_TYPES = ['WAREHOUSE', 'DISTRIBUTION_CENTER', 'MIXED'];
+const SELLER_LOCATION_TYPES = ['BRANCH', 'MIXED', 'EXTERNAL_POINT_OF_SALE'];
 const LAST_ADMIN_TRANSACTION_OPTIONS = {
   isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel,
 } as const;
@@ -121,8 +129,8 @@ export class UsersService {
     const phone = this.normalizePhone(dto.phone);
     await this.assertEmailAvailable(email);
     await this.assertPhoneAvailable(phone);
-    await this.assertRoleExists(dto.roleId);
-    await this.assertEmployeeLocation(dto.operationalLocationId);
+    const role = await this.assertRoleExists(dto.roleId);
+    await this.assertEmployeeLocation(dto.operationalLocationId, role.name);
     const temporaryPassword = this.generateTemporaryPassword();
 
     const passwordHash = await bcrypt.hash(
@@ -325,14 +333,23 @@ export class UsersService {
     if (existing) throw new ConflictException('Phone is already registered');
   }
 
-  private async assertEmployeeLocation(locationId: string): Promise<void> {
+  private async assertEmployeeLocation(
+    locationId: string,
+    roleName: string,
+  ): Promise<void> {
     const location = await this.prisma.operationalLocation.findUnique({
       where: { id: locationId },
     });
+    const allowedLocationTypes =
+      roleName === 'ADMIN'
+        ? EMPLOYEE_LOCATION_TYPES
+        : roleName === 'WAREHOUSE'
+          ? WAREHOUSE_LOCATION_TYPES
+          : SELLER_LOCATION_TYPES;
     if (
       !location ||
       !location.isActive ||
-      !EMPLOYEE_LOCATION_TYPES.includes(location.type)
+      !allowedLocationTypes.includes(location.type)
     ) {
       throw new BadRequestException(
         'Operational location is not available for employees',

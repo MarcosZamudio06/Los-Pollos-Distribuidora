@@ -40,6 +40,16 @@ type UserWithAccess = Prisma.UserGetPayload<{
 type AccessClient = Prisma.TransactionClient | PrismaService;
 type RequestContext = { requestId?: string; ipAddress?: string };
 
+const EMPLOYEE_LOCATION_TYPES = [
+  'BRANCH',
+  'WAREHOUSE',
+  'DISTRIBUTION_CENTER',
+  'MIXED',
+  'EXTERNAL_POINT_OF_SALE',
+];
+const WAREHOUSE_LOCATION_TYPES = ['WAREHOUSE', 'DISTRIBUTION_CENTER', 'MIXED'];
+const SELLER_LOCATION_TYPES = ['BRANCH', 'MIXED', 'EXTERNAL_POINT_OF_SALE'];
+
 @Injectable()
 export class AccessControlService {
   constructor(
@@ -263,6 +273,9 @@ export class AccessControlService {
             role: {
               include: { permissions: { include: { permission: true } } },
             },
+            operationalLocation: {
+              select: { type: true, isActive: true },
+            },
           },
         });
         if (!current) throw new NotFoundException('User not found');
@@ -280,6 +293,13 @@ export class AccessControlService {
           actor,
           nextRole.permissions.map(({ permission }) => permission.key),
         );
+
+        if (current.roleId !== nextRole.id) {
+          this.assertRoleLocationCompatibility(
+            nextRole.name,
+            current.operationalLocation,
+          );
+        }
 
         if (current.roleId === nextRole.id) {
           return {
@@ -484,6 +504,24 @@ export class AccessControlService {
     if (!(CANONICAL_ROLE_NAMES as readonly string[]).includes(name)) {
       throw new ForbiddenException(
         'Only canonical access profiles can be managed',
+      );
+    }
+  }
+
+  private assertRoleLocationCompatibility(
+    roleName: string,
+    location: { type: string; isActive: boolean } | null,
+  ): void {
+    const allowedTypes =
+      roleName === 'ADMIN'
+        ? EMPLOYEE_LOCATION_TYPES
+        : roleName === 'WAREHOUSE'
+          ? WAREHOUSE_LOCATION_TYPES
+          : SELLER_LOCATION_TYPES;
+
+    if (!location?.isActive || !allowedTypes.includes(location.type)) {
+      throw new BadRequestException(
+        'Operational location is not available for the selected access profile',
       );
     }
   }

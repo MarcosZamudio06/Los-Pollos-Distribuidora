@@ -3,6 +3,13 @@ export const PERMISSIONS = {
   ACCESS_PROFILES_MANAGE: 'access_profiles.manage',
   CASH_SHIFTS_ADMINISTRATIVE_CLOSE: 'cash_shifts.administrative_close',
   CASH_TERMINALS_REASSIGN: 'cash_terminals.reassign',
+  CEDIS_CLOSE: 'cedis.close',
+  CEDIS_DISPATCH: 'cedis.dispatch',
+  CEDIS_MANAGE: 'cedis.manage',
+  CEDIS_RECEIVE_RETURNS: 'cedis.receive_returns',
+  CEDIS_RECONCILE: 'cedis.reconcile',
+  CEDIS_VIEW: 'cedis.view',
+  CEDIS_VIEW_COSTS: 'cedis.view_costs',
   COSTS_READ: 'costs.read',
   DAILY_CLOSES_DIFFERENCES_AUTHORIZE: 'daily_closes.differences.authorize',
   DAILY_CLOSES_REOPEN: 'daily_closes.reopen',
@@ -28,6 +35,7 @@ export type PermissionRisk = 'standard' | 'sensitive' | 'critical';
 export type PermissionGroup =
   | 'Access'
   | 'Cash'
+  | 'CEDIS'
   | 'Finance'
   | 'Information'
   | 'Security';
@@ -49,6 +57,34 @@ export const PERMISSION_DEFINITIONS = [
   {
     key: PERMISSIONS.CASH_TERMINALS_REASSIGN,
     description: 'Reassign cash terminals to an operational location.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_CLOSE,
+    description: 'Close CEDIS operational cycles.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_DISPATCH,
+    description: 'Dispatch inventory from an authorized CEDIS.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_MANAGE,
+    description: 'Manage CEDIS hierarchy and operational configuration.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_RECEIVE_RETURNS,
+    description: 'Receive authorized branch returns at a CEDIS.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_RECONCILE,
+    description: 'Reconcile CEDIS operational cycles.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_VIEW,
+    description: 'View authorized CEDIS hierarchy and operations.',
+  },
+  {
+    key: PERMISSIONS.CEDIS_VIEW_COSTS,
+    description: 'View CEDIS cost and utility information.',
   },
   {
     key: PERMISSIONS.COSTS_READ,
@@ -95,6 +131,13 @@ export const PERMISSION_METADATA: Record<
     risk: 'critical',
   },
   [PERMISSIONS.CASH_TERMINALS_REASSIGN]: { group: 'Cash', risk: 'critical' },
+  [PERMISSIONS.CEDIS_CLOSE]: { group: 'CEDIS', risk: 'critical' },
+  [PERMISSIONS.CEDIS_DISPATCH]: { group: 'CEDIS', risk: 'sensitive' },
+  [PERMISSIONS.CEDIS_MANAGE]: { group: 'CEDIS', risk: 'critical' },
+  [PERMISSIONS.CEDIS_RECEIVE_RETURNS]: { group: 'CEDIS', risk: 'sensitive' },
+  [PERMISSIONS.CEDIS_RECONCILE]: { group: 'CEDIS', risk: 'critical' },
+  [PERMISSIONS.CEDIS_VIEW]: { group: 'CEDIS', risk: 'standard' },
+  [PERMISSIONS.CEDIS_VIEW_COSTS]: { group: 'CEDIS', risk: 'sensitive' },
   [PERMISSIONS.COSTS_READ]: { group: 'Information', risk: 'sensitive' },
   [PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE]: {
     group: 'Finance',
@@ -116,6 +159,11 @@ export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
   BILLING: [PERMISSIONS.FISCAL_INFORMATION_EXPORT],
   COLLECTIONS: [],
   DRIVER: [],
-  SELLER: [],
-  WAREHOUSE: [PERMISSIONS.COSTS_READ],
+  SELLER: [PERMISSIONS.CEDIS_VIEW],
+  WAREHOUSE: [
+    PERMISSIONS.COSTS_READ,
+    PERMISSIONS.CEDIS_VIEW,
+    PERMISSIONS.CEDIS_DISPATCH,
+    PERMISSIONS.CEDIS_RECEIVE_RETURNS,
+  ],
 };

@@ -20,6 +20,7 @@ type PurchaseLocationSelectorProps = {
 const receiverTypes = new Set([
   "BRANCH",
   "WAREHOUSE",
+  "DISTRIBUTION_CENTER",
   "MIXED",
   "EXTERNAL_POINT_OF_SALE",
 ]);

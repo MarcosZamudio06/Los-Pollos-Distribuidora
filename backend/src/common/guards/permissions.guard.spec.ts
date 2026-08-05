@@ -29,6 +29,9 @@ class GuardTestController {
   @RequirePermissions(PERMISSIONS.PAYMENTS_CANCEL)
   protectedRoute() {}
 
+  @RequirePermissions(PERMISSIONS.CEDIS_VIEW)
+  cedisRoute() {}
+
   unclassifiedRoute() {}
 }
 
@@ -64,6 +67,22 @@ describe('PermissionsGuard', () => {
       guard.canActivate(
         contextFor(handlerFor('protectedRoute'), {
           permissions: [PERMISSIONS.PAYMENTS_CANCEL],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('requires the CEDIS read permission for the CEDIS hierarchy endpoint', () => {
+    expect(() =>
+      guard.canActivate(
+        contextFor(handlerFor('cedisRoute'), { permissions: [] }),
+      ),
+    ).toThrow(new ForbiddenException('Insufficient permissions'));
+
+    expect(
+      guard.canActivate(
+        contextFor(handlerFor('cedisRoute'), {
+          permissions: [PERMISSIONS.CEDIS_VIEW],
         }),
       ),
     ).toBe(true);

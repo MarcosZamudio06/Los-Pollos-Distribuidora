@@ -6,10 +6,17 @@ import { UsersService } from './users.service';
 
 const now = new Date('2026-07-11T00:00:00.000Z');
 const role = { id: 'role-seller', name: 'SELLER' };
+const warehouseRole = { id: 'role-warehouse', name: 'WAREHOUSE' };
 const location = {
   id: 'location-1',
   name: 'Matriz',
   type: 'BRANCH',
+  isActive: true,
+};
+const cedisLocation = {
+  id: 'cedis-1',
+  name: 'CEDIS Veracruz',
+  type: 'DISTRIBUTION_CENTER',
   isActive: true,
 };
 
@@ -133,6 +140,41 @@ describe('UsersService employee administration', () => {
         operationalLocationId: location.id,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('allows WAREHOUSE users to be assigned to an active CEDIS', async () => {
+    const prisma = prismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.role.findUnique.mockResolvedValue(warehouseRole);
+    prisma.operationalLocation.findUnique.mockResolvedValue(cedisLocation);
+    prisma.user.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(
+          user({
+            ...data,
+            role: warehouseRole,
+            roleId: warehouseRole.id,
+            operationalLocationId: cedisLocation.id,
+            operationalLocation: cedisLocation,
+          }),
+        ),
+    );
+    const service = new UsersService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.create({
+        name: 'Almacén CEDIS',
+        email: 'warehouse@pollos.local',
+        phone: '+522291234568',
+        roleId: warehouseRole.id,
+        operationalLocationId: cedisLocation.id,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        operationalLocationId: cedisLocation.id,
+        role: warehouseRole,
+      }),
+    );
   });
 
   it('maps database unique races to their actual field', async () => {

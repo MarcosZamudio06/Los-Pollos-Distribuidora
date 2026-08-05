@@ -4,8 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { OperationalLocationType, Prisma } from '@prisma/client';
+import { Prisma, type OperationalLocationType } from '@prisma/client';
 import {
+  BranchSupplyCycleStatus,
   DeliveryRouteStatus,
   InventoryTransferStatus,
   PointOfSaleDailyCloseStatus,
@@ -39,11 +40,19 @@ type LocationResponse = Omit<LocationRecord, 'latitude' | 'longitude'> & {
 };
 
 type LocationListResponse = { items: LocationResponse[] };
+type LocationClient = PrismaService | Prisma.TransactionClient;
 
 type LocationMutationDto = CreateLocationDto | UpdateLocationDto;
 type LocationMutationData = Pick<
   LocationRecord,
-  'name' | 'code' | 'type' | 'parentId' | 'address' | 'isActive'
+  | 'name'
+  | 'code'
+  | 'type'
+  | 'parentId'
+  | 'address'
+  | 'latitude'
+  | 'longitude'
+  | 'isActive'
 >;
 type LocationListActor = Pick<
   AuthenticatedUser,
@@ -71,7 +80,10 @@ export class LocationsService {
     };
   }
 
-  async findOne(id: string): Promise<LocationResponse> {
+  async findOne(
+    id: string,
+    currentUser: LocationListActor,
+  ): Promise<LocationResponse> {
     const location = (await this.prisma.operationalLocation.findUnique({
       where: { id },
     })) as LocationRecord | null;
@@ -80,13 +92,52 @@ export class LocationsService {
       throw new NotFoundException('Location not found');
     }
 
+    this.assertLocationReadScope(location, currentUser);
+
     return this.toLocationResponse(location);
+  }
+
+  async findActiveBranches(
+    cedisId: string,
+    currentUser: LocationListActor,
+  ): Promise<LocationListResponse> {
+    const cedis = (await this.prisma.operationalLocation.findUnique({
+      where: { id: cedisId },
+    })) as LocationRecord | null;
+
+    if (
+      !cedis ||
+      cedis.type !== 'DISTRIBUTION_CENTER' ||
+      !cedis.isActive ||
+      (currentUser.role === 'WAREHOUSE' &&
+        currentUser.operationalLocationId !== cedisId) ||
+      !['ADMIN', 'WAREHOUSE'].includes(currentUser.role)
+    ) {
+      throw new NotFoundException('CEDIS not found');
+    }
+
+    const locations = (await this.prisma.operationalLocation.findMany({
+      where: {
+        parentId: cedisId,
+        type: 'BRANCH',
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+    })) as LocationRecord[];
+
+    return {
+      items: locations.map((location) => this.toLocationResponse(location)),
+    };
   }
 
   async create(dto: CreateLocationDto): Promise<LocationResponse> {
     const data = this.normalizeMutationData(dto, { forCreate: true });
     await this.assertCodeAvailable(data.code);
-    await this.assertParentLocationExists(data.parentId);
+    await this.assertLocationHierarchy(
+      data.type as OperationalLocationType,
+      data.parentId,
+    );
+    this.assertCoordinates(data.latitude, data.longitude);
 
     const location = (await this.prisma.operationalLocation
       .create({
@@ -96,6 +147,8 @@ export class LocationsService {
           type: data.type as OperationalLocationType,
           parentId: data.parentId ?? null,
           address: data.address ?? null,
+          latitude: this.toPrismaCoordinate(data.latitude),
+          longitude: this.toPrismaCoordinate(data.longitude),
           isActive: true,
         },
       })
@@ -108,44 +161,80 @@ export class LocationsService {
   }
 
   async update(id: string, dto: UpdateLocationDto): Promise<LocationResponse> {
-    const currentLocation = await this.findLocationForMutation(id);
     const data = this.normalizeMutationData(dto);
 
-    if (data.code !== undefined) {
-      await this.assertCodeAvailable(data.code, currentLocation.id);
-    }
+    return this.prisma
+      .$transaction(
+        async (tx) => {
+          const currentLocation = await this.findLocationForMutation(id, tx);
 
-    if (data.parentId !== undefined) {
-      await this.assertParentLocationExists(data.parentId, currentLocation.id);
-    }
+          if (data.code !== undefined) {
+            await this.assertCodeAvailable(data.code, currentLocation.id, tx);
+          }
 
-    if (data.isActive === false && currentLocation.isActive) {
-      await this.assertNoOpenDependencies(currentLocation.id);
-    }
+          if (
+            data.parentId !== undefined ||
+            data.type !== undefined ||
+            data.isActive !== undefined
+          ) {
+            await this.assertLocationHierarchy(
+              data.type ?? currentLocation.type,
+              data.parentId !== undefined
+                ? data.parentId
+                : currentLocation.parentId,
+              currentLocation.id,
+              currentLocation.type,
+              tx,
+              data.parentId !== undefined || data.type !== undefined,
+            );
+          }
 
-    const location = (await this.prisma.operationalLocation
-      .update({
-        where: { id: currentLocation.id },
-        data: data,
-      })
+          this.assertCoordinates(
+            data.latitude !== undefined
+              ? data.latitude
+              : currentLocation.latitude,
+            data.longitude !== undefined
+              ? data.longitude
+              : currentLocation.longitude,
+          );
+
+          if (data.isActive === false && currentLocation.isActive) {
+            await this.assertNoOpenDependencies(currentLocation, tx);
+          }
+
+          const location = (await tx.operationalLocation.update({
+            where: { id: currentLocation.id },
+            data: this.toPrismaMutationData(data),
+          })) as LocationRecord;
+
+          return this.toLocationResponse(location);
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      )
       .catch((error: unknown) => {
         this.throwDuplicateCodeConflict(error);
         throw error;
-      })) as LocationRecord;
-
-    return this.toLocationResponse(location);
+      });
   }
 
   async deactivate(id: string): Promise<LocationResponse> {
-    const currentLocation = await this.findActiveLocationForMutation(id);
-    await this.assertNoOpenDependencies(currentLocation.id);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const currentLocation = await this.findActiveLocationForMutation(
+          id,
+          tx,
+        );
+        await this.assertNoOpenDependencies(currentLocation, tx);
 
-    const location = (await this.prisma.operationalLocation.update({
-      where: { id: currentLocation.id },
-      data: { isActive: false },
-    })) as LocationRecord;
+        const location = (await tx.operationalLocation.update({
+          where: { id: currentLocation.id },
+          data: { isActive: false },
+        })) as LocationRecord;
 
-    return this.toLocationResponse(location);
+        return this.toLocationResponse(location);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async assertLocationCanBeUsedForSale(locationId: string): Promise<void> {
@@ -175,15 +264,9 @@ export class LocationsService {
     currentUser: LocationListActor,
   ): Prisma.OperationalLocationWhereInput {
     const search = query.search?.trim();
-
-    return {
-      isActive: query.isActive ?? true,
-      ...(currentUser.role === 'SELLER'
-        ? { id: currentUser.operationalLocationId ?? SELLER_WITHOUT_LOCATION }
-        : {}),
-      ...(query.type ? { type: query.type } : {}),
-      ...(query.parentId ? { parentId: query.parentId } : {}),
-      ...(search
+    const scope = this.buildScopeWhere(currentUser);
+    const searchFilter: Prisma.OperationalLocationWhereInput | undefined =
+      search
         ? {
             OR: [
               { name: { contains: search, mode: 'insensitive' } },
@@ -191,7 +274,15 @@ export class LocationsService {
               { address: { contains: search, mode: 'insensitive' } },
             ],
           }
-        : {}),
+        : undefined;
+
+    return {
+      isActive: query.isActive ?? true,
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.parentId ? { parentId: query.parentId } : {}),
+      ...(searchFilter && Object.keys(scope).length > 0
+        ? { AND: [scope, searchFilter] }
+        : (searchFilter ?? scope)),
     };
   }
 
@@ -209,8 +300,56 @@ export class LocationsService {
     };
   }
 
-  private async findLocationForMutation(id: string): Promise<LocationRecord> {
-    const location = (await this.prisma.operationalLocation.findUnique({
+  private buildScopeWhere(
+    currentUser: LocationListActor,
+  ): Prisma.OperationalLocationWhereInput {
+    if (currentUser.role === 'ADMIN') return {};
+
+    if (currentUser.role === 'WAREHOUSE') {
+      const locationId = currentUser.operationalLocationId;
+      return {
+        OR: locationId
+          ? [
+              { id: locationId },
+              {
+                parentId: locationId,
+                type: 'BRANCH',
+                isActive: true,
+              },
+            ]
+          : [{ id: SELLER_WITHOUT_LOCATION }],
+      };
+    }
+
+    return { id: currentUser.operationalLocationId ?? SELLER_WITHOUT_LOCATION };
+  }
+
+  private assertLocationReadScope(
+    location: LocationRecord,
+    currentUser: LocationListActor,
+  ): void {
+    if (currentUser.role === 'ADMIN') return;
+
+    if (
+      currentUser.role === 'WAREHOUSE' &&
+      (location.id === currentUser.operationalLocationId ||
+        (location.type === 'BRANCH' &&
+          location.parentId === currentUser.operationalLocationId &&
+          location.isActive))
+    ) {
+      return;
+    }
+
+    if (location.id === currentUser.operationalLocationId) return;
+
+    throw new NotFoundException('Location not found');
+  }
+
+  private async findLocationForMutation(
+    id: string,
+    client: LocationClient = this.prisma,
+  ): Promise<LocationRecord> {
+    const location = (await client.operationalLocation.findUnique({
       where: { id },
     })) as LocationRecord | null;
 
@@ -223,8 +362,9 @@ export class LocationsService {
 
   private async findActiveLocationForMutation(
     id: string,
+    client: LocationClient = this.prisma,
   ): Promise<LocationRecord> {
-    const location = (await this.prisma.operationalLocation.findFirst({
+    const location = (await client.operationalLocation.findFirst({
       where: { id, isActive: true },
     })) as LocationRecord | null;
 
@@ -255,13 +395,37 @@ export class LocationsService {
     }
   }
 
-  private async assertNoOpenDependencies(locationId: string): Promise<void> {
-    const transfer = await this.prisma.inventoryTransfer.findFirst({
+  private async assertNoOpenDependencies(
+    location: LocationRecord,
+    client: LocationClient = this.prisma,
+  ): Promise<void> {
+    const locationIds = [location.id];
+    const children =
+      (await client.operationalLocation.findMany({
+        where: {
+          parentId: location.id,
+        },
+        select: { id: true, isActive: true },
+      })) ?? [];
+
+    if (location.type === 'DISTRIBUTION_CENTER' && children.length > 0) {
+      throw new BadRequestException(
+        'Cannot deactivate a CEDIS with child locations',
+      );
+    }
+
+    if (children.length > 0) {
+      throw new BadRequestException(
+        'Cannot deactivate a location with child locations',
+      );
+    }
+
+    const transfer = await client.inventoryTransfer.findFirst({
       where: {
         status: InventoryTransferStatus.IN_TRANSIT,
         OR: [
-          { originLocationId: locationId },
-          { destinationLocationId: locationId },
+          { originLocationId: { in: locationIds } },
+          { destinationLocationId: { in: locationIds } },
         ],
       },
       select: { id: true },
@@ -273,9 +437,9 @@ export class LocationsService {
       );
     }
 
-    const dailyClose = await this.prisma.pointOfSaleDailyClose.findFirst({
+    const dailyClose = await client.pointOfSaleDailyClose.findFirst({
       where: {
-        operationalLocationId: locationId,
+        operationalLocationId: { in: locationIds },
         status: {
           in: [
             PointOfSaleDailyCloseStatus.DRAFT,
@@ -292,11 +456,11 @@ export class LocationsService {
       );
     }
 
-    const activeRoute = await this.prisma.deliveryRoute.findFirst({
+    const activeRoute = await client.deliveryRoute.findFirst({
       where: {
         OR: [
           {
-            originLocationId: locationId,
+            originLocationId: { in: locationIds },
             status: {
               in: [
                 DeliveryRouteStatus.PENDING,
@@ -305,7 +469,7 @@ export class LocationsService {
             },
           },
           {
-            routeStockLocationId: locationId,
+            routeStockLocationId: { in: locationIds },
             status: {
               in: [
                 DeliveryRouteStatus.PENDING,
@@ -314,7 +478,7 @@ export class LocationsService {
             },
           },
           {
-            originLocationId: locationId,
+            originLocationId: { in: locationIds },
             settlement: {
               status: {
                 in: [
@@ -325,7 +489,7 @@ export class LocationsService {
             },
           },
           {
-            routeStockLocationId: locationId,
+            routeStockLocationId: { in: locationIds },
             settlement: {
               status: {
                 in: [
@@ -345,17 +509,40 @@ export class LocationsService {
         'Cannot deactivate a location with active routes or open settlements',
       );
     }
+
+    const cycle = await client.branchSupplyCycle.findFirst({
+      where: {
+        status: {
+          notIn: [
+            BranchSupplyCycleStatus.CLOSED,
+            BranchSupplyCycleStatus.CANCELLED,
+          ],
+        },
+        OR: [
+          { distributionCenterLocationId: { in: locationIds } },
+          { branchLocationId: { in: locationIds } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (cycle) {
+      throw new BadRequestException(
+        'Cannot deactivate a location with open CEDIS supply cycles',
+      );
+    }
   }
 
   private async assertCodeAvailable(
     code: string | null | undefined,
     currentLocationId?: string,
+    client: LocationClient = this.prisma,
   ): Promise<void> {
     if (code === undefined || code === null) {
       return;
     }
 
-    const existingLocation = await this.prisma.operationalLocation.findUnique({
+    const existingLocation = await client.operationalLocation.findUnique({
       where: { code },
       select: { id: true },
     });
@@ -365,10 +552,68 @@ export class LocationsService {
     }
   }
 
-  private async assertParentLocationExists(
+  private async assertLocationHierarchy(
+    type: OperationalLocationType,
     parentId: string | null | undefined,
     currentLocationId?: string,
+    currentType?: OperationalLocationType,
+    client: LocationClient = this.prisma,
+    checkOpenCycle = false,
   ): Promise<void> {
+    if (
+      currentLocationId &&
+      currentType === 'DISTRIBUTION_CENTER' &&
+      type !== 'DISTRIBUTION_CENTER'
+    ) {
+      const activeChild = await client.operationalLocation.findFirst({
+        where: { parentId: currentLocationId, isActive: true },
+        select: { id: true },
+      });
+
+      if (activeChild) {
+        throw new BadRequestException(
+          'Cannot change a CEDIS type while it has active child locations',
+        );
+      }
+    }
+
+    if (checkOpenCycle && currentLocationId && currentType === 'BRANCH') {
+      const openCycle = await client.branchSupplyCycle.findFirst({
+        where: {
+          branchLocationId: currentLocationId,
+          status: {
+            notIn: [
+              BranchSupplyCycleStatus.CLOSED,
+              BranchSupplyCycleStatus.CANCELLED,
+            ],
+          },
+        },
+        select: { id: true },
+      });
+
+      if (openCycle) {
+        throw new BadRequestException(
+          'Cannot change a branch hierarchy while it has an open CEDIS supply cycle',
+        );
+      }
+    }
+
+    if (
+      type === 'DISTRIBUTION_CENTER' &&
+      parentId !== null &&
+      parentId !== undefined
+    ) {
+      throw new BadRequestException(
+        'DISTRIBUTION_CENTER locations cannot have a parent',
+      );
+    }
+
+    if (type === 'BRANCH' && (parentId === undefined || parentId === null)) {
+      throw new BadRequestException(
+        'BRANCH locations must have a DISTRIBUTION_CENTER parent',
+      );
+    }
+
     if (parentId === undefined || parentId === null) {
       return;
     }
@@ -377,13 +622,42 @@ export class LocationsService {
       throw new BadRequestException('Location cannot be its own parent');
     }
 
-    const parentLocation = await this.prisma.operationalLocation.findUnique({
+    const parentLocation = await client.operationalLocation.findUnique({
       where: { id: parentId },
-      select: { id: true },
+      select: { id: true, type: true, isActive: true, parentId: true },
     });
 
     if (!parentLocation) {
       throw new BadRequestException('Parent location does not exist');
+    }
+
+    if (!parentLocation.isActive) {
+      throw new BadRequestException('Parent location must be active');
+    }
+
+    if (type === 'BRANCH' && parentLocation.type !== 'DISTRIBUTION_CENTER') {
+      throw new BadRequestException(
+        'BRANCH locations must have a DISTRIBUTION_CENTER parent',
+      );
+    }
+
+    const visited = new Set<string>();
+    let ancestor: typeof parentLocation | null = parentLocation;
+    while (ancestor) {
+      if (ancestor.id === currentLocationId) {
+        throw new BadRequestException('Location parent would create a cycle');
+      }
+      if (visited.has(ancestor.id)) {
+        throw new BadRequestException(
+          'Location parent hierarchy contains a cycle',
+        );
+      }
+      visited.add(ancestor.id);
+      if (!ancestor.parentId) break;
+      ancestor = await client.operationalLocation.findUnique({
+        where: { id: ancestor.parentId },
+        select: { id: true, type: true, isActive: true, parentId: true },
+      });
     }
   }
 
@@ -415,6 +689,16 @@ export class LocationsService {
       ...(dto.address !== undefined
         ? { address: this.normalizeOptionalText(dto.address) }
         : {}),
+      ...(dto.latitude !== undefined
+        ? { latitude: dto.latitude }
+        : options.forCreate
+          ? { latitude: null }
+          : {}),
+      ...(dto.longitude !== undefined
+        ? { longitude: dto.longitude }
+        : options.forCreate
+          ? { longitude: null }
+          : {}),
       ...('isActive' in dto && dto.isActive !== undefined
         ? { isActive: dto.isActive }
         : {}),
@@ -428,6 +712,55 @@ export class LocationsService {
 
     const normalizedValue = value.trim();
     return normalizedValue.length > 0 ? normalizedValue : null;
+  }
+
+  private assertCoordinates(
+    latitude: LocationRecord['latitude'] | undefined,
+    longitude: LocationRecord['longitude'] | undefined,
+  ): void {
+    const hasLatitude = latitude !== undefined && latitude !== null;
+    const hasLongitude = longitude !== undefined && longitude !== null;
+
+    if (hasLatitude !== hasLongitude) {
+      throw new BadRequestException(
+        'latitude and longitude must be provided together',
+      );
+    }
+
+    if (!hasLatitude || !hasLongitude) return;
+
+    const numericLatitude = Number(latitude);
+    const numericLongitude = Number(longitude);
+    if (
+      !Number.isFinite(numericLatitude) ||
+      numericLatitude < -90 ||
+      numericLatitude > 90 ||
+      !Number.isFinite(numericLongitude) ||
+      numericLongitude < -180 ||
+      numericLongitude > 180
+    ) {
+      throw new BadRequestException('Coordinates are out of range');
+    }
+  }
+
+  private toPrismaMutationData(
+    data: Partial<LocationMutationData>,
+  ): Prisma.OperationalLocationUncheckedUpdateInput {
+    return {
+      ...data,
+      ...(data.latitude !== undefined
+        ? { latitude: this.toPrismaCoordinate(data.latitude) }
+        : {}),
+      ...(data.longitude !== undefined
+        ? { longitude: this.toPrismaCoordinate(data.longitude) }
+        : {}),
+    } as Prisma.OperationalLocationUncheckedUpdateInput;
+  }
+
+  private toPrismaCoordinate(
+    value: LocationRecord['latitude'] | undefined,
+  ): number | null {
+    return value == null ? null : Number(value.toString());
   }
 
   private toLocationResponse(location: LocationRecord): LocationResponse {

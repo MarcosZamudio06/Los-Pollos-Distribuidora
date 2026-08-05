@@ -232,12 +232,23 @@ describe('AccessControlService', () => {
       isActive: true,
       roleId: currentRole.id,
       role: currentRole,
+      operationalLocation: {
+        id: 'cedis-1',
+        name: 'CEDIS Veracruz',
+        type: 'DISTRIBUTION_CENTER',
+        isActive: true,
+      },
     };
     const updatedUser = {
       ...currentUser,
       roleId: nextRole.id,
       role: nextRole,
-      operationalLocation: { id: 'location-1', name: 'Matriz', type: 'BRANCH' },
+      operationalLocation: {
+        id: 'cedis-1',
+        name: 'CEDIS Veracruz',
+        type: 'DISTRIBUTION_CENTER',
+        isActive: true,
+      },
     };
     prisma.user.findUnique.mockResolvedValue(currentUser);
     prisma.role.findUnique.mockResolvedValue(nextRole);
@@ -274,6 +285,46 @@ describe('AccessControlService', () => {
         }),
       }),
     );
+  });
+
+  it('does not assign WAREHOUSE access to a user assigned to a branch', async () => {
+    const prisma = createPrisma();
+    const currentRole = roleRecord({ id: 'role-seller', name: 'SELLER' });
+    const nextRole = roleRecord({
+      id: 'role-warehouse',
+      name: 'WAREHOUSE',
+      permissions: [{ permission: permission(PERMISSIONS.CEDIS_VIEW) }],
+    });
+    const currentUser = {
+      id: 'employee-1',
+      roleId: currentRole.id,
+      role: currentRole,
+      operationalLocation: {
+        id: 'branch-1',
+        name: 'Sucursal Veracruz',
+        type: 'BRANCH',
+        isActive: true,
+      },
+    };
+    prisma.user.findUnique.mockResolvedValue(currentUser);
+    prisma.role.findUnique.mockResolvedValue(nextRole);
+
+    await expect(
+      new AccessControlService(
+        prisma as unknown as PrismaService,
+      ).updateUserAccessProfile(
+        'employee-1',
+        {
+          roleId: nextRole.id,
+          expectedRoleId: currentRole.id,
+          reason: 'Cambio de responsabilidad',
+        },
+        admin,
+      ),
+    ).rejects.toThrow(
+      'Operational location is not available for the selected access profile',
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('revokes sessions and audits a manual session closure', async () => {

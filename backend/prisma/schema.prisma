@@ -509,6 +509,8 @@ model OperationalLocation {
   cashMovements         CashMovement[]
   scaleTicketReferences ScaleTicketReference[]
   legalEntityMappings   LegalEntityOperationalLocation[]
+
+  @@index([parentId, type, isActive])
 }
 
 model Category {

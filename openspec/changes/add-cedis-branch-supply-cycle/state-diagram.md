@@ -4,19 +4,21 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ACTIVE: crear
-    ACTIVE --> COMPLETED: cierre diario CLOSED
-    COMPLETED --> ACTIVE: reapertura auditada
-    ACTIVE --> CANCELLED: cancelar con motivo
+    [*] --> OPEN: crear
+    OPEN --> READY_FOR_REVIEW: revisión
+    READY_FOR_REVIEW --> CLOSED: cierre diario CLOSED
+    CLOSED --> OPEN: reapertura auditada
+    OPEN --> CANCELLED: cancelar con motivo
     CANCELLED --> [*]
 ```
 
 Reglas:
 
-- `ACTIVE` admite vínculos y comandos mientras el cierre relacionado sea inexistente o `DRAFT`.
-- `COMPLETED` exige suministro confirmado, cero transferencias pendientes, integridad válida y cierre `REVIEWED` con versión vigente.
+- `OPEN` admite vínculos y comandos mientras el cierre relacionado sea inexistente o `DRAFT`.
+- `READY_FOR_REVIEW` exige suministro confirmado, cero transferencias pendientes e integridad válida.
+- `CLOSED` exige cierre `CLOSED` con versión vigente.
 - `CANCELLED` es final.
-- `COMPLETED` no tiene endpoint propio: se obtiene dentro de `PointOfSaleDailyCloseService.close`.
+- `CLOSED` no tiene endpoint propio: se obtiene dentro de `PointOfSaleDailyCloseService.close`.
 
 ## Traspaso vinculado
 
@@ -42,4 +44,4 @@ DRAFT -> REVIEWED -> CLOSED
   +-> CANCELLED      +-> DRAFT (reapertura ADMIN)
 ```
 
-El ciclo no redefine estas transiciones. Solo añade precondiciones de suministro/integridad y sincroniza `ACTIVE`/`COMPLETED` dentro de la misma transacción.
+El ciclo no redefine estas transiciones. Solo añade precondiciones de suministro/integridad y sincroniza `OPEN`/`CLOSED` dentro de la misma transacción.

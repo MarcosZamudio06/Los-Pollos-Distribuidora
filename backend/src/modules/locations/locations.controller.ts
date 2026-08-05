@@ -9,6 +9,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { PERMISSIONS } from '../../common/authorization/permissions';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -39,18 +41,36 @@ export class LocationsController {
     };
   }
 
+  @Get(':id/branches')
+  @Roles('ADMIN', 'WAREHOUSE')
+  @RequirePermissions(PERMISSIONS.CEDIS_VIEW)
+  async findActiveBranches(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'CEDIS branches retrieved successfully',
+      data: await this.locationsService.findActiveBranches(id, currentUser),
+    };
+  }
+
   @Get(':id')
   @Roles('ADMIN', 'WAREHOUSE', 'SELLER', 'DRIVER', 'COLLECTIONS')
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Location retrieved successfully',
-      data: await this.locationsService.findOne(id),
+      data: await this.locationsService.findOne(id, currentUser),
     };
   }
 
   @Post()
   @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.CEDIS_MANAGE)
   async create(@Body() body: CreateLocationDto) {
     return {
       success: true,
@@ -61,6 +81,7 @@ export class LocationsController {
 
   @Patch(':id')
   @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.CEDIS_MANAGE)
   async update(@Param('id') id: string, @Body() body: UpdateLocationDto) {
     return {
       success: true,
@@ -71,6 +92,7 @@ export class LocationsController {
 
   @Delete(':id')
   @Roles('ADMIN')
+  @RequirePermissions(PERMISSIONS.CEDIS_MANAGE)
   async deactivate(@Param('id') id: string) {
     return {
       success: true,

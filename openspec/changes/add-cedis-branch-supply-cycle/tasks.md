@@ -8,13 +8,13 @@
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
 | Suggested split | PR 1 datos/permisos; PR 2 dominio/API; PR 3 cierre/reportes; PR 4 frontend/E2E |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Delivery strategy | exception-ok (autorización explícita del usuario) |
+| Chain strategy | size:exception |
 
-Decision needed before apply: Yes
-Chained PRs recommended: Yes
-Chain strategy: pending
-400-line budget risk: High
+Decision needed before apply: Resolved — implementación autorizada como una unidad revisable.
+Chained PRs recommended: Yes, excepted by explicit user authorization.
+Chain strategy: size:exception
+400-line budget risk: High — accepted by maintainer.
 
 ### Suggested Work Units
 
@@ -50,3 +50,10 @@ Chain strategy: pending
 - [ ] 4.1 Crear feature CEDIS y extender router, navegación, permisos y layout.
 - [ ] 4.2 Extender inventario, cierre diario y dashboard reutilizando sus servicios/componentes actuales.
 - [ ] 4.3 Ejecutar pruebas backend, E2E, builds y pruebas UI; verificar que solo el cambio OpenSpec se modifique durante la documentación.
+
+## Approved implementation slice: CEDIS hierarchy and permissions
+
+- [x] 5.1 Add CEDIS location hierarchy validation, parent-cycle protection, coordinate DTO validation, scoped reads, and active direct-branch query.
+- [x] 5.2 Add CEDIS permissions, idempotent seed defaults, CEDIS/branch seed mapping, and hierarchy migration contract.
+- [x] 5.3 Synchronize frontend catalog labels/types and canonical/OpenSpec documentation without implementing the unrelated BranchSupplyCycle workflow.
+- [x] 5.4 Add unit, controller, permission, seed, and schema contract coverage for the approved slice.

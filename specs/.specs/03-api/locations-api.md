@@ -1,6 +1,6 @@
 # API — Ubicaciones operativas
 
-Define contratos para administrar `OperationalLocation`, la abstracción usada por inventario, ventas, compras, traspasos, rutas y configuración operativa. No resuelve la decisión final de sucursal-almacén; solo conserva la estructura necesaria para operar por ubicación.
+Define contratos para administrar `OperationalLocation`, la abstracción usada por inventario, ventas, compras, traspasos, rutas y configuración operativa. La jerarquía CEDIS-sucursal está cerrada: un CEDIS es una raíz `DISTRIBUTION_CENTER` y una sucursal directa es `BRANCH` con su `parentId`.
 
 ## GET /api/locations
 
@@ -11,27 +11,35 @@ Permisos: `ADMIN`, `WAREHOUSE`; `SELLER` y `DRIVER` solo lectura cuando el flujo
 Query:
 
 - `page`, `limit`, `search`.
-- `type`: `BRANCH`, `WAREHOUSE`, `MIXED`, `EXTERNAL_POINT_OF_SALE`, `ROUTE_STOCK`.
+- `type`: `BRANCH`, `WAREHOUSE`, `DISTRIBUTION_CENTER`, `MIXED`, `EXTERNAL_POINT_OF_SALE`, `ROUTE_STOCK`.
 - `parentId`.
 - `isActive`.
 
 Respuesta `data.items[]`:
 
-- `id`, `name`, `code`, `type`, `parentId`, `address`, `isActive`.
+- `id`, `name`, `code`, `type`, `parentId`, `address`, `latitude`, `longitude`, `isActive`.
 - `createdAt`, `updatedAt`.
 
 Validaciones:
 
-- No asumir que toda sucursal tiene almacenes ni que todo almacén pertenece a una sucursal.
-- `parentId` es opcional hasta cerrar la decisión de negocio.
+- `ADMIN` ve el catálogo global. `SELLER`, `DRIVER` y `COLLECTIONS` solo ven su ubicación asignada. `WAREHOUSE` ve el CEDIS asignado y sus sucursales directas activas.
+- Un `DISTRIBUTION_CENTER` tiene `parentId=null`; un `BRANCH` requiere como padre un CEDIS activo. `ROUTE_STOCK` y `EXTERNAL_POINT_OF_SALE` conservan su relación operativa compatible con su sucursal.
 
 ## GET /api/locations/:id
 
 Propósito: obtener una ubicación operativa.
 
-Permisos: `ADMIN`, `WAREHOUSE`; lectura limitada para roles operativos.
+Permisos: `ADMIN`, `WAREHOUSE`; los demás roles operativos solo pueden leer su ubicación asignada.
 
 Respuesta `data`: campos de la ubicación y, si aplica, resumen de uso operativo.
+
+## GET /api/locations/:id/branches
+
+Propósito: listar exclusivamente las sucursales activas directas del CEDIS solicitado.
+
+Permisos: `cedis.view`; solo `ADMIN` y `WAREHOUSE`. `WAREHOUSE` requiere que `id` sea su CEDIS asignado. Un identificador inexistente, inactivo o que no sea `DISTRIBUTION_CENTER` no revela datos.
+
+Respuesta `data.items[]`: ubicaciones `BRANCH` activas con `parentId=id`, ordenadas por nombre. No incluye nietos, otros tipos ni sucursales de otro CEDIS.
 
 ## POST /api/locations
 
@@ -47,7 +55,9 @@ Body importante:
   "code": "ALM-001",
   "type": "EXTERNAL_POINT_OF_SALE",
   "parentId": "string opcional",
-  "address": "Dirección operativa"
+  "address": "Dirección operativa",
+  "latitude": 19.183,
+  "longitude": -96.134
 }
 ```
 
@@ -58,7 +68,9 @@ Validaciones:
 - `name` requerido.
 - `type` requerido.
 - `code` único si existe.
-- `type` limitado a `BRANCH`, `WAREHOUSE`, `MIXED`, `EXTERNAL_POINT_OF_SALE`, `ROUTE_STOCK`.
+- `type` limitado a `BRANCH`, `WAREHOUSE`, `DISTRIBUTION_CENTER`, `MIXED`, `EXTERNAL_POINT_OF_SALE`, `ROUTE_STOCK`.
+- Latitud y longitud se envían juntas; sus rangos son `[-90, 90]` y `[-180, 180]` respectivamente.
+- El padre debe existir, estar activo y no crear ciclos. Un CEDIS no tiene padre; una sucursal requiere un CEDIS activo como padre.
 - `EXTERNAL_POINT_OF_SALE` representa una pollería externa a matriz y debe operar como ubicación de inventario, venta y cierre diario.
 - `ROUTE_STOCK` representa inventario cargado a una ruta y no debe reutilizarse entre rutas activas distintas.
 
@@ -72,6 +84,7 @@ Validaciones:
 
 - No cambiar estructura de forma que rompa referencias históricas.
 - No convertir una ubicación inactiva en origen o destino de nuevas operaciones sin reactivación explícita.
+- No permitir ciclos, cambios de tipo incompatibles ni coordenadas sin su par.
 
 ## DELETE /api/locations/:id
 
@@ -88,6 +101,8 @@ Validaciones:
 - Una ubicación inactiva no debe usarse en nuevas ventas, compras, ajustes o traspasos.
 - No desactivar una ubicación con `PointOfSaleDailyClose` en `DRAFT` o `REVIEWED`.
 - No desactivar una ubicación `ROUTE_STOCK` si la ruta asociada sigue activa o tiene liquidación abierta.
+- No desactivar un CEDIS o sucursal con `BranchSupplyCycle` que no esté `CLOSED` o `CANCELLED`. Al desactivar un CEDIS, la protección también cubre sus sucursales directas.
+- No desactivar una ubicación que conserve hijos activos; tampoco cambiar un CEDIS a otro tipo mientras tenga hijos activos.
 
 ## Uso en cierres diarios
 
@@ -95,4 +110,4 @@ Validaciones:
 - En `GET /api/locations`, `SELLER` solo recibe su ubicación operativa asignada; si no tiene asignación, recibe una lista vacía. `ADMIN` conserva el catálogo activo para seleccionar una ubicación compatible.
 - Crear un cierre diario requiere una ubicación activa de tipo `EXTERNAL_POINT_OF_SALE` o una ubicación equivalente autorizada por negocio.
 - Cambiar el tipo de una ubicación no puede invalidar cierres, ventas, movimientos o pagos históricos.
-- El modelo final de jerarquía matriz-sucursal-almacén permanece abierto; este tipo no obliga a usar `parentId`.
+- Los cierres diarios siguen limitados a los tipos autorizados para punto de venta; `DISTRIBUTION_CENTER` no es una ubicación de cierre de punto de venta.

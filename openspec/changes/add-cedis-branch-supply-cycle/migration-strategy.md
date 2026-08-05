@@ -2,13 +2,15 @@
 
 ## Esquema
 
-1. Crear `BranchSupplyCycleStatus` (`ACTIVE`, `COMPLETED`, `CANCELLED`) y `BranchSupplyCycleTransferKind` (`SUPPLY`, `RETURN`).
-2. Crear `BranchSupplyCycle` con CEDIS, sucursal, fecha, versión, auditoría y motivo de cancelación.
+1. Crear `BranchSupplyCycleStatus` (`OPEN`, `READY_FOR_REVIEW`, `CLOSED`, `CANCELLED`) y `BranchSupplyTransferRole` (`SUPPLY`, `RETURN`).
+2. Crear `BranchSupplyCycle` con `distributionCenterLocationId`, sucursal, fecha, versión, auditoría y motivo de cancelación.
 3. Crear `BranchSupplyCycleTransfer` con vínculo único a `InventoryTransfer`, clasificación y auditoría.
 4. Agregar `PointOfSaleDailyClose.branchSupplyCycleId` nullable.
 5. Agregar FK `ON DELETE RESTRICT`, índices por ubicación/fecha/estado y restricciones de versión/ubicaciones distintas.
-6. Crear por SQL el índice parcial único de ciclo `(branchLocationId, businessDate)` para estados distintos de `CANCELLED`.
+6. Crear por SQL el índice parcial único de ciclo `(distributionCenterLocationId, branchLocationId, businessDate)` para estados distintos de `CANCELLED`.
 7. Crear por SQL el índice parcial que limite a un cierre no cancelado por ciclo.
+8. Ejecutar el preflight de `OperationalLocation`: `DISTRIBUTION_CENTER` raíz y `BRANCH` con padre CEDIS activo; detener el despliegue si existen filas inválidas.
+9. Reforzar el trigger del ciclo para aceptar únicamente sucursales `BRANCH` directamente asignadas al CEDIS.
 
 ## Permisos
 
@@ -17,12 +19,19 @@ Insertar de forma idempotente:
 - `branch_supply_cycles.read`
 - `branch_supply_cycles.manage`
 - `branch_supply_cycles.cancel`
+- `cedis.view`
+- `cedis.manage`
+- `cedis.dispatch`
+- `cedis.receive_returns`
+- `cedis.reconcile`
+- `cedis.close`
+- `cedis.view_costs`
 
-Asignar defaults a roles canónicos sin eliminar asignaciones personalizadas.
+El bootstrap de producción asigna defaults a roles canónicos sin eliminar asignaciones personalizadas. El seed de desarrollo conserva su comportamiento explícito de reinicio de perfiles para ambientes descartables.
 
 ## Backfill
 
-El backfill requiere un archivo/configuración de mapeo aprobado `branchLocationId -> cedisLocationId`. No usa `parentId`, nombre, código ni proximidad como inferencia automática.
+El backfill de ciclos requiere un archivo/configuración de mapeo aprobado `branchLocationId -> distributionCenterLocationId`. No usa `parentId`, nombre, código ni proximidad para asociar ciclos históricos automáticamente. La topología vigente sí debe validarse como `DISTRIBUTION_CENTER` raíz y `BRANCH` directa.
 
 Para cada pareja y fecha:
 

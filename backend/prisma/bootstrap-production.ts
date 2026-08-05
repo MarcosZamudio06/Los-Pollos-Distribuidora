@@ -23,6 +23,14 @@ const productionRoles = [
   },
 ] as const;
 
+const productionDistributionCenter = {
+  name: 'Main Distribution Center',
+  code: 'MAIN-CEDIS',
+  type: 'DISTRIBUTION_CENTER',
+  address: null,
+  isActive: true,
+} as const;
+
 const productionLocation = {
   name: 'Main Location',
   code: 'MAIN',
@@ -130,9 +138,21 @@ export async function bootstrapProduction(
   }
 
   await prisma.operationalLocation.upsert({
+    where: { code: productionDistributionCenter.code },
+    update: productionDistributionCenter,
+    create: productionDistributionCenter,
+  });
+
+  await prisma.operationalLocation.upsert({
     where: { code: productionLocation.code },
-    update: productionLocation,
-    create: productionLocation,
+    update: {
+      ...productionLocation,
+      parent: { connect: { code: productionDistributionCenter.code } },
+    },
+    create: {
+      ...productionLocation,
+      parent: { connect: { code: productionDistributionCenter.code } },
+    },
   });
 
   await prisma.user.upsert({

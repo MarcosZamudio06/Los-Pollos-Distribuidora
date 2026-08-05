@@ -7,6 +7,13 @@
 | `branch_supply_cycles.read` | standard | Consultar ciclos y resumen autorizado. |
 | `branch_supply_cycles.manage` | sensitive | Crear ciclos, suministros, devoluciones y vínculos. |
 | `branch_supply_cycles.cancel` | critical | Cancelar ciclos con motivo y versión. |
+| `cedis.view` | standard | Consultar jerarquía y operación CEDIS autorizada. |
+| `cedis.manage` | critical | Administrar configuración y jerarquía CEDIS. |
+| `cedis.dispatch` | sensitive | Despachar inventario desde CEDIS. |
+| `cedis.receive_returns` | sensitive | Recibir devoluciones autorizadas. |
+| `cedis.reconcile` | critical | Conciliar operación CEDIS. |
+| `cedis.close` | critical | Cerrar operación CEDIS. |
+| `cedis.view_costs` | sensitive | Consultar costos/utilidad CEDIS. |
 
 ## Matriz por rol
 
@@ -29,6 +36,7 @@
 - `ADMIN` puede elegir ubicaciones activas compatibles.
 - `WAREHOUSE` debe tener `operationalLocationId` igual al CEDIS del ciclo.
 - `SELLER` debe tener `operationalLocationId` igual a la sucursal del ciclo.
+- `GET /api/locations/:cedisId/branches` exige `cedis.view`; solo `ADMIN` o `WAREHOUSE` asignado al CEDIS puede usarlo. `SELLER` conserva el permiso para capacidades futuras, pero no consulta este endpoint.
 - El backend debe aplicar alcance aunque el frontend o query envíe otra ubicación.
 - `branch_supply_cycles.manage` no concede permisos de inventario fuera de las reglas actuales.
 - `branch_supply_cycles.cancel` no permite cancelar cierres ni revertir movimientos.

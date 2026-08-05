@@ -46,7 +46,7 @@ Una devolución CEDIS contribuye a `otherOutputs` mediante su único `TRANSFER_O
 
 `completionEligible(C) = confirmedSupplyCount(C) > 0 AND pending(C) = 0 AND integrityErrors(C) = 0 AND dailyClose.status = REVIEWED AND dailyClose.validatedSourceVersion = dailyClose.version`
 
-Solo si `completionEligible(C)` es verdadero se permite la transición atómica del cierre a `CLOSED` y del ciclo a `COMPLETED`.
+Solo si `completionEligible(C)` es verdadero se permite la transición atómica del cierre a `CLOSED` y del ciclo a `CLOSED`.
 
 ## Límites
 

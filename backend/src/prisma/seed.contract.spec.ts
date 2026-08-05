@@ -187,6 +187,12 @@ describe('Prisma seed contract', () => {
           role: { connect: { name: roleUser.roleName } },
         },
       });
+      expect(upsert?.update.operationalLocation).toEqual({
+        connect: { code: roleUser.operationalLocationCode },
+      });
+      expect(upsert?.create.operationalLocation).toEqual({
+        connect: { code: roleUser.operationalLocationCode },
+      });
 
       const createPasswordHash = upsert?.create.passwordHash;
       const updatePasswordHash = upsert?.update.passwordHash;
@@ -266,26 +272,36 @@ describe('Prisma seed contract', () => {
     ).resolves.toBe(true);
   });
 
-  it('defines the three requested branches, base categories, and example products without global stock', () => {
-    expect(initialSeedLocations).toHaveLength(3);
+  it('defines an operational CEDIS with three directly mapped branches, base categories, and example products without global stock', () => {
+    expect(initialSeedLocations).toHaveLength(4);
     expect(initialSeedLocations).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          name: 'CEDIS Veracruz',
+          code: 'CEDIS-VER',
+          type: 'DISTRIBUTION_CENTER',
+          parentCode: null,
+          isActive: true,
+        }),
         expect.objectContaining({
           name: 'Veracruz',
           code: 'VER',
           type: 'BRANCH',
+          parentCode: 'CEDIS-VER',
           isActive: true,
         }),
         expect.objectContaining({
           name: 'Boca del Río',
           code: 'BDR',
           type: 'BRANCH',
+          parentCode: 'CEDIS-VER',
           isActive: true,
         }),
         expect.objectContaining({
           name: 'Alvarado',
           code: 'ALV',
           type: 'BRANCH',
+          parentCode: 'CEDIS-VER',
           isActive: true,
         }),
       ]),

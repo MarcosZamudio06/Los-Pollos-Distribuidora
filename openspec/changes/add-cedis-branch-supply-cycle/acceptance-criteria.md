@@ -17,11 +17,16 @@ Cada criterio es verificable como prueba unitaria, de contrato o E2E.
 - [ ] **AC-13 Suministro mínimo:** Sin suministro confirmado, la jornada no puede cerrar.
 - [ ] **AC-14 Cierre único:** Abrir el ciclo no crea un segundo `PointOfSaleDailyClose`; reutiliza o enlaza el único cierre permitido.
 - [ ] **AC-15 Invalidación:** Confirmar/cancelar un traspaso vinculado invalida la validación del cierre `DRAFT` y aumenta su versión.
-- [ ] **AC-16 Finalización:** Cerrar un cierre elegible cambia ciclo y cierre atómicamente a `COMPLETED`/`CLOSED`.
-- [ ] **AC-17 Reapertura:** Reabrir un cierre `CLOSED` devuelve ciclo a `ACTIVE` con auditoría existente conservada.
+- [ ] **AC-16 Finalización:** Cerrar un cierre elegible cambia ciclo y cierre atómicamente a `CLOSED`/`CLOSED`.
+- [ ] **AC-17 Reapertura:** Reabrir un cierre `CLOSED` devuelve ciclo a `OPEN` con auditoría existente conservada.
 - [ ] **AC-18 Cancelación:** El ciclo solo se cancela con motivo, sin cierre activo ni transferencias pendientes; no revierte inventario.
 - [ ] **AC-19 No doble conteo:** Una devolución participa una sola vez como salida `TRANSFER_OUT` en la conciliación del cierre.
 - [ ] **AC-20 No paralelismo:** No existen conteos, diferencias, saldos, snapshots ni cierre alternativos del ciclo.
 - [ ] **AC-21 Reportes:** Dashboard y detalle respetan alcance, frescura y ocultamiento de información sensible.
 - [ ] **AC-22 UI:** La pantalla CEDIS muestra loading, error, empty, success, unauthorized y conflict; el cierre mantiene un único botón de cierre.
 - [ ] **AC-23 Migración:** El backfill usa solo un mapa aprobado, es repetible, reporta ambigüedades y no modifica inventario histórico.
+- [x] **AC-24 Jerarquía:** `DISTRIBUTION_CENTER` siempre es raíz y una sucursal `BRANCH` requiere un padre CEDIS activo mediante `parentId`.
+- [x] **AC-25 Ciclos de parentId:** La API y la base rechazan autorreferencias y ciclos transitivos sin escribir la relación inválida.
+- [x] **AC-26 Sucursales directas:** La consulta CEDIS devuelve solo hijas `BRANCH` activas directas dentro del alcance autorizado.
+- [x] **AC-27 Desactivación:** Un CEDIS o sucursal no se desactiva con ciclos abiertos, transferencias `IN_TRANSIT`, cierres `DRAFT`/`REVIEWED` o hijos activos.
+- [x] **AC-28 Permisos:** `ADMIN` recibe los siete permisos CEDIS; `WAREHOUSE` recibe operación de abastecimiento/devolución; `SELLER` solo consulta y no recibe costos por default.

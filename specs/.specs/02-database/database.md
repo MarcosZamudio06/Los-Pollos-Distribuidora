@@ -160,7 +160,7 @@ El registro es append-only mediante restricciones de base de datos. Nunca almace
 
 ### OperationalLocation
 
-Representa una ubicación operativa donde se controla inventario. Puede modelar sucursal, almacén o una combinación según la decisión final de negocio.
+Representa una ubicación operativa donde se controla inventario. `DISTRIBUTION_CENTER` representa un CEDIS raíz y `BRANCH` representa una sucursal directa de ese CEDIS.
 
 Campos:
 
@@ -170,13 +170,15 @@ Campos:
 - type
 - parentId
 - address
+- latitude
+- longitude
 - isActive
 - createdAt
 - updatedAt
 
 Relaciones requeridas:
 
-- OperationalLocation puede tener una ubicación padre mediante `parentId` si se confirma jerarquía sucursal-almacén.
+- OperationalLocation tiene una autorrelación padre/hijas mediante `parentId`.
 - OperationalLocation tiene muchos InventoryBalance.
 - OperationalLocation tiene muchos Sale como ubicación de descuento.
 - OperationalLocation tiene muchos Purchase como ubicación receptora.
@@ -188,15 +190,17 @@ Tipos sugeridos:
 
 - BRANCH
 - WAREHOUSE
+- DISTRIBUTION_CENTER
 - MIXED
 - EXTERNAL_POINT_OF_SALE
 - ROUTE_STOCK
 
 Notas:
 
-- `parentId` permite representar un almacén dentro de una sucursal si el negocio confirma ese modelo.
-- Si sucursal y almacén operan como entidades independientes, `parentId` puede quedar vacío.
-- No se debe asumir una jerarquía final hasta cerrar la decisión de negocio.
+- `DISTRIBUTION_CENTER` tiene `parentId` nulo.
+- `BRANCH` requiere un padre activo de tipo `DISTRIBUTION_CENTER`.
+- La relación padre no puede formar ciclos directos o transitivos. `ROUTE_STOCK` y `EXTERNAL_POINT_OF_SALE` conservan las relaciones operativas compatibles con su sucursal.
+- `latitude` y `longitude` son nulas en conjunto o están dentro de sus rangos geográficos; la base de datos aplica ambos checks.
 - `EXTERNAL_POINT_OF_SALE` es el tipo canónico para pollerías o puntos fijos externos.
 - `ROUTE_STOCK` representa inventario cargado a una ruta operativa y solo debe usarse asociado a `DeliveryRoute`.
 

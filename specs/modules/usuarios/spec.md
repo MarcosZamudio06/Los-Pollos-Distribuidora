@@ -41,9 +41,19 @@ Administrar usuarios internos del sistema.
 
 - `users.manage` permite administrar usuarios.
 - `access_profiles.manage` permite administrar perfiles y sus permisos.
+- Los perfiles iniciales incluyen `cedis.view`, `cedis.manage`,
+  `cedis.dispatch`, `cedis.receive_returns`, `cedis.reconcile`, `cedis.close` y
+  `cedis.view_costs`.
+- `ADMIN` recibe todos los permisos CEDIS; `WAREHOUSE` recibe consulta,
+  abastecimiento y recepción de devoluciones; `SELLER` recibe únicamente
+  consulta dentro de su sucursal y no recibe costos por implicación del rol.
+- La asignación de ubicación permite `DISTRIBUTION_CENTER` para `WAREHOUSE`,
+  conserva ubicaciones operativas de venta para `SELLER` y no permite asignar
+  un CEDIS a un vendedor por defecto.
 - La administración técnica no concede automáticamente autorizaciones financieras.
 - Cambiar un perfil o sus permisos debe conservar actor, valores anterior y nuevo, fecha y motivo cuando corresponda.
 - El cambio de perfil se realiza únicamente mediante `/users/:id/access-profile`, con `expectedRoleId` y motivo.
+- El cambio de perfil valida que la ubicación asignada sea compatible con el nuevo rol; `WAREHOUSE` requiere CEDIS/almacén operativo y `SELLER` no puede recibir un CEDIS.
 - El cambio de perfil revoca todas las sesiones activas del usuario.
 - `/users/:id/sessions/revoke` permite cerrar sesiones activas con motivo y auditoría.
 - La respuesta de acceso incluye el perfil efectivo, permisos y sesiones activas sin exponer hashes ni tokens.

@@ -38,6 +38,14 @@ const branchSupplyCycleMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260804120000_add_branch_supply_cycle/migration.sql',
 );
+const cedisHierarchyMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260804130000_enforce_cedis_hierarchy/migration.sql',
+);
+const cedisCycleHierarchyMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260804140000_enforce_cedis_cycle_branch_type/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -146,7 +154,10 @@ describe('Prisma schema contract', () => {
     const cycleStatus = getEnumBlock('BranchSupplyCycleStatus');
     const transferRole = getEnumBlock('BranchSupplyTransferRole');
     const eventType = getEnumBlock('BranchSupplyCycleEventType');
-    const migrationSql = readFileSync(branchSupplyCycleMigrationSqlPath, 'utf8');
+    const migrationSql = readFileSync(
+      branchSupplyCycleMigrationSqlPath,
+      'utf8',
+    );
 
     expect(operationalLocationType).toMatch(/DISTRIBUTION_CENTER/);
     expect(cycleStatus).toMatch(/OPEN/);
@@ -161,11 +172,19 @@ describe('Prisma schema contract', () => {
       /distributionCenterLocationId\s+String[\s\S]*branchLocationId\s+String[\s\S]*businessDate\s+DateTime\s+@db\.Date/,
     );
     expect(cycle).toMatch(/pointOfSaleDailyCloseId\s+String\?/);
-    expect(cycle).toMatch(/status\s+BranchSupplyCycleStatus\s+@default\(OPEN\)/);
+    expect(cycle).toMatch(
+      /status\s+BranchSupplyCycleStatus\s+@default\(OPEN\)/,
+    );
     expect(cycle).toMatch(/version\s+Int\s+@default\(1\)/);
-    expect(cycle).toMatch(/totalDeliveredKg\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 3\)/);
-    expect(cycle).toMatch(/expectedSalesTotal\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
-    expect(cycle).toMatch(/actualProfitTotal\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
+    expect(cycle).toMatch(
+      /totalDeliveredKg\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 3\)/,
+    );
+    expect(cycle).toMatch(
+      /expectedSalesTotal\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/,
+    );
+    expect(cycle).toMatch(
+      /actualProfitTotal\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/,
+    );
 
     expect(transfer).toMatch(/inventoryTransferId\s+String\s+@unique/);
     expect(transfer).toMatch(/role\s+BranchSupplyTransferRole/);
@@ -173,9 +192,15 @@ describe('Prisma schema contract', () => {
     expect(item).toMatch(/productSkuSnapshot\s+String\?/);
     expect(item).toMatch(/productUnitSnapshot\s+ProductUnit/);
     expect(item).toMatch(/appliedEquivalentFactorSnapshot\s+Decimal\?/);
-    expect(item).toMatch(/deliveredPieces\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 3\)/);
-    expect(item).toMatch(/actualSalesAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
-    expect(item).toMatch(/actualProfitAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/);
+    expect(item).toMatch(
+      /deliveredPieces\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 3\)/,
+    );
+    expect(item).toMatch(
+      /actualSalesAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/,
+    );
+    expect(item).toMatch(
+      /actualProfitAmount\s+Decimal\s+@default\(0\)\s+@db\.Decimal\(14, 2\)/,
+    );
     expect(event).toMatch(/cycleVersion\s+Int/);
     expect(event).toMatch(/payload\s+Json/);
     expect(event).toMatch(/idempotencyKey\s+String\?/);
@@ -204,7 +229,10 @@ describe('Prisma schema contract', () => {
     const product = getModelBlock('Product');
     const transfer = getModelBlock('InventoryTransfer');
     const dailyClose = getModelBlock('PointOfSaleDailyClose');
-    const migrationSql = readFileSync(branchSupplyCycleMigrationSqlPath, 'utf8');
+    const migrationSql = readFileSync(
+      branchSupplyCycleMigrationSqlPath,
+      'utf8',
+    );
 
     expect(user).toMatch(
       /branchSupplyCyclesOpened\s+BranchSupplyCycle\[\]\s+@relation\("BranchSupplyCycleOpenedBy"\)/,
@@ -218,7 +246,9 @@ describe('Prisma schema contract', () => {
     expect(location).toMatch(
       /branchSupplyCycles\s+BranchSupplyCycle\[\]\s+@relation\("BranchSupplyCycleBranch"\)/,
     );
-    expect(product).toMatch(/branchSupplyCycleItems\s+BranchSupplyCycleItem\[\]/);
+    expect(product).toMatch(
+      /branchSupplyCycleItems\s+BranchSupplyCycleItem\[\]/,
+    );
     expect(transfer).toMatch(
       /branchSupplyCycleTransfer\s+BranchSupplyCycleTransfer\?/,
     );
@@ -279,6 +309,56 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toMatch(/USING GIST \("locationPoint"\)/);
     expect(migrationSql).toMatch(/USING GIST \("routeGeometry"\)/);
     expect(migrationSql).toContain('DeliveryRoutePlanDraft_active_lookup_idx');
+  });
+
+  it('enforces CEDIS hierarchy and parent-cycle prevention in the database', () => {
+    const location = getModelBlock('OperationalLocation');
+    const migrationSql = readFileSync(cedisHierarchyMigrationSqlPath, 'utf8');
+
+    expect(location).toMatch(/parent\s+OperationalLocation\?/);
+    expect(location).toMatch(/children\s+OperationalLocation\[\]/);
+    expect(location).toMatch(/@@index\(\[parentId, type, isActive\]\)/);
+    expect(migrationSql).toContain('validate_operational_location_hierarchy');
+    expect(migrationSql).toContain(
+      'DISTRIBUTION_CENTER locations cannot have a parent',
+    );
+    expect(migrationSql).toContain(
+      'BRANCH locations must have a DISTRIBUTION_CENTER parent',
+    );
+    expect(migrationSql).toContain(
+      'Cannot deactivate or change the type of a location with child locations',
+    );
+    expect(migrationSql).toContain(
+      'BEFORE INSERT OR UPDATE OF "type", "parentId", "isActive"',
+    );
+    expect(migrationSql).toContain(
+      'Cannot change a branch hierarchy with an open CEDIS supply cycle',
+    );
+    expect(migrationSql).toContain(
+      'OperationalLocation hierarchy preflight found % parent cycles',
+    );
+    expect(migrationSql).toContain(
+      'OperationalLocation_parentId_type_isActive_idx',
+    );
+    expect(readFileSync(geospatialRoutesMigrationSqlPath, 'utf8')).toContain(
+      'OperationalLocation_coordinates_pair_check',
+    );
+  });
+
+  it('keeps branch supply cycles tied to direct active CEDIS branches', () => {
+    const migrationSql = readFileSync(
+      cedisCycleHierarchyMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(migrationSql).toContain('BranchSupplyCycle preflight');
+    expect(migrationSql).toContain(
+      'branch."parentId" IS DISTINCT FROM cycle."distributionCenterLocationId"',
+    );
+    expect(migrationSql).toContain('branch_parent_id IS DISTINCT FROM');
+    expect(migrationSql).toContain(
+      'must be an active BRANCH directly assigned to CEDIS',
+    );
   });
 
   it('enforces one non-cancelled daily close per location and business date', () => {

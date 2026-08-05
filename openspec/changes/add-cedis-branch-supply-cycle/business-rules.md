@@ -3,8 +3,8 @@
 ## Invariantes
 
 1. `BranchSupplyCycle` coordina una sucursal, un CEDIS y una fecha; no es una ubicación ni un libro de inventario.
-2. `cedisLocationId` MUST referenciar una ubicación activa `WAREHOUSE` o `MIXED` aprobada por negocio. `branchLocationId` MUST referenciar una ubicación activa `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`.
-3. CEDIS y sucursal MUST ser distintos. No se inferirá su relación desde `OperationalLocation.parentId`.
+2. `distributionCenterLocationId` MUST referenciar una ubicación activa `DISTRIBUTION_CENTER`. `branchLocationId` MUST referenciar una ubicación activa `BRANCH` cuyo `parentId` sea el CEDIS.
+3. CEDIS y sucursal MUST ser distintos. `DISTRIBUTION_CENTER` tiene `parentId=null`; el árbol de ubicaciones no permite ciclos.
 4. Solo puede existir un ciclo no cancelado por sucursal y fecha.
 5. Un ciclo puede vincular múltiples transferencias `SUPPLY` y `RETURN`; cada traspaso solo puede vincularse una vez.
 6. `SUPPLY` MUST tener dirección CEDIS → sucursal. `RETURN` MUST tener dirección sucursal → CEDIS.
