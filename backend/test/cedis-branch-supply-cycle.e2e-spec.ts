@@ -164,11 +164,36 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       }),
     ).toBe(0);
 
-    await request(app.getHttpServer())
-      .post(`/api/inventory-transfers/${supplyTransferId}/confirm`)
+    const incomingSupply = await request(app.getHttpServer())
+      .get(`/api/cedis/incoming-supplies/${supplyTransferId}`)
       .set(auth)
-      .set('Idempotency-Key', `${marker}:supply-confirm`)
+      .expect(200);
+
+    expect(incomingSupply.body.data.status).toBe('PENDING');
+
+    const receiptItems = incomingSupply.body.data.items.map(
+      (item: {
+        transferItemId: string;
+        quantityKg: number;
+        quantityPieces: number;
+      }) => ({
+        transferItemId: item.transferItemId,
+        quantityKg: item.quantityKg,
+        quantityPieces: item.quantityPieces,
+      }),
+    );
+
+    const receivedSupply = await request(app.getHttpServer())
+      .post(`/api/cedis/incoming-supplies/${supplyTransferId}/receive`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:supply-receive`)
+      .send({
+        expectedCycleVersion: incomingSupply.body.data.cycleVersion,
+        items: receiptItems,
+      })
       .expect(201);
+
+    expect(receivedSupply.body.data.status).toBe('RECEIVED');
 
     const afterSupply = await request(app.getHttpServer())
       .get(`${cyclePath}/${cycleId}`)
