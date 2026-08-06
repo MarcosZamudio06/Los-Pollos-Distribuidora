@@ -216,6 +216,18 @@ Toda vista debe contemplar:
 - Motivo obligatorio en ajustes, mermas, devoluciones y pérdidas.
 - Mostrar errores del backend sin ocultar conflictos de negocio.
 
+## Dashboard de inventario CEDIS
+
+La vista de inventario debe permitir consultar un CEDIS y una fecha operativa, mostrando:
+
+- recibido de proveedores en el día;
+- enviado a sucursales;
+- devuelto al CEDIS;
+- restante físico total;
+- desglose por producto y por KG/PIECE.
+
+Las sucursales no deben aparecer como ubicaciones receptoras en el formulario de compras externas.
+
 ## Extensión: conciliación de puntos externos
 
 Las vistas por ubicación deben admitir `EXTERNAL_POINT_OF_SALE` y permitir a usuarios autorizados consultar:

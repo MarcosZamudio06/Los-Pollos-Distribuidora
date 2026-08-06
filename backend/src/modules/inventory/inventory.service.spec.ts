@@ -156,6 +156,30 @@ describe('InventoryService', () => {
     );
   });
 
+  it('limits warehouse balance queries to its CEDIS and direct branches', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryBalance.findMany.mockResolvedValue([]);
+
+    await service.findBalances(
+      { locationId: undefined },
+      { role: 'WAREHOUSE', operationalLocationId: 'cedis-1' },
+    );
+
+    expect(prisma.inventoryBalance.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          location: {
+            isActive: true,
+            OR: [
+              { id: 'cedis-1' },
+              { parentId: 'cedis-1', type: 'BRANCH', isActive: true },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
   it('rejects manual adjustments without a reason before changing balances', async () => {
     const { service, prisma } = createService();
 

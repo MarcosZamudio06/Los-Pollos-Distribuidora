@@ -23,6 +23,36 @@ export type InventoryCategory = {
 export type InventoryLocation = {
   id: string;
   name: string;
+  type?: string;
+  parentId?: string | null;
+};
+
+export type InventoryQuantity = {
+  kg: string;
+  pieces: string;
+};
+
+export type CedisInventorySummaryItem = {
+  productId: string;
+  productName: string;
+  sku: string | null;
+  unit: string;
+  opening: InventoryQuantity;
+  receivedFromSuppliers: InventoryQuantity;
+  sentToBranches: InventoryQuantity;
+  returnedFromBranches: InventoryQuantity;
+  otherNet: InventoryQuantity;
+  remaining: InventoryQuantity;
+};
+
+export type CedisInventorySummary = {
+  cedis: { id: string; name: string };
+  businessDate: string;
+  generatedAt: string;
+  dataAsOf: string;
+  timeZone: string;
+  totals: Omit<CedisInventorySummaryItem, "productId" | "productName" | "sku" | "unit">;
+  items: CedisInventorySummaryItem[];
 };
 
 export type ProductEquivalenceSummary = {

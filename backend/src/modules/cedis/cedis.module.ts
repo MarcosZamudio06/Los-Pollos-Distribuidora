@@ -9,7 +9,7 @@ import { BranchSupplyReceiptsController } from './branch-supply-receipts.control
 import { BranchSupplyReceiptsService } from './branch-supply-receipts.service';
 import { CedisDashboardController } from './cedis-dashboard.controller';
 import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
-import { CedisGateway } from './cedis.gateway';
+import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 @Module({
   imports: [AuthModule, InventoryModule, PointOfSaleDailyCloseModule],
@@ -23,7 +23,7 @@ import { CedisGateway } from './cedis.gateway';
     BranchSupplyCyclesService,
     BranchSupplyReceiptsService,
     CedisDashboardQueryService,
-    CedisGateway,
+    CedisInventorySummaryQueryService,
   ],
   exports: [BranchSupplyCyclesService],
 })

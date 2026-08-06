@@ -24,9 +24,10 @@ describe('InventoryTransfersService equivalences', () => {
     const service = new InventoryTransfersService(
       prisma as unknown as PrismaService,
     );
-    prisma.operationalLocation.findUnique
-      .mockResolvedValueOnce({ id: 'origin-1', isActive: true })
-      .mockResolvedValueOnce({ id: 'destination-1', isActive: true });
+    prisma.operationalLocation.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve({ id: where.id, isActive: true }),
+    );
     prisma.product.findUnique.mockResolvedValue({
       id: 'product-1',
       name: 'Pollo mixto',
@@ -104,9 +105,10 @@ describe('InventoryTransfersService equivalences', () => {
     const service = new InventoryTransfersService(
       prisma as unknown as PrismaService,
     );
-    prisma.operationalLocation.findUnique
-      .mockResolvedValueOnce({ id: 'origin-1', isActive: true })
-      .mockResolvedValueOnce({ id: 'destination-1', isActive: true });
+    prisma.operationalLocation.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve({ id: where.id, isActive: true }),
+    );
     prisma.product.findUnique.mockResolvedValue({
       id: 'product-1',
       name: 'Pollo mixto',

@@ -10,6 +10,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthService } from '../auth/auth.service';
 import { CedisDashboardController } from './cedis-dashboard.controller';
 import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
+import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 const adminUser = {
   id: 'admin-1',
@@ -23,6 +24,7 @@ const adminUser = {
 describe('CedisDashboardController API', () => {
   let app: INestApplication<App>;
   let queryService: jest.Mocked<CedisDashboardQueryService>;
+  let inventorySummaryService: jest.Mocked<CedisInventorySummaryQueryService>;
 
   beforeEach(async () => {
     const authService = {
@@ -39,12 +41,19 @@ describe('CedisDashboardController API', () => {
       }),
       getCycleSummary: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
     } as unknown as jest.Mocked<CedisDashboardQueryService>;
+    inventorySummaryService = {
+      getSummary: jest.fn().mockResolvedValue({ items: [], totals: {} }),
+    } as unknown as jest.Mocked<CedisInventorySummaryQueryService>;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [CedisDashboardController],
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: CedisDashboardQueryService, useValue: queryService },
+        {
+          provide: CedisInventorySummaryQueryService,
+          useValue: inventorySummaryService,
+        },
       ],
     }).compile();
 
@@ -130,6 +139,22 @@ describe('CedisDashboardController API', () => {
 
     expect(queryService.getCycleSummary.mock.calls[0]).toEqual([
       'cycle-1',
+      adminUser,
+    ]);
+  });
+
+  it('routes the CEDIS inventory summary endpoint', async () => {
+    await request(app.getHttpServer())
+      .get('/api/cedis/inventory-summary')
+      .set('Authorization', 'Bearer token')
+      .query({ cedisLocationId: 'cedis-1', businessDate: '2026-08-04' })
+      .expect(200);
+
+    expect(inventorySummaryService.getSummary.mock.calls[0]).toEqual([
+      expect.objectContaining({
+        cedisLocationId: 'cedis-1',
+        businessDate: '2026-08-04',
+      }),
       adminUser,
     ]);
   });

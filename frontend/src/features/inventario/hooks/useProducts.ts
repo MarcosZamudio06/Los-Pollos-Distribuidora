@@ -65,6 +65,23 @@ export function useInventoryBalances(filters: {
   });
 }
 
+export function useCedisInventorySummary(
+  cedisLocationId?: string,
+  businessDate?: string,
+) {
+  const { accessToken } = useAuth();
+  return useQuery({
+    enabled: Boolean(accessToken && cedisLocationId && businessDate),
+    queryKey: ["cedis-inventory-summary", cedisLocationId, businessDate],
+    queryFn: () =>
+      productService.getCedisInventorySummary(
+        cedisLocationId as string,
+        businessDate as string,
+        accessToken,
+      ),
+  });
+}
+
 export function useCreateInventoryAdjustment() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();

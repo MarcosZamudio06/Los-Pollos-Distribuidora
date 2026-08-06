@@ -219,6 +219,50 @@ describe('InventoryTransfersService', () => {
     );
   });
 
+  it('rejects generic transfers into a branch even when the source is its parent CEDIS', async () => {
+    const { service, prisma } = createService();
+    prisma.operationalLocation.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === 'cedis-1'
+            ? {
+                id: 'cedis-1',
+                name: 'Matriz',
+                type: 'DISTRIBUTION_CENTER',
+                parentId: null,
+                isActive: true,
+              }
+            : {
+                id: 'branch-1',
+                name: 'Alvarado',
+                type: 'BRANCH',
+                parentId: 'cedis-1',
+                isActive: true,
+              },
+        ),
+    );
+
+    await expect(
+      service.create(
+        {
+          originLocationId: 'cedis-1',
+          destinationLocationId: 'branch-1',
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG,
+              quantityKg: 1,
+            },
+          ],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow(
+      'Branch inventory transfers must be created through a CEDIS supply cycle',
+    );
+    expect(prisma.inventoryTransfer.create).not.toHaveBeenCalled();
+  });
+
   it('rejects transfers with the same origin and destination or without items before writing', async () => {
     const { service, prisma } = createService();
 

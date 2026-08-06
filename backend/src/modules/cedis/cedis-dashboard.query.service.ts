@@ -68,8 +68,16 @@ type DashboardDailyCloseRecord = {
 };
 
 type DashboardTransferActivity = {
+  role: string;
   linkedAt: Date;
-  inventoryTransfer: { status: string; updatedAt: Date };
+  inventoryTransfer: {
+    status: string;
+    updatedAt: Date;
+    items?: Array<{
+      quantityKg: DecimalLike;
+      quantityPieces: number | null;
+    }>;
+  };
 };
 
 type HistoryCycleRecord = DashboardCycleRecord & {
@@ -272,8 +280,17 @@ const DASHBOARD_CYCLE_SELECT = {
   },
   transfers: {
     select: {
+      role: true,
       linkedAt: true,
-      inventoryTransfer: { select: { status: true, updatedAt: true } },
+      inventoryTransfer: {
+        select: {
+          status: true,
+          updatedAt: true,
+          items: {
+            select: { quantityKg: true, quantityPieces: true },
+          },
+        },
+      },
     },
   },
   events: {
@@ -722,6 +739,17 @@ export class CedisDashboardQueryService {
       expectedSales: this.money(cycle.expectedSalesTotal),
       actualSales: this.money(cycle.actualSalesTotal),
     };
+    const physical = this.physicalTotals(cycle.transfers);
+    const deliveredKg = physical?.deliveredKg ?? Number(cycle.totalDeliveredKg);
+    const deliveredPieces =
+      physical?.deliveredPieces ?? Number(cycle.totalDeliveredPieces);
+    const returnedKg = physical?.returnedKg ?? Number(cycle.totalReturnedKg);
+    const returnedPieces =
+      physical?.returnedPieces ?? Number(cycle.totalReturnedPieces);
+    const expectedSoldKg =
+      physical?.expectedSoldKg ?? Number(cycle.totalExpectedSoldKg);
+    const expectedSoldPieces =
+      physical?.expectedSoldPieces ?? Number(cycle.totalExpectedSoldPieces);
     if (canViewCosts) {
       financial.expectedCost = this.money(cycle.expectedCostTotal);
       financial.actualCost = this.money(cycle.actualCostTotal);
@@ -739,12 +767,12 @@ export class CedisDashboardQueryService {
         version: cycle.version,
       },
       physical: {
-        deliveredKg: this.quantity(cycle.totalDeliveredKg),
-        deliveredPieces: this.quantity(cycle.totalDeliveredPieces),
-        returnedKg: this.quantity(cycle.totalReturnedKg),
-        returnedPieces: this.quantity(cycle.totalReturnedPieces),
-        expectedSoldKg: this.quantity(cycle.totalExpectedSoldKg),
-        expectedSoldPieces: this.quantity(cycle.totalExpectedSoldPieces),
+        deliveredKg: this.quantity(deliveredKg),
+        deliveredPieces: this.quantity(deliveredPieces),
+        returnedKg: this.quantity(returnedKg),
+        returnedPieces: this.quantity(returnedPieces),
+        expectedSoldKg: this.quantity(expectedSoldKg),
+        expectedSoldPieces: this.quantity(expectedSoldPieces),
         actualSoldKg: this.quantity(cycle.totalActualSoldKg),
         actualSoldPieces: this.quantity(cycle.totalActualSoldPieces),
       },
@@ -760,13 +788,24 @@ export class CedisDashboardQueryService {
   }
 
   private toTotals(cycle: DetailCycleRecord, canViewCosts: boolean) {
+    const physical = this.physicalTotals(cycle.transfers);
+    const deliveredKg = physical?.deliveredKg ?? Number(cycle.totalDeliveredKg);
+    const deliveredPieces =
+      physical?.deliveredPieces ?? Number(cycle.totalDeliveredPieces);
+    const returnedKg = physical?.returnedKg ?? Number(cycle.totalReturnedKg);
+    const returnedPieces =
+      physical?.returnedPieces ?? Number(cycle.totalReturnedPieces);
     const totals: Record<string, string | null> = {
-      deliveredKg: this.quantity(cycle.totalDeliveredKg),
-      deliveredPieces: this.quantity(cycle.totalDeliveredPieces),
-      returnedKg: this.quantity(cycle.totalReturnedKg),
-      returnedPieces: this.quantity(cycle.totalReturnedPieces),
-      expectedSoldKg: this.quantity(cycle.totalExpectedSoldKg),
-      expectedSoldPieces: this.quantity(cycle.totalExpectedSoldPieces),
+      deliveredKg: this.quantity(deliveredKg),
+      deliveredPieces: this.quantity(deliveredPieces),
+      returnedKg: this.quantity(returnedKg),
+      returnedPieces: this.quantity(returnedPieces),
+      expectedSoldKg: this.quantity(
+        physical?.expectedSoldKg ?? Number(cycle.totalExpectedSoldKg),
+      ),
+      expectedSoldPieces: this.quantity(
+        physical?.expectedSoldPieces ?? Number(cycle.totalExpectedSoldPieces),
+      ),
       actualSoldKg: this.quantity(cycle.totalActualSoldKg),
       actualSoldPieces: this.quantity(cycle.totalActualSoldPieces),
       expectedSales: this.money(cycle.expectedSalesTotal),
@@ -782,6 +821,58 @@ export class CedisDashboardQueryService {
       totals.actualProfit = this.money(cycle.actualProfitTotal);
       totals.actualNetProfit = this.money(cycle.actualNetProfitTotal);
     }
+    return totals;
+  }
+
+  private physicalTotals(
+    transfers:
+      | Array<{
+          role: string;
+          inventoryTransfer: {
+            status: string;
+            items?: Array<{
+              quantityKg: DecimalLike;
+              quantityPieces: number | null;
+            }>;
+          };
+        }>
+      | undefined,
+  ) {
+    if (!transfers) return null;
+
+    let hasLoadedItems = false;
+    const totals = {
+      deliveredKg: 0,
+      deliveredPieces: 0,
+      returnedKg: 0,
+      returnedPieces: 0,
+      expectedSoldKg: 0,
+      expectedSoldPieces: 0,
+    };
+
+    for (const link of transfers) {
+      const items = link.inventoryTransfer.items;
+      if (!items) continue;
+      hasLoadedItems = true;
+      if (link.inventoryTransfer.status !== 'CONFIRMED') continue;
+      if (link.role !== 'SUPPLY' && link.role !== 'RETURN') continue;
+
+      for (const item of items) {
+        const quantityKg = Number(item.quantityKg ?? 0);
+        const quantityPieces = item.quantityPieces ?? 0;
+        if (link.role === 'SUPPLY') {
+          totals.deliveredKg += quantityKg;
+          totals.deliveredPieces += quantityPieces;
+        } else {
+          totals.returnedKg += quantityKg;
+          totals.returnedPieces += quantityPieces;
+        }
+      }
+    }
+
+    if (!hasLoadedItems) return null;
+    totals.expectedSoldKg = totals.deliveredKg - totals.returnedKg;
+    totals.expectedSoldPieces = totals.deliveredPieces - totals.returnedPieces;
     return totals;
   }
 

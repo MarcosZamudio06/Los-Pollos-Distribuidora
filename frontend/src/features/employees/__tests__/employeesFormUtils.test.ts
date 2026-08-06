@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  locationsForEmployeeRole,
   validateEmployeeForm,
   type EmployeeFormDraft,
 } from "../employeesFormUtils";
@@ -13,6 +14,24 @@ const validDraft: EmployeeFormDraft = {
 };
 
 describe("employee form validation", () => {
+  it("includes CEDIS and branches for WAREHOUSE employees", () => {
+    const locations = locationsForEmployeeRole(
+      [
+        { id: "cedis-1", type: "DISTRIBUTION_CENTER" },
+        { id: "branch-alvarado", type: "BRANCH" },
+        { id: "branch-veracruz", type: "BRANCH" },
+      ],
+      [{ id: "role-warehouse", name: "WAREHOUSE" }],
+      "role-warehouse",
+    );
+
+    expect(locations.map((location) => location.id)).toEqual([
+      "cedis-1",
+      "branch-alvarado",
+      "branch-veracruz",
+    ]);
+  });
+
   it("accepts a valid name, email and ten-character phone", () => {
     expect(validateEmployeeForm(validDraft)).toEqual({});
   });

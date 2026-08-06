@@ -13,6 +13,44 @@ export type EmployeeFormErrors = Partial<
   >
 >;
 
+type EmployeeRoleOption = { id: string; name: string };
+type EmployeeLocationOption = { type: string };
+
+const allLocationTypes = new Set([
+  "BRANCH",
+  "WAREHOUSE",
+  "DISTRIBUTION_CENTER",
+  "MIXED",
+  "EXTERNAL_POINT_OF_SALE",
+]);
+const warehouseLocationTypes = new Set([
+  "BRANCH",
+  "WAREHOUSE",
+  "DISTRIBUTION_CENTER",
+  "MIXED",
+]);
+const sellerLocationTypes = new Set([
+  "BRANCH",
+  "MIXED",
+  "EXTERNAL_POINT_OF_SALE",
+]);
+
+export function locationsForEmployeeRole<T extends EmployeeLocationOption>(
+  locations: T[],
+  roles: EmployeeRoleOption[],
+  roleId: string,
+) {
+  const selectedRole = roles.find((role) => role.id === roleId)?.name;
+  const allowedTypes =
+    selectedRole === "WAREHOUSE"
+      ? warehouseLocationTypes
+      : selectedRole === "ADMIN"
+        ? allLocationTypes
+        : sellerLocationTypes;
+
+  return locations.filter((location) => allowedTypes.has(location.type));
+}
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateEmployeeForm(

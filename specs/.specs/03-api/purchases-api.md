@@ -121,6 +121,7 @@ Validaciones:
 
 - `supplierId` requerido.
 - `locationId` requerido como ubicación operativa receptora.
+- `locationId` debe referir a una ubicación activa de tipo `DISTRIBUTION_CENTER`; las sucursales y puntos de venta no pueden recibir compras externas.
 - Debe tener al menos un producto.
 - Cada item requiere cantidad mayor a cero y costo mayor o igual a cero.
 - Registrar cantidades por kilo y/o pieza según producto.

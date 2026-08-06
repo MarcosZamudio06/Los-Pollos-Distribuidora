@@ -33,6 +33,16 @@ export class CedisDashboardQueryDto {
   search?: string;
 }
 
+export class CedisInventorySummaryQueryDto {
+  @IsString()
+  @IsNotEmpty()
+  cedisLocationId!: string;
+
+  @IsString()
+  @Matches(BUSINESS_DATE_PATTERN)
+  businessDate!: string;
+}
+
 export class CedisBranchHistoryQueryDto {
   @IsString()
   @Matches(BUSINESS_DATE_PATTERN)

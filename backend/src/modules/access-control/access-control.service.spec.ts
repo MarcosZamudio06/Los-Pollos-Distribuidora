@@ -287,7 +287,7 @@ describe('AccessControlService', () => {
     );
   });
 
-  it('does not assign WAREHOUSE access to a user assigned to a branch', async () => {
+  it('allows WAREHOUSE access for a user assigned to a branch', async () => {
     const prisma = createPrisma();
     const currentRole = roleRecord({ id: 'role-seller', name: 'SELLER' });
     const nextRole = roleRecord({
@@ -306,8 +306,19 @@ describe('AccessControlService', () => {
         isActive: true,
       },
     };
+    const updatedUser = {
+      ...currentUser,
+      roleId: nextRole.id,
+      role: nextRole,
+    };
     prisma.user.findUnique.mockResolvedValue(currentUser);
     prisma.role.findUnique.mockResolvedValue(nextRole);
+    prisma.user.update.mockResolvedValue(updatedUser);
+    prisma.user.findUniqueOrThrow.mockResolvedValue(updatedUser);
+    prisma.user.count.mockResolvedValue(1);
+    prisma.authSession.updateMany.mockResolvedValue({ count: 1 });
+    prisma.authSession.findMany.mockResolvedValue([]);
+    prisma.accessControlAuditLog.create.mockResolvedValue({ id: 'audit-4' });
 
     await expect(
       new AccessControlService(
@@ -321,10 +332,13 @@ describe('AccessControlService', () => {
         },
         admin,
       ),
-    ).rejects.toThrow(
-      'Operational location is not available for the selected access profile',
+    ).resolves.toMatchObject({ changed: true, revokedSessions: 1 });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'employee-1' },
+        data: expect.objectContaining({ roleId: nextRole.id }),
+      }),
     );
-    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('revokes sessions and audits a manual session closure', async () => {

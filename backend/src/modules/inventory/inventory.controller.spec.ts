@@ -156,6 +156,7 @@ describe('InventoryController API', () => {
         reason: 'Physical count correction',
       }),
       'warehouse-1',
+      expect.objectContaining({ role: 'WAREHOUSE' }),
     );
   });
 
@@ -188,6 +189,7 @@ describe('InventoryController API', () => {
         type: InventoryMovementType.ADJUSTMENT,
         referenceType: 'MANUAL',
       }),
+      expect.objectContaining({ role: 'ADMIN' }),
     );
   });
 
@@ -216,6 +218,7 @@ describe('InventoryController API', () => {
         search: 'pech',
         lowStock: true,
       }),
+      expect.objectContaining({ role: 'SELLER' }),
     );
   });
 

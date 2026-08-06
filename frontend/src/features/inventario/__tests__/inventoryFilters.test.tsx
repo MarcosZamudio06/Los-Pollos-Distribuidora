@@ -19,7 +19,9 @@ const mockState = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   locations: {
-    data: [{ id: "loc-1", name: "Almacén Principal" }],
+    data: [
+      { id: "loc-1", name: "Matriz CEDIS", type: "DISTRIBUTION_CENTER" },
+    ],
     error: null as Error | null,
     isLoading: false,
     refetch: vi.fn(),
@@ -35,6 +37,11 @@ vi.mock("../../auth", () => ({
 vi.mock("../hooks/useProducts", () => ({
   useInventoryCategories: () => mockState.categories,
   useInventoryLocations: () => mockState.locations,
+  useCedisInventorySummary: () => ({
+    data: null,
+    error: null,
+    isLoading: false,
+  }),
   useProducts: (filters: ProductFilters) => {
     mockState.productFilters = filters;
     return mockState.products;
@@ -63,7 +70,9 @@ describe("Filtros del inventario", () => {
       refetch: vi.fn(),
     };
     mockState.locations = {
-      data: [{ id: "loc-1", name: "Almacén Principal" }],
+      data: [
+        { id: "loc-1", name: "Matriz CEDIS", type: "DISTRIBUTION_CENTER" },
+      ],
       error: null,
       isLoading: false,
       refetch: vi.fn(),
@@ -99,7 +108,7 @@ describe("Filtros del inventario", () => {
     const html = renderToStaticMarkup(<ProductListPage />);
 
     expect(html).toContain("Pollo fresco");
-    expect(html).toContain("Almacén Principal");
+    expect(html).toContain("Matriz CEDIS");
     expect(html).toContain("Todas las categorías");
     expect(html).toContain("Todas las ubicaciones");
     expect(html).not.toContain("ID de categoría");

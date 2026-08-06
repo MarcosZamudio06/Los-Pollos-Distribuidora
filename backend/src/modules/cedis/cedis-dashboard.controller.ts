@@ -6,15 +6,23 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { CedisBranchHistoryQueryDto, CedisDashboardQueryDto } from './dto';
+import {
+  CedisBranchHistoryQueryDto,
+  CedisDashboardQueryDto,
+  CedisInventorySummaryQueryDto,
+} from './dto';
 import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
+import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 @Controller('cedis')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
 @RequirePermissions(PERMISSIONS.CEDIS_VIEW)
 export class CedisDashboardController {
-  constructor(private readonly queryService: CedisDashboardQueryService) {}
+  constructor(
+    private readonly queryService: CedisDashboardQueryService,
+    private readonly inventorySummaryService: CedisInventorySummaryQueryService,
+  ) {}
 
   @Get('dashboard')
   async dashboard(
@@ -25,6 +33,19 @@ export class CedisDashboardController {
       success: true,
       message: 'CEDIS dashboard retrieved successfully',
       data: await this.queryService.getDashboard(query, user),
+    };
+  }
+
+  @Get('inventory-summary')
+  @Roles('ADMIN', 'WAREHOUSE')
+  async inventorySummary(
+    @Query() query: CedisInventorySummaryQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'CEDIS inventory summary retrieved successfully',
+      data: await this.inventorySummaryService.getSummary(query, user),
     };
   }
 

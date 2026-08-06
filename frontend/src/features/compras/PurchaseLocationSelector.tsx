@@ -17,13 +17,7 @@ type PurchaseLocationSelectorProps = {
   value: string;
 };
 
-const receiverTypes = new Set([
-  "BRANCH",
-  "WAREHOUSE",
-  "DISTRIBUTION_CENTER",
-  "MIXED",
-  "EXTERNAL_POINT_OF_SALE",
-]);
+const receiverTypes = new Set(["DISTRIBUTION_CENTER"]);
 
 export function PurchaseLocationSelector({
   error,
@@ -53,8 +47,8 @@ export function PurchaseLocationSelector({
         </div>
         <CardTitle className="mt-1">Inventario por ubicación</CardTitle>
         <CardDescription className="mt-2">
-          La compra incrementa saldos solo en la ubicación operativa
-          seleccionada. No existe stock global.
+          Las compras externas se reciben únicamente en un CEDIS. Las
+          sucursales reciben producto mediante traspasos desde su matriz.
         </CardDescription>
       </div>
       <label className="mt-4 grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
@@ -66,7 +60,7 @@ export function PurchaseLocationSelector({
         />
       </label>
       <label className="mt-4 grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
-        Ubicación operativa requerida
+         CEDIS receptor requerido
         <Select
           onChange={(event) =>
             onChange(

@@ -34,6 +34,7 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 - Una diferencia física debe quedar como ajuste trazable.
 - Una recepción CEDIS conserva la cantidad enviada, incrementa la sucursal por la cantidad recibida y registra faltantes como `SHRINKAGE` o sobrantes como `IN`, con referencia a la recepción.
 - Un traspaso puede salir de matriz y llegar a pollería o a `ROUTE_STOCK`.
+- Una sucursal solo puede recibir inventario mediante un `InventoryTransfer` cuyo origen sea su CEDIS padre activo; las recepciones externas directas están prohibidas.
 - Crear, confirmar y cancelar traspasos debe soportar idempotencia para no duplicar movimientos.
 - Los traspasos vinculados a un ciclo CEDIS conservan las mismas reglas de inventario; el ciclo solo deriva dirección, alcance y trazabilidad.
 - Un suministro del ciclo se crea `REQUESTED` con dirección CEDIS → sucursal; una devolución se crea `REQUESTED` con dirección sucursal → CEDIS.
@@ -75,4 +76,4 @@ Los ciclos CEDIS se definen en `specs/modules/branch-supply-cycles/spec.md` y `s
 - No se permite stock negativo.
 - Varios suministros y devoluciones dentro del mismo ciclo sin vínculos ni movimientos duplicados.
 - Confirmación/cancelación de traspaso vinculado invalida la proyección del ciclo.
-- Recepción exacta, faltante, sobrante, nota obligatoria con diferencia e idempotencia de recepción.
+- El dashboard operativo del CEDIS debe mostrar por fecha: recibido de proveedores, enviado a sucursales, devuelto al CEDIS y restante físico total.

@@ -76,6 +76,8 @@
 ## 3. Compras
 
 - Una compra debe contener proveedor y al menos un producto.
+- Una compra de proveedor externo solo puede incrementar inventario en un CEDIS activo (`DISTRIBUTION_CENTER`).
+- Una sucursal no puede recibir compras externas; solo recibe mediante un traspaso confirmado desde su CEDIS padre.
 - Una compra confirmada debe incrementar inventario.
 - El costo de producto puede actualizarse al registrar una compra si el administrador lo permite.
 - No se puede eliminar una compra confirmada; debe cancelarse mediante estatus.

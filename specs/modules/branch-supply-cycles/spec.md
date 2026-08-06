@@ -50,6 +50,8 @@ dimensiones equivalentes.
 
 El sistema MUST admitir múltiples suministros CEDIS → sucursal y múltiples devoluciones sucursal → CEDIS. Cada operación MUST crear un `InventoryTransfer` `REQUESTED` y vincularlo una sola vez al ciclo.
 
+Una sucursal MUST NOT recibir inventario de proveedores externos ni mediante un traspaso genérico no vinculado. Todo suministro hacia una sucursal MUST originarse en su CEDIS padre y MUST pertenecer a un ciclo de suministro.
+
 #### Scenario: Creación sin movimiento
 
 - GIVEN un ciclo mutable y partidas válidas

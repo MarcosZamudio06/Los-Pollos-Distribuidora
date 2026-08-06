@@ -177,6 +177,48 @@ describe('UsersService employee administration', () => {
     );
   });
 
+  it('allows WAREHOUSE users to be assigned to an active branch', async () => {
+    const prisma = prismaMock();
+    const branch = {
+      ...location,
+      id: 'branch-alvarado',
+      name: 'Alvarado',
+      type: 'BRANCH',
+    };
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.role.findUnique.mockResolvedValue(warehouseRole);
+    prisma.operationalLocation.findUnique.mockResolvedValue(branch);
+    prisma.user.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(
+          user({
+            ...data,
+            role: warehouseRole,
+            roleId: warehouseRole.id,
+            operationalLocationId: branch.id,
+            operationalLocation: branch,
+          }),
+        ),
+    );
+    const service = new UsersService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.create({
+        name: 'Almacén Alvarado',
+        email: 'warehouse-alvarado@pollos.local',
+        phone: '+522291234569',
+        roleId: warehouseRole.id,
+        operationalLocationId: branch.id,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        operationalLocationId: branch.id,
+        role: warehouseRole,
+        operationalLocation: branch,
+      }),
+    );
+  });
+
   it('maps database unique races to their actual field', async () => {
     const prisma = prismaMock();
     prisma.user.findUnique.mockResolvedValue(null);
