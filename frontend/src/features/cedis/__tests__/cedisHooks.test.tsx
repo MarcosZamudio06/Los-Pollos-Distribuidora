@@ -24,7 +24,11 @@ vi.mock("../cedisService", () => ({
   cedisService: serviceMocks,
 }));
 
-function Harness({ onReady }: { onReady: (run: () => Promise<unknown>) => void }) {
+function Harness({
+  onReady,
+}: {
+  onReady: (run: () => Promise<unknown>) => void;
+}) {
   const mutation = useCreateCedisSupply("cycle-1");
   onReady(() =>
     mutation.mutateAsync({

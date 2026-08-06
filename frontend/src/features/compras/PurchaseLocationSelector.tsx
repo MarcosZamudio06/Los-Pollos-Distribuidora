@@ -47,8 +47,8 @@ export function PurchaseLocationSelector({
         </div>
         <CardTitle className="mt-1">Inventario por ubicación</CardTitle>
         <CardDescription className="mt-2">
-          Las compras externas se reciben únicamente en un CEDIS. Las
-          sucursales reciben producto mediante traspasos desde su matriz.
+          Las compras externas se reciben únicamente en un CEDIS. Las sucursales
+          reciben producto mediante traspasos desde su matriz.
         </CardDescription>
       </div>
       <label className="mt-4 grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
@@ -60,7 +60,7 @@ export function PurchaseLocationSelector({
         />
       </label>
       <label className="mt-4 grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
-         CEDIS receptor requerido
+        CEDIS receptor requerido
         <Select
           onChange={(event) =>
             onChange(

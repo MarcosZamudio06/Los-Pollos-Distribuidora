@@ -49,9 +49,7 @@ function renderIncomingRoute() {
         <Route
           element={
             <RoleRoute roles={ROUTE_ACCESS_ROLES.cedisIncoming}>
-              <PermissionRoute
-                permission={PERMISSIONS.cedisReceiveSupplies}
-              >
+              <PermissionRoute permission={PERMISSIONS.cedisReceiveSupplies}>
                 <p>Recepción autorizada</p>
               </PermissionRoute>
             </RoleRoute>

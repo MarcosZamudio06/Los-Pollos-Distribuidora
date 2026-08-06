@@ -2595,9 +2595,7 @@ export class SalesService {
     currentUser: Actor,
   ) {
     const creditDecision = sale.creditDecisionSnapshot as
-      | Record<string, unknown>
-      | null
-      | undefined;
+      Record<string, unknown> | null | undefined;
     const visibleSale = { ...sale };
     if (currentUser.role !== 'ADMIN') delete visibleSale.deviceId;
     return {

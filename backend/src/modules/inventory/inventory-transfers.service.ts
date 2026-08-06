@@ -228,7 +228,7 @@ export type SupplyReceiptItemInput = {
 export type SupplyReceiptCommandOptions = {
   tx?: Prisma.TransactionClient;
   receiptId: string;
-  actor?: Pick<
+  actor: Pick<
     AuthenticatedUser,
     'id' | 'role' | 'operationalLocationId' | 'permissions'
   >;
@@ -496,7 +496,13 @@ export class InventoryTransfersService {
     actor?: InventoryTransferCommandOptions['actor'],
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id, tx);
+
     this.assertActorCanChangeTransfer(transfer, actor);
+
+    if (transfer.branchSupplyCycleTransfer?.role === 'SUPPLY') {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+    }
+
     if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
       throw new BadRequestException(
         'Idempotency-Key is required for transfers linked to a branch supply cycle',
@@ -1003,6 +1009,49 @@ export class InventoryTransfersService {
       if (actor.operationalLocationId !== scopedLocationId) {
         throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
       }
+    }
+  }
+
+  private assertActorCanReceiveSupply(
+    transfer: TransferRecord,
+    actor?: SupplyReceiptCommandOptions['actor'],
+  ): void {
+    const link = transfer.branchSupplyCycleTransfer;
+
+    if (!link || link.role !== 'SUPPLY') {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+    }
+
+    const cycle = link.branchSupplyCycle;
+
+    if (!cycle) {
+      throw new NotFoundException('Linked branch supply cycle not found');
+    }
+
+    // Permite llamadas internas sin actor, siguiendo el patrón actual
+    // de InventoryTransfersService.
+    if (!actor) {
+      return;
+    }
+
+    if (!actor.permissions?.includes(PERMISSIONS.CEDIS_RECEIVE_SUPPLIES)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    if (actor.role === 'ADMIN') {
+      return;
+    }
+
+    const isAuthorizedWarehouse =
+      actor.role === 'WAREHOUSE' &&
+      actor.operationalLocationId === cycle.distributionCenterLocationId;
+
+    const isAuthorizedSeller =
+      actor.role === 'SELLER' &&
+      actor.operationalLocationId === cycle.branchLocationId;
+
+    if (!isAuthorizedWarehouse && !isAuthorizedSeller) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
     }
   }
 

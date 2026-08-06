@@ -105,7 +105,8 @@ export function CedisDashboardPage() {
     [assignedLocationQuery.data, cedisLocationsQuery.data, isSeller],
   );
   const defaultCedisId =
-    cedisLocations[0]?.id ?? (!isSeller ? user?.operationalLocationId ?? "" : "");
+    cedisLocations[0]?.id ??
+    (!isSeller ? (user?.operationalLocationId ?? "") : "");
   const cedisLocationId = isSeller
     ? (assignedLocationQuery.data?.parentId ?? "")
     : searchParams.get("cedis") || defaultCedisId;
@@ -232,7 +233,9 @@ export function CedisDashboardPage() {
           <>
             <FreshnessBar
               dataAsOf={formatDateTime(dashboardQuery.data.dataAsOf)}
-              freshnessSeconds={freshnessSeconds(dashboardQuery.data.generatedAt)}
+              freshnessSeconds={freshnessSeconds(
+                dashboardQuery.data.generatedAt,
+              )}
               generatedAt={formatDateTime(dashboardQuery.data.generatedAt)}
               isStale={freshnessSeconds(dashboardQuery.data.generatedAt) > 60}
             />

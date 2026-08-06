@@ -51,7 +51,10 @@ export type CedisInventorySummary = {
   generatedAt: string;
   dataAsOf: string;
   timeZone: string;
-  totals: Omit<CedisInventorySummaryItem, "productId" | "productName" | "sku" | "unit">;
+  totals: Omit<
+    CedisInventorySummaryItem,
+    "productId" | "productName" | "sku" | "unit"
+  >;
   items: CedisInventorySummaryItem[];
 };
 

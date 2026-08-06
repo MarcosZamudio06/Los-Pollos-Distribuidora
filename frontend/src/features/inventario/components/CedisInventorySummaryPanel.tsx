@@ -44,7 +44,10 @@ function SummaryMetric({
 export function CedisInventorySummaryPanel() {
   const locations = useInventoryLocations();
   const cedisLocations = useMemo(
-    () => (locations.data ?? []).filter((location) => location.type === "DISTRIBUTION_CENTER"),
+    () =>
+      (locations.data ?? []).filter(
+        (location) => location.type === "DISTRIBUTION_CENTER",
+      ),
     [locations.data],
   );
   const [selectedCedisId, setSelectedCedisId] = useState("");
@@ -63,7 +66,8 @@ export function CedisInventorySummaryPanel() {
           </p>
           <CardTitle className="mt-2">Inventario recibido y restante</CardTitle>
           <CardDescription className="mt-1">
-            El restante es el saldo físico total del CEDIS, incluyendo existencias anteriores.
+            El restante es el saldo físico total del CEDIS, incluyendo
+            existencias anteriores.
           </CardDescription>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -86,7 +90,10 @@ export function CedisInventorySummaryPanel() {
           <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
             Fecha operativa
             <span className="relative">
-              <CalendarDays className="pointer-events-none absolute left-3 top-3 h-4 w-4" aria-hidden="true" />
+              <CalendarDays
+                className="pointer-events-none absolute left-3 top-3 h-4 w-4"
+                aria-hidden="true"
+              />
               <input
                 className="h-10 rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface)] pl-9 pr-3 text-sm font-semibold text-[var(--erp-foreground)]"
                 onChange={(event) => setBusinessDate(event.target.value)}
@@ -144,18 +151,31 @@ export function CedisInventorySummaryPanel() {
               </thead>
               <tbody>
                 {summaryData.items.map((item) => (
-                  <tr className="border-t border-[var(--erp-border)]" key={item.productId}>
+                  <tr
+                    className="border-t border-[var(--erp-border)]"
+                    key={item.productId}
+                  >
                     <td className="px-4 py-3 font-semibold">
                       {item.productName}
                       <span className="ml-2 text-xs text-[var(--erp-muted-foreground)]">
                         {item.sku ?? item.unit}
                       </span>
                     </td>
-                    <td className="px-4 py-3 tabular-nums">{formatQuantity(item.opening)}</td>
-                    <td className="px-4 py-3 tabular-nums">{formatQuantity(item.receivedFromSuppliers)}</td>
-                    <td className="px-4 py-3 tabular-nums">{formatQuantity(item.sentToBranches)}</td>
-                    <td className="px-4 py-3 tabular-nums">{formatQuantity(item.returnedFromBranches)}</td>
-                    <td className="px-4 py-3 font-black tabular-nums">{formatQuantity(item.remaining)}</td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {formatQuantity(item.opening)}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {formatQuantity(item.receivedFromSuppliers)}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {formatQuantity(item.sentToBranches)}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {formatQuantity(item.returnedFromBranches)}
+                    </td>
+                    <td className="px-4 py-3 font-black tabular-nums">
+                      {formatQuantity(item.remaining)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

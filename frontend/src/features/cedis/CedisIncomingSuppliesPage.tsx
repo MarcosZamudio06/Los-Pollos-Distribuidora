@@ -455,21 +455,26 @@ export function CedisIncomingSuppliesPage() {
 
   useEffect(() => {
     if (!accessToken || !socketLocationId) return undefined;
-    return cedisSocket.subscribe(accessToken, socketLocationId, (supply) => {
-      if (supply.businessDate !== businessDate) return;
-      if (seenNotification.current === supply.transferId) return;
-      seenNotification.current = supply.transferId;
-      void queryClient.invalidateQueries({
-        queryKey: cedisQueryKeys.incomingSupplies(filters),
-      });
-      toast.info(`Nuevo envío CEDIS: ${supply.transferNumber}`, {
-        description: `${supply.origin.name} → ${supply.destination.name}`,
-      });
-    }, () => {
-      void queryClient.invalidateQueries({
-        queryKey: cedisQueryKeys.incomingSupplies(filters),
-      });
-    });
+    return cedisSocket.subscribe(
+      accessToken,
+      socketLocationId,
+      (supply) => {
+        if (supply.businessDate !== businessDate) return;
+        if (seenNotification.current === supply.transferId) return;
+        seenNotification.current = supply.transferId;
+        void queryClient.invalidateQueries({
+          queryKey: cedisQueryKeys.incomingSupplies(filters),
+        });
+        toast.info(`Nuevo envío CEDIS: ${supply.transferNumber}`, {
+          description: `${supply.origin.name} → ${supply.destination.name}`,
+        });
+      },
+      () => {
+        void queryClient.invalidateQueries({
+          queryKey: cedisQueryKeys.incomingSupplies(filters),
+        });
+      },
+    );
   }, [accessToken, businessDate, filters, queryClient, socketLocationId]);
 
   function updateFilter(name: "date" | "status", value: string) {

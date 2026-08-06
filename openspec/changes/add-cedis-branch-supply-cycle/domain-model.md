@@ -15,12 +15,12 @@ Estados: `OPEN`, `READY_FOR_REVIEW`, `CLOSED`, `CANCELLED`.
 
 ## BranchSupplyCycleTransfer
 
-| Campo | Regla |
-|---|---|
-| `branchSupplyCycleId` | Ciclo obligatorio. |
-| `inventoryTransferId` | Transferencia obligatoria y única globalmente. |
-| `role` | `SUPPLY` o `RETURN`. |
-| `linkedByUserId`, `linkedAt` | Auditoría obligatoria. |
+| Campo                        | Regla                                          |
+| ---------------------------- | ---------------------------------------------- |
+| `branchSupplyCycleId`        | Ciclo obligatorio.                             |
+| `inventoryTransferId`        | Transferencia obligatoria y única globalmente. |
+| `role`                       | `SUPPLY` o `RETURN`.                           |
+| `linkedByUserId`, `linkedAt` | Auditoría obligatoria.                         |
 
 La base protege dirección exacta según rol. El vínculo nunca se elimina al confirmar o cancelar.
 

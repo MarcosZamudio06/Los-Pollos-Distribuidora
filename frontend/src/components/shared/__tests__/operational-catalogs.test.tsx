@@ -106,16 +106,14 @@ describe("catálogos operativos", () => {
     const onChange = vi.fn();
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              data: { items: [{ id: "customer-1", name: "Comercial Centro" }] },
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          ),
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: { items: [{ id: "customer-1", name: "Comercial Centro" }] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
+      ),
     );
     render(
       <MiniAjaxSelect
@@ -156,16 +154,14 @@ describe("catálogos operativos", () => {
     const onChange = vi.fn();
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              data: { items: [{ id: "user-1", name: "Ana López" }] },
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          ),
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: { items: [{ id: "user-1", name: "Ana López" }] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
+      ),
     );
     render(
       <MiniAjaxSelect

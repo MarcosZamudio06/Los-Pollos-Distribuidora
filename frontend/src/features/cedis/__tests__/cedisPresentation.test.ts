@@ -56,9 +56,9 @@ describe("CEDIS presentation", () => {
     expect(
       cashState({ ...card, cash: { ...card.cash!, difference: "0.00" } }),
     ).toEqual({ label: "Cuadrada", tone: "green" });
-    expect(cashState({ ...card, cash: { ...card.cash!, counted: null } })).toEqual(
-      { label: "Pendiente de conteo", tone: "amber" },
-    );
+    expect(
+      cashState({ ...card, cash: { ...card.cash!, counted: null } }),
+    ).toEqual({ label: "Pendiente de conteo", tone: "amber" });
   });
 
   it("construye una URL de detalle sin botones anidados", () => {
@@ -67,6 +67,8 @@ describe("CEDIS presentation", () => {
         businessDate: "2026-08-05",
         cedisLocationId: "cedis-1",
       }),
-    ).toBe("/cedis/branches/branch-1?cedis=cedis-1&date=2026-08-05&cycle=cycle-1");
+    ).toBe(
+      "/cedis/branches/branch-1?cedis=cedis-1&date=2026-08-05&cycle=cycle-1",
+    );
   });
 });

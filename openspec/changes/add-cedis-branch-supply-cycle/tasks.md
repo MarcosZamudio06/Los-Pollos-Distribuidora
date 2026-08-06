@@ -2,14 +2,14 @@
 
 ## Review Workload Forecast
 
-| Campo | Valor |
-|---|---|
-| Estimated changed lines | 900-1,300 de implementación, pruebas y migración |
-| 400-line budget risk | High |
-| Chained PRs recommended | Yes |
-| Suggested split | PR 1 datos/permisos; PR 2 dominio/API; PR 3 cierre/reportes; PR 4 frontend/E2E |
-| Delivery strategy | exception-ok (autorización explícita del usuario) |
-| Chain strategy | size:exception |
+| Campo                   | Valor                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| Estimated changed lines | 900-1,300 de implementación, pruebas y migración                               |
+| 400-line budget risk    | High                                                                           |
+| Chained PRs recommended | Yes                                                                            |
+| Suggested split         | PR 1 datos/permisos; PR 2 dominio/API; PR 3 cierre/reportes; PR 4 frontend/E2E |
+| Delivery strategy       | exception-ok (autorización explícita del usuario)                              |
+| Chain strategy          | size:exception                                                                 |
 
 Decision needed before apply: Resolved — implementación autorizada como una unidad revisable.
 Chained PRs recommended: Yes, excepted by explicit user authorization.
@@ -18,12 +18,12 @@ Chain strategy: size:exception
 
 ### Suggested Work Units
 
-| Unit | Objetivo | Base sugerida |
-|---|---|---|
-| 1 | Prisma, permisos, constraints y backfill | main |
-| 2 | Módulo backend CEDIS y comandos de traspaso | PR 1 |
-| 3 | Integración de cierre diario y reportes | PR 2 |
-| 4 | UI CEDIS, navegación, dashboard y E2E | PR 3 |
+| Unit | Objetivo                                    | Base sugerida |
+| ---- | ------------------------------------------- | ------------- |
+| 1    | Prisma, permisos, constraints y backfill    | main          |
+| 2    | Módulo backend CEDIS y comandos de traspaso | PR 1          |
+| 3    | Integración de cierre diario y reportes     | PR 2          |
+| 4    | UI CEDIS, navegación, dashboard y E2E       | PR 3          |
 
 ## Phase 1: Spec Gate and Foundation
 
