@@ -3,7 +3,11 @@ import { ProductUnit } from '@prisma/client';
 import { Money } from '../../../../shared/money';
 
 export type ReconciliationDecimal =
-  number | string | { toString(): string } | null | undefined;
+  | number
+  | string
+  | { toString(): string }
+  | null
+  | undefined;
 
 export type ReconciliationBlockerPhase = 'READY_FOR_REVIEW' | 'CLOSED';
 

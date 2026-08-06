@@ -34,7 +34,12 @@ export const CANONICAL_ROLE_NAMES = [
 
 export type PermissionRisk = 'standard' | 'sensitive' | 'critical';
 export type PermissionGroup =
-  'Access' | 'Cash' | 'CEDIS' | 'Finance' | 'Information' | 'Security';
+  | 'Access'
+  | 'Cash'
+  | 'CEDIS'
+  | 'Finance'
+  | 'Information'
+  | 'Security';
 
 export const PERMISSION_DEFINITIONS = [
   {

@@ -15,7 +15,9 @@ import {
 
 export class BillingRemediationQueryDto {
   @IsOptional() @IsIn(['OPEN', 'RESOLVED', 'ALL']) status:
-    'OPEN' | 'RESOLVED' | 'ALL' = 'OPEN';
+    | 'OPEN'
+    | 'RESOLVED'
+    | 'ALL' = 'OPEN';
   @IsOptional() @IsString() code?: string;
   @IsOptional() @IsString() search?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
