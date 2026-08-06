@@ -117,7 +117,6 @@ describe("role navigation", () => {
     expect(getSidebarNavForRole("SELLER").map((item) => item.to)).toEqual([
       "/",
       "/sales",
-      "/cedis",
       "/cedis/incoming",
       "/sales/history",
       "/orders",

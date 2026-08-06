@@ -41,6 +41,28 @@ function renderProtectedRoute() {
   );
 }
 
+function renderIncomingRoute() {
+  return renderToStaticMarkup(
+    <MemoryRouter initialEntries={["/cedis/incoming"]}>
+      <Routes>
+        <Route element={<p>Forbidden</p>} path="/403" />
+        <Route
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.cedisIncoming}>
+              <PermissionRoute
+                permission={PERMISSIONS.cedisReceiveSupplies}
+              >
+                <p>Recepción autorizada</p>
+              </PermissionRoute>
+            </RoleRoute>
+          }
+          path="/cedis/incoming"
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("CEDIS protected route", () => {
   beforeEach(() => {
     mockAuth.user = {
@@ -78,5 +100,17 @@ describe("CEDIS protected route", () => {
     };
 
     expect(renderProtectedRoute()).not.toContain("CEDIS autorizado");
+  });
+
+  it("permite a SELLER entrar a recepción con cedis.receive_supplies", () => {
+    mockAuth.user = {
+      email: "seller@pollos.local",
+      id: "seller-1",
+      name: "Vendedor",
+      permissions: [PERMISSIONS.cedisReceiveSupplies],
+      role: "SELLER",
+    };
+
+    expect(renderIncomingRoute()).toContain("Recepción autorizada");
   });
 });
