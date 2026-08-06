@@ -5,16 +5,23 @@ import { PointOfSaleDailyCloseModule } from '../point-of-sale-daily-close/point-
 import { BranchSupplyCyclesController } from './branch-supply-cycles.controller';
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
+import { BranchSupplyReceiptsController } from './branch-supply-receipts.controller';
+import { BranchSupplyReceiptsService } from './branch-supply-receipts.service';
 import { CedisDashboardController } from './cedis-dashboard.controller';
 import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
 import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 @Module({
   imports: [AuthModule, InventoryModule, PointOfSaleDailyCloseModule],
-  controllers: [BranchSupplyCyclesController, CedisDashboardController],
+  controllers: [
+    BranchSupplyCyclesController,
+    BranchSupplyReceiptsController,
+    CedisDashboardController,
+  ],
   providers: [
     BranchSupplyCycleReconciliationService,
     BranchSupplyCyclesService,
+    BranchSupplyReceiptsService,
     CedisDashboardQueryService,
     CedisInventorySummaryQueryService,
   ],

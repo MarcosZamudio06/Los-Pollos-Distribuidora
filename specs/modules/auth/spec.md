@@ -73,8 +73,8 @@ Gestionar autenticación, sesión y autorización del sistema.
 - Me requiere autenticación.
 - Logout requiere autenticación.
 - Refresh requiere la cookie de refresh válida.
-- Permisos CEDIS: `cedis.view`, `cedis.manage`, `cedis.dispatch`, `cedis.receive_returns`, `cedis.reconcile`, `cedis.close`, `cedis.view_costs`.
-- `ADMIN` recibe los siete permisos. `WAREHOUSE` recibe `cedis.view`, `cedis.dispatch` y `cedis.receive_returns` por default; `SELLER` solo `cedis.view`. `cedis.view_costs` no sustituye ni concede `costs.read`.
+- Permisos CEDIS: `cedis.view`, `cedis.manage`, `cedis.dispatch`, `cedis.receive_supplies`, `cedis.receive_returns`, `cedis.reconcile`, `cedis.close`, `cedis.view_costs`.
+- `ADMIN` recibe todos los permisos CEDIS. `WAREHOUSE` recibe consulta, despacho y recepción de suministros y devoluciones; `SELLER` recibe consulta y recepción de suministros únicamente dentro de su sucursal. `cedis.view_costs` no sustituye ni concede `costs.read`.
 
 ## UI
 

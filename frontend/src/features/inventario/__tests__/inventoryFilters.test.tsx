@@ -19,9 +19,7 @@ const mockState = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   locations: {
-    data: [
-      { id: "loc-1", name: "Matriz CEDIS", type: "DISTRIBUTION_CENTER" },
-    ],
+    data: [{ id: "loc-1", name: "Matriz CEDIS", type: "DISTRIBUTION_CENTER" }],
     error: null as Error | null,
     isLoading: false,
     refetch: vi.fn(),

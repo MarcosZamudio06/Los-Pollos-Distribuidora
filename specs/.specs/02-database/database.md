@@ -750,6 +750,59 @@ Reglas:
 - `SUPPLY` exige CEDIS → sucursal; `RETURN` exige sucursal → CEDIS.
 - La dirección debe protegerse en aplicación y base de datos.
 
+### BranchSupplyReceipt
+
+Representa la recepción física de un suministro CEDIS → sucursal. Conserva la
+transferencia enviada, el actor, la nota, la clave idempotente y el resultado
+inmutable por partida.
+
+Campos:
+
+- id
+- inventoryTransferId
+- branchSupplyCycleId
+- receivedByUserId
+- receivedAt
+- notes
+- idempotencyKey
+- payloadHash
+- createdAt
+- updatedAt
+
+Reglas:
+
+- `inventoryTransferId` es único; solo existe una recepción por suministro.
+- La recepción solo aplica a vínculos `SUPPLY` y ciclos no cerrados ni cancelados.
+- La clave y el hash soportan reintentos seguros y conflictos por payload.
+- La cantidad enviada nunca se actualiza; los detalles conservan enviado,
+  recibido y diferencia por KG y PIECE.
+
+### BranchSupplyReceiptItem
+
+Detalle append-only de la recepción física por partida del traspaso.
+
+Campos:
+
+- id
+- receiptId
+- transferItemId
+- productId
+- productNameSnapshot
+- unit
+- sentKg, sentPieces
+- receivedKg, receivedPieces
+- differenceKg, differencePieces
+- createdAt
+
+Reglas:
+
+- Cada partida del suministro aparece exactamente una vez.
+- `difference = received - sent` y no se acepta como fuente de verdad desde el
+  cliente.
+- Kilos no negativos y piezas enteras no negativas.
+- Las diferencias se reflejan en movimientos `SHRINKAGE` o `IN` con referencia
+  a la recepción.
+
 ### BranchSupplyCycleItem
 
 Snapshot append-only por producto y versión del ciclo. Conserva identidad y unidad del producto, equivalencia aplicada cuando exista, cantidades entregadas/devueltas y proyecciones derivadas necesarias para conciliación.
@@ -1185,6 +1238,8 @@ Notas:
 - InventoryTransfer 1:N InventoryTransferItem
 - InventoryTransfer 1:N InventoryMovement opcional
 - InventoryTransfer 1:1 BranchSupplyCycleTransfer opcional
+- InventoryTransfer 1:1 BranchSupplyReceipt opcional
+- BranchSupplyReceipt 1:N BranchSupplyReceiptItem
 - Product 1:N InventoryTransferItem
 - BranchSupplyCycle 1:N BranchSupplyCycleTransfer
 - BranchSupplyCycle 1:N BranchSupplyCycleItem

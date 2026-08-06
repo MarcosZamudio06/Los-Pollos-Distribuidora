@@ -32,6 +32,7 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 - Las consultas de sucursales CEDIS solo devuelven hijas directas activas y
   respetan el alcance de ubicación del usuario.
 - Una diferencia física debe quedar como ajuste trazable.
+- Una recepción CEDIS conserva la cantidad enviada, incrementa la sucursal por la cantidad recibida y registra faltantes como `SHRINKAGE` o sobrantes como `IN`, con referencia a la recepción.
 - Un traspaso puede salir de matriz y llegar a pollería o a `ROUTE_STOCK`.
 - Una sucursal solo puede recibir inventario mediante un `InventoryTransfer` cuyo origen sea su CEDIS padre activo; las recepciones externas directas están prohibidas.
 - Crear, confirmar y cancelar traspasos debe soportar idempotencia para no duplicar movimientos.
@@ -43,6 +44,7 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 
 - ADMIN y WAREHOUSE.
 - `cedis.dispatch` autoriza abastecimientos desde el CEDIS asignado.
+- `cedis.receive_supplies` autoriza recepciones de suministros destinados a la sucursal autorizada.
 - `cedis.receive_returns` autoriza devoluciones hacia el CEDIS asignado.
 - `cedis.reconcile` autoriza reconstruir snapshots y elegibilidad del ciclo.
 - `SELLER` solo consulta su sucursal con `cedis.view`; no recibe costos ni

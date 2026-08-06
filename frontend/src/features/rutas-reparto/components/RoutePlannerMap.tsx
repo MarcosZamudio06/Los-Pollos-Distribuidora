@@ -170,15 +170,13 @@ export function RoutePlannerMap({
     return new Map(
       ordered.map((stop, index) => [
         stop.saleId,
-        ordered
-          .slice(0, index + 1)
-          .reduce(
-            (total, item) => ({
-              distance: total.distance + item.legDistanceMeters,
-              duration: total.duration + item.legDurationSeconds,
-            }),
-            { distance: 0, duration: 0 },
-          ),
+        ordered.slice(0, index + 1).reduce(
+          (total, item) => ({
+            distance: total.distance + item.legDistanceMeters,
+            duration: total.duration + item.legDurationSeconds,
+          }),
+          { distance: 0, duration: 0 },
+        ),
       ]),
     );
   }, [plan]);

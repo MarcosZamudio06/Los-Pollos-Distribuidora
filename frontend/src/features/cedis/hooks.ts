@@ -13,6 +13,8 @@ import type {
   CedisCloseCycleCommand,
   CedisCycleCommand,
   CedisDashboardFilters,
+  CedisIncomingSuppliesFilters,
+  CedisReceiveSupplyCommand,
   CedisMutationInput,
   CedisOpenCycleCommand,
   CedisReopenCycleCommand,
@@ -96,6 +98,55 @@ export function useCedisCycleSummary(cycleId: string | undefined) {
     queryKey: cedisQueryKeys.cycleSummary(cycleId ?? "disabled"),
     queryFn: () => cedisService.getCycleSummary(cycleId as string, accessToken),
     refetchInterval: CEDIS_REFRESH_INTERVAL_MS,
+  });
+}
+
+export function useCedisIncomingSupplies(
+  filters: CedisIncomingSuppliesFilters | null,
+) {
+  const { accessToken } = useAuth();
+
+  return useQuery({
+    enabled: Boolean(accessToken && filters?.businessDate),
+    placeholderData: keepPreviousData,
+    queryKey: cedisQueryKeys.incomingSupplies(filters ?? { businessDate: "" }),
+    queryFn: () => {
+      if (!filters) throw new Error("Incoming supply filters are required");
+      return cedisService.listIncomingSupplies(filters, accessToken);
+    },
+    refetchInterval: CEDIS_REFRESH_INTERVAL_MS,
+  });
+}
+
+export function useCedisIncomingSupply(transferId: string | undefined) {
+  const { accessToken } = useAuth();
+
+  return useQuery({
+    enabled: Boolean(accessToken && transferId),
+    queryKey: ["cedis", "incoming-supplies", transferId],
+    queryFn: () =>
+      cedisService.getIncomingSupply(transferId as string, accessToken),
+  });
+}
+
+export function useReceiveCedisSupply() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations("receive-supply"),
+    mutationFn: (input: {
+      transferId: string;
+      payload: CedisReceiveSupplyCommand;
+      idempotencyKey?: string;
+    }) =>
+      cedisService.receiveIncomingSupply(
+        input.transferId,
+        input.payload,
+        accessToken,
+        input.idempotencyKey ?? idempotencyKey(),
+      ),
+    onSuccess: () => invalidateCedisDependencies(queryClient),
   });
 }
 

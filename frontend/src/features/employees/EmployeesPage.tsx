@@ -221,10 +221,10 @@ export function EmployeesPage() {
                   value={locationId}
                   onChange={(event) => setLocationId(event.target.value)}
                 >
-                    <option value="">Todos los puntos de venta</option>
-                    {locations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name} · {locationTypeLabel(location.type)}
+                  <option value="">Todos los puntos de venta</option>
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name} · {locationTypeLabel(location.type)}
                     </option>
                   ))}
                 </Select>

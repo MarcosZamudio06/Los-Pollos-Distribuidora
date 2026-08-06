@@ -796,6 +796,7 @@ function Transfers({ summary }: { summary: CedisCycleSummary }) {
                 <th className="px-4 py-3 font-black">Partidas</th>
                 <th className="px-4 py-3 font-black">Solicitado</th>
                 <th className="px-4 py-3 font-black">Confirmado</th>
+                <th className="px-4 py-3 font-black">Recepción</th>
               </tr>
             </thead>
             <tbody>
@@ -841,6 +842,38 @@ function Transfers({ summary }: { summary: CedisCycleSummary }) {
                   </td>
                   <td className="px-4 py-3 text-xs">
                     {dateTimeLabel(link.transfer.confirmedAt)}
+                  </td>
+                  <td className="max-w-64 px-4 py-3 text-xs">
+                    {link.role !== "SUPPLY" ? (
+                      <span className="text-[var(--erp-muted-foreground)]">
+                        No aplica
+                      </span>
+                    ) : link.transfer.receipt ? (
+                      <div className="grid gap-1">
+                        <Badge tone="green">
+                          Recibido por {link.transfer.receipt.receivedBy.name}
+                        </Badge>
+                        <span>
+                          {dateTimeLabel(link.transfer.receipt.receivedAt)}
+                        </span>
+                        {link.transfer.receipt.items.some(
+                          (item) =>
+                            Number(item.differenceKg) !== 0 ||
+                            item.differencePieces !== 0,
+                        ) && (
+                          <span className="font-bold text-[var(--erp-danger)]">
+                            Con diferencias
+                          </span>
+                        )}
+                        {link.transfer.receipt.notes && (
+                          <span className="line-clamp-2 text-[var(--erp-muted-foreground)]">
+                            {link.transfer.receipt.notes}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge tone="amber">Pendiente de recepción</Badge>
+                    )}
                   </td>
                 </tr>
               ))}

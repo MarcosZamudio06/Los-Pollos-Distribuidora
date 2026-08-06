@@ -75,7 +75,9 @@ export function CedisFilters({
             value={filters.cedisLocationId}
           >
             <option value="">
-              {cedisLocationsLoading ? "Cargando CEDIS…" : "Selecciona un CEDIS"}
+              {cedisLocationsLoading
+                ? "Cargando CEDIS…"
+                : "Selecciona un CEDIS"}
             </option>
             {cedisLocations.map((location) => (
               <option key={location.id} value={location.id}>
@@ -102,8 +104,7 @@ export function CedisFilters({
               onChange({
                 ...filters,
                 status: (event.target.value || undefined) as
-                  | CedisCycleStatus
-                  | undefined,
+                  CedisCycleStatus | undefined,
               })
             }
             value={filters.status ?? ""}

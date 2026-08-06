@@ -206,7 +206,9 @@ describe("TASK-062 purchase UI behavior", () => {
 
     expect(html).toContain("Matriz CEDIS");
     expect(html).not.toContain("Ruta 1");
-    expect(html).toContain("Las sucursales reciben producto mediante traspasos");
+    expect(html).toContain(
+      "Las sucursales reciben producto mediante traspasos",
+    );
   });
 
   it("muestra CEDIS como etiqueta de ubicación", () => {

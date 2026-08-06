@@ -55,10 +55,10 @@ Body importante:
   "items": [
     {
       "productId": "string",
-     "unit": "KG",
-     "quantityKg": 25.5,
-     "quantityPieces": 0,
-     "unitEquivalentId": null
+      "unit": "KG",
+      "quantityKg": 25.5,
+      "quantityPieces": 0,
+      "unitEquivalentId": null
     }
   ]
 }

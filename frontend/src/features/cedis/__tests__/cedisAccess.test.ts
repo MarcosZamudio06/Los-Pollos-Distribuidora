@@ -3,8 +3,9 @@ import { hasPermission, PERMISSIONS } from "../../auth/permissions";
 import { ROUTE_ACCESS_ROLES } from "../../../components/layout/routeAccess";
 
 describe("CEDIS access", () => {
-  it("permite la pantalla a ADMIN, WAREHOUSE y SELLER solamente", () => {
-    expect(ROUTE_ACCESS_ROLES.cedis).toEqual(["ADMIN", "WAREHOUSE", "SELLER"]);
+  it("reserva el tablero CEDIS para ADMIN y WAREHOUSE", () => {
+    expect(ROUTE_ACCESS_ROLES.cedis).toEqual(["ADMIN", "WAREHOUSE"]);
+    expect(ROUTE_ACCESS_ROLES.cedis).not.toContain("SELLER");
     expect(ROUTE_ACCESS_ROLES.cedis).not.toContain("COLLECTIONS");
     expect(ROUTE_ACCESS_ROLES.cedis).not.toContain("DRIVER");
   });

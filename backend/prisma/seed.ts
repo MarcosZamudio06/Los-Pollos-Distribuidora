@@ -278,9 +278,12 @@ async function seedInitialAdmin(prisma: SeedPrismaClient): Promise<void> {
   const passwordHash = await bcrypt.hash(passwordResolution.password, 12);
 
   await prisma.user.upsert({
-    where: { email: initialAdminUser.email },
+    where: { controlNumber: initialAdminUser.controlNumber },
     update: {
       name: initialAdminUser.name,
+      email: initialAdminUser.email,
+      controlNumber: initialAdminUser.controlNumber,
+      phone: initialAdminUser.phone,
       passwordHash,
       isActive: initialAdminUser.isActive,
       mustChangePassword: initialAdminUser.mustChangePassword,
@@ -326,9 +329,12 @@ async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
 
   for (const user of initialRoleTestUsers) {
     await prisma.user.upsert({
-      where: { email: user.email },
+      where: { controlNumber: user.controlNumber },
       update: {
         name: user.name,
+        email: user.email,
+        controlNumber: user.controlNumber,
+        phone: user.phone,
         passwordHash,
         isActive: user.isActive,
         mustChangePassword: user.mustChangePassword,

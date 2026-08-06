@@ -49,6 +49,7 @@ import { AccessProfilesPage } from "../features/access-control";
 import {
   CedisBranchDetailPage,
   CedisDashboardPage,
+  CedisIncomingSuppliesPage,
 } from "../features/cedis";
 
 export function AppRouter() {
@@ -245,6 +246,16 @@ export function AppRouter() {
           element={
             <RoleRoute roles={ROUTE_ACCESS_ROLES.dailyClose}>
               <DailyClosePage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/cedis/incoming"
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.cedisIncoming}>
+              <PermissionRoute permission={PERMISSIONS.cedisReceiveSupplies}>
+                <CedisIncomingSuppliesPage />
+              </PermissionRoute>
             </RoleRoute>
           }
         />

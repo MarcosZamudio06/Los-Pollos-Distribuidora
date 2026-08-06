@@ -97,7 +97,9 @@ export function CedisBranchCard({
             <span>{branch.address || "Dirección no registrada"}</span>
           </p>
           {coordinates && (
-            <p className="pl-6 text-xs tabular-nums">Coordenadas: {coordinates}</p>
+            <p className="pl-6 text-xs tabular-nums">
+              Coordenadas: {coordinates}
+            </p>
           )}
         </div>
 
@@ -106,18 +108,21 @@ export function CedisBranchCard({
             Estado del día: {cycleLabel}
           </Badge>
           <Badge tone={cash.tone}>
-            <Banknote aria-hidden="true" className="mr-1.5 inline h-3.5 w-3.5" />
+            <Banknote
+              aria-hidden="true"
+              className="mr-1.5 inline h-3.5 w-3.5"
+            />
             Caja: {cash.label}
           </Badge>
           <Badge tone={item.warningCount > 0 ? "red" : "green"}>
-              <AlertTriangle
-                aria-hidden="true"
-                className="mr-1.5 inline h-3.5 w-3.5"
-              />
-              {item.warningCount === 0
-                ? "0 advertencias"
-                : `${item.warningCount} advertencia${item.warningCount === 1 ? "" : "s"}`}
-            </Badge>
+            <AlertTriangle
+              aria-hidden="true"
+              className="mr-1.5 inline h-3.5 w-3.5"
+            />
+            {item.warningCount === 0
+              ? "0 advertencias"
+              : `${item.warningCount} advertencia${item.warningCount === 1 ? "" : "s"}`}
+          </Badge>
         </div>
 
         <dl className="mt-5 grid grid-cols-2 gap-3">
@@ -160,11 +165,7 @@ export function CedisBranchCard({
             label="Diferencia"
             value={difference ? formatMoney(difference) : "—"}
           />
-          <Metric
-            icon={Banknote}
-            label="Estado de caja"
-            value={cash.label}
-          />
+          <Metric icon={Banknote} label="Estado de caja" value={cash.label} />
         </dl>
       </article>
     </Link>

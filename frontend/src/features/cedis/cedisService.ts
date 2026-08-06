@@ -8,6 +8,10 @@ import type {
   CedisCycleSummary,
   CedisDashboardFilters,
   CedisDashboardResponse,
+  CedisIncomingSupply,
+  CedisIncomingSuppliesFilters,
+  CedisIncomingSuppliesResponse,
+  CedisReceiveSupplyCommand,
   CedisLocation,
   CedisOpenCycleCommand,
   CedisReopenCycleCommand,
@@ -118,6 +122,47 @@ export const cedisService = {
       `/cedis/branch-supply-cycles/${cycleId}/summary`,
       { headers: authHeaders(accessToken) },
     );
+
+    return unwrap(response);
+  },
+
+  async listIncomingSupplies(
+    filters: CedisIncomingSuppliesFilters,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.get<
+      ApiEnvelope<CedisIncomingSuppliesResponse>
+    >(withParams("/cedis/incoming-supplies", filters), {
+      headers: authHeaders(accessToken),
+    });
+
+    return unwrap(response);
+  },
+
+  async getIncomingSupply(transferId: string, accessToken?: string | null) {
+    const response = await apiClient.get<ApiEnvelope<CedisIncomingSupply>>(
+      `/cedis/incoming-supplies/${transferId}`,
+      {
+        headers: authHeaders(accessToken),
+      },
+    );
+
+    return unwrap(response);
+  },
+
+  async receiveIncomingSupply(
+    transferId: string,
+    payload: CedisReceiveSupplyCommand,
+    accessToken: string | null,
+    idempotencyKey: string,
+  ) {
+    const response = await apiClient.post<
+      ApiEnvelope<CedisIncomingSupply>,
+      CedisReceiveSupplyCommand
+    >(`/cedis/incoming-supplies/${transferId}/receive`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
 
     return unwrap(response);
   },

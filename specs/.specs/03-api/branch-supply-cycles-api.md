@@ -118,6 +118,64 @@ ni caja.
 
 Contrato complementario necesario para alcanzar `CANCELLED`. Requiere `ADMIN`, `cedis.close`, `expectedVersion` y motivo. Se rechaza si existe cierre no cancelado o cualquier transferencia no cancelada. No revierte inventario.
 
+## GET /api/cedis/incoming-supplies
+
+Propósito: listar los suministros CEDIS → sucursal de la fecha operativa para
+recibirlos en la sucursal.
+
+Permisos: `ADMIN`, `WAREHOUSE`, `SELLER` con `cedis.receive_supplies`.
+
+Query: `businessDate`, `branchLocationId`, `status` (`PENDING` o `RECEIVED`),
+`page`, `limit`.
+
+La respuesta ordena primero los pendientes y después por `requestedAt`/`createdAt`
+descendente. Cada elemento incluye folio, CEDIS, sucursal, ciclo, estado,
+notas del despacho, partidas enviadas y, cuando exista, la recepción completa.
+El alcance limita a `ADMIN`, al CEDIS del `WAREHOUSE` y a la sucursal del
+`SELLER`.
+
+## GET /api/cedis/incoming-supplies/:transferId
+
+Devuelve el detalle del suministro y su recepción. Las cantidades enviadas son
+de solo lectura; los costos requieren `cedis.view_costs`.
+
+## POST /api/cedis/incoming-supplies/:transferId/receive
+
+Requiere `cedis.receive_supplies` e `Idempotency-Key`.
+
+Body:
+
+```json
+{
+  "expectedCycleVersion": 2,
+  "notes": "Se recibió un bulto abierto",
+  "items": [
+    {
+      "transferItemId": "string",
+      "quantityKg": 24.5,
+      "quantityPieces": 0
+    }
+  ]
+}
+```
+
+Validaciones:
+
+- Solo acepta transferencias vinculadas con rol `SUPPLY` en estado `REQUESTED`
+  o `IN_TRANSIT` y ciclos no cerrados ni cancelados.
+- Todas las partidas del suministro deben aparecer exactamente una vez.
+- Las cantidades recibidas son no negativas, respetan la unidad y las piezas
+  son enteras.
+- La nota es obligatoria cuando alguna diferencia no es cero.
+- La operación es transaccional: recepción, confirmación de salida, entrada
+  recibida, ajuste de diferencia, versión del ciclo y evento se persisten juntos.
+- La salida del CEDIS usa lo enviado; la entrada de la sucursal usa lo recibido.
+- Un faltante crea `SHRINKAGE`; un sobrante crea `IN`, ambos con
+  `referenceType=BRANCH_SUPPLY_RECEIPT` y `referenceId` de la recepción.
+- Repetir la misma clave y payload devuelve el resultado original; cambiar el
+  payload responde `IDEMPOTENCY_CONFLICT`.
+- Una versión obsoleta responde `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`.
+
 ## Comandos de inventario reutilizados
 
 - `POST /api/inventory-transfers/:id/confirm`: confirma recepción. Revalida ciclo mutable, ubicaciones/productos activos, dirección, alcance y stock; genera ambos movimientos en una transacción.
@@ -135,4 +193,4 @@ Contrato complementario necesario para alcanzar `CANCELLED`. Requiere `ADMIN`, `
 
 ## Errores estables
 
-`BRANCH_SUPPLY_CYCLE_NOT_FOUND`, `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`, `BRANCH_SUPPLY_CYCLE_LOCATION_INVALID`, `BRANCH_SUPPLY_CYCLE_CLOSED`, `BRANCH_SUPPLY_CYCLE_NOT_READY`, `BRANCH_SUPPLY_CYCLE_NOT_CLOSED`, `BRANCH_SUPPLY_CYCLE_CLOSING_BLOCKED`, `BRANCH_SUPPLY_CYCLE_REFRESH_REQUIRED`, `BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE`, `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`, `BRANCH_SUPPLY_CYCLE_TRANSFER_ALREADY_LINKED`, `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`, `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`, `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`, `PRODUCT_INACTIVE`, `UNIT_MISMATCH`, `EQUIVALENCE_NOT_APPLICABLE`, `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`, `INSUFFICIENT_STOCK`, `LOCATION_NOT_AUTHORIZED`, `IDEMPOTENCY_CONFLICT`.
+`BRANCH_SUPPLY_CYCLE_NOT_FOUND`, `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`, `BRANCH_SUPPLY_CYCLE_LOCATION_INVALID`, `BRANCH_SUPPLY_CYCLE_CLOSED`, `BRANCH_SUPPLY_CYCLE_NOT_READY`, `BRANCH_SUPPLY_CYCLE_NOT_CLOSED`, `BRANCH_SUPPLY_CYCLE_CLOSING_BLOCKED`, `BRANCH_SUPPLY_CYCLE_REFRESH_REQUIRED`, `BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE`, `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`, `BRANCH_SUPPLY_CYCLE_TRANSFER_ALREADY_LINKED`, `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`, `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`, `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`, `PRODUCT_INACTIVE`, `UNIT_MISMATCH`, `EQUIVALENCE_NOT_APPLICABLE`, `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`, `INSUFFICIENT_STOCK`, `LOCATION_NOT_AUTHORIZED`, `IDEMPOTENCY_CONFLICT`, `BRANCH_SUPPLY_RECEIPT_ALREADY_EXISTS`, `BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED`, `BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID`, `BRANCH_SUPPLY_RECEIPT_NOTE_REQUIRED`.

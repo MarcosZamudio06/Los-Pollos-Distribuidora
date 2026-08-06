@@ -339,7 +339,9 @@ export function PedidosPage() {
                 <Activity className="h-4 w-4" /> Operación en vivo
               </div>
               <div className="mt-2 flex flex-col gap-1.5 lg:flex-row lg:items-baseline lg:gap-4">
-                <h1 className="shrink-0 text-3xl font-black tracking-[-0.06em] sm:text-4xl">Pedidos de sucursal</h1>
+                <h1 className="shrink-0 text-3xl font-black tracking-[-0.06em] sm:text-4xl">
+                  Pedidos de sucursal
+                </h1>
                 <p className="max-w-2xl text-sm leading-5 text-[var(--erp-muted-foreground)]"></p>
               </div>
             </div>
@@ -394,7 +396,9 @@ export function PedidosPage() {
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
             <CardHeader className="min-w-0 flex-1 gap-1">
-              <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]"><Store className="h-4 w-4" /> Sucursal operativa</div>
+              <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">
+                <Store className="h-4 w-4" /> Sucursal operativa
+              </div>
               <CardDescription className="leading-5"></CardDescription>
             </CardHeader>
             <CardContent className="w-full lg:w-80 lg:shrink-0">

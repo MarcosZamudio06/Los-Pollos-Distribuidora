@@ -42,7 +42,7 @@ Administrar usuarios internos del sistema.
 - `users.manage` permite administrar usuarios.
 - `access_profiles.manage` permite administrar perfiles y sus permisos.
 - Los perfiles iniciales incluyen `cedis.view`, `cedis.manage`,
-  `cedis.dispatch`, `cedis.receive_returns`, `cedis.reconcile`, `cedis.close` y
+  `cedis.dispatch`, `cedis.receive_supplies`, `cedis.receive_returns`, `cedis.reconcile`, `cedis.close` y
   `cedis.view_costs`.
 - `ADMIN` recibe todos los permisos CEDIS; `WAREHOUSE` recibe consulta,
   abastecimiento y recepción de devoluciones; `SELLER` recibe únicamente

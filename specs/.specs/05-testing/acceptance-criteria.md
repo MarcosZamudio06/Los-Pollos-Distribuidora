@@ -15,6 +15,7 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un usuario `ADMIN`, cuando accede a módulos administrativos, entonces puede operar inventario, ventas, clientes, compras, cobranza, rutas, liquidaciones, reportes, usuarios, políticas comerciales y configuración operativa según specs.
 - Dado un usuario `SELLER`, cuando opera POS, entonces puede registrar ventas autorizadas, consultar productos disponibles por ubicación y ver ventas propias; no puede modificar inventario, costos ni reportes financieros globales.
 - Dado un usuario `WAREHOUSE`, cuando opera inventario o compras, entonces puede gestionar productos, saldos, ajustes, movimientos, traspasos y compras conforme a permisos; no puede registrar ventas ni consultar ingresos financieros globales.
+- Dado un usuario `SELLER`, `WAREHOUSE` o `ADMIN` con `cedis.receive_supplies`, cuando consulta recepción CEDIS, entonces solo ve suministros dentro de su alcance operativo y puede recibirlos conforme a la ubicación autorizada.
 - Dado un usuario `DRIVER`, cuando consulta reparto, entonces solo ve rutas y pedidos asignados a su usuario; no puede crear productos, modificar precios, cancelar ventas ni ver reportes financieros globales.
 - Dado un usuario `COLLECTIONS`, cuando opera cobranza, entonces puede consultar cuentas por cobrar, saldos, pagos, cobros en ruta y liquidaciones autorizadas; no puede modificar inventario ni registrar ventas desde POS.
 - Dado cualquier pantalla con navegación por rol, cuando el rol no tiene acceso a un módulo, entonces el menú y la ruta protegida no permiten operar ese módulo.
@@ -79,6 +80,11 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado la misma clave con payload distinto, cuando se reintenta cualquier comando CEDIS, entonces responde `IDEMPOTENCY_CONFLICT`.
 - Dado un ciclo `CLOSED` o `CANCELLED`, cuando se intenta suministrar, devolver o refrescar, entonces se rechaza sin modificar historial.
 - Dado una devolución confirmada, cuando se concilia el cierre, entonces participa una sola vez mediante `TRANSFER_OUT` en la sucursal.
+- Dado un suministro pendiente, cuando la sucursal registra cantidades recibidas iguales a las enviadas, entonces confirma salida y entrada sin diferencia.
+- Dado un suministro pendiente con faltante, cuando se registra una nota y las cantidades recibidas, entonces la sucursal queda con lo recibido y se crea una merma `SHRINKAGE` trazable.
+- Dado un suministro pendiente con sobrante, cuando se registra una nota y las cantidades recibidas, entonces la sucursal recibe un ajuste `IN` por el excedente.
+- Dado un suministro ya recibido, cuando se intenta recibirlo nuevamente, entonces se rechaza o se devuelve la recepción original sin duplicar movimientos.
+- Dado una diferencia sin nota, cuando se intenta recibir, entonces se rechaza sin confirmar la transferencia.
 - Dado un cálculo que requiere conversión kilo/pieza sin equivalencia y redondeo aprobados, cuando se procesa, entonces se rechaza sin inventar el factor ni la regla.
 
 ## Clientes minoristas, mayoristas y políticas comerciales

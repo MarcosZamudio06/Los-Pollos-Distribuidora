@@ -37,7 +37,8 @@ const contextCopy: Record<string, { title: string; description: string }> = {
   },
   UNALLOCATED_ITEM_AMOUNTS: {
     title: "Importes sin distribuir",
-    description: "Las partidas no reflejan correctamente los importes de la venta.",
+    description:
+      "Las partidas no reflejan correctamente los importes de la venta.",
   },
   INVALID_SALE_TOTAL: {
     title: "Totales inconsistentes",
@@ -99,17 +100,13 @@ function pushContextMetric(
   if (formatted) metrics.push({ label, value: formatted });
 }
 
-function scalarContextMetrics(
-  details: ContextSnapshot,
-): ContextMetric[] {
+function scalarContextMetrics(details: ContextSnapshot): ContextMetric[] {
   return Object.entries(details).flatMap(([key, value]) => {
     if (typeof value === "object" || value === null) return [];
     const formatted = ["subtotal", "discount", "tax", "total"].includes(key)
       ? contextMoney(value)
       : contextText(value);
-    return formatted
-      ? [{ label: contextKeyLabel(key), value: formatted }]
-      : [];
+    return formatted ? [{ label: contextKeyLabel(key), value: formatted }] : [];
   });
 }
 
@@ -132,7 +129,11 @@ function getContextMetrics(item: BillingRemediationItem): ContextMetric[] {
       item.sale?.documentType ?? details.documentType,
       contextDocumentType,
     );
-    pushContextMetric(metrics, "Documentos encontrados", details.matchingDocuments);
+    pushContextMetric(
+      metrics,
+      "Documentos encontrados",
+      details.matchingDocuments,
+    );
   }
   if (item.code === "UNALLOCATED_ITEM_AMOUNTS") {
     if (item.sale) {
@@ -252,7 +253,8 @@ function RemediationContext({ item }: { item: BillingRemediationItem }) {
               const headerValue = comparison.header[key];
               const itemValue = comparison.items[key];
               const hasBothValues = headerValue != null && itemValue != null;
-              const mismatch = hasBothValues && !sameMoney(headerValue, itemValue);
+              const mismatch =
+                hasBothValues && !sameMoney(headerValue, itemValue);
               return (
                 <div
                   className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 border-t border-[color:var(--erp-border)] px-2.5 py-2 text-xs"

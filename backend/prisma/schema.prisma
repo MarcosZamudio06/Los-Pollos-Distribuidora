@@ -446,6 +446,7 @@ model User {
   branchSupplyCyclesCancelled     BranchSupplyCycle[]          @relation("BranchSupplyCycleCancelledBy")
   branchSupplyCyclesReopened      BranchSupplyCycle[]          @relation("BranchSupplyCycleReopenedBy")
   branchSupplyCycleTransfers      BranchSupplyCycleTransfer[]  @relation("BranchSupplyCycleTransferLinkedBy")
+  branchSupplyReceiptsReceived    BranchSupplyReceipt[]        @relation("BranchSupplyReceiptReceivedBy")
   branchSupplyCycleEvents         BranchSupplyCycleEvent[]     @relation("BranchSupplyCycleEventActor")
   branchSupplyCycleSnapshots      BranchSupplyCycleSnapshot[]
   cashMovements                   CashMovement[]
@@ -560,6 +561,7 @@ model Product {
   dailyCloseDifferences             DailyCloseDifference[]
   branchSupplyCycleItems            BranchSupplyCycleItem[]
   branchSupplyCycleProductSnapshots BranchSupplyCycleProductSnapshot[]
+  branchSupplyReceiptItems          BranchSupplyReceiptItem[]
 }
 
 model ProductUnitEquivalent {
@@ -902,26 +904,28 @@ model InventoryTransfer {
   items                     InventoryTransferItem[]
   inventoryMovements        InventoryMovement[]
   branchSupplyCycleTransfer BranchSupplyCycleTransfer?
+  branchSupplyReceipt       BranchSupplyReceipt?
 
   @@index([originLocationId, status])
   @@index([destinationLocationId, status])
 }
 
 model InventoryTransferItem {
-  id                      String                 @id @default(cuid())
-  transferId              String
-  productId               String
-  quantityKg              Decimal?               @db.Decimal(14, 3)
-  quantityPieces          Int?
-  unit                    ProductUnit
-  unitEquivalentId        String?
-  appliedEquivalentFactor Decimal?               @db.Decimal(18, 6)
-  roundingMode            String?
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
-  transfer                InventoryTransfer      @relation(fields: [transferId], references: [id])
-  product                 Product                @relation(fields: [productId], references: [id])
-  unitEquivalent          ProductUnitEquivalent? @relation(fields: [unitEquivalentId], references: [id])
+  id                       String                    @id @default(cuid())
+  transferId               String
+  productId                String
+  quantityKg               Decimal?                  @db.Decimal(14, 3)
+  quantityPieces           Int?
+  unit                     ProductUnit
+  unitEquivalentId         String?
+  appliedEquivalentFactor  Decimal?                  @db.Decimal(18, 6)
+  roundingMode             String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  transfer                 InventoryTransfer         @relation(fields: [transferId], references: [id])
+  product                  Product                   @relation(fields: [productId], references: [id])
+  unitEquivalent           ProductUnitEquivalent?    @relation(fields: [unitEquivalentId], references: [id])
+  branchSupplyReceiptItems BranchSupplyReceiptItem[]
 }
 
 model AccountReceivable {
@@ -1674,6 +1678,7 @@ model BranchSupplyCycle {
   items                        BranchSupplyCycleItem[]
   events                       BranchSupplyCycleEvent[]
   reconciliationSnapshots      BranchSupplyCycleSnapshot[]
+  receipts                     BranchSupplyReceipt[]
 
   @@index([distributionCenterLocationId, branchLocationId, businessDate, status])
   @@index([distributionCenterLocationId, businessDate, status, branchLocationId])
@@ -1694,6 +1699,49 @@ model BranchSupplyCycleTransfer {
   linkedBy            User                     @relation("BranchSupplyCycleTransferLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
 
   @@index([branchSupplyCycleId, role, linkedAt])
+}
+
+model BranchSupplyReceipt {
+  id                  String                    @id @default(cuid())
+  inventoryTransferId String                    @unique
+  branchSupplyCycleId String
+  receivedByUserId    String
+  receivedAt          DateTime                  @default(now())
+  notes               String?
+  idempotencyKey      String                    @unique
+  payloadHash         String
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  inventoryTransfer   InventoryTransfer         @relation(fields: [inventoryTransferId], references: [id], onDelete: Restrict)
+  branchSupplyCycle   BranchSupplyCycle         @relation(fields: [branchSupplyCycleId], references: [id], onDelete: Restrict)
+  receivedBy          User                      @relation("BranchSupplyReceiptReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  items               BranchSupplyReceiptItem[]
+
+  @@index([branchSupplyCycleId, receivedAt])
+  @@index([receivedByUserId, receivedAt])
+}
+
+model BranchSupplyReceiptItem {
+  id                  String                @id @default(cuid())
+  receiptId           String
+  transferItemId      String
+  productId           String
+  productNameSnapshot String
+  unit                ProductUnit
+  sentKg              Decimal               @default(0) @db.Decimal(14, 3)
+  sentPieces          Int                   @default(0)
+  receivedKg          Decimal               @default(0) @db.Decimal(14, 3)
+  receivedPieces      Int                   @default(0)
+  differenceKg        Decimal               @default(0) @db.Decimal(14, 3)
+  differencePieces    Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  receipt             BranchSupplyReceipt   @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  transferItem        InventoryTransferItem @relation(fields: [transferItemId], references: [id], onDelete: Restrict)
+  product             Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, transferItemId])
+  @@index([transferItemId])
+  @@index([productId, createdAt])
 }
 
 model BranchSupplyCycleItem {

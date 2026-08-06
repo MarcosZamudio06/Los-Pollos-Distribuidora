@@ -130,6 +130,24 @@ type DetailTransferRecord = {
   cancelledAt: Date | null;
   updatedAt: Date;
   items: DetailTransferItemRecord[];
+  branchSupplyReceipt: {
+    id: string;
+    receivedAt: Date;
+    notes: string | null;
+    receivedBy: { id: string; name: string };
+    items: Array<{
+      transferItemId: string;
+      productId: string;
+      productNameSnapshot: string;
+      unit: string;
+      sentKg: DecimalLike;
+      sentPieces: number;
+      receivedKg: DecimalLike;
+      receivedPieces: number;
+      differenceKg: DecimalLike;
+      differencePieces: number;
+    }>;
+  } | null;
 };
 
 type DetailTransferLinkRecord = {
@@ -553,6 +571,29 @@ export class CedisDashboardQueryService {
                   product: { select: { name: true, sku: true } },
                 },
               },
+              branchSupplyReceipt: {
+                select: {
+                  id: true,
+                  receivedAt: true,
+                  notes: true,
+                  receivedBy: { select: { id: true, name: true } },
+                  items: {
+                    orderBy: { createdAt: 'asc' as const },
+                    select: {
+                      transferItemId: true,
+                      productId: true,
+                      productNameSnapshot: true,
+                      unit: true,
+                      sentKg: true,
+                      sentPieces: true,
+                      receivedKg: true,
+                      receivedPieces: true,
+                      differenceKg: true,
+                      differencePieces: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -890,6 +931,26 @@ export class CedisDashboardQueryService {
           quantityKg: this.nullableQuantity(item.quantityKg),
           quantityPieces: item.quantityPieces,
         })),
+        receipt: transfer.branchSupplyReceipt
+          ? {
+              id: transfer.branchSupplyReceipt.id,
+              receivedAt: transfer.branchSupplyReceipt.receivedAt.toISOString(),
+              notes: transfer.branchSupplyReceipt.notes,
+              receivedBy: transfer.branchSupplyReceipt.receivedBy,
+              items: transfer.branchSupplyReceipt.items.map((item) => ({
+                transferItemId: item.transferItemId,
+                productId: item.productId,
+                productName: item.productNameSnapshot,
+                unit: item.unit,
+                sentKg: this.quantity(item.sentKg),
+                sentPieces: item.sentPieces,
+                receivedKg: this.quantity(item.receivedKg),
+                receivedPieces: item.receivedPieces,
+                differenceKg: this.quantity(item.differenceKg),
+                differencePieces: item.differencePieces,
+              })),
+            }
+          : null,
       },
     };
   }

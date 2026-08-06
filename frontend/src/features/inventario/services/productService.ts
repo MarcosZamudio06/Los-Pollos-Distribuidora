@@ -136,9 +136,7 @@ export const productService = {
     businessDate: string,
     accessToken?: string | null,
   ) {
-    const response = await apiClient.get<
-      ItemEnvelope<CedisInventorySummary>
-    >(
+    const response = await apiClient.get<ItemEnvelope<CedisInventorySummary>>(
       withParams("/cedis/inventory-summary", {
         cedisLocationId,
         businessDate,

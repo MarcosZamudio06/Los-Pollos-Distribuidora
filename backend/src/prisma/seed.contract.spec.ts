@@ -172,9 +172,12 @@ describe('Prisma seed contract', () => {
     for (const [index, roleUser] of initialRoleTestUsers.entries()) {
       const upsert = roleUserUpserts[index];
       expect(upsert).toMatchObject({
-        where: { email: roleUser.email },
+        where: { controlNumber: roleUser.controlNumber },
         update: {
           name: roleUser.name,
+          email: roleUser.email,
+          controlNumber: roleUser.controlNumber,
+          phone: roleUser.phone,
           isActive: true,
           mustChangePassword: false,
           role: { connect: { name: roleUser.roleName } },
@@ -236,9 +239,14 @@ describe('Prisma seed contract', () => {
     const userUpsert = userUpsertMock.mock.calls[0]?.[0];
 
     expect(userUpsert).toMatchObject({
-      where: { email: initialAdminUser.email },
+      where: {
+        controlNumber: initialAdminUser.controlNumber,
+      },
       update: {
         name: initialAdminUser.name,
+        email: initialAdminUser.email,
+        controlNumber: initialAdminUser.controlNumber,
+        phone: initialAdminUser.phone,
         isActive: true,
         mustChangePassword: false,
         role: { connect: { name: 'ADMIN' } },

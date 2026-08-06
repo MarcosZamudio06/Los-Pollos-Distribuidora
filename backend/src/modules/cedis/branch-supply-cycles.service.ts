@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   BranchSupplyCycleEventType,
@@ -35,6 +36,8 @@ import {
 } from './dto';
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
 import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { CedisGateway } from './cedis.gateway';
+import type { CedisSupplyCreatedPayload } from './cedis-realtime.types';
 import type {
   ReconciliationDailyClose,
   ReconciliationInput,
@@ -195,8 +198,8 @@ type CycleResponse = {
     cashOutTotal: number;
     cashAdjustmentTotal: number;
   };
-  distributionCenterLocation: unknown;
-  branchLocation: unknown;
+  distributionCenterLocation: { id: string; name: string };
+  branchLocation: { id: string; name: string };
   dailyClose: unknown;
   supplies: CycleTransferResponse[];
   returns: CycleTransferResponse[];
@@ -221,6 +224,7 @@ export class BranchSupplyCyclesService {
     private readonly inventoryTransfers: InventoryTransfersService,
     private readonly cycleReconciliation: BranchSupplyCycleReconciliationService,
     private readonly dailyCloseService: PointOfSaleDailyCloseService,
+    @Optional() private readonly cedisGateway?: CedisGateway,
   ) {}
 
   async open(
@@ -320,13 +324,32 @@ export class BranchSupplyCyclesService {
     actor: CycleActor,
     idempotencyKey: string,
   ) {
-    return this.createTransferCommand(
+    const result = await this.createTransferCommand(
       cycleId,
       dto,
       actor,
       idempotencyKey,
       BranchSupplyTransferRole.SUPPLY,
     );
+    if (result.created && result.transfer) {
+      const payload: CedisSupplyCreatedPayload = {
+        transferId: result.transfer.id,
+        transferNumber: result.transfer.transferNumber,
+        cycleId: result.cycle.id,
+        businessDate: result.cycle.businessDate.toISOString().slice(0, 10),
+        origin: {
+          id: result.cycle.distributionCenterLocation.id,
+          name: result.cycle.distributionCenterLocation.name,
+        },
+        destination: {
+          id: result.cycle.branchLocation.id,
+          name: result.cycle.branchLocation.name,
+        },
+        requestedAt: result.transfer.requestedAt?.toISOString() ?? null,
+      };
+      this.cedisGateway?.emitSupplyCreated(payload);
+    }
+    return result;
   }
 
   async createReturn(
@@ -934,6 +957,7 @@ export class BranchSupplyCyclesService {
             );
             return {
               cycle: replay,
+              created: false,
               transfer: transferId
                 ? await this.findTransferResponse(tx, transferId)
                 : null,
@@ -1031,6 +1055,7 @@ export class BranchSupplyCyclesService {
           });
 
           return {
+            created: true,
             cycle: this.toCycleResponse(
               await this.findCycle(tx, cycle.id),
               null,

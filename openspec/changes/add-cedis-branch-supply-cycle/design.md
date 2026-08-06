@@ -6,14 +6,14 @@ Crear `CedisModule` como orquestador de ciclos. `BranchSupplyCyclesService` deri
 
 ## Architecture Decisions
 
-| Decisión | Alternativa | Razón |
-|---|---|---|
-| Controller `cedis/branch-supply-cycles` | Prefijo raíz anterior | Agrupa la capacidad bajo el permiso y dominio CEDIS acordados. |
-| Crear transferencias `REQUESTED` | Confirmar al capturar | La recepción física es una decisión separada y auditable. |
-| Confirmar/cancelar con endpoints de inventario | Duplicar comandos CEDIS | Mantiene una sola autoridad sobre saldos, movimientos y estado del traspaso. |
-| Núcleo de transferencias acepta `TransactionClient` | Transacciones anidadas | Permite transferencia, vínculo, evento y versión dentro de una sola transacción. |
-| Snapshots append-only reconstruibles | Totales como fuente de stock | Conserva auditoría sin competir con `InventoryBalance`/`InventoryMovement`. |
-| Sin reserva de pendientes | Descontar al solicitar | El servicio actual descuenta al confirmar; agregar reservas sería otro agregado. |
+| Decisión                                            | Alternativa                  | Razón                                                                            |
+| --------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
+| Controller `cedis/branch-supply-cycles`             | Prefijo raíz anterior        | Agrupa la capacidad bajo el permiso y dominio CEDIS acordados.                   |
+| Crear transferencias `REQUESTED`                    | Confirmar al capturar        | La recepción física es una decisión separada y auditable.                        |
+| Confirmar/cancelar con endpoints de inventario      | Duplicar comandos CEDIS      | Mantiene una sola autoridad sobre saldos, movimientos y estado del traspaso.     |
+| Núcleo de transferencias acepta `TransactionClient` | Transacciones anidadas       | Permite transferencia, vínculo, evento y versión dentro de una sola transacción. |
+| Snapshots append-only reconstruibles                | Totales como fuente de stock | Conserva auditoría sin competir con `InventoryBalance`/`InventoryMovement`.      |
+| Sin reserva de pendientes                           | Descontar al solicitar       | El servicio actual descuenta al confirmar; agregar reservas sería otro agregado. |
 
 ## Data Flow
 
@@ -52,15 +52,15 @@ Los conflictos `P2034` se reintentan de forma limitada con la misma clave. Índi
 
 ## File Changes
 
-| Archivo | Acción |
-|---|---|
-| `backend/src/modules/cedis/**` | Crear módulo, controller, service, DTOs y pruebas. |
-| `backend/src/modules/inventory/inventory-transfers.service.ts` | Extraer operaciones reutilizables con `TransactionClient` y validar ciclo vinculado. |
-| `backend/src/modules/inventory/inventory-transfers.controller.ts` | Exigir idempotencia y conservar contratos de confirmación/cancelación. |
-| `backend/src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service.ts` | Exponer helpers transaccionales de cierre y reapertura coordinados. |
-| `backend/src/app.module.ts` | Registrar `CedisModule`. |
-| `backend/prisma/schema.prisma` | Alinear unicidad activa y eventos de cambio de transferencia. |
-| `backend/prisma/migrations/*cedis_cycle_alignment*/migration.sql` | Aplicar cambios no destructivos de constraints/enums. |
+| Archivo                                                                              | Acción                                                                               |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `backend/src/modules/cedis/**`                                                       | Crear módulo, controller, service, DTOs y pruebas.                                   |
+| `backend/src/modules/inventory/inventory-transfers.service.ts`                       | Extraer operaciones reutilizables con `TransactionClient` y validar ciclo vinculado. |
+| `backend/src/modules/inventory/inventory-transfers.controller.ts`                    | Exigir idempotencia y conservar contratos de confirmación/cancelación.               |
+| `backend/src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service.ts` | Exponer helpers transaccionales de cierre y reapertura coordinados.                  |
+| `backend/src/app.module.ts`                                                          | Registrar `CedisModule`.                                                             |
+| `backend/prisma/schema.prisma`                                                       | Alinear unicidad activa y eventos de cambio de transferencia.                        |
+| `backend/prisma/migrations/*cedis_cycle_alignment*/migration.sql`                    | Aplicar cambios no destructivos de constraints/enums.                                |
 
 ## Units and Equivalences
 

@@ -6,6 +6,7 @@ export const PERMISSIONS = {
   CEDIS_CLOSE: 'cedis.close',
   CEDIS_DISPATCH: 'cedis.dispatch',
   CEDIS_MANAGE: 'cedis.manage',
+  CEDIS_RECEIVE_SUPPLIES: 'cedis.receive_supplies',
   CEDIS_RECEIVE_RETURNS: 'cedis.receive_returns',
   CEDIS_RECONCILE: 'cedis.reconcile',
   CEDIS_VIEW: 'cedis.view',
@@ -75,6 +76,10 @@ export const PERMISSION_DEFINITIONS = [
     description: 'Receive authorized branch returns at a CEDIS.',
   },
   {
+    key: PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
+    description: 'Receive supplies delivered from an authorized CEDIS.',
+  },
+  {
     key: PERMISSIONS.CEDIS_RECONCILE,
     description: 'Reconcile CEDIS operational cycles.',
   },
@@ -134,6 +139,7 @@ export const PERMISSION_METADATA: Record<
   [PERMISSIONS.CEDIS_CLOSE]: { group: 'CEDIS', risk: 'critical' },
   [PERMISSIONS.CEDIS_DISPATCH]: { group: 'CEDIS', risk: 'sensitive' },
   [PERMISSIONS.CEDIS_MANAGE]: { group: 'CEDIS', risk: 'critical' },
+  [PERMISSIONS.CEDIS_RECEIVE_SUPPLIES]: { group: 'CEDIS', risk: 'sensitive' },
   [PERMISSIONS.CEDIS_RECEIVE_RETURNS]: { group: 'CEDIS', risk: 'sensitive' },
   [PERMISSIONS.CEDIS_RECONCILE]: { group: 'CEDIS', risk: 'critical' },
   [PERMISSIONS.CEDIS_VIEW]: { group: 'CEDIS', risk: 'standard' },
@@ -159,11 +165,12 @@ export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
   BILLING: [PERMISSIONS.FISCAL_INFORMATION_EXPORT],
   COLLECTIONS: [],
   DRIVER: [],
-  SELLER: [PERMISSIONS.CEDIS_VIEW],
+  SELLER: [PERMISSIONS.CEDIS_VIEW, PERMISSIONS.CEDIS_RECEIVE_SUPPLIES],
   WAREHOUSE: [
     PERMISSIONS.COSTS_READ,
     PERMISSIONS.CEDIS_VIEW,
     PERMISSIONS.CEDIS_DISPATCH,
+    PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
     PERMISSIONS.CEDIS_RECEIVE_RETURNS,
   ],
 };

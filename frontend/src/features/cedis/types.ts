@@ -185,7 +185,83 @@ export type CedisCycleTransfer = {
     cancelledAt: string | null;
     updatedAt: string;
     items: CedisCycleTransferItem[];
+    receipt?: CedisSupplyReceipt | null;
   };
+};
+
+export type CedisSupplyReceiptItem = {
+  transferItemId: string;
+  productId: string;
+  productName: string;
+  unit: "KG" | "PIECE" | "KG_AND_PIECE" | string;
+  sentKg: string;
+  sentPieces: number;
+  receivedKg: string;
+  receivedPieces: number;
+  differenceKg: string;
+  differencePieces: number;
+};
+
+export type CedisSupplyReceipt = {
+  id: string;
+  receivedAt: string;
+  notes: string | null;
+  receivedBy: { id: string; name: string };
+  items: CedisSupplyReceiptItem[];
+};
+
+export type CedisIncomingSupplyItem = {
+  transferItemId: string;
+  productId: string;
+  productName: string;
+  unit: "KG" | "PIECE" | "KG_AND_PIECE" | string;
+  quantityKg: number;
+  quantityPieces: number;
+};
+
+export type CedisIncomingSupply = {
+  id: string;
+  transferNumber: string;
+  cycleId: string;
+  cycleVersion: number;
+  businessDate: string;
+  status: "PENDING" | "RECEIVED";
+  origin: { id: string; name: string; code: string | null };
+  destination: { id: string; name: string; code: string | null };
+  notes: string | null;
+  requestedAt: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+  items: CedisIncomingSupplyItem[];
+  receipt: CedisSupplyReceipt | null;
+};
+
+export type CedisIncomingSuppliesResponse = {
+  items: CedisIncomingSupply[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type CedisIncomingSuppliesFilters = {
+  businessDate: string;
+  branchLocationId?: string;
+  status?: "PENDING" | "RECEIVED";
+  page?: number;
+  limit?: number;
+};
+
+export type CedisReceiveSupplyItem = {
+  transferItemId: string;
+  quantityKg?: number;
+  quantityPieces?: number;
+};
+
+export type CedisReceiveSupplyCommand = {
+  expectedCycleVersion: number;
+  notes?: string;
+  items: CedisReceiveSupplyItem[];
 };
 
 export type CedisDailyCloseDifference = {

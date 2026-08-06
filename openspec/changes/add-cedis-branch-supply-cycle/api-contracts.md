@@ -4,26 +4,26 @@ La fuente canónica exacta es `specs/.specs/03-api/branch-supply-cycles-api.md`.
 
 ## Superficie CEDIS
 
-| Método y ruta | Propósito | Permiso |
-|---|---|---|
-| `GET /api/cedis/branch-supply-cycles` | Listar por alcance | `cedis.view` |
-| `POST /api/cedis/branch-supply-cycles` | Abrir ciclo `OPEN` | `cedis.dispatch` o `ADMIN` |
-| `GET /api/cedis/branch-supply-cycles/:id` | Consultar detalle, transferencias y snapshots | `cedis.view` |
-| `POST /api/cedis/branch-supply-cycles/:id/supplies` | Crear `REQUESTED` CEDIS → sucursal | `cedis.dispatch` |
-| `POST /api/cedis/branch-supply-cycles/:id/returns` | Crear `REQUESTED` sucursal → CEDIS | `cedis.receive_returns` |
-| `POST /api/cedis/branch-supply-cycles/:id/refresh` | Reconstruir snapshot/elegibilidad | `cedis.reconcile` |
-| `POST /api/cedis/branch-supply-cycles/:id/close` | Cerrar ciclo y cierre diario coordinados | `cedis.close` + `ADMIN` |
-| `POST /api/cedis/branch-supply-cycles/:id/reopen` | Reabrir ciclo y cierre diario coordinados | `cedis.close` + `ADMIN` |
-| `POST /api/cedis/branch-supply-cycles/:id/cancel` | Cancelar ciclo elegible | `cedis.close` + `ADMIN` |
+| Método y ruta                                       | Propósito                                     | Permiso                    |
+| --------------------------------------------------- | --------------------------------------------- | -------------------------- |
+| `GET /api/cedis/branch-supply-cycles`               | Listar por alcance                            | `cedis.view`               |
+| `POST /api/cedis/branch-supply-cycles`              | Abrir ciclo `OPEN`                            | `cedis.dispatch` o `ADMIN` |
+| `GET /api/cedis/branch-supply-cycles/:id`           | Consultar detalle, transferencias y snapshots | `cedis.view`               |
+| `POST /api/cedis/branch-supply-cycles/:id/supplies` | Crear `REQUESTED` CEDIS → sucursal            | `cedis.dispatch`           |
+| `POST /api/cedis/branch-supply-cycles/:id/returns`  | Crear `REQUESTED` sucursal → CEDIS            | `cedis.receive_returns`    |
+| `POST /api/cedis/branch-supply-cycles/:id/refresh`  | Reconstruir snapshot/elegibilidad             | `cedis.reconcile`          |
+| `POST /api/cedis/branch-supply-cycles/:id/close`    | Cerrar ciclo y cierre diario coordinados      | `cedis.close` + `ADMIN`    |
+| `POST /api/cedis/branch-supply-cycles/:id/reopen`   | Reabrir ciclo y cierre diario coordinados     | `cedis.close` + `ADMIN`    |
+| `POST /api/cedis/branch-supply-cycles/:id/cancel`   | Cancelar ciclo elegible                       | `cedis.close` + `ADMIN`    |
 
 Todos los `POST` requieren `Idempotency-Key`. Los comandos sobre ciclo existente requieren `expectedVersion`. Suministro/devolución reciben `notes` e `items[]` con `productId`, `unit`, `quantityKg`, `quantityPieces` y `unitEquivalentId` opcional; no reciben ubicaciones.
 
 ## Contratos de inventario reutilizados
 
-| Método y ruta | Comportamiento vinculado |
-|---|---|
+| Método y ruta                               | Comportamiento vinculado                                                           |
+| ------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `POST /api/inventory-transfers/:id/confirm` | Confirma recepción, valida ciclo/dirección/stock y genera salida/entrada atómicas. |
-| `POST /api/inventory-transfers/:id/cancel` | Cancela `DRAFT`, `REQUESTED` o `IN_TRANSIT` con motivo; nunca `CONFIRMED`. |
+| `POST /api/inventory-transfers/:id/cancel`  | Cancela `DRAFT`, `REQUESTED` o `IN_TRANSIT` con motivo; nunca `CONFIRMED`.         |
 
 Confirmar o cancelar una transferencia vinculada requiere `Idempotency-Key`, incrementa la versión del ciclo, lo devuelve a `OPEN` cuando corresponda e invalida la validación vigente de un cierre `DRAFT`.
 

@@ -27,6 +27,7 @@ import {
 export type NavigationItemKey =
   | "home"
   | "cedis"
+  | "cedis-incoming"
   | "sales"
   | "sales-history"
   | "orders"
@@ -92,6 +93,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "CEDIS",
     section: "operations",
     to: "/cedis",
+  },
+  {
+    activePaths: ["/cedis/incoming"],
+    allowedRoles: ROUTE_ACCESS_ROLES.cedisIncoming,
+    routeAccessKey: "cedisIncoming",
+    description: "Recepción de envíos del CEDIS",
+    icon: ClipboardCheck,
+    key: "cedis-incoming",
+    label: "Recepción CEDIS",
+    section: "operations",
+    to: "/cedis/incoming",
   },
   {
     activePaths: ["/sales/history", "/sales/"],

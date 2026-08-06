@@ -94,14 +94,12 @@ describe("billing remediations UI contracts", () => {
   });
 
   it("sends concurrency tokens and an idempotency key when resolving", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify({ id: "rem-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "rem-1" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
 
     await billingRemediationsService.resolve(
       {
