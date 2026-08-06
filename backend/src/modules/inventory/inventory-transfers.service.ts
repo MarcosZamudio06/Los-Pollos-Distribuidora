@@ -205,6 +205,21 @@ export type InventoryTransferCommandOptions = {
   >;
 };
 
+export type SupplyReceiptItemInput = {
+  transferItemId: string;
+  quantityKg?: number;
+  quantityPieces?: number;
+};
+
+export type SupplyReceiptCommandOptions = {
+  tx?: Prisma.TransactionClient;
+  receiptId: string;
+  actor?: Pick<
+    AuthenticatedUser,
+    'id' | 'role' | 'operationalLocationId' | 'permissions'
+  >;
+};
+
 @Injectable()
 export class InventoryTransfersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -290,6 +305,40 @@ export class InventoryTransfersService {
             userId,
             idempotencyKey,
             options.actor,
+          ),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+  }
+
+  async receiveSupply(
+    id: string,
+    receivedItems: SupplyReceiptItemInput[],
+    userId: string,
+    idempotencyKey: string,
+    options: SupplyReceiptCommandOptions,
+  ): Promise<TransferResponse> {
+    if (options.tx) {
+      return this.receiveSupplyInTransaction(
+        options.tx,
+        id,
+        receivedItems,
+        userId,
+        idempotencyKey,
+        options,
+      );
+    }
+
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.receiveSupplyInTransaction(
+            tx,
+            id,
+            receivedItems,
+            userId,
+            idempotencyKey,
+            options,
           ),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -421,6 +470,9 @@ export class InventoryTransfersService {
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id, tx);
     this.assertActorCanChangeLinkedTransfer(transfer, actor);
+    if (transfer.branchSupplyCycleTransfer?.role === 'SUPPLY') {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+    }
     if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
       throw new BadRequestException(
         'Idempotency-Key is required for transfers linked to a branch supply cycle',
@@ -517,6 +569,173 @@ export class InventoryTransfersService {
       userId,
       'CONFIRM',
       idempotencyKey,
+    );
+
+    return this.toTransferResponse(confirmed);
+  }
+
+  private async receiveSupplyInTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    receivedItems: SupplyReceiptItemInput[],
+    userId: string,
+    idempotencyKey: string,
+    options: SupplyReceiptCommandOptions,
+  ): Promise<TransferResponse> {
+    const transfer = await this.findTransferOrThrow(id, tx);
+    this.assertActorCanReceiveSupply(transfer, options.actor);
+    if (!idempotencyKey.trim()) {
+      throw new BadRequestException(
+        'Idempotency-Key is required for supply receipts',
+      );
+    }
+    if (transfer.branchSupplyCycleTransfer?.role !== 'SUPPLY') {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+    }
+
+    this.assertLinkedCycleCanChange(transfer);
+    this.assertLinkedTransferDirection(transfer);
+    await this.assertLocationAvailable(tx, transfer.originLocationId, 'origin');
+    await this.assertLocationAvailable(
+      tx,
+      transfer.destinationLocationId,
+      'destination',
+    );
+    await this.assertTransferProductsActive(tx, transfer);
+    this.assertCanConfirm(transfer);
+
+    const quantitiesByItem = this.normalizeReceiptItems(
+      transfer.items ?? [],
+      receivedItems,
+    );
+    const commandMarker = this.buildCommandMarker('CONFIRM', idempotencyKey, {
+      transferId: id,
+      userId,
+      receiptId: options.receiptId,
+    });
+
+    for (const item of transfer.items ?? []) {
+      const sent = this.normalizeExistingItemQuantities(item);
+      const received = quantitiesByItem.get(item.id);
+      if (!received) {
+        throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID');
+      }
+      const reason = this.withCommandMarker(
+        `Inventory supply ${transfer.transferNumber} received`,
+        commandMarker,
+      );
+
+      const originChange = await this.applyBalanceChange(
+        tx,
+        item.productId,
+        transfer.originLocationId,
+        -1,
+        sent,
+      );
+      await this.createMovement(
+        tx,
+        transfer,
+        item,
+        userId,
+        InventoryMovementType.TRANSFER_OUT,
+        transfer.originLocationId,
+        sent,
+        originChange,
+        reason,
+      );
+
+      const destinationChange = await this.applyBalanceChange(
+        tx,
+        item.productId,
+        transfer.destinationLocationId,
+        1,
+        sent,
+      );
+      await this.createMovement(
+        tx,
+        transfer,
+        item,
+        userId,
+        InventoryMovementType.TRANSFER_IN,
+        transfer.destinationLocationId,
+        sent,
+        destinationChange,
+        reason,
+      );
+
+      const shortage = {
+        quantityKg: Math.max(sent.quantityKg - received.quantityKg, 0),
+        quantityPieces: Math.max(
+          sent.quantityPieces - received.quantityPieces,
+          0,
+        ),
+      };
+      if (shortage.quantityKg > 0 || shortage.quantityPieces > 0) {
+        const balanceChange = await this.applyBalanceChange(
+          tx,
+          item.productId,
+          transfer.destinationLocationId,
+          -1,
+          shortage,
+        );
+        await this.createReceiptAdjustmentMovement(
+          tx,
+          item,
+          userId,
+          InventoryMovementType.SHRINKAGE,
+          transfer.destinationLocationId,
+          shortage,
+          balanceChange,
+          options.receiptId,
+          `Supply shortage for ${transfer.transferNumber}`,
+        );
+      }
+
+      const surplus = {
+        quantityKg: Math.max(received.quantityKg - sent.quantityKg, 0),
+        quantityPieces: Math.max(
+          received.quantityPieces - sent.quantityPieces,
+          0,
+        ),
+      };
+      if (surplus.quantityKg > 0 || surplus.quantityPieces > 0) {
+        const balanceChange = await this.applyBalanceChange(
+          tx,
+          item.productId,
+          transfer.destinationLocationId,
+          1,
+          surplus,
+        );
+        await this.createReceiptAdjustmentMovement(
+          tx,
+          item,
+          userId,
+          InventoryMovementType.IN,
+          transfer.destinationLocationId,
+          surplus,
+          balanceChange,
+          options.receiptId,
+          `Supply surplus for ${transfer.transferNumber}`,
+        );
+      }
+    }
+
+    const confirmed = (await tx.inventoryTransfer.update({
+      where: { id },
+      data: {
+        status: InventoryTransferStatus.CONFIRMED,
+        confirmedAt: new Date(),
+      },
+      include: TRANSFER_INCLUDE,
+    })) as TransferRecord;
+
+    await this.recordLinkedCycleStateChange(
+      tx,
+      transfer,
+      userId,
+      'CONFIRM',
+      idempotencyKey,
+      { receiptId: options.receiptId },
     );
 
     return this.toTransferResponse(confirmed);
@@ -733,12 +952,35 @@ export class InventoryTransfersService {
     }
   }
 
+  private assertActorCanReceiveSupply(
+    transfer: TransferRecord,
+    actor?: SupplyReceiptCommandOptions['actor'],
+  ): void {
+    const link = transfer.branchSupplyCycleTransfer;
+    if (!link || link.role !== 'SUPPLY' || !link.branchSupplyCycle) {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+    }
+    if (!actor?.permissions?.includes(PERMISSIONS.CEDIS_RECEIVE_SUPPLIES)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+    if (actor.role === 'ADMIN') return;
+    const allowed =
+      (actor.role === 'WAREHOUSE' &&
+        actor.operationalLocationId ===
+          link.branchSupplyCycle.distributionCenterLocationId) ||
+      (actor.role === 'SELLER' &&
+        actor.operationalLocationId ===
+          link.branchSupplyCycle.branchLocationId);
+    if (!allowed) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+  }
+
   private async recordLinkedCycleStateChange(
     tx: Prisma.TransactionClient,
     transfer: TransferRecord,
     userId: string,
     action: 'CONFIRM' | 'CANCEL',
     idempotencyKey?: string,
+    extraPayload: Record<string, unknown> = {},
   ): Promise<void> {
     const link = transfer.branchSupplyCycleTransfer;
     if (!link) return;
@@ -812,6 +1054,7 @@ export class InventoryTransfersService {
           role: link.role,
           fromTransferStatus: transfer.status,
           idempotencyKey: idempotencyKey ?? null,
+          ...extraPayload,
         },
         idempotencyKey: idempotencyKey
           ? `inventory:${action}:${transfer.id}:${idempotencyKey}`
@@ -1138,6 +1381,74 @@ export class InventoryTransfersService {
     return quantities;
   }
 
+  private normalizeReceiptItems(
+    transferItems: TransferItemRecord[],
+    receivedItems: SupplyReceiptItemInput[],
+  ): Map<string, NormalizedQuantities> {
+    const itemById = new Map(transferItems.map((item) => [item.id, item]));
+    const normalized = new Map<string, NormalizedQuantities>();
+
+    for (const receivedItem of receivedItems) {
+      if (normalized.has(receivedItem.transferItemId)) {
+        throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID');
+      }
+      const transferItem = itemById.get(receivedItem.transferItemId);
+      if (!transferItem) {
+        throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID');
+      }
+      normalized.set(
+        receivedItem.transferItemId,
+        this.normalizeReceivedItemQuantities(
+          transferItem.product?.unit ?? transferItem.unit,
+          receivedItem.quantityKg,
+          receivedItem.quantityPieces,
+        ),
+      );
+    }
+
+    if (normalized.size !== transferItems.length) {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID');
+    }
+
+    return normalized;
+  }
+
+  private normalizeReceivedItemQuantities(
+    productUnit: ProductUnit,
+    quantityKg?: number,
+    quantityPieces?: number,
+  ): NormalizedQuantities {
+    const quantities = {
+      quantityKg: quantityKg ?? 0,
+      quantityPieces: quantityPieces ?? 0,
+    };
+
+    if (
+      !Number.isFinite(quantities.quantityKg) ||
+      !Number.isFinite(quantities.quantityPieces) ||
+      quantities.quantityKg < 0 ||
+      quantities.quantityPieces < 0
+    ) {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID');
+    }
+
+    if (productUnit === ProductUnit.KG && quantities.quantityPieces !== 0) {
+      throw new BadRequestException('UNIT_MISMATCH');
+    }
+    if (
+      productUnit === ProductUnit.PIECE &&
+      (quantities.quantityKg !== 0 ||
+        !Number.isInteger(quantities.quantityPieces))
+    ) {
+      throw new BadRequestException('UNIT_MISMATCH');
+    }
+    if (!Number.isInteger(quantities.quantityPieces)) {
+      throw new BadRequestException('BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID');
+    }
+
+    return quantities;
+  }
+
   private assertCanConfirm(transfer: TransferRecord): void {
     if (!transfer.items?.length) {
       throw new BadRequestException(
@@ -1267,6 +1578,43 @@ export class InventoryTransfersService {
         referenceType: 'INVENTORY_TRANSFER',
         referenceId: transfer.id,
         transferId: transfer.id,
+      },
+      include: { product: true, location: true },
+    });
+  }
+
+  private async createReceiptAdjustmentMovement(
+    tx: Prisma.TransactionClient,
+    item: TransferItemRecord,
+    userId: string,
+    type: InventoryMovementType,
+    locationId: string,
+    quantities: NormalizedQuantities,
+    balanceChange: AppliedBalanceChange,
+    receiptId: string,
+    reason: string,
+  ): Promise<void> {
+    await tx.inventoryMovement.create({
+      data: {
+        productId: item.productId,
+        locationId,
+        userId,
+        type,
+        quantity:
+          quantities.quantityKg > 0
+            ? quantities.quantityKg
+            : quantities.quantityPieces,
+        quantityKg: quantities.quantityKg,
+        quantityPieces: quantities.quantityPieces,
+        previousStock: balanceChange.previousQuantityKg,
+        newStock: balanceChange.newQuantityKg,
+        previousQuantityKg: balanceChange.previousQuantityKg,
+        newQuantityKg: balanceChange.newQuantityKg,
+        previousQuantityPieces: balanceChange.previousQuantityPieces,
+        newQuantityPieces: balanceChange.newQuantityPieces,
+        reason,
+        referenceType: 'BRANCH_SUPPLY_RECEIPT',
+        referenceId: receiptId,
       },
       include: { product: true, location: true },
     });

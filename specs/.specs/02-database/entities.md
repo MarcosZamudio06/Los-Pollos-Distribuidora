@@ -238,6 +238,29 @@ Validaciones:
 - `RETURN` requiere sucursal como origen y CEDIS como destino.
 - Transferencias confirmadas o canceladas permanecen vinculadas como historial.
 
+## BranchSupplyReceipt
+
+Validaciones:
+
+- `inventoryTransferId` único y debe referenciar una transferencia vinculada con
+  rol `SUPPLY`.
+- `branchSupplyCycleId`, actor, fecha, clave de idempotencia y hash del payload
+  requeridos.
+- Una recepción es append-only y solo puede existir una por suministro.
+- La recepción conserva nota, cantidades enviadas, recibidas y diferencias por
+  KG y PIECE.
+
+## BranchSupplyReceiptItem
+
+Validaciones:
+
+- Cada `transferItemId` del suministro aparece exactamente una vez.
+- Cantidades recibidas no negativas; piezas enteras; unidad compatible con el
+  producto.
+- `difference = received - sent` por dimensión y no puede ser recalculada desde
+  un valor enviado por el cliente.
+- No se actualiza ni elimina después de persistirse.
+
 ## BranchSupplyCycleItem
 
 Validaciones:

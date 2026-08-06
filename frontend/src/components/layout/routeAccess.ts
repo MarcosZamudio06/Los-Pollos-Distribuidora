@@ -21,6 +21,7 @@ export const ROUTE_ACCESS_ROLES = {
   customers: ["ADMIN", "SELLER", "COLLECTIONS"],
   dashboard: ALL_ROLES,
   cedis: ["ADMIN", "WAREHOUSE", "SELLER"],
+  cedisIncoming: ["ADMIN", "WAREHOUSE", "SELLER"],
   deliveryRouteDetail: ["ADMIN", "COLLECTIONS", "DRIVER"],
   deliveryRouteEvidence: ["ADMIN", "COLLECTIONS", "DRIVER"],
   deliveryRoutes: ["ADMIN", "COLLECTIONS", "WAREHOUSE"],

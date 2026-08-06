@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   cedisClose: "cedis.close",
   cedisDispatch: "cedis.dispatch",
   cedisManage: "cedis.manage",
+  cedisReceiveSupplies: "cedis.receive_supplies",
   cedisReceiveReturns: "cedis.receive_returns",
   cedisReconcile: "cedis.reconcile",
   cedisView: "cedis.view",

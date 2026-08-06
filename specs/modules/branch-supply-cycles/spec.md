@@ -73,6 +73,44 @@ Los comandos existentes de inventario MUST seguir siendo la única vía para con
 - WHEN se solicita cancelarla
 - THEN la operación se rechaza y cualquier corrección requiere operación compensatoria auditable
 
+### Recepción de suministros en sucursal
+
+Cada suministro CEDIS → sucursal MUST conservar sus cantidades enviadas y admitir
+como máximo una recepción física. La recepción MUST registrar por partida la
+cantidad enviada, la cantidad recibida, la diferencia por KG y PIECE, el actor,
+la fecha y una nota opcional. Las cantidades enviadas nunca se sobrescriben.
+
+La confirmación desde sucursal MUST descontar del CEDIS lo enviado, incrementar
+en la sucursal únicamente lo recibido y registrar la diferencia como movimiento
+trazable: `SHRINKAGE` cuando falte mercancía o `IN` cuando exista sobrante. Una
+diferencia MUST requerir una nota no vacía.
+
+#### Scenario: Recepción exacta
+
+- GIVEN un suministro `REQUESTED` con stock suficiente en el CEDIS
+- WHEN un usuario autorizado registra las mismas cantidades recibidas
+- THEN se confirma el suministro, el CEDIS descuenta lo enviado y la sucursal recibe lo mismo
+- AND la diferencia queda en cero
+
+#### Scenario: Recepción con diferencia
+
+- GIVEN un suministro `REQUESTED` con cantidades enviadas mayores que las recibidas
+- WHEN la sucursal registra una nota y las cantidades físicas recibidas
+- THEN el CEDIS descuenta lo enviado, la sucursal conserva como saldo lo recibido
+- AND se registra una merma trazable por la diferencia
+
+#### Scenario: Sobrante recibido
+
+- GIVEN un suministro `REQUESTED` con una cantidad recibida mayor que la enviada
+- WHEN la sucursal registra una nota y la cantidad física
+- THEN el CEDIS descuenta lo enviado, la sucursal recibe un ajuste `IN` trazable
+
+#### Scenario: Recepción idempotente
+
+- GIVEN una clave de idempotencia ya utilizada con el mismo payload
+- WHEN se repite la recepción
+- THEN devuelve la recepción original sin duplicar movimientos ni incrementar otra vez la versión del ciclo
+
 ### Refresh y elegibilidad
 
 El sistema MUST reconstruir snapshots append-only desde transferencias y movimientos confirmados. `DRAFT`, `REQUESTED` e `IN_TRANSIT` MUST bloquear revisión; `CANCELLED` MUST conservarse con contribución cero.
@@ -120,6 +158,7 @@ El sistema MUST mantener KG y PIECE como dimensiones separadas, exigir piezas en
 
 - `cedis.view`: lectura dentro del alcance.
 - `cedis.dispatch`: suministros desde el CEDIS asignado.
+- `cedis.receive_supplies`: recepción de suministros destinados a la sucursal autorizada.
 - `cedis.receive_returns`: devoluciones hacia el CEDIS asignado.
 - `cedis.reconcile`: refresh y conciliación.
 - `cedis.close`: cierre coordinado.

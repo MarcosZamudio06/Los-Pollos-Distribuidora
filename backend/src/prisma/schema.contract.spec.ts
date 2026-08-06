@@ -62,6 +62,14 @@ const cedisPermissionSyncMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260805120000_sync_cedis_permissions/migration.sql',
 );
+const branchSupplyReceiptMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260805165000_add_branch_supply_receipts/migration.sql',
+);
+const cedisReceiptPermissionMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260805170000_add_cedis_receive_supplies_permission/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -151,10 +159,12 @@ describe('Prisma schema contract', () => {
       'BranchSupplyCycleProductSnapshot',
       'BranchSupplyCycleSnapshot',
       'BranchSupplyCycleEvent',
+      'BranchSupplyReceipt',
+      'BranchSupplyReceiptItem',
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(60);
+    expect(modelNames).toHaveLength(62);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
@@ -170,6 +180,8 @@ describe('Prisma schema contract', () => {
     const productSnapshot = getModelBlock('BranchSupplyCycleProductSnapshot');
     const cycleSnapshot = getModelBlock('BranchSupplyCycleSnapshot');
     const event = getModelBlock('BranchSupplyCycleEvent');
+    const receipt = getModelBlock('BranchSupplyReceipt');
+    const receiptItem = getModelBlock('BranchSupplyReceiptItem');
     const operationalLocationType = getEnumBlock('OperationalLocationType');
     const cycleStatus = getEnumBlock('BranchSupplyCycleStatus');
     const transferRole = getEnumBlock('BranchSupplyTransferRole');
@@ -230,6 +242,11 @@ describe('Prisma schema contract', () => {
     expect(event).toMatch(/cycleVersion\s+Int/);
     expect(event).toMatch(/payload\s+Json/);
     expect(event).toMatch(/idempotencyKey\s+String\?/);
+    expect(receipt).toMatch(/inventoryTransferId\s+String\s+@unique/);
+    expect(receipt).toMatch(/idempotencyKey\s+String\s+@unique/);
+    expect(receiptItem).toMatch(/transferItemId\s+String/);
+    expect(receiptItem).toMatch(/receivedKg\s+Decimal\s+@default\(0\)/);
+    expect(receiptItem).toMatch(/differencePieces\s+Int\s+@default\(0\)/);
 
     expect(migrationSql).toContain(
       'ALTER TYPE "OperationalLocationType" ADD VALUE \'DISTRIBUTION_CENTER\'',
@@ -278,6 +295,10 @@ describe('Prisma schema contract', () => {
     expect(transfer).toMatch(
       /branchSupplyCycleTransfer\s+BranchSupplyCycleTransfer\?/,
     );
+    expect(transfer).toMatch(/branchSupplyReceipt\s+BranchSupplyReceipt\?/);
+    expect(user).toMatch(
+      /branchSupplyReceiptsReceived\s+BranchSupplyReceipt\[\]\s+@relation\("BranchSupplyReceiptReceivedBy"\)/,
+    );
     expect(dailyClose).toMatch(
       /branchSupplyCycle\s+BranchSupplyCycle\?\s+@relation\("BranchSupplyCycleDailyClose"\)/,
     );
@@ -300,6 +321,24 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('BranchSupplyCycleEvent_append_only');
     expect(migrationSql).toContain(
       'BranchSupplyCycle_branchLocationId_businessDate_status_idx',
+    );
+    const receiptMigrationSql = readFileSync(
+      branchSupplyReceiptMigrationSqlPath,
+      'utf8',
+    );
+    expect(receiptMigrationSql).toContain('CREATE TABLE "BranchSupplyReceipt"');
+    expect(receiptMigrationSql).toContain(
+      'CREATE TABLE "BranchSupplyReceiptItem"',
+    );
+    expect(receiptMigrationSql).toContain('BranchSupplyReceipt_append_only');
+    expect(receiptMigrationSql).toContain(
+      'BranchSupplyReceiptItem_append_only',
+    );
+    expect(receiptMigrationSql).toContain(
+      'BranchSupplyReceiptItem_difference_check',
+    );
+    expect(receiptMigrationSql).toContain(
+      'validate_branch_supply_receipt_link',
     );
   });
 
@@ -367,6 +406,14 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain("'cedis.reconcile'");
     expect(migrationSql).toContain("'cedis.close'");
     expect(migrationSql).toContain("'cedis.view_costs'");
+    const receiptPermissionMigration = readFileSync(
+      cedisReceiptPermissionMigrationSqlPath,
+      'utf8',
+    );
+    expect(receiptPermissionMigration).toContain("'cedis.receive_supplies'");
+    expect(receiptPermissionMigration).toMatch(
+      /role\."name" IN \('ADMIN', 'WAREHOUSE', 'SELLER'\)/,
+    );
     expect(migrationSql).toMatch(/role\."name" = 'ADMIN'/);
     expect(migrationSql).toMatch(/role\."name" = 'WAREHOUSE'/);
     expect(migrationSql).toMatch(/role\."name" = 'SELLER'/);
@@ -436,6 +483,11 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain(
       'OperationalLocation_parentId_type_isActive_idx',
     );
+    expect(migrationSql).toContain("'CEDIS-VER'");
+    expect(migrationSql).toContain("'VER'");
+    expect(migrationSql).toContain("'BDR'");
+    expect(migrationSql).toContain("'ALV'");
+    expect(migrationSql).toContain('ON CONFLICT ("code") DO NOTHING');
     expect(readFileSync(geospatialRoutesMigrationSqlPath, 'utf8')).toContain(
       'OperationalLocation_coordinates_pair_check',
     );

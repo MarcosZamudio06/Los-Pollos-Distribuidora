@@ -89,6 +89,15 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Probar confirmaciones concurrentes contra el mismo saldo sin stock negativo.
 - Mantener KG y PIECE separados y bloquear conversiones sin equivalencia y redondeo aprobados.
 - Verificar que una devolución no se descuente dos veces durante el cierre diario.
+- Validar alcance de `cedis.receive_supplies` para `ADMIN`, `WAREHOUSE` y `SELLER`.
+- Validar recepción exacta, faltante y sobrante con movimientos `TRANSFER_OUT`,
+  `TRANSFER_IN`, `SHRINKAGE` e `IN` trazables.
+- Validar nota obligatoria con diferencia, partidas completas, unidades y piezas
+  enteras.
+- Validar una recepción por suministro, idempotencia y conflicto por payload.
+- Validar listado de envíos del día, orden de pendientes y detalle visible desde
+  CEDIS.
+- Validar notificación autorizada y recuperación por REST tras desconexión.
 
 ### Ventas
 

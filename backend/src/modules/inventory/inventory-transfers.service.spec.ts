@@ -388,7 +388,34 @@ describe('InventoryTransfersService', () => {
     expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
   });
 
-  it('confirms a linked transfer through inventory and records the cycle state event', async () => {
+  it('requires linked supplies to use the branch receipt flow', async () => {
+    const { service, prisma } = createService();
+    const cycleLink = {
+      id: 'cycle-transfer-1',
+      branchSupplyCycleId: 'cycle-1',
+      role: 'SUPPLY',
+      branchSupplyCycle: {
+        id: 'cycle-1',
+        distributionCenterLocationId: 'origin-1',
+        branchLocationId: 'destination-1',
+        status: 'OPEN',
+        version: 1,
+        pointOfSaleDailyCloseId: null,
+        pointOfSaleDailyClose: null,
+      },
+    };
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createTransfer({ branchSupplyCycleTransfer: cycleLink }),
+    );
+    await expect(
+      service.confirm('transfer-1', 'warehouse-1', 'linked-confirm-key'),
+    ).rejects.toThrow('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
+  });
+
+  it('confirms sent quantities and records a shortage adjustment for a receipt', async () => {
     const { service, prisma } = createService();
     const cycleLink = {
       id: 'cycle-transfer-1',
@@ -408,47 +435,54 @@ describe('InventoryTransfersService', () => {
       createTransfer({ branchSupplyCycleTransfer: cycleLink }),
     );
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
-    prisma.inventoryBalance.findUnique
-      .mockResolvedValueOnce({
-        quantityKg: decimal(17.5),
-        quantityPieces: 7,
-      })
-      .mockResolvedValueOnce({
-        quantityKg: decimal(12.5),
-        quantityPieces: 3,
-      });
     prisma.inventoryBalance.upsert.mockResolvedValue({});
-    prisma.inventoryMovement.create
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({});
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      quantityKg: decimal(10),
+      quantityPieces: 2,
+    });
+    prisma.inventoryMovement.create.mockResolvedValue({});
     prisma.inventoryTransfer.update.mockResolvedValue(
       createTransfer({
         status: InventoryTransferStatus.CONFIRMED,
-        confirmedAt: now,
         branchSupplyCycleTransfer: cycleLink,
       }),
     );
     prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
     prisma.branchSupplyCycleEvent.create.mockResolvedValue({});
 
-    await expect(
-      service.confirm('transfer-1', 'warehouse-1', 'linked-confirm-key'),
-    ).resolves.toEqual(
-      expect.objectContaining({ status: InventoryTransferStatus.CONFIRMED }),
+    await service.receiveSupply(
+      'transfer-1',
+      [{ transferItemId: 'item-1', quantityKg: 10, quantityPieces: 2 }],
+      'seller-1',
+      'receipt-key',
+      {
+        receiptId: 'receipt-1',
+        actor: {
+          id: 'seller-1',
+          role: 'SELLER',
+          operationalLocationId: 'destination-1',
+          permissions: ['cedis.receive_supplies'],
+        },
+      },
     );
 
-    expect(prisma.branchSupplyCycle.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ id: 'cycle-1', version: 1 }),
-        data: expect.objectContaining({ version: { increment: 1 } }),
-      }),
-    );
-    expect(prisma.branchSupplyCycleEvent.create).toHaveBeenCalledWith(
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(3);
+    expect(prisma.inventoryMovement.create).toHaveBeenNthCalledWith(
+      3,
       expect.objectContaining({
         data: expect.objectContaining({
-          type: 'TRANSFER_STATE_CHANGED',
-          cycleVersion: 2,
-          payload: expect.objectContaining({ transferId: 'transfer-1' }),
+          type: InventoryMovementType.SHRINKAGE,
+          referenceType: 'BRANCH_SUPPLY_RECEIPT',
+          referenceId: 'receipt-1',
+          quantityKg: 2.5,
+          quantityPieces: 1,
+        }),
+      }),
+    );
+    expect(prisma.inventoryTransfer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: InventoryTransferStatus.CONFIRMED,
         }),
       }),
     );

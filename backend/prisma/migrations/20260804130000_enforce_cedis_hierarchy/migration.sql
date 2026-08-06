@@ -1,3 +1,45 @@
+-- Approved base map: CEDIS-VER is the direct parent of VER, BDR, and ALV.
+-- Failed PostgreSQL migrations roll back atomically, so this remains safe to retry.
+INSERT INTO "OperationalLocation" (
+  "id",
+  "name",
+  "code",
+  "type",
+  "parentId",
+  "address",
+  "latitude",
+  "longitude",
+  "isActive",
+  "createdAt",
+  "updatedAt"
+)
+VALUES (
+  'migration-cedis-veracruz',
+  'CEDIS Veracruz',
+  'CEDIS-VER',
+  'DISTRIBUTION_CENTER'::"OperationalLocationType",
+  NULL,
+  'Centro de distribución Veracruz',
+  19.183,
+  -96.134,
+  TRUE,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+)
+ON CONFLICT ("code") DO NOTHING;
+
+UPDATE "OperationalLocation" AS branch
+SET
+  "parentId" = cedis."id",
+  "updatedAt" = CURRENT_TIMESTAMP
+FROM "OperationalLocation" AS cedis
+WHERE cedis."code" = 'CEDIS-VER'
+  AND cedis."type" = 'DISTRIBUTION_CENTER'::"OperationalLocationType"
+  AND cedis."isActive"
+  AND branch."type" = 'BRANCH'::"OperationalLocationType"
+  AND branch."code" IN ('VER', 'BDR', 'ALV')
+  AND branch."parentId" IS NULL;
+
 CREATE INDEX IF NOT EXISTS "OperationalLocation_parentId_type_isActive_idx"
   ON "OperationalLocation" ("parentId", "type", "isActive");
 
@@ -24,7 +66,7 @@ BEGIN
 
   IF invalid_location_count > 0 THEN
     RAISE EXCEPTION
-      'OperationalLocation hierarchy preflight found % invalid CEDIS/BRANCH rows; apply an approved parent map before this migration',
+      'OperationalLocation hierarchy preflight found % invalid CEDIS/BRANCH rows after canonical CEDIS backfill',
       invalid_location_count;
   END IF;
 END $$;

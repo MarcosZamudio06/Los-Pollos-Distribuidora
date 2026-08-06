@@ -79,6 +79,7 @@ describe("role navigation", () => {
       "/",
       "/sales",
       "/cedis",
+      "/cedis/incoming",
       "/sales/history",
       "/orders",
       "/customers",
@@ -117,6 +118,7 @@ describe("role navigation", () => {
       "/",
       "/sales",
       "/cedis",
+      "/cedis/incoming",
       "/sales/history",
       "/orders",
       "/customers",
@@ -129,6 +131,7 @@ describe("role navigation", () => {
     expect(getSidebarNavForRole("WAREHOUSE").map((item) => item.to)).toEqual([
       "/",
       "/cedis",
+      "/cedis/incoming",
       "/inventory",
       "/purchases",
       "/purchases/suppliers",

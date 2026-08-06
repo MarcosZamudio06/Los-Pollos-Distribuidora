@@ -80,7 +80,10 @@ describe("CEDIS service", () => {
 
     await cedisService.createSupply(
       "cycle-1",
-      { expectedVersion: 2, items: [{ productId: "product-1", unit: "KG", quantityKg: 5 }] },
+      {
+        expectedVersion: 2,
+        items: [{ productId: "product-1", unit: "KG", quantityKg: 5 }],
+      },
       "access-token",
       "idem-supply",
     );
@@ -101,5 +104,37 @@ describe("CEDIS service", () => {
         "idempotency-key",
       ),
     ).toBe("idem-refresh");
+  });
+
+  it("consulta envíos entrantes y conserva la clave de idempotencia al recibir", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        okJson({ items: [], total: 0, page: 1, limit: 25, totalPages: 0 }),
+      )
+      .mockResolvedValueOnce(okJson({ id: "transfer-1", status: "RECEIVED" }));
+
+    await cedisService.listIncomingSupplies(
+      { businessDate: "2026-08-05", status: "PENDING", page: 1, limit: 25 },
+      "access-token",
+    );
+    expect(lastRequest().url).toBe(
+      "/api/cedis/incoming-supplies?businessDate=2026-08-05&status=PENDING&page=1&limit=25",
+    );
+
+    await cedisService.receiveIncomingSupply(
+      "transfer-1",
+      {
+        expectedCycleVersion: 2,
+        notes: "Recepción exacta",
+        items: [{ transferItemId: "item-1", quantityKg: 5, quantityPieces: 0 }],
+      },
+      "access-token",
+      "idem-receipt",
+    );
+    const request = lastRequest();
+    expect(request.url).toBe("/api/cedis/incoming-supplies/transfer-1/receive");
+    expect(new Headers(request.init?.headers).get("idempotency-key")).toBe(
+      "idem-receipt",
+    );
   });
 });
