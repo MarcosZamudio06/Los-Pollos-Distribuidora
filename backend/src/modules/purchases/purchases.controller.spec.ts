@@ -190,6 +190,7 @@ describe('PurchasesController API', () => {
         locationId: 'loc-1',
         status: PurchaseStatus.CONFIRMED,
       }),
+      expect.objectContaining({ role: 'WAREHOUSE' }),
     );
   });
 

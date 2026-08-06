@@ -20,11 +20,14 @@ export class InventoryController {
 
   @Get('balances')
   @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
-  async findBalances(@Query() query: ListInventoryBalancesQueryDto) {
+  async findBalances(
+    @Query() query: ListInventoryBalancesQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Inventory balances retrieved successfully',
-      data: await this.inventoryService.findBalances(query),
+      data: await this.inventoryService.findBalances(query, user),
     };
   }
 
@@ -37,17 +40,20 @@ export class InventoryController {
     return {
       success: true,
       message: 'Inventory adjustment registered successfully',
-      data: await this.inventoryService.createAdjustment(body, user.id),
+      data: await this.inventoryService.createAdjustment(body, user.id, user),
     };
   }
 
   @Get('movements')
   @Roles('ADMIN', 'WAREHOUSE')
-  async findMovements(@Query() query: ListInventoryMovementsQueryDto) {
+  async findMovements(
+    @Query() query: ListInventoryMovementsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Inventory movements retrieved successfully',
-      data: await this.inventoryService.findMovements(query),
+      data: await this.inventoryService.findMovements(query, user),
     };
   }
 }

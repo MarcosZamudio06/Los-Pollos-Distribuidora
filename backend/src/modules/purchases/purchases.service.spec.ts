@@ -22,6 +22,7 @@ const warehouseUser: AuthenticatedUser = {
   name: 'Warehouse User',
   role: 'WAREHOUSE',
   mustChangePassword: false,
+  operationalLocationId: 'loc-1',
 };
 
 const adminUser: AuthenticatedUser = {
@@ -197,6 +198,7 @@ describe('PurchasesService', () => {
       id: 'loc-1',
       isActive: true,
       name: 'Matriz',
+      type: 'DISTRIBUTION_CENTER',
     });
     prisma.product.findUnique.mockResolvedValue({
       id: 'product-1',
@@ -414,6 +416,7 @@ describe('PurchasesService', () => {
     prisma.operationalLocation.findUnique.mockResolvedValue({
       id: 'loc-1',
       isActive: true,
+      type: 'DISTRIBUTION_CENTER',
     });
     prisma.product.findUnique.mockResolvedValue({
       id: 'product-1',
@@ -442,6 +445,43 @@ describe('PurchasesService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects external purchases received directly by a branch', async () => {
+    const { service, prisma } = createService();
+    prisma.purchase.findUnique.mockResolvedValue(null);
+    prisma.supplier.findUnique.mockResolvedValue({
+      id: 'supplier-1',
+      isActive: true,
+    });
+    prisma.operationalLocation.findUnique.mockResolvedValue({
+      id: 'branch-1',
+      isActive: true,
+      name: 'Alvarado',
+      type: 'BRANCH',
+    });
+
+    await expect(
+      service.create(
+        {
+          supplierId: 'supplier-1',
+          locationId: 'branch-1',
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG,
+              quantityKg: 1,
+              unitCost: 10,
+            },
+          ],
+        },
+        adminUser,
+        'branch-purchase',
+      ),
+    ).rejects.toThrow(
+      'External purchases must be received at a distribution center',
+    );
+    expect(prisma.purchase.create).not.toHaveBeenCalled();
   });
 
   it('cancels confirmed purchases by reverting original receiver stock without allowing negative stock', async () => {

@@ -7,6 +7,7 @@ import { locationTypeLabel } from "../compras/purchaseLabels";
 import { apiClient } from "../../lib/api";
 import { Button, Input, Select } from "../../components/ui";
 import {
+  locationsForEmployeeRole,
   validateEmployeeForm,
   type EmployeeFormErrors,
 } from "./employeesFormUtils";
@@ -74,17 +75,10 @@ export function EmployeesPage() {
     operationalLocationId: "",
   });
   const [formErrors, setFormErrors] = useState<EmployeeFormErrors>({});
-  const formLocations = useMemo(() => {
-    const selectedRole = roles.find((role) => role.id === form.roleId)?.name;
-    const allowedTypes =
-      selectedRole === "WAREHOUSE"
-        ? new Set(["WAREHOUSE", "DISTRIBUTION_CENTER", "MIXED"])
-        : selectedRole === "ADMIN"
-          ? usableLocationTypes
-          : new Set(["BRANCH", "MIXED", "EXTERNAL_POINT_OF_SALE"]);
-
-    return locations.filter((location) => allowedTypes.has(location.type));
-  }, [form.roleId, locations, roles]);
+  const formLocations = useMemo(
+    () => locationsForEmployeeRole(locations, roles, form.roleId),
+    [form.roleId, locations, roles],
+  );
   const headers = useMemo(() => authHeaders(accessToken), [accessToken]);
 
   async function load() {

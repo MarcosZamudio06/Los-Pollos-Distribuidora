@@ -86,8 +86,18 @@ type TransferRecord = {
   cancellationReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
-  originLocation?: { id: string; name: string } | null;
-  destinationLocation?: { id: string; name: string } | null;
+  originLocation?: {
+    id: string;
+    name: string;
+    type?: string;
+    parentId?: string | null;
+  } | null;
+  destinationLocation?: {
+    id: string;
+    name: string;
+    type?: string;
+    parentId?: string | null;
+  } | null;
   items?: TransferItemRecord[];
   inventoryMovements?: MovementRecord[];
   branchSupplyCycleTransfer?: {
@@ -195,14 +205,18 @@ const TRANSFER_INCLUDE = {
 export type InventoryTransferCreateOptions = {
   tx?: Prisma.TransactionClient;
   equivalenceDate?: Date;
+  actor?: InventoryTransferActor;
+  cedisCycleTransfer?: boolean;
 };
+
+type InventoryTransferActor = Pick<
+  AuthenticatedUser,
+  'id' | 'role' | 'operationalLocationId' | 'permissions'
+>;
 
 export type InventoryTransferCommandOptions = {
   tx?: Prisma.TransactionClient;
-  actor?: Pick<
-    AuthenticatedUser,
-    'id' | 'role' | 'operationalLocationId' | 'permissions'
-  >;
+  actor?: InventoryTransferActor;
 };
 
 @Injectable()
@@ -211,9 +225,10 @@ export class InventoryTransfersService {
 
   async findAll(
     query: ListInventoryTransfersQueryDto,
+    actor?: InventoryTransferActor,
   ): Promise<TransferListResponse> {
     const transfers = (await this.prisma.inventoryTransfer.findMany({
-      where: this.buildTransferWhere(query),
+      where: this.buildTransferWhere(query, actor),
       include: TRANSFER_INCLUDE,
       orderBy: { createdAt: 'desc' },
       ...this.buildPagination(query),
@@ -224,8 +239,13 @@ export class InventoryTransfersService {
     };
   }
 
-  async findOne(id: string): Promise<TransferResponse> {
-    return this.toTransferResponse(await this.findTransferOrThrow(id));
+  async findOne(
+    id: string,
+    actor?: InventoryTransferActor,
+  ): Promise<TransferResponse> {
+    const transfer = await this.findTransferOrThrow(id);
+    this.assertTransferReadScope(transfer, actor);
+    return this.toTransferResponse(transfer);
   }
 
   async create(
@@ -247,6 +267,8 @@ export class InventoryTransfersService {
         userId,
         idempotencyKey,
         options.equivalenceDate,
+        options.actor,
+        options.cedisCycleTransfer ?? false,
       );
     }
 
@@ -259,6 +281,8 @@ export class InventoryTransfersService {
             userId,
             idempotencyKey,
             options.equivalenceDate,
+            options.actor,
+            options.cedisCycleTransfer ?? false,
           ),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -338,7 +362,10 @@ export class InventoryTransfersService {
     userId: string,
     idempotencyKey?: string,
     equivalenceDate?: Date,
+    actor?: InventoryTransferActor,
+    cedisCycleTransfer = false,
   ): Promise<TransferResponse> {
+    await this.assertTransferCreationScope(tx, dto, actor, cedisCycleTransfer);
     const idempotentTransferNumber =
       this.resolveIdempotentTransferNumber(idempotencyKey);
     if (idempotentTransferNumber) {
@@ -420,7 +447,7 @@ export class InventoryTransfersService {
     actor?: InventoryTransferCommandOptions['actor'],
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id, tx);
-    this.assertActorCanChangeLinkedTransfer(transfer, actor);
+    this.assertActorCanChangeTransfer(transfer, actor);
     if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
       throw new BadRequestException(
         'Idempotency-Key is required for transfers linked to a branch supply cycle',
@@ -531,7 +558,7 @@ export class InventoryTransfersService {
     actor?: InventoryTransferCommandOptions['actor'],
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id, tx);
-    this.assertActorCanChangeLinkedTransfer(transfer, actor);
+    this.assertActorCanChangeTransfer(transfer, actor);
     if (transfer.branchSupplyCycleTransfer && !idempotencyKey?.trim()) {
       throw new BadRequestException(
         'Idempotency-Key is required for transfers linked to a branch supply cycle',
@@ -704,6 +731,65 @@ export class InventoryTransfersService {
     }
   }
 
+  private async assertTransferCreationScope(
+    tx: Prisma.TransactionClient,
+    dto: CreateInventoryTransferDto,
+    actor: InventoryTransferActor | undefined,
+    cedisCycleTransfer: boolean,
+  ): Promise<void> {
+    const [origin, destination] = await Promise.all([
+      tx.operationalLocation.findUnique({
+        where: { id: dto.originLocationId },
+        select: { id: true, type: true, parentId: true, isActive: true },
+      }),
+      tx.operationalLocation.findUnique({
+        where: { id: dto.destinationLocationId },
+        select: { id: true, type: true, parentId: true, isActive: true },
+      }),
+    ]);
+
+    if (!origin || !destination) {
+      throw new NotFoundException('Transfer location not found');
+    }
+    if (!origin.isActive || !destination.isActive) {
+      throw new BadRequestException(
+        'Inventory transfers require active locations',
+      );
+    }
+
+    const isSupply =
+      origin.type === 'DISTRIBUTION_CENTER' &&
+      destination.type === 'BRANCH' &&
+      destination.parentId === origin.id;
+    const isReturn =
+      origin.type === 'BRANCH' &&
+      destination.type === 'DISTRIBUTION_CENTER' &&
+      origin.parentId === destination.id;
+
+    if (destination.type === 'BRANCH' && !isSupply) {
+      throw new BadRequestException(
+        'Branch inventory must originate from its parent distribution center',
+      );
+    }
+    if ((isSupply || isReturn) && !cedisCycleTransfer) {
+      throw new BadRequestException(
+        'Branch inventory transfers must be created through a CEDIS supply cycle',
+      );
+    }
+    if (cedisCycleTransfer && !isSupply && !isReturn) {
+      throw new BadRequestException(
+        'CEDIS supply cycle transfers require a direct CEDIS and branch pair',
+      );
+    }
+
+    if (actor?.role === 'WAREHOUSE') {
+      const scopedLocationId = isReturn ? destination.id : origin.id;
+      if (actor.operationalLocationId !== scopedLocationId) {
+        throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+      }
+    }
+  }
+
   private assertActorCanChangeLinkedTransfer(
     transfer: TransferRecord,
     actor?: InventoryTransferCommandOptions['actor'],
@@ -731,6 +817,51 @@ export class InventoryTransfersService {
     if (!actor.permissions?.includes(permission)) {
       throw new ForbiddenException('Insufficient permissions');
     }
+  }
+
+  private assertActorCanChangeTransfer(
+    transfer: TransferRecord,
+    actor?: InventoryTransferCommandOptions['actor'],
+  ): void {
+    if (transfer.branchSupplyCycleTransfer) {
+      this.assertActorCanChangeLinkedTransfer(transfer, actor);
+      return;
+    }
+    if (!actor || actor.role === 'ADMIN') return;
+    if (
+      actor.role !== 'WAREHOUSE' ||
+      actor.operationalLocationId !== transfer.originLocationId
+    ) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
+    if (transfer.destinationLocation?.type === 'BRANCH') {
+      throw new BadRequestException(
+        'Branch inventory transfers must belong to a CEDIS supply cycle',
+      );
+    }
+  }
+
+  private assertTransferReadScope(
+    transfer: TransferRecord,
+    actor?: InventoryTransferActor,
+  ): void {
+    if (!actor || actor.role === 'ADMIN') return;
+    if (actor.role !== 'WAREHOUSE') {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
+
+    const cycleCedisId =
+      transfer.branchSupplyCycleTransfer?.branchSupplyCycle
+        ?.distributionCenterLocationId;
+    const warehouseLocationId = actor.operationalLocationId;
+    const allowed =
+      cycleCedisId === warehouseLocationId ||
+      transfer.originLocation?.id === warehouseLocationId ||
+      transfer.destinationLocation?.id === warehouseLocationId ||
+      transfer.originLocation?.parentId === warehouseLocationId ||
+      transfer.destinationLocation?.parentId === warehouseLocationId;
+
+    if (!allowed) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
   }
 
   private async recordLinkedCycleStateChange(
@@ -1274,8 +1405,13 @@ export class InventoryTransfersService {
 
   private buildTransferWhere(
     query: ListInventoryTransfersQueryDto,
+    actor?: InventoryTransferActor,
   ): Prisma.InventoryTransferWhereInput {
     const createdAt = this.buildCreatedAtFilter(query.dateFrom, query.dateTo);
+    const locationId =
+      actor?.role === 'WAREHOUSE'
+        ? (actor.operationalLocationId ?? '__warehouse_without_location__')
+        : undefined;
 
     return {
       ...(query.originLocationId
@@ -1286,6 +1422,16 @@ export class InventoryTransfersService {
         : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(createdAt ? { createdAt } : {}),
+      ...(locationId
+        ? {
+            OR: [
+              { originLocationId: locationId },
+              { destinationLocationId: locationId },
+              { originLocation: { parentId: locationId, type: 'BRANCH' } },
+              { destinationLocation: { parentId: locationId, type: 'BRANCH' } },
+            ],
+          }
+        : {}),
     };
   }
 

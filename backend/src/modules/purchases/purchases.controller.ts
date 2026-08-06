@@ -29,21 +29,27 @@ export class PurchasesController {
 
   @Get()
   @Roles('ADMIN', 'WAREHOUSE')
-  async findAll(@Query() query: ListPurchasesQueryDto) {
+  async findAll(
+    @Query() query: ListPurchasesQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Purchases retrieved successfully',
-      data: await this.purchasesService.findAll(query),
+      data: await this.purchasesService.findAll(query, currentUser),
     };
   }
 
   @Get(':id')
   @Roles('ADMIN', 'WAREHOUSE')
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Purchase retrieved successfully',
-      data: await this.purchasesService.findOne(id),
+      data: await this.purchasesService.findOne(id, currentUser),
     };
   }
 

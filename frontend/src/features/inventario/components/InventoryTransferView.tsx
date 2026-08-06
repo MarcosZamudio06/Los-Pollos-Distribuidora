@@ -53,7 +53,12 @@ export function InventoryTransferView({
   const locationOptions = locations.data?.map((location) => ({
     id: location.id,
     label: location.name ?? location.id,
+    type: location.type,
   }));
+  const destinationOptions = locationOptions?.filter(
+    (item) =>
+      item.id !== values.originLocationId && item.type !== "BRANCH",
+  );
 
   function validate() {
     if (!values.originLocationId || !values.destinationLocationId)
@@ -127,6 +132,7 @@ export function InventoryTransferView({
         </h2>
         <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">
           Registro visual de movimientos entre ubicaciones operativas.
+          Las sucursales se abastecen mediante ciclos CEDIS.
         </p>
       </div>
       {canManage && (
@@ -163,9 +169,7 @@ export function InventoryTransferView({
               onChange={(destinationLocationId) =>
                 setValues({ ...values, destinationLocationId })
               }
-              options={locationOptions?.filter(
-                (item) => item.id !== values.originLocationId,
-              )}
+              options={destinationOptions}
               placeholder="Selecciona destino"
               value={values.destinationLocationId}
             />

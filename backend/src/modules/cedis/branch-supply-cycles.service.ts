@@ -986,6 +986,8 @@ export class BranchSupplyCyclesService {
           const transferOptions: InventoryTransferCreateOptions = {
             tx,
             equivalenceDate: cycle.businessDate,
+            actor,
+            cedisCycleTransfer: true,
           };
           const transfer = await this.inventoryTransfers.create(
             transferDto,

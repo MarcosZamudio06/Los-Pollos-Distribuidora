@@ -25,8 +25,8 @@ const mockState = vi.hoisted(() => ({
     data: [
       {
         id: "loc-1",
-        name: "Almacén Principal",
-        type: "WAREHOUSE",
+        name: "Matriz CEDIS",
+        type: "DISTRIBUTION_CENTER",
         isActive: true,
       },
       { id: "route-1", name: "Ruta 1", type: "ROUTE_STOCK", isActive: true },
@@ -96,7 +96,7 @@ const purchase: PurchaseDetail = {
       createdAt: "2026-07-03T12:01:00.000Z",
       id: "mov-1",
       locationId: "loc-1",
-      locationName: "Almacén Principal",
+      locationName: "Matriz CEDIS",
       newQuantityKg: 12,
       newQuantityPieces: 4,
       productId: "prod-1",
@@ -121,7 +121,7 @@ const purchase: PurchaseDetail = {
     },
   ],
   locationId: "loc-1",
-  locationName: "Almacén Principal",
+  locationName: "Matriz CEDIS",
   purchaseNumber: "C-0001",
   status: "CONFIRMED",
   supplierId: "sup-1",
@@ -177,7 +177,7 @@ describe("TASK-062 purchase UI behavior", () => {
     expect(html).toContain("Proveedor");
     expect(html).toContain("Ubicación receptora");
     expect(html).toContain("Granja Norte");
-    expect(html).toContain("Almacén Principal");
+    expect(html).toContain("Matriz CEDIS");
     expect(html).toContain("Confirmada");
     expect(html).toContain("Ver detalle");
     expect(html).not.toContain("ID proveedor");
@@ -204,9 +204,9 @@ describe("TASK-062 purchase UI behavior", () => {
       <PurchaseLocationSelector onChange={() => undefined} value="" />,
     );
 
-    expect(html).toContain("Almacén Principal");
+    expect(html).toContain("Matriz CEDIS");
     expect(html).not.toContain("Ruta 1");
-    expect(html).toContain("No existe stock global");
+    expect(html).toContain("Las sucursales reciben producto mediante traspasos");
   });
 
   it("muestra CEDIS como etiqueta de ubicación", () => {

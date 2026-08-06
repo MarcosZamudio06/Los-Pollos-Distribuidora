@@ -76,6 +76,7 @@ Validaciones:
 - `unitEquivalentId` es opcional; si se envía, el backend valida la equivalencia activa y conserva el factor/modo de redondeo aplicado.
 - No aceptar ubicaciones inactivas.
 - El destino puede representar una pollería, una ubicación `ROUTE_STOCK` o un punto operativo de salida.
+- Si el destino es una `BRANCH`, el origen debe ser su CEDIS padre activo y el traspaso debe crearse desde un ciclo CEDIS-sucursal; no se permiten transferencias genéricas hacia sucursales.
 - Reintentos con la misma `Idempotency-Key` y el mismo payload no deben crear un segundo traspaso.
 - Cuando el traspaso se crea desde un ciclo CEDIS, origen y destino se derivan del ciclo, se vincula en la misma transacción y el estado inicial es `REQUESTED`.
 
@@ -102,6 +103,7 @@ Validaciones:
 - La devolución de sobrante desde ruta se confirma con origen `ROUTE_STOCK`.
 - Reintentos con la misma `Idempotency-Key` no deben duplicar movimientos ni confirmar dos veces el mismo traspaso.
 - Si está vinculado a un ciclo CEDIS, el ciclo debe estar mutable, la dirección debe coincidir y ubicaciones y productos deben seguir activos.
+- Una transferencia hacia una sucursal que no esté vinculada a un ciclo CEDIS debe rechazarse.
 - Confirmar una transferencia vinculada devuelve el ciclo a `OPEN`, incrementa su versión e invalida una validación vigente del cierre `DRAFT`.
 
 ## POST /api/inventory-transfers/:id/cancel

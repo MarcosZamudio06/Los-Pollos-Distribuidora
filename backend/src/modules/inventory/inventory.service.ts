@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { InventoryMovementType, ProductUnit } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateInventoryAdjustmentDto,
   ListInventoryBalancesQueryDto,
@@ -114,6 +116,10 @@ type BalanceResponse = {
 };
 
 type BalanceListResponse = { items: BalanceResponse[] };
+type InventoryScopeActor = Pick<
+  AuthenticatedUser,
+  'role' | 'operationalLocationId'
+>;
 
 type NormalizedQuantities = {
   quantityKg: number;
@@ -142,9 +148,10 @@ export class InventoryService {
 
   async findBalances(
     query: ListInventoryBalancesQueryDto,
+    actor?: InventoryScopeActor,
   ): Promise<BalanceListResponse> {
     const balances = await this.prisma.inventoryBalance.findMany({
-      where: this.buildBalanceWhere(query),
+      where: this.buildBalanceWhere(query, actor),
       include: { product: true, location: true },
       orderBy: [{ location: { name: 'asc' } }, { product: { name: 'asc' } }],
       ...this.buildPagination(query),
@@ -163,6 +170,7 @@ export class InventoryService {
   async createAdjustment(
     dto: CreateInventoryAdjustmentDto,
     userId: string,
+    actor?: InventoryScopeActor,
   ): Promise<MovementResponse> {
     const reason = this.normalizeRequiredReason(dto.reason);
 
@@ -176,9 +184,16 @@ export class InventoryService {
 
         const location = await tx.operationalLocation.findUnique({
           where: { id: dto.locationId },
-          select: { id: true, name: true, isActive: true },
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+            parentId: true,
+            type: true,
+          },
         });
         this.assertLocationAvailable(location);
+        this.assertLocationScope(location, actor);
 
         const quantities = this.normalizeQuantities(dto, product.unit);
         const direction = this.getMovementDirection(dto.type);
@@ -227,9 +242,10 @@ export class InventoryService {
 
   async findMovements(
     query: ListInventoryMovementsQueryDto,
+    actor?: InventoryScopeActor,
   ): Promise<MovementListResponse> {
     const movements = (await this.prisma.inventoryMovement.findMany({
-      where: this.buildMovementWhere(query),
+      where: this.buildMovementWhere(query, actor),
       include: { product: true, location: true },
       orderBy: { createdAt: 'desc' },
       ...this.buildPagination(query),
@@ -276,6 +292,26 @@ export class InventoryService {
         'Inventory adjustments require an active location',
       );
     }
+  }
+
+  private assertLocationScope(
+    location: {
+      id: string;
+      parentId?: string | null;
+      type?: string;
+    },
+    actor?: InventoryScopeActor,
+  ): void {
+    if (!actor || actor.role === 'ADMIN') return;
+
+    const locationId = actor.operationalLocationId;
+    const allowed =
+      actor.role === 'WAREHOUSE'
+        ? location.id === locationId ||
+          (location.type === 'BRANCH' && location.parentId === locationId)
+        : location.id === locationId;
+
+    if (!allowed) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
   }
 
   private normalizeQuantities(
@@ -464,8 +500,10 @@ export class InventoryService {
 
   private buildMovementWhere(
     query: ListInventoryMovementsQueryDto,
+    actor?: InventoryScopeActor,
   ): Prisma.InventoryMovementWhereInput {
     const createdAt = this.buildCreatedAtFilter(query.dateFrom, query.dateTo);
+    const scope = this.buildLocationScopeWhere(actor);
 
     return {
       ...(query.productId ? { productId: query.productId } : {}),
@@ -477,13 +515,16 @@ export class InventoryService {
         ? { pointOfSaleDailyCloseId: query.pointOfSaleDailyCloseId }
         : {}),
       ...(createdAt ? { createdAt } : {}),
+      ...(scope ? { location: scope } : {}),
     };
   }
 
   private buildBalanceWhere(
     query: ListInventoryBalancesQueryDto,
+    actor?: InventoryScopeActor,
   ): Prisma.InventoryBalanceWhereInput {
     const search = query.search?.trim();
+    const scope = this.buildLocationScopeWhere(actor);
 
     return {
       ...(query.productId ? { productId: query.productId } : {}),
@@ -499,8 +540,26 @@ export class InventoryService {
             }
           : {}),
       },
-      location: { isActive: true },
+      location: { isActive: true, ...(scope ?? {}) },
     };
+  }
+
+  private buildLocationScopeWhere(
+    actor?: InventoryScopeActor,
+  ): Prisma.OperationalLocationWhereInput | undefined {
+    if (!actor || actor.role === 'ADMIN') return undefined;
+
+    const locationId = actor.operationalLocationId ?? '__without_location__';
+    if (actor.role === 'WAREHOUSE') {
+      return {
+        OR: [
+          { id: locationId },
+          { parentId: locationId, type: 'BRANCH', isActive: true },
+        ],
+      };
+    }
+
+    return { id: locationId };
   }
 
   private buildCreatedAtFilter(

@@ -37,6 +37,8 @@ Registrar entradas de mercancía desde proveedores, actualizar inventario por ub
 - Compra requiere proveedor.
 - Compra requiere al menos un producto.
 - Compra requiere ubicación operativa receptora.
+- Las compras de proveedores externos solo pueden recibirse en una ubicación activa de tipo `DISTRIBUTION_CENTER`.
+- Una sucursal (`BRANCH`) no puede recibir compras de proveedores externos; su inventario solo aumenta mediante un traspaso confirmado desde su CEDIS padre.
 - Cantidad debe ser mayor a cero.
 - Costo debe ser mayor o igual a cero.
 - Confirmar compra incrementa inventario en la ubicación operativa indicada.
@@ -98,3 +100,4 @@ Pendiente de especificación API antes de implementar:
 - Cancelar compra y revertir inventario si aplica.
 - Rechazar cancelación si produciría inventario negativo por ubicación.
 - Conservar equivalencia kilo/pieza aplicada cuando corresponda.
+- Rechazar una compra cuya ubicación receptora no sea un CEDIS activo.

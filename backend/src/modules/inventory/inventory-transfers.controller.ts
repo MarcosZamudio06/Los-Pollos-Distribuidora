@@ -31,21 +31,27 @@ export class InventoryTransfersController {
 
   @Get()
   @Roles('ADMIN', 'WAREHOUSE')
-  async findAll(@Query() query: ListInventoryTransfersQueryDto) {
+  async findAll(
+    @Query() query: ListInventoryTransfersQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Inventory transfers retrieved successfully',
-      data: await this.inventoryTransfersService.findAll(query),
+      data: await this.inventoryTransfersService.findAll(query, user),
     };
   }
 
   @Get(':id')
   @Roles('ADMIN', 'WAREHOUSE')
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Inventory transfer retrieved successfully',
-      data: await this.inventoryTransfersService.findOne(id),
+      data: await this.inventoryTransfersService.findOne(id, user),
     };
   }
 
@@ -60,8 +66,12 @@ export class InventoryTransfersController {
       success: true,
       message: 'Inventory transfer created successfully',
       data: await (idempotencyKey
-        ? this.inventoryTransfersService.create(body, user.id, idempotencyKey)
-        : this.inventoryTransfersService.create(body, user.id)),
+        ? this.inventoryTransfersService.create(body, user.id, idempotencyKey, {
+            actor: user,
+          })
+        : this.inventoryTransfersService.create(body, user.id, undefined, {
+            actor: user,
+          })),
     };
   }
 

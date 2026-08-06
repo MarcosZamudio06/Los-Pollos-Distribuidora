@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../../auth";
 import { AsyncState } from "../components/AsyncState";
 import { InventoryAdjustmentModal } from "../components/InventoryAdjustmentModal";
+import { CedisInventorySummaryPanel } from "../components/CedisInventorySummaryPanel";
 import { InventoryByLocationView } from "../components/InventoryByLocationView";
 import { InventoryMovementsView } from "../components/InventoryMovementsView";
 import { InventoryTransferView } from "../components/InventoryTransferView";
@@ -486,6 +487,7 @@ export function ProductListPage() {
 
         {canManage ? (
           <>
+            <CedisInventorySummaryPanel />
             <InventoryByLocationView locationId={filters.locationId} />
             <InventoryTransferView canManage={canManage} />
             <InventoryMovementsView />

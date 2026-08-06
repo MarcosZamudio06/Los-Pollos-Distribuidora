@@ -184,6 +184,28 @@ Validaciones:
 - No consolidar como stock global único.
 - `quantityKg` y `quantityPieces` no deben ser negativos.
 
+## GET /api/cedis/inventory-summary
+
+Propósito: consultar la conciliación diaria del inventario físico de un CEDIS.
+
+Permisos: `ADMIN`, `WAREHOUSE` autorizado para el CEDIS y `cedis.view` conforme al alcance.
+
+Query:
+
+- `cedisLocationId` requerido.
+- `businessDate` requerido en formato `YYYY-MM-DD`.
+
+La respuesta debe incluir por producto y total:
+
+- saldo inicial del día;
+- recibido de proveedores externos en el CEDIS;
+- enviado a sucursales mediante suministros confirmados;
+- devuelto por sucursales mediante devoluciones confirmadas;
+- otros movimientos netos trazables;
+- restante físico total al momento o cierre consultado.
+
+El restante representa el saldo físico total del CEDIS, incluyendo existencias de días anteriores. KG y PIECE se conservan como dimensiones separadas.
+
 ## POST /api/inventory/adjustments
 
 Propósito: registrar ajuste manual, merma, diferencia de peso, devolución o pérdida operativa.

@@ -7,6 +7,7 @@ import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-re
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
 import { CedisDashboardController } from './cedis-dashboard.controller';
 import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
+import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 @Module({
   imports: [AuthModule, InventoryModule, PointOfSaleDailyCloseModule],
@@ -15,6 +16,7 @@ import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
     BranchSupplyCycleReconciliationService,
     BranchSupplyCyclesService,
     CedisDashboardQueryService,
+    CedisInventorySummaryQueryService,
   ],
   exports: [BranchSupplyCyclesService],
 })

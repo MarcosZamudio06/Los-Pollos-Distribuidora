@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -148,8 +149,11 @@ const PURCHASE_INCLUDE = {
 export class PurchasesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: ListPurchasesQueryDto = {}) {
-    const where = this.buildPurchaseWhere(query);
+  async findAll(
+    query: ListPurchasesQueryDto = {},
+    currentUser?: Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>,
+  ) {
+    const where = this.buildPurchaseWhere(query, currentUser);
     const pagination = this.buildPagination(query);
     const [total, purchases] = await Promise.all([
       this.prisma.purchase.count({ where }),
@@ -174,8 +178,13 @@ export class PurchasesService {
     };
   }
 
-  async findOne(id: string) {
-    return this.toPurchaseDetail(await this.findPurchaseOrThrow(id));
+  async findOne(
+    id: string,
+    currentUser?: Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>,
+  ) {
+    const purchase = await this.findPurchaseOrThrow(id);
+    this.assertPurchaseScope(purchase, currentUser);
+    return this.toPurchaseDetail(purchase);
   }
 
   async create(
@@ -199,7 +208,7 @@ export class PurchasesService {
         }
 
         await this.assertSupplierAvailable(tx, dto.supplierId);
-        await this.assertLocationAvailable(tx, dto.locationId);
+        await this.assertLocationAvailable(tx, dto.locationId, currentUser);
         this.assertCostUpdateAllowed(dto, currentUser);
         const preparedItems = await this.prepareItems(tx, dto.items);
         const total = this.roundMoney(
@@ -358,16 +367,28 @@ export class PurchasesService {
   private async assertLocationAvailable(
     tx: Prisma.TransactionClient,
     locationId: string,
+    currentUser: Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>,
   ): Promise<void> {
     const location = await tx.operationalLocation.findUnique({
       where: { id: locationId },
-      select: { id: true, isActive: true, name: true },
+      select: { id: true, isActive: true, name: true, type: true },
     });
     if (!location) throw new NotFoundException('Location not found');
     if (!location.isActive)
       throw new BadRequestException(
         'Purchase receiver location must be active',
       );
+    if (location.type !== 'DISTRIBUTION_CENTER') {
+      throw new BadRequestException(
+        'External purchases must be received at a distribution center',
+      );
+    }
+    if (
+      currentUser.role === 'WAREHOUSE' &&
+      currentUser.operationalLocationId !== location.id
+    ) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
   }
 
   private assertCostUpdateAllowed(
@@ -626,12 +647,32 @@ export class PurchasesService {
     return purchase;
   }
 
+  private assertPurchaseScope(
+    purchase: PurchaseRecord,
+    currentUser?: Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>,
+  ): void {
+    if (!currentUser || currentUser.role === 'ADMIN') return;
+    if (
+      currentUser.role !== 'WAREHOUSE' ||
+      currentUser.operationalLocationId !== purchase.locationId
+    ) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
+  }
+
   private buildPurchaseWhere(
     query: ListPurchasesQueryDto,
+    currentUser?: Pick<AuthenticatedUser, 'role' | 'operationalLocationId'>,
   ): Prisma.PurchaseWhereInput {
+    const scopedLocationId =
+      currentUser?.role === 'WAREHOUSE'
+        ? (currentUser.operationalLocationId ??
+          '__warehouse_without_location__')
+        : query.locationId;
+
     return {
       ...(query.supplierId ? { supplierId: query.supplierId } : {}),
-      ...(query.locationId ? { locationId: query.locationId } : {}),
+      ...(scopedLocationId ? { locationId: scopedLocationId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.dateFrom || query.dateTo
         ? {

@@ -191,8 +191,12 @@ describe('InventoryTransfersController API', () => {
         originLocationId: 'origin-1',
         status: InventoryTransferStatus.REQUESTED,
       }),
+      expect.objectContaining({ role: 'ADMIN' }),
     );
-    expect(transfersService.findOne).toHaveBeenCalledWith('transfer-1');
+    expect(transfersService.findOne).toHaveBeenCalledWith(
+      'transfer-1',
+      expect.objectContaining({ role: 'WAREHOUSE' }),
+    );
   });
 
   it('creates transfer requests with authenticated responsible user and validates body quantities', async () => {
@@ -237,6 +241,8 @@ describe('InventoryTransfersController API', () => {
         ],
       }),
       'warehouse-1',
+      undefined,
+      { actor: warehouseUser },
     );
 
     await request(app.getHttpServer())

@@ -2,6 +2,7 @@ import { apiClient } from "../../../lib/api";
 import type {
   InventoryAdjustmentValues,
   InventoryBalance,
+  CedisInventorySummary,
   InventoryCategory,
   InventoryLocation,
   InventoryMovement,
@@ -129,6 +130,22 @@ export const productService = {
       },
     );
     return unwrapList(response);
+  },
+  async getCedisInventorySummary(
+    cedisLocationId: string,
+    businessDate: string,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.get<
+      ItemEnvelope<CedisInventorySummary>
+    >(
+      withParams("/cedis/inventory-summary", {
+        cedisLocationId,
+        businessDate,
+      }),
+      { headers: authHeaders(accessToken) },
+    );
+    return unwrapItem(response);
   },
   async createAdjustment(
     values: InventoryAdjustmentValues,

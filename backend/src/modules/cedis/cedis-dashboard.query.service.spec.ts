@@ -221,6 +221,47 @@ describe('CedisDashboardQueryService', () => {
     );
   });
 
+  it('projects confirmed transfer quantities in dashboard cards before refresh', async () => {
+    const { prisma, service } = createService();
+    prisma.operationalLocation.findMany.mockResolvedValue([branch]);
+    prisma.branchSupplyCycle.findMany.mockResolvedValue([
+      cycle({
+        totalDeliveredKg: new Prisma.Decimal('0.000'),
+        totalDeliveredPieces: new Prisma.Decimal('0.000'),
+        totalExpectedSoldKg: new Prisma.Decimal('0.000'),
+        totalExpectedSoldPieces: new Prisma.Decimal('0.000'),
+        transfers: [
+          {
+            role: 'SUPPLY',
+            linkedAt: new Date('2026-08-04T09:00:00.000Z'),
+            inventoryTransfer: {
+              status: 'CONFIRMED',
+              updatedAt: new Date('2026-08-04T09:30:00.000Z'),
+              items: [
+                {
+                  quantityKg: new Prisma.Decimal('25.500'),
+                  quantityPieces: null,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getDashboard(
+      { cedisLocationId: 'cedis-1', businessDate: '2026-08-04' },
+      adminWithCosts,
+    );
+
+    expect(result.items[0]?.physical).toEqual(
+      expect.objectContaining({
+        deliveredKg: '25.500',
+        expectedSoldKg: '25.500',
+      }),
+    );
+  });
+
   it('uses stable pagination and applies the history filters in both queries', async () => {
     const { prisma, service } = createService();
     prisma.branchSupplyCycle.findMany.mockResolvedValue([
@@ -471,5 +512,65 @@ describe('CedisDashboardQueryService', () => {
       prisma.branchSupplyCycle.findUnique.mock.calls[1][0].select;
     expect(sellerSelect).not.toHaveProperty('expectedCostTotal');
     expect(sellerSelect.items.select).not.toHaveProperty('unitCostSnapshot');
+  });
+
+  it('reflects confirmed delivery transfers before the cycle is refreshed', async () => {
+    const { prisma, service } = createService();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(
+      cycle({
+        items: [],
+        branchLocation: branch,
+        distributionCenterLocation: {
+          ...branch,
+          id: 'cedis-1',
+          name: 'CEDIS Centro',
+          code: 'C01',
+        },
+        pointOfSaleDailyClose: null,
+        totalDeliveredKg: new Prisma.Decimal('0.000'),
+        totalDeliveredPieces: new Prisma.Decimal('0.000'),
+        totalExpectedSoldKg: new Prisma.Decimal('0.000'),
+        totalExpectedSoldPieces: new Prisma.Decimal('0.000'),
+        transfers: [
+          {
+            id: 'link-supply-1',
+            role: 'SUPPLY',
+            linkedAt: new Date('2026-08-04T09:00:00.000Z'),
+            inventoryTransfer: {
+              id: 'transfer-supply-1',
+              transferNumber: 'TR-SUPPLY-1',
+              status: 'CONFIRMED',
+              originLocationId: 'cedis-1',
+              destinationLocationId: 'branch-1',
+              requestedAt: new Date('2026-08-04T08:00:00.000Z'),
+              confirmedAt: new Date('2026-08-04T09:30:00.000Z'),
+              cancelledAt: null,
+              updatedAt: new Date('2026-08-04T09:30:00.000Z'),
+              items: [
+                {
+                  id: 'transfer-item-1',
+                  productId: 'product-1',
+                  unit: 'KG',
+                  quantityKg: new Prisma.Decimal('25.500'),
+                  quantityPieces: null,
+                  product: { name: 'Pollo', sku: 'POL-1' },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = await service.getCycleSummary('cycle-1', adminWithCosts);
+
+    expect(result.totals).toEqual(
+      expect.objectContaining({
+        deliveredKg: '25.500',
+        deliveredPieces: '0.000',
+        expectedSoldKg: '25.500',
+        expectedSoldPieces: '0.000',
+      }),
+    );
   });
 });
