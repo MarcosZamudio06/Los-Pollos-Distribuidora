@@ -16,8 +16,7 @@ type OperationalConfigRecord = Prisma.OperationalConfigGetPayload<
   Record<string, never>
 >;
 type ConfigMutationDto =
-  | CreateOperationalConfigDto
-  | UpdateOperationalConfigDto;
+  CreateOperationalConfigDto | UpdateOperationalConfigDto;
 
 const STRUCTURAL_INVARIANT_KEYS = new Set([
   'ENABLE_GLOBAL_STOCK',
