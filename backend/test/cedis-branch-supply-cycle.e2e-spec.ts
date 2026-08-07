@@ -32,6 +32,7 @@ describe('CEDIS branch supply cycle (e2e)', () => {
   let branchLocationId: string;
   let cycleId: string;
   let supplyTransferId: string;
+  let activeSupplyTransferId: string;
   let returnTransferId: string;
 
   beforeAll(async () => {
@@ -158,14 +159,206 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .expect(201);
     supplyTransferId = supply.body.data.transfer.id as string;
     expect(supply.body.data.transfer.status).toBe('REQUESTED');
+    expect(supply.body.data.cycle.version).toBe(2);
+    expect(
+      await prisma.branchSupplyCycleEvent.count({
+        where: {
+          branchSupplyCycleId: cycleId,
+          type: 'TRANSFER_LINKED',
+          cycleVersion: 2,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.branchSupplyCycleProductSnapshot.count({
+        where: { branchSupplyCycleId: cycleId, productId },
+      }),
+    ).toBe(1);
     expect(
       await prisma.inventoryMovement.count({
         where: { transferId: supplyTransferId },
       }),
     ).toBe(0);
 
+    const reservedCedisBalance = await prisma.inventoryBalance.findUnique({
+      where: {
+        productId_locationId: {
+          productId,
+          locationId: cedisLocationId,
+        },
+      },
+    });
+    expect(Number(reservedCedisBalance?.quantityKg)).toBe(10);
+    expect(Number(reservedCedisBalance?.reservedQuantityKg)).toBe(10);
+    expect(
+      Number(reservedCedisBalance?.quantityKg) -
+        Number(reservedCedisBalance?.reservedQuantityKg),
+    ).toBe(0);
+
+    const retriedSupply = await request(app.getHttpServer())
+      .post(`${cyclePath}/${cycleId}/supplies`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:supply`)
+      .send({
+        expectedVersion: 1,
+        items: [{ productId, unit: 'KG', quantityKg: 10 }],
+      })
+      .expect(201);
+    expect(retriedSupply.body.data.transfer.id).toBe(supplyTransferId);
+    expect(
+      Number(
+        (
+          await prisma.inventoryBalance.findUnique({
+            where: {
+              productId_locationId: {
+                productId,
+                locationId: cedisLocationId,
+              },
+            },
+          })
+        )?.reservedQuantityKg,
+      ),
+    ).toBe(10);
+    expect(
+      await prisma.branchSupplyCycleEvent.count({
+        where: {
+          branchSupplyCycleId: cycleId,
+          type: 'TRANSFER_LINKED',
+          cycleVersion: 2,
+        },
+      }),
+    ).toBe(1);
+
+    await request(app.getHttpServer())
+      .post(`${cyclePath}/${cycleId}/supplies`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:supply`)
+      .send({
+        expectedVersion: 1,
+        items: [{ productId, unit: 'KG', quantityKg: 9 }],
+      })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.code).toBe('IDEMPOTENCY_CONFLICT');
+      });
+
+    await request(app.getHttpServer())
+      .post(`${cyclePath}/${cycleId}/supplies`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:insufficient`)
+      .send({
+        expectedVersion: 2,
+        items: [{ productId, unit: 'KG', quantityKg: 1 }],
+      })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.code).toBe('INSUFFICIENT_STOCK');
+        expect(body.findings).toEqual([
+          expect.objectContaining({
+            productId,
+            requestedKg: 1,
+            availableKg: 0,
+            shortageKg: 1,
+          }),
+        ]);
+      });
+
+    expect(
+      (
+        await prisma.branchSupplyCycle.findUnique({
+          where: { id: cycleId },
+          select: { version: true },
+        })
+      )?.version,
+    ).toBe(2);
+    expect(
+      await prisma.branchSupplyCycleTransfer.count({
+        where: { branchSupplyCycleId: cycleId },
+      }),
+    ).toBe(1);
+
+    const cancellationReason = `${marker}:cancel-supply`;
+    const cancelledSupply = await request(app.getHttpServer())
+      .post(`/api/inventory-transfers/${supplyTransferId}/cancel`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:supply-cancel`)
+      .send({ reason: cancellationReason })
+      .expect(201);
+    expect(cancelledSupply.body.data.status).toBe('CANCELLED');
+    expect(
+      await prisma.inventoryMovement.count({
+        where: { transferId: supplyTransferId },
+      }),
+    ).toBe(0);
+    const releasedCedisBalance = await prisma.inventoryBalance.findUnique({
+      where: {
+        productId_locationId: {
+          productId,
+          locationId: cedisLocationId,
+        },
+      },
+    });
+    expect(Number(releasedCedisBalance?.quantityKg)).toBe(10);
+    expect(Number(releasedCedisBalance?.reservedQuantityKg)).toBe(0);
+    expect(
+      await prisma.branchSupplyCycleEvent.count({
+        where: {
+          branchSupplyCycleId: cycleId,
+          type: 'TRANSFER_STATE_CHANGED',
+          cycleVersion: 3,
+        },
+      }),
+    ).toBe(1);
+
+    await request(app.getHttpServer())
+      .post(`/api/inventory-transfers/${supplyTransferId}/cancel`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:supply-cancel`)
+      .send({ reason: cancellationReason })
+      .expect(201);
+    expect(
+      await prisma.branchSupplyCycleEvent.count({
+        where: {
+          branchSupplyCycleId: cycleId,
+          type: 'TRANSFER_STATE_CHANGED',
+          cycleVersion: 3,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      (
+        await prisma.branchSupplyCycle.findUnique({
+          where: { id: cycleId },
+          select: { version: true },
+        })
+      )?.version,
+    ).toBe(3);
+
+    await request(app.getHttpServer())
+      .post(`/api/inventory-transfers/${supplyTransferId}/cancel`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:supply-cancel`)
+      .send({ reason: `${cancellationReason}:changed` })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.code).toBe('IDEMPOTENCY_CONFLICT');
+      });
+
+    const replacementSupply = await request(app.getHttpServer())
+      .post(`${cyclePath}/${cycleId}/supplies`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:replacement-supply`)
+      .send({
+        expectedVersion: 3,
+        items: [{ productId, unit: 'KG', quantityKg: 10 }],
+      })
+      .expect(201);
+    activeSupplyTransferId = replacementSupply.body.data.transfer.id as string;
+    expect(replacementSupply.body.data.transfer.status).toBe('REQUESTED');
+    expect(replacementSupply.body.data.cycle.version).toBe(4);
+
     const incomingSupply = await request(app.getHttpServer())
-      .get(`/api/cedis/incoming-supplies/${supplyTransferId}`)
+      .get(`/api/cedis/incoming-supplies/${activeSupplyTransferId}`)
       .set(auth)
       .expect(200);
 
@@ -184,7 +377,7 @@ describe('CEDIS branch supply cycle (e2e)', () => {
     );
 
     const receivedSupply = await request(app.getHttpServer())
-      .post(`/api/cedis/incoming-supplies/${supplyTransferId}/receive`)
+      .post(`/api/cedis/incoming-supplies/${activeSupplyTransferId}/receive`)
       .set(auth)
       .set('Idempotency-Key', `${marker}:supply-receive`)
       .send({
@@ -199,7 +392,7 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .get(`${cyclePath}/${cycleId}`)
       .set(auth)
       .expect(200);
-    expect(afterSupply.body.data.version).toBe(3);
+    expect(afterSupply.body.data.version).toBe(5);
     expect(afterSupply.body.data.confirmedSupplyCount).toBe(1);
 
     const returned = await request(app.getHttpServer())
@@ -207,7 +400,7 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set(auth)
       .set('Idempotency-Key', `${marker}:return`)
       .send({
-        expectedVersion: 3,
+        expectedVersion: 5,
         items: [{ productId, unit: 'KG', quantityKg: 3 }],
       })
       .expect(201);
@@ -229,7 +422,7 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .post(`${cyclePath}/${cycleId}/refresh`)
       .set(auth)
       .set('Idempotency-Key', `${marker}:refresh`)
-      .send({ expectedVersion: 5 })
+      .send({ expectedVersion: 7 })
       .expect(201);
 
     expect(refreshed.body.data.confirmedSupplyCount).toBe(1);
@@ -240,7 +433,9 @@ describe('CEDIS branch supply cycle (e2e)', () => {
     expect(refreshed.body.data.totals.expectedSoldKg).toBe(7);
 
     const movements = await prisma.inventoryMovement.findMany({
-      where: { transferId: { in: [supplyTransferId, returnTransferId] } },
+      where: {
+        transferId: { in: [activeSupplyTransferId, returnTransferId] },
+      },
       orderBy: { createdAt: 'asc' },
     });
     expect(movements).toHaveLength(4);

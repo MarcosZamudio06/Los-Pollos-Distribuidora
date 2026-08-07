@@ -52,16 +52,33 @@ El sistema MUST admitir múltiples suministros CEDIS → sucursal y múltiples d
 
 Una sucursal MUST NOT recibir inventario de proveedores externos ni mediante un traspaso genérico no vinculado. Todo suministro hacia una sucursal MUST originarse en su CEDIS padre y MUST pertenecer a un ciclo de suministro.
 
+Toda transferencia `REQUESTED` o `IN_TRANSIT` MUST reservar en su ubicación de
+origen las cantidades de cada dimensión. La mercancía permanece físicamente en
+el origen hasta la confirmación; la reserva reduce la disponibilidad sin crear
+una ubicación virtual ni un movimiento físico.
+
 #### Scenario: Creación sin movimiento
 
 - GIVEN un ciclo mutable y partidas válidas
 - WHEN se registra un suministro o devolución
-- THEN transferencia, vínculo y auditoría se crean atómicamente
-- AND no cambia ningún balance ni se crea movimiento
+- THEN transferencia, vínculo, reserva y auditoría se crean atómicamente
+- AND no cambia las cantidades físicas del balance ni se crea movimiento
+
+#### Scenario: Creación con stock insuficiente
+
+- GIVEN un suministro CEDIS → sucursal cuya cantidad supera la disponibilidad no reservada en el CEDIS
+- WHEN se registra el suministro
+- THEN la operación se rechaza con `INSUFFICIENT_STOCK`
+- AND no crea transferencia, vínculo, evento ni movimientos parciales
+- AND no crea una reserva parcial
+- AND la confirmación conserva una revalidación atómica para impedir saldo negativo
 
 ### Confirmación y cancelación
 
 Los comandos existentes de inventario MUST seguir siendo la única vía para confirmar o cancelar transferencias. Confirmar MUST aplicar `TRANSFER_OUT` y `TRANSFER_IN` atómicamente; cancelar MUST limitarse a transferencias no confirmadas.
+
+Confirmar MUST consumir exactamente la reserva del origen. Cancelar MUST
+liberar exactamente la reserva del origen y no debe crear movimientos físicos.
 
 #### Scenario: Confirmación con stock
 
@@ -154,7 +171,7 @@ El sistema MUST mantener KG y PIECE como dimensiones separadas, exigir piezas en
 
 - GIVEN dos confirmaciones que compiten por el mismo saldo
 - WHEN el stock solo alcanza para una
-- THEN una confirma y la otra recibe stock insuficiente sin saldo negativo
+- THEN una confirma y la otra recibe stock insuficiente sin saldo negativo ni reserva negativa
 
 ## Permisos
 

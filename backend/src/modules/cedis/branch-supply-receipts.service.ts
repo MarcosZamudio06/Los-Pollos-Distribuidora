@@ -543,14 +543,20 @@ export class BranchSupplyReceiptsService {
             : undefined;
         if ((code !== 'P2034' && code !== 'P2002') || attempt === 3) {
           if (code === 'P2034' || code === 'P2002') {
-            throw new ConflictException(
-              'BRANCH_SUPPLY_RECEIPT_CONCURRENCY_CONFLICT',
-            );
+            throw new ConflictException({
+              code: 'INVENTORY_CONCURRENCY_CONFLICT',
+              message:
+                'The inventory receipt could not be completed after concurrent retries',
+            });
           }
           throw error;
         }
       }
     }
-    throw new ConflictException('BRANCH_SUPPLY_RECEIPT_CONCURRENCY_CONFLICT');
+    throw new ConflictException({
+      code: 'INVENTORY_CONCURRENCY_CONFLICT',
+      message:
+        'The inventory receipt could not be completed after concurrent retries',
+    });
   }
 }

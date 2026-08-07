@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   BranchSupplyCycleStatus,
   BranchSupplyTransferRole,
@@ -335,6 +335,67 @@ describe('BranchSupplyCyclesService', () => {
         }),
       }),
     );
+  });
+
+  it('rejects supply creation without the dispatch permission before changing the cycle', async () => {
+    const { prisma, inventoryTransfers, service } = createService();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(createCycle());
+
+    await expect(
+      service.createSupply(
+        'cycle-1',
+        {
+          expectedVersion: 1,
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG,
+              quantityKg: 2,
+            },
+          ],
+        },
+        { ...warehouse, permissions: ['cedis.view'] },
+        'missing-dispatch-key',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.branchSupplyCycle.updateMany).not.toHaveBeenCalled();
+    expect(inventoryTransfers.create).not.toHaveBeenCalled();
+  });
+
+  it('does not advance the cycle version when transfer validation rejects insufficient stock', async () => {
+    const { prisma, inventoryTransfers, service } = createService();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(createCycle());
+    inventoryTransfers.create.mockRejectedValue(
+      new ConflictException({
+        code: 'INSUFFICIENT_STOCK',
+        findings: [{ productId: 'product-1', shortageKg: 2 }],
+      }),
+    );
+
+    await expect(
+      service.createSupply(
+        'cycle-1',
+        {
+          expectedVersion: 1,
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG,
+              quantityKg: 2,
+            },
+          ],
+        },
+        warehouse,
+        'insufficient-before-version-key',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
+    });
+
+    expect(prisma.branchSupplyCycle.updateMany).not.toHaveBeenCalled();
+    expect(prisma.branchSupplyCycleTransfer.create).not.toHaveBeenCalled();
+    expect(prisma.branchSupplyCycleEvent.create).not.toHaveBeenCalled();
   });
 
   it('creates the price and cost snapshot only on the first supply', async () => {

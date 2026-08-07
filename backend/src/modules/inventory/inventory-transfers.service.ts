@@ -21,6 +21,11 @@ import {
   CreateInventoryTransferDto,
   ListInventoryTransfersQueryDto,
 } from './dto';
+import {
+  InventoryBalanceService,
+  toInventoryBalanceAvailability,
+  type InventoryBalanceAvailability,
+} from './inventory-balance.service';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -121,6 +126,15 @@ type NormalizedQuantities = {
   quantityPieces: number;
 };
 
+type NormalizedTransferItem = NormalizedQuantities & {
+  productId: string;
+  productUnit: ProductUnit;
+  unit: ProductUnit;
+  unitEquivalentId?: string;
+  appliedEquivalentFactor?: Prisma.Decimal;
+  roundingMode?: string | null;
+};
+
 type AppliedBalanceChange = {
   previousQuantityKg: number;
   previousQuantityPieces: number;
@@ -137,6 +151,7 @@ type TransferItemResponse = {
   unitEquivalentId: string | null;
   appliedEquivalentFactor: number | null;
   roundingMode: string | null;
+  balance?: (InventoryBalanceAvailability & { locationId: string }) | null;
 };
 
 type MovementResponse = {
@@ -236,7 +251,10 @@ export type SupplyReceiptCommandOptions = {
 
 @Injectable()
 export class InventoryTransfersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly balanceService: InventoryBalanceService,
+  ) {}
 
   async findAll(
     query: ListInventoryTransfersQueryDto,
@@ -260,7 +278,37 @@ export class InventoryTransfersService {
   ): Promise<TransferResponse> {
     const transfer = await this.findTransferOrThrow(id);
     this.assertTransferReadScope(transfer, actor);
-    return this.toTransferResponse(transfer);
+    const balances = (await this.prisma.inventoryBalance.findMany({
+      where: {
+        locationId: transfer.originLocationId,
+        productId: { in: (transfer.items ?? []).map((item) => item.productId) },
+      },
+      select: {
+        productId: true,
+        locationId: true,
+        quantityKg: true,
+        quantityPieces: true,
+        reservedQuantityKg: true,
+        reservedQuantityPieces: true,
+      },
+    })) as Array<{
+      productId: string;
+      locationId: string;
+      quantityKg: DecimalLike;
+      quantityPieces: number;
+      reservedQuantityKg: DecimalLike;
+      reservedQuantityPieces: number;
+    }>;
+    const balanceByProduct = new Map(
+      (balances ?? []).map((balance) => [
+        balance.productId,
+        {
+          locationId: balance.locationId,
+          ...toInventoryBalanceAvailability(balance),
+        },
+      ]),
+    );
+    return this.toTransferResponse(transfer, balanceByProduct);
   }
 
   async create(
@@ -436,39 +484,33 @@ export class InventoryTransfersService {
       'destination',
     );
 
-    const items: Array<{
-      productId: string;
-      unit: ProductUnit;
-      quantityKg: number;
-      quantityPieces: number;
-      unitEquivalentId?: string;
-      appliedEquivalentFactor?: Prisma.Decimal;
-      roundingMode?: string | null;
-    }> = [];
-    for (const item of dto.items) {
-      const product = await this.findProductOrThrow(tx, item.productId);
-      const quantities = this.normalizeItemQuantities(
-        item.unit,
-        product.unit,
-        item.quantityKg,
-        item.quantityPieces,
-      );
-      const equivalence = await this.resolveItemEquivalence(
-        tx,
-        item.productId,
-        product.unit,
-        item.unitEquivalentId,
-        equivalenceDate,
-      );
-
-      items.push({
+    const normalizedItems = await this.normalizeTransferItems(
+      tx,
+      dto.items,
+      equivalenceDate,
+    );
+    const items = normalizedItems.map((item) => {
+      const baseItem = {
         productId: item.productId,
         unit: item.unit,
-        quantityKg: quantities.quantityKg,
-        quantityPieces: quantities.quantityPieces,
-        ...(equivalence ?? {}),
-      });
-    }
+        quantityKg: item.quantityKg,
+        quantityPieces: item.quantityPieces,
+      };
+      return item.unitEquivalentId !== undefined
+        ? {
+            ...baseItem,
+            unitEquivalentId: item.unitEquivalentId,
+            appliedEquivalentFactor: item.appliedEquivalentFactor,
+            roundingMode: item.roundingMode,
+          }
+        : baseItem;
+    });
+
+    await this.balanceService.reserve(
+      tx,
+      dto.originLocationId,
+      normalizedItems,
+    );
 
     const transfer = (await tx.inventoryTransfer.create({
       data: {
@@ -533,7 +575,21 @@ export class InventoryTransfersService {
     await this.assertTransferProductsActive(tx, transfer);
     this.assertCanConfirm(transfer);
 
-    for (const item of transfer.items ?? []) {
+    const transferItems = transfer.items ?? [];
+    const pendingOriginChanges =
+      transfer.status === InventoryTransferStatus.DRAFT
+        ? null
+        : await this.balanceService.consumeReservations(
+            tx,
+            transfer.originLocationId,
+            transferItems.map((item) => ({
+              key: item.id,
+              productId: item.productId,
+              ...this.normalizeExistingItemQuantities(item),
+            })),
+          );
+
+    for (const item of transferItems) {
       const quantities = this.normalizeExistingItemQuantities(item);
       const reason = this.withCommandMarker(
         `Inventory transfer ${transfer.transferNumber} confirmed`,
@@ -545,13 +601,25 @@ export class InventoryTransfersService {
           : null,
       );
 
-      const originChange = await this.applyBalanceChange(
-        tx,
-        item.productId,
-        transfer.originLocationId,
-        -1,
-        quantities,
-      );
+      const originChange =
+        transfer.status === InventoryTransferStatus.DRAFT
+          ? await this.balanceService.decreaseAvailable(
+              tx,
+              item.productId,
+              transfer.originLocationId,
+              quantities,
+              'Inventory transfer cannot leave negative available stock',
+            )
+          : pendingOriginChanges?.get(item.id);
+      if (!originChange) {
+        throw new ConflictException({
+          code: 'INVENTORY_RESERVATION_INTEGRITY_ERROR',
+          message:
+            'The pending transfer reservation does not match the inventory balance',
+          productId: item.productId,
+          locationId: transfer.originLocationId,
+        });
+      }
       await this.createMovement(
         tx,
         transfer,
@@ -564,11 +632,10 @@ export class InventoryTransfersService {
         reason,
       );
 
-      const destinationChange = await this.applyBalanceChange(
+      const destinationChange = await this.balanceService.increase(
         tx,
         item.productId,
         transfer.destinationLocationId,
-        1,
         quantities,
       );
       await this.createMovement(
@@ -644,7 +711,18 @@ export class InventoryTransfersService {
       receiptId: options.receiptId,
     });
 
-    for (const item of transfer.items ?? []) {
+    const transferItems = transfer.items ?? [];
+    const pendingOriginChanges = await this.balanceService.consumeReservations(
+      tx,
+      transfer.originLocationId,
+      transferItems.map((item) => ({
+        key: item.id,
+        productId: item.productId,
+        ...this.normalizeExistingItemQuantities(item),
+      })),
+    );
+
+    for (const item of transferItems) {
       const sent = this.normalizeExistingItemQuantities(item);
       const received = quantitiesByItem.get(item.id);
       if (!received) {
@@ -655,13 +733,16 @@ export class InventoryTransfersService {
         commandMarker,
       );
 
-      const originChange = await this.applyBalanceChange(
-        tx,
-        item.productId,
-        transfer.originLocationId,
-        -1,
-        sent,
-      );
+      const originChange = pendingOriginChanges.get(item.id);
+      if (!originChange) {
+        throw new ConflictException({
+          code: 'INVENTORY_RESERVATION_INTEGRITY_ERROR',
+          message:
+            'The pending transfer reservation does not match the inventory balance',
+          productId: item.productId,
+          locationId: transfer.originLocationId,
+        });
+      }
       await this.createMovement(
         tx,
         transfer,
@@ -674,12 +755,11 @@ export class InventoryTransfersService {
         reason,
       );
 
-      const destinationChange = await this.applyBalanceChange(
+      const destinationChange = await this.balanceService.increase(
         tx,
         item.productId,
         transfer.destinationLocationId,
-        1,
-        sent,
+        received,
       );
       await this.createMovement(
         tx,
@@ -688,7 +768,7 @@ export class InventoryTransfersService {
         userId,
         InventoryMovementType.TRANSFER_IN,
         transfer.destinationLocationId,
-        sent,
+        received,
         destinationChange,
         reason,
       );
@@ -701,12 +781,10 @@ export class InventoryTransfersService {
         ),
       };
       if (shortage.quantityKg > 0 || shortage.quantityPieces > 0) {
-        const balanceChange = await this.applyBalanceChange(
+        const balanceChange = await this.currentBalanceChange(
           tx,
           item.productId,
           transfer.destinationLocationId,
-          -1,
-          shortage,
         );
         await this.createReceiptAdjustmentMovement(
           tx,
@@ -729,12 +807,10 @@ export class InventoryTransfersService {
         ),
       };
       if (surplus.quantityKg > 0 || surplus.quantityPieces > 0) {
-        const balanceChange = await this.applyBalanceChange(
+        const balanceChange = await this.currentBalanceChange(
           tx,
           item.productId,
           transfer.destinationLocationId,
-          1,
-          surplus,
         );
         await this.createReceiptAdjustmentMovement(
           tx,
@@ -805,25 +881,38 @@ export class InventoryTransfersService {
       );
     }
 
+    const commandMarker = idempotencyKey
+      ? this.buildCommandMarker('CANCEL', idempotencyKey, {
+          transferId: id,
+          userId,
+          reason,
+        })
+      : null;
+
     this.assertLinkedCycleCanChange(transfer);
     this.assertLinkedTransferDirection(transfer);
     this.assertCanCancel(transfer);
+
+    if (
+      transfer.status === InventoryTransferStatus.REQUESTED ||
+      transfer.status === InventoryTransferStatus.IN_TRANSIT
+    ) {
+      await this.balanceService.releaseReservations(
+        tx,
+        transfer.originLocationId,
+        (transfer.items ?? []).map((item) => ({
+          productId: item.productId,
+          ...this.normalizeExistingItemQuantities(item),
+        })),
+      );
+    }
 
     const cancelled = (await tx.inventoryTransfer.update({
       where: { id },
       data: {
         status: InventoryTransferStatus.CANCELLED,
         cancelledByUserId: userId,
-        cancellationReason: this.withCommandMarker(
-          reason,
-          idempotencyKey
-            ? this.buildCommandMarker('CANCEL', idempotencyKey, {
-                transferId: id,
-                userId,
-                reason,
-              })
-            : null,
-        ),
+        cancellationReason: this.withCommandMarker(reason, commandMarker),
         cancelledAt: new Date(),
       },
       include: TRANSFER_INCLUDE,
@@ -835,9 +924,84 @@ export class InventoryTransfersService {
       userId,
       'CANCEL',
       idempotencyKey,
+      {
+        cancellationReason: reason,
+        idempotencyMarker: commandMarker,
+      },
     );
 
     return this.toTransferResponse(cancelled);
+  }
+
+  private async normalizeTransferItems(
+    tx: Prisma.TransactionClient,
+    inputItems: CreateInventoryTransferDto['items'],
+    equivalenceDate = new Date(),
+  ): Promise<NormalizedTransferItem[]> {
+    const normalized: NormalizedTransferItem[] = [];
+    for (const item of inputItems) {
+      const product = await this.findProductOrThrow(tx, item.productId);
+      const quantities = this.normalizeItemQuantities(
+        item.unit,
+        product.unit,
+        item.quantityKg,
+        item.quantityPieces,
+      );
+      const equivalence = await this.resolveItemEquivalence(
+        tx,
+        item.productId,
+        product.unit,
+        item.unitEquivalentId,
+        equivalenceDate,
+      );
+
+      normalized.push({
+        productId: item.productId,
+        productUnit: product.unit,
+        unit: item.unit,
+        ...quantities,
+        ...(equivalence ?? {}),
+      });
+    }
+
+    return this.aggregateTransferItems(normalized);
+  }
+
+  private aggregateTransferItems(
+    items: NormalizedTransferItem[],
+  ): NormalizedTransferItem[] {
+    const grouped = new Map<string, NormalizedTransferItem>();
+    for (const item of items) {
+      const current = grouped.get(item.productId);
+      if (!current) {
+        grouped.set(item.productId, { ...item });
+        continue;
+      }
+
+      if (
+        (current.unitEquivalentId ?? null) !== (item.unitEquivalentId ?? null)
+      ) {
+        throw new BadRequestException('UNIT_MISMATCH');
+      }
+
+      current.quantityKg = this.addQuantity(
+        current.quantityKg,
+        item.quantityKg,
+      );
+      current.quantityPieces += item.quantityPieces;
+      current.unit = this.mergeUnits(current.unit, item.unit);
+    }
+
+    return [...grouped.values()];
+  }
+
+  private mergeUnits(left: ProductUnit, right: ProductUnit): ProductUnit {
+    if (left === right) return left;
+    return ProductUnit.KG_AND_PIECE;
+  }
+
+  private addQuantity(left: number, right: number): number {
+    return new Prisma.Decimal(left).add(right).toNumber();
   }
 
   private async resolveItemEquivalence(
@@ -857,9 +1021,7 @@ export class InventoryTransfersService {
     if (!unitEquivalentId) return undefined;
 
     if (productUnit !== ProductUnit.KG_AND_PIECE) {
-      throw new BadRequestException(
-        'Unit equivalence is only valid for KG_AND_PIECE products',
-      );
+      throw new BadRequestException('EQUIVALENCE_NOT_APPLICABLE');
     }
 
     const equivalent = await tx.productUnitEquivalent.findUnique({
@@ -892,7 +1054,7 @@ export class InventoryTransfersService {
         equivalent.effectiveFrom > equivalenceDate) ||
       (equivalent.effectiveTo && equivalent.effectiveTo < equivalenceDate)
     ) {
-      throw new BadRequestException('Unit equivalence is not applicable');
+      throw new BadRequestException('EQUIVALENCE_NOT_APPLICABLE');
     }
 
     return {
@@ -908,9 +1070,7 @@ export class InventoryTransfersService {
   ): Promise<void> {
     for (const item of transfer.items ?? []) {
       if (item.product?.isActive === false) {
-        throw new BadRequestException(
-          'Inactive products cannot be transferred',
-        );
+        throw new BadRequestException('PRODUCT_INACTIVE');
       }
       await this.findProductOrThrow(tx, item.productId);
     }
@@ -989,19 +1149,34 @@ export class InventoryTransfersService {
       origin.parentId === destination.id;
 
     if (destination.type === 'BRANCH' && !isSupply) {
-      throw new BadRequestException(
-        'Branch inventory must originate from its parent distribution center',
-      );
+      throw new BadRequestException({
+        code: 'BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID',
+        message:
+          'Branch inventory must originate from its parent distribution center',
+      });
     }
     if ((isSupply || isReturn) && !cedisCycleTransfer) {
-      throw new BadRequestException(
-        'Branch inventory transfers must be created through a CEDIS supply cycle',
-      );
+      throw new BadRequestException({
+        code: 'BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID',
+        message:
+          'Branch inventory transfers must be created through a CEDIS supply cycle',
+      });
     }
     if (cedisCycleTransfer && !isSupply && !isReturn) {
-      throw new BadRequestException(
-        'CEDIS supply cycle transfers require a direct CEDIS and branch pair',
-      );
+      throw new BadRequestException({
+        code: 'BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID',
+        message:
+          'CEDIS supply cycle transfers require a direct CEDIS and branch pair',
+      });
+    }
+
+    if (cedisCycleTransfer) {
+      const requiredPermission = isSupply
+        ? PERMISSIONS.CEDIS_DISPATCH
+        : PERMISSIONS.CEDIS_RECEIVE_RETURNS;
+      if (!actor?.permissions?.includes(requiredPermission)) {
+        throw new ForbiddenException('Insufficient permissions');
+      }
     }
 
     if (actor?.role === 'WAREHOUSE') {
@@ -1177,6 +1352,10 @@ export class InventoryTransfersService {
       data: {
         version: { increment: 1 },
         status: nextStatus,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        reconciledDailyCloseVersion: null,
+        reconciledAt: null,
       },
     });
     if (result.count !== 1) {
@@ -1202,7 +1381,10 @@ export class InventoryTransfersService {
         fromStatus: cycle.status,
         toStatus: nextStatus,
         actorUserId: userId,
-        reason: action,
+        reason:
+          typeof extraPayload.cancellationReason === 'string'
+            ? extraPayload.cancellationReason
+            : action,
         payload: {
           action,
           transferId: transfer.id,
@@ -1227,16 +1409,22 @@ export class InventoryTransfersService {
       } catch (error) {
         if (!this.isRetryableConflict(error) || attempt === 3) {
           if (this.isRetryableConflict(error)) {
-            throw new ConflictException(
-              'INVENTORY_TRANSFER_CONCURRENCY_CONFLICT',
-            );
+            throw new ConflictException({
+              code: 'INVENTORY_CONCURRENCY_CONFLICT',
+              message:
+                'The inventory operation could not be completed after concurrent retries',
+            });
           }
           throw error;
         }
       }
     }
 
-    throw new ConflictException('INVENTORY_TRANSFER_CONCURRENCY_CONFLICT');
+    throw new ConflictException({
+      code: 'INVENTORY_CONCURRENCY_CONFLICT',
+      message:
+        'The inventory operation could not be completed after concurrent retries',
+    });
   }
 
   private isSerializableConflict(error: unknown): boolean {
@@ -1289,9 +1477,10 @@ export class InventoryTransfersService {
         : transfer.cancellationReason;
 
     if (!commandText?.includes(expectedMarker)) {
-      throw new ConflictException(
-        `Idempotency-Key does not match the completed inventory transfer ${action.toLowerCase()} command`,
-      );
+      throw new ConflictException({
+        code: 'IDEMPOTENCY_CONFLICT',
+        message: `Idempotency-Key does not match the completed inventory transfer ${action.toLowerCase()} command`,
+      });
     }
   }
 
@@ -1344,9 +1533,11 @@ export class InventoryTransfersService {
       (transfer.notes ?? null) !== this.normalizeOptionalText(dto.notes) ||
       JSON.stringify(existingItems) !== JSON.stringify(requestedItems)
     ) {
-      throw new ConflictException(
-        'Idempotency-Key was already used for a different inventory transfer payload',
-      );
+      throw new ConflictException({
+        code: 'IDEMPOTENCY_CONFLICT',
+        message:
+          'Idempotency-Key was already used for a different inventory transfer payload',
+      });
     }
   }
 
@@ -1359,14 +1550,48 @@ export class InventoryTransfersService {
       unitEquivalentId?: string | null;
     }>,
   ): string[] {
-    return items
+    const grouped = new Map<
+      string,
+      {
+        productId: string;
+        unit: ProductUnit;
+        quantityKg: number;
+        quantityPieces: number;
+        unitEquivalentId: string;
+      }
+    >();
+
+    for (const item of items) {
+      const unitEquivalentId = item.unitEquivalentId ?? '';
+      const key = `${item.productId}|${unitEquivalentId}`;
+      const current = grouped.get(key);
+      if (!current) {
+        grouped.set(key, {
+          productId: item.productId,
+          unit: item.unit,
+          quantityKg: item.quantityKg ?? 0,
+          quantityPieces: item.quantityPieces ?? 0,
+          unitEquivalentId,
+        });
+        continue;
+      }
+
+      current.quantityKg = this.addQuantity(
+        current.quantityKg,
+        item.quantityKg ?? 0,
+      );
+      current.quantityPieces += item.quantityPieces ?? 0;
+      current.unit = this.mergeUnits(current.unit, item.unit);
+    }
+
+    return [...grouped.values()]
       .map((item) =>
         [
           item.productId,
           item.unit,
-          item.quantityKg ?? 0,
-          item.quantityPieces ?? 0,
-          item.unitEquivalentId ?? '',
+          item.quantityKg,
+          item.quantityPieces,
+          item.unitEquivalentId,
         ].join('|'),
       )
       .sort();
@@ -1441,7 +1666,7 @@ export class InventoryTransfersService {
     }
 
     if (!product.isActive) {
-      throw new BadRequestException('Inactive products cannot be transferred');
+      throw new BadRequestException('PRODUCT_INACTIVE');
     }
 
     return product;
@@ -1458,8 +1683,15 @@ export class InventoryTransfersService {
       quantityPieces: quantityPieces ?? 0,
     };
 
-    if (quantities.quantityKg < 0 || quantities.quantityPieces < 0) {
-      throw new BadRequestException('Transfer quantities must be non-negative');
+    if (
+      !Number.isFinite(quantities.quantityKg) ||
+      !Number.isFinite(quantities.quantityPieces) ||
+      quantities.quantityKg < 0 ||
+      quantities.quantityPieces < 0 ||
+      !Number.isInteger(quantities.quantityPieces) ||
+      !Object.values(ProductUnit).includes(requestedUnit)
+    ) {
+      throw new BadRequestException('UNIT_MISMATCH');
     }
 
     if (productUnit === ProductUnit.KG) {
@@ -1468,9 +1700,7 @@ export class InventoryTransfersService {
         quantities.quantityKg <= 0 ||
         quantities.quantityPieces !== 0
       ) {
-        throw new BadRequestException(
-          'KG products require a positive quantityKg only',
-        );
+        throw new BadRequestException('UNIT_MISMATCH');
       }
       return quantities;
     }
@@ -1481,9 +1711,7 @@ export class InventoryTransfersService {
         quantities.quantityPieces <= 0 ||
         quantities.quantityKg !== 0
       ) {
-        throw new BadRequestException(
-          'PIECE products require a positive quantityPieces only',
-        );
+        throw new BadRequestException('UNIT_MISMATCH');
       }
       return quantities;
     }
@@ -1492,18 +1720,14 @@ export class InventoryTransfersService {
       requestedUnit === ProductUnit.KG &&
       (quantities.quantityKg <= 0 || quantities.quantityPieces !== 0)
     ) {
-      throw new BadRequestException(
-        'KG transfers require a positive quantityKg only',
-      );
+      throw new BadRequestException('UNIT_MISMATCH');
     }
 
     if (
       requestedUnit === ProductUnit.PIECE &&
       (quantities.quantityPieces <= 0 || quantities.quantityKg !== 0)
     ) {
-      throw new BadRequestException(
-        'PIECE transfers require a positive quantityPieces only',
-      );
+      throw new BadRequestException('UNIT_MISMATCH');
     }
 
     if (
@@ -1511,9 +1735,7 @@ export class InventoryTransfersService {
       quantities.quantityKg <= 0 &&
       quantities.quantityPieces <= 0
     ) {
-      throw new BadRequestException(
-        'KG_AND_PIECE transfers require quantityKg, quantityPieces, or both',
-      );
+      throw new BadRequestException('UNIT_MISMATCH');
     }
 
     return quantities;
@@ -1626,78 +1848,15 @@ export class InventoryTransfersService {
     if (transfer.status === InventoryTransferStatus.CONFIRMED) {
       throw new BadRequestException('Confirmed transfers cannot be cancelled');
     }
-  }
-
-  private async applyBalanceChange(
-    tx: Prisma.TransactionClient,
-    productId: string,
-    locationId: string,
-    direction: 1 | -1,
-    quantities: NormalizedQuantities,
-  ): Promise<AppliedBalanceChange> {
-    if (direction === -1) {
-      const result = await tx.inventoryBalance.updateMany({
-        where: {
-          productId,
-          locationId,
-          quantityKg: { gte: quantities.quantityKg },
-          quantityPieces: { gte: quantities.quantityPieces },
-        },
-        data: {
-          quantityKg: { decrement: quantities.quantityKg },
-          quantityPieces: { decrement: quantities.quantityPieces },
-        },
-      });
-
-      if (result.count !== 1) {
-        throw new BadRequestException(
-          'Origin location does not have sufficient stock for this transfer',
-        );
-      }
-    } else {
-      await tx.inventoryBalance.upsert({
-        where: {
-          productId_locationId: {
-            productId,
-            locationId,
-          },
-        },
-        create: {
-          productId,
-          locationId,
-          quantityKg: quantities.quantityKg,
-          quantityPieces: quantities.quantityPieces,
-        },
-        update: {
-          quantityKg: { increment: quantities.quantityKg },
-          quantityPieces: { increment: quantities.quantityPieces },
-        },
-      });
+    if (
+      transfer.status !== InventoryTransferStatus.DRAFT &&
+      transfer.status !== InventoryTransferStatus.REQUESTED &&
+      transfer.status !== InventoryTransferStatus.IN_TRANSIT
+    ) {
+      throw new BadRequestException(
+        'Only draft, requested, or in-transit transfers can be cancelled',
+      );
     }
-
-    const balance = await tx.inventoryBalance.findUnique({
-      where: {
-        productId_locationId: {
-          productId,
-          locationId,
-        },
-      },
-    });
-
-    if (!balance) {
-      throw new BadRequestException('Inventory balance could not be updated');
-    }
-
-    const newQuantityKg = this.toNumber(balance.quantityKg);
-    const newQuantityPieces = balance.quantityPieces;
-
-    return {
-      previousQuantityKg: newQuantityKg - direction * quantities.quantityKg,
-      previousQuantityPieces:
-        newQuantityPieces - direction * quantities.quantityPieces,
-      newQuantityKg,
-      newQuantityPieces,
-    };
   }
 
   private async createMovement(
@@ -1775,6 +1934,24 @@ export class InventoryTransfersService {
     });
   }
 
+  private async currentBalanceChange(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    locationId: string,
+  ): Promise<AppliedBalanceChange> {
+    const balance = await this.balanceService.get(tx, productId, locationId);
+    if (!balance) {
+      throw new BadRequestException('Inventory balance could not be updated');
+    }
+
+    return {
+      previousQuantityKg: balance.quantityKg,
+      previousQuantityPieces: balance.quantityPieces,
+      newQuantityKg: balance.quantityKg,
+      newQuantityPieces: balance.quantityPieces,
+    };
+  }
+
   private buildTransferWhere(
     query: ListInventoryTransfersQueryDto,
     actor?: InventoryTransferActor,
@@ -1835,7 +2012,13 @@ export class InventoryTransfersService {
     };
   }
 
-  private toTransferResponse(transfer: TransferRecord): TransferResponse {
+  private toTransferResponse(
+    transfer: TransferRecord,
+    balanceByProduct?: Map<
+      string,
+      (InventoryBalanceAvailability & { locationId: string }) | null
+    >,
+  ): TransferResponse {
     const items = (transfer.items ?? []).map((item) => ({
       productId: item.productId,
       productName: item.product?.name,
@@ -1847,6 +2030,9 @@ export class InventoryTransfersService {
         ? this.toNumber(item.appliedEquivalentFactor)
         : null,
       roundingMode: item.roundingMode ?? null,
+      ...(balanceByProduct
+        ? { balance: balanceByProduct.get(item.productId) ?? null }
+        : {}),
     }));
 
     return {

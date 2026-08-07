@@ -70,6 +70,7 @@ const mockState = vi.hoisted(() => ({
     data: [] as Product[],
     error: null as unknown,
     isLoading: false,
+    refetch: vi.fn(),
   },
   mutations: {
     isPending: false,
@@ -106,6 +107,15 @@ const product: Product = {
   unit: "KG",
   salePrice: 85,
   isActive: true,
+  inventoryBalance: {
+    locationId: "cedis-1",
+    quantityKg: 100,
+    quantityPieces: 0,
+    reservedQuantityKg: 20,
+    reservedQuantityPieces: 0,
+    availableQuantityKg: 80,
+    availableQuantityPieces: 0,
+  },
 };
 
 const card: CedisDashboardCard = {
@@ -226,6 +236,15 @@ const summary: CedisCycleSummary = {
             unit: "KG",
             quantityKg: "120.000",
             quantityPieces: null,
+            balance: {
+              locationId: "cedis-1",
+              quantityKg: 30,
+              quantityPieces: 0,
+              reservedQuantityKg: 7,
+              reservedQuantityPieces: 0,
+              availableQuantityKg: 23,
+              availableQuantityPieces: 0,
+            },
           },
         ],
       },
@@ -342,6 +361,8 @@ describe("CEDIS branch detail page", () => {
     mockState.products.data = [product];
     mockState.products.error = null;
     mockState.products.isLoading = false;
+    mockState.products.refetch.mockReset();
+    mockState.products.refetch.mockResolvedValue({});
     mockState.mutations.isPending = false;
     mockState.mutations.mutateAsync.mockReset();
     mockState.mutations.mutateAsync.mockResolvedValue({ id: "cycle-2" });
@@ -359,6 +380,9 @@ describe("CEDIS branch detail page", () => {
     expect(html).toContain("Desglose por producto");
     expect(html).toContain("Pollo entero");
     expect(html).toContain("Suministros y devoluciones");
+    expect(html).toContain("Físico en origen");
+    expect(html).toContain("Comprometido");
+    expect(html).toContain("Disponible");
     expect(html).toContain("Resumen de caja");
     expect(html).toContain("Advertencias y diferencias");
     expect(html).toContain("Diferencia de caja");
@@ -401,6 +425,69 @@ describe("CEDIS branch detail page", () => {
 
     expect(html).toContain("No se pudo cargar el detalle");
     expect(html).toContain("Reintentar");
+  });
+
+  it("refresca saldos y conserva el formulario ante un conflicto de disponibilidad", async () => {
+    mockState.mutations.mutateAsync.mockRejectedValueOnce({
+      payload: {
+        code: "INSUFFICIENT_STOCK",
+        message: "Insufficient stock",
+      },
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+
+    await act(async () =>
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            "/cedis/branches/branch-1?date=2026-08-05&cycle=cycle-1",
+          ]}
+        >
+          <CedisBranchDetailPage />
+        </MemoryRouter>,
+      ),
+    );
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Enviar producto"))
+        ?.click();
+    });
+    await act(async () => {
+      const select = container.querySelector("select") as HTMLSelectElement;
+      select.value = "product-1";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const input = container.querySelector(
+        'input[aria-label="Kilos 1"]',
+      ) as HTMLInputElement;
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(input, "25.5");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      (
+        container.querySelector('button[type="submit"]') as HTMLButtonElement
+      ).click();
+    });
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Confirmar suministro"))
+        ?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mockState.products.refetch).toHaveBeenCalled();
+    expect(mockState.summary.refetch).toHaveBeenCalled();
+    expect(container.textContent).toContain("Reintentar suministro");
+
+    await act(async () => root.unmount());
+    container.remove();
   });
 
   it("expone semántica modal accesible para el comando de transferencia", () => {
@@ -470,7 +557,7 @@ describe("CEDIS transfer command panel", () => {
     });
   }
 
-  async function fillSupplyForm() {
+  async function fillSupplyForm(submit = true) {
     await act(async () => {
       const select = container.querySelector("select") as HTMLSelectElement;
       select.value = "product-1";
@@ -486,23 +573,98 @@ describe("CEDIS transfer command panel", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await act(async () => {
-      (
-        container.querySelector('button[type="submit"]') as HTMLButtonElement
-      ).click();
-    });
+    if (submit) {
+      await act(async () => {
+        (
+          container.querySelector('button[type="submit"]') as HTMLButtonElement
+        ).click();
+      });
+    }
   }
 
   it("muestra el origen, destino y cantidades antes de confirmar", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderPanel(onSubmit);
-    await fillSupplyForm();
+    await fillSupplyForm(false);
 
+    expect(container.textContent).toContain("Existencia física");
+    expect(container.textContent).toContain("Comprometido");
+    expect(container.textContent).toContain("Disponible");
+    expect(container.textContent).toContain("Suficiente");
+    await act(async () => {
+      (
+        container.querySelector('button[type="submit"]') as HTMLButtonElement
+      ).click();
+    });
     expect(container.textContent).toContain("Confirmación requerida");
     expect(container.textContent).toContain("CEDIS Centro");
     expect(container.textContent).toContain("Sucursal Centro");
     expect(container.textContent).toContain("25.5 kg");
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("bloquea una cantidad que supera la disponibilidad actual", async () => {
+    const constrainedProduct: Product = {
+      ...product,
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        quantityKg: 10,
+        reservedQuantityKg: 8,
+        availableQuantityKg: 2,
+      },
+    };
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <CedisTransferCommandPanel
+          branch={card.branch}
+          cedis={summary.distributionCenter}
+          expectedVersion={summary.version}
+          mode="SUPPLY"
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+          products={[constrainedProduct]}
+          productsLoading={false}
+        />,
+      );
+    });
+    expect(
+      (container.querySelector('button[type="submit"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    await fillSupplyForm();
+
+    expect(container.textContent).toContain("supera la disponibilidad");
+    expect(container.textContent).not.toContain("Confirmación requerida");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("deshabilita productos sin disponibilidad en el selector", () => {
+    const unavailableProduct: Product = {
+      ...product,
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        quantityKg: 0,
+        reservedQuantityKg: 0,
+        availableQuantityKg: 0,
+      },
+    };
+    const html = renderToStaticMarkup(
+      <CedisTransferCommandPanel
+        branch={card.branch}
+        cedis={summary.distributionCenter}
+        expectedVersion={summary.version}
+        mode="SUPPLY"
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        products={[unavailableProduct]}
+        productsLoading={false}
+      />,
+    );
+
+    expect(html).toContain("Sin disponibilidad");
+    expect(html).toContain('disabled=""');
   });
 
   it("conserva la misma Idempotency-Key al reintentar un comando fallido", async () => {

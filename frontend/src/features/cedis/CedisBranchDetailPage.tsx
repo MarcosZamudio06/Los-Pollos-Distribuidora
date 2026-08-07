@@ -126,6 +126,13 @@ function quantity(value: string | number | null | undefined) {
   }).format(Number(value));
 }
 
+function balanceQuantity(quantityKg: number, quantityPieces: number): string {
+  const values: string[] = [];
+  if (quantityKg !== 0) values.push(`${quantity(quantityKg)} kg`);
+  if (quantityPieces !== 0) values.push(`${quantity(quantityPieces)} piezas`);
+  return values.length > 0 ? values.join(" · ") : "0";
+}
+
 function money(value: string | number | null | undefined) {
   return value === null || value === undefined ? "—" : formatMoney(value);
 }
@@ -165,6 +172,18 @@ function apiErrorMessage(error: unknown, fallback: string) {
     }
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function apiErrorCode(error: unknown) {
+  if (error && typeof error === "object" && "payload" in error) {
+    const payload = (error as { payload?: unknown }).payload;
+    if (payload && typeof payload === "object") {
+      const record = payload as Record<string, unknown>;
+      if (typeof record.code === "string") return record.code;
+      if (typeof record.error === "string") return record.error;
+    }
+  }
+  return null;
 }
 
 function SummaryMetric({
@@ -834,6 +853,25 @@ function Transfers({ summary }: { summary: CedisCycleSummary }) {
                         {item.quantityKg
                           ? `${quantity(item.quantityKg)} kg`
                           : `${quantity(item.quantityPieces)} piezas`}
+                        {item.balance && (
+                          <span className="mt-1 block text-xs text-[var(--erp-muted-foreground)]">
+                            Físico en origen{" "}
+                            {balanceQuantity(
+                              item.balance.quantityKg,
+                              item.balance.quantityPieces,
+                            )}{" "}
+                            · Comprometido{" "}
+                            {balanceQuantity(
+                              item.balance.reservedQuantityKg,
+                              item.balance.reservedQuantityPieces,
+                            )}{" "}
+                            · Disponible{" "}
+                            {balanceQuantity(
+                              item.balance.availableQuantityKg,
+                              item.balance.availableQuantityPieces,
+                            )}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </td>
@@ -1412,7 +1450,15 @@ export function CedisBranchDetailPage() {
     );
   const cycleId = cycleIdFromUrl ?? selectedCard?.cycle?.id;
   const summaryQuery = useCedisCycleSummary(cycleId);
-  const productsQuery = useProducts({ isActive: "true" });
+  const [transferMode, setTransferMode] = useState<TransferMode | null>(null);
+  const transferSourceLocationId =
+    transferMode === "RETURN"
+      ? (branchQuery.data?.id ?? branchId)
+      : parentQuery.data?.id;
+  const productsQuery = useProducts({
+    isActive: "true",
+    locationId: transferSourceLocationId,
+  });
   const createSupply = useCreateCedisSupply(cycleId ?? "disabled");
   const createReturn = useCreateCedisReturn(cycleId ?? "disabled");
   const refreshCycle = useRefreshCedisCycle(cycleId ?? "disabled");
@@ -1420,7 +1466,6 @@ export function CedisBranchDetailPage() {
   const closeCycle = useCloseCedisCycle(cycleId ?? "disabled");
   const reopenCycle = useReopenCedisCycle(cycleId ?? "disabled");
   const cancelCycle = useCancelCedisCycle(cycleId ?? "disabled");
-  const [transferMode, setTransferMode] = useState<TransferMode | null>(null);
   const [action, setAction] = useState<ActionType | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionRequest, setActionRequest] = useState<ActionRequest | null>(
@@ -1577,13 +1622,28 @@ export function CedisBranchDetailPage() {
       payload,
       idempotencyKey,
     };
-    if (transferMode === "SUPPLY") await createSupply.mutateAsync(input);
-    else await createReturn.mutateAsync(input);
-    toast.success(
-      transferMode === "SUPPLY"
-        ? "Suministro registrado."
-        : "Devolución registrada.",
-    );
+    try {
+      if (transferMode === "SUPPLY") await createSupply.mutateAsync(input);
+      else await createReturn.mutateAsync(input);
+      toast.success(
+        transferMode === "SUPPLY"
+          ? "Suministro registrado."
+          : "Devolución registrada.",
+      );
+    } catch (error) {
+      const code = apiErrorCode(error);
+      if (
+        code === "INSUFFICIENT_STOCK" ||
+        code === "INVENTORY_CONCURRENCY_CONFLICT" ||
+        code === "INVENTORY_RESERVATION_INTEGRITY_ERROR"
+      ) {
+        await Promise.allSettled([
+          productsQuery.refetch(),
+          summaryQuery.refetch(),
+        ]);
+      }
+      throw error;
+    }
   }
 
   function beginAction(nextAction: ActionType) {

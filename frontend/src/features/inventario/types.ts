@@ -38,6 +38,11 @@ export type CedisInventorySummaryItem = {
   sku: string | null;
   unit: string;
   opening: InventoryQuantity;
+  physicalAtCedis: InventoryQuantity;
+  reservedAtCedis: InventoryQuantity;
+  availableToDispatch: InventoryQuantity;
+  inBranchCustody: InventoryQuantity;
+  ownedNetworkTotal: InventoryQuantity;
   receivedFromSuppliers: InventoryQuantity;
   sentToBranches: InventoryQuantity;
   returnedFromBranches: InventoryQuantity;
@@ -75,6 +80,10 @@ export type InventoryBalance = {
   locationName?: string;
   quantityKg: number;
   quantityPieces: number;
+  reservedQuantityKg: number;
+  reservedQuantityPieces: number;
+  availableQuantityKg: number;
+  availableQuantityPieces: number;
   minQuantityKg?: number | null;
   minQuantityPieces?: number | null;
   minimumKg?: number | null;

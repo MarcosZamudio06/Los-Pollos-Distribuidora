@@ -298,6 +298,8 @@ Campos:
 - locationId
 - quantityKg
 - quantityPieces
+- reservedQuantityKg
+- reservedQuantityPieces
 - minQuantityKg
 - minQuantityPieces
 - createdAt
@@ -307,6 +309,12 @@ Reglas:
 
 - Debe existir una combinación única de `productId` y `locationId`.
 - `quantityKg` y `quantityPieces` no deben ser negativos.
+- `reservedQuantityKg` y `reservedQuantityPieces` representan mercancía comprometida por transferencias pendientes y deben iniciar en cero para datos nuevos.
+- `reservedQuantityKg` y `reservedQuantityPieces` no deben ser negativos.
+- `reservedQuantityKg` no puede superar `quantityKg`; `reservedQuantityPieces` no puede superar `quantityPieces`.
+- La disponibilidad se deriva sin persistir un segundo stock: `quantityKg - reservedQuantityKg` y `quantityPieces - reservedQuantityPieces`.
+- Las reservas no representan una ubicación física adicional ni modifican la propiedad de red.
+- Las ventas y ajustes negativos solo pueden descontar la disponibilidad no reservada.
 - Cuando un producto solo permita kilo o pieza, la unidad no aplicable debe permanecer en cero o nula según la decisión técnica del esquema.
 - La conversión entre kilos y piezas solo debe aplicarse con equivalencia aprobada por negocio.
 
@@ -660,9 +668,11 @@ Estados:
 
 Reglas:
 
-- `DRAFT` y `REQUESTED` no modifican inventario.
+- `DRAFT` no modifica inventario; `REQUESTED` no crea movimientos físicos, pero mantiene una reserva en el origen.
+- `REQUESTED` e `IN_TRANSIT` mantienen una reserva por producto y dimensión en el origen sin crear movimientos físicos.
 - `IN_TRANSIT` representa salida física en proceso, pero no confirma recepción final ni debe duplicar decrementos posteriores en venta.
 - `CONFIRMED` genera movimientos `TRANSFER_OUT` en origen y `TRANSFER_IN` en destino en una sola transacción.
+- `CONFIRMED` consume exactamente la reserva del origen; `CANCELLED` libera exactamente la reserva del origen.
 - Crear, confirmar y cancelar deben soportar idempotencia en capa de API/aplicación para evitar duplicar traspasos o movimientos.
 - La carga a ruta debe usar `destinationLocationId` de tipo `ROUTE_STOCK`.
 - La devolución de sobrante desde ruta debe usar `originLocationId` de tipo `ROUTE_STOCK`.
@@ -686,7 +696,7 @@ Campos:
 
 Reglas:
 
-- No confirmar si la ubicación origen no tiene stock suficiente.
+- No confirmar si la ubicación origen no tiene disponibilidad suficiente después de reservas existentes.
 - Confirmar debe generar movimientos de salida y entrada trazables.
 - `unitEquivalentId`, cuando exista, debe pertenecer al producto, estar activa y ser aplicable a la fecha de negocio.
 - `appliedEquivalentFactor` y `roundingMode` conservan la equivalencia usada; son opcionales para transferencias sin conversión.

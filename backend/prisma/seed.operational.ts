@@ -26,6 +26,7 @@ import {
   type ProductUnit,
 } from '@prisma/client';
 import { assertSeedEnvironment } from './seed-guard';
+import { InventoryBalanceService } from '../src/modules/inventory/inventory-balance.service';
 import {
   addDays,
   calculateDaysOverdue,
@@ -123,6 +124,8 @@ type TransferPlan = {
   userId: string;
   items: ProductLine[];
 };
+
+const inventoryBalanceService = new InventoryBalanceService();
 
 type DailyClosePlan = {
   id: string;
@@ -1080,24 +1083,13 @@ async function applyInventoryDelta(
   const { product, locationId, quantityKg, quantityPieces, direction } = params;
 
   if (direction === -1) {
-    const updated = await tx.inventoryBalance.updateMany({
-      where: {
-        productId: product.id,
-        locationId,
-        quantityKg: { gte: quantityKg },
-        quantityPieces: { gte: quantityPieces },
-      },
-      data: {
-        quantityKg: { decrement: quantityKg },
-        quantityPieces: { decrement: quantityPieces },
-      },
-    });
-
-    if (updated.count !== 1) {
-      throw new Error(
-        `Insufficient stock for product ${product.name} (${product.id}) at location ${locationId}; requiredKg=${quantityKg}; requiredPieces=${quantityPieces}`,
-      );
-    }
+    await inventoryBalanceService.decreaseAvailable(
+      tx,
+      product.id,
+      locationId,
+      { quantityKg, quantityPieces },
+      `Insufficient available stock for product ${product.name} (${product.id}) at location ${locationId}; requiredKg=${quantityKg}; requiredPieces=${quantityPieces}`,
+    );
   } else {
     await tx.inventoryBalance.upsert({
       where: { productId_locationId: { productId: product.id, locationId } },

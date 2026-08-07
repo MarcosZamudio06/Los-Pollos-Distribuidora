@@ -13,6 +13,7 @@ import type {
 import { PrismaService } from '../../database/prisma.service';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { toInventoryBalanceAvailability } from '../inventory/inventory-balance.service';
 import {
   CreateProductDto,
   GetProductQueryDto,
@@ -29,7 +30,7 @@ const ACTIVE_EQUIVALENCES_INCLUDE = {
   orderBy: { effectiveFrom: 'desc' as const },
 } as const;
 
-type DecimalLike = Prisma.Decimal | number | string;
+type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
 type ProductRecord = {
   id: string;
@@ -54,12 +55,15 @@ type ProductRecord = {
 };
 
 type InventoryBalanceRecord = {
+  productId?: string;
   locationId: string;
   location?: { id: string; name: string } | null;
   quantityKg: DecimalLike;
   quantityPieces: number;
-  minQuantityKg: DecimalLike;
-  minQuantityPieces: number;
+  reservedQuantityKg?: DecimalLike;
+  reservedQuantityPieces?: number;
+  minQuantityKg?: DecimalLike;
+  minQuantityPieces?: number;
 };
 
 type ProductEquivalentRecord = {
@@ -96,6 +100,10 @@ type InventoryBalanceResponse = {
   locationName?: string;
   quantityKg: number;
   quantityPieces: number;
+  reservedQuantityKg: number;
+  reservedQuantityPieces: number;
+  availableQuantityKg: number;
+  availableQuantityPieces: number;
   minQuantityKg: number;
   minQuantityPieces: number;
   isLowStock: boolean;
@@ -113,6 +121,8 @@ type ProductEquivalentResponse = {
 type ProductListResponse = { items: ProductResponse[] };
 
 type ProductMutationDto = CreateProductDto | UpdateProductDto;
+type ProductReadActor = Pick<AuthenticatedUser, 'role' | 'permissions'> &
+  Partial<Pick<AuthenticatedUser, 'operationalLocationId'>>;
 
 @Injectable()
 export class ProductsService {
@@ -120,7 +130,7 @@ export class ProductsService {
 
   async findAll(
     query: ListProductsQueryDto,
-    currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>,
+    currentUser: ProductReadActor,
   ): Promise<ProductListResponse> {
     if (query.lowStock === true && !query.locationId) {
       throw new BadRequestException(
@@ -130,7 +140,7 @@ export class ProductsService {
 
     const search = query.search?.trim();
     const where = this.buildListWhere(query);
-    const include = this.buildListInclude(query.locationId);
+    const include = this.buildListInclude(query.locationId, currentUser);
     let products: ProductRecord[];
 
     if (search) {
@@ -194,7 +204,7 @@ export class ProductsService {
   async findOne(
     id: string,
     query: GetProductQueryDto = {},
-    currentUser: Pick<AuthenticatedUser, 'role' | 'permissions'>,
+    currentUser: ProductReadActor,
   ): Promise<ProductResponse> {
     const includeBalances =
       query.includeBalances === true || !!query.locationId;
@@ -206,7 +216,10 @@ export class ProductsService {
         ...(includeBalances
           ? {
               inventoryBalances: {
-                where: query.locationId ? { locationId: query.locationId } : {},
+                where: {
+                  ...(query.locationId ? { locationId: query.locationId } : {}),
+                  location: this.buildLocationScopeWhere(currentUser),
+                },
                 include: { location: true },
               },
             }
@@ -349,7 +362,11 @@ export class ProductsService {
     };
   }
 
-  private buildListInclude(locationId?: string) {
+  private buildListInclude(
+    locationId: string | undefined,
+    actor: Pick<AuthenticatedUser, 'role'> &
+      Partial<Pick<AuthenticatedUser, 'operationalLocationId'>>,
+  ) {
     if (!locationId) {
       return PRODUCT_INCLUDE;
     }
@@ -357,9 +374,32 @@ export class ProductsService {
     return {
       ...PRODUCT_INCLUDE,
       inventoryBalances: {
-        where: { locationId },
+        where: {
+          locationId,
+          location: this.buildLocationScopeWhere(actor),
+        },
+        include: { location: true },
       },
     };
+  }
+
+  private buildLocationScopeWhere(
+    actor: Pick<AuthenticatedUser, 'role'> &
+      Partial<Pick<AuthenticatedUser, 'operationalLocationId'>>,
+  ): Prisma.OperationalLocationWhereInput | undefined {
+    if (actor.role === 'ADMIN') return undefined;
+
+    const locationId = actor.operationalLocationId ?? '__without_location__';
+    if (actor.role === 'WAREHOUSE') {
+      return {
+        OR: [
+          { id: locationId },
+          { parentId: locationId, type: 'BRANCH', isActive: true },
+        ],
+      };
+    }
+
+    return { id: locationId };
   }
 
   private buildPagination(query: ListProductsQueryDto): {
@@ -545,21 +585,21 @@ export class ProductsService {
   private toInventoryBalanceResponse(
     balance: InventoryBalanceRecord,
   ): InventoryBalanceResponse {
-    const quantityKg = this.toNumber(balance.quantityKg);
+    const availability = toInventoryBalanceAvailability(balance);
     const minQuantityKg = this.toNumber(balance.minQuantityKg);
+    const minQuantityPieces = balance.minQuantityPieces ?? 0;
 
     return {
       locationId: balance.locationId,
       ...(balance.location?.name
         ? { locationName: balance.location.name }
         : {}),
-      quantityKg,
-      quantityPieces: balance.quantityPieces,
+      ...availability,
       minQuantityKg,
-      minQuantityPieces: balance.minQuantityPieces,
+      minQuantityPieces,
       isLowStock:
-        quantityKg < minQuantityKg ||
-        balance.quantityPieces < balance.minQuantityPieces,
+        availability.availableQuantityKg < minQuantityKg ||
+        availability.availableQuantityPieces < minQuantityPieces,
     };
   }
 
@@ -568,7 +608,7 @@ export class ProductsService {
   }
 
   private toNumber(value: DecimalLike): number {
-    return Number(value.toString());
+    return value === null || value === undefined ? 0 : Number(value.toString());
   }
 
   private throwDuplicateSkuConflict(error: unknown): void {

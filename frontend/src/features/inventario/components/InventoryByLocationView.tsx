@@ -39,8 +39,12 @@ export function InventoryByLocationView({
                 <tr>
                   <th className={cellClass}>Producto</th>
                   <th className={cellClass}>Ubicación</th>
-                  <th className={cellClass}>Kg</th>
-                  <th className={cellClass}>Piezas</th>
+                  <th className={cellClass}>Físico kg</th>
+                  <th className={cellClass}>Comprometido kg</th>
+                  <th className={cellClass}>Disponible kg</th>
+                  <th className={cellClass}>Físico piezas</th>
+                  <th className={cellClass}>Comprometido piezas</th>
+                  <th className={cellClass}>Disponible piezas</th>
                   <th className={cellClass}>Mínimo kg</th>
                   <th className={cellClass}>Mínimo piezas</th>
                   <th className={cellClass}>Estado</th>
@@ -64,7 +68,19 @@ export function InventoryByLocationView({
                       {balance.quantityKg}
                     </td>
                     <td className={`${cellClass} text-right font-semibold`}>
+                      {balance.reservedQuantityKg}
+                    </td>
+                    <td className={`${cellClass} text-right font-semibold`}>
+                      {balance.availableQuantityKg}
+                    </td>
+                    <td className={`${cellClass} text-right font-semibold`}>
                       {balance.quantityPieces}
+                    </td>
+                    <td className={`${cellClass} text-right font-semibold`}>
+                      {balance.reservedQuantityPieces}
+                    </td>
+                    <td className={`${cellClass} text-right font-semibold`}>
+                      {balance.availableQuantityPieces}
                     </td>
                     <td
                       className={`${cellClass} text-right text-[var(--erp-muted-foreground)]`}

@@ -592,19 +592,24 @@ model ProductUnitEquivalent {
 }
 
 model InventoryBalance {
-  id                String              @id @default(cuid())
-  productId         String
-  locationId        String
-  quantityKg        Decimal             @default(0) @db.Decimal(14, 3)
-  quantityPieces    Int                 @default(0)
-  minQuantityKg     Decimal             @default(0) @db.Decimal(14, 3)
-  minQuantityPieces Int                 @default(0)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  product           Product             @relation(fields: [productId], references: [id])
-  location          OperationalLocation @relation(fields: [locationId], references: [id])
+  id                     String              @id @default(cuid())
+  productId              String
+  locationId             String
+  quantityKg             Decimal             @default(0) @db.Decimal(14, 3)
+  quantityPieces         Int                 @default(0)
+  reservedQuantityKg     Decimal             @default(0) @db.Decimal(14, 3)
+  reservedQuantityPieces Int                 @default(0)
+  minQuantityKg          Decimal             @default(0) @db.Decimal(14, 3)
+  minQuantityPieces      Int                 @default(0)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  product                Product             @relation(fields: [productId], references: [id])
+  location               OperationalLocation @relation(fields: [locationId], references: [id])
 
   @@unique([productId, locationId])
+  @@index([locationId, productId])
+  @@index([productId, locationId, quantityKg, reservedQuantityKg])
+  @@index([productId, locationId, quantityPieces, reservedQuantityPieces])
 }
 
 model Customer {

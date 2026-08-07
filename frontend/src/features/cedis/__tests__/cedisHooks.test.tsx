@@ -89,6 +89,9 @@ describe("CEDIS mutation invalidation", () => {
       queryKey: ["inventory-balances"],
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["products"],
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["reports"],
     });
   });

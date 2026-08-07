@@ -15,6 +15,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import {
   CancelPurchaseDto,
   CreatePurchaseDto,
@@ -147,7 +148,10 @@ const PURCHASE_INCLUDE = {
 
 @Injectable()
 export class PurchasesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly balanceService: InventoryBalanceService,
+  ) {}
 
   async findAll(
     query: ListPurchasesQueryDto = {},
@@ -546,54 +550,25 @@ export class PurchasesService {
     direction: 1 | -1,
     quantities: NormalizedQuantities,
   ): Promise<AppliedBalanceChange> {
-    if (direction === -1) {
-      const updated = await tx.inventoryBalance.updateMany({
-        where: {
-          productId,
-          locationId,
-          quantityKg: { gte: quantities.quantityKg },
-          quantityPieces: { gte: quantities.quantityPieces },
-        },
-        data: {
-          quantityKg: { decrement: quantities.quantityKg },
-          quantityPieces: { decrement: quantities.quantityPieces },
-        },
-      });
-      if (updated.count !== 1)
-        throw new BadRequestException(
-          'Purchase cancellation cannot leave negative stock at receiver location',
-        );
-    } else {
-      await tx.inventoryBalance.upsert({
-        where: { productId_locationId: { productId, locationId } },
-        create: {
-          productId,
-          locationId,
-          quantityKg: quantities.quantityKg,
-          quantityPieces: quantities.quantityPieces,
-        },
-        update: {
-          quantityKg: { increment: quantities.quantityKg },
-          quantityPieces: { increment: quantities.quantityPieces },
-        },
-      });
-    }
+    const change =
+      direction === -1
+        ? await this.balanceService.decreaseAvailable(
+            tx,
+            productId,
+            locationId,
+            quantities,
+            'Purchase cancellation cannot leave negative available stock at receiver location',
+          )
+        : await this.balanceService.increase(
+            tx,
+            productId,
+            locationId,
+            quantities,
+          );
 
-    const balance = await tx.inventoryBalance.findUnique({
-      where: { productId_locationId: { productId, locationId } },
-    });
-    if (!balance)
-      throw new BadRequestException('Inventory balance could not be updated');
-    const newQuantityKg = this.toNumber(balance.quantityKg);
-    const newQuantityPieces = balance.quantityPieces;
     return {
-      previousQuantityKg: this.roundQuantity(
-        newQuantityKg - direction * quantities.quantityKg,
-      ),
-      previousQuantityPieces:
-        newQuantityPieces - direction * quantities.quantityPieces,
-      newQuantityKg,
-      newQuantityPieces,
+      ...change,
+      previousQuantityKg: this.roundQuantity(change.previousQuantityKg),
     };
   }
 

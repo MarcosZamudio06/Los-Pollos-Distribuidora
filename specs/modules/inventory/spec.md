@@ -27,6 +27,12 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 
 - No existe stock global.
 - Toda operación conserva ubicación operativa.
+- `InventoryBalance` representa existencia física en custodia dentro de una ubicación operativa; no representa por sí solo propiedad contable.
+- La propiedad de una sucursal se deriva de su CEDIS padre directo y no requiere un segundo balance ni una ubicación virtual.
+- Una transferencia `REQUESTED` o `IN_TRANSIT` reserva en su origen sin mover físicamente la mercancía.
+- La disponibilidad por dimensión es `quantity - reservedQuantity`; nunca puede ser negativa.
+- Las ventas y los ajustes negativos no pueden consumir mercancía reservada.
+- Las reservas no representan una ubicación física adicional ni se suman otra vez a la existencia o a la propiedad de red.
 - Un CEDIS es una `OperationalLocation` `DISTRIBUTION_CENTER`; sus sucursales
   directas son `BRANCH` con `parentId` igual al CEDIS activo.
 - Las consultas de sucursales CEDIS solo devuelven hijas directas activas y
@@ -39,6 +45,9 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 - Los traspasos vinculados a un ciclo CEDIS conservan las mismas reglas de inventario; el ciclo solo deriva dirección, alcance y trazabilidad.
 - Un suministro del ciclo se crea `REQUESTED` con dirección CEDIS → sucursal; una devolución se crea `REQUESTED` con dirección sucursal → CEDIS.
 - Confirmar o cancelar un traspaso vinculado debe validar que el ciclo no esté `CLOSED` ni `CANCELLED` e invalidar su proyección vigente.
+- Los conflictos de disponibilidad, reserva, idempotencia y concurrencia deben exponer códigos estables en el sobre de error HTTP.
+- `INSUFFICIENT_STOCK`, `INVENTORY_RESERVATION_INTEGRITY_ERROR` e `INVENTORY_CONCURRENCY_CONFLICT` responden `409 Conflict` y no dejan mutaciones parciales.
+- `LOCATION_NOT_AUTHORIZED` responde `403 Forbidden`; `PRODUCT_INACTIVE` y `UNIT_MISMATCH` responden `400 Bad Request`.
 
 ## Permisos
 
@@ -62,6 +71,9 @@ Los ciclos CEDIS se definen en `specs/modules/branch-supply-cycles/spec.md` y `s
 - Presentación semántica visible por producto.
 - Stock por ubicación.
 - Traspasos.
+- Los comandos CEDIS deben consultar la disponibilidad de la ubicación origen y mostrar existencia física, comprometido, disponible, cantidad solicitada, faltante y estado operativo.
+- El formulario debe deshabilitar productos sin disponibilidad, impedir partidas duplicadas y validar KG y PIECE por separado antes de confirmar.
+- Un conflicto de disponibilidad o concurrencia debe conservar el formulario y refrescar los saldos antes del reintento.
 
 ## Pruebas mínimas
 
@@ -74,6 +86,9 @@ Los ciclos CEDIS se definen en `specs/modules/branch-supply-cycles/spec.md` y `s
 - No existe doble decremento en carga más venta de ruta.
 - Reintento idempotente en creación, confirmación y cancelación de traspaso.
 - No se permite stock negativo.
+- No se permite reserva negativa ni reserva mayor que la existencia física.
+- Cancelar una transferencia libera su reserva sin crear movimientos físicos.
+- Confirmar una transferencia consume su reserva y crea los movimientos físicos de salida y entrada en una sola transacción.
 - Varios suministros y devoluciones dentro del mismo ciclo sin vínculos ni movimientos duplicados.
 - Confirmación/cancelación de traspaso vinculado invalida la proyección del ciclo.
 - El dashboard operativo del CEDIS debe mostrar por fecha: recibido de proveedores, enviado a sucursales, devuelto al CEDIS y restante físico total.

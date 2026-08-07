@@ -155,6 +155,7 @@ async function invalidateCedisDependencies(
 ) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: cedisQueryKeys.all }),
+    queryClient.invalidateQueries({ queryKey: ["products"] }),
     queryClient.invalidateQueries({ queryKey: ["inventory-balances"] }),
     queryClient.invalidateQueries({ queryKey: ["inventory-transfers"] }),
     queryClient.invalidateQueries({ queryKey: ["inventory-movements"] }),

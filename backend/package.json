@@ -15,6 +15,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "start:prod": "node dist/backend/src/main",
     "bootstrap:production": "ts-node prisma/bootstrap-production.ts",
+    "inventory:preflight": "ts-node prisma/scripts/cedis-inventory-preflight.ts",
     "seed:development": "prisma db seed",
     "seed:operational": "ts-node prisma/seed.operational.ts",
     "lint": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --fix",

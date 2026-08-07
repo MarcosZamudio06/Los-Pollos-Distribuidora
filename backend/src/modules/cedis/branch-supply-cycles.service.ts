@@ -25,6 +25,10 @@ import {
   InventoryTransfersService,
   TransferResponse,
 } from '../inventory/inventory-transfers.service';
+import {
+  toInventoryBalanceAvailability,
+  type InventoryBalanceAvailability,
+} from '../inventory/inventory-balance.service';
 import { CreateInventoryTransferDto } from '../inventory/dto/create-inventory-transfer.dto';
 import {
   BranchSupplyCycleCommandDto,
@@ -63,6 +67,9 @@ const CYCLE_INCLUDE = {
           originLocation: true,
           destinationLocation: true,
           items: { include: { product: true, unitEquivalent: true } },
+          branchSupplyReceipt: {
+            include: { items: true },
+          },
           inventoryMovements: {
             include: { product: true, location: true },
             orderBy: { createdAt: 'asc' as const },
@@ -315,7 +322,13 @@ export class BranchSupplyCyclesService {
   async findOne(id: string, actor: CycleActor): Promise<CycleResponse> {
     const cycle = await this.findCycle(this.prisma, id);
     this.assertCycleReadScope(cycle, actor);
-    return this.toCycleResponse(cycle, null, this.canViewCosts(actor));
+    const balances = await this.findCycleTransferBalances(cycle);
+    return this.toCycleResponse(
+      cycle,
+      null,
+      this.canViewCosts(actor),
+      balances,
+    );
   }
 
   async createSupply(
@@ -927,6 +940,7 @@ export class BranchSupplyCyclesService {
     role: BranchSupplyTransferRole,
   ) {
     const key = this.requireIdempotencyKey(idempotencyKey);
+    this.assertCycleTransferPermission(actor, role);
     const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey(role, cycleId, key);
 
@@ -975,25 +989,6 @@ export class BranchSupplyCyclesService {
             cycle.status === BranchSupplyCycleStatus.READY_FOR_REVIEW
               ? BranchSupplyCycleStatus.OPEN
               : cycle.status;
-          const updateResult = await tx.branchSupplyCycle.updateMany({
-            where: {
-              id: cycle.id,
-              version: dto.expectedVersion,
-              status: {
-                in: [
-                  BranchSupplyCycleStatus.OPEN,
-                  BranchSupplyCycleStatus.READY_FOR_REVIEW,
-                ],
-              },
-            },
-            data: { version: { increment: 1 }, status: nextStatus },
-          });
-          if (updateResult.count !== 1) {
-            throw this.businessConflict(
-              'BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT',
-              'The branch supply cycle version is stale',
-            );
-          }
 
           const transferDto: CreateInventoryTransferDto = {
             originLocationId:
@@ -1019,6 +1014,27 @@ export class BranchSupplyCyclesService {
             eventKey,
             transferOptions,
           );
+
+          const updateResult = await tx.branchSupplyCycle.updateMany({
+            where: {
+              id: cycle.id,
+              version: dto.expectedVersion,
+              status: {
+                in: [
+                  BranchSupplyCycleStatus.OPEN,
+                  BranchSupplyCycleStatus.READY_FOR_REVIEW,
+                ],
+              },
+            },
+            data: { version: { increment: 1 }, status: nextStatus },
+          });
+          if (updateResult.count !== 1) {
+            throw this.businessConflict(
+              'BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT',
+              'The branch supply cycle version is stale',
+            );
+          }
+
           if (role === BranchSupplyTransferRole.SUPPLY) {
             await this.createInitialProductSnapshots(
               tx,
@@ -1218,10 +1234,30 @@ export class BranchSupplyCyclesService {
           });
         })()
       : Promise.resolve([]);
-    const [sales, dailyCloseRecord, shrinkages] = await Promise.all([
+    const surplusQuery: Promise<ShrinkageRecord[]> = inventoryMovementDelegate
+      ? (() => {
+          const { from, to } = this.operationalDay(cycle.businessDate);
+          return inventoryMovementDelegate.findMany({
+            where: {
+              locationId: cycle.branchLocationId,
+              type: InventoryMovementType.IN,
+              referenceType: 'BRANCH_SUPPLY_RECEIPT',
+              createdAt: { gte: from, lt: to },
+            },
+            select: {
+              id: true,
+              productId: true,
+              quantityKg: true,
+              quantityPieces: true,
+            },
+          });
+        })()
+      : Promise.resolve([]);
+    const [sales, dailyCloseRecord, shrinkages, surpluses] = await Promise.all([
       salesQuery,
       this.findDailyCloseForCycle(tx, cycle),
       shrinkageQuery,
+      surplusQuery,
     ]);
 
     const dailyClose = dailyCloseRecord
@@ -1239,6 +1275,7 @@ export class BranchSupplyCyclesService {
           originLocationId: link.inventoryTransfer.originLocationId,
           destinationLocationId: link.inventoryTransfer.destinationLocationId,
           items: link.inventoryTransfer.items.map((item) => ({
+            id: item.id,
             productId: item.productId,
             productName: item.product.name,
             productSku: item.product.sku,
@@ -1259,6 +1296,17 @@ export class BranchSupplyCyclesService {
             productPrice: item.product.salePrice,
             productCost: item.product.purchaseCost,
           })),
+          receipt: link.inventoryTransfer.branchSupplyReceipt
+            ? {
+                items: link.inventoryTransfer.branchSupplyReceipt.items.map(
+                  (item) => ({
+                    transferItemId: item.transferItemId,
+                    receivedKg: item.receivedKg,
+                    receivedPieces: item.receivedPieces,
+                  }),
+                ),
+              }
+            : null,
           movements: link.inventoryTransfer.inventoryMovements.map(
             (movement) => ({
               productId: movement.productId,
@@ -1301,6 +1349,12 @@ export class BranchSupplyCyclesService {
         roundingModeSnapshot: snapshot.roundingModeSnapshot,
       })),
       shrinkages: shrinkages.map((movement) => ({
+        id: movement.id,
+        productId: movement.productId,
+        quantityKg: movement.quantityKg,
+        quantityPieces: movement.quantityPieces,
+      })),
+      surpluses: surpluses.map((movement) => ({
         id: movement.id,
         productId: movement.productId,
         quantityKg: movement.quantityKg,
@@ -1435,6 +1489,9 @@ export class BranchSupplyCyclesService {
         originLocation: true,
         destinationLocation: true,
         items: { include: { product: true, unitEquivalent: true } },
+        branchSupplyReceipt: {
+          include: { items: true },
+        },
         inventoryMovements: {
           include: { product: true, location: true },
           orderBy: { createdAt: 'asc' },
@@ -1517,6 +1574,19 @@ export class BranchSupplyCyclesService {
     }
   }
 
+  private assertCycleTransferPermission(
+    actor: CycleActor,
+    role: BranchSupplyTransferRole,
+  ): void {
+    const permission =
+      role === BranchSupplyTransferRole.SUPPLY
+        ? PERMISSIONS.CEDIS_DISPATCH
+        : PERMISSIONS.CEDIS_RECEIVE_RETURNS;
+    if (!actor.permissions?.includes(permission)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+  }
+
   private assertAdministrativeActor(actor: CycleActor): void {
     if (actor.role !== 'ADMIN') {
       throw new ForbiddenException({
@@ -1555,12 +1625,16 @@ export class BranchSupplyCyclesService {
     cycle: CycleRecord,
     reconciliation: ReconciliationResult | null = null,
     canViewCosts = true,
+    balanceByItem?: Map<
+      string,
+      (InventoryBalanceAvailability & { locationId: string }) | null
+    >,
   ): CycleResponse {
     const transfers = cycle.transfers.map((link) => ({
       id: link.id,
       role: link.role,
       linkedAt: link.linkedAt,
-      transfer: this.toTransferResponse(link.inventoryTransfer),
+      transfer: this.toTransferResponse(link.inventoryTransfer, balanceByItem),
     }));
     const confirmed = transfers.filter(
       ({ transfer }) => transfer.status === InventoryTransferStatus.CONFIRMED,
@@ -1766,6 +1840,10 @@ export class BranchSupplyCyclesService {
 
   private toTransferResponse(
     transfer: CycleRecord['transfers'][number]['inventoryTransfer'],
+    balanceByItem?: Map<
+      string,
+      (InventoryBalanceAvailability & { locationId: string }) | null
+    >,
   ): TransferResponse {
     return {
       id: transfer.id,
@@ -1794,6 +1872,9 @@ export class BranchSupplyCyclesService {
           ? this.toNumber(item.appliedEquivalentFactor)
           : null,
         roundingMode: item.roundingMode,
+        ...(balanceByItem
+          ? { balance: balanceByItem.get(`${transfer.id}:${item.id}`) ?? null }
+          : {}),
       })),
       movements: transfer.inventoryMovements.map((movement) => ({
         id: movement.id,
@@ -1824,6 +1905,63 @@ export class BranchSupplyCyclesService {
         createdAt: movement.createdAt,
       })),
     };
+  }
+
+  private async findCycleTransferBalances(
+    cycle: CycleRecord,
+  ): Promise<
+    Map<string, (InventoryBalanceAvailability & { locationId: string }) | null>
+  > {
+    const pairs = cycle.transfers.flatMap((link) =>
+      link.inventoryTransfer.items.map((item) => ({
+        key: `${link.inventoryTransfer.id}:${item.id}`,
+        productId: item.productId,
+        locationId: link.inventoryTransfer.originLocationId,
+      })),
+    );
+    if (pairs.length === 0) return new Map();
+
+    const balances = (await this.prisma.inventoryBalance.findMany({
+      where: {
+        OR: pairs.map(({ productId, locationId }) => ({
+          productId,
+          locationId,
+        })),
+      },
+      select: {
+        productId: true,
+        locationId: true,
+        quantityKg: true,
+        quantityPieces: true,
+        reservedQuantityKg: true,
+        reservedQuantityPieces: true,
+      },
+    })) as Array<{
+      productId: string;
+      locationId: string;
+      quantityKg: Prisma.Decimal | number | string | null;
+      quantityPieces: number;
+      reservedQuantityKg: Prisma.Decimal | number | string | null;
+      reservedQuantityPieces: number;
+    }>;
+    const byLocationAndProduct = new Map<
+      string,
+      InventoryBalanceAvailability & { locationId: string }
+    >();
+    for (const balance of balances ?? []) {
+      byLocationAndProduct.set(`${balance.locationId}:${balance.productId}`, {
+        locationId: balance.locationId,
+        ...toInventoryBalanceAvailability(balance),
+      });
+    }
+
+    return new Map(
+      pairs.map((pair) => [
+        pair.key,
+        byLocationAndProduct.get(`${pair.locationId}:${pair.productId}`) ??
+          null,
+      ]),
+    );
   }
 
   private resolveMovementUnit(
@@ -1945,7 +2083,13 @@ export class BranchSupplyCyclesService {
           ['P2002', 'P2034'].includes(
             (error as { code?: unknown }).code as string,
           );
-        if (!retryable || attempt === 3) throw error;
+        if (!retryable) throw error;
+        if (attempt === 3) {
+          throw this.businessConflict(
+            'BRANCH_SUPPLY_CYCLE_CONCURRENCY_CONFLICT',
+            'The cycle operation could not be completed after concurrent retries',
+          );
+        }
       }
     }
     throw this.businessConflict(

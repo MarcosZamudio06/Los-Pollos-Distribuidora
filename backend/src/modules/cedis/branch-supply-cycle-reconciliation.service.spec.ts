@@ -141,6 +141,153 @@ describe('BranchSupplyCycleReconciliationService', () => {
     expect(result.canClose).toBe(true);
   });
 
+  it('accepts a receipt whose incoming movement contains the physically received quantity', () => {
+    const sentSupply = transfer('SUPPLY', 10);
+    const supplyWithReceipt = {
+      ...sentSupply,
+      transfer: {
+        ...sentSupply.transfer,
+        items: [
+          {
+            ...sentSupply.transfer.items[0],
+            id: 'supply-item-1',
+          },
+        ],
+        movements: [
+          sentSupply.transfer.movements[0],
+          {
+            ...sentSupply.transfer.movements[1],
+            quantityPieces: 8,
+          },
+        ],
+        receipt: {
+          items: [
+            {
+              transferItemId: 'supply-item-1',
+              receivedKg: 0,
+              receivedPieces: 8,
+            },
+          ],
+        },
+      },
+    };
+    const result = service.calculate(
+      baseInput({
+        dailyClose: dailyClose({ grossSalesTotal: '500.00' }),
+        transfers: [supplyWithReceipt, transfer('RETURN', 3)],
+        sales: [
+          {
+            id: 'sale-1',
+            status: 'CONFIRMED',
+            total: '500.00',
+            items: [
+              {
+                productId: 'product-1',
+                productName: 'Pollo entero',
+                productSku: 'POLLO-1',
+                productUnit: ProductUnit.PIECE,
+                quantityKg: 0,
+                quantityPieces: 5,
+                total: '500.00',
+                appliedEquivalentFactor: null,
+                equivalent: null,
+              },
+            ],
+          },
+        ],
+        shrinkages: [
+          {
+            id: 'shortage-1',
+            productId: 'product-1',
+            quantityKg: 0,
+            quantityPieces: 2,
+          },
+        ],
+        surpluses: [],
+      }),
+    );
+
+    expect(result.blockers).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'TRANSFER_INTEGRITY_ERROR' }),
+      ]),
+    );
+  });
+
+  it('includes a documented receipt surplus in expected physical delivery', () => {
+    const sentSupply = transfer('SUPPLY', 10);
+    const supplyWithSurplus = {
+      ...sentSupply,
+      transfer: {
+        ...sentSupply.transfer,
+        items: [
+          {
+            ...sentSupply.transfer.items[0],
+            id: 'supply-item-surplus-1',
+          },
+        ],
+        movements: [
+          sentSupply.transfer.movements[0],
+          {
+            ...sentSupply.transfer.movements[1],
+            quantityPieces: 12,
+          },
+        ],
+        receipt: {
+          items: [
+            {
+              transferItemId: 'supply-item-surplus-1',
+              receivedKg: 0,
+              receivedPieces: 12,
+            },
+          ],
+        },
+      },
+    };
+    const result = service.calculate(
+      baseInput({
+        dailyClose: dailyClose({ grossSalesTotal: '1200.00' }),
+        transfers: [supplyWithSurplus],
+        surpluses: [
+          {
+            id: 'surplus-1',
+            productId: 'product-1',
+            quantityKg: 0,
+            quantityPieces: 2,
+          },
+        ],
+        sales: [
+          {
+            id: 'sale-surplus-1',
+            status: 'CONFIRMED',
+            total: '1200.00',
+            items: [
+              {
+                productId: 'product-1',
+                productName: 'Pollo entero',
+                productSku: 'POLLO-1',
+                productUnit: ProductUnit.PIECE,
+                quantityKg: 0,
+                quantityPieces: 12,
+                total: '1200.00',
+                appliedEquivalentFactor: null,
+                equivalent: null,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.items[0].deliveredPieces).toBe(12);
+    expect(result.items[0].differencePieces).toBe(0);
+    expect(result.blockers).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CYCLE_DIFFERENCE_UNEXPLAINED' }),
+      ]),
+    );
+  });
+
   it('aggregates multiple supplies and returns while ignoring a cancelled transfer', () => {
     const cancelledReturn = {
       ...transfer('RETURN', 99),

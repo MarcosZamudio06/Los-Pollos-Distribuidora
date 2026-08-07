@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma, ProductUnit } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { InventoryBalanceService } from './inventory-balance.service';
 import { InventoryTransfersService } from './inventory-transfers.service';
 
 function createPrisma() {
@@ -9,6 +10,7 @@ function createPrisma() {
     operationalLocation: { findUnique: jest.fn() },
     product: { findUnique: jest.fn() },
     productUnitEquivalent: { findUnique: jest.fn() },
+    inventoryBalance: { findMany: jest.fn(), updateMany: jest.fn() },
     inventoryTransfer: { findUnique: jest.fn(), create: jest.fn() },
   };
   prisma.$transaction.mockImplementation(
@@ -23,6 +25,7 @@ describe('InventoryTransfersService equivalences', () => {
     const prisma = createPrisma();
     const service = new InventoryTransfersService(
       prisma as unknown as PrismaService,
+      new InventoryBalanceService(),
     );
     prisma.operationalLocation.findUnique.mockImplementation(
       ({ where }: { where: { id: string } }) =>
@@ -45,6 +48,17 @@ describe('InventoryTransfersService equivalences', () => {
       effectiveTo: null,
       status: 'ACTIVE',
     });
+    prisma.inventoryBalance.findMany.mockResolvedValue([
+      {
+        productId: 'product-1',
+        locationId: 'origin-1',
+        quantityKg: new Prisma.Decimal(20),
+        quantityPieces: 10,
+        reservedQuantityKg: new Prisma.Decimal(0),
+        reservedQuantityPieces: 0,
+      },
+    ]);
+    prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
     prisma.inventoryTransfer.create.mockResolvedValue({
       id: 'transfer-1',
       transferNumber: 'TRF-1',
@@ -104,6 +118,7 @@ describe('InventoryTransfersService equivalences', () => {
     const prisma = createPrisma();
     const service = new InventoryTransfersService(
       prisma as unknown as PrismaService,
+      new InventoryBalanceService(),
     );
     prisma.operationalLocation.findUnique.mockImplementation(
       ({ where }: { where: { id: string } }) =>

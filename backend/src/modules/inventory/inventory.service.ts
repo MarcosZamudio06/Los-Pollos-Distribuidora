@@ -13,6 +13,10 @@ import {
   ListInventoryBalancesQueryDto,
   ListInventoryMovementsQueryDto,
 } from './dto';
+import {
+  InventoryBalanceService,
+  toInventoryBalanceAvailability,
+} from './inventory-balance.service';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -35,6 +39,8 @@ type InventoryBalanceRecord = {
   locationId: string;
   quantityKg: DecimalLike;
   quantityPieces: number;
+  reservedQuantityKg?: DecimalLike;
+  reservedQuantityPieces?: number;
   minQuantityKg?: DecimalLike;
   minQuantityPieces?: number;
   product?: {
@@ -110,6 +116,10 @@ type BalanceResponse = {
   locationName?: string;
   quantityKg: number;
   quantityPieces: number;
+  reservedQuantityKg: number;
+  reservedQuantityPieces: number;
+  availableQuantityKg: number;
+  availableQuantityPieces: number;
   minQuantityKg: number;
   minQuantityPieces: number;
   isLowStock: boolean;
@@ -127,13 +137,6 @@ type NormalizedQuantities = {
   genericQuantity: number;
 };
 
-type AppliedBalanceChange = {
-  previousQuantityKg: number;
-  previousQuantityPieces: number;
-  newQuantityKg: number;
-  newQuantityPieces: number;
-};
-
 const DECREASE_MOVEMENT_TYPES = new Set<InventoryMovementType>([
   'OUT',
   'SALE',
@@ -144,7 +147,10 @@ const DECREASE_MOVEMENT_TYPES = new Set<InventoryMovementType>([
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly balanceService: InventoryBalanceService,
+  ) {}
 
   async findBalances(
     query: ListInventoryBalancesQueryDto,
@@ -202,13 +208,21 @@ export class InventoryService {
           previousQuantityPieces,
           newQuantityKg,
           newQuantityPieces,
-        } = await this.applyAtomicBalanceChange(
-          tx,
-          dto.productId,
-          dto.locationId,
-          direction,
-          quantities,
-        );
+        } =
+          direction === -1
+            ? await this.balanceService.decreaseAvailable(
+                tx,
+                dto.productId,
+                dto.locationId,
+                quantities,
+                'Inventory adjustment cannot leave negative available stock',
+              )
+            : await this.balanceService.increase(
+                tx,
+                dto.productId,
+                dto.locationId,
+                quantities,
+              );
 
         const movement = (await tx.inventoryMovement.create({
           data: {
@@ -410,94 +424,6 @@ export class InventoryService {
     return DECREASE_MOVEMENT_TYPES.has(type) ? -1 : 1;
   }
 
-  private assertNonNegativeBalance(
-    quantityKg: number,
-    quantityPieces: number,
-  ): void {
-    if (quantityKg < 0 || quantityPieces < 0) {
-      throw new BadRequestException(
-        'Inventory adjustment cannot leave negative stock',
-      );
-    }
-  }
-
-  private async applyAtomicBalanceChange(
-    tx: Prisma.TransactionClient,
-    productId: string,
-    locationId: string,
-    direction: 1 | -1,
-    quantities: NormalizedQuantities,
-  ): Promise<AppliedBalanceChange> {
-    if (direction === -1) {
-      const result = await tx.inventoryBalance.updateMany({
-        where: {
-          productId,
-          locationId,
-          quantityKg: { gte: quantities.quantityKg },
-          quantityPieces: { gte: quantities.quantityPieces },
-        },
-        data: {
-          quantityKg: { decrement: quantities.quantityKg },
-          quantityPieces: { decrement: quantities.quantityPieces },
-        },
-      });
-
-      if (result.count !== 1) {
-        throw new BadRequestException(
-          'Inventory adjustment cannot leave negative stock',
-        );
-      }
-    } else {
-      await tx.inventoryBalance.upsert({
-        where: {
-          productId_locationId: {
-            productId,
-            locationId,
-          },
-        },
-        create: {
-          productId,
-          locationId,
-          quantityKg: quantities.quantityKg,
-          quantityPieces: quantities.quantityPieces,
-        },
-        update: {
-          quantityKg: { increment: quantities.quantityKg },
-          quantityPieces: { increment: quantities.quantityPieces },
-        },
-      });
-    }
-
-    const balance = (await tx.inventoryBalance.findUnique({
-      where: {
-        productId_locationId: {
-          productId,
-          locationId,
-        },
-      },
-    })) as InventoryBalanceRecord | null;
-
-    if (!balance) {
-      throw new BadRequestException('Inventory balance could not be updated');
-    }
-
-    const newQuantityKg = this.toNumber(balance.quantityKg);
-    const newQuantityPieces = balance.quantityPieces;
-    const previousQuantityKg =
-      newQuantityKg - direction * quantities.quantityKg;
-    const previousQuantityPieces =
-      newQuantityPieces - direction * quantities.quantityPieces;
-
-    this.assertNonNegativeBalance(newQuantityKg, newQuantityPieces);
-
-    return {
-      previousQuantityKg,
-      previousQuantityPieces,
-      newQuantityKg,
-      newQuantityPieces,
-    };
-  }
-
   private buildMovementWhere(
     query: ListInventoryMovementsQueryDto,
     actor?: InventoryScopeActor,
@@ -591,12 +517,9 @@ export class InventoryService {
   }
 
   private toBalanceResponse(balance: InventoryBalanceRecord): BalanceResponse {
-    const quantityKg = this.toNumber(balance.quantityKg);
-    const quantityPieces = balance.quantityPieces;
+    const availability = toInventoryBalanceAvailability(balance);
     const minQuantityKg = this.toNumber(balance.minQuantityKg);
     const minQuantityPieces = balance.minQuantityPieces ?? 0;
-
-    this.assertNonNegativeBalance(quantityKg, quantityPieces);
 
     return {
       productId: balance.productId,
@@ -605,12 +528,12 @@ export class InventoryService {
       unit: balance.product?.unit,
       locationId: balance.locationId,
       locationName: balance.location?.name,
-      quantityKg,
-      quantityPieces,
+      ...availability,
       minQuantityKg,
       minQuantityPieces,
       isLowStock:
-        quantityKg < minQuantityKg || quantityPieces < minQuantityPieces,
+        availability.availableQuantityKg < minQuantityKg ||
+        availability.availableQuantityPieces < minQuantityPieces,
     };
   }
 

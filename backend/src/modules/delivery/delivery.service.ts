@@ -22,6 +22,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import {
   CreateDeliveryRouteDto,
   AssignDeliveryRouteOrdersDto,
@@ -194,7 +195,10 @@ const INCIDENT_STATUS_REQUIRING_NOTES = new Set<DeliveryOrderStatus>([
 
 @Injectable()
 export class DeliveryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly balanceService: InventoryBalanceService,
+  ) {}
 
   async findRoutes(query: ListDeliveryRoutesQueryDto = {}, currentUser: Actor) {
     const where = this.buildRouteWhere(query, currentUser);
@@ -1588,32 +1592,17 @@ export class DeliveryService {
       );
     }
 
-    const balance = await tx.inventoryBalance.upsert({
-      where: {
-        productId_locationId: {
-          productId: params.item.productId,
-          locationId: params.routeStockLocationId,
-        },
-      },
-      update: {
-        quantityKg: { increment: quantityKg },
-        quantityPieces: { increment: quantityPieces },
-      },
-      create: {
-        productId: params.item.productId,
-        locationId: params.routeStockLocationId,
-        quantityKg,
-        quantityPieces,
-      },
-    });
-
-    const newQuantityKg = this.toNumber(
-      (balance as { quantityKg?: DecimalLike }).quantityKg,
+    const {
+      previousQuantityKg,
+      previousQuantityPieces,
+      newQuantityKg,
+      newQuantityPieces,
+    } = await this.balanceService.increase(
+      tx,
+      params.item.productId,
+      params.routeStockLocationId,
+      { quantityKg, quantityPieces },
     );
-    const newQuantityPieces =
-      (balance as { quantityPieces?: number }).quantityPieces ?? 0;
-    const previousQuantityKg = this.roundQuantity(newQuantityKg - quantityKg);
-    const previousQuantityPieces = newQuantityPieces - quantityPieces;
 
     return tx.inventoryMovement.create({
       data: {

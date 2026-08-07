@@ -10,6 +10,10 @@ import { toMoneyString, Money } from '../../../../shared/money';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import {
+  toInventoryBalanceAvailability,
+  type InventoryBalanceAvailability,
+} from '../inventory/inventory-balance.service';
 import { CedisBranchHistoryQueryDto, CedisDashboardQueryDto } from './dto';
 
 type QueryActor = Pick<
@@ -494,6 +498,7 @@ export class CedisDashboardQueryService {
     const items = cycle.items.filter(
       (item) => item.cycleVersion === itemVersion,
     );
+    const transferBalances = await this.findTransferBalances(cycle.transfers);
     const lastActivityAt = this.lastActivityDate(cycle);
     const generatedAt = new Date();
 
@@ -507,7 +512,9 @@ export class CedisDashboardQueryService {
       distributionCenter: this.toLocation(cycle.distributionCenterLocation),
       totals: this.toTotals(cycle, canViewCosts),
       items: items.map((item) => this.toDetailItem(item, canViewCosts)),
-      transfers: cycle.transfers.map((link) => this.toTransfer(link)),
+      transfers: cycle.transfers.map((link) =>
+        this.toTransfer(link, transferBalances),
+      ),
       dailyClose: cycle.pointOfSaleDailyClose
         ? this.toDailyClose(cycle.pointOfSaleDailyClose, canViewCosts)
         : null,
@@ -906,7 +913,13 @@ export class CedisDashboardQueryService {
     return result;
   }
 
-  private toTransfer(link: DetailTransferLinkRecord) {
+  private toTransfer(
+    link: DetailTransferLinkRecord,
+    balanceByItem?: Map<
+      string,
+      (InventoryBalanceAvailability & { locationId: string }) | null
+    >,
+  ) {
     const transfer = link.inventoryTransfer;
     return {
       id: link.id,
@@ -930,6 +943,11 @@ export class CedisDashboardQueryService {
           unit: item.unit,
           quantityKg: this.nullableQuantity(item.quantityKg),
           quantityPieces: item.quantityPieces,
+          ...(balanceByItem
+            ? {
+                balance: balanceByItem.get(`${transfer.id}:${item.id}`) ?? null,
+              }
+            : {}),
         })),
         receipt: transfer.branchSupplyReceipt
           ? {
@@ -953,6 +971,63 @@ export class CedisDashboardQueryService {
           : null,
       },
     };
+  }
+
+  private async findTransferBalances(
+    links: DetailTransferLinkRecord[],
+  ): Promise<
+    Map<string, (InventoryBalanceAvailability & { locationId: string }) | null>
+  > {
+    const pairs = links.flatMap((link) =>
+      link.inventoryTransfer.items.map((item) => ({
+        key: `${link.inventoryTransfer.id}:${item.id}`,
+        productId: item.productId,
+        locationId: link.inventoryTransfer.originLocationId,
+      })),
+    );
+    if (pairs.length === 0) return new Map();
+
+    const balances = (await this.prisma.inventoryBalance.findMany({
+      where: {
+        OR: pairs.map(({ productId, locationId }) => ({
+          productId,
+          locationId,
+        })),
+      },
+      select: {
+        productId: true,
+        locationId: true,
+        quantityKg: true,
+        quantityPieces: true,
+        reservedQuantityKg: true,
+        reservedQuantityPieces: true,
+      },
+    })) as Array<{
+      productId: string;
+      locationId: string;
+      quantityKg: DecimalLike;
+      quantityPieces: number;
+      reservedQuantityKg: DecimalLike;
+      reservedQuantityPieces: number;
+    }>;
+    const byLocationAndProduct = new Map<
+      string,
+      InventoryBalanceAvailability & { locationId: string }
+    >();
+    for (const balance of balances ?? []) {
+      byLocationAndProduct.set(`${balance.locationId}:${balance.productId}`, {
+        locationId: balance.locationId,
+        ...toInventoryBalanceAvailability(balance),
+      });
+    }
+
+    return new Map(
+      pairs.map((pair) => [
+        pair.key,
+        byLocationAndProduct.get(`${pair.locationId}:${pair.productId}`) ??
+          null,
+      ]),
+    );
   }
 
   private toDailyClose(close: DetailDailyCloseRecord, canViewCosts: boolean) {
