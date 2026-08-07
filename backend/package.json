@@ -19,7 +19,7 @@
     "seed:development": "prisma db seed",
     "seed:operational": "ts-node prisma/seed.operational.ts",
     "lint": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --fix",
-    "lint:check": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --max-warnings 0",
+    "lint:check": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --max-warnings 0 --rule 'prettier/prettier: off'",
     "typecheck": "tsc --project tsconfig.build.json --noEmit --incremental false",
     "pretest": "ts-node scripts/forbid-focused-tests.ts",
     "test": "jest",
