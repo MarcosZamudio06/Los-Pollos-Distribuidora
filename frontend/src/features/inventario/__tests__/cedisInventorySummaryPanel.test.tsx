@@ -47,18 +47,18 @@ vi.mock("../hooks/useProducts", () => {
   };
 
   return {
-  useInventoryLocations: () => ({
-    data: [
-      { id: "cedis-1", name: "Matriz CEDIS", type: "DISTRIBUTION_CENTER" },
-    ],
-    error: null,
-    isLoading: false,
-  }),
-  useCedisInventorySummary: () => ({
-    data: mockSummary.empty ? { ...data, items: [] } : data,
-    error: null,
-    isLoading: false,
-  }),
+    useInventoryLocations: () => ({
+      data: [
+        { id: "cedis-1", name: "Matriz CEDIS", type: "DISTRIBUTION_CENTER" },
+      ],
+      error: null,
+      isLoading: false,
+    }),
+    useCedisInventorySummary: () => ({
+      data: mockSummary.empty ? { ...data, items: [] } : data,
+      error: null,
+      isLoading: false,
+    }),
   };
 });
 

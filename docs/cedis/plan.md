@@ -1,4 +1,3 @@
-
 # Plan de Inventario CEDIS y Sucursales
 
 ## Propósito
@@ -21,13 +20,13 @@ Este documento es un plan de implementación. Antes de modificar código se debe
 
 El CEDIS es el padre de la red y cada sucursal es una hija directa.
 
-| Concepto | Definición | Ubicación de referencia |
-|---|---|---|
-| Propiedad contable | Mercancía que pertenece al CEDIS, esté físicamente en el CEDIS o en una sucursal en custodia | Se calcula desde la relación CEDIS → sucursales |
-| Existencia física | Mercancía realmente ubicada en una operación | `InventoryBalance` por producto y ubicación |
-| Mercancía comprometida | Existencia física apartada para transferencias pendientes | Reserva sobre `InventoryBalance` |
-| Disponible para surtir | Existencia física no comprometida | Disponible del origen |
-| Custodia de sucursal | Mercancía recibida por una sucursal, disponible para vender o devolver | `InventoryBalance` de la sucursal |
+| Concepto               | Definición                                                                                   | Ubicación de referencia                         |
+| ---------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Propiedad contable     | Mercancía que pertenece al CEDIS, esté físicamente en el CEDIS o en una sucursal en custodia | Se calcula desde la relación CEDIS → sucursales |
+| Existencia física      | Mercancía realmente ubicada en una operación                                                 | `InventoryBalance` por producto y ubicación     |
+| Mercancía comprometida | Existencia física apartada para transferencias pendientes                                    | Reserva sobre `InventoryBalance`                |
+| Disponible para surtir | Existencia física no comprometida                                                            | Disponible del origen                           |
+| Custodia de sucursal   | Mercancía recibida por una sucursal, disponible para vender o devolver                       | `InventoryBalance` de la sucursal               |
 
 No se debe crear un campo `Product.stock`, un stock global ni un segundo agregado de inventario.
 
@@ -122,13 +121,13 @@ La mercancía reservada permanece dentro de `quantityKg` o `quantityPieces`; no 
 
 ### Estados y reservas
 
-| Estado de transferencia | Existencia física | Reserva |
-|---|---|---|
-| `DRAFT` | Sin cambio | No mantiene reserva |
-| `REQUESTED` | Sin cambio | Reserva activa en el origen |
-| `IN_TRANSIT` | Sin cambio en el modelo actual | Reserva activa en el origen |
-| `CONFIRMED` | Sale del origen y entra al destino | La reserva se consume |
-| `CANCELLED` | Sin cambio | La reserva se libera |
+| Estado de transferencia | Existencia física                  | Reserva                     |
+| ----------------------- | ---------------------------------- | --------------------------- |
+| `DRAFT`                 | Sin cambio                         | No mantiene reserva         |
+| `REQUESTED`             | Sin cambio                         | Reserva activa en el origen |
+| `IN_TRANSIT`            | Sin cambio en el modelo actual     | Reserva activa en el origen |
+| `CONFIRMED`             | Sale del origen y entra al destino | La reserva se consume       |
+| `CANCELLED`             | Sin cambio                         | La reserva se libera        |
 
 Mientras una transferencia esté pendiente, la mercancía continúa físicamente en su origen. La reserva impide que otra operación la asigne o venda.
 

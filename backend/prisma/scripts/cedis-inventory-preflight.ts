@@ -7,7 +7,9 @@ import {
 
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL?.trim()) {
-    throw new Error('DATABASE_URL is required for the CEDIS inventory preflight');
+    throw new Error(
+      'DATABASE_URL is required for the CEDIS inventory preflight',
+    );
   }
 
   const prisma = new PrismaClient();
