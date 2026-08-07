@@ -53,6 +53,22 @@ class SecurityTestController {
     throw new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS');
   }
 
+  @Get('structured-conflict')
+  structuredConflict(): never {
+    throw new ConflictException({
+      code: 'INSUFFICIENT_STOCK',
+      message: 'Origin location does not have sufficient available stock',
+      findings: [
+        {
+          productId: 'product-1',
+          requestedKg: 25,
+          availableKg: 20,
+          shortageKg: 5,
+        },
+      ],
+    });
+  }
+
   @Get('ip')
   clientIp(@Req() request: Request) {
     return { ip: request.ip };
@@ -228,6 +244,30 @@ describe('configureHttpApplication', () => {
             code: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
             error: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
             message: 'DAILY_CLOSE_HAS_OPEN_SHIFTS',
+          }),
+        );
+      });
+  });
+
+  it('preserves structured operational findings on a 409 response', async () => {
+    await request(app.getHttpServer())
+      .get('/api/security-test/structured-conflict')
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            success: false,
+            code: 'INSUFFICIENT_STOCK',
+            error: 'INSUFFICIENT_STOCK',
+            statusCode: 409,
+            findings: [
+              {
+                productId: 'product-1',
+                requestedKg: 25,
+                availableKg: 20,
+                shortageKg: 5,
+              },
+            ],
           }),
         );
       });

@@ -115,7 +115,32 @@ export function CedisInventorySummaryPanel() {
         </p>
       ) : summaryData ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <SummaryMetric
+              icon={PackageCheck}
+              label="Existencia física en CEDIS"
+              value={formatQuantity(summaryData.totals.physicalAtCedis)}
+            />
+            <SummaryMetric
+              icon={PackageCheck}
+              label="Comprometido para despacho"
+              value={formatQuantity(summaryData.totals.reservedAtCedis)}
+            />
+            <SummaryMetric
+              icon={PackageCheck}
+              label="Disponible para surtir"
+              value={formatQuantity(summaryData.totals.availableToDispatch)}
+            />
+            <SummaryMetric
+              icon={PackageCheck}
+              label="Existencia en custodia de sucursales"
+              value={formatQuantity(summaryData.totals.inBranchCustody)}
+            />
+            <SummaryMetric
+              icon={PackageCheck}
+              label="Propiedad total de la red CEDIS"
+              value={formatQuantity(summaryData.totals.ownedNetworkTotal)}
+            />
             <SummaryMetric
               icon={Truck}
               label="Recibido de proveedores"
@@ -137,50 +162,76 @@ export function CedisInventorySummaryPanel() {
               value={formatQuantity(summaryData.totals.remaining)}
             />
           </div>
-          <div className="overflow-x-auto rounded-2xl border border-[var(--erp-border)]">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-[var(--erp-surface-muted)] text-[11px] uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
-                <tr>
-                  <th className="px-4 py-3">Producto</th>
-                  <th className="px-4 py-3">Apertura</th>
-                  <th className="px-4 py-3">Recibido</th>
-                  <th className="px-4 py-3">Enviado</th>
-                  <th className="px-4 py-3">Devuelto</th>
-                  <th className="px-4 py-3">Restante</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summaryData.items.map((item) => (
-                  <tr
-                    className="border-t border-[var(--erp-border)]"
-                    key={item.productId}
-                  >
-                    <td className="px-4 py-3 font-semibold">
-                      {item.productName}
-                      <span className="ml-2 text-xs text-[var(--erp-muted-foreground)]">
-                        {item.sku ?? item.unit}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      {formatQuantity(item.opening)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      {formatQuantity(item.receivedFromSuppliers)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      {formatQuantity(item.sentToBranches)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      {formatQuantity(item.returnedFromBranches)}
-                    </td>
-                    <td className="px-4 py-3 font-black tabular-nums">
-                      {formatQuantity(item.remaining)}
-                    </td>
+          {summaryData.items.length > 0 ? (
+            <div className="overflow-x-auto rounded-2xl border border-[var(--erp-border)]">
+              <table className="min-w-[1200px] text-left text-sm">
+                <thead className="bg-[var(--erp-surface-muted)] text-[11px] uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+                  <tr>
+                    <th className="px-4 py-3">Producto</th>
+                    <th className="px-4 py-3">Apertura</th>
+                    <th className="px-4 py-3">Físico CEDIS</th>
+                    <th className="px-4 py-3">Comprometido</th>
+                    <th className="px-4 py-3">Disponible</th>
+                    <th className="px-4 py-3">Custodia sucursales</th>
+                    <th className="px-4 py-3">Propiedad de red</th>
+                    <th className="px-4 py-3">Recibido</th>
+                    <th className="px-4 py-3">Enviado</th>
+                    <th className="px-4 py-3">Devuelto</th>
+                    <th className="px-4 py-3">Restante</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {summaryData.items.map((item) => (
+                    <tr
+                      className="border-t border-[var(--erp-border)]"
+                      key={item.productId}
+                    >
+                      <td className="px-4 py-3 font-semibold">
+                        {item.productName}
+                        <span className="ml-2 text-xs text-[var(--erp-muted-foreground)]">
+                          {item.sku ?? item.unit}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.opening)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.physicalAtCedis)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.reservedAtCedis)}
+                      </td>
+                      <td className="px-4 py-3 font-black tabular-nums">
+                        {formatQuantity(item.availableToDispatch)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.inBranchCustody)}
+                      </td>
+                      <td className="px-4 py-3 font-black tabular-nums">
+                        {formatQuantity(item.ownedNetworkTotal)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.receivedFromSuppliers)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.sentToBranches)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatQuantity(item.returnedFromBranches)}
+                      </td>
+                      <td className="px-4 py-3 font-black tabular-nums">
+                        {formatQuantity(item.remaining)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-xl border border-dashed border-[var(--erp-border)] p-4 text-sm text-[var(--erp-muted-foreground)]">
+              No hay productos en el resumen del CEDIS.
+            </p>
+          )}
         </>
       ) : (
         <p className="rounded-xl border border-[var(--erp-border)] p-3 text-sm text-[var(--erp-muted-foreground)]">

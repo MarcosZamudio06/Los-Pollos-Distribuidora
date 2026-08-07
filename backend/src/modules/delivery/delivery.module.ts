@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
+import { InventoryModule } from '../inventory/inventory.module';
 import { DeliveryController } from './delivery.controller';
 import { DeliveryOrdersController } from './delivery-orders.controller';
 import { RouteSettlementsController } from './route-settlements.controller';
@@ -13,7 +14,7 @@ import { RoutingTechnicalStatusController } from './routing-technical-status.con
 import { RoutingTechnicalStatusService } from './routing-technical-status.service';
 
 @Module({
-  imports: [AuthModule, ConfigModule],
+  imports: [AuthModule, ConfigModule, InventoryModule],
   controllers: [
     DeliveryController,
     DeliveryOrdersController,

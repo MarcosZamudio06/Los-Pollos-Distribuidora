@@ -3,11 +3,7 @@ import { ProductUnit } from '@prisma/client';
 import { Money } from '../../../../shared/money';
 
 export type ReconciliationDecimal =
-  | number
-  | string
-  | { toString(): string }
-  | null
-  | undefined;
+  number | string | { toString(): string } | null | undefined;
 
 export type ReconciliationBlockerPhase = 'READY_FOR_REVIEW' | 'CLOSED';
 
@@ -27,6 +23,7 @@ export type ReconciliationTransferMovement = {
 };
 
 export type ReconciliationTransferItem = {
+  id?: string;
   productId: string;
   productName: string;
   productSku: string | null;
@@ -46,6 +43,12 @@ export type ReconciliationTransferItem = {
   productCost?: ReconciliationDecimal;
 };
 
+export type ReconciliationReceiptItem = {
+  transferItemId: string;
+  receivedKg: ReconciliationDecimal;
+  receivedPieces: number | null | undefined;
+};
+
 export type ReconciliationTransfer = {
   id: string;
   status: string;
@@ -53,6 +56,7 @@ export type ReconciliationTransfer = {
   destinationLocationId: string;
   items: ReconciliationTransferItem[];
   movements: ReconciliationTransferMovement[];
+  receipt?: { items: ReconciliationReceiptItem[] } | null;
 };
 
 export type ReconciliationTransferLink = {
@@ -156,6 +160,7 @@ export type ReconciliationInput = {
   sales: ReconciliationSale[];
   productSnapshots: ReconciliationProductSnapshot[];
   shrinkages: ReconciliationShrinkage[];
+  surpluses?: ReconciliationShrinkage[];
 };
 
 export type ReconciliationItem = {
@@ -458,6 +463,45 @@ export class BranchSupplyCycleReconciliationService {
             }
           : null,
         shrinkage.productId,
+        blockers,
+      );
+    }
+
+    for (const surplus of input.surpluses ?? []) {
+      const snapshot = snapshots.get(surplus.productId);
+      const aggregate = this.aggregateForItem(
+        aggregates,
+        snapshots,
+        surplus.productId,
+        snapshot?.productNameSnapshot ?? surplus.productId,
+        snapshot?.productSkuSnapshot ?? null,
+        snapshot?.productUnitSnapshot ?? ProductUnit.KG,
+        undefined,
+        undefined,
+        blockers,
+      );
+      const quantity = this.physicalQuantity(
+        surplus.quantityKg,
+        surplus.quantityPieces,
+        surplus.productId,
+        blockers,
+      );
+      aggregate.deliveredKg += quantity.kg;
+      aggregate.deliveredPieces += quantity.pieces;
+      aggregate.expectedValueQuantity += this.valuationQuantity(
+        aggregate.productUnitSnapshot,
+        quantity.kg,
+        quantity.pieces,
+        aggregate.appliedEquivalentFactorSnapshot,
+        aggregate.equivalenceFromUnitSnapshot &&
+          aggregate.equivalenceToUnitSnapshot
+          ? {
+              unitFrom: aggregate.equivalenceFromUnitSnapshot,
+              unitTo: aggregate.equivalenceToUnitSnapshot,
+              factor: aggregate.appliedEquivalentFactorSnapshot,
+            }
+          : null,
+        surplus.productId,
         blockers,
       );
     }
@@ -1050,16 +1094,48 @@ export class BranchSupplyCycleReconciliationService {
           },
           { kg: 0, pieces: 0, count: 0 },
         );
+      const incomingItemTotals = transfer.items
+        .filter((item) => item.productId === productId)
+        .reduce(
+          (total, item) => {
+            const receiptItem =
+              role === 'SUPPLY' && transfer.receipt
+                ? transfer.receipt.items.find(
+                    (candidate) => candidate.transferItemId === item.id,
+                  )
+                : null;
+            if (role === 'SUPPLY' && transfer.receipt && !receiptItem) {
+              return total;
+            }
+            const quantity = this.physicalQuantity(
+              receiptItem?.receivedKg ?? item.quantityKg,
+              receiptItem?.receivedPieces ?? item.quantityPieces,
+              item.productId,
+              blockers,
+            );
+            return {
+              kg: total.kg + quantity.kg,
+              pieces: total.pieces + quantity.pieces,
+              count: total.count + 1,
+            };
+          },
+          { kg: 0, pieces: 0, count: 0 },
+        );
+
       for (const type of ['TRANSFER_OUT', 'TRANSFER_IN']) {
         const movementTotals = expected.get(`${type}:${productId}`) ?? {
           kg: 0,
           pieces: 0,
           count: 0,
         };
+        const expectedTotals =
+          type === 'TRANSFER_IN' && role === 'SUPPLY'
+            ? incomingItemTotals
+            : itemTotals;
         if (
-          movementTotals.count !== itemTotals.count ||
-          !this.sameQuantity(movementTotals.kg, itemTotals.kg) ||
-          movementTotals.pieces !== itemTotals.pieces
+          movementTotals.count !== expectedTotals.count ||
+          !this.sameQuantity(movementTotals.kg, expectedTotals.kg) ||
+          movementTotals.pieces !== expectedTotals.pieces
         )
           return false;
       }

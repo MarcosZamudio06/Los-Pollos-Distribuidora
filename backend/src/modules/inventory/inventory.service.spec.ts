@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { CreateInventoryAdjustmentDto } from './dto';
+import { InventoryBalanceService } from './inventory-balance.service';
 import { InventoryService } from './inventory.service';
 
 type MockPrisma = {
@@ -51,7 +52,10 @@ function createService(prisma = createPrisma()): {
   prisma: MockPrisma;
 } {
   return {
-    service: new InventoryService(prisma as unknown as PrismaService),
+    service: new InventoryService(
+      prisma as unknown as PrismaService,
+      new InventoryBalanceService(),
+    ),
     prisma,
   };
 }
@@ -71,15 +75,29 @@ describe('InventoryService', () => {
       isActive: true,
     });
     prisma.inventoryBalance.upsert.mockResolvedValue({});
-    prisma.inventoryBalance.findUnique.mockResolvedValue({
-      id: 'balance-1',
-      productId: 'product-1',
-      locationId: 'location-1',
-      quantityKg: decimal('10.000'),
-      quantityPieces: 0,
-      minQuantityKg: decimal(0),
-      minQuantityPieces: 0,
-    });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal('7.500'),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(0),
+        minQuantityPieces: 0,
+      })
+      .mockResolvedValueOnce({
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal('10.000'),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(0),
+        minQuantityPieces: 0,
+      });
     prisma.inventoryMovement.create.mockImplementation(
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({
@@ -180,6 +198,38 @@ describe('InventoryService', () => {
     );
   });
 
+  it('marks a balance low when its available stock is below the minimum', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryBalance.findMany.mockResolvedValue([
+      {
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal(10),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(8),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(5),
+        minQuantityPieces: 0,
+        product: { name: 'Pechuga', sku: 'SKU-1', unit: ProductUnit.KG },
+        location: { name: 'Matriz' },
+      },
+    ]);
+
+    await expect(
+      service.findBalances({ locationId: 'location-1' }),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          quantityKg: 10,
+          reservedQuantityKg: 8,
+          availableQuantityKg: 2,
+          isLowStock: true,
+        }),
+      ],
+    });
+  });
+
   it('rejects manual adjustments without a reason before changing balances', async () => {
     const { service, prisma } = createService();
 
@@ -214,6 +264,15 @@ describe('InventoryService', () => {
       isActive: true,
     });
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      id: 'balance-1',
+      productId: 'product-1',
+      locationId: 'location-1',
+      quantityKg: decimal(2),
+      quantityPieces: 0,
+      reservedQuantityKg: decimal(0),
+      reservedQuantityPieces: 0,
+    });
 
     await expect(
       service.createAdjustment(
@@ -227,9 +286,56 @@ describe('InventoryService', () => {
         },
         'user-1',
       ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
+    });
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative adjustment when reservations leave less available stock than requested', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1',
+      name: 'Pechuga',
+      unit: ProductUnit.KG,
+      isActive: true,
+    });
+    prisma.operationalLocation.findUnique.mockResolvedValue({
+      id: 'location-1',
+      name: 'Matriz',
+      isActive: true,
+    });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      id: 'balance-1',
+      productId: 'product-1',
+      locationId: 'location-1',
+      quantityKg: decimal(10),
+      quantityPieces: 0,
+      reservedQuantityKg: decimal(8),
+      reservedQuantityPieces: 0,
+    });
+    prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.createAdjustment(
+        {
+          productId: 'product-1',
+          locationId: 'location-1',
+          type: InventoryMovementType.SHRINKAGE,
+          unit: ProductUnit.KG,
+          quantityKg: 3,
+          reason: 'Spoilage found during count',
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'INSUFFICIENT_STOCK',
+      }),
+    });
+
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
   });
 
@@ -247,15 +353,29 @@ describe('InventoryService', () => {
       isActive: true,
     });
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
-    prisma.inventoryBalance.findUnique.mockResolvedValue({
-      id: 'balance-1',
-      productId: 'product-1',
-      locationId: 'location-1',
-      quantityKg: decimal(3),
-      quantityPieces: 0,
-      minQuantityKg: decimal(0),
-      minQuantityPieces: 0,
-    });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal(5),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(1),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(0),
+        minQuantityPieces: 0,
+      })
+      .mockResolvedValueOnce({
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal(3),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(1),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(0),
+        minQuantityPieces: 0,
+      });
     prisma.inventoryMovement.create.mockImplementation(
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({
@@ -283,8 +403,10 @@ describe('InventoryService', () => {
       where: {
         productId: 'product-1',
         locationId: 'location-1',
-        quantityKg: { gte: 2 },
+        quantityKg: { gte: 3 },
         quantityPieces: { gte: 0 },
+        reservedQuantityKg: 1,
+        reservedQuantityPieces: 0,
       },
       data: {
         quantityKg: { decrement: 2 },
@@ -316,6 +438,15 @@ describe('InventoryService', () => {
       isActive: true,
     });
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      id: 'balance-1',
+      productId: 'product-1',
+      locationId: 'location-1',
+      quantityKg: decimal(2),
+      quantityPieces: 0,
+      reservedQuantityKg: decimal(0),
+      reservedQuantityPieces: 0,
+    });
 
     await expect(
       service.createAdjustment(
@@ -329,7 +460,11 @@ describe('InventoryService', () => {
         },
         'user-1',
       ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'INVENTORY_CONCURRENCY_CONFLICT',
+      }),
+    });
 
     expect(prisma.inventoryBalance.updateMany).toHaveBeenCalledWith({
       where: {
@@ -337,6 +472,8 @@ describe('InventoryService', () => {
         locationId: 'location-1',
         quantityKg: { gte: 2 },
         quantityPieces: { gte: 0 },
+        reservedQuantityKg: 0,
+        reservedQuantityPieces: 0,
       },
       data: {
         quantityKg: { decrement: 2 },
@@ -360,15 +497,29 @@ describe('InventoryService', () => {
       isActive: true,
     });
     prisma.inventoryBalance.upsert.mockResolvedValue({});
-    prisma.inventoryBalance.findUnique.mockResolvedValue({
-      id: 'balance-1',
-      productId: 'product-1',
-      locationId: 'location-1',
-      quantityKg: decimal(10),
-      quantityPieces: 0,
-      minQuantityKg: decimal(0),
-      minQuantityPieces: 0,
-    });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal(7.5),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(0),
+        minQuantityPieces: 0,
+      })
+      .mockResolvedValueOnce({
+        id: 'balance-1',
+        productId: 'product-1',
+        locationId: 'location-1',
+        quantityKg: decimal(10),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+        minQuantityKg: decimal(0),
+        minQuantityPieces: 0,
+      });
     prisma.inventoryMovement.create.mockImplementation(
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({
@@ -579,6 +730,8 @@ describe('InventoryService', () => {
         locationId: 'location-1',
         quantityKg: decimal(8),
         quantityPieces: 0,
+        reservedQuantityKg: decimal(3),
+        reservedQuantityPieces: 0,
         minQuantityKg: decimal(10),
         minQuantityPieces: 0,
         product: {
@@ -594,6 +747,8 @@ describe('InventoryService', () => {
         locationId: 'location-2',
         quantityKg: decimal(20),
         quantityPieces: 0,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
         minQuantityKg: decimal(10),
         minQuantityPieces: 0,
         product: {
@@ -630,6 +785,8 @@ describe('InventoryService', () => {
         productId: 'product-1',
         locationId: 'location-1',
         quantityKg: 8,
+        reservedQuantityKg: 3,
+        availableQuantityKg: 5,
         minQuantityKg: 10,
         isLowStock: true,
       }),
@@ -637,6 +794,8 @@ describe('InventoryService', () => {
         productId: 'product-1',
         locationId: 'location-2',
         quantityKg: 20,
+        reservedQuantityKg: 0,
+        availableQuantityKg: 20,
         isLowStock: false,
       }),
     ]);

@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma, ProductUnit } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import { InventoryTransfersService } from '../inventory/inventory-transfers.service';
@@ -200,6 +201,82 @@ describe('BranchSupplyReceiptsService', () => {
       'receipt-key-1',
       expect.objectContaining({ receiptId: expect.any(String) }),
     );
+  });
+
+  it('replays an idempotent receipt without delegating inventory or versioning again', async () => {
+    const prisma = createPrisma();
+    const inventoryTransfers = {
+      receiveSupply: jest.fn().mockResolvedValue({ status: 'CONFIRMED' }),
+    } as unknown as jest.Mocked<
+      Pick<InventoryTransfersService, 'receiveSupply'>
+    >;
+    const service = new BranchSupplyReceiptsService(
+      prisma as unknown as PrismaService,
+      inventoryTransfers as unknown as InventoryTransfersService,
+    );
+    const link = createLink();
+    const receivedBy = { id: seller.id, name: 'Vendedor' };
+    const receipt = {
+      id: 'receipt-1',
+      receivedAt: businessDate,
+      notes: null,
+      receivedBy,
+      items: [
+        {
+          transferItemId: 'transfer-item-1',
+          productId: 'product-1',
+          productNameSnapshot: 'Pollo entero',
+          unit: ProductUnit.KG,
+          sentKg: new Prisma.Decimal('10.000'),
+          sentPieces: 0,
+          receivedKg: new Prisma.Decimal('10.000'),
+          receivedPieces: 0,
+          differenceKg: new Prisma.Decimal('0.000'),
+          differencePieces: 0,
+        },
+      ],
+    };
+    const confirmedLink = {
+      ...link,
+      inventoryTransfer: {
+        ...link.inventoryTransfer,
+        status: 'CONFIRMED',
+        branchSupplyReceipt: receipt,
+      },
+    };
+    const body = {
+      expectedCycleVersion: 2,
+      items: [{ transferItemId: 'transfer-item-1', quantityKg: 10 }],
+    };
+    const payloadHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          transferId: 'transfer-1',
+          dto: body,
+          actorId: seller.id,
+        }),
+      )
+      .digest('hex');
+    prisma.branchSupplyReceipt.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: receipt.id,
+        payloadHash,
+        receivedBy,
+        items: receipt.items,
+      });
+    prisma.branchSupplyCycleTransfer.findUnique
+      .mockResolvedValueOnce(link)
+      .mockResolvedValueOnce(confirmedLink)
+      .mockResolvedValueOnce(confirmedLink);
+    prisma.branchSupplyReceipt.create.mockResolvedValue({ id: receipt.id });
+
+    await service.receive('transfer-1', body, seller, 'receipt-replay-key');
+    await service.receive('transfer-1', body, seller, 'receipt-replay-key');
+
+    expect(inventoryTransfers.receiveSupply).toHaveBeenCalledTimes(1);
+    expect(prisma.branchSupplyReceipt.create).toHaveBeenCalledTimes(1);
+    expect(prisma.branchSupplyReceiptItem.createMany).toHaveBeenCalledTimes(1);
   });
 
   it('blocks a seller from another branch', async () => {

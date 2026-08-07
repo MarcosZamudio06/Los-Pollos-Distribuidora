@@ -35,16 +35,40 @@ describe('CedisInventorySummaryQueryService', () => {
           parentId: null,
           isActive: true,
         }),
-      },
-      inventoryBalance: {
         findMany: jest.fn().mockResolvedValue([
           {
-            productId: 'product-1',
-            quantityKg: decimal(13),
-            quantityPieces: 0,
-            product: { name: 'Pollo mixto', sku: 'POLLO-1', unit: 'KG' },
+            id: 'branch-1',
+            parentId: 'cedis-1',
+            type: 'BRANCH',
+            isActive: true,
           },
         ]),
+      },
+      inventoryBalance: {
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              productId: 'product-1',
+              locationId: 'cedis-1',
+              quantityKg: decimal(13),
+              quantityPieces: 0,
+              reservedQuantityKg: decimal(3),
+              reservedQuantityPieces: 0,
+              product: { name: 'Pollo mixto', sku: 'POLLO-1', unit: 'KG' },
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              productId: 'product-1',
+              locationId: 'branch-1',
+              quantityKg: decimal(7),
+              quantityPieces: 0,
+              reservedQuantityKg: decimal(0),
+              reservedQuantityPieces: 0,
+              product: { name: 'Pollo mixto', sku: 'POLLO-1', unit: 'KG' },
+            },
+          ]),
       },
       inventoryMovement: {
         findMany: jest.fn().mockResolvedValue([
@@ -101,6 +125,11 @@ describe('CedisInventorySummaryQueryService', () => {
 
     expect(result.totals).toEqual({
       opening: { kg: '10.000', pieces: '0.000' },
+      physicalAtCedis: { kg: '13.000', pieces: '0.000' },
+      reservedAtCedis: { kg: '3.000', pieces: '0.000' },
+      availableToDispatch: { kg: '10.000', pieces: '0.000' },
+      inBranchCustody: { kg: '7.000', pieces: '0.000' },
+      ownedNetworkTotal: { kg: '20.000', pieces: '0.000' },
       receivedFromSuppliers: { kg: '5.000', pieces: '0.000' },
       sentToBranches: { kg: '3.000', pieces: '0.000' },
       returnedFromBranches: { kg: '1.000', pieces: '0.000' },

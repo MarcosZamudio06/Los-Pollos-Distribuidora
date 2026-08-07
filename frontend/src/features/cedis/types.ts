@@ -168,6 +168,17 @@ export type CedisCycleTransferItem = {
   unit: "KG" | "PIECE" | "KG_AND_PIECE";
   quantityKg: string | null;
   quantityPieces: number | null;
+  balance?: CedisTransferBalance | null;
+};
+
+export type CedisTransferBalance = {
+  locationId: string;
+  quantityKg: number;
+  quantityPieces: number;
+  reservedQuantityKg: number;
+  reservedQuantityPieces: number;
+  availableQuantityKg: number;
+  availableQuantityPieces: number;
 };
 
 export type CedisCycleTransfer = {

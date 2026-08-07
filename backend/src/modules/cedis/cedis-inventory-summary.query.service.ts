@@ -21,6 +21,8 @@ type SummaryProduct = {
   sku: string | null;
   unit: string;
   opening: QuantityAccumulator;
+  reservedAtCedis: QuantityAccumulator;
+  inBranchCustody: QuantityAccumulator;
   receivedFromSuppliers: QuantityAccumulator;
   sentToBranches: QuantityAccumulator;
   returnedFromBranches: QuantityAccumulator;
@@ -97,9 +99,19 @@ export class CedisInventorySummaryQueryService {
       throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
     }
 
-    const [balances, movements] = await Promise.all([
+    const [balances, branchBalances, movements] = await Promise.all([
       this.prisma.inventoryBalance.findMany({
         where: { locationId: query.cedisLocationId },
+        include: { product: true },
+      }),
+      this.prisma.inventoryBalance.findMany({
+        where: {
+          location: {
+            parentId: query.cedisLocationId,
+            type: 'BRANCH',
+            isActive: true,
+          },
+        },
         include: { product: true },
       }),
       this.prisma.inventoryMovement.findMany({
@@ -134,8 +146,29 @@ export class CedisInventorySummaryQueryService {
             kg: this.number(balance.quantityKg),
             pieces: balance.quantityPieces,
           },
+          reservedAtCedis: {
+            kg: this.number(balance.reservedQuantityKg),
+            pieces: balance.reservedQuantityPieces ?? 0,
+          },
         }),
       );
+    }
+
+    for (const balance of branchBalances) {
+      const product =
+        products.get(balance.productId) ??
+        this.createProductSummary({
+          productId: balance.productId,
+          productName: balance.product.name,
+          sku: balance.product.sku,
+          unit: balance.product.unit,
+          fallbackBalance: { kg: 0, pieces: 0 },
+        });
+      this.add(product.inBranchCustody, {
+        kg: this.number(balance.quantityKg),
+        pieces: balance.quantityPieces,
+      });
+      products.set(balance.productId, product);
     }
 
     let lastMovementAt: Date | null = null;
@@ -187,10 +220,13 @@ export class CedisInventorySummaryQueryService {
     sku: string | null;
     unit: string;
     fallbackBalance: QuantityAccumulator;
+    reservedAtCedis?: QuantityAccumulator;
   }): SummaryProduct {
     return {
       ...input,
       opening: { kg: 0, pieces: 0 },
+      reservedAtCedis: { ...(input.reservedAtCedis ?? { kg: 0, pieces: 0 }) },
+      inBranchCustody: { kg: 0, pieces: 0 },
       receivedFromSuppliers: { kg: 0, pieces: 0 },
       sentToBranches: { kg: 0, pieces: 0 },
       returnedFromBranches: { kg: 0, pieces: 0 },
@@ -211,12 +247,30 @@ export class CedisInventorySummaryQueryService {
       product.remaining = { ...product.fallbackBalance };
     }
 
+    const physicalAtCedis = { ...product.remaining };
+    const availableToDispatch = {
+      kg: Math.max(physicalAtCedis.kg - product.reservedAtCedis.kg, 0),
+      pieces: Math.max(
+        physicalAtCedis.pieces - product.reservedAtCedis.pieces,
+        0,
+      ),
+    };
+    const ownedNetworkTotal = {
+      kg: physicalAtCedis.kg + product.inBranchCustody.kg,
+      pieces: physicalAtCedis.pieces + product.inBranchCustody.pieces,
+    };
+
     return {
       productId: product.productId,
       productName: product.productName,
       sku: product.sku,
       unit: product.unit,
       opening: this.quantity(product.opening),
+      physicalAtCedis: this.quantity(physicalAtCedis),
+      reservedAtCedis: this.quantity(product.reservedAtCedis),
+      availableToDispatch: this.quantity(availableToDispatch),
+      inBranchCustody: this.quantity(product.inBranchCustody),
+      ownedNetworkTotal: this.quantity(ownedNetworkTotal),
       receivedFromSuppliers: this.quantity(product.receivedFromSuppliers),
       sentToBranches: this.quantity(product.sentToBranches),
       returnedFromBranches: this.quantity(product.returnedFromBranches),
@@ -262,6 +316,11 @@ export class CedisInventorySummaryQueryService {
   private sumTotals(items: Array<Record<string, unknown>>) {
     const fields = [
       'opening',
+      'physicalAtCedis',
+      'reservedAtCedis',
+      'availableToDispatch',
+      'inBranchCustody',
+      'ownedNetworkTotal',
       'receivedFromSuppliers',
       'sentToBranches',
       'returnedFromBranches',

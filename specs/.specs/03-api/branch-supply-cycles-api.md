@@ -39,6 +39,13 @@ Devuelve encabezado, ubicaciones, versión, eventos, último snapshot y transfer
 
 Requiere `cedis.dispatch`. Crea y vincula un `InventoryTransfer` `REQUESTED` con dirección CEDIS → sucursal.
 
+Antes de crear la transferencia, el backend valida la disponibilidad no reservada
+actual del origen por producto y dimensión. Si la cantidad solicitada supera el
+disponible del CEDIS, responde `409 Conflict` con `code=INSUFFICIENT_STOCK`,
+`findings[]` y no persiste transferencia, vínculo, evento ni reserva parcial. La
+confirmación o recepción vuelve a validar el stock y consume la reserva de forma
+atómica.
+
 ## POST /api/cedis/branch-supply-cycles/:id/returns
 
 Requiere `cedis.receive_returns`. Crea y vincula un `InventoryTransfer` `REQUESTED` con dirección sucursal → CEDIS.
@@ -69,6 +76,7 @@ Reglas:
 - `KG_AND_PIECE` acepta una o ambas cantidades medidas directamente.
 - Solo se deriva una dimensión faltante con equivalencia `ACTIVE` aplicable a `businessDate` y política de redondeo aprobada. Mientras esa política siga abierta, la conversión automática se rechaza con `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`.
 - Crear transferencia, vínculo, evento y nueva versión del ciclo es atómico.
+- Crear un suministro o devolución `REQUESTED` reserva en el origen dentro de la misma transacción.
 - Si el ciclo estaba `READY_FOR_REVIEW`, una nueva operación permitida lo devuelve a `OPEN`.
 - `CLOSED` y `CANCELLED` rechazan mutaciones.
 
@@ -170,6 +178,7 @@ Validaciones:
 - La operación es transaccional: recepción, confirmación de salida, entrada
   recibida, ajuste de diferencia, versión del ciclo y evento se persisten juntos.
 - La salida del CEDIS usa lo enviado; la entrada de la sucursal usa lo recibido.
+- La confirmación consume la reserva del origen exactamente una vez.
 - Un faltante crea `SHRINKAGE`; un sobrante crea `IN`, ambos con
   `referenceType=BRANCH_SUPPLY_RECEIPT` y `referenceId` de la recepción.
 - Repetir la misma clave y payload devuelve el resultado original; cambiar el
@@ -190,7 +199,8 @@ Validaciones:
 - Las mutaciones usan transacciones `Serializable`, restricción única para ciclo activo, vínculo único por transferencia y actualización por `expectedVersion`.
 - Conflictos serializables pueden reintentarse de forma limitada con la misma clave; al agotarse responden conflicto reintentable sin cambios parciales.
 - Confirmar stock usa decremento condicional por producto, ubicación, KG y PIECE; nunca permite saldo negativo.
+- Cancelar stock libera la reserva del origen por producto, ubicación, KG y PIECE; nunca permite reserva negativa.
 
 ## Errores estables
 
-`BRANCH_SUPPLY_CYCLE_NOT_FOUND`, `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`, `BRANCH_SUPPLY_CYCLE_LOCATION_INVALID`, `BRANCH_SUPPLY_CYCLE_CLOSED`, `BRANCH_SUPPLY_CYCLE_NOT_READY`, `BRANCH_SUPPLY_CYCLE_NOT_CLOSED`, `BRANCH_SUPPLY_CYCLE_CLOSING_BLOCKED`, `BRANCH_SUPPLY_CYCLE_REFRESH_REQUIRED`, `BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE`, `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`, `BRANCH_SUPPLY_CYCLE_TRANSFER_ALREADY_LINKED`, `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`, `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`, `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`, `PRODUCT_INACTIVE`, `UNIT_MISMATCH`, `EQUIVALENCE_NOT_APPLICABLE`, `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`, `INSUFFICIENT_STOCK`, `LOCATION_NOT_AUTHORIZED`, `IDEMPOTENCY_CONFLICT`, `BRANCH_SUPPLY_RECEIPT_ALREADY_EXISTS`, `BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED`, `BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID`, `BRANCH_SUPPLY_RECEIPT_NOTE_REQUIRED`.
+`BRANCH_SUPPLY_CYCLE_NOT_FOUND`, `BRANCH_SUPPLY_CYCLE_ALREADY_EXISTS`, `BRANCH_SUPPLY_CYCLE_LOCATION_INVALID`, `BRANCH_SUPPLY_CYCLE_CLOSED`, `BRANCH_SUPPLY_CYCLE_NOT_READY`, `BRANCH_SUPPLY_CYCLE_NOT_CLOSED`, `BRANCH_SUPPLY_CYCLE_CLOSING_BLOCKED`, `BRANCH_SUPPLY_CYCLE_REFRESH_REQUIRED`, `BRANCH_SUPPLY_CYCLE_NOT_CANCELABLE`, `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`, `BRANCH_SUPPLY_CYCLE_CONCURRENCY_CONFLICT`, `BRANCH_SUPPLY_CYCLE_TRANSFER_ALREADY_LINKED`, `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`, `BRANCH_SUPPLY_CYCLE_HAS_PENDING_TRANSFERS`, `BRANCH_SUPPLY_CYCLE_INTEGRITY_ERROR`, `INVENTORY_RESERVATION_INTEGRITY_ERROR`, `INVENTORY_CONCURRENCY_CONFLICT`, `PRODUCT_INACTIVE`, `UNIT_MISMATCH`, `EQUIVALENCE_NOT_APPLICABLE`, `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`, `INSUFFICIENT_STOCK`, `LOCATION_NOT_AUTHORIZED`, `IDEMPOTENCY_CONFLICT`, `BRANCH_SUPPLY_RECEIPT_ALREADY_EXISTS`, `BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED`, `BRANCH_SUPPLY_RECEIPT_ITEMS_INVALID`, `BRANCH_SUPPLY_RECEIPT_NOTE_REQUIRED`.

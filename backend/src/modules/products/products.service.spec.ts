@@ -34,6 +34,8 @@ type ProductRecord = {
     locationId: string;
     quantityKg: Prisma.Decimal;
     quantityPieces: number;
+    reservedQuantityKg: Prisma.Decimal;
+    reservedQuantityPieces: number;
     minQuantityKg: Prisma.Decimal;
     minQuantityPieces: number;
   }>;
@@ -294,6 +296,8 @@ describe('ProductsService', () => {
             locationId: 'location-1',
             quantityKg: decimal(3),
             quantityPieces: 0,
+            reservedQuantityKg: decimal(1),
+            reservedQuantityPieces: 0,
             minQuantityKg: decimal(5),
             minQuantityPieces: 0,
           },
@@ -325,6 +329,10 @@ describe('ProductsService', () => {
           locationId: 'location-1',
           quantityKg: 3,
           quantityPieces: 0,
+          reservedQuantityKg: 1,
+          reservedQuantityPieces: 0,
+          availableQuantityKg: 2,
+          availableQuantityPieces: 0,
           isLowStock: true,
         }),
       }),
@@ -334,6 +342,39 @@ describe('ProductsService', () => {
     await expect(
       service.findAll({ lowStock: true }, { role: 'ADMIN' }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('scopes location balances to the warehouse CEDIS and its direct branches', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([createProduct()]);
+
+    await service.findAll(
+      { locationId: 'branch-1', includeBalances: true } as never,
+      {
+        role: 'WAREHOUSE',
+        permissions: [],
+        operationalLocationId: 'cedis-1',
+      },
+    );
+
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          inventoryBalances: {
+            where: {
+              locationId: 'branch-1',
+              location: {
+                OR: [
+                  { id: 'cedis-1' },
+                  { parentId: 'cedis-1', type: 'BRANCH', isActive: true },
+                ],
+              },
+            },
+            include: { location: true },
+          },
+        }),
+      }),
+    );
   });
 
   it('returns the barcode and prioritizes an exact barcode match for POS searches', async () => {

@@ -352,8 +352,12 @@ export function ProductListPage() {
                     <th className={tableCellClass}>Unidad</th>
                     <th className={tableCellClass}>Equivalencia</th>
                     <th className={tableCellClass}>Ubicación</th>
-                    <th className={tableCellClass}>Kg</th>
-                    <th className={tableCellClass}>Piezas</th>
+                    <th className={tableCellClass}>Físico kg</th>
+                    <th className={tableCellClass}>Comprometido kg</th>
+                    <th className={tableCellClass}>Disponible kg</th>
+                    <th className={tableCellClass}>Físico piezas</th>
+                    <th className={tableCellClass}>Comprometido piezas</th>
+                    <th className={tableCellClass}>Disponible piezas</th>
                     <th className={tableCellClass}>Mínimo</th>
                     <th className={tableCellClass}>Stock bajo</th>
                     <th className={tableCellClass}>Estado</th>
@@ -417,7 +421,27 @@ export function ProductListPage() {
                         <td
                           className={`${tableCellClass} text-right font-semibold`}
                         >
+                          {balance?.reservedQuantityKg ?? "—"}
+                        </td>
+                        <td
+                          className={`${tableCellClass} text-right font-semibold`}
+                        >
+                          {balance?.availableQuantityKg ?? "—"}
+                        </td>
+                        <td
+                          className={`${tableCellClass} text-right font-semibold`}
+                        >
                           {balance?.quantityPieces ?? "—"}
+                        </td>
+                        <td
+                          className={`${tableCellClass} text-right font-semibold`}
+                        >
+                          {balance?.reservedQuantityPieces ?? "—"}
+                        </td>
+                        <td
+                          className={`${tableCellClass} text-right font-semibold`}
+                        >
+                          {balance?.availableQuantityPieces ?? "—"}
                         </td>
                         <td
                           className={`${tableCellClass} text-right text-[var(--erp-muted-foreground)]`}

@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import { PurchasesService } from './purchases.service';
 
 const now = new Date('2026-07-03T12:00:00.000Z');
@@ -84,7 +85,10 @@ function createPrisma(): MockPrisma {
 
 function createService(prisma = createPrisma()) {
   return {
-    service: new PurchasesService(prisma as unknown as PrismaService),
+    service: new PurchasesService(
+      prisma as unknown as PrismaService,
+      new InventoryBalanceService(),
+    ),
     prisma,
   };
 }
@@ -209,12 +213,23 @@ describe('PurchasesService', () => {
       unitEquivalents: [],
     });
     prisma.inventoryBalance.upsert.mockResolvedValue({});
-    prisma.inventoryBalance.findUnique.mockResolvedValue({
-      productId: 'product-1',
-      locationId: 'loc-1',
-      quantityKg: decimal('15.5'),
-      quantityPieces: 9,
-    });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: decimal(5),
+        quantityPieces: 5,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+      })
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: decimal('15.5'),
+        quantityPieces: 9,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+      });
     prisma.purchase.create.mockImplementation(({ data }) =>
       Promise.resolve(
         createPurchase({
@@ -488,12 +503,23 @@ describe('PurchasesService', () => {
     const { service, prisma } = createService();
     prisma.purchase.findFirst.mockResolvedValueOnce(createPurchase());
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
-    prisma.inventoryBalance.findUnique.mockResolvedValue({
-      productId: 'product-1',
-      locationId: 'loc-1',
-      quantityKg: decimal('5'),
-      quantityPieces: 5,
-    });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: decimal('15.5'),
+        quantityPieces: 9,
+        reservedQuantityKg: decimal(2),
+        reservedQuantityPieces: 1,
+      })
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: decimal('5'),
+        quantityPieces: 5,
+        reservedQuantityKg: decimal(2),
+        reservedQuantityPieces: 1,
+      });
     prisma.inventoryMovement.create.mockResolvedValue({
       id: 'cancel-movement-1',
       productId: 'product-1',
@@ -552,8 +578,10 @@ describe('PurchasesService', () => {
       where: {
         productId: 'product-1',
         locationId: 'loc-1',
-        quantityKg: { gte: 10.5 },
-        quantityPieces: { gte: 4 },
+        quantityKg: { gte: 12.5 },
+        quantityPieces: { gte: 5 },
+        reservedQuantityKg: 2,
+        reservedQuantityPieces: 1,
       },
       data: {
         quantityKg: { decrement: 10.5 },
@@ -576,6 +604,14 @@ describe('PurchasesService', () => {
     const { service, prisma } = createService();
     prisma.purchase.findFirst.mockResolvedValue(createPurchase());
     prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      productId: 'product-1',
+      locationId: 'loc-1',
+      quantityKg: decimal('5'),
+      quantityPieces: 5,
+      reservedQuantityKg: decimal(0),
+      reservedQuantityPieces: 0,
+    });
 
     await expect(
       service.cancel(
@@ -584,7 +620,37 @@ describe('PurchasesService', () => {
         adminUser,
         'cancel-idem',
       ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
+    });
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.purchase.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects purchase cancellation when reserved stock is not available for the reversal', async () => {
+    const { service, prisma } = createService();
+    prisma.purchase.findFirst.mockResolvedValue(createPurchase());
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      productId: 'product-1',
+      locationId: 'loc-1',
+      quantityKg: decimal('15.5'),
+      quantityPieces: 9,
+      reservedQuantityKg: decimal('6'),
+      reservedQuantityPieces: 1,
+    });
+    prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.cancel(
+        'purchase-1',
+        { reason: 'Wrong capture' },
+        adminUser,
+        'cancel-reserved-stock',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
+    });
+
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
     expect(prisma.purchase.update).not.toHaveBeenCalled();
   });

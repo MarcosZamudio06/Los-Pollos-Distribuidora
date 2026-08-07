@@ -5,6 +5,7 @@ Define contratos para traspasos entre ubicaciones operativas. Un traspaso es ent
 ## Convenciones
 
 - Operaciones críticas de creación, confirmación y cancelación deben ejecutarse en transacción cuando apliquen movimientos.
+- Una transferencia pendiente reserva cantidades en el origen; la reserva no crea un movimiento físico.
 - Headers recomendados en comandos críticos:
   - `Idempotency-Key`
 
@@ -79,6 +80,8 @@ Validaciones:
 - Si el destino es una `BRANCH`, el origen debe ser su CEDIS padre activo y el traspaso debe crearse desde un ciclo CEDIS-sucursal; no se permiten transferencias genéricas hacia sucursales.
 - Reintentos con la misma `Idempotency-Key` y el mismo payload no deben crear un segundo traspaso.
 - Cuando el traspaso se crea desde un ciclo CEDIS, origen y destino se derivan del ciclo, se vincula en la misma transacción y el estado inicial es `REQUESTED`.
+- Una transferencia `REQUESTED` reserva cada dimensión en el origen dentro de la misma transacción.
+- Si la disponibilidad no alcanza, responde `409 Conflict` con `code=INSUFFICIENT_STOCK` y `findings[]`; no persiste transferencia, vínculo ni reserva parcial.
 
 ## POST /api/inventory-transfers/:id/confirm
 
@@ -94,7 +97,9 @@ Respuesta `data`:
 Validaciones:
 
 - No confirmar si la ubicación origen no tiene stock suficiente.
+- No confirmar si la ubicación origen no tiene disponibilidad suficiente después de reservas existentes.
 - Confirmar debe generar movimientos `TRANSFER_OUT` en origen y `TRANSFER_IN` en destino.
+- Confirmar debe consumir exactamente la reserva correspondiente antes o junto con la salida física.
 - Ejecutar de forma transaccional.
 - No confirmar traspasos cancelados o ya confirmados.
 - `DRAFT` y `REQUESTED` no generan movimientos.
@@ -126,4 +131,18 @@ Validaciones:
 - Registrar actor, fecha y motivo de cancelación.
 - Reintentos con la misma `Idempotency-Key` no deben duplicar cancelaciones ni alterar una cancelación ya aplicada.
 - `DRAFT`, `REQUESTED` e `IN_TRANSIT` pueden cancelarse con motivo; `CONFIRMED` nunca se cancela.
+- Cancelar una transferencia pendiente debe liberar exactamente la reserva del origen sin crear movimientos físicos.
 - Cancelar una transferencia vinculada devuelve el ciclo a `OPEN`, incrementa su versión e invalida una validación vigente del cierre `DRAFT`.
+
+## Errores operativos
+
+Los errores de disponibilidad, reserva e idempotencia deben conservar `409 Conflict` y el sobre definido en `api-conventions.md`:
+
+- `INSUFFICIENT_STOCK`: la operación solicita más existencia disponible que la existente. Incluye `findings[]` por producto y dimensión, con cantidades física, reservada, disponible y faltante.
+- `INVENTORY_RESERVATION_INTEGRITY_ERROR`: la reserva persistida no coincide con la transferencia pendiente. No reconstruye la reserva ni crea movimientos parciales.
+- `INVENTORY_CONCURRENCY_CONFLICT`: la disponibilidad cambió durante la operación o se agotaron los reintentos serializables.
+- `IDEMPOTENCY_CONFLICT`: la misma clave fue reutilizada con un payload distinto.
+- `LOCATION_NOT_AUTHORIZED`: el actor está fuera del alcance operativo y responde `403 Forbidden`.
+- `BRANCH_SUPPLY_CYCLE_DIRECTION_INVALID`: el origen, destino y rol del ciclo no forman una dirección CEDIS ↔ sucursal válida.
+- `PRODUCT_INACTIVE`: una partida referencia un producto inactivo y responde `400 Bad Request`.
+- `UNIT_MISMATCH`: las cantidades no corresponden con la unidad del producto y responde `400 Bad Request`.

@@ -88,6 +88,10 @@ Validaciones:
 - La combinación `productId` + `locationId` debe ser única.
 - `quantityKg` mayor o igual a 0 cuando aplique.
 - `quantityPieces` mayor o igual a 0 cuando aplique.
+- `reservedQuantityKg` y `reservedQuantityPieces` representan reservas de transferencias pendientes.
+- `reservedQuantityKg` y `reservedQuantityPieces` deben ser mayores o iguales a 0.
+- Cada cantidad reservada debe ser menor o igual a su cantidad física correspondiente.
+- La disponibilidad se deriva como cantidad física menos cantidad reservada; no existe una ubicación virtual de reserva.
 - `quantityPieces` debe ser entero salvo regla explícita posterior.
 - No convertir entre kilo y pieza sin equivalencia oficial aprobada.
 - No debe existir más de un saldo por producto y ubicación.
@@ -179,7 +183,10 @@ Validaciones:
 - `destinationLocationId` requerido.
 - Origen y destino no deben ser iguales.
 - Debe tener al menos un item.
-- No confirmar si la ubicación origen no tiene stock suficiente.
+- `REQUESTED` e `IN_TRANSIT` reservan disponibilidad en el origen sin crear movimientos físicos.
+- No confirmar si la ubicación origen no tiene disponibilidad suficiente.
+- `CONFIRMED` consume la reserva y crea los movimientos físicos atómicamente.
+- `CANCELLED` libera la reserva sin crear movimientos físicos.
 - `DRAFT` y `REQUESTED` no generan movimientos.
 - `IN_TRANSIT` no debe generar un segundo descuento cuando la salida ya quedó representada por confirmación posterior.
 - `CONFIRMED` debe generar movimientos de salida y entrada trazables en una sola transacción.

@@ -16,6 +16,7 @@ import {
   SaleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import { DeliveryService } from './delivery.service';
 
 type MockPrisma = {
@@ -153,7 +154,10 @@ function createPrisma(): MockPrisma {
 
 function createService(prisma = createPrisma()) {
   return {
-    service: new DeliveryService(prisma as unknown as PrismaService),
+    service: new DeliveryService(
+      prisma as unknown as PrismaService,
+      new InventoryBalanceService(),
+    ),
     prisma,
   };
 }
@@ -1132,10 +1136,24 @@ describe('DeliveryService', () => {
         notes: 'Cliente devolvió producto',
       }),
     );
-    prisma.inventoryBalance.upsert.mockResolvedValue({
-      quantityKg: money('8.5'),
-      quantityPieces: 4,
-    });
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'route-stock-1',
+        quantityKg: money('6'),
+        quantityPieces: 4,
+        reservedQuantityKg: money('1'),
+        reservedQuantityPieces: 1,
+      })
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'route-stock-1',
+        quantityKg: money('8.5'),
+        quantityPieces: 4,
+        reservedQuantityKg: money('1'),
+        reservedQuantityPieces: 1,
+      });
+    prisma.inventoryBalance.upsert.mockResolvedValue({});
     prisma.inventoryMovement.create.mockResolvedValue({
       id: 'movement-1',
       productId: 'product-1',
@@ -1185,6 +1203,10 @@ describe('DeliveryService', () => {
           type: InventoryMovementType.RETURN,
           referenceType: 'DeliveryOrder',
           referenceId: 'order-1',
+          previousQuantityKg: 6,
+          newQuantityKg: 8.5,
+          previousQuantityPieces: 4,
+          newQuantityPieces: 4,
         }),
       }),
     );

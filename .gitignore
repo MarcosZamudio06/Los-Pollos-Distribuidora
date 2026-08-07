@@ -1,7 +1,10 @@
 # Dependencies
 node_modules/
 **/node_modules/
-docs/
+docs/*
+!docs/
+!docs/cedis/
+!docs/cedis/plan.md
 # Build outputs
 dist/
 build/

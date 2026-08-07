@@ -65,6 +65,7 @@ function cycle(overrides: Record<string, unknown> = {}) {
 function createService() {
   const prisma = {
     operationalLocation: { findMany: jest.fn(), findUnique: jest.fn() },
+    inventoryBalance: { findMany: jest.fn().mockResolvedValue([]) },
     pointOfSaleDailyClose: { findFirst: jest.fn() },
     branchSupplyCycle: {
       findMany: jest.fn(),
@@ -477,6 +478,16 @@ describe('CedisDashboardQueryService', () => {
         },
       }),
     );
+    prisma.inventoryBalance.findMany.mockResolvedValue([
+      {
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: new Prisma.Decimal('30.000'),
+        quantityPieces: 0,
+        reservedQuantityKg: new Prisma.Decimal('5.000'),
+        reservedQuantityPieces: 0,
+      },
+    ]);
 
     const result = await service.getCycleSummary('cycle-1', adminWithCosts);
 
@@ -489,7 +500,18 @@ describe('CedisDashboardQueryService', () => {
       }),
     );
     expect(result.transfers[0].transfer.items[0]).toEqual(
-      expect.objectContaining({ productName: 'Pollo actualizado' }),
+      expect.objectContaining({
+        productName: 'Pollo actualizado',
+        balance: {
+          locationId: 'cedis-1',
+          quantityKg: 30,
+          quantityPieces: 0,
+          reservedQuantityKg: 5,
+          reservedQuantityPieces: 0,
+          availableQuantityKg: 25,
+          availableQuantityPieces: 0,
+        },
+      }),
     );
     expect(result.dailyClose).toEqual(
       expect.objectContaining({ status: 'CLOSED' }),

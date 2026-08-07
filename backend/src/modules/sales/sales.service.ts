@@ -32,6 +32,7 @@ import {
 import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import {
   CancelSaleDto,
   CreateSaleDto,
@@ -424,6 +425,7 @@ const saleChannelLocationTypes: Record<
 export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly balanceService: InventoryBalanceService,
     @Optional() private readonly salesRealtime?: SalesRealtimeService,
   ) {}
 
@@ -2029,22 +2031,17 @@ export class SalesService {
       const quantityKg = this.roundQuantity(this.toNumber(item.quantityKg));
       const quantityPieces = item.quantityPieces ?? 0;
 
-      const balance = await tx.inventoryBalance.update({
-        where: {
-          productId_locationId: {
-            productId: item.productId,
-            locationId: sale.locationId,
-          },
-        },
-        data: {
-          quantityKg: { increment: quantityKg },
-          quantityPieces: { increment: quantityPieces },
-        },
-      });
-      const newQuantityKg = this.toNumber(balance.quantityKg);
-      const newQuantityPieces = balance.quantityPieces;
-      const previousQuantityKg = this.roundQuantity(newQuantityKg - quantityKg);
-      const previousQuantityPieces = newQuantityPieces - quantityPieces;
+      const {
+        previousQuantityKg,
+        previousQuantityPieces,
+        newQuantityKg,
+        newQuantityPieces,
+      } = await this.balanceService.increase(
+        tx,
+        item.productId,
+        sale.locationId,
+        { quantityKg, quantityPieces },
+      );
 
       movements.push(
         await tx.inventoryMovement.create({
@@ -2283,42 +2280,25 @@ export class SalesService {
     > = [];
 
     for (const item of items) {
-      const updated = await tx.inventoryBalance.updateMany({
-        where: {
-          productId: item.product.id,
-          locationId,
-          quantityKg: { gte: item.quantityKg },
-          quantityPieces: { gte: item.quantityPieces },
+      const {
+        previousQuantityKg,
+        previousQuantityPieces,
+        newQuantityKg,
+        newQuantityPieces,
+      } = await this.balanceService.decreaseAvailable(
+        tx,
+        item.product.id,
+        locationId,
+        {
+          quantityKg: item.quantityKg,
+          quantityPieces: item.quantityPieces,
         },
-        data: {
-          quantityKg: { decrement: item.quantityKg },
-          quantityPieces: { decrement: item.quantityPieces },
-        },
-      });
-
-      if (updated.count !== 1) {
-        throw new BadRequestException(
-          'Insufficient stock at selected location',
-        );
-      }
-
-      const balance = await tx.inventoryBalance.findUnique({
-        where: {
-          productId_locationId: { productId: item.product.id, locationId },
-        },
-      });
-      if (!balance) {
-        throw new BadRequestException(
-          'Inventory balance not found after sale stock decrement',
-        );
-      }
-
-      const newQuantityKg = this.toNumber(balance.quantityKg);
-      const newQuantityPieces = balance.quantityPieces;
+        'Insufficient stock at selected location',
+      );
       changes.push({
         ...item,
-        previousQuantityKg: this.roundQuantity(newQuantityKg + item.quantityKg),
-        previousQuantityPieces: newQuantityPieces + item.quantityPieces,
+        previousQuantityKg: this.roundQuantity(previousQuantityKg),
+        previousQuantityPieces,
         newQuantityKg,
         newQuantityPieces,
       });
@@ -2595,9 +2575,7 @@ export class SalesService {
     currentUser: Actor,
   ) {
     const creditDecision = sale.creditDecisionSnapshot as
-      | Record<string, unknown>
-      | null
-      | undefined;
+      Record<string, unknown> | null | undefined;
     const visibleSale = { ...sale };
     if (currentUser.role !== 'ADMIN') delete visibleSale.deviceId;
     return {

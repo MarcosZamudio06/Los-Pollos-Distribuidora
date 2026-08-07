@@ -83,6 +83,28 @@ Authorization: Bearer <token>
 - 429: límite de solicitudes excedido; debe incluir `Retry-After` cuando aplique.
 - 500: error interno.
 
+## Respuestas de error
+
+Las rutas deben devolver errores de negocio con el siguiente sobre estable:
+
+```json
+{
+  "success": false,
+  "message": "Mensaje operativo seguro",
+  "error": "INSUFFICIENT_STOCK",
+  "code": "INSUFFICIENT_STOCK",
+  "statusCode": 409,
+  "requestId": "uuid",
+  "findings": []
+}
+```
+
+- `code` identifica el error estable que puede manejar el cliente.
+- `error` conserva el mismo código para compatibilidad con consumidores existentes.
+- `findings` es opcional y contiene únicamente el detalle operativo necesario para corregir la solicitud.
+- Los errores de disponibilidad, reserva o concurrencia deben usar `409 Conflict`.
+- Los errores internos deben usar `500`, un mensaje genérico y no deben exponer detalles de infraestructura.
+
 ## Validaciones
 
 Todos los endpoints que reciben body deben usar DTOs y validación.

@@ -13,6 +13,17 @@ type TransferLineDraft = {
   quantityPieces: string;
 };
 
+type ProductAvailability = {
+  quantityKg: number;
+  quantityPieces: number;
+  reservedQuantityKg: number;
+  reservedQuantityPieces: number;
+  availableQuantityKg: number;
+  availableQuantityPieces: number;
+};
+
+type AvailabilityStatus = "SUFFICIENT" | "INSUFFICIENT" | "NONE";
+
 type CedisTransferCommandPanelProps = {
   branch: CedisDashboardLocation;
   cedis: CedisDashboardLocation;
@@ -47,6 +58,112 @@ function productUnit(product: Product | undefined): OperationalUnit {
   return product?.unit ?? product?.operationalUnit ?? "KG";
 }
 
+function productAvailability(
+  product: Product | undefined,
+): ProductAvailability {
+  const balance =
+    product?.inventoryBalance ??
+    product?.locationBalance ??
+    product?.balances?.[0];
+
+  return {
+    quantityKg: balance?.quantityKg ?? 0,
+    quantityPieces: balance?.quantityPieces ?? 0,
+    reservedQuantityKg: balance?.reservedQuantityKg ?? 0,
+    reservedQuantityPieces: balance?.reservedQuantityPieces ?? 0,
+    availableQuantityKg: balance?.availableQuantityKg ?? 0,
+    availableQuantityPieces: balance?.availableQuantityPieces ?? 0,
+  };
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("es-MX", {
+    maximumFractionDigits: 3,
+  }).format(value);
+}
+
+function formatUnitQuantity(
+  unit: OperationalUnit,
+  quantityKg: number,
+  quantityPieces: number,
+) {
+  const values: string[] = [];
+  if (unit !== "PIECE") values.push(`${formatNumber(quantityKg)} kg`);
+  if (unit !== "KG") values.push(`${formatNumber(quantityPieces)} piezas`);
+  return values.join(" · ");
+}
+
+function hasProductAvailability(product: Product) {
+  const unit = productUnit(product);
+  const balance = productAvailability(product);
+  return (
+    (unit !== "PIECE" && balance.availableQuantityKg > 0) ||
+    (unit !== "KG" && balance.availableQuantityPieces > 0)
+  );
+}
+
+function lineQuantities(line: TransferLineDraft) {
+  const quantityKg = Number(line.quantityKg);
+  const quantityPieces = Number(line.quantityPieces);
+  return {
+    quantityKg:
+      line.unit !== "PIECE" && Number.isFinite(quantityKg) ? quantityKg : 0,
+    quantityPieces:
+      line.unit !== "KG" && Number.isFinite(quantityPieces)
+        ? quantityPieces
+        : 0,
+  };
+}
+
+function lineAvailability(
+  product: Product | undefined,
+  line: TransferLineDraft,
+) {
+  const balance = productAvailability(product);
+  const requested = lineQuantities(line);
+  const shortageKg = Math.max(
+    requested.quantityKg - balance.availableQuantityKg,
+    0,
+  );
+  const shortagePieces = Math.max(
+    requested.quantityPieces - balance.availableQuantityPieces,
+    0,
+  );
+  const hasAvailable =
+    (line.unit !== "PIECE" && balance.availableQuantityKg > 0) ||
+    (line.unit !== "KG" && balance.availableQuantityPieces > 0);
+  const status: AvailabilityStatus =
+    shortageKg > 0 || shortagePieces > 0
+      ? "INSUFFICIENT"
+      : hasAvailable
+        ? "SUFFICIENT"
+        : "NONE";
+
+  return {
+    balance,
+    requested,
+    shortageKg,
+    shortagePieces,
+    status,
+  };
+}
+
+function statusLabel(status: AvailabilityStatus) {
+  return {
+    SUFFICIENT: "Suficiente",
+    INSUFFICIENT: "Insuficiente",
+    NONE: "Sin disponibilidad",
+  }[status];
+}
+
+function statusTone(status: AvailabilityStatus) {
+  return {
+    SUFFICIENT: "green",
+    INSUFFICIENT: "red",
+    NONE: "amber",
+  }[status] as "green" | "red" | "amber";
+}
+
 function productIsActive(product: Product) {
   return (
     product.isActive !== false &&
@@ -66,11 +183,17 @@ function createIdempotencyKey() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
-function commandErrorMessage(error: unknown) {
+function commandErrorMessage(error: unknown, mode: TransferMode) {
   if (error && typeof error === "object" && "payload" in error) {
     const payload = (error as { payload?: unknown }).payload;
     if (payload && typeof payload === "object") {
       const record = payload as Record<string, unknown>;
+      if (record.code === "INSUFFICIENT_STOCK") {
+        return `No hay disponibilidad suficiente en ${mode === "SUPPLY" ? "el CEDIS" : "la sucursal"}. Reduce la cantidad o registra primero la existencia física disponible.`;
+      }
+      if (record.code === "INVENTORY_CONCURRENCY_CONFLICT") {
+        return "La disponibilidad cambió mientras se procesaba la operación. Revisa los saldos actualizados y reintenta.";
+      }
       if (typeof record.message === "string") return record.message;
       if (typeof record.code === "string")
         return `El servidor rechazó el comando (${record.code}).`;
@@ -112,6 +235,100 @@ function LocationPair({
   );
 }
 
+function AvailabilityPanel({
+  line,
+  mode,
+  product,
+}: {
+  line: TransferLineDraft;
+  mode: TransferMode;
+  product: Product | undefined;
+}) {
+  if (!product) {
+    return (
+      <p className="mt-3 rounded-lg border border-dashed border-[color:var(--erp-border)] px-3 py-2 text-xs text-[var(--erp-muted-foreground)]">
+        Selecciona un producto para consultar su disponibilidad.
+      </p>
+    );
+  }
+
+  const details = lineAvailability(product, line);
+  const source = mode === "SUPPLY" ? "CEDIS" : "sucursal";
+  const requested = formatUnitQuantity(
+    line.unit,
+    details.requested.quantityKg,
+    details.requested.quantityPieces,
+  );
+  const shortage = formatUnitQuantity(
+    line.unit,
+    details.shortageKg,
+    details.shortagePieces,
+  );
+
+  return (
+    <div
+      aria-label={`Disponibilidad de ${product.name}`}
+      className="mt-3 rounded-xl border border-[color:var(--erp-border)] bg-white p-3"
+      role="status"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+          Disponibilidad en {source}
+        </p>
+        <Badge tone={statusTone(details.status)}>
+          {statusLabel(details.status)}
+        </Badge>
+      </div>
+      <dl className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg bg-[var(--erp-surface)] px-3 py-2">
+          <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+            Existencia física
+          </dt>
+          <dd className="mt-1 text-sm font-black tabular-nums">
+            {formatUnitQuantity(
+              line.unit,
+              details.balance.quantityKg,
+              details.balance.quantityPieces,
+            )}
+          </dd>
+        </div>
+        <div className="rounded-lg bg-[var(--erp-surface)] px-3 py-2">
+          <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+            Comprometido
+          </dt>
+          <dd className="mt-1 text-sm font-black tabular-nums">
+            {formatUnitQuantity(
+              line.unit,
+              details.balance.reservedQuantityKg,
+              details.balance.reservedQuantityPieces,
+            )}
+          </dd>
+        </div>
+        <div className="rounded-lg bg-[rgba(63,123,65,0.08)] px-3 py-2">
+          <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+            Disponible
+          </dt>
+          <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-success)]">
+            {formatUnitQuantity(
+              line.unit,
+              details.balance.availableQuantityKg,
+              details.balance.availableQuantityPieces,
+            )}
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--erp-muted-foreground)]">
+        <span>Solicitado: {requested || "Sin cantidad"}</span>
+        {details.status === "INSUFFICIENT" && (
+          <span className="font-bold text-[var(--erp-danger)]">
+            Faltante: {shortage}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CedisTransferCommandPanel({
   branch,
   cedis,
@@ -133,7 +350,9 @@ export function CedisTransferCommandPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const activeProducts = products.filter(productIsActive);
+  const availableProducts = activeProducts.filter(hasProductAvailability);
   const isSupply = mode === "SUPPLY";
+  const sourceLabel = isSupply ? "CEDIS" : "la sucursal";
   const title = isSupply ? "Enviar producto" : "Registrar devolución";
   const submitLabel = isSupply
     ? "Confirmar suministro"
@@ -149,19 +368,43 @@ export function CedisTransferCommandPanel({
 
   function selectProduct(index: number, productId: string) {
     const product = activeProducts.find((item) => item.id === productId);
+    if (
+      productId &&
+      (!product ||
+        !hasProductAvailability(product) ||
+        lines.some(
+          (line, lineIndex) =>
+            lineIndex !== index && line.productId === productId,
+        ))
+    ) {
+      setError(
+        product
+          ? "Ese producto ya está seleccionado o no tiene disponibilidad."
+          : "Selecciona un producto válido.",
+      );
+      return;
+    }
     updateLine(index, {
       productId,
       unit: productUnit(product),
       quantityKg: "",
       quantityPieces: "",
     });
+    setError(null);
   }
 
   function validateLines() {
     if (lines.length === 0) return "Agrega al menos un producto.";
+    const selectedProductIds = new Set<string>();
     for (const [index, line] of lines.entries()) {
       if (!line.productId)
         return `Selecciona un producto en la línea ${index + 1}.`;
+      if (selectedProductIds.has(line.productId))
+        return `No repitas el mismo producto en la línea ${index + 1}.`;
+      selectedProductIds.add(line.productId);
+      const product = activeProducts.find((item) => item.id === line.productId);
+      if (!product)
+        return `El producto de la línea ${index + 1} ya no está disponible en el catálogo.`;
       const kg = Number(line.quantityKg);
       const pieces = Number(line.quantityPieces);
       const hasKg = Boolean(line.quantityKg) && Number.isFinite(kg) && kg > 0;
@@ -177,6 +420,11 @@ export function CedisTransferCommandPanel({
         return `Captura piezas enteras positivas en la línea ${index + 1}.`;
       if (line.unit === "KG_AND_PIECE" && !hasKg && !hasPieces)
         return `Captura kilos o piezas en la línea ${index + 1}.`;
+      const availability = lineAvailability(product, line);
+      if (availability.status === "NONE")
+        return `El producto de la línea ${index + 1} no tiene disponibilidad en ${sourceLabel}.`;
+      if (availability.status === "INSUFFICIENT")
+        return `La cantidad de la línea ${index + 1} supera la disponibilidad. Faltan ${formatUnitQuantity(line.unit, availability.shortageKg, availability.shortagePieces)}.`;
     }
     return null;
   }
@@ -222,7 +470,7 @@ export function CedisTransferCommandPanel({
       await onSubmit(confirmation.payload, confirmation.idempotencyKey);
       onClose();
     } catch (submissionError) {
-      setError(commandErrorMessage(submissionError));
+      setError(commandErrorMessage(submissionError, mode));
     } finally {
       setIsSubmitting(false);
     }
@@ -373,12 +621,13 @@ export function CedisTransferCommandPanel({
           No se pudo cargar el catálogo de productos.
         </p>
       ) : null}
-      <form className="mt-5 space-y-4" onSubmit={review}>
+      <form className="mt-5 space-y-4" noValidate onSubmit={review}>
         {lines.map((line, index) => {
           const product = activeProducts.find(
             (item) => item.id === line.productId,
           );
           const unit = productUnit(product);
+          const availability = lineAvailability(product, line);
           return (
             <div
               className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
@@ -420,9 +669,27 @@ export function CedisTransferCommandPanel({
                         : "Selecciona producto"}
                     </option>
                     {activeProducts.map((item) => (
-                      <option key={item.id} value={item.id}>
+                      <option
+                        disabled={
+                          !hasProductAvailability(item) ||
+                          lines.some(
+                            (otherLine, otherIndex) =>
+                              otherIndex !== index &&
+                              otherLine.productId === item.id,
+                          )
+                        }
+                        key={item.id}
+                        value={item.id}
+                      >
                         {item.name}
-                        {item.sku ? ` · ${item.sku}` : ""}
+                        {item.sku ? ` · ${item.sku}` : ""} ·{" "}
+                        {hasProductAvailability(item)
+                          ? formatUnitQuantity(
+                              productUnit(item),
+                              productAvailability(item).availableQuantityKg,
+                              productAvailability(item).availableQuantityPieces,
+                            )
+                          : "Sin disponibilidad"}
                       </option>
                     ))}
                   </Select>
@@ -450,6 +717,7 @@ export function CedisTransferCommandPanel({
                     {line.unit !== "PIECE" && (
                       <Input
                         aria-label={`Kilos ${index + 1}`}
+                        max={availability.balance.availableQuantityKg}
                         min="0"
                         onChange={(event) =>
                           updateLine(index, { quantityKg: event.target.value })
@@ -463,6 +731,7 @@ export function CedisTransferCommandPanel({
                     {line.unit !== "KG" && (
                       <Input
                         aria-label={`Piezas ${index + 1}`}
+                        max={availability.balance.availableQuantityPieces}
                         min="0"
                         onChange={(event) =>
                           updateLine(index, {
@@ -478,6 +747,7 @@ export function CedisTransferCommandPanel({
                   </div>
                 </div>
               </div>
+              <AvailabilityPanel line={line} mode={mode} product={product} />
               <p className="mt-3 text-xs text-[var(--erp-muted-foreground)]">
                 {product
                   ? `Unidad del catálogo: ${unitLabels[unit]}`
@@ -515,7 +785,7 @@ export function CedisTransferCommandPanel({
             Cancelar
           </Button>
           <Button
-            disabled={productsLoading || activeProducts.length === 0}
+            disabled={productsLoading || availableProducts.length === 0}
             type="submit"
           >
             Revisar antes de confirmar

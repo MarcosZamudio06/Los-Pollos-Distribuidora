@@ -160,7 +160,7 @@ Validaciones: no eliminar físicamente.
 
 ## GET /api/inventory/balances
 
-Propósito: consultar stock disponible por producto y ubicación operativa.
+Propósito: consultar existencia física, mercancía reservada y stock disponible por producto y ubicación operativa.
 
 Permisos: `ADMIN`, `WAREHOUSE`, `SELLER` en modo lectura para POS.
 
@@ -176,6 +176,8 @@ Respuesta `data.items[]`:
 - `productId`, `productName`, `sku`, `unit`.
 - `locationId`, `locationName`.
 - `quantityKg`, `quantityPieces`.
+- `reservedQuantityKg`, `reservedQuantityPieces`.
+- `availableQuantityKg`, `availableQuantityPieces`.
 - `minQuantityKg`, `minQuantityPieces`.
 - `isLowStock`.
 
@@ -183,6 +185,11 @@ Validaciones:
 
 - No consolidar como stock global único.
 - `quantityKg` y `quantityPieces` no deben ser negativos.
+- `reservedQuantityKg` y `reservedQuantityPieces` no deben ser negativos.
+- La disponibilidad se calcula como existencia física menos reserva por dimensión.
+- `availableQuantityKg` y `availableQuantityPieces` no deben ser negativos.
+- La reserva no representa una ubicación física adicional.
+- `isLowStock` debe comparar la disponibilidad contra `minQuantityKg` y `minQuantityPieces`, no la existencia física comprometida.
 
 ## GET /api/cedis/inventory-summary
 
@@ -237,6 +244,7 @@ Validaciones:
 - Registrar cantidades por kilo y/o pieza según unidad del producto.
 - `quantityPieces` debe ser entero cuando aplique.
 - No permitir saldo negativo por ubicación.
+- No permitir que un ajuste negativo consuma `reservedQuantityKg` o `reservedQuantityPieces`.
 - Usar equivalencia aprobada si el ajuste requiere convertir kilo/pieza.
 - Si el ajuste corresponde a diferencia de ruta, debe conservar referencia a `routeId` o `routeSettlementId` mediante `referenceType/referenceId`.
 
