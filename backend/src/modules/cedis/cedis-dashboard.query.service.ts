@@ -95,19 +95,19 @@ type DashboardTransferActivity = {
     updatedAt: Date;
     items?: Array<{
       productId: string;
-      unit?: ProductUnit | string;
+      unit?: string;
       quantityKg: DecimalLike;
       quantityPieces: number | null;
       appliedEquivalentFactor?: DecimalLike;
       unitEquivalent?: {
-        unitFrom: ProductUnit | string;
-        unitTo: ProductUnit | string;
+        unitFrom: string;
+        unitTo: string;
         factor: DecimalLike;
       } | null;
       product?: {
         name?: string;
         sku?: string | null;
-        unit?: ProductUnit | string;
+        unit?: string;
         salePrice?: DecimalLike;
       };
     }>;
@@ -1076,7 +1076,7 @@ export class CedisDashboardQueryService {
       {
         productName: string;
         productSku: string | null;
-        unit: ProductUnit | string;
+        unit: string;
         unitPrice: DecimalLike;
         unitCost: DecimalLike;
         deliveredKg: number;
@@ -1317,14 +1317,14 @@ export class CedisDashboardQueryService {
   }
 
   private valuationQuantity(
-    unit: ProductUnit | string | undefined,
+    unit: string | undefined,
     quantityKg: DecimalLike,
     quantityPieces: number | null,
     appliedFactor: DecimalLike,
     equivalent:
       | {
-          unitFrom: ProductUnit | string;
-          unitTo: ProductUnit | string;
+          unitFrom: string;
+          unitTo: string;
           factor: DecimalLike;
         }
       | null

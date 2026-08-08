@@ -224,8 +224,8 @@ describe('CedisDashboardQueryService', () => {
       { cedisLocationId: 'cedis-1', businessDate: '2026-08-04' },
       seller,
     );
-    const dashboardSelect = prisma.branchSupplyCycle.findMany.mock.calls[0][0]
-      .select;
+    const dashboardSelect =
+      prisma.branchSupplyCycle.findMany.mock.calls[0][0].select;
 
     expect(dashboardSelect.pointOfSaleDailyClose.select.sales).toBeDefined();
     expect(dashboard.items[0]?.financial).toEqual(
