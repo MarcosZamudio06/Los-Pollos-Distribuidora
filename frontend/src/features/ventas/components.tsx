@@ -765,6 +765,7 @@ type PaymentEntryControlProps = {
   onPaymentsChange: (payments: SalePaymentInput[]) => void;
   panelRef?: RefObject<HTMLElement | null>;
   payments: SalePaymentInput[];
+  paymentType?: PaymentType;
   total: Money;
 };
 
@@ -777,8 +778,22 @@ export function PaymentEntryControl({
   onPaymentsChange,
   panelRef,
   payments,
+  paymentType = "CASH_SALE",
   total,
 }: PaymentEntryControlProps) {
+  const isCreditSale = paymentType === "CREDIT_SALE";
+  const appliedAmountLabel = isCreditSale ? "Monto del adelanto" : "Monto";
+  const appliedAmountAriaLabel = (index: number) =>
+    isCreditSale
+      ? `Monto del adelanto ${index + 1}`
+      : `Monto aplicado del pago ${index + 1}`;
+  const cashReceivedLabel = isCreditSale
+    ? "Dinero entregado"
+    : "Efectivo entregado";
+  const cashReceivedAriaLabel = (index: number) =>
+    isCreditSale
+      ? `Dinero entregado del adelanto ${index + 1}`
+      : `Efectivo entregado del pago ${index + 1}`;
   const totalPaid = calculatePaymentsTotal(payments);
   const remaining =
     total.subtract(totalPaid).compare(Money.zero()) > 0
@@ -807,12 +822,12 @@ export function PaymentEntryControl({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-amber)]">
-            Pago
+            {isCreditSale ? "Adelanto" : "Pago"}
           </p>
           <h2
             className={`${compact ? "mt-1 text-sm" : "mt-1 text-xl"} font-[var(--pos-display)] font-bold uppercase tracking-[-0.02em]`}
           >
-            Pago recibido
+            {isCreditSale ? "Adelanto recibido" : "Pago recibido"}
           </h2>
         </div>
         <span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">
@@ -854,13 +869,16 @@ export function PaymentEntryControl({
                 </select>
               </label>
               <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">
-                Monto
+                {appliedAmountLabel}
                 <input
-                  aria-label={`Monto aplicado del pago ${index + 1}`}
+                  aria-label={appliedAmountAriaLabel(index)}
                   className={`${inputClass} ${compact ? "px-2 py-2 text-xs" : ""}`}
                   min="0.01"
                   onChange={(event) =>
-                    updatePayment(index, { amount: event.target.value })
+                    updatePayment(index, {
+                      amount:
+                        event.target.value === "" ? 0 : event.target.value,
+                    })
                   }
                   step="0.01"
                   type="number"
@@ -886,9 +904,9 @@ export function PaymentEntryControl({
                 className={`${compact ? "mt-2" : "mt-3"} grid gap-2 sm:grid-cols-2`}
               >
                 <label className="grid gap-1.5 text-xs font-bold text-[var(--pos-muted)]">
-                  Efectivo entregado
+                  {cashReceivedLabel}
                   <input
-                    aria-label={`Efectivo entregado del pago ${index + 1}`}
+                    aria-label={cashReceivedAriaLabel(index)}
                     className={`${inputClass} ${compact ? "px-2 py-2 text-xs" : ""}`}
                     data-pos-cash-tendered
                     min={Money.from(payment.amount).toString()}
@@ -912,11 +930,12 @@ export function PaymentEntryControl({
                   <output
                     aria-atomic="true"
                     aria-live="polite"
-                    className={`${inputClass} ${compact ? "px-2 py-2" : ""} ${payment.cashTendered !== undefined && Money.from(payment.cashTendered).compare(payment.amount) >= 0 ? "border-[rgba(22,117,82,0.45)] bg-[rgba(22,117,82,0.10)] text-lg font-black text-[var(--pos-success)]" : "bg-[var(--pos-porcelain)] text-[var(--pos-muted)]"} font-mono tabular-nums`}
+                    className={`${inputClass} ${compact ? "px-2 py-2" : ""} ${Money.from(payment.amount).isPositive() && payment.cashTendered !== undefined && Money.from(payment.cashTendered).compare(payment.amount) >= 0 ? "border-[rgba(22,117,82,0.45)] bg-[rgba(22,117,82,0.10)] text-lg font-black text-[var(--pos-success)]" : "bg-[var(--pos-porcelain)] text-[var(--pos-muted)]"} font-mono tabular-nums`}
                     data-pos-cash-change
                   >
                     {toMoney(
-                      payment.cashTendered !== undefined &&
+                      Money.from(payment.amount).isPositive() &&
+                        payment.cashTendered !== undefined &&
                         Money.from(payment.cashTendered).compare(
                           payment.amount,
                         ) >= 0
@@ -952,6 +971,7 @@ export function PaymentEntryControl({
                         aria-label={`Usar ${toMoney(denomination)} de efectivo entregado`}
                         className="min-h-11 border border-[var(--pos-steel)] bg-white px-1 font-mono text-xs font-black tabular-nums text-[var(--pos-ink)] transition hover:border-[var(--pos-action)] hover:bg-[var(--pos-porcelain)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)] disabled:cursor-not-allowed disabled:bg-[var(--pos-porcelain)] disabled:text-[var(--pos-muted)] disabled:opacity-50"
                         disabled={
+                          !Money.from(payment.amount).isPositive() ||
                           Money.from(String(denomination)).compare(
                             payment.amount,
                           ) < 0
@@ -1056,7 +1076,7 @@ export function PaymentEntryControl({
           }
           type="button"
         >
-          Agregar pago
+          Agregar {isCreditSale ? "adelanto" : "pago"}
         </button>
       </div>
     </section>
@@ -1102,6 +1122,7 @@ export function PaymentMethodSelector({
           onPaymentsChange={onPaymentsChange}
           panelRef={panelRef}
           payments={payments}
+          paymentType={paymentType}
           total={Money.from(total)}
         />
       </div>

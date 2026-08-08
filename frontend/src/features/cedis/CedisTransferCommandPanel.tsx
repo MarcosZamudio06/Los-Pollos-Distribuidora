@@ -1,8 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, Plus, Trash2 } from "lucide-react";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
+import { formatMoney, Money } from "../../lib/money";
 import type { Product, OperationalUnit } from "../inventario/types";
-import type { CedisCycleCommand, CedisDashboardLocation } from "./types";
+import type {
+  CedisCycleCommand,
+  CedisCycleItem,
+  CedisDashboardLocation,
+} from "./types";
 
 type TransferMode = "SUPPLY" | "RETURN";
 
@@ -37,6 +42,8 @@ type CedisTransferCommandPanelProps = {
   products: Product[];
   productsError?: unknown;
   productsLoading: boolean;
+  cycleItems?: CedisCycleItem[];
+  expectedSales?: string;
 };
 
 const unitLabels: Record<OperationalUnit, string> = {
@@ -93,8 +100,76 @@ function formatUnitQuantity(
   return values.join(" · ");
 }
 
-function hasProductAvailability(product: Product) {
-  const unit = productUnit(product);
+function formatDimensions(quantityKg: number, quantityPieces: number) {
+  return (
+    formatUnitQuantity("KG_AND_PIECE", quantityKg, quantityPieces) ||
+    "0 kg · 0 piezas"
+  );
+}
+
+function numberValue(value: string | number | null | undefined) {
+  const result = Number(value ?? 0);
+  return Number.isFinite(result) ? result : 0;
+}
+
+function cycleItemQuantities(item: CedisCycleItem) {
+  return {
+    deliveredKg: numberValue(item.deliveredKg),
+    deliveredPieces: numberValue(item.deliveredPieces),
+    returnedKg: numberValue(item.returnedKg),
+    returnedPieces: numberValue(item.returnedPieces),
+    actualSoldKg: numberValue(item.actualSoldKg),
+    actualSoldPieces: numberValue(item.actualSoldPieces),
+  };
+}
+
+function cycleItemReturnCapacity(item: CedisCycleItem) {
+  const quantities = cycleItemQuantities(item);
+  return {
+    quantityKg: Math.max(
+      quantities.deliveredKg - quantities.actualSoldKg - quantities.returnedKg,
+      0,
+    ),
+    quantityPieces: Math.max(
+      quantities.deliveredPieces -
+        quantities.actualSoldPieces -
+        quantities.returnedPieces,
+      0,
+    ),
+  };
+}
+
+function valuationQuantity(
+  unit: OperationalUnit,
+  quantityKg: number,
+  quantityPieces: number,
+) {
+  if (unit === "KG") return quantityKg;
+  if (unit === "PIECE") return quantityPieces;
+  return quantityKg > 0 ? quantityKg : quantityPieces;
+}
+
+function lineValueQuantity(line: TransferLineDraft) {
+  const quantities = lineQuantities(line);
+  return valuationQuantity(
+    line.unit,
+    quantities.quantityKg,
+    quantities.quantityPieces,
+  );
+}
+
+function isPositiveCycleBalance(item: CedisCycleItem) {
+  const remaining = cycleItemReturnCapacity(item);
+  if (item.unit === "KG") return remaining.quantityKg > 0;
+  if (item.unit === "PIECE") return remaining.quantityPieces > 0;
+  return remaining.quantityKg > 0 || remaining.quantityPieces > 0;
+}
+
+function hasProductAvailability(
+  product: Product,
+  unitOverride?: OperationalUnit,
+) {
+  const unit = unitOverride ?? productUnit(product);
   const balance = productAvailability(product);
   return (
     (unit !== "PIECE" && balance.availableQuantityKg > 0) ||
@@ -144,11 +219,71 @@ function lineAvailability(
     requested,
     shortageKg,
     shortagePieces,
+    returnAvailableKg: balance.availableQuantityKg,
+    returnAvailablePieces: balance.availableQuantityPieces,
     status,
   };
 }
 
-function statusLabel(status: AvailabilityStatus) {
+function returnLineAvailability(
+  product: Product | undefined,
+  line: TransferLineDraft,
+  cycleItem: CedisCycleItem | undefined,
+) {
+  const details = lineAvailability(product, line);
+  if (!cycleItem) {
+    return {
+      ...details,
+      returnAvailableKg: 0,
+      returnAvailablePieces: 0,
+      status: "NONE" as AvailabilityStatus,
+    };
+  }
+
+  const cycleCapacity = cycleItemReturnCapacity(cycleItem);
+  const returnAvailableKg = Math.min(
+    details.balance.availableQuantityKg,
+    cycleCapacity.quantityKg,
+  );
+  const returnAvailablePieces = Math.min(
+    details.balance.availableQuantityPieces,
+    cycleCapacity.quantityPieces,
+  );
+  const shortageKg = Math.max(
+    details.requested.quantityKg - returnAvailableKg,
+    0,
+  );
+  const shortagePieces = Math.max(
+    details.requested.quantityPieces - returnAvailablePieces,
+    0,
+  );
+  const hasAvailable =
+    (line.unit !== "PIECE" && returnAvailableKg > 0) ||
+    (line.unit !== "KG" && returnAvailablePieces > 0);
+
+  return {
+    ...details,
+    shortageKg,
+    shortagePieces,
+    returnAvailableKg,
+    returnAvailablePieces,
+    status:
+      shortageKg > 0 || shortagePieces > 0
+        ? ("INSUFFICIENT" as AvailabilityStatus)
+        : hasAvailable
+          ? ("SUFFICIENT" as AvailabilityStatus)
+          : ("NONE" as AvailabilityStatus),
+  };
+}
+
+function statusLabel(status: AvailabilityStatus, mode: TransferMode) {
+  if (mode === "RETURN") {
+    return {
+      SUFFICIENT: "Dentro del límite",
+      INSUFFICIENT: "Excede el límite",
+      NONE: "Sin saldo para devolver",
+    }[status];
+  }
   return {
     SUFFICIENT: "Suficiente",
     INSUFFICIENT: "Insuficiente",
@@ -194,6 +329,9 @@ function commandErrorMessage(error: unknown, mode: TransferMode) {
       if (record.code === "INVENTORY_CONCURRENCY_CONFLICT") {
         return "La disponibilidad cambió mientras se procesaba la operación. Revisa los saldos actualizados y reintenta.";
       }
+      if (record.code === "RETURN_EXCEEDS_UNSOLD_QUANTITY") {
+        return "La devolución supera la cantidad no vendida disponible en el ciclo. Revisa lo enviado, lo vendido y lo ya regresado.";
+      }
       if (typeof record.message === "string") return record.message;
       if (typeof record.code === "string")
         return `El servidor rechazó el comando (${record.code}).`;
@@ -236,10 +374,12 @@ function LocationPair({
 }
 
 function AvailabilityPanel({
+  cycleItem,
   line,
   mode,
   product,
 }: {
+  cycleItem?: CedisCycleItem;
   line: TransferLineDraft;
   mode: TransferMode;
   product: Product | undefined;
@@ -252,7 +392,15 @@ function AvailabilityPanel({
     );
   }
 
-  const details = lineAvailability(product, line);
+  const details =
+    mode === "RETURN"
+      ? returnLineAvailability(product, line, cycleItem)
+      : {
+          ...lineAvailability(product, line),
+          returnAvailableKg: productAvailability(product).availableQuantityKg,
+          returnAvailablePieces:
+            productAvailability(product).availableQuantityPieces,
+        };
   const source = mode === "SUPPLY" ? "CEDIS" : "sucursal";
   const requested = formatUnitQuantity(
     line.unit,
@@ -276,7 +424,7 @@ function AvailabilityPanel({
           Disponibilidad en {source}
         </p>
         <Badge tone={statusTone(details.status)}>
-          {statusLabel(details.status)}
+          {statusLabel(details.status, mode)}
         </Badge>
       </div>
       <dl className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -306,14 +454,20 @@ function AvailabilityPanel({
         </div>
         <div className="rounded-lg bg-[rgba(63,123,65,0.08)] px-3 py-2">
           <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
-            Disponible
+            {mode === "RETURN" ? "Límite de devolución" : "Disponible"}
           </dt>
           <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-success)]">
-            {formatUnitQuantity(
-              line.unit,
-              details.balance.availableQuantityKg,
-              details.balance.availableQuantityPieces,
-            )}
+            {mode === "RETURN"
+              ? formatUnitQuantity(
+                  line.unit,
+                  details.returnAvailableKg,
+                  details.returnAvailablePieces,
+                ) || "0"
+              : formatUnitQuantity(
+                  line.unit,
+                  details.balance.availableQuantityKg,
+                  details.balance.availableQuantityPieces,
+                )}
           </dd>
         </div>
       </dl>
@@ -321,11 +475,189 @@ function AvailabilityPanel({
         <span>Solicitado: {requested || "Sin cantidad"}</span>
         {details.status === "INSUFFICIENT" && (
           <span className="font-bold text-[var(--erp-danger)]">
-            Faltante: {shortage}
+            {mode === "RETURN" ? "Excede por" : "Faltante"}: {shortage}
           </span>
         )}
       </div>
     </div>
+  );
+}
+
+function ReturnLineContext({
+  cycleItem,
+}: {
+  cycleItem: CedisCycleItem | undefined;
+}) {
+  if (!cycleItem) {
+    return (
+      <p className="mt-3 rounded-lg border border-dashed border-[color:var(--erp-border)] px-3 py-2 text-xs text-[var(--erp-muted-foreground)]">
+        Este producto no tiene suministro confirmado en el ciclo seleccionado.
+      </p>
+    );
+  }
+
+  const quantities = cycleItemQuantities(cycleItem);
+  const returnCapacity = cycleItemReturnCapacity(cycleItem);
+
+  return (
+    <dl className="mt-3 grid gap-2 rounded-xl border border-[rgba(173,123,32,0.24)] bg-[rgba(248,239,216,0.42)] p-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div>
+        <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+          Enviado en ciclo
+        </dt>
+        <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-foreground)]">
+          {formatUnitQuantity(
+            cycleItem.unit,
+            quantities.deliveredKg,
+            quantities.deliveredPieces,
+          ) || "0"}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+          Vendido en sucursal
+        </dt>
+        <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-foreground)]">
+          {formatUnitQuantity(
+            cycleItem.unit,
+            quantities.actualSoldKg,
+            quantities.actualSoldPieces,
+          ) || "0"}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+          Ya regresado
+        </dt>
+        <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-foreground)]">
+          {formatUnitQuantity(
+            cycleItem.unit,
+            quantities.returnedKg,
+            quantities.returnedPieces,
+          ) || "0"}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+          Límite para devolver
+        </dt>
+        <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-brand-gold-deep)]">
+          {formatUnitQuantity(
+            cycleItem.unit,
+            returnCapacity.quantityKg,
+            returnCapacity.quantityPieces,
+          ) || "0"}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+          Precio de venta
+        </dt>
+        <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-foreground)]">
+          {formatMoney(cycleItem.unitPrice)}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function ReturnFinancialPreview({
+  cycleItems,
+  expectedSales,
+  lines,
+}: {
+  cycleItems: CedisCycleItem[];
+  expectedSales?: string;
+  lines: TransferLineDraft[];
+}) {
+  const currentReturnKg = lines.reduce(
+    (total, line) => total + lineQuantities(line).quantityKg,
+    0,
+  );
+  const currentReturnPieces = lines.reduce(
+    (total, line) => total + lineQuantities(line).quantityPieces,
+    0,
+  );
+  const sentKg = cycleItems.reduce(
+    (total, item) => total + cycleItemQuantities(item).deliveredKg,
+    0,
+  );
+  const sentPieces = cycleItems.reduce(
+    (total, item) => total + cycleItemQuantities(item).deliveredPieces,
+    0,
+  );
+  const notSoldValue = Money.sum(
+    lines.map((line) => {
+      const item = cycleItems.find(
+        (candidate) => candidate.productId === line.productId,
+      );
+      return item
+        ? Money.from(item.unitPrice).multiply(lineValueQuantity(line))
+        : Money.zero();
+    }),
+  );
+  const expectedAmount =
+    expectedSales === undefined ? null : Money.from(expectedSales);
+  const adjustedExpectedAmount = expectedAmount
+    ? expectedAmount.subtract(notSoldValue).compare(Money.zero()) < 0
+      ? Money.zero()
+      : expectedAmount.subtract(notSoldValue)
+    : null;
+
+  return (
+    <section
+      aria-label="Impacto de la devolución"
+      className="mt-5 overflow-hidden rounded-2xl border border-[rgba(173,123,32,0.32)] bg-[linear-gradient(135deg,rgba(248,239,216,0.7),rgba(255,255,255,0.96))]"
+    >
+      <div className="border-b border-[rgba(173,123,32,0.2)] px-4 py-4 sm:px-5">
+        <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-[var(--erp-brand-gold-deep)]">
+          Conciliación de devolución
+        </p>
+        <h3 className="mt-1 text-lg font-black text-[var(--erp-foreground)]">
+          El regreso reduce la venta que se esperaba cobrar
+        </h3>
+        <p className="mt-1 max-w-3xl text-sm text-[var(--erp-muted-foreground)]">
+          El valor se calcula con el precio de venta guardado en el ciclo, no
+          con el precio actual del catálogo.
+        </p>
+      </div>
+      <dl className="grid gap-px bg-[rgba(173,123,32,0.16)] sm:grid-cols-2 xl:grid-cols-4">
+        <div className="bg-white/80 px-4 py-4 sm:px-5">
+          <dt className="text-xs font-bold text-[var(--erp-muted-foreground)]">
+            Enviado en ciclo
+          </dt>
+          <dd className="mt-1 text-lg font-black tabular-nums">
+            {formatDimensions(sentKg, sentPieces)}
+          </dd>
+        </div>
+        <div className="bg-white/80 px-4 py-4 sm:px-5">
+          <dt className="text-xs font-bold text-[var(--erp-muted-foreground)]">
+            Regresado ahora
+          </dt>
+          <dd className="mt-1 text-lg font-black tabular-nums">
+            {formatDimensions(currentReturnKg, currentReturnPieces)}
+          </dd>
+        </div>
+        <div className="bg-white/80 px-4 py-4 sm:px-5">
+          <dt className="text-xs font-bold text-[var(--erp-muted-foreground)]">
+            Venta no realizada
+          </dt>
+          <dd className="mt-1 text-lg font-black tabular-nums text-[var(--erp-danger)]">
+            {formatMoney(notSoldValue.toString())}
+          </dd>
+        </div>
+        <div className="bg-[rgba(63,123,65,0.1)] px-4 py-4 sm:px-5">
+          <dt className="text-xs font-bold text-[var(--erp-muted-foreground)]">
+            Monto esperado después
+          </dt>
+          <dd className="mt-1 text-lg font-black tabular-nums text-[var(--erp-success)]">
+            {adjustedExpectedAmount
+              ? formatMoney(adjustedExpectedAmount.toString())
+              : "—"}
+          </dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 
@@ -339,6 +671,8 @@ export function CedisTransferCommandPanel({
   products,
   productsError,
   productsLoading,
+  cycleItems = [],
+  expectedSales,
 }: CedisTransferCommandPanelProps) {
   const [lines, setLines] = useState<TransferLineDraft[]>([emptyLine()]);
   const [notes, setNotes] = useState("");
@@ -349,14 +683,53 @@ export function CedisTransferCommandPanel({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const activeProducts = products.filter(productIsActive);
-  const availableProducts = activeProducts.filter(hasProductAvailability);
   const isSupply = mode === "SUPPLY";
+  const activeProducts = products.filter(productIsActive);
+  const availableProducts = activeProducts.filter(hasTransferAvailability);
   const sourceLabel = isSupply ? "CEDIS" : "la sucursal";
   const title = isSupply ? "Enviar producto" : "Registrar devolución";
   const submitLabel = isSupply
     ? "Confirmar suministro"
     : "Confirmar devolución";
+
+  function cycleItemForProduct(productId: string) {
+    return cycleItems.find((item) => item.productId === productId);
+  }
+
+  function transferUnit(product: Product) {
+    return cycleItemForProduct(product.id)?.unit ?? productUnit(product);
+  }
+
+  function hasTransferAvailability(product: Product) {
+    if (isSupply || cycleItems.length === 0)
+      return hasProductAvailability(product);
+    const cycleItem = cycleItemForProduct(product.id);
+    return (
+      Boolean(cycleItem && isPositiveCycleBalance(cycleItem)) &&
+      hasProductAvailability(product, cycleItem?.unit)
+    );
+  }
+
+  function returnQuantityLimit(
+    product: Product | undefined,
+    dimension: "KG" | "PIECE",
+  ) {
+    const balance = productAvailability(product);
+    if (isSupply) {
+      return dimension === "KG"
+        ? balance.availableQuantityKg
+        : balance.availableQuantityPieces;
+    }
+    const cycleItem = product ? cycleItemForProduct(product.id) : undefined;
+    if (!cycleItem) return 0;
+    const remaining = cycleItemReturnCapacity(cycleItem);
+    return Math.min(
+      dimension === "KG"
+        ? balance.availableQuantityKg
+        : balance.availableQuantityPieces,
+      dimension === "KG" ? remaining.quantityKg : remaining.quantityPieces,
+    );
+  }
 
   function updateLine(index: number, next: Partial<TransferLineDraft>) {
     setLines((current) =>
@@ -371,7 +744,7 @@ export function CedisTransferCommandPanel({
     if (
       productId &&
       (!product ||
-        !hasProductAvailability(product) ||
+        !hasTransferAvailability(product) ||
         lines.some(
           (line, lineIndex) =>
             lineIndex !== index && line.productId === productId,
@@ -386,7 +759,7 @@ export function CedisTransferCommandPanel({
     }
     updateLine(index, {
       productId,
-      unit: productUnit(product),
+      unit: cycleItemForProduct(productId)?.unit ?? productUnit(product),
       quantityKg: "",
       quantityPieces: "",
     });
@@ -420,11 +793,21 @@ export function CedisTransferCommandPanel({
         return `Captura piezas enteras positivas en la línea ${index + 1}.`;
       if (line.unit === "KG_AND_PIECE" && !hasKg && !hasPieces)
         return `Captura kilos o piezas en la línea ${index + 1}.`;
-      const availability = lineAvailability(product, line);
+      const availability = isSupply
+        ? lineAvailability(product, line)
+        : returnLineAvailability(
+            product,
+            line,
+            cycleItemForProduct(line.productId),
+          );
       if (availability.status === "NONE")
-        return `El producto de la línea ${index + 1} no tiene disponibilidad en ${sourceLabel}.`;
+        return isSupply
+          ? `El producto de la línea ${index + 1} no tiene disponibilidad en ${sourceLabel}.`
+          : `El producto de la línea ${index + 1} no tiene saldo para devolver.`;
       if (availability.status === "INSUFFICIENT")
-        return `La cantidad de la línea ${index + 1} supera la disponibilidad. Faltan ${formatUnitQuantity(line.unit, availability.shortageKg, availability.shortagePieces)}.`;
+        return isSupply
+          ? `La cantidad de la línea ${index + 1} supera la disponibilidad. Faltan ${formatUnitQuantity(line.unit, availability.shortageKg, availability.shortagePieces)}.`
+          : `La devolución de la línea ${index + 1} supera el límite de producto no vendido. Máximo: ${formatUnitQuantity(line.unit, availability.returnAvailableKg, availability.returnAvailablePieces)}.`;
     }
     return null;
   }
@@ -506,13 +889,26 @@ export function CedisTransferCommandPanel({
         <div className="mt-5">
           <LocationPair branch={branch} cedis={cedis} mode={mode} />
         </div>
+        {!isSupply && (
+          <ReturnFinancialPreview
+            cycleItems={cycleItems}
+            expectedSales={expectedSales}
+            lines={lines}
+          />
+        )}
         <div className="mt-4 overflow-x-auto rounded-xl border border-[color:var(--erp-border)]">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-[var(--erp-surface)] text-xs uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
               <tr>
                 <th className="px-3 py-2 font-black">Producto</th>
                 <th className="px-3 py-2 font-black">Unidad</th>
+                {!isSupply && (
+                  <th className="px-3 py-2 font-black">Enviado en ciclo</th>
+                )}
                 <th className="px-3 py-2 font-black">Cantidad</th>
+                {!isSupply && (
+                  <th className="px-3 py-2 font-black">Venta no realizada</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -520,6 +916,17 @@ export function CedisTransferCommandPanel({
                 const product = activeProducts.find(
                   (item) => item.id === line.productId,
                 );
+                const cycleItem = cycleItemForProduct(line.productId);
+                const sent = cycleItem ? cycleItemQuantities(cycleItem) : null;
+                const lineValue = cycleItem
+                  ? Money.from(cycleItem.unitPrice).multiply(
+                      valuationQuantity(
+                        line.unit,
+                        numberValue(line.quantityKg),
+                        numberValue(line.quantityPieces),
+                      ),
+                    )
+                  : Money.zero();
                 return (
                   <tr
                     className="border-t border-[color:var(--erp-border)]"
@@ -529,6 +936,17 @@ export function CedisTransferCommandPanel({
                       {product?.name ?? line.productId}
                     </td>
                     <td className="px-3 py-3">{unitLabels[line.unit]}</td>
+                    {!isSupply && (
+                      <td className="px-3 py-3 font-bold tabular-nums">
+                        {sent
+                          ? formatUnitQuantity(
+                              cycleItem?.unit ?? line.unit,
+                              sent.deliveredKg,
+                              sent.deliveredPieces,
+                            ) || "0"
+                          : "—"}
+                      </td>
+                    )}
                     <td className="px-3 py-3 font-bold tabular-nums">
                       {[
                         line.quantityKg ? `${line.quantityKg} kg` : null,
@@ -539,6 +957,11 @@ export function CedisTransferCommandPanel({
                         .filter(Boolean)
                         .join(" · ")}
                     </td>
+                    {!isSupply && (
+                      <td className="px-3 py-3 font-bold tabular-nums text-[var(--erp-danger)]">
+                        {formatMoney(lineValue.toString())}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -613,6 +1036,13 @@ export function CedisTransferCommandPanel({
       <div className="mt-5">
         <LocationPair branch={branch} cedis={cedis} mode={mode} />
       </div>
+      {!isSupply && (
+        <ReturnFinancialPreview
+          cycleItems={cycleItems}
+          expectedSales={expectedSales}
+          lines={lines}
+        />
+      )}
       {productsError ? (
         <p
           className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-[var(--erp-danger)]"
@@ -626,8 +1056,8 @@ export function CedisTransferCommandPanel({
           const product = activeProducts.find(
             (item) => item.id === line.productId,
           );
-          const unit = productUnit(product);
-          const availability = lineAvailability(product, line);
+          const cycleItem = cycleItemForProduct(line.productId);
+          const unit = cycleItem?.unit ?? productUnit(product);
           return (
             <div
               className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
@@ -671,7 +1101,7 @@ export function CedisTransferCommandPanel({
                     {activeProducts.map((item) => (
                       <option
                         disabled={
-                          !hasProductAvailability(item) ||
+                          !hasTransferAvailability(item) ||
                           lines.some(
                             (otherLine, otherIndex) =>
                               otherIndex !== index &&
@@ -683,9 +1113,9 @@ export function CedisTransferCommandPanel({
                       >
                         {item.name}
                         {item.sku ? ` · ${item.sku}` : ""} ·{" "}
-                        {hasProductAvailability(item)
+                        {hasTransferAvailability(item)
                           ? formatUnitQuantity(
-                              productUnit(item),
+                              transferUnit(item),
                               productAvailability(item).availableQuantityKg,
                               productAvailability(item).availableQuantityPieces,
                             )
@@ -717,7 +1147,7 @@ export function CedisTransferCommandPanel({
                     {line.unit !== "PIECE" && (
                       <Input
                         aria-label={`Kilos ${index + 1}`}
-                        max={availability.balance.availableQuantityKg}
+                        max={returnQuantityLimit(product, "KG")}
                         min="0"
                         onChange={(event) =>
                           updateLine(index, { quantityKg: event.target.value })
@@ -731,7 +1161,7 @@ export function CedisTransferCommandPanel({
                     {line.unit !== "KG" && (
                       <Input
                         aria-label={`Piezas ${index + 1}`}
-                        max={availability.balance.availableQuantityPieces}
+                        max={returnQuantityLimit(product, "PIECE")}
                         min="0"
                         onChange={(event) =>
                           updateLine(index, {
@@ -747,7 +1177,13 @@ export function CedisTransferCommandPanel({
                   </div>
                 </div>
               </div>
-              <AvailabilityPanel line={line} mode={mode} product={product} />
+              <AvailabilityPanel
+                cycleItem={cycleItem}
+                line={line}
+                mode={mode}
+                product={product}
+              />
+              {!isSupply && <ReturnLineContext cycleItem={cycleItem} />}
               <p className="mt-3 text-xs text-[var(--erp-muted-foreground)]">
                 {product
                   ? `Unidad del catálogo: ${unitLabels[unit]}`

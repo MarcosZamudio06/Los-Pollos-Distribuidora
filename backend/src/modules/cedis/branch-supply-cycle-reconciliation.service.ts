@@ -264,7 +264,8 @@ type Aggregate = {
   deliveredPieces: number;
   returnedKg: number;
   returnedPieces: number;
-  expectedValueQuantity: number;
+  deliveredValueQuantity: number;
+  returnedValueQuantity: number;
   actualSoldKg: number;
   actualSoldPieces: number;
   actualValueQuantity: number;
@@ -373,11 +374,11 @@ export class BranchSupplyCycleReconciliationService {
         if (link.role === 'SUPPLY') {
           aggregate.deliveredKg += quantity.kg;
           aggregate.deliveredPieces += quantity.pieces;
-          aggregate.expectedValueQuantity += valueQuantity;
+          aggregate.deliveredValueQuantity += valueQuantity;
         } else {
           aggregate.returnedKg += quantity.kg;
           aggregate.returnedPieces += quantity.pieces;
-          aggregate.expectedValueQuantity -= valueQuantity;
+          aggregate.returnedValueQuantity += valueQuantity;
         }
       }
     }
@@ -488,7 +489,7 @@ export class BranchSupplyCycleReconciliationService {
       );
       aggregate.deliveredKg += quantity.kg;
       aggregate.deliveredPieces += quantity.pieces;
-      aggregate.expectedValueQuantity += this.valuationQuantity(
+      aggregate.deliveredValueQuantity += this.valuationQuantity(
         aggregate.productUnitSnapshot,
         quantity.kg,
         quantity.pieces,
@@ -786,7 +787,8 @@ export class BranchSupplyCycleReconciliationService {
       deliveredPieces: 0,
       returnedKg: 0,
       returnedPieces: 0,
-      expectedValueQuantity: 0,
+      deliveredValueQuantity: 0,
+      returnedValueQuantity: 0,
       actualSoldKg: 0,
       actualSoldPieces: 0,
       actualValueQuantity: 0,
@@ -854,8 +856,12 @@ export class BranchSupplyCycleReconciliationService {
       aggregate.shrinkagePieces;
     const price = Money.from(aggregate.unitPriceSnapshot);
     const cost = Money.from(aggregate.unitCostSnapshot);
-    const expectedSalesAmount = price.multiply(aggregate.expectedValueQuantity);
-    const expectedCostAmount = cost.multiply(aggregate.expectedValueQuantity);
+    const expectedSalesQuantity = Math.max(
+      aggregate.deliveredValueQuantity - aggregate.returnedValueQuantity,
+      0,
+    );
+    const expectedSalesAmount = price.multiply(expectedSalesQuantity);
+    const expectedCostAmount = cost.multiply(aggregate.deliveredValueQuantity);
     const actualCostAmount = cost.multiply(aggregate.actualValueQuantity);
     const actualProfitAmount =
       aggregate.actualSalesAmount.subtract(actualCostAmount);

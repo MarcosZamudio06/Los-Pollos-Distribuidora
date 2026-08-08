@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  History,
   MapPin,
   Maximize2,
   Minimize2,
@@ -53,6 +54,7 @@ import { CartPanel } from "./pos/CartPanel";
 import { CheckoutDock } from "./pos/CheckoutDock";
 import { OperationalBar } from "./pos/OperationalBar";
 import { ProductResultsTable } from "./pos/ProductResultsTable";
+import { RecentSalesModal } from "./pos/RecentSalesModal";
 import { ScanCommandBar } from "./pos/ScanCommandBar";
 import type {
   CartItem,
@@ -445,6 +447,7 @@ export function SalesPosPage() {
   const [recentlyAddedProductId, setRecentlyAddedProductId] =
     useState<string>();
   const [showNewSaleDialog, setShowNewSaleDialog] = useState(false);
+  const [showRecentSalesModal, setShowRecentSalesModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
@@ -461,6 +464,7 @@ export function SalesPosPage() {
   const conditionPanelRef = useRef<HTMLElement>(null);
   const paymentPanelRef = useRef<HTMLElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const recentSalesButtonRef = useRef<HTMLButtonElement>(null);
   const pendingScanRef = useRef<string | null>(null);
   const registrationInFlightRef = useRef(false);
   const cartRef = useRef<CartItem[]>([]);
@@ -533,6 +537,7 @@ export function SalesPosPage() {
     [customers.data],
   );
   const total = useMemo(() => calculateCartTotal(cart), [cart]);
+  const totalPaid = useMemo(() => calculatePaymentsTotal(payments), [payments]);
   const canOverrideCredit = useMemo(
     () =>
       Boolean(
@@ -552,8 +557,14 @@ export function SalesPosPage() {
   );
   const creditRestriction = useMemo(
     () =>
-      getCreditRestriction(paymentType, selectedCustomer, total, creditOptions),
-    [creditOptions, paymentType, selectedCustomer, total],
+      getCreditRestriction(
+        paymentType,
+        selectedCustomer,
+        total,
+        creditOptions,
+        totalPaid,
+      ),
+    [creditOptions, paymentType, selectedCustomer, total, totalPaid],
   );
   const submitBlocker = useMemo(
     () =>
@@ -1344,6 +1355,20 @@ export function SalesPosPage() {
             )}
           </button>
           <button
+            aria-controls="pos-recent-sales-modal"
+            aria-expanded={showRecentSalesModal}
+            aria-haspopup="dialog"
+            aria-label="Abrir ventas recientes"
+            className="ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center gap-2 border-l border-[var(--pos-steel)] px-2 text-xs font-bold text-[var(--pos-muted)] transition hover:bg-[var(--pos-surface-secondary)] hover:text-[var(--pos-ink)] focus-visible:relative focus-visible:z-10 sm:w-auto sm:justify-start sm:px-3"
+            onClick={() => setShowRecentSalesModal(true)}
+            ref={recentSalesButtonRef}
+            title="Ventas recientes"
+            type="button"
+          >
+            <History aria-hidden="true" className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">Ventas recientes</span>
+          </button>
+          <button
             aria-keyshortcuts="F9"
             className="ml-1 h-11 border-l border-[var(--pos-steel)] pl-3 text-xs font-bold text-[#1D5FD1] transition hover:text-[var(--pos-ink)]"
             onClick={handleNewSale}
@@ -1558,6 +1583,13 @@ export function SalesPosPage() {
             )}
           </div>
         </details>
+
+        {showRecentSalesModal && (
+          <RecentSalesModal
+            onClose={() => setShowRecentSalesModal(false)}
+            returnFocusRef={recentSalesButtonRef}
+          />
+        )}
 
         <CheckoutDock
           cart={cart}

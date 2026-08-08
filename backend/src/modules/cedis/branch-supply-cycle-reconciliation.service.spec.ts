@@ -122,7 +122,7 @@ function baseInput(
 }
 
 describe('BranchSupplyCycleReconciliationService', () => {
-  it('calculates expected and actual values for 10 delivered and 3 returned pieces', () => {
+  it('calculates expected sales and cost from delivered pieces', () => {
     const result = service.calculate(baseInput());
     const item = result.items[0];
 
@@ -130,8 +130,8 @@ describe('BranchSupplyCycleReconciliationService', () => {
     expect(item.returnedPieces).toBe(3);
     expect(item.expectedSoldPieces).toBe(7);
     expect(item.expectedSalesAmount).toBe('700.00');
-    expect(item.expectedCostAmount).toBe('420.00');
-    expect(item.expectedProfitAmount).toBe('280.00');
+    expect(item.expectedCostAmount).toBe('600.00');
+    expect(item.expectedProfitAmount).toBe('100.00');
     expect(item.actualSoldPieces).toBe(7);
     expect(item.actualSalesAmount).toBe('700.00');
     expect(item.actualCostAmount).toBe('420.00');
@@ -314,8 +314,8 @@ describe('BranchSupplyCycleReconciliationService', () => {
         returnedPieces: 3,
         expectedSoldPieces: 7,
         expectedSalesAmount: '700.00',
-        expectedCostAmount: '420.00',
-        expectedProfitAmount: '280.00',
+        expectedCostAmount: '600.00',
+        expectedProfitAmount: '100.00',
       }),
     );
     expect(result.confirmedSupplyCount).toBe(2);
@@ -347,7 +347,7 @@ describe('BranchSupplyCycleReconciliationService', () => {
     expect(result.items[0].unitPriceSnapshot).toBe('100.00');
     expect(result.items[0].unitCostSnapshot).toBe('60.00');
     expect(result.items[0].expectedSalesAmount).toBe('700.00');
-    expect(result.items[0].expectedCostAmount).toBe('420.00');
+    expect(result.items[0].expectedCostAmount).toBe('600.00');
   });
 
   it('converts piece-only KG_AND_PIECE quantities with the captured equivalence', () => {
@@ -413,7 +413,7 @@ describe('BranchSupplyCycleReconciliationService', () => {
     expect(item.expectedSoldPieces).toBe(7);
     expect(item.expectedSoldKg).toBe(0);
     expect(item.expectedSalesAmount).toBe('1260.00');
-    expect(item.expectedCostAmount).toBe('756.00');
+    expect(item.expectedCostAmount).toBe('1080.00');
     expect(result.blockers).toEqual(
       expect.not.arrayContaining([
         expect.objectContaining({ code: 'EQUIVALENCE_NOT_APPLICABLE' }),

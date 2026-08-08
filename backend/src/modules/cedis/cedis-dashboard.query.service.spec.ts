@@ -47,6 +47,7 @@ function cycle(overrides: Record<string, unknown> = {}) {
       id: 'close-1',
       updatedAt: new Date('2026-08-04T17:00:00.000Z'),
       differences: [{ status: 'PENDING_AUTHORIZATION' }],
+      sales: [],
     },
     transfers: [
       {
@@ -66,6 +67,7 @@ function createService() {
   const prisma = {
     operationalLocation: { findMany: jest.fn(), findUnique: jest.fn() },
     inventoryBalance: { findMany: jest.fn().mockResolvedValue([]) },
+    sale: { findMany: jest.fn().mockResolvedValue([]) },
     pointOfSaleDailyClose: { findFirst: jest.fn() },
     branchSupplyCycle: {
       findMany: jest.fn(),
@@ -195,7 +197,55 @@ describe('CedisDashboardQueryService', () => {
     expect(result.items[0].financial).toEqual({
       expectedSales: '1000.00',
       actualSales: '900.00',
+      creditSales: '0.00',
     });
+  });
+
+  it('includes outstanding credit sales in dashboard and branch history cards', async () => {
+    const { prisma, service } = createService();
+    const cycleWithCreditSales = cycle({
+      pointOfSaleDailyClose: {
+        id: 'close-1',
+        updatedAt: new Date('2026-08-04T17:00:00.000Z'),
+        differences: [],
+        sales: [
+          {
+            paymentType: 'CREDIT_SALE',
+            total: new Prisma.Decimal('5000.00'),
+            payments: [{ amount: new Prisma.Decimal('500.00') }],
+          },
+        ],
+      },
+    });
+    prisma.operationalLocation.findMany.mockResolvedValue([branch]);
+    prisma.branchSupplyCycle.findMany.mockResolvedValue([cycleWithCreditSales]);
+
+    const dashboard = await service.getDashboard(
+      { cedisLocationId: 'cedis-1', businessDate: '2026-08-04' },
+      seller,
+    );
+    const dashboardSelect = prisma.branchSupplyCycle.findMany.mock.calls[0][0]
+      .select;
+
+    expect(dashboardSelect.pointOfSaleDailyClose.select.sales).toBeDefined();
+    expect(dashboard.items[0]?.financial).toEqual(
+      expect.objectContaining({ creditSales: '4500.00' }),
+    );
+
+    prisma.branchSupplyCycle.findMany.mockResolvedValue([
+      { ...cycleWithCreditSales, branchLocation: branch },
+    ]);
+    prisma.branchSupplyCycle.count.mockResolvedValue(1);
+
+    const history = await service.getBranchHistory(
+      'branch-1',
+      { dateFrom: '2026-08-01', dateTo: '2026-08-31', page: 1, limit: 31 },
+      seller,
+    );
+
+    expect(history.items[0]?.financial).toEqual(
+      expect.objectContaining({ creditSales: '4500.00' }),
+    );
   });
 
   it('returns complete financial projections to an administrator with cost permission', async () => {
@@ -231,6 +281,20 @@ describe('CedisDashboardQueryService', () => {
         totalDeliveredPieces: new Prisma.Decimal('0.000'),
         totalExpectedSoldKg: new Prisma.Decimal('0.000'),
         totalExpectedSoldPieces: new Prisma.Decimal('0.000'),
+        expectedSalesTotal: new Prisma.Decimal('0.00'),
+        expectedCostTotal: new Prisma.Decimal('0.00'),
+        expectedProfitTotal: new Prisma.Decimal('0.00'),
+        productSnapshots: [
+          {
+            productId: 'product-1',
+            productUnitSnapshot: 'KG',
+            unitPriceSnapshot: new Prisma.Decimal('58.00'),
+            unitCostSnapshot: new Prisma.Decimal('42.00'),
+            appliedEquivalentFactorSnapshot: null,
+            equivalenceFromUnitSnapshot: null,
+            equivalenceToUnitSnapshot: null,
+          },
+        ],
         transfers: [
           {
             role: 'SUPPLY',
@@ -240,8 +304,38 @@ describe('CedisDashboardQueryService', () => {
               updatedAt: new Date('2026-08-04T09:30:00.000Z'),
               items: [
                 {
+                  productId: 'product-1',
+                  unit: 'KG',
                   quantityKg: new Prisma.Decimal('25.500'),
                   quantityPieces: null,
+                  appliedEquivalentFactor: null,
+                  unitEquivalent: null,
+                  product: {
+                    unit: 'KG',
+                    salePrice: new Prisma.Decimal('58.00'),
+                  },
+                },
+              ],
+            },
+          },
+          {
+            role: 'RETURN',
+            linkedAt: new Date('2026-08-04T10:00:00.000Z'),
+            inventoryTransfer: {
+              status: 'CONFIRMED',
+              updatedAt: new Date('2026-08-04T10:30:00.000Z'),
+              items: [
+                {
+                  productId: 'product-1',
+                  unit: 'KG',
+                  quantityKg: new Prisma.Decimal('1.000'),
+                  quantityPieces: null,
+                  appliedEquivalentFactor: null,
+                  unitEquivalent: null,
+                  product: {
+                    unit: 'KG',
+                    salePrice: new Prisma.Decimal('58.00'),
+                  },
                 },
               ],
             },
@@ -258,7 +352,15 @@ describe('CedisDashboardQueryService', () => {
     expect(result.items[0]?.physical).toEqual(
       expect.objectContaining({
         deliveredKg: '25.500',
-        expectedSoldKg: '25.500',
+        returnedKg: '1.000',
+        expectedSoldKg: '24.500',
+      }),
+    );
+    expect(result.items[0]?.financial).toEqual(
+      expect.objectContaining({
+        expectedSales: '1421.00',
+        expectedCost: '1071.00',
+        expectedProfit: '350.00',
       }),
     );
   });
@@ -432,7 +534,7 @@ describe('CedisDashboardQueryService', () => {
           cardVoucherTotal: new Prisma.Decimal('100.00'),
           transferTotal: new Prisma.Decimal('100.00'),
           expenseTotal: new Prisma.Decimal('50.00'),
-          grossSalesTotal: new Prisma.Decimal('900.00'),
+          grossSalesTotal: new Prisma.Decimal('5700.00'),
           netCashExpected: new Prisma.Decimal('700.00'),
           cashCountedTotal: new Prisma.Decimal('695.00'),
           cashDifferenceTotal: new Prisma.Decimal('-5.00'),
@@ -455,9 +557,17 @@ describe('CedisDashboardQueryService', () => {
           payments: [
             {
               id: 'payment-1',
-              amount: new Prisma.Decimal('900.00'),
+              amount: new Prisma.Decimal('700.00'),
               paymentMethod: 'CASH',
               paidAt: new Date('2026-08-04T16:00:00.000Z'),
+            },
+          ],
+          sales: [
+            { paymentType: 'CASH_SALE', total: new Prisma.Decimal('700.00') },
+            {
+              paymentType: 'CREDIT_SALE',
+              total: new Prisma.Decimal('5000.00'),
+              payments: [{ amount: new Prisma.Decimal('500.00') }],
             },
           ],
           cashShifts: [
@@ -499,6 +609,8 @@ describe('CedisDashboardQueryService', () => {
         expectedProfit: '400.00',
       }),
     );
+    expect(result.totals.creditSales).toBe('4500.00');
+    expect(result.dailyClose?.totals.creditSales).toBe('4500.00');
     expect(result.transfers[0].transfer.items[0]).toEqual(
       expect.objectContaining({
         productName: 'Pollo actualizado',
@@ -534,6 +646,9 @@ describe('CedisDashboardQueryService', () => {
       prisma.branchSupplyCycle.findUnique.mock.calls[1][0].select;
     expect(sellerSelect).not.toHaveProperty('expectedCostTotal');
     expect(sellerSelect.items.select).not.toHaveProperty('unitCostSnapshot');
+    expect(sellerSelect.productSnapshots.select).not.toHaveProperty(
+      'unitCostSnapshot',
+    );
   });
 
   it('reflects confirmed delivery transfers before the cycle is refreshed', async () => {
@@ -553,6 +668,20 @@ describe('CedisDashboardQueryService', () => {
         totalDeliveredPieces: new Prisma.Decimal('0.000'),
         totalExpectedSoldKg: new Prisma.Decimal('0.000'),
         totalExpectedSoldPieces: new Prisma.Decimal('0.000'),
+        expectedSalesTotal: new Prisma.Decimal('0.00'),
+        expectedCostTotal: new Prisma.Decimal('0.00'),
+        expectedProfitTotal: new Prisma.Decimal('0.00'),
+        productSnapshots: [
+          {
+            productId: 'product-1',
+            productUnitSnapshot: 'KG',
+            unitPriceSnapshot: new Prisma.Decimal('58.00'),
+            unitCostSnapshot: new Prisma.Decimal('42.00'),
+            appliedEquivalentFactorSnapshot: null,
+            equivalenceFromUnitSnapshot: null,
+            equivalenceToUnitSnapshot: null,
+          },
+        ],
         transfers: [
           {
             id: 'link-supply-1',
@@ -575,7 +704,12 @@ describe('CedisDashboardQueryService', () => {
                   unit: 'KG',
                   quantityKg: new Prisma.Decimal('25.500'),
                   quantityPieces: null,
-                  product: { name: 'Pollo', sku: 'POL-1' },
+                  product: {
+                    name: 'Pollo',
+                    sku: 'POL-1',
+                    unit: 'KG',
+                    salePrice: new Prisma.Decimal('58.00'),
+                  },
                 },
               ],
             },
@@ -584,14 +718,38 @@ describe('CedisDashboardQueryService', () => {
       }),
     );
 
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        items: [
+          {
+            productId: 'product-1',
+            quantityKg: new Prisma.Decimal('10.000'),
+            quantityPieces: null,
+            total: new Prisma.Decimal('580.00'),
+          },
+        ],
+      },
+    ]);
+
     const result = await service.getCycleSummary('cycle-1', adminWithCosts);
 
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        productId: 'product-1',
+        deliveredKg: '25.500',
+        actualSoldKg: '10.000',
+        expectedSales: '1479.00',
+      }),
+    );
     expect(result.totals).toEqual(
       expect.objectContaining({
         deliveredKg: '25.500',
         deliveredPieces: '0.000',
         expectedSoldKg: '25.500',
         expectedSoldPieces: '0.000',
+        expectedSales: '1479.00',
+        expectedCost: '1071.00',
+        expectedProfit: '408.00',
       }),
     );
   });

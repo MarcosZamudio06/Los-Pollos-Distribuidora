@@ -1119,7 +1119,7 @@ export class PointOfSaleDailyCloseService {
     user: AuthenticatedUser,
   ) {
     this.requirePermission(user, PERMISSIONS.DAILY_CLOSES_REOPEN);
-    return this.prisma.$transaction((tx) =>
+    const transitioned = await this.prisma.$transaction((tx) =>
       this.reopenWithinTransaction(
         tx,
         id,
@@ -1128,6 +1128,7 @@ export class PointOfSaleDailyCloseService {
         dto.reason.trim(),
       ),
     );
+    return this.projectDetailForRole(transitioned, user);
   }
 
   async reopenWithinTransaction(

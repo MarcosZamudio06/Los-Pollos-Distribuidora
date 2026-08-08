@@ -768,7 +768,27 @@ describe('BranchSupplyCyclesService', () => {
 
   it('creates a return transfer from the branch back to the CEDIS', async () => {
     const { prisma, inventoryTransfers, service } = createService();
-    prisma.branchSupplyCycle.findUnique.mockResolvedValue(createCycle());
+    prisma.branchSupplyCycle.findUnique
+      .mockResolvedValueOnce(
+        createCycle({
+          transfers: [
+            {
+              role: BranchSupplyTransferRole.SUPPLY,
+              inventoryTransfer: {
+                status: InventoryTransferStatus.CONFIRMED,
+                items: [
+                  {
+                    productId: 'product-1',
+                    quantityKg: 0,
+                    quantityPieces: 2,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValue(createCycle());
     inventoryTransfers.create.mockResolvedValue({
       id: 'transfer-return-1',
       status: InventoryTransferStatus.REQUESTED,
@@ -802,6 +822,71 @@ describe('BranchSupplyCyclesService', () => {
       expect.stringContaining('return-direction-key'),
       expect.objectContaining({ tx: expect.anything() }),
     );
+  });
+
+  it('rejects a return above the cycle quantity that remains unsold', async () => {
+    const { prisma, inventoryTransfers, service } = createService();
+    prisma.branchSupplyCycle.findUnique.mockResolvedValue(
+      createCycle({
+        transfers: [
+          {
+            role: BranchSupplyTransferRole.SUPPLY,
+            inventoryTransfer: {
+              status: InventoryTransferStatus.CONFIRMED,
+              items: [
+                {
+                  productId: 'product-1',
+                  quantityKg: 0,
+                  quantityPieces: 10,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        items: [
+          {
+            productId: 'product-1',
+            quantityKg: 0,
+            quantityPieces: 8,
+            total: '800.00',
+            appliedEquivalentFactor: null,
+            product: {
+              name: 'Pollo mixto',
+              sku: 'POLLO-1',
+              unit: ProductUnit.PIECE,
+            },
+            unitEquivalent: null,
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      service.createReturn(
+        'cycle-1',
+        {
+          expectedVersion: 1,
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.PIECE,
+              quantityPieces: 3,
+            },
+          ],
+        },
+        warehouse,
+        'return-over-limit-key',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'RETURN_EXCEEDS_UNSOLD_QUANTITY',
+      }),
+    });
+    expect(inventoryTransfers.create).not.toHaveBeenCalled();
   });
 
   it('excludes pending and cancelled transfers from refresh totals', async () => {

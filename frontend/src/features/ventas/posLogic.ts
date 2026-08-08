@@ -222,6 +222,7 @@ export function getCreditRestriction(
   customer: CustomerOption | null,
   total: Money | string | number,
   options: CreditRestrictionOptions = {},
+  totalPaid: Money | string | number = 0,
 ) {
   if (paymentType !== "CREDIT_SALE") return null;
   if (!customer || customer.isActive === false || customer.active === false) {
@@ -261,12 +262,17 @@ export function getCreditRestriction(
   }
 
   const exactTotal = Money.from(total);
+  const outstandingAmount = exactTotal.subtract(Money.from(totalPaid));
+  const creditExposure =
+    outstandingAmount.compare(Money.zero()) > 0
+      ? outstandingAmount
+      : Money.zero();
   const availableCredit = moneyFrom(
     summary?.availableCredit ?? customer.creditLimit,
   );
   if (
     availableCredit.compare(Money.zero()) >= 0 &&
-    exactTotal.compare(availableCredit) > 0
+    creditExposure.compare(availableCredit) > 0
   ) {
     return `La venta excede el crédito disponible de ${formatMoney(availableCredit)}.`;
   }
@@ -298,7 +304,7 @@ export function getSaleRestriction(
     return "La venta de contado debe liquidarse completamente. Cambia el tipo de venta a crédito para registrar un pago parcial.";
   }
 
-  return getCreditRestriction(paymentType, customer, total, options);
+  return getCreditRestriction(paymentType, customer, total, options, totalPaid);
 }
 
 const CREDIT_ERROR_MESSAGES: Record<string, string> = {

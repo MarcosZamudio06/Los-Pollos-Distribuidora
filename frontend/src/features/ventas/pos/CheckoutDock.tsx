@@ -462,6 +462,7 @@ type PaymentConditionControlProps = Pick<
   CheckoutDockProps,
   | "conditionPanelRef"
   | "creditOptions"
+  | "creditRestriction"
   | "disabledReason"
   | "isSubmitting"
   | "onPaymentTypeChange"
@@ -472,6 +473,7 @@ type PaymentConditionControlProps = Pick<
 function PaymentConditionControl({
   conditionPanelRef,
   creditOptions,
+  creditRestriction: activeCreditRestriction,
   disabledReason,
   isSubmitting,
   onPaymentTypeChange,
@@ -480,10 +482,13 @@ function PaymentConditionControl({
   total,
   visualState,
 }: PaymentConditionControlProps) {
-  const creditRestriction = getCreditRestriction(
+  const creditRestriction =
+    activeCreditRestriction ??
+    getCreditRestriction("CREDIT_SALE", selectedCustomer, total, creditOptions);
+  const creditSelectionRestriction = getCreditRestriction(
     "CREDIT_SALE",
     selectedCustomer,
-    total,
+    Money.zero(),
     creditOptions,
   );
   const offlineRestricted = disabledReason?.includes("Sin conexión");
@@ -493,12 +498,15 @@ function PaymentConditionControl({
     selectedCustomer.active !== false,
   );
   const requiresSupervisor = Boolean(
-    creditRestriction &&
+    creditSelectionRestriction &&
     selectedCustomer?.creditSummary?.canAdministrativeOverride &&
     !creditOptions?.isAdmin,
   );
   const creditDisabled = Boolean(
-    !hasValidCustomer || offlineRestricted || creditRestriction || isSubmitting,
+    !hasValidCustomer ||
+    offlineRestricted ||
+    creditSelectionRestriction ||
+    isSubmitting,
   );
   const localCreditReason = offlineRestricted
     ? "Crédito no disponible sin conexión."
@@ -613,6 +621,7 @@ function PaymentSummary({
   const change = payments.reduce(
     (sum, payment) =>
       payment.paymentMethod === "CASH" &&
+      Money.from(payment.amount).isPositive() &&
       payment.cashTendered !== undefined &&
       Money.from(payment.cashTendered).compare(payment.amount) >= 0
         ? sum.add(calculateCashChange(payment.cashTendered, payment.amount))
@@ -630,12 +639,17 @@ function PaymentSummary({
     }, new Map<string, Money>()),
   );
   const firstPaymentMethod = payments[0]?.paymentMethod;
+  const isCreditSale = paymentType === "CREDIT_SALE";
   const creditWithoutPayment = paymentType === "CREDIT_SALE" && paid.isZero();
   const paymentValidationMessage =
     visualState.reason && visualState.kind === "PAYMENT_NOT_STARTED"
-      ? "Captura el pago."
+      ? isCreditSale
+        ? "Captura el adelanto."
+        : "Captura el pago."
       : visualState.reason && visualState.kind === "PAYMENT_PARTIAL"
-        ? "Completa el pago."
+        ? isCreditSale
+          ? "Completa el adelanto."
+          : "Completa el pago."
         : "";
 
   useEffect(() => {
@@ -649,7 +663,12 @@ function PaymentSummary({
 
   const openPanel = () => {
     if (payments.length === 0 && total.isPositive())
-      onPaymentsChange([{ amount: total.toString(), paymentMethod: "CASH" }]);
+      onPaymentsChange([
+        {
+          amount: isCreditSale ? 0 : total.toString(),
+          paymentMethod: "CASH",
+        },
+      ]);
     setIsOpen(true);
   };
 
@@ -691,7 +710,7 @@ function PaymentSummary({
               aria-hidden="true"
               className="size-4 text-[var(--pos-neutral)]"
             />
-            Pago
+            {isCreditSale ? "Adelanto" : "Pago"}
           </span>
           <span className="font-mono text-[0.62rem] font-bold text-[var(--pos-muted)]">
             F6
@@ -709,7 +728,7 @@ function PaymentSummary({
         >
           {paymentValidationMessage ||
             (creditWithoutPayment ? (
-              "Venta a crédito sin pago inmediato"
+              "Venta a crédito sin adelanto"
             ) : methods.length === 0 ? (
               "Sin pagos aplicados"
             ) : (
@@ -774,13 +793,19 @@ function PaymentSummary({
       {isOpen && (
         <>
           <button
-            aria-label="Cerrar captura de pagos"
+            aria-label={
+              isCreditSale
+                ? "Cerrar captura de adelantos"
+                : "Cerrar captura de pagos"
+            }
             className="fixed inset-0 z-40 bg-[rgba(22,26,24,0.36)] min-[1440px]:hidden"
             onClick={closePanel}
             type="button"
           />
           <section
-            aria-label="Captura de pagos"
+            aria-label={
+              isCreditSale ? "Captura de adelantos" : "Captura de pagos"
+            }
             aria-modal="true"
             className="fixed inset-x-0 bottom-0 z-50 max-h-[86dvh] overflow-y-auto border-t border-[var(--pos-steel)] bg-[var(--pos-surface)] p-4 shadow-sm min-[1440px]:absolute min-[1440px]:bottom-full min-[1440px]:left-0 min-[1440px]:mb-2 min-[1440px]:w-[min(42rem,calc(100vw-2rem))] min-[1440px]:border"
             id="pos-payment-entry"
@@ -791,7 +816,7 @@ function PaymentSummary({
           >
             <div className="flex items-center justify-between gap-4">
               <span className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--pos-muted)]">
-                Captura de pagos
+                {isCreditSale ? "Captura de adelantos" : "Captura de pagos"}
               </span>
               <button
                 className="h-11 px-4 text-xs font-bold text-[var(--pos-neutral)] hover:text-[var(--pos-ink)] focus-visible:ring-2 focus-visible:ring-[var(--pos-focus)]"
@@ -807,6 +832,7 @@ function PaymentSummary({
               onPaymentsChange={onPaymentsChange}
               panelRef={paymentEntryRef}
               payments={payments}
+              paymentType={paymentType}
               total={total}
             />
           </section>
@@ -937,6 +963,7 @@ type PosPrimaryActionProps = Pick<
   | "isSubmitting"
   | "onConfirm"
   | "paymentPanelRef"
+  | "paymentType"
 > & { pendingAmount: Money; total: Money; visualState: CheckoutVisualState };
 
 function PosPrimaryAction({
@@ -945,21 +972,26 @@ function PosPrimaryAction({
   isSubmitting,
   onConfirm,
   paymentPanelRef,
+  paymentType,
   pendingAmount,
   visualState,
 }: PosPrimaryActionProps) {
   const [isActivating, setIsActivating] = useState(false);
   const reason = visualState.reason;
+  const paymentActionNoun = paymentType === "CREDIT_SALE" ? "adelanto" : "pago";
   const action =
     visualState.kind === "WEIGHT_PENDING"
       ? { label: "Capturar peso", type: "weight" as const }
       : visualState.kind === "CUSTOMER_REQUIRED"
         ? { label: "Seleccionar cliente", type: "customer" as const }
         : visualState.kind === "PAYMENT_NOT_STARTED"
-          ? { label: "Registrar pago", type: "payment" as const }
+          ? {
+              label: `Registrar ${paymentActionNoun}`,
+              type: "payment" as const,
+            }
           : visualState.kind === "PAYMENT_PARTIAL"
             ? {
-                label: `Registrar pago · Falta ${toMoney(pendingAmount)}`,
+                label: `Registrar ${paymentActionNoun} · Falta ${toMoney(pendingAmount)}`,
                 type: "payment" as const,
               }
             : visualState.kind === "READY_TO_CHARGE"
@@ -1092,6 +1124,7 @@ export function CheckoutDock({
   conditionPanelRef,
   confirmButtonRef,
   creditOptions,
+  creditRestriction,
   customerSearch,
   customerSearchRef,
   customers,
@@ -1123,6 +1156,27 @@ export function CheckoutDock({
     payments,
     transactionState,
   });
+  const handlePaymentTypeChange = (nextPaymentType: PaymentType) => {
+    if (
+      nextPaymentType === "CREDIT_SALE" &&
+      paymentType !== "CREDIT_SALE" &&
+      payments.length === 1
+    ) {
+      const [payment] = payments;
+      const isUncapturedCashSeed =
+        payment.paymentMethod === "CASH" &&
+        payment.cashTendered === undefined &&
+        !payment.bankName?.trim() &&
+        !payment.referenceNumber?.trim() &&
+        !payment.cardLastFour?.trim() &&
+        Money.from(payment.amount).compare(exactTotal) === 0;
+
+      if (isUncapturedCashSeed) {
+        onPaymentsChange([{ ...payment, amount: 0, cashTendered: undefined }]);
+      }
+    }
+    onPaymentTypeChange(nextPaymentType);
+  };
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -1174,9 +1228,10 @@ export function CheckoutDock({
         <PaymentConditionControl
           conditionPanelRef={conditionPanelRef}
           creditOptions={creditOptions}
+          creditRestriction={creditRestriction}
           disabledReason={disabledReason}
           isSubmitting={isSubmitting}
-          onPaymentTypeChange={onPaymentTypeChange}
+          onPaymentTypeChange={handlePaymentTypeChange}
           paymentType={paymentType}
           selectedCustomer={selectedCustomer}
           total={exactTotal}
@@ -1201,6 +1256,7 @@ export function CheckoutDock({
             isSubmitting={isSubmitting}
             onConfirm={onConfirm}
             paymentPanelRef={paymentPanelRef}
+            paymentType={paymentType}
             pendingAmount={pendingAmount}
             total={exactTotal}
             visualState={visualState}

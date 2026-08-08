@@ -50,6 +50,7 @@ export type CedisDashboardCard = {
   financial: {
     expectedSales: string;
     actualSales: string;
+    creditSales?: string;
     expectedCost?: string;
     actualCost?: string;
     expectedProfit?: string;
@@ -115,6 +116,7 @@ export type CedisCycleSummary = {
     actualSoldPieces: string;
     expectedSales: string;
     actualSales: string;
+    creditSales: string;
     expectedCash: string;
     cashCounted: string | null;
     cashDifference: string | null;
@@ -300,6 +302,7 @@ export type CedisDailyClose = {
     transfer: string;
     expenses: string;
     grossSales: string;
+    creditSales: string;
     netCashExpected: string;
     cashCounted: string | null;
     cashDifference: string | null;

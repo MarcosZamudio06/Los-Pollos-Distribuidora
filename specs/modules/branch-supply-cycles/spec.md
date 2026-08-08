@@ -32,6 +32,11 @@ KG y PIECE y calcular `entregado`, `devuelto`, `vendidoEsperado`, `ventaEsperada
 venta real, costo real, utilidad bruta y neta, merma documentada y diferencia no
 explicada.
 
+`vendidoEsperado` MUST be `entregado - devuelto`. `ventaEsperada` (the expected
+amount) MUST be `(entregado - devuelto) * unitPriceSnapshot`, and
+`costoEsperado` MUST be `entregado * unitCostSnapshot`. A return reduces the
+expected amount by the sale price of the quantity that was not sold.
+
 Los snapshots de precio y costo se crean al primer suministro del producto por
 ciclo. Son append-only y no se reemplazan si cambia el catálogo posteriormente.
 
@@ -45,6 +50,7 @@ dimensiones equivalentes.
 - GIVEN 10 piezas entregadas y 3 piezas devueltas
 - WHEN se refresca la conciliación
 - THEN `vendidoEsperado = 10 - 3 = 7` piezas
+- AND con `unitPriceSnapshot = 100`, `ventaEsperada = 7 * 100 = 700`
 
 ### Suministros y devoluciones
 
@@ -56,6 +62,12 @@ Toda transferencia `REQUESTED` o `IN_TRANSIT` MUST reservar en su ubicación de
 origen las cantidades de cada dimensión. La mercancía permanece físicamente en
 el origen hasta la confirmación; la reserva reduce la disponibilidad sin crear
 una ubicación virtual ni un movimiento físico.
+
+Una devolución MUST NOT superar, por producto y dimensión, la cantidad no
+vendida disponible del ciclo: `entregado - vendidoReal - devueltoConfirmado`.
+También MUST respetar la disponibilidad física actual de la sucursal; el
+servidor debe rechazar el comando antes de crear una reserva si cualquiera de
+los límites se excede.
 
 #### Scenario: Creación sin movimiento
 

@@ -983,6 +983,9 @@ export class BranchSupplyCyclesService {
             cycle.branchLocationId,
           );
           this.assertMutableCycle(cycle, dto.expectedVersion);
+          if (role === BranchSupplyTransferRole.RETURN) {
+            await this.assertReturnWithinUnsoldQuantity(tx, cycle, dto);
+          }
 
           const nextVersion = cycle.version + 1;
           const nextStatus =
@@ -1083,6 +1086,127 @@ export class BranchSupplyCyclesService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
+  }
+
+  private async assertReturnWithinUnsoldQuantity(
+    tx: Prisma.TransactionClient,
+    cycle: CycleRecord,
+    dto: BranchSupplyCycleCommandDto,
+  ): Promise<void> {
+    const quantities = new Map<
+      string,
+      {
+        deliveredKg: number;
+        deliveredPieces: number;
+        returnedKg: number;
+        returnedPieces: number;
+        soldKg: number;
+        soldPieces: number;
+      }
+    >();
+    const getQuantities = (productId: string) => {
+      const current = quantities.get(productId) ?? {
+        deliveredKg: 0,
+        deliveredPieces: 0,
+        returnedKg: 0,
+        returnedPieces: 0,
+        soldKg: 0,
+        soldPieces: 0,
+      };
+      quantities.set(productId, current);
+      return current;
+    };
+
+    for (const link of cycle.transfers) {
+      if (
+        link.inventoryTransfer.status !== InventoryTransferStatus.CONFIRMED ||
+        (link.role !== BranchSupplyTransferRole.SUPPLY &&
+          link.role !== BranchSupplyTransferRole.RETURN)
+      ) {
+        continue;
+      }
+      for (const item of link.inventoryTransfer.items) {
+        const current = getQuantities(item.productId);
+        if (link.role === BranchSupplyTransferRole.SUPPLY) {
+          current.deliveredKg += Number(item.quantityKg ?? 0);
+          current.deliveredPieces += item.quantityPieces ?? 0;
+        } else {
+          current.returnedKg += Number(item.quantityKg ?? 0);
+          current.returnedPieces += item.quantityPieces ?? 0;
+        }
+      }
+    }
+
+    const saleDelegate = (
+      tx as unknown as {
+        sale?: {
+          findMany(args: unknown): Promise<SaleRecord[]>;
+        };
+      }
+    ).sale;
+    const sales = saleDelegate
+      ? await saleDelegate.findMany({
+          where: {
+            locationId: cycle.branchLocationId,
+            businessDate: cycle.businessDate,
+            status: 'CONFIRMED',
+          },
+          select: {
+            items: {
+              select: {
+                productId: true,
+                quantityKg: true,
+                quantityPieces: true,
+                total: true,
+                appliedEquivalentFactor: true,
+                product: {
+                  select: { name: true, sku: true, unit: true },
+                },
+                unitEquivalent: {
+                  select: { unitFrom: true, unitTo: true, factor: true },
+                },
+              },
+            },
+          },
+        })
+      : [];
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        const current = getQuantities(item.productId);
+        current.soldKg += Number(item.quantityKg ?? 0);
+        current.soldPieces += item.quantityPieces ?? 0;
+      }
+    }
+
+    const requested = new Map<string, { kg: number; pieces: number }>();
+    for (const item of dto.items) {
+      const current = requested.get(item.productId) ?? { kg: 0, pieces: 0 };
+      current.kg += item.quantityKg ?? 0;
+      current.pieces += item.quantityPieces ?? 0;
+      requested.set(item.productId, current);
+    }
+
+    for (const [productId, item] of requested) {
+      const current = quantities.get(productId);
+      const availableKg = Math.max(
+        (current?.deliveredKg ?? 0) -
+          (current?.soldKg ?? 0) -
+          (current?.returnedKg ?? 0),
+        0,
+      );
+      const availablePieces = Math.max(
+        (current?.deliveredPieces ?? 0) -
+          (current?.soldPieces ?? 0) -
+          (current?.returnedPieces ?? 0),
+        0,
+      );
+      if (item.kg > availableKg || item.pieces > availablePieces) {
+        throw this.businessConflict(
+          'RETURN_EXCEEDS_UNSOLD_QUANTITY',
+          `The return for product ${productId} exceeds the unsold quantity available in the cycle`,
+        );
+      }
+    }
   }
 
   private async createInitialProductSnapshots(

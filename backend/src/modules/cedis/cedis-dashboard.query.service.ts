@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BranchSupplyCycleStatus, Prisma } from '@prisma/client';
+import { BranchSupplyCycleStatus, Prisma, ProductUnit } from '@prisma/client';
 import { toMoneyString, Money } from '../../../../shared/money';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
@@ -62,13 +62,29 @@ type DashboardCycleRecord = {
   distributionCenterLocation?: LocationRecord;
   pointOfSaleDailyClose?: DashboardDailyCloseRecord | null;
   transfers?: DashboardTransferActivity[];
+  productSnapshots?: DashboardProductSnapshot[];
   events?: Array<{ occurredAt: Date }>;
+};
+
+type DashboardProductSnapshot = {
+  productId: string;
+  productUnitSnapshot: ProductUnit;
+  unitPriceSnapshot: DecimalLike;
+  unitCostSnapshot?: DecimalLike;
+  appliedEquivalentFactorSnapshot: DecimalLike;
+  equivalenceFromUnitSnapshot: ProductUnit | null;
+  equivalenceToUnitSnapshot: ProductUnit | null;
 };
 
 type DashboardDailyCloseRecord = {
   id: string;
   updatedAt: Date;
   differences: Array<{ status: string }>;
+  sales?: Array<{
+    paymentType: string;
+    total: DecimalLike;
+    payments?: Array<{ amount: DecimalLike }>;
+  }>;
 };
 
 type DashboardTransferActivity = {
@@ -78,8 +94,22 @@ type DashboardTransferActivity = {
     status: string;
     updatedAt: Date;
     items?: Array<{
+      productId: string;
+      unit?: ProductUnit | string;
       quantityKg: DecimalLike;
       quantityPieces: number | null;
+      appliedEquivalentFactor?: DecimalLike;
+      unitEquivalent?: {
+        unitFrom: ProductUnit | string;
+        unitTo: ProductUnit | string;
+        factor: DecimalLike;
+      } | null;
+      product?: {
+        name?: string;
+        sku?: string | null;
+        unit?: ProductUnit | string;
+        salePrice?: DecimalLike;
+      };
     }>;
   };
 };
@@ -120,7 +150,29 @@ type DetailTransferItemRecord = {
   unit: string;
   quantityKg: DecimalLike;
   quantityPieces: number | null;
-  product: { name: string; sku: string | null };
+  product: {
+    name: string;
+    sku: string | null;
+    unit?: string;
+    salePrice?: DecimalLike;
+  };
+};
+
+type DetailSaleItemRecord = {
+  productId: string;
+  quantityKg: DecimalLike;
+  quantityPieces: number | null;
+  total: DecimalLike;
+};
+
+type DetailSaleRecord = {
+  items: DetailSaleItemRecord[];
+};
+
+type DetailSalesAggregate = {
+  quantityKg: number;
+  quantityPieces: number;
+  salesAmount: Money;
 };
 
 type DetailTransferRecord = {
@@ -226,6 +278,11 @@ type DetailDailyCloseRecord = {
   cashMovements: DetailCashMovementRecord[];
   payments: DetailPaymentRecord[];
   cashShifts: DetailCashShiftRecord[];
+  sales?: Array<{
+    paymentType: string;
+    total: DecimalLike;
+    payments?: Array<{ amount: DecimalLike }>;
+  }>;
   differences: DetailDifferenceRecord[];
 };
 
@@ -254,6 +311,15 @@ const LOCATION_SELECT = {
   longitude: true,
 } as const;
 
+const PRODUCT_SNAPSHOT_SELECT = {
+  productId: true,
+  productUnitSnapshot: true,
+  unitPriceSnapshot: true,
+  appliedEquivalentFactorSnapshot: true,
+  equivalenceFromUnitSnapshot: true,
+  equivalenceToUnitSnapshot: true,
+} as const;
+
 const DASHBOARD_CYCLE_SELECT = {
   id: true,
   distributionCenterLocationId: true,
@@ -280,6 +346,17 @@ const DASHBOARD_CYCLE_SELECT = {
       id: true,
       updatedAt: true,
       differences: { select: { status: true } },
+      sales: {
+        where: { status: 'CONFIRMED' as const },
+        select: {
+          paymentType: true,
+          total: true,
+          payments: {
+            where: { status: 'APPLIED' as const },
+            select: { amount: true },
+          },
+        },
+      },
     },
   },
   transfers: {
@@ -291,7 +368,17 @@ const DASHBOARD_CYCLE_SELECT = {
           status: true,
           updatedAt: true,
           items: {
-            select: { quantityKg: true, quantityPieces: true },
+            select: {
+              productId: true,
+              unit: true,
+              quantityKg: true,
+              quantityPieces: true,
+              appliedEquivalentFactor: true,
+              unitEquivalent: {
+                select: { unitFrom: true, unitTo: true, factor: true },
+              },
+              product: { select: { unit: true, salePrice: true } },
+            },
           },
         },
       },
@@ -302,6 +389,7 @@ const DASHBOARD_CYCLE_SELECT = {
     orderBy: { occurredAt: 'desc' as const },
     select: { occurredAt: true },
   },
+  productSnapshots: { select: PRODUCT_SNAPSHOT_SELECT },
 } as const;
 
 const COST_TOTAL_SELECT = {
@@ -495,9 +583,10 @@ export class CedisDashboardQueryService {
           : latest,
       0,
     );
-    const items = cycle.items.filter(
+    const persistedItems = cycle.items.filter(
       (item) => item.cycleVersion === itemVersion,
     );
+    const items = await this.detailItems(cycle, persistedItems, canViewCosts);
     const transferBalances = await this.findTransferBalances(cycle.transfers);
     const lastActivityAt = this.lastActivityDate(cycle);
     const generatedAt = new Date();
@@ -511,7 +600,7 @@ export class CedisDashboardQueryService {
       branch: this.toLocation(cycle.branchLocation),
       distributionCenter: this.toLocation(cycle.distributionCenterLocation),
       totals: this.toTotals(cycle, canViewCosts),
-      items: items.map((item) => this.toDetailItem(item, canViewCosts)),
+      items,
       transfers: cycle.transfers.map((link) =>
         this.toTransfer(link, transferBalances),
       ),
@@ -533,13 +622,18 @@ export class CedisDashboardQueryService {
     return {
       ...DASHBOARD_CYCLE_SELECT,
       ...(canViewCosts ? COST_TOTAL_SELECT : {}),
+      productSnapshots: {
+        select: {
+          ...PRODUCT_SNAPSHOT_SELECT,
+          ...(canViewCosts ? { unitCostSnapshot: true } : {}),
+        },
+      },
     } as Prisma.BranchSupplyCycleSelect;
   }
 
   private detailCycleSelect(canViewCosts: boolean) {
     return {
-      ...DASHBOARD_CYCLE_SELECT,
-      ...(canViewCosts ? COST_TOTAL_SELECT : {}),
+      ...this.dashboardCycleSelect(canViewCosts),
       notes: true,
       branchLocation: { select: LOCATION_SELECT },
       distributionCenterLocation: { select: LOCATION_SELECT },
@@ -575,7 +669,14 @@ export class CedisDashboardQueryService {
                   unit: true,
                   quantityKg: true,
                   quantityPieces: true,
-                  product: { select: { name: true, sku: true } },
+                  product: {
+                    select: {
+                      name: true,
+                      sku: true,
+                      unit: true,
+                      salePrice: true,
+                    },
+                  },
                 },
               },
               branchSupplyReceipt: {
@@ -691,6 +792,17 @@ export class CedisDashboardQueryService {
         orderBy: { paidAt: 'asc' as const },
         select: { id: true, amount: true, paymentMethod: true, paidAt: true },
       },
+      sales: {
+        where: { status: 'CONFIRMED' as const },
+        select: {
+          paymentType: true,
+          total: true,
+          payments: {
+            where: { status: 'APPLIED' as const },
+            select: { amount: true },
+          },
+        },
+      },
       cashShifts: {
         orderBy: { openedAt: 'asc' as const },
         select: {
@@ -742,9 +854,11 @@ export class CedisDashboardQueryService {
       };
     }
 
+    const expectedFinancials = this.expectedFinancials(cycle);
     const financial: Record<string, string> = {
-      expectedSales: this.money(cycle.expectedSalesTotal),
+      expectedSales: expectedFinancials.expectedSales,
       actualSales: this.money(cycle.actualSalesTotal),
+      creditSales: this.creditSales(cycle.pointOfSaleDailyClose?.sales),
     };
     const physical = this.physicalTotals(cycle.transfers);
     const deliveredKg = physical?.deliveredKg ?? Number(cycle.totalDeliveredKg);
@@ -758,9 +872,9 @@ export class CedisDashboardQueryService {
     const expectedSoldPieces =
       physical?.expectedSoldPieces ?? Number(cycle.totalExpectedSoldPieces);
     if (canViewCosts) {
-      financial.expectedCost = this.money(cycle.expectedCostTotal);
+      financial.expectedCost = expectedFinancials.expectedCost;
       financial.actualCost = this.money(cycle.actualCostTotal);
-      financial.expectedProfit = this.money(cycle.expectedProfitTotal);
+      financial.expectedProfit = expectedFinancials.expectedProfit;
       financial.actualProfit = this.money(cycle.actualProfitTotal);
       financial.actualNetProfit = this.money(cycle.actualNetProfitTotal);
     }
@@ -796,6 +910,7 @@ export class CedisDashboardQueryService {
 
   private toTotals(cycle: DetailCycleRecord, canViewCosts: boolean) {
     const physical = this.physicalTotals(cycle.transfers);
+    const expectedFinancials = this.expectedFinancials(cycle);
     const deliveredKg = physical?.deliveredKg ?? Number(cycle.totalDeliveredKg);
     const deliveredPieces =
       physical?.deliveredPieces ?? Number(cycle.totalDeliveredPieces);
@@ -815,16 +930,17 @@ export class CedisDashboardQueryService {
       ),
       actualSoldKg: this.quantity(cycle.totalActualSoldKg),
       actualSoldPieces: this.quantity(cycle.totalActualSoldPieces),
-      expectedSales: this.money(cycle.expectedSalesTotal),
+      expectedSales: expectedFinancials.expectedSales,
       actualSales: this.money(cycle.actualSalesTotal),
+      creditSales: this.creditSales(cycle.pointOfSaleDailyClose?.sales),
       expectedCash: this.money(cycle.expectedCashTotal),
       cashCounted: this.nullableMoney(cycle.cashCountedTotal),
       cashDifference: this.nullableMoney(cycle.cashDifferenceTotal),
     };
     if (canViewCosts) {
-      totals.expectedCost = this.money(cycle.expectedCostTotal);
+      totals.expectedCost = expectedFinancials.expectedCost;
       totals.actualCost = this.money(cycle.actualCostTotal);
-      totals.expectedProfit = this.money(cycle.expectedProfitTotal);
+      totals.expectedProfit = expectedFinancials.expectedProfit;
       totals.actualProfit = this.money(cycle.actualProfitTotal);
       totals.actualNetProfit = this.money(cycle.actualNetProfitTotal);
     }
@@ -883,6 +999,202 @@ export class CedisDashboardQueryService {
     return totals;
   }
 
+  private async detailItems(
+    cycle: DetailCycleRecord,
+    persistedItems: DetailItemRecord[],
+    canViewCosts: boolean,
+  ) {
+    if (persistedItems.length > 0) {
+      return persistedItems.map((item) =>
+        this.toDetailItem(item, canViewCosts),
+      );
+    }
+
+    const sales = await this.findSalesByProduct(cycle);
+    return this.projectTransferItems(cycle, sales, canViewCosts);
+  }
+
+  private async findSalesByProduct(cycle: DetailCycleRecord) {
+    const saleDelegate = (
+      this.prisma as unknown as {
+        sale?: {
+          findMany(args: unknown): Promise<DetailSaleRecord[]>;
+        };
+      }
+    ).sale;
+    if (!saleDelegate) return new Map<string, DetailSalesAggregate>();
+
+    const sales = await saleDelegate.findMany({
+      where: {
+        locationId: cycle.branchLocationId,
+        businessDate: cycle.businessDate,
+        status: 'CONFIRMED',
+      },
+      select: {
+        items: {
+          select: {
+            productId: true,
+            quantityKg: true,
+            quantityPieces: true,
+            total: true,
+          },
+        },
+      },
+    });
+    const result = new Map<string, DetailSalesAggregate>();
+
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        const current = result.get(item.productId) ?? {
+          quantityKg: 0,
+          quantityPieces: 0,
+          salesAmount: Money.zero(),
+        };
+        current.quantityKg += Number(item.quantityKg ?? 0);
+        current.quantityPieces += item.quantityPieces ?? 0;
+        current.salesAmount = current.salesAmount.add(Money.from(item.total));
+        result.set(item.productId, current);
+      }
+    }
+
+    return result;
+  }
+
+  private projectTransferItems(
+    cycle: DetailCycleRecord,
+    sales: Map<string, DetailSalesAggregate>,
+    canViewCosts: boolean,
+  ) {
+    const snapshots = new Map(
+      (cycle.productSnapshots ?? []).map((snapshot) => [
+        snapshot.productId,
+        snapshot,
+      ]),
+    );
+    const aggregates = new Map<
+      string,
+      {
+        productName: string;
+        productSku: string | null;
+        unit: ProductUnit | string;
+        unitPrice: DecimalLike;
+        unitCost: DecimalLike;
+        deliveredKg: number;
+        deliveredPieces: number;
+        returnedKg: number;
+        returnedPieces: number;
+        snapshot: DashboardProductSnapshot | undefined;
+      }
+    >();
+
+    for (const link of cycle.transfers) {
+      if (
+        link.inventoryTransfer.status !== 'CONFIRMED' ||
+        (link.role !== 'SUPPLY' && link.role !== 'RETURN')
+      ) {
+        continue;
+      }
+
+      for (const item of link.inventoryTransfer.items) {
+        const snapshot = snapshots.get(item.productId);
+        const aggregate = aggregates.get(item.productId) ?? {
+          productName: item.product.name,
+          productSku: item.product.sku,
+          unit:
+            snapshot?.productUnitSnapshot ??
+            item.unit ??
+            item.product.unit ??
+            ProductUnit.KG,
+          unitPrice: snapshot?.unitPriceSnapshot ?? item.product.salePrice ?? 0,
+          unitCost: snapshot?.unitCostSnapshot ?? 0,
+          deliveredKg: 0,
+          deliveredPieces: 0,
+          returnedKg: 0,
+          returnedPieces: 0,
+          snapshot,
+        };
+        const quantityKg = Number(item.quantityKg ?? 0);
+        const quantityPieces = item.quantityPieces ?? 0;
+        if (link.role === 'SUPPLY') {
+          aggregate.deliveredKg += quantityKg;
+          aggregate.deliveredPieces += quantityPieces;
+        } else {
+          aggregate.returnedKg += quantityKg;
+          aggregate.returnedPieces += quantityPieces;
+        }
+        aggregates.set(item.productId, aggregate);
+      }
+    }
+
+    return [...aggregates.entries()].map(([productId, aggregate]) => {
+      const expectedSoldKg = Math.max(
+        aggregate.deliveredKg - aggregate.returnedKg,
+        0,
+      );
+      const expectedSoldPieces = Math.max(
+        aggregate.deliveredPieces - aggregate.returnedPieces,
+        0,
+      );
+      const snapshot = aggregate.snapshot;
+      const equivalent =
+        snapshot?.equivalenceFromUnitSnapshot &&
+        snapshot.equivalenceToUnitSnapshot
+          ? {
+              unitFrom: snapshot.equivalenceFromUnitSnapshot,
+              unitTo: snapshot.equivalenceToUnitSnapshot,
+              factor: snapshot.appliedEquivalentFactorSnapshot,
+            }
+          : null;
+      const expectedQuantity = this.valuationQuantity(
+        aggregate.unit,
+        expectedSoldKg,
+        expectedSoldPieces,
+        snapshot?.appliedEquivalentFactorSnapshot,
+        equivalent,
+      );
+      const expectedSales = Money.from(aggregate.unitPrice).multiply(
+        expectedQuantity ?? 0,
+      );
+      const actual = sales.get(productId) ?? {
+        quantityKg: 0,
+        quantityPieces: 0,
+        salesAmount: Money.zero(),
+      };
+      const result: Record<string, unknown> = {
+        id: `projected-${productId}`,
+        snapshotKey: productId,
+        productId,
+        name: aggregate.productName,
+        sku: aggregate.productSku,
+        unit: aggregate.unit,
+        unitPrice: this.money(aggregate.unitPrice),
+        deliveredKg: this.quantity(aggregate.deliveredKg),
+        deliveredPieces: this.quantity(aggregate.deliveredPieces),
+        returnedKg: this.quantity(aggregate.returnedKg),
+        returnedPieces: this.quantity(aggregate.returnedPieces),
+        expectedSoldKg: this.quantity(expectedSoldKg),
+        expectedSoldPieces: this.quantity(expectedSoldPieces),
+        actualSoldKg: this.quantity(actual.quantityKg),
+        actualSoldPieces: this.quantity(actual.quantityPieces),
+        expectedSales: this.money(expectedSales.toString()),
+        actualSales: this.money(actual.salesAmount.toString()),
+      };
+      if (canViewCosts) {
+        const expectedCost = Money.from(aggregate.unitCost).multiply(
+          expectedQuantity ?? 0,
+        );
+        Object.assign(result, {
+          unitCost: this.money(aggregate.unitCost),
+          expectedCost: this.money(expectedCost.toString()),
+          expectedProfit: this.money(
+            expectedSales.subtract(expectedCost).toString(),
+          ),
+        });
+      }
+      return result;
+    });
+  }
+
   private toDetailItem(item: DetailItemRecord, canViewCosts: boolean) {
     const result: Record<string, unknown> = {
       id: item.id,
@@ -911,6 +1223,135 @@ export class CedisDashboardQueryService {
       result.actualProfit = this.money(item.actualProfitAmount);
     }
     return result;
+  }
+
+  private expectedFinancials(cycle: DashboardCycleRecord) {
+    const projection = this.projectExpectedFinancials(cycle);
+    const expectedSales =
+      projection?.sales ?? Money.from(cycle.expectedSalesTotal);
+    const expectedCost =
+      projection?.cost ?? Money.from(cycle.expectedCostTotal);
+    const expectedProfit = projection?.cost
+      ? expectedSales.subtract(projection.cost)
+      : Money.from(cycle.expectedProfitTotal);
+
+    return {
+      expectedSales: expectedSales.toString(),
+      expectedCost: expectedCost.toString(),
+      expectedProfit: expectedProfit.toString(),
+    };
+  }
+
+  // Confirmed transfers can update physical projections before refresh persists financial totals.
+  private projectExpectedFinancials(cycle: DashboardCycleRecord): {
+    sales: Money;
+    cost: Money | null;
+  } | null {
+    const snapshots = new Map(
+      (cycle.productSnapshots ?? []).map((snapshot) => [
+        snapshot.productId,
+        snapshot,
+      ]),
+    );
+    let sales = Money.zero();
+    let cost: Money | null = Money.zero();
+    let hasTransferItems = false;
+
+    for (const link of cycle.transfers ?? []) {
+      if (
+        (link.role !== 'SUPPLY' && link.role !== 'RETURN') ||
+        link.inventoryTransfer.status !== 'CONFIRMED'
+      ) {
+        continue;
+      }
+
+      for (const item of link.inventoryTransfer.items ?? []) {
+        if (link.role === 'SUPPLY') hasTransferItems = true;
+        const snapshot = snapshots.get(item.productId);
+        const productUnit = snapshot?.productUnitSnapshot ?? item.product?.unit;
+        if (!productUnit) return null;
+        const quantity = this.valuationQuantity(
+          productUnit,
+          item.quantityKg,
+          item.quantityPieces,
+          snapshot?.appliedEquivalentFactorSnapshot ??
+            item.appliedEquivalentFactor,
+          snapshot?.equivalenceFromUnitSnapshot &&
+            snapshot.equivalenceToUnitSnapshot
+            ? {
+                unitFrom: snapshot.equivalenceFromUnitSnapshot,
+                unitTo: snapshot.equivalenceToUnitSnapshot,
+                factor:
+                  snapshot.appliedEquivalentFactorSnapshot ??
+                  item.unitEquivalent?.factor,
+              }
+            : item.unitEquivalent,
+        );
+        const unitPrice =
+          snapshot?.unitPriceSnapshot ?? item.product?.salePrice;
+
+        if (
+          quantity === null ||
+          unitPrice === null ||
+          unitPrice === undefined
+        ) {
+          return null;
+        }
+
+        const value = Money.from(unitPrice).multiply(quantity);
+        sales =
+          link.role === 'SUPPLY' ? sales.add(value) : sales.subtract(value);
+
+        if (link.role === 'SUPPLY' && cost !== null) {
+          const unitCost = snapshot?.unitCostSnapshot;
+          if (unitCost === null || unitCost === undefined) {
+            cost = null;
+          } else {
+            cost = cost.add(Money.from(unitCost).multiply(quantity));
+          }
+        }
+      }
+    }
+
+    return hasTransferItems ? { sales, cost } : null;
+  }
+
+  private valuationQuantity(
+    unit: ProductUnit | string | undefined,
+    quantityKg: DecimalLike,
+    quantityPieces: number | null,
+    appliedFactor: DecimalLike,
+    equivalent:
+      | {
+          unitFrom: ProductUnit | string;
+          unitTo: ProductUnit | string;
+          factor: DecimalLike;
+        }
+      | null
+      | undefined,
+  ): number | null {
+    const kg = Number(quantityKg ?? 0);
+    const pieces = Number(quantityPieces ?? 0);
+    if (unit === ProductUnit.KG) return kg;
+    if (unit === ProductUnit.PIECE) return pieces;
+    if (kg > 0) return kg;
+    if (pieces === 0) return 0;
+
+    const factor = Number(appliedFactor ?? equivalent?.factor);
+    if (!Number.isFinite(factor) || factor <= 0 || !equivalent) return null;
+    if (
+      equivalent.unitFrom === ProductUnit.PIECE &&
+      equivalent.unitTo === ProductUnit.KG
+    ) {
+      return pieces * factor;
+    }
+    if (
+      equivalent.unitFrom === ProductUnit.KG &&
+      equivalent.unitTo === ProductUnit.PIECE
+    ) {
+      return pieces / factor;
+    }
+    return null;
   }
 
   private toTransfer(
@@ -1042,6 +1483,7 @@ export class CedisDashboardQueryService {
         transfer: this.money(close.transferTotal),
         expenses: this.money(close.expenseTotal),
         grossSales: this.money(close.grossSalesTotal),
+        creditSales: this.creditSales(close.sales),
         netCashExpected: this.money(close.netCashExpected),
         cashCounted: this.nullableMoney(close.cashCountedTotal),
         cashDifference: this.nullableMoney(close.cashDifferenceTotal),
@@ -1278,6 +1720,30 @@ export class CedisDashboardQueryService {
 
   private money(value: DecimalLike) {
     return toMoneyString(value ?? 0);
+  }
+
+  private creditSales(
+    sales:
+      | Array<{
+          paymentType: string;
+          total: DecimalLike;
+          payments?: Array<{ amount: DecimalLike }>;
+        }>
+      | undefined,
+  ) {
+    return Money.sum(
+      (sales ?? [])
+        .filter((sale) => sale.paymentType === 'CREDIT_SALE')
+        .map((sale) => {
+          const paid = Money.sum(
+            (sale.payments ?? []).map((payment) => payment.amount),
+          );
+          const outstanding = Money.from(sale.total).subtract(paid);
+          return outstanding.compare(Money.zero()) > 0
+            ? outstanding
+            : Money.zero();
+        }),
+    ).toString();
   }
 
   private nullableMoney(value: DecimalLike) {

@@ -509,6 +509,8 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("Selecciona una ubicación operativa");
     expect(html).toContain("Mostrador · MOST");
     expect(html).toContain("Nueva venta");
+    expect(html).toContain("Ventas recientes");
+    expect(html).toContain('aria-controls="pos-recent-sales-modal"');
     expect(html).toContain("Frecuentes recientes");
     expect(html).toContain("Impresora: no configurada");
     expect(html).toContain("Báscula: captura manual");
@@ -516,6 +518,57 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("Listo · F2");
     expect(html).toContain("Agrega productos");
     expect(html).toContain("Resolución no compatible");
+  });
+
+  it("abre ventas recientes en un modal descendente sin salir del POS", async () => {
+    mockState.sales = {
+      data: { items: [confirmedSale] },
+      error: null,
+      isLoading: false,
+    };
+    const { container, root } = await renderDom(
+      <MemoryRouter initialEntries={["/sales"]}>
+        <SalesPosPage />
+      </MemoryRouter>,
+    );
+    try {
+      const recentSalesButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-controls="pos-recent-sales-modal"]',
+      );
+      expect(recentSalesButton).toBeTruthy();
+      expect(recentSalesButton?.getAttribute("href")).toBeNull();
+
+      await act(async () => {
+        recentSalesButton?.click();
+      });
+
+      const dialog = container.querySelector<HTMLElement>(
+        '[role="dialog"]#pos-recent-sales-modal',
+      );
+      expect(dialog).toBeTruthy();
+      expect(dialog?.className).toContain("pos-recent-sales-drop");
+      expect(dialog?.getAttribute("aria-modal")).toBe("true");
+      expect(dialog?.textContent).toContain("V-1001");
+      expect(dialog?.textContent).toContain("Restaurante Norte");
+      expect(dialog?.textContent).toContain("$276.00");
+      expect(container.querySelector('a[href="/sales/history"]')).toBeNull();
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Cerrar ventas recientes"]',
+          )
+          ?.click();
+      });
+
+      expect(container.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).toBe(recentSalesButton);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
   });
 
   it("enfoca la búsqueda con F2 y conserva controles de operación rápida", async () => {
@@ -1033,6 +1086,309 @@ describe("TASK-055 sales UI behavior", () => {
         enabledCreditButton.click();
       });
       expect(onPaymentTypeChange).toHaveBeenCalledWith("CREDIT_SALE");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("permite entrar a crédito para capturar un adelanto aunque el total exceda el crédito disponible", async () => {
+    const conditionPanelRef = createRef<HTMLElement>();
+    const paymentPanelRef = createRef<HTMLElement>();
+    const customerSearchRef = createRef<HTMLInputElement>();
+    const onPaymentTypeChange = vi.fn();
+    const customer = {
+      id: "customer-limited",
+      name: "Cliente con crédito limitado",
+      customerType: "WHOLESALE" as const,
+      isActive: true,
+      active: true,
+      creditSummary: { availableCredit: 100 },
+    };
+    const { container, root } = await renderDom(
+      <CheckoutDock
+        cart={[]}
+        conditionPanelRef={conditionPanelRef}
+        customerSearch=""
+        customerSearchRef={customerSearchRef}
+        customers={[]}
+        customersError={null}
+        customersLoading={false}
+        isSubmitting={false}
+        onConfirm={() => undefined}
+        onCustomerSearchChange={() => undefined}
+        onCustomerSelect={() => undefined}
+        onPaymentTypeChange={onPaymentTypeChange}
+        onPaymentsChange={() => undefined}
+        paymentPanelRef={paymentPanelRef}
+        paymentType="CASH_SALE"
+        payments={[]}
+        selectedCustomer={customer}
+        total={250}
+        transactionState="CART_ACTIVE"
+      />,
+    );
+
+    try {
+      const creditButton = getConditionButton(container, "Crédito");
+      expect(creditButton.disabled).toBe(false);
+
+      await act(async () => {
+        creditButton.click();
+      });
+
+      expect(onPaymentTypeChange).toHaveBeenCalledWith("CREDIT_SALE");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("convierte la captura de pago en adelanto y no precarga el total de crédito", async () => {
+    function CreditDockHarness() {
+      const [payments, setPayments] = useState<SalePaymentInput[]>([]);
+      const [paymentType, setPaymentType] = useState<
+        "CASH_SALE" | "CREDIT_SALE"
+      >("CASH_SALE");
+      return (
+        <CheckoutDock
+          cart={[]}
+          customerSearch=""
+          customers={[]}
+          customersError={null}
+          customersLoading={false}
+          isSubmitting={false}
+          onConfirm={() => undefined}
+          onCustomerSearchChange={() => undefined}
+          onCustomerSelect={() => undefined}
+          onPaymentTypeChange={setPaymentType}
+          onPaymentsChange={setPayments}
+          paymentType={paymentType}
+          payments={payments}
+          selectedCustomer={{
+            id: "customer-credit",
+            name: "Cliente de crédito",
+            customerType: "WHOLESALE",
+            isActive: true,
+            active: true,
+            creditSummary: { availableCredit: 1000 },
+          }}
+          total={250}
+          transactionState="READY_TO_CHARGE"
+        />
+      );
+    }
+
+    const { container, root } = await renderDom(<CreditDockHarness />);
+    try {
+      await openPaymentCapture(container);
+      await act(async () => {
+        getConditionButton(container, "Crédito").click();
+      });
+
+      expect(
+        container.querySelector('[aria-label="Captura de adelantos"]'),
+      ).toBeTruthy();
+      expect(container.textContent).toContain("Adelanto");
+      expect(container.textContent).toContain("Monto del adelanto");
+      expect(container.textContent).toContain("Dinero entregado");
+      expect(getButtonByText(container, "Agregar adelanto").disabled).toBe(
+        false,
+      );
+      expect(
+        (
+          container.querySelector(
+            'input[aria-label="Monto del adelanto 1"]',
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("");
+
+      await act(async () => {
+        changeInput(
+          container.querySelector(
+            'input[aria-label="Monto del adelanto 1"]',
+          ) as HTMLInputElement,
+          "",
+        );
+      });
+      expect(
+        container.querySelector('input[aria-label="Monto del adelanto 1"]'),
+      ).toBeTruthy();
+
+      await act(async () => {
+        changeInput(
+          container.querySelector(
+            'input[aria-label="Dinero entregado del adelanto 1"]',
+          ) as HTMLInputElement,
+          "23",
+        );
+      });
+      expect(container.textContent).toContain("Cambio$0.00");
+
+      await act(async () => {
+        changeInput(
+          container.querySelector(
+            'input[aria-label="Monto del adelanto 1"]',
+          ) as HTMLInputElement,
+          "150",
+        );
+      });
+      expect(container.textContent).toContain("Pagado$150.00");
+      expect(container.textContent).toContain("Pendiente$100.00");
+
+      await act(async () => {
+        changeInput(
+          container.querySelector(
+            'input[aria-label="Dinero entregado del adelanto 1"]',
+          ) as HTMLInputElement,
+          "200",
+        );
+      });
+      expect(container.textContent).toContain("Cambio$50.00");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("habilita confirmar venta cuando el adelanto deja el saldo dentro del crédito disponible", async () => {
+    mockState.locations = {
+      data: [
+        { id: "loc-counter", name: "Mostrador", code: "MOST", type: "BRANCH" },
+      ],
+      error: null,
+      isLoading: false,
+    };
+    mockState.products = {
+      data: [
+        {
+          id: "prod-credit",
+          name: "Pollo a crédito",
+          sku: "CREDIT-1",
+          presentationType: "WHOLE",
+          unit: "PIECE",
+          salePrice: 250,
+          inventoryBalance: {
+            locationId: "loc-counter",
+            quantityKg: 0,
+            quantityPieces: 4,
+          },
+        },
+      ],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    mockState.customers = {
+      data: [
+        {
+          id: "customer-credit",
+          name: "Cliente con saldo disponible",
+          customerType: "WHOLESALE",
+          creditStatus: "ACTIVE",
+          isActive: true,
+          creditSummary: {
+            effectiveCreditStatus: "ACTIVE",
+            availableCredit: 100,
+          },
+        },
+      ],
+      error: null,
+      isLoading: false,
+    };
+
+    const { container, root } = await renderDom(
+      <MemoryRouter initialEntries={["/sales"]}>
+        <SalesPosPage />
+      </MemoryRouter>,
+    );
+    try {
+      const locationSelect = getSelectByLabelText(
+        container,
+        "Ubicación operativa",
+      );
+      await act(async () => {
+        locationSelect.value = "loc-counter";
+        locationSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        getButtonByText(container, "Agregar").click();
+      });
+      await selectPosCustomer(container, "Cliente con saldo disponible");
+      await addPosPayment(container);
+      await act(async () => {
+        getConditionButton(container, "Crédito").click();
+      });
+      expect(getPosPrimaryAction(container).textContent).toContain(
+        "Registrar adelanto",
+      );
+
+      const amount = container.querySelector(
+        'input[aria-label="Monto del adelanto 1"]',
+      ) as HTMLInputElement;
+      await act(async () => {
+        changeInput(amount, "150");
+      });
+
+      const primaryAction = getPosPrimaryAction(container);
+      expect(primaryAction.disabled).toBe(false);
+      expect(primaryAction.textContent).toContain("Confirmar venta");
+      expect(
+        container.querySelector('[aria-label="Resumen de pago"]')?.textContent,
+      ).toContain("$150.00");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("conserva la captura cuando el monto se borra temporalmente para editarlo", async () => {
+    function CashDockHarness() {
+      const [payments, setPayments] = useState<SalePaymentInput[]>([]);
+      return (
+        <CheckoutDock
+          cart={[]}
+          customerSearch=""
+          customers={[]}
+          customersError={null}
+          customersLoading={false}
+          isSubmitting={false}
+          onConfirm={() => undefined}
+          onCustomerSearchChange={() => undefined}
+          onCustomerSelect={() => undefined}
+          onPaymentTypeChange={() => undefined}
+          onPaymentsChange={setPayments}
+          paymentType="CASH_SALE"
+          payments={payments}
+          selectedCustomer={null}
+          total={250}
+          transactionState="CART_ACTIVE"
+        />
+      );
+    }
+
+    const { container, root } = await renderDom(<CashDockHarness />);
+    try {
+      await openPaymentCapture(container);
+      const amount = container.querySelector(
+        'input[aria-label="Monto aplicado del pago 1"]',
+      ) as HTMLInputElement;
+      await act(async () => {
+        changeInput(amount, "200");
+        changeInput(amount, "");
+      });
+
+      expect(
+        container.querySelector(
+          'input[aria-label="Monto aplicado del pago 1"]',
+        ),
+      ).toBeTruthy();
     } finally {
       await act(async () => {
         root.unmount();
@@ -2611,9 +2967,7 @@ describe("TASK-055 sales UI behavior", () => {
       await act(async () => {
         getConditionButton(container, "Crédito").click();
       });
-      expect(container.textContent).toContain(
-        "Venta a crédito sin pago inmediato",
-      );
+      expect(container.textContent).toContain("Venta a crédito sin adelanto");
       await act(async () => {
         getButtonByText(container, "Confirmar venta").click();
       });

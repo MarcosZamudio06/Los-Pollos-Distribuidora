@@ -270,6 +270,7 @@ describe('PointOfSaleDailyCloseService', () => {
     const reviewed = {
       id: 'close-1',
       operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
       status: 'REVIEWED',
       sales: [],
       updatedAt: new Date(),
@@ -279,11 +280,23 @@ describe('PointOfSaleDailyCloseService', () => {
       .mockResolvedValueOnce({ ...reviewed, status: 'DRAFT' });
     prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
 
-    await service.reopen('close-1', { version: 1, reason: 'Corregir conteo' }, {
-      id: 'admin-1',
-      role: 'ADMIN',
-      permissions: [PERMISSIONS.DAILY_CLOSES_REOPEN],
-    } as never);
+    const reopened = await service.reopen(
+      'close-1',
+      { version: 1, reason: 'Corregir conteo' },
+      {
+        id: 'admin-1',
+        role: 'ADMIN',
+        permissions: [PERMISSIONS.DAILY_CLOSES_REOPEN],
+      } as never,
+    );
+
+    expect(reopened).toEqual(
+      expect.objectContaining({
+        status: 'DRAFT',
+        dataAsOf: reviewed.updatedAt,
+        unresolvedDifferenceCount: 0,
+      }),
+    );
 
     expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -146,6 +146,7 @@ const card: CedisDashboardCard = {
   financial: {
     expectedSales: "9350.00",
     actualSales: "9180.00",
+    creditSales: "4500.00",
   },
   cash: {
     expected: "5000.00",
@@ -182,6 +183,7 @@ const summary: CedisCycleSummary = {
     actualSoldPieces: "0.000",
     expectedSales: "9350.00",
     actualSales: "9180.00",
+    creditSales: "4500.00",
     expectedCash: "5000.00",
     cashCounted: "4950.00",
     cashDifference: "-50.00",
@@ -261,6 +263,7 @@ const summary: CedisCycleSummary = {
       transfer: "1000.00",
       expenses: "100.00",
       grossSales: "9180.00",
+      creditSales: "4500.00",
       netCashExpected: "5000.00",
       cashCounted: "4950.00",
       cashDifference: "-50.00",
@@ -384,12 +387,24 @@ describe("CEDIS branch detail page", () => {
     expect(html).toContain("Comprometido");
     expect(html).toContain("Disponible");
     expect(html).toContain("Resumen de caja");
+    expect(html).toContain("Ventas a crédito");
+    expect(html).toContain("$4,500.00");
     expect(html).toContain("Advertencias y diferencias");
     expect(html).toContain("Diferencia de caja");
     expect(html).toContain(
       'href="/daily-close?closeId=daily-close-1&amp;locationId=branch-1&amp;date=2026-08-05"',
     );
     expect(html).toContain("Actualizar conciliación");
+  });
+
+  it("oculta efectivo esperado del resumen operativo", () => {
+    const html = renderPage();
+    const summaryStart = html.indexOf("Resumen operativo");
+    const productBreakdownStart = html.indexOf("Desglose por producto");
+
+    expect(html.slice(summaryStart, productBreakdownStart)).not.toContain(
+      "Efectivo esperado",
+    );
   });
 
   it("oculta comandos cuando el usuario solo tiene permiso de consulta", () => {
@@ -601,6 +616,74 @@ describe("CEDIS transfer command panel", () => {
     expect(container.textContent).toContain("Sucursal Centro");
     expect(container.textContent).toContain("25.5 kg");
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("muestra lo enviado y descuenta la venta no realizada del monto esperado al devolver", async () => {
+    const returnProduct: Product = {
+      ...product,
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        locationId: "branch-1",
+        quantityKg: 80,
+        reservedQuantityKg: 0,
+        availableQuantityKg: 80,
+      },
+    };
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <CedisTransferCommandPanel
+          branch={card.branch}
+          cedis={summary.distributionCenter}
+          cycleItems={summary.items}
+          expectedSales={summary.totals.expectedSales}
+          expectedVersion={summary.version}
+          mode="RETURN"
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+          products={[returnProduct]}
+          productsLoading={false}
+        />,
+      );
+    });
+
+    await act(async () => {
+      const select = container.querySelector("select") as HTMLSelectElement;
+      select.value = "product-1";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const input = container.querySelector(
+        'input[aria-label="Kilos 1"]',
+      ) as HTMLInputElement;
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(input, "5");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Enviado en ciclo");
+    expect(container.textContent).toContain("120 kg");
+    expect(container.textContent).toContain("Vendido en sucursal");
+    expect(container.textContent).toContain("108 kg");
+    expect(container.textContent).toContain("Límite para devolver");
+    expect(container.textContent).toContain("2 kg");
+    expect(container.textContent).toContain("Venta no realizada");
+    expect(container.textContent).toContain("$425.00");
+    expect(container.textContent).toContain("Monto esperado después");
+    expect(container.textContent).toContain("$8,925.00");
+
+    await act(async () => {
+      (
+        container.querySelector('button[type="submit"]') as HTMLButtonElement
+      ).click();
+    });
+    expect(container.textContent).toContain(
+      "supera el límite de producto no vendido",
+    );
+    expect(container.textContent).not.toContain("Confirmación requerida");
   });
 
   it("bloquea una cantidad que supera la disponibilidad actual", async () => {

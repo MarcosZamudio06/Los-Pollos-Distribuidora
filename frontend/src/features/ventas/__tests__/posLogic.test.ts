@@ -374,6 +374,23 @@ describe("POS credit restrictions", () => {
     ).toBeNull();
   });
 
+  it("validates credit against the outstanding balance after an initial advance", () => {
+    const customer = {
+      ...activeCustomer,
+      creditSummary: {
+        ...activeCustomer.creditSummary,
+        availableCredit: 100,
+      },
+    };
+
+    expect(
+      getCreditRestriction("CREDIT_SALE", customer, 250, {}, 150),
+    ).toBeNull();
+    expect(getSaleRestriction("CREDIT_SALE", customer, 250, 100)).toBe(
+      "La venta excede el crédito disponible de $100.00.",
+    );
+  });
+
   it("permits warnings and only bypasses an eligible block with an intentional admin override", () => {
     const warningCustomer: CustomerOption = {
       ...activeCustomer,

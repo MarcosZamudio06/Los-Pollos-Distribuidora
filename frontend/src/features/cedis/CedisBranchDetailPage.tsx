@@ -598,6 +598,16 @@ function SummaryGrid({
             difference === null ? undefined : `Diferencia ${money(difference)}`
           }
         />
+        <SummaryMetric
+          label="Ventas a crédito"
+          value={
+            financial?.creditSales !== undefined
+              ? money(financial.creditSales)
+              : "—"
+          }
+          detail="Incluidas en ventas reales"
+          tone="warning"
+        />
         {canViewCosts && (
           <SummaryMetric
             label="Utilidad bruta esperada"
@@ -621,10 +631,6 @@ function SummaryGrid({
             }
           />
         )}
-        <SummaryMetric
-          label="Efectivo esperado"
-          value={cash ? money(cash.expected) : "—"}
-        />
         <SummaryMetric
           label="Efectivo contado"
           value={cash ? money(cash.counted) : "—"}
@@ -971,6 +977,12 @@ function CashSummary({
               label="Ventas brutas"
               value={money(totals.grossSales)}
             />
+            <SummaryMetric
+              label="Ventas a crédito"
+              value={money(totals.creditSales)}
+              detail="Incluidas en ventas brutas"
+              tone="warning"
+            />
             <SummaryMetric label="Efectivo" value={money(totals.cash)} />
             <SummaryMetric
               label="Tarjeta / voucher"
@@ -1201,6 +1213,12 @@ function RelatedDailyClose({
         <SummaryMetric
           label="Ventas"
           value={money(dailyClose.totals.grossSales)}
+        />
+        <SummaryMetric
+          label="Ventas a crédito"
+          value={money(dailyClose.totals.creditSales)}
+          detail="Incluidas en ventas"
+          tone="warning"
         />
         <SummaryMetric
           label="Gastos"
@@ -1937,6 +1955,8 @@ export function CedisBranchDetailPage() {
             products={productsQuery.data ?? []}
             productsError={productsQuery.error}
             productsLoading={productsQuery.isLoading}
+            cycleItems={summary.items}
+            expectedSales={summary.totals.expectedSales}
           />
         )}
         {action === "CANCEL" ? (
