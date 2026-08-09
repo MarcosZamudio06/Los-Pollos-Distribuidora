@@ -11,10 +11,19 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../auth";
 import { AsyncState } from "../components/AsyncState";
+import { BranchReturnsView } from "../components/BranchReturnsView";
 import { InventoryAdjustmentModal } from "../components/InventoryAdjustmentModal";
 import { CedisInventorySummaryPanel } from "../components/CedisInventorySummaryPanel";
 import { InventoryByLocationView } from "../components/InventoryByLocationView";
 import { InventoryMovementsView } from "../components/InventoryMovementsView";
+import { InventorySectionMenu } from "../components/InventorySectionMenu";
+import {
+  getInventorySectionPanelId,
+  getInventorySectionTabId,
+  inventoryAdminSections,
+  inventorySellerSections,
+  type InventorySectionKey,
+} from "../components/inventorySections";
 import { InventoryTransferView } from "../components/InventoryTransferView";
 import { LowStockBadge } from "../components/LowStockBadge";
 import { ProductFormModal } from "../components/ProductFormModal";
@@ -89,6 +98,11 @@ const tableCellClass = "px-4 py-3 align-middle";
 export function ProductListPage() {
   const { user } = useAuth();
   const canManage = canManageInventory(user?.role);
+  const defaultSection: InventorySectionKey = canManage
+    ? "returns"
+    : "products";
+  const [activeSection, setActiveSection] =
+    useState<InventorySectionKey>(defaultSection);
   const canViewPurchaseCost =
     user?.permissions?.includes("costs.read") ?? false;
   const [filters, setFilters] = useState<ProductFilters>({});
@@ -101,6 +115,14 @@ export function ProductListPage() {
   const products = useProducts(filters);
   const pagination = useTablePagination(products.data ?? []);
   const locationSelected = Boolean(filters.locationId);
+  const visibleSections = canManage
+    ? inventoryAdminSections
+    : inventorySellerSections;
+  const selectedSection = visibleSections.some(
+    (section) => section.key === activeSection,
+  )
+    ? activeSection
+    : defaultSection;
 
   return (
     <main className="min-h-screen bg-[var(--erp-shell-bg)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
@@ -160,7 +182,21 @@ export function ProductListPage() {
           </div>
         </header>
 
-        <section className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[0_18px_50px_rgba(16,24,32,0.06)]">
+        <InventorySectionMenu
+          activeSection={selectedSection}
+          onSectionChange={setActiveSection}
+          sections={visibleSections}
+        />
+
+        <div
+          aria-labelledby={getInventorySectionTabId("products")}
+          className="grid gap-6"
+          hidden={selectedSection !== "products"}
+          id={getInventorySectionPanelId("products")}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <section className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-4 shadow-[0_18px_50px_rgba(16,24,32,0.06)]">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--erp-foreground)]">
@@ -315,213 +351,254 @@ export function ProductListPage() {
               )}
             </div>
           )}
-        </section>
+          </section>
 
-        <AsyncState
-          empty={!products.data?.length}
-          emptyMessage="No hay productos para estos filtros. Prueba con una ubicación, categoría o SKU."
-          error={products.error}
-          isLoading={products.isLoading}
-        >
-          <div className="overflow-hidden rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] shadow-[0_18px_50px_rgba(16,24,32,0.06)]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--erp-border)] px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold text-[var(--erp-foreground)]">
-                  Catálogo operativo
-                </h2>
-                <p className="text-xs text-[var(--erp-muted-foreground)]">
-                  Tabla compacta para consulta, edición y ajuste autorizado.
-                </p>
+          <AsyncState
+            empty={!products.data?.length}
+            emptyMessage="No hay productos para estos filtros. Prueba con una ubicación, categoría o SKU."
+            error={products.error}
+            isLoading={products.isLoading}
+          >
+            <div className="overflow-hidden rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] shadow-[0_18px_50px_rgba(16,24,32,0.06)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--erp-border)] px-4 py-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--erp-foreground)]">
+                    Catálogo operativo
+                  </h2>
+                  <p className="text-xs text-[var(--erp-muted-foreground)]">
+                    Tabla compacta para consulta, edición y ajuste autorizado.
+                  </p>
+                </div>
+                <span className="rounded-full border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+                  {products.data?.length ?? 0} registros
+                </span>
               </div>
-              <span className="rounded-full border border-[var(--erp-border)] bg-[var(--erp-surface-muted)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
-                {products.data?.length ?? 0} registros
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className={tableHeadClass}>
-                  <tr>
-                    <th className={tableCellClass}>Nombre</th>
-                    <th className={tableCellClass}>SKU</th>
-                    <th className={tableCellClass}>Categoría</th>
-                    <th className={tableCellClass}>Presentación</th>
-                    <th className={tableCellClass}>Precio de venta</th>
-                    {canViewPurchaseCost && (
-                      <th className={tableCellClass}>Costo</th>
-                    )}
-                    <th className={tableCellClass}>Unidad</th>
-                    <th className={tableCellClass}>Equivalencia</th>
-                    <th className={tableCellClass}>Ubicación</th>
-                    <th className={tableCellClass}>Físico kg</th>
-                    <th className={tableCellClass}>Comprometido kg</th>
-                    <th className={tableCellClass}>Disponible kg</th>
-                    <th className={tableCellClass}>Físico piezas</th>
-                    <th className={tableCellClass}>Comprometido piezas</th>
-                    <th className={tableCellClass}>Disponible piezas</th>
-                    <th className={tableCellClass}>Mínimo</th>
-                    <th className={tableCellClass}>Stock bajo</th>
-                    <th className={tableCellClass}>Estado</th>
-                    <th className={tableCellClass}>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagination.pageItems.map((product) => {
-                    const balance = productBalance(product);
-                    return (
-                      <tr
-                        key={product.id}
-                        className="border-t border-[var(--erp-border)] align-top transition hover:bg-[var(--erp-surface-muted)]/70"
-                      >
-                        <td
-                          className={`${tableCellClass} min-w-52 font-semibold text-[var(--erp-foreground)]`}
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className={tableHeadClass}>
+                    <tr>
+                      <th className={tableCellClass}>Nombre</th>
+                      <th className={tableCellClass}>SKU</th>
+                      <th className={tableCellClass}>Categoría</th>
+                      <th className={tableCellClass}>Presentación</th>
+                      <th className={tableCellClass}>Precio de venta</th>
+                      {canViewPurchaseCost && (
+                        <th className={tableCellClass}>Costo</th>
+                      )}
+                      <th className={tableCellClass}>Unidad</th>
+                      <th className={tableCellClass}>Equivalencia</th>
+                      <th className={tableCellClass}>Ubicación</th>
+                      <th className={tableCellClass}>Físico kg</th>
+                      <th className={tableCellClass}>Comprometido kg</th>
+                      <th className={tableCellClass}>Disponible kg</th>
+                      <th className={tableCellClass}>Físico piezas</th>
+                      <th className={tableCellClass}>Comprometido piezas</th>
+                      <th className={tableCellClass}>Disponible piezas</th>
+                      <th className={tableCellClass}>Mínimo</th>
+                      <th className={tableCellClass}>Stock bajo</th>
+                      <th className={tableCellClass}>Estado</th>
+                      <th className={tableCellClass}>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagination.pageItems.map((product) => {
+                      const balance = productBalance(product);
+                      return (
+                        <tr
+                          key={product.id}
+                          className="border-t border-[var(--erp-border)] align-top transition hover:bg-[var(--erp-surface-muted)]/70"
                         >
-                          {product.name}
-                        </td>
-                        <td
-                          className={`${tableCellClass} font-mono text-xs text-[var(--erp-muted-foreground)]`}
-                        >
-                          {product.sku ?? "—"}
-                        </td>
-                        <td className={tableCellClass}>
-                          {categoryName(product)}
-                        </td>
-                        <td className={tableCellClass}>
-                          {productPresentation(product)}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          ${product.salePrice}
-                        </td>
-                        {canViewPurchaseCost && (
+                          <td
+                            className={`${tableCellClass} min-w-52 font-semibold text-[var(--erp-foreground)]`}
+                          >
+                            {product.name}
+                          </td>
+                          <td
+                            className={`${tableCellClass} font-mono text-xs text-[var(--erp-muted-foreground)]`}
+                          >
+                            {product.sku ?? "—"}
+                          </td>
+                          <td className={tableCellClass}>
+                            {categoryName(product)}
+                          </td>
+                          <td className={tableCellClass}>
+                            {productPresentation(product)}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            ${product.salePrice}
+                          </td>
+                          {canViewPurchaseCost && (
+                            <td
+                              className={`${tableCellClass} text-right text-[var(--erp-muted-foreground)]`}
+                            >
+                              ${productPurchaseCost(product)}
+                            </td>
+                          )}
+                          <td className={tableCellClass}>
+                            {productUnit(product)}
+                          </td>
+                          <td
+                            className={`${tableCellClass} min-w-44 text-[var(--erp-muted-foreground)]`}
+                          >
+                            {productEquivalence(product)}
+                          </td>
+                          <td className={tableCellClass}>
+                            {balance?.locationName ??
+                              filters.locationId ??
+                              "Selecciona ubicación"}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            {balance?.quantityKg ?? "—"}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            {balance?.reservedQuantityKg ?? "—"}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            {balance?.availableQuantityKg ?? "—"}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            {balance?.quantityPieces ?? "—"}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            {balance?.reservedQuantityPieces ?? "—"}
+                          </td>
+                          <td
+                            className={`${tableCellClass} text-right font-semibold`}
+                          >
+                            {balance?.availableQuantityPieces ?? "—"}
+                          </td>
                           <td
                             className={`${tableCellClass} text-right text-[var(--erp-muted-foreground)]`}
                           >
-                            ${productPurchaseCost(product)}
+                            {balance?.minQuantityKg ??
+                              balance?.minimumKg ??
+                              balance?.minQuantityPieces ??
+                              balance?.minimumPieces ??
+                              "—"}
                           </td>
-                        )}
-                        <td className={tableCellClass}>
-                          {productUnit(product)}
-                        </td>
-                        <td
-                          className={`${tableCellClass} min-w-44 text-[var(--erp-muted-foreground)]`}
-                        >
-                          {productEquivalence(product)}
-                        </td>
-                        <td className={tableCellClass}>
-                          {balance?.locationName ??
-                            filters.locationId ??
-                            "Selecciona ubicación"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          {balance?.quantityKg ?? "—"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          {balance?.reservedQuantityKg ?? "—"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          {balance?.availableQuantityKg ?? "—"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          {balance?.quantityPieces ?? "—"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          {balance?.reservedQuantityPieces ?? "—"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right font-semibold`}
-                        >
-                          {balance?.availableQuantityPieces ?? "—"}
-                        </td>
-                        <td
-                          className={`${tableCellClass} text-right text-[var(--erp-muted-foreground)]`}
-                        >
-                          {balance?.minQuantityKg ??
-                            balance?.minimumKg ??
-                            balance?.minQuantityPieces ??
-                            balance?.minimumPieces ??
-                            "—"}
-                        </td>
-                        <td className={tableCellClass}>
-                          <LowStockBadge
-                            isLowStock={balance?.isLowStock}
-                            locationSelected={locationSelected}
-                          />
-                        </td>
-                        <td className={tableCellClass}>
-                          <span
-                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${isProductActive(product) ? "border-[rgba(63,123,65,0.22)] bg-[rgba(63,123,65,0.10)] text-[var(--erp-success)]" : "border-[var(--erp-border)] bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]"}`}
-                          >
-                            {isProductActive(product) ? "Activo" : "Inactivo"}
-                          </span>
-                        </td>
-                        <td className={tableCellClass}>
-                          {canManage ? (
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-danger)] transition hover:bg-[rgba(157,45,36,0.08)]"
-                                onClick={() => setEditingProduct(product)}
-                              >
-                                <Pencil
-                                  className="h-3.5 w-3.5"
-                                  aria-hidden="true"
-                                />
-                                Editar
-                              </button>
-                              <button
-                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-info)] transition hover:bg-[rgba(47,111,115,0.08)]"
-                                onClick={() => setAdjustingProduct(product)}
-                              >
-                                <Settings2
-                                  className="h-3.5 w-3.5"
-                                  aria-hidden="true"
-                                />
-                                Ajustar
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[var(--erp-muted-foreground)]">
-                              Solo lectura
+                          <td className={tableCellClass}>
+                            <LowStockBadge
+                              isLowStock={balance?.isLowStock}
+                              locationSelected={locationSelected}
+                            />
+                          </td>
+                          <td className={tableCellClass}>
+                            <span
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${isProductActive(product) ? "border-[rgba(63,123,65,0.22)] bg-[rgba(63,123,65,0.10)] text-[var(--erp-success)]" : "border-[var(--erp-border)] bg-[var(--erp-surface-muted)] text-[var(--erp-muted-foreground)]"}`}
+                            >
+                              {isProductActive(product) ? "Activo" : "Inactivo"}
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className={tableCellClass}>
+                            {canManage ? (
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-danger)] transition hover:bg-[rgba(157,45,36,0.08)]"
+                                  onClick={() => setEditingProduct(product)}
+                                >
+                                  <Pencil
+                                    className="h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
+                                  Editar
+                                </button>
+                                <button
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-info)] transition hover:bg-[rgba(47,111,115,0.08)]"
+                                  onClick={() => setAdjustingProduct(product)}
+                                >
+                                  <Settings2
+                                    className="h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
+                                  Ajustar
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[var(--erp-muted-foreground)]">
+                                Solo lectura
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <TablePagination
+                {...pagination}
+                total={products.data?.length ?? 0}
+                onPageChange={pagination.setPage}
+              />
             </div>
-            <TablePagination
-              {...pagination}
-              total={products.data?.length ?? 0}
-              onPageChange={pagination.setPage}
-            />
-          </div>
-        </AsyncState>
+          </AsyncState>
+        </div>
 
-        {canManage ? (
+        {canManage && (
           <>
-            <CedisInventorySummaryPanel />
-            <InventoryByLocationView locationId={filters.locationId} />
-            <InventoryTransferView canManage={canManage} />
-            <InventoryMovementsView />
+            <div
+              aria-labelledby={getInventorySectionTabId("returns")}
+              className="min-w-0"
+              hidden={selectedSection !== "returns"}
+              id={getInventorySectionPanelId("returns")}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <BranchReturnsView canManage={canManage} />
+            </div>
+            <div
+              aria-labelledby={getInventorySectionTabId("cedisSummary")}
+              className="min-w-0"
+              hidden={selectedSection !== "cedisSummary"}
+              id={getInventorySectionPanelId("cedisSummary")}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <CedisInventorySummaryPanel />
+            </div>
+            <div
+              aria-labelledby={getInventorySectionTabId("balances")}
+              className="min-w-0"
+              hidden={selectedSection !== "balances"}
+              id={getInventorySectionPanelId("balances")}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <InventoryByLocationView locationId={filters.locationId} />
+            </div>
+            <div
+              aria-labelledby={getInventorySectionTabId("transfers")}
+              className="min-w-0"
+              hidden={selectedSection !== "transfers"}
+              id={getInventorySectionPanelId("transfers")}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <InventoryTransferView canManage={canManage} />
+            </div>
+            <div
+              aria-labelledby={getInventorySectionTabId("movements")}
+              className="min-w-0"
+              hidden={selectedSection !== "movements"}
+              id={getInventorySectionPanelId("movements")}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <InventoryMovementsView />
+            </div>
           </>
-        ) : (
-          <section className="rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 text-sm text-[var(--erp-muted-foreground)]">
-            Los paneles administrativos de inventario están ocultos para
-            sesiones SELLER. Usa la tabla de productos para revisar
-            disponibilidad.
-          </section>
         )}
       </section>
       {canManage && editingProduct !== undefined && (

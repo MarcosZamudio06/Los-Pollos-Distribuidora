@@ -55,6 +55,9 @@ vi.mock("../components/InventoryMovementsView", () => ({
 vi.mock("../components/InventoryTransferView", () => ({
   InventoryTransferView: () => null,
 }));
+vi.mock("../components/BranchReturnsView", () => ({
+  BranchReturnsView: () => null,
+}));
 
 describe("Filtros del inventario", () => {
   let root: Root | undefined;
@@ -111,6 +114,31 @@ describe("Filtros del inventario", () => {
     expect(html).toContain("Todas las ubicaciones");
     expect(html).not.toContain("ID de categoría");
     expect(html).not.toContain("ID de ubicación");
+  });
+
+  it("presenta devoluciones a CEDIS como sección primaria para ADMIN", () => {
+    const html = renderToStaticMarkup(<ProductListPage />);
+
+    expect(html).toContain("Devoluciones a CEDIS");
+    expect(html).toContain('aria-selected="true"');
+    expect(html).toContain("inventory-section-panel-returns");
+    expect(html).toContain("Resumen CEDIS");
+    expect(html).toContain("Inventario por ubicación");
+    expect(html).toContain("Traspasos");
+    expect(html).toContain("Movimientos");
+  });
+
+  it("deja Productos y stock como única sección primaria para SELLER", () => {
+    mockState.auth = { user: { role: "SELLER" } };
+    const html = renderToStaticMarkup(<ProductListPage />);
+
+    expect(html).toContain("Productos y stock");
+    expect(html).toContain('aria-selected="true"');
+    expect(html).not.toContain("Devoluciones a CEDIS");
+    expect(html).not.toContain("Resumen CEDIS");
+    expect(html).not.toContain("Inventario por ubicación");
+    expect(html).not.toContain("Traspasos");
+    expect(html).not.toContain("Movimientos");
   });
 
   it("envía los IDs seleccionados y limpia stock bajo al quitar la ubicación", async () => {

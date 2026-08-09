@@ -365,6 +365,49 @@ describe('CedisDashboardQueryService', () => {
     );
   });
 
+  it('keeps persisted physical totals when a pending return has items', async () => {
+    const { prisma, service } = createService();
+    prisma.operationalLocation.findMany.mockResolvedValue([branch]);
+    prisma.branchSupplyCycle.findMany.mockResolvedValue([
+      cycle({
+        transfers: [
+          {
+            role: 'RETURN',
+            linkedAt: new Date('2026-08-04T10:00:00.000Z'),
+            inventoryTransfer: {
+              status: 'REQUESTED',
+              updatedAt: new Date('2026-08-04T10:30:00.000Z'),
+              items: [
+                {
+                  productId: 'product-1',
+                  unit: 'KG',
+                  quantityKg: new Prisma.Decimal('3.000'),
+                  quantityPieces: null,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getDashboard(
+      { cedisLocationId: 'cedis-1', businessDate: '2026-08-04' },
+      seller,
+    );
+
+    expect(result.items[0]?.physical).toEqual(
+      expect.objectContaining({
+        deliveredKg: '25.500',
+        deliveredPieces: '10.000',
+        returnedKg: '1.000',
+        returnedPieces: '1.000',
+        expectedSoldKg: '24.500',
+        expectedSoldPieces: '9.000',
+      }),
+    );
+  });
+
   it('uses stable pagination and applies the history filters in both queries', async () => {
     const { prisma, service } = createService();
     prisma.branchSupplyCycle.findMany.mockResolvedValue([

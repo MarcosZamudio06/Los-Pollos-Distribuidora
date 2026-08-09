@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { useAuth } from "../../auth";
 import { productService } from "../services/productService";
 import type {
@@ -16,6 +21,30 @@ export type ProductFilters = {
   lowStock?: boolean;
   isActive?: string;
 };
+
+export type InventoryTransferCommand = {
+  id: string;
+  idempotencyKey?: string;
+};
+
+export type InventoryTransferCancellationCommand = InventoryTransferCommand & {
+  reason: string;
+};
+
+function createIdempotencyKey() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
+
+function invalidateInventoryQueries(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["inventory-transfers"] }),
+    queryClient.invalidateQueries({ queryKey: ["inventory-balances"] }),
+    queryClient.invalidateQueries({ queryKey: ["inventory-movements"] }),
+    queryClient.invalidateQueries({ queryKey: ["cedis-inventory-summary"] }),
+    queryClient.invalidateQueries({ queryKey: ["cedis"] }),
+    queryClient.invalidateQueries({ queryKey: ["products"] }),
+  ]);
+}
 
 export function useProducts(filters: ProductFilters) {
   const { accessToken } = useAuth();
@@ -137,9 +166,13 @@ export function useConfirmInventoryTransfer() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => productService.confirmTransfer(id, accessToken),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["inventory-transfers"] }),
+    mutationFn: ({ id, idempotencyKey }: InventoryTransferCommand) =>
+      productService.confirmTransfer(
+        id,
+        accessToken,
+        idempotencyKey?.trim() || createIdempotencyKey(),
+      ),
+    onSuccess: () => invalidateInventoryQueries(queryClient),
   });
 }
 
@@ -147,9 +180,17 @@ export function useCancelInventoryTransfer() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      productService.cancelTransfer(id, reason, accessToken),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["inventory-transfers"] }),
+    mutationFn: ({
+      id,
+      idempotencyKey,
+      reason,
+    }: InventoryTransferCancellationCommand) =>
+      productService.cancelTransfer(
+        id,
+        reason,
+        accessToken,
+        idempotencyKey?.trim() || createIdempotencyKey(),
+      ),
+    onSuccess: () => invalidateInventoryQueries(queryClient),
   });
 }

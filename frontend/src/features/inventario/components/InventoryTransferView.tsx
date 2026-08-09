@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { AsyncState } from "./AsyncState";
 import {
   useCancelInventoryTransfer,
@@ -35,6 +35,10 @@ function canCancelTransfer(transfer: InventoryTransfer) {
   return transfer.status !== "CONFIRMED" && transfer.status !== "CANCELLED";
 }
 
+function createIdempotencyKey() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
+
 export function InventoryTransferView({
   canManage,
 }: InventoryTransferViewProps) {
@@ -44,6 +48,7 @@ export function InventoryTransferView({
   const [cancelReason, setCancelReason] = useState("");
   const [pendingTransfer, setPendingTransfer] =
     useState<InventoryTransferValues | null>(null);
+  const idempotencyKeys = useRef(new Map<string, string>());
   const transfers = useInventoryTransfers();
   const detail = useInventoryTransferDetail(selectedId);
   const createTransfer = useCreateInventoryTransfer();
@@ -112,15 +117,61 @@ export function InventoryTransferView({
     }
   }
 
+  function getIdempotencyKey(
+    action: "cancel" | "confirm",
+    id: string,
+    reason?: string,
+  ) {
+    const key = reason
+      ? `${action}:${id}:${reason}`
+      : `${action}:${id}`;
+    const existingKey = idempotencyKeys.current.get(key);
+    if (existingKey) return existingKey;
+
+    const idempotencyKey = createIdempotencyKey();
+    idempotencyKeys.current.set(key, idempotencyKey);
+    return idempotencyKey;
+  }
+
+  async function handleConfirm(id: string) {
+    try {
+      await confirmTransfer.mutateAsync({
+        id,
+        idempotencyKey: getIdempotencyKey("confirm", id),
+      });
+      idempotencyKeys.current.delete(`confirm:${id}`);
+      setError(null);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "No se pudo confirmar el traspaso.",
+      );
+    }
+  }
+
   async function handleCancel(id: string) {
     const reason = cancelReason.trim();
     if (!reason) {
       setError("El motivo de cancelación es obligatorio.");
       return;
     }
-    await cancelTransfer.mutateAsync({ id, reason });
-    setCancelReason("");
-    setError(null);
+    try {
+      await cancelTransfer.mutateAsync({
+        id,
+        reason,
+        idempotencyKey: getIdempotencyKey("cancel", id, reason),
+      });
+      idempotencyKeys.current.delete(`cancel:${id}:${reason}`);
+      setCancelReason("");
+      setError(null);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "No se pudo cancelar el traspaso.",
+      );
+    }
   }
 
   return (
@@ -402,9 +453,7 @@ export function InventoryTransferView({
                           !canConfirmTransfer(detail.data) ||
                           confirmTransfer.isPending
                         }
-                        onClick={() =>
-                          void confirmTransfer.mutateAsync(detail.data.id)
-                        }
+                        onClick={() => void handleConfirm(detail.data.id)}
                         type="button"
                       >
                         Confirmar

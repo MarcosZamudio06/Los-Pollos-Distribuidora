@@ -48,8 +48,13 @@ function unwrapItem<T>(response: ItemEnvelope<T>) {
   return payload as T;
 }
 
-function authHeaders(accessToken?: string | null) {
-  return accessToken ? { authorization: `Bearer ${accessToken}` } : undefined;
+function authHeaders(accessToken?: string | null, idempotencyKey?: string) {
+  return {
+    ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+    ...(idempotencyKey?.trim()
+      ? { "Idempotency-Key": idempotencyKey.trim() }
+      : {}),
+  };
 }
 
 function withParams(
@@ -201,11 +206,15 @@ export const productService = {
     });
     return unwrapItem(response);
   },
-  async confirmTransfer(id: string, accessToken?: string | null) {
+  async confirmTransfer(
+    id: string,
+    accessToken: string | null | undefined,
+    idempotencyKey: string,
+  ) {
     const response = await apiClient.post<ItemEnvelope<InventoryTransfer>>(
       `/inventory-transfers/${id}/confirm`,
       {
-        headers: authHeaders(accessToken),
+        headers: authHeaders(accessToken, idempotencyKey),
       },
     );
     return unwrapItem(response);
@@ -213,14 +222,15 @@ export const productService = {
   async cancelTransfer(
     id: string,
     reason: string,
-    accessToken?: string | null,
+    accessToken: string | null | undefined,
+    idempotencyKey: string,
   ) {
     const response = await apiClient.post<
       ItemEnvelope<InventoryTransfer>,
       { reason: string }
     >(`/inventory-transfers/${id}/cancel`, {
       body: { reason },
-      headers: authHeaders(accessToken),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },

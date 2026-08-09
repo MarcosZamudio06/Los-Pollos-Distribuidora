@@ -973,11 +973,22 @@ export class CedisDashboardQueryService {
       expectedSoldPieces: 0,
     };
 
+    let hasPendingTransfer = false;
     for (const link of transfers) {
+      const status = link.inventoryTransfer.status;
+      if (
+        status === 'DRAFT' ||
+        status === 'REQUESTED' ||
+        status === 'IN_TRANSIT'
+      ) {
+        hasPendingTransfer = true;
+        continue;
+      }
+
       const items = link.inventoryTransfer.items;
       if (!items) continue;
       hasLoadedItems = true;
-      if (link.inventoryTransfer.status !== 'CONFIRMED') continue;
+      if (status !== 'CONFIRMED') continue;
       if (link.role !== 'SUPPLY' && link.role !== 'RETURN') continue;
 
       for (const item of items) {
@@ -993,7 +1004,7 @@ export class CedisDashboardQueryService {
       }
     }
 
-    if (!hasLoadedItems) return null;
+    if (!hasLoadedItems || hasPendingTransfer) return null;
     totals.expectedSoldKg = totals.deliveredKg - totals.returnedKg;
     totals.expectedSoldPieces = totals.deliveredPieces - totals.returnedPieces;
     return totals;
