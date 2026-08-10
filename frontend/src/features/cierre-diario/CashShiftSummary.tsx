@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2, LockKeyhole } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { ConfirmationDialog } from "../../components/shared/confirmation-dialog";
 import { formatMoney as money } from "../../lib/money";
 import type { DailyClose, DailyCloseCashShift } from "./types";
 
@@ -24,17 +25,21 @@ type CashShiftSummaryProps = {
   close: DailyClose;
   currentUserId?: string;
   canAdministrativelyClose: boolean;
+  canReopenClosedShifts: boolean;
   onCloseShift: (
     shiftId: string,
     body: { cashCountedTotal: number; administrativeReason?: string },
   ) => Promise<void>;
+  onReopenShift: (shiftId: string, password: string) => Promise<void>;
 };
 
 export function CashShiftSummary({
   close,
   currentUserId,
   canAdministrativelyClose,
+  canReopenClosedShifts,
   onCloseShift,
+  onReopenShift,
 }: CashShiftSummaryProps) {
   const shifts = [...(close.cashShifts ?? [])].sort((left, right) => {
     if (left.status === "OPEN" && right.status !== "OPEN") return -1;
@@ -46,6 +51,9 @@ export function CashShiftSummary({
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [pendingShiftId, setPendingShiftId] = useState<string | null>(null);
+  const [reopenTarget, setReopenTarget] =
+    useState<DailyCloseCashShift | null>(null);
+  const [reopenPassword, setReopenPassword] = useState("");
 
   const submit = async (
     shift: DailyCloseCashShift,
@@ -66,6 +74,17 @@ export function CashShiftSummary({
       setReasons((current) => ({ ...current, [shift.id]: "" }));
     } finally {
       setPendingShiftId(null);
+    }
+  };
+
+  const confirmReopen = async () => {
+    if (!reopenTarget || !reopenPassword) return;
+    const password = reopenPassword;
+    try {
+      await onReopenShift(reopenTarget.id, password);
+      setReopenTarget(null);
+    } finally {
+      setReopenPassword("");
     }
   };
 
@@ -213,7 +232,7 @@ export function CashShiftSummary({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <caption className="sr-only">Turnos cerrados o cancelados</caption>
-            <thead className="bg-[var(--erp-surface-muted)] text-xs uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
+            <thead className="bg-[var(--erp-brand-red)] text-xs uppercase tracking-[0.1em] text-white">
               <tr>
                 <th className="px-4 py-3">Terminal</th>
                 <th className="px-4 py-3">Cajero</th>
@@ -222,6 +241,7 @@ export function CashShiftSummary({
                 <th className="px-4 py-3 text-right">Fondo</th>
                 <th className="px-4 py-3 text-right">Conteo</th>
                 <th className="px-4 py-3 text-right">Diferencia</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -273,12 +293,67 @@ export function CashShiftSummary({
                       ? "Pendiente"
                       : money(shift.cashDifferenceTotal)}
                   </td>
-                </tr>
-              ))}
+                  <td className="px-4 py-3 text-right">
+                    {canReopenClosedShifts &&
+                    shift.status === "CLOSED" &&
+                    shift.cashierUserId === currentUserId ? (
+                      <Button
+                        aria-label={`Reabrir turno de ${shift.terminal.name}`}
+                        onClick={() => {
+                          setReopenPassword("");
+                          setReopenTarget(shift);
+                        }}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        Reabrir turno
+                      </Button>
+                    ) : null}
+                  </td>
+                 </tr>
+               ))}
             </tbody>
           </table>
         </div>
       )}
+      <ConfirmationDialog
+        cancelLabel="Conservar turno cerrado"
+        confirmDisabled={!reopenPassword}
+        confirmLabel="Reabrir turno"
+        description="El mismo turno volverá a estar abierto para continuar operando. No se creará otro turno ni se registrarán movimientos de apertura."
+        onConfirm={confirmReopen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReopenTarget(null);
+            setReopenPassword("");
+          }
+        }}
+        open={reopenTarget !== null}
+        title="Confirmar reapertura del turno"
+      >
+        {reopenTarget && (
+          <>
+            <p>
+              <strong>Terminal:</strong> {reopenTarget.terminal.name} (
+              {reopenTarget.terminal.code})
+            </p>
+            <p>
+              <strong>Cajero:</strong> {reopenTarget.cashier.name}
+            </p>
+            <label className="mt-2 grid gap-2 font-bold text-[var(--erp-muted-foreground)]">
+              Contraseña de tu sesión
+              <Input
+                aria-label={`Contraseña para reabrir el turno de ${reopenTarget.terminal.name}`}
+                autoComplete="current-password"
+                autoFocus
+                onChange={(event) => setReopenPassword(event.target.value)}
+                type="password"
+                value={reopenPassword}
+              />
+            </label>
+          </>
+        )}
+      </ConfirmationDialog>
     </section>
   );
 }

@@ -11,6 +11,7 @@ import {
   PaymentStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import { PaymentsService } from './payments.service';
 import { CancelPaymentDto } from './dto';
 
@@ -68,15 +69,26 @@ function createPrisma() {
     payment: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     accountReceivable: { findUnique: jest.fn(), update: jest.fn() },
     sale: { update: jest.fn().mockResolvedValue(undefined) },
+    pointOfSaleDailyClose: {
+      findUnique: jest.fn().mockResolvedValue({ status: 'DRAFT' }),
+    },
+    $executeRawUnsafe: jest.fn(),
     $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
 }
 
 function createService(prisma = createPrisma()) {
+  const dailyCloseService = {
+    recalculateAfterDraftMutation: jest.fn().mockResolvedValue(undefined),
+  };
   return {
-    service: new PaymentsService(prisma as unknown as PrismaService),
+    service: new PaymentsService(
+      prisma as unknown as PrismaService,
+      dailyCloseService as unknown as PointOfSaleDailyCloseService,
+    ),
     prisma,
+    dailyCloseService,
   };
 }
 
@@ -169,6 +181,69 @@ describe('PaymentsService', () => {
       }),
     );
     jest.useRealTimers();
+  });
+
+  it('rechaza cancelar un pago de una venta asociada a un cierre revisado', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.payment.findUnique.mockResolvedValue(
+      createPayment({
+        pointOfSaleDailyCloseId: 'close-1',
+        sale: {
+          pointOfSaleDailyClose: { id: 'close-1', status: 'REVIEWED' },
+        },
+      }),
+    );
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      status: 'REVIEWED',
+    });
+
+    await expect(
+      service.cancel(
+        'payment-1',
+        { reason: 'Pago incorrecto', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'payment-review-1',
+      ),
+    ).rejects.toThrow('DAILY_CLOSE_REOPEN_REQUIRED');
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+    expect(prisma.sale.update).not.toHaveBeenCalled();
+  });
+
+  it('rechaza cancelar el pago legado asociado solo al turno de un cierre revisado', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.payment.findUnique.mockResolvedValue(
+      createPayment({
+        saleId: null,
+        pointOfSaleDailyCloseId: null,
+        cashShiftId: 'shift-1',
+        accountReceivable: null,
+        sale: null,
+        cashShift: {
+          pointOfSaleDailyClose: { id: 'close-1', status: 'REVIEWED' },
+        },
+      }),
+    );
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      status: 'REVIEWED',
+    });
+
+    await expect(
+      service.cancel(
+        'payment-1',
+        { reason: 'Pago incorrecto', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'payment-legacy-review-1',
+      ),
+    ).rejects.toThrow('DAILY_CLOSE_REOPEN_REQUIRED');
+
+    expect(prisma.payment.update).not.toHaveBeenCalled();
   });
 
   it('rejects cancellation without reason, missing payment, already cancelled payment, or stale expectedVersion', async () => {

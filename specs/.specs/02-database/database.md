@@ -1375,6 +1375,9 @@ Reglas:
 - Solo existe un cierre no cancelado por `operationalLocationId` y `businessDate`; PostgreSQL lo garantiza con un índice único parcial para estados distintos de `CANCELLED`.
 - El cierre consolida `CashShift[]` y no representa una terminal ni una sesión monetaria.
 - No puede cerrarse mientras exista un `CashShift` abierto.
+- Para el estado físico monetario, se excluyen turnos `CANCELLED` y se selecciona uno por `terminalId` con orden `openedAt DESC`, `createdAt DESC`, `id DESC`. Solo la posición seleccionada de cada terminal aporta fondo neto, esperado, conteo y diferencia consolidados.
+- El esperado de la posición seleccionada usa únicamente sus pagos `APPLIED` en `CASH` y sus movimientos no iniciales de canal `CASH`: suma `CASH_IN` y resta `CASH_OUT`, `ADJUSTMENT` y `EXPENSE`.
+- La presencia de filas `CashShift` deshabilita el cálculo heredado aunque todas estén `CANCELLED`; en ese caso el estado físico de terminales es cero. Un turno seleccionado `OPEN` aporta esperado, mantiene nulo el conteo consolidado y continúa como bloqueante.
 - Los totales se recalculan en backend y se guardan como snapshot auditable al revisar y cerrar.
 - Cerrar, cancelar o reabrir registra usuario, fecha, motivo y versión esperada.
 - Las transiciones que afecten asociaciones, snapshots o ajustes relacionados se ejecutan en transacción.
@@ -1388,6 +1391,11 @@ Reglas:
 - `CashShift` requiere terminal, ubicación, cierre diario, cajero, fecha de negocio, estado, apertura y fondos iniciales.
 - PostgreSQL impone un solo turno `OPEN` por terminal mediante índice único parcial.
 - `CashShift` conserva conteo y diferencia independientes; ventas, pagos y movimientos monetarios referencian el turno.
+- Abrir o cerrar un `CashShift` y registrar uno de sus movimientos invalida la validación y recalcula el `PointOfSaleDailyClose` asociado dentro de la misma transacción.
+- Toda mutación que requiera un cierre editable y toda transición de estado adquieren el mismo bloqueo transaccional por `PointOfSaleDailyClose.id`; la mutación relee autorización, estado y versión dentro de la transacción y solo escribe si el padre continúa en `DRAFT`.
+- El recálculo vuelve a leer el estado después de sincronizar operaciones y condiciona la actualización final por `id`, `DRAFT` y versión fuente. La validación aplica el mismo guard antes de persistir sus sellos.
+- Reabrir un `CashShift` actualiza la misma fila e incrementa `version`; conserva terminal, ubicación, cierre diario, cajero, fecha, fondos, ventas, pagos y movimientos, y limpia `closedAt`, `closedByUserId`, `closeMode`, `closeReason`, `cashCountedTotal` y `cashDifferenceTotal`. No crea otra fila ni movimientos `isOpening`.
+- La reapertura solo admite `CLOSED`, requiere el cierre diario padre en `DRAFT`, el cajero propietario y coincidencia exacta con el `deviceId` activo registrado; también rechaza la operación si la terminal ya tiene otro turno `OPEN`. La contraseña se verifica con bcrypt mediante `AuthService` usando el `user.id` del principal autenticado; el DTO no recibe ni controla el usuario a verificar. Un intento correcto registra el evento de estado y dispara invalidación y recálculo del cierre.
 - `CashShift.closeMode` distingue `CASHIER` de `ADMINISTRATIVE`; `closeReason` es obligatorio para el modo administrativo.
 - Un cierre administrativo puede omitir el `deviceId` original únicamente con el permiso crítico `cash_shifts.administrative_close`; conserva actor, fecha, conteo, diferencia y evento auditable.
 - `CashTerminalActivation` conserva `operationalLocationId`, `requestedByUserId`, `deviceId`, `codeHash` único, vencimiento, consumo y actor administrativo. El código en claro nunca se persiste.

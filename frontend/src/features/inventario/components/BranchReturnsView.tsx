@@ -12,6 +12,10 @@ import type {
   InventoryTransfer,
   InventoryTransferLine,
 } from "../types";
+import {
+  isBranchToParentCedisTransfer,
+  isPendingCedisReturnTransfer,
+} from "../cedisReturnPredicates";
 
 type BranchReturnsViewProps = {
   canManage: boolean;
@@ -21,13 +25,6 @@ type BranchReturn = InventoryTransfer & {
   origin: InventoryLocation;
   destination: InventoryLocation;
 };
-
-const confirmableStatuses = new Set([
-  "DRAFT",
-  "PENDING",
-  "REQUESTED",
-  "IN_TRANSIT",
-]);
 
 function createIdempotencyKey() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -74,9 +71,7 @@ function findBranchReturns(
     if (
       !origin ||
       !destination ||
-      origin.type !== "BRANCH" ||
-      destination.type !== "DISTRIBUTION_CENTER" ||
-      origin.parentId !== destination.id
+      !isBranchToParentCedisTransfer(transfer, locationById)
     ) {
       return [];
     }
@@ -135,6 +130,9 @@ export function BranchReturnsView({ canManage }: BranchReturnsViewProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const idempotencyKeys = useRef(new Map<string, string>());
+  const locationById = new Map(
+    (locations.data ?? []).map((location) => [location.id, location]),
+  );
   const branchReturns = findBranchReturns(transfers.data, locations.data);
   const queryError = locations.error ?? transfers.error;
   const canConfirmReturns =
@@ -204,7 +202,8 @@ export function BranchReturnsView({ canManage }: BranchReturnsViewProps) {
         <div className="grid gap-4">
           {branchReturns.map((transfer) => {
             const canConfirm =
-              canConfirmReturns && confirmableStatuses.has(transfer.status);
+              canConfirmReturns &&
+              isPendingCedisReturnTransfer(transfer, locationById);
             const isConfirming =
               confirmingId === transfer.id && confirmTransfer.isPending;
 

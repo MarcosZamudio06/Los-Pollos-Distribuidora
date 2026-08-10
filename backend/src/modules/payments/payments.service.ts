@@ -15,6 +15,8 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { calculateReceivableAging } from '../accounts-receivable/receivable-aging';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { acquireDraftDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
 import { CancelPaymentDto } from './dto';
 import { Money, toMoneyString } from '../../../../shared/money';
 
@@ -34,11 +36,20 @@ type PaymentWithReceivable = Payment & {
   cancellationReason?: string | null;
   cancellationIdempotencyKey?: string | null;
   cancelledByUserId?: string | null;
+  sale?: {
+    pointOfSaleDailyClose?: { id: string; status: string } | null;
+  } | null;
+  cashShift?: {
+    pointOfSaleDailyClose?: { id: string; status: string } | null;
+  } | null;
 };
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dailyCloseService: PointOfSaleDailyCloseService,
+  ) {}
 
   async cancel(
     id: string,
@@ -76,9 +87,23 @@ export class PaymentsService {
             return this.buildCancellationResponse(tx, existingCancellation);
           }
 
-          const payment = (await tx.payment.findUnique({
+          let payment = (await tx.payment.findUnique({
             where: { id },
-            include: { accountReceivable: true },
+            include: {
+              accountReceivable: true,
+              sale: {
+                select: {
+                  pointOfSaleDailyClose: { select: { id: true, status: true } },
+                },
+              },
+              cashShift: {
+                select: {
+                  pointOfSaleDailyClose: {
+                    select: { id: true, status: true },
+                  },
+                },
+              },
+            },
           })) as PaymentWithReceivable | null;
 
           if (!payment) {
@@ -87,6 +112,38 @@ export class PaymentsService {
 
           if (payment.status === PaymentStatus.CANCELLED) {
             throw new BadRequestException('Payment is already cancelled');
+          }
+
+          const initialDailyCloseId =
+            payment.pointOfSaleDailyCloseId ??
+            payment.sale?.pointOfSaleDailyClose?.id ??
+            payment.cashShift?.pointOfSaleDailyClose?.id ??
+            null;
+          if (initialDailyCloseId) {
+            await acquireDraftDailyCloseLifecycleLock(tx, initialDailyCloseId);
+            payment = (await tx.payment.findUnique({
+              where: { id },
+              include: {
+                accountReceivable: true,
+                sale: {
+                  select: {
+                    pointOfSaleDailyClose: {
+                      select: { id: true, status: true },
+                    },
+                  },
+                },
+                cashShift: {
+                  select: {
+                    pointOfSaleDailyClose: {
+                      select: { id: true, status: true },
+                    },
+                  },
+                },
+              },
+            })) as PaymentWithReceivable | null;
+            if (!payment) throw new NotFoundException('Payment not found');
+            if (payment.status === PaymentStatus.CANCELLED)
+              throw new BadRequestException('Payment is already cancelled');
           }
 
           if (payment.version !== dto.expectedVersion) {
@@ -108,18 +165,28 @@ export class PaymentsService {
             },
           });
 
-          if (!payment.accountReceivable) {
-            return {
-              payment: this.toPaymentResponse(cancelledPayment),
-              accountReceivable: null,
-            };
-          }
+          const response = !payment.accountReceivable
+            ? {
+                payment: this.toPaymentResponse(cancelledPayment),
+                accountReceivable: null,
+              }
+            : await this.restoreReceivableAfterCancellation(
+                tx,
+                cancelledPayment,
+                payment.accountReceivable,
+              );
 
-          return this.restoreReceivableAfterCancellation(
-            tx,
-            cancelledPayment,
-            payment.accountReceivable,
-          );
+          const dailyCloseId =
+            payment.pointOfSaleDailyCloseId ??
+            payment.sale?.pointOfSaleDailyClose?.id ??
+            payment.cashShift?.pointOfSaleDailyClose?.id ??
+            null;
+          if (dailyCloseId)
+            await this.dailyCloseService.recalculateAfterDraftMutation(
+              dailyCloseId,
+              tx,
+            );
+          return response;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );

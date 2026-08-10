@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo } from "react";
-import { RefreshCw, Warehouse } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { ArrowRight, ClipboardCheck, RefreshCw, Warehouse } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageContainer } from "../../components/layout/PageContainer";
 import {
   Badge,
@@ -189,20 +189,36 @@ export function CedisDashboardPage() {
                 CEDIS / Sucursales
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--erp-muted-foreground)]">
-                Supervisa entregas, devoluciones, ventas y caja por sucursal sin
-                perder la trazabilidad de la jornada operativa.
+                Revisa primero excepciones, diferencias y recepciones físicas;
+                confirma la jornada solo cuando la conciliación esté lista.
               </p>
             </div>
-            <div className="relative rounded-[1.35rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-4 backdrop-blur sm:min-w-64">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-muted-foreground)]">
-                CEDIS consultado
-              </p>
-              <p className="mt-2 text-lg font-black">
-                {selectedCedis?.name ?? "Sin CEDIS seleccionado"}
-              </p>
-              <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">
-                {selectedCedis?.code ?? "Selecciona un CEDIS autorizado"}
-              </p>
+            <div className="relative grid gap-3 sm:min-w-64">
+              <div className="rounded-[1.35rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-4 backdrop-blur">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-muted-foreground)]">
+                  CEDIS consultado
+                </p>
+                <p className="mt-2 text-lg font-black">
+                  {selectedCedis?.name ?? "Sin CEDIS seleccionado"}
+                </p>
+                <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">
+                  {selectedCedis?.code ?? "Selecciona un CEDIS autorizado"}
+                </p>
+              </div>
+              <Link
+                aria-label="Revisar recepciones físicas pendientes"
+                className="group inline-flex items-center justify-between gap-3 rounded-[1.2rem] border border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] px-4 py-3 text-sm font-black text-[var(--erp-on-brand)] shadow-[0_10px_28px_rgba(182,42,34,0.16)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
+                to={`/cedis/incoming?date=${encodeURIComponent(businessDate)}&status=PENDING`}
+              >
+                <span className="flex items-center gap-2">
+                  <ClipboardCheck aria-hidden="true" className="h-4 w-4" />
+                  Revisar recepciones pendientes
+                </span>
+                <ArrowRight
+                  aria-hidden="true"
+                  className="h-4 w-4 transition-transform group-hover:translate-x-1"
+                />
+              </Link>
             </div>
           </div>
         </header>

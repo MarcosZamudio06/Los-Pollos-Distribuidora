@@ -50,7 +50,27 @@ const mockState = vi.hoisted(() => ({
 }));
 
 vi.mock("../../auth", () => ({
+  PERMISSIONS: { cedisView: "cedis.view" },
+  hasPermission: (
+    user: { permissions?: string[] } | null | undefined,
+    permission: string,
+  ) => Boolean(user?.permissions?.includes(permission)),
   useAuth: () => mockState.auth,
+}));
+
+vi.mock("../../inventario/hooks/useProducts", () => ({
+  useInventoryLocations: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+  useInventoryTransfers: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("../../reportes", async (importOriginal) => {

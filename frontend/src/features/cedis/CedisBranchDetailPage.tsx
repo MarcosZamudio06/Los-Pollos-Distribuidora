@@ -1830,13 +1830,20 @@ export function CedisBranchDetailPage() {
         />
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--erp-border)] bg-white/80 p-4">
           <div>
-            <p className="text-sm font-bold">Acciones de jornada</p>
+            <p className="text-sm font-bold">Revisión y confirmación</p>
             <p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">
-              Las acciones visibles respetan permisos y el estado actual del
-              ciclo.
+              Inspecciona advertencias, diferencias y conciliación; después
+              confirma la jornada cuando la evidencia esté lista.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-4 text-sm font-semibold text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
+              to={`/cedis/incoming?date=${encodeURIComponent(businessDate)}&status=PENDING`}
+            >
+              <ClipboardCheck aria-hidden="true" className="h-4 w-4" />
+              Revisar recepciones
+            </Link>
             {!cycleId && canDispatch && (
               <Button
                 disabled={Boolean(status)}
@@ -1891,7 +1898,7 @@ export function CedisBranchDetailPage() {
                 onClick={() => beginAction("CLOSE")}
                 title={closeBlockedReason ?? undefined}
               >
-                <CheckCircle2 className="h-4 w-4" /> Cerrar
+                <CheckCircle2 className="h-4 w-4" /> Confirmar jornada
               </Button>
             )}
             {cycleId && canClose && (

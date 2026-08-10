@@ -24,6 +24,7 @@ import {
   ListCashTerminalQueryDto,
   OpenCashShiftDto,
   RequestCashTerminalActivationDto,
+  ReopenCashShiftDto,
   UpdateCashTerminalDto,
 } from './dto';
 
@@ -127,6 +128,19 @@ export class CashManagementController {
     return this.response(
       'Cash shift closed successfully',
       this.service.closeShift(id, dto, user),
+    );
+  }
+
+  @Patch('cash-shifts/:id/reopen')
+  @Roles('ADMIN', 'SELLER')
+  reopenShift(
+    @Param('id') id: string,
+    @Body() dto: ReopenCashShiftDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.response(
+      'Cash shift reopened successfully',
+      this.service.reopenShift(id, dto, user),
     );
   }
 

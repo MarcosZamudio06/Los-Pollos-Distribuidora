@@ -47,7 +47,8 @@ Registrar ventas de contado, crédito, abonadas y atrasadas con inventario por u
 - Venta a crédito con abono inicial genera `Payment` por el abono y `AccountReceivable` por el saldo.
 - Nota sencilla, nota grande y ticket interno no son CFDI; la solicitud administrativa se maneja aparte como `BillingRequest`.
 - Entregar y cobrar pueden ser usuarios distintos.
-- No cancelar venta con pagos aplicados, cierre POS cerrado o liquidación cerrada sin reversa o reapertura auditable.
+- No cancelar ni anular una venta asociada a un cierre POS `REVIEWED`, `CLOSED` o `CANCELLED`; la API responde `DAILY_CLOSE_REOPEN_REQUIRED` y exige reapertura versionada antes de cualquier mutación. Una venta asociada a un cierre `DRAFT` conserva el flujo normal.
+- Crear, cancelar o anular una venta asociada a un cierre `DRAFT` adquiere el bloqueo transaccional del cierre, relee estado y autorización bajo el bloqueo, y ejecuta la invalidación de validación, incremento de versión y recálculo del cierre en la misma transacción.
 - La operación administrativa `Anular venta` coordina la reversa de pagos, la cancelación de la venta, la restauración de inventario, la actualización de cartera y la invalidación de documentos internos de forma transaccional e idempotente.
 - `Anular venta` requiere vista previa del impacto, motivo y autorización de `ADMIN`; no reabre automáticamente cierres POS ni liquidaciones de ruta cerrados.
 - Un pedido operativo corresponde exclusivamente a una `Sale` confirmada y a su `locationId`; no existe una bandeja global de pedidos.

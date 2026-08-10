@@ -162,6 +162,7 @@ Validaciones:
 - La venta persiste `discountAuthorizationId`, porcentaje, importe calculado y evidencia para auditoría.
 - Generar `saleNumber` en backend desde una secuencia atómica; no depende del conteo de ventas.
 - Registrar unidad capturada, kilos, piezas y equivalencia aplicada cuando corresponda.
+- Para una venta de punto fijo asociada a un cierre POS `DRAFT`, adquirir el bloqueo transaccional del cierre antes de validar y mutar, releer el turno y el estado del cierre bajo el bloqueo, e invalidar, versionar y recalcular el cierre después de confirmar la venta dentro de la misma transacción.
 - `quantityPieces` debe ser entero cuando aplique.
 - Venta de contado requiere que exista al menos un pago y que la suma de `payments[]` sea exactamente igual al total calculado por backend.
 - Toda venta de punto fijo requiere un `CashShift` abierto del cajero autenticado y dispositivo registrado. El backend deriva y persiste `terminalId`, `cashShiftId`, `cashierUserId`, `businessDate`, `registeredAt`, `deviceId` y el `pointOfSaleDailyCloseId` consolidado.
@@ -215,7 +216,7 @@ Validaciones:
 - No cancelar venta ya cancelada.
 - Restaurar inventario en la ubicación operativa original.
 - Si la venta tiene pagos aplicados, requerir reversa o reembolso auditable antes de cancelar.
-- Si la venta está asociada a un cierre POS cerrado, requerir reapertura versionada antes de cancelar.
+- Si la venta está asociada a un cierre POS `REVIEWED` o `CLOSED`, requerir reapertura versionada antes de cancelar. Una venta asociada a un cierre `DRAFT` puede seguir el flujo normal.
 - Si la venta está asociada a una liquidación cerrada, requerir reapertura versionada antes de cancelar.
 - Si la venta fue a crédito, ajustar o cancelar la cuenta por cobrar relacionada.
 - Registrar movimientos de inventario.
@@ -236,7 +237,7 @@ La respuesta debe incluir, con datos vigentes y la versión de la venta:
 - Cuenta por cobrar afectada y saldo actual.
 - `SaleDocument` relacionados y cuáles quedarán cancelados.
 - Solicitud administrativa relacionada cuando exista.
-- `blockers[]` con códigos estables para venta no confirmada, cierre POS cerrado, liquidación de ruta cerrada o factura externa activa.
+- `blockers[]` con códigos estables para venta no confirmada, cierre POS `REVIEWED`, `CLOSED` o `CANCELLED`, liquidación de ruta cerrada o factura externa activa.
 - Usuario ADMIN que autorizará la operación.
 
 La vista previa no cancela pagos, no modifica inventario y no cambia estados.
@@ -270,7 +271,7 @@ Validaciones:
 
 - Requiere motivo, `expectedVersion` y `Idempotency-Key`.
 - Solo puede ejecutar `ADMIN` y sobre una venta `CONFIRMED`.
-- Una venta asociada a cierre POS o liquidación de ruta `CLOSED` requiere reapertura versionada antes de ejecutar; la anulación no reabre cierres automáticamente.
+- Una venta asociada a cierre POS `REVIEWED`, `CLOSED` o `CANCELLED` requiere reapertura versionada antes de ejecutar y responde `DAILY_CLOSE_REOPEN_REQUIRED`; la anulación no reabre cierres automáticamente.
 - Una factura externa activa relacionada requiere cancelarse desde facturación antes de anular la venta.
 - Reintentar la misma clave y payload devuelve el resultado persistido sin duplicar reversas, movimientos o documentos cancelados.
 - Reutilizar la clave con otro payload responde conflicto.

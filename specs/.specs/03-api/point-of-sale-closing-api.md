@@ -121,6 +121,8 @@ Body: `terminalId`, `deviceId`, `businessDate`, `initialCashFund`, `initialCashI
 - Solo un turno abierto por terminal.
 - Crea o reutiliza el cierre diario consolidado de sucursal y fecha solo cuando está en `DRAFT`; un cierre revisado o cerrado requiere reapertura explícita.
 - Los movimientos iniciales conservan `cashShiftId`.
+- La apertura invalida la validación vigente y recalcula el cierre diario asociado dentro de la misma transacción.
+- La apertura y las transiciones a `REVIEWED` o `CLOSED` se serializan por cierre; después del bloqueo, el backend vuelve a exigir que el padre esté en `DRAFT` antes de insertar el turno.
 
 ## PATCH /api/cash-shifts/:id/close
 
@@ -132,11 +134,34 @@ Body administrativo para un turno abandonado o una terminal inaccesible: `cashCo
 
 El backend valida cajero o privilegio administrativo, calcula efectivo esperado y persiste `cashDifferenceTotal` sin alterar las diferencias de otros turnos.
 Los depósitos y retiros iniciales se representan también como movimientos auditables, pero se contabilizan una sola vez en el efectivo esperado.
+El cierre del turno invalida la validación vigente y recalcula el cierre diario asociado dentro de la misma transacción.
 
 - El cierre normal exige cajero propietario y coincidencia exacta del `deviceId`.
 - El cierre administrativo exige `cash_shifts.administrative_close`, motivo no vacío y conserva `closeMode=ADMINISTRATIVE` y `closeReason`.
 - Toda modalidad conserva actor, fecha, conteo y diferencia; el cierre administrativo registra además un evento auditable asociado al cierre diario.
 - Los códigos `CASH_SHIFT_NOT_OPEN`, `CASH_SHIFT_CASHIER_MISMATCH`, `CASH_TERMINAL_DEVICE_MISMATCH`, `CASH_SHIFT_ADMINISTRATIVE_REASON_REQUIRED` y `CASH_SHIFT_ADMINISTRATIVE_PERMISSION_REQUIRED` son estables.
+
+## PATCH /api/cash-shifts/:id/reopen
+
+Propósito: reactivar el mismo turno cerrado para continuar operando en la misma terminal.
+
+Body:
+
+```json
+{
+  "deviceId": "device-1",
+  "password": "contraseña-de-la-sesión"
+}
+```
+
+- Solo admite un `CashShift` `CLOSED`; rechaza `OPEN` con `CASH_SHIFT_ALREADY_OPEN` y `CANCELLED` con `CASH_SHIFT_CANCELLED`.
+- Exige que el cierre diario padre esté en `DRAFT`; un padre `REVIEWED`, `CLOSED` o `CANCELLED` responde `DAILY_CLOSE_NOT_EDITABLE` antes de verificar o mutar el turno.
+- El usuario autenticado debe ser el cajero propietario del turno, el usuario debe estar activo y el `deviceId` debe coincidir exactamente con la terminal activa registrada. La reapertura no usa la excepción del cierre administrativo.
+- La terminal no puede tener otro `CashShift` `OPEN`; si lo tiene, responde `CASH_SHIFT_ALREADY_OPEN` sin escribir.
+- El backend verifica `password` mediante bcrypt contra el `user.id` del principal autenticado. El cliente no puede indicar el usuario cuya contraseña se valida; una contraseña incorrecta responde `401 Invalid credentials`, sin cambiar contraseña ni revocar sesiones.
+- Reactiva la misma fila y el mismo `id`, limpia `closedAt`, actor, modo, motivo, `cashCountedTotal` y `cashDifferenceTotal`, conserva ventas, pagos, movimientos y fondos, incrementa la versión, registra el evento y recalcula el cierre diario dentro de la misma transacción.
+- No crea un turno sucesor ni movimientos de apertura.
+- Los códigos `CASH_SHIFT_ALREADY_OPEN`, `CASH_SHIFT_CANCELLED`, `CASH_SHIFT_NOT_CLOSED`, `CASH_SHIFT_CASHIER_MISMATCH`, `CASH_TERMINAL_DEVICE_REQUIRED`, `CASH_TERMINAL_DEVICE_MISMATCH`, `CASH_SHIFT_NOT_FOUND` y `DAILY_CLOSE_NOT_EDITABLE` son estables.
 
 ## POST /api/cash-shifts/:id/movements
 
@@ -148,6 +173,8 @@ Body: `deviceId`, `type` (`EXPENSE`, `CASH_IN` o `CASH_OUT`), `amount`, `reason`
 - Rechaza reutilizar la clave con otro payload.
 - Valida turno abierto, cajero o privilegio administrativo y coincidencia exacta del dispositivo registrado.
 - El backend deriva ubicación y cierre diario desde el turno; el cliente no puede reemplazarlos.
+- La escritura del movimiento, la invalidación y el recálculo del cierre diario son atómicos.
+- El movimiento y el cierre del turno usan la misma serialización que revisión y cierre diario, y rechazan la escritura con `DAILY_CLOSE_NOT_EDITABLE` si el padre ya no está en `DRAFT`.
 
 ## GET /api/point-of-sale-daily-closes
 
@@ -185,6 +212,10 @@ En particular, para `SELLER` debe omitir los snapshots de costo dentro de `sales
 `data.differences[]` conserva para cada diferencia `code`, `scope`, `referenceKey`, `unit`, `expectedValue`, `recordedValue`, `differenceValue`, `differenceType`, `status`, `reason`, `evidence`, `justifiedBy`, `justifiedAt`, `authorizedBy` y `authorizedAt`. La respuesta también incluye `openedBy`, `reviewedBy`, `closedBy` y `unresolvedDifferenceCount` cuando el rol tenga acceso a la proyección.
 
 Cada elemento de `cashShifts[]` incluye terminal, cajero, estado, apertura, cierre, fondo, entradas, retiros, conteo y diferencia.
+
+Los resúmenes consolidados seleccionan una posición vigente por terminal: excluyen `CANCELLED` y ordenan por `openedAt DESC`, `createdAt DESC`, `id DESC`. Solo el turno seleccionado aporta fondo, efectivo esperado, conteo y diferencia de terminal; la respuesta conserva el historial completo de turnos, pagos y movimientos. Si el seleccionado está `OPEN`, incluye su esperado vigente, devuelve conteo consolidado nulo y mantiene el bloqueo. Los campos heredados solo se usan cuando no existe ningún `CashShift`.
+
+Todos los endpoints que modifican un cierre `DRAFT`, incluidos ventas POS, pagos asociados, gastos, conteo de efectivo, referencias de báscula, conteos de inventario, diferencias, validación y actualización, adquieren el mismo bloqueo transaccional por cierre que las transiciones de estado. Después del bloqueo, el backend relee autorización, estado y versión aplicable; las mutaciones propias del cierre y de sus turnos responden `DAILY_CLOSE_NOT_EDITABLE` si el cierre dejó de ser editable, mientras que ventas POS, pagos asociados y otros dominios externos responden `DAILY_CLOSE_REOPEN_REQUIRED` sin escritura parcial. El recálculo y la validación condicionan también su escritura final por estado y versión fuente.
 
 ## POST /api/point-of-sale-daily-closes/:id/lines
 
@@ -392,17 +423,17 @@ Validaciones:
 - La diferencia se expone como advertencia; no se compensa ni se aplican tolerancias sin política aprobada.
 - La revisión y el cierre con diferencia permanecen autorizados exclusivamente para `ADMIN`.
 
-## POST /api/point-of-sale-daily-closes/:id/review
+## PATCH /api/point-of-sale-daily-closes/:id/review
 
 Propósito: pasar de `DRAFT` a `REVIEWED` con snapshot validado.
 
 Permisos: `ADMIN`.
 
-Body: `expectedVersion`, `notes` opcional.
+Body: `{"version": 4}`.
 
 Validaciones: ejecutar validación vigente y rechazar errores bloqueantes.
 
-## POST /api/point-of-sale-daily-closes/:id/close
+## PATCH /api/point-of-sale-daily-closes/:id/close
 
 Propósito: confirmar el cierre diario.
 
@@ -412,8 +443,7 @@ Body:
 
 ```json
 {
-  "expectedVersion": 4,
-  "reason": "Cierre verificado"
+  "version": 4
 }
 ```
 
@@ -426,24 +456,38 @@ Validaciones:
 - Ejecutar transición del cierre y ciclo a `CLOSED`, snapshot y asociaciones en una sola transacción.
 - Requerir idempotencia para evitar doble cierre accidental.
 
-## POST /api/point-of-sale-daily-closes/:id/cancel
+## PATCH /api/point-of-sale-daily-closes/:id/cancel
 
 Propósito: cancelar sin eliminar historial.
 
 Permisos: `ADMIN`.
 
-Body: `expectedVersion`, `reason` requerido.
+Body:
+
+```json
+{
+  "version": 4,
+  "reason": "Cierre cancelado"
+}
+```
 
 Validaciones: no cancelar silenciosamente movimientos fuente; cualquier reversa usa su dominio correspondiente.
 Debe persistir actor, fecha, motivo, versión e idempotencia.
 
-## POST /api/point-of-sale-daily-closes/:id/reopen
+## PATCH /api/point-of-sale-daily-closes/:id/reopen
 
 Propósito: reabrir un cierre `REVIEWED` o `CLOSED` a `DRAFT`.
 
 Permisos: `ADMIN`.
 
-Body: `expectedVersion`, `reason` requerido.
+Body:
+
+```json
+{
+  "version": 4,
+  "reason": "Reapertura autorizada"
+}
+```
 
 Validaciones:
 
@@ -462,6 +506,8 @@ Validaciones:
 - `DAILY_CLOSE_ALREADY_EXISTS`
 - `DAILY_CLOSE_INVALID_STATUS`
 - `DAILY_CLOSE_VERSION_CONFLICT`
+- `DAILY_CLOSE_NOT_EDITABLE`
+- `DAILY_CLOSE_REOPEN_REQUIRED`
 - `DAILY_CLOSE_UNVALIDATED`
 - `OPERATION_LOCATION_MISMATCH`
 - `OPERATION_WITHOUT_LOCATION`

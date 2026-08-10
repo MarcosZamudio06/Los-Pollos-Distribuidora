@@ -121,6 +121,11 @@ describe("CEDIS dashboard UI", () => {
     const html = renderPage("/cedis?date=2026-08-05&cedis=cedis-1");
 
     expect(html).toContain("CEDIS / Sucursales");
+    expect(html).toContain("Revisa primero excepciones, diferencias");
+    expect(html).toContain("Revisar recepciones pendientes");
+    expect(html).toContain(
+      'href="/cedis/incoming?date=2026-08-05&amp;status=PENDING"',
+    );
     expect(html).toContain("Sucursal Centro");
     expect(html).toContain("Código S01");
     expect(html).toContain("Av. Centro 10");

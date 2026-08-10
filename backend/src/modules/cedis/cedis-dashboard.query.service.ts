@@ -10,6 +10,7 @@ import { toMoneyString, Money } from '../../../../shared/money';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { calculateCashTerminalState } from '../cash-management/cash-terminal-state';
 import {
   toInventoryBalanceAvailability,
   type InventoryBalanceAvailability,
@@ -215,6 +216,7 @@ type DetailTransferLinkRecord = {
 
 type DetailCashMovementRecord = {
   id: string;
+  cashShiftId: string | null;
   type: string;
   movementChannel: string;
   amount: DecimalLike;
@@ -226,15 +228,19 @@ type DetailCashMovementRecord = {
 
 type DetailPaymentRecord = {
   id: string;
+  cashShiftId: string | null;
   amount: DecimalLike;
   paymentMethod: string;
+  status: string;
   paidAt: Date;
 };
 
 type DetailCashShiftRecord = {
   id: string;
+  terminalId: string;
   status: string;
   openedAt: Date;
+  createdAt: Date;
   closedAt: Date | null;
   initialCashFund: DecimalLike;
   initialCashIn: DecimalLike;
@@ -268,6 +274,9 @@ type DetailDailyCloseRecord = {
   transferTotal: DecimalLike;
   expenseTotal: DecimalLike;
   grossSalesTotal: DecimalLike;
+  initialCashFund: DecimalLike;
+  initialCashIn: DecimalLike;
+  initialCashOut: DecimalLike;
   netCashExpected: DecimalLike;
   cashCountedTotal: DecimalLike;
   cashDifferenceTotal: DecimalLike;
@@ -763,6 +772,9 @@ export class CedisDashboardQueryService {
       transferTotal: true,
       expenseTotal: true,
       grossSalesTotal: true,
+      initialCashFund: true,
+      initialCashIn: true,
+      initialCashOut: true,
       netCashExpected: true,
       cashCountedTotal: true,
       cashDifferenceTotal: true,
@@ -778,6 +790,7 @@ export class CedisDashboardQueryService {
         orderBy: { occurredAt: 'asc' as const },
         select: {
           id: true,
+          cashShiftId: true,
           type: true,
           movementChannel: true,
           amount: true,
@@ -790,7 +803,14 @@ export class CedisDashboardQueryService {
       payments: {
         where: { status: 'APPLIED' as const },
         orderBy: { paidAt: 'asc' as const },
-        select: { id: true, amount: true, paymentMethod: true, paidAt: true },
+        select: {
+          id: true,
+          cashShiftId: true,
+          amount: true,
+          paymentMethod: true,
+          status: true,
+          paidAt: true,
+        },
       },
       sales: {
         where: { status: 'CONFIRMED' as const },
@@ -807,8 +827,10 @@ export class CedisDashboardQueryService {
         orderBy: { openedAt: 'asc' as const },
         select: {
           id: true,
+          terminalId: true,
           status: true,
           openedAt: true,
+          createdAt: true,
           closedAt: true,
           initialCashFund: true,
           initialCashIn: true,
@@ -1483,6 +1505,16 @@ export class CedisDashboardQueryService {
   }
 
   private toDailyClose(close: DetailDailyCloseRecord, canViewCosts: boolean) {
+    const terminalState = this.cashTerminalState(close);
+    const netCashExpected = terminalState.hasShiftRecords
+      ? terminalState.expectedCash
+      : close.netCashExpected;
+    const cashCountedTotal = terminalState.hasShiftRecords
+      ? terminalState.cashCountedTotal
+      : close.cashCountedTotal;
+    const cashDifferenceTotal = terminalState.hasShiftRecords
+      ? terminalState.cashDifferenceTotal
+      : close.cashDifferenceTotal;
     const response: Record<string, unknown> = {
       id: close.id,
       businessDate: this.dateOnly(close.businessDate),
@@ -1495,9 +1527,9 @@ export class CedisDashboardQueryService {
         expenses: this.money(close.expenseTotal),
         grossSales: this.money(close.grossSalesTotal),
         creditSales: this.creditSales(close.sales),
-        netCashExpected: this.money(close.netCashExpected),
-        cashCounted: this.nullableMoney(close.cashCountedTotal),
-        cashDifference: this.nullableMoney(close.cashDifferenceTotal),
+        netCashExpected: this.money(netCashExpected),
+        cashCounted: this.nullableMoney(cashCountedTotal),
+        cashDifference: this.nullableMoney(cashDifferenceTotal),
         ...(canViewCosts
           ? {
               purchaseCost: this.money(close.purchaseCostTotal),
@@ -1524,6 +1556,14 @@ export class CedisDashboardQueryService {
       updatedAt: close.updatedAt.toISOString(),
     };
     return response;
+  }
+
+  private cashTerminalState(close: DetailDailyCloseRecord) {
+    return calculateCashTerminalState({
+      shifts: close.cashShifts,
+      payments: close.payments,
+      movements: close.cashMovements,
+    });
   }
 
   private toCashMovementSummary(close: DetailDailyCloseRecord) {
@@ -1610,16 +1650,18 @@ export class CedisDashboardQueryService {
       paymentsByMethod.set(payment.paymentMethod, current);
     }
 
-    const activeShifts = close.cashShifts.filter(
-      (shift) => shift.status !== 'CANCELLED',
-    );
-    const shiftCashCounted =
-      activeShifts.length > 0 &&
-      activeShifts.every(
-        (shift) => shift.status === 'CLOSED' && shift.cashCountedTotal !== null,
-      )
-        ? Money.sum(activeShifts.map((shift) => shift.cashCountedTotal))
-        : null;
+    const terminalState = this.cashTerminalState(close);
+    const openingCash = terminalState.hasShiftRecords
+      ? terminalState.openingCash
+      : Money.from(close.initialCashFund)
+          .add(close.initialCashIn)
+          .subtract(close.initialCashOut);
+    const expectedCash = terminalState.hasShiftRecords
+      ? terminalState.expectedCash
+      : close.netCashExpected;
+    const shiftCashCounted = terminalState.hasShiftRecords
+      ? terminalState.cashCountedTotal
+      : close.cashCountedTotal;
 
     return {
       dailyCloseId: close.id,
@@ -1650,17 +1692,14 @@ export class CedisDashboardQueryService {
           amount: value.amount.toString(),
         })),
       shifts: {
-        activeShiftCount: activeShifts.length,
-        openShiftCount: activeShifts.filter((shift) => shift.status === 'OPEN')
-          .length,
-        openingCash: Money.sum(
-          activeShifts.map((shift) =>
-            Money.from(shift.initialCashFund)
-              .add(shift.initialCashIn)
-              .subtract(shift.initialCashOut),
-          ),
-        ).toString(),
-        shiftCashCounted: shiftCashCounted?.toString() ?? null,
+        activeShiftCount: terminalState.terminalCount,
+        openShiftCount: terminalState.openShiftCount,
+        openingCash: toMoneyString(openingCash),
+        expectedCash: toMoneyString(expectedCash),
+        shiftCashCounted:
+          shiftCashCounted === null || shiftCashCounted === undefined
+            ? null
+            : toMoneyString(shiftCashCounted),
       },
     };
   }

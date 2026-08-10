@@ -578,9 +578,12 @@ describe('CedisDashboardQueryService', () => {
           transferTotal: new Prisma.Decimal('100.00'),
           expenseTotal: new Prisma.Decimal('50.00'),
           grossSalesTotal: new Prisma.Decimal('5700.00'),
-          netCashExpected: new Prisma.Decimal('700.00'),
-          cashCountedTotal: new Prisma.Decimal('695.00'),
-          cashDifferenceTotal: new Prisma.Decimal('-5.00'),
+          initialCashFund: new Prisma.Decimal('0.00'),
+          initialCashIn: new Prisma.Decimal('0.00'),
+          initialCashOut: new Prisma.Decimal('0.00'),
+          netCashExpected: new Prisma.Decimal('8490.00'),
+          cashCountedTotal: new Prisma.Decimal('8490.00'),
+          cashDifferenceTotal: new Prisma.Decimal('0.00'),
           purchaseCostTotal: new Prisma.Decimal('550.00'),
           grossProfitTotal: new Prisma.Decimal('350.00'),
           netProfitTotal: new Prisma.Decimal('330.00'),
@@ -588,6 +591,7 @@ describe('CedisDashboardQueryService', () => {
           cashMovements: [
             {
               id: 'movement-1',
+              cashShiftId: 'shift-1',
               type: 'EXPENSE',
               movementChannel: 'CASH',
               amount: new Prisma.Decimal('50.00'),
@@ -600,8 +604,10 @@ describe('CedisDashboardQueryService', () => {
           payments: [
             {
               id: 'payment-1',
+              cashShiftId: 'shift-1',
               amount: new Prisma.Decimal('700.00'),
               paymentMethod: 'CASH',
+              status: 'APPLIED',
               paidAt: new Date('2026-08-04T16:00:00.000Z'),
             },
           ],
@@ -616,14 +622,16 @@ describe('CedisDashboardQueryService', () => {
           cashShifts: [
             {
               id: 'shift-1',
+              terminalId: 'terminal-1',
               status: 'CLOSED',
               openedAt: new Date('2026-08-04T08:00:00.000Z'),
+              createdAt: new Date('2026-08-04T08:00:00.000Z'),
               closedAt: new Date('2026-08-04T18:00:00.000Z'),
               initialCashFund: new Prisma.Decimal('100.00'),
               initialCashIn: new Prisma.Decimal('0.00'),
               initialCashOut: new Prisma.Decimal('0.00'),
-              cashCountedTotal: new Prisma.Decimal('695.00'),
-              cashDifferenceTotal: new Prisma.Decimal('-5.00'),
+              cashCountedTotal: new Prisma.Decimal('4390.00'),
+              cashDifferenceTotal: new Prisma.Decimal('3640.00'),
               closeMode: 'CASHIER',
             },
           ],
@@ -654,6 +662,13 @@ describe('CedisDashboardQueryService', () => {
     );
     expect(result.totals.creditSales).toBe('4500.00');
     expect(result.dailyClose?.totals.creditSales).toBe('4500.00');
+    expect(result.dailyClose?.totals).toEqual(
+      expect.objectContaining({
+        netCashExpected: '750.00',
+        cashCounted: '4390.00',
+        cashDifference: '3640.00',
+      }),
+    );
     expect(result.transfers[0].transfer.items[0]).toEqual(
       expect.objectContaining({
         productName: 'Pollo actualizado',
@@ -795,5 +810,85 @@ describe('CedisDashboardQueryService', () => {
         expectedProfit: '408.00',
       }),
     );
+  });
+
+  it('reports only the latest physical state for sequential shifts in one terminal', () => {
+    const { service } = createService();
+    const privateService = service as unknown as {
+      toCashMovementSummary(close: Record<string, unknown>): {
+        shifts: {
+          activeShiftCount: number;
+          openingCash: string;
+          expectedCash: string;
+          shiftCashCounted: string | null;
+        };
+      };
+    };
+
+    const result = privateService.toCashMovementSummary({
+      id: 'close-1',
+      initialCashFund: new Prisma.Decimal('0.00'),
+      initialCashIn: new Prisma.Decimal('0.00'),
+      initialCashOut: new Prisma.Decimal('0.00'),
+      netCashExpected: new Prisma.Decimal('12200.00'),
+      cashCountedTotal: new Prisma.Decimal('12200.00'),
+      cashMovements: [],
+      payments: [
+        {
+          id: 'payment-1',
+          cashShiftId: 'shift-1',
+          amount: new Prisma.Decimal('6000.00'),
+          paymentMethod: 'CASH',
+          status: 'APPLIED',
+          paidAt: new Date('2026-08-04T12:00:00.000Z'),
+        },
+        {
+          id: 'payment-2',
+          cashShiftId: 'shift-2',
+          amount: new Prisma.Decimal('200.00'),
+          paymentMethod: 'CASH',
+          status: 'APPLIED',
+          paidAt: new Date('2026-08-04T16:00:00.000Z'),
+        },
+      ],
+      cashShifts: [
+        {
+          id: 'shift-1',
+          terminalId: 'terminal-1',
+          status: 'CLOSED',
+          openedAt: new Date('2026-08-04T08:00:00.000Z'),
+          createdAt: new Date('2026-08-04T08:00:00.000Z'),
+          closedAt: new Date('2026-08-04T13:00:00.000Z'),
+          initialCashFund: new Prisma.Decimal('0.00'),
+          initialCashIn: new Prisma.Decimal('0.00'),
+          initialCashOut: new Prisma.Decimal('0.00'),
+          cashCountedTotal: new Prisma.Decimal('6000.00'),
+          cashDifferenceTotal: new Prisma.Decimal('0.00'),
+          closeMode: 'CASHIER',
+        },
+        {
+          id: 'shift-2',
+          terminalId: 'terminal-1',
+          status: 'CLOSED',
+          openedAt: new Date('2026-08-04T14:00:00.000Z'),
+          createdAt: new Date('2026-08-04T14:00:00.000Z'),
+          closedAt: new Date('2026-08-04T18:00:00.000Z'),
+          initialCashFund: new Prisma.Decimal('6000.00'),
+          initialCashIn: new Prisma.Decimal('0.00'),
+          initialCashOut: new Prisma.Decimal('0.00'),
+          cashCountedTotal: new Prisma.Decimal('6200.00'),
+          cashDifferenceTotal: new Prisma.Decimal('0.00'),
+          closeMode: 'CASHIER',
+        },
+      ],
+    });
+
+    expect(result.shifts).toEqual({
+      activeShiftCount: 1,
+      openShiftCount: 0,
+      openingCash: '6000.00',
+      expectedCash: '6200.00',
+      shiftCashCounted: '6200.00',
+    });
   });
 });

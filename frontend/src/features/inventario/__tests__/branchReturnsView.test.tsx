@@ -64,11 +64,56 @@ const mockState = vi.hoisted(() => ({
       items: [],
     },
     {
+      id: "draft-return-1",
+      transferNumber: "TRF-DRAFT-RETURN",
+      originLocationId: "branch-1",
+      destinationLocationId: "cedis-1",
+      status: "DRAFT",
+      createdAt: "2026-08-09T10:00:00.000Z",
+      items: [],
+    },
+    {
+      id: "in-transit-return-1",
+      transferNumber: "TRF-IN-TRANSIT-RETURN",
+      originLocationId: "branch-2",
+      destinationLocationId: "cedis-1",
+      status: "IN_TRANSIT",
+      createdAt: "2026-08-09T10:00:00.000Z",
+      items: [],
+    },
+    {
       id: "wrong-parent-1",
       transferNumber: "TRF-WRONG-PARENT",
       originLocationId: "branch-2",
       destinationLocationId: "cedis-2",
       status: "REQUESTED",
+      createdAt: "2026-08-09T10:00:00.000Z",
+      items: [],
+    },
+    {
+      id: "confirmed-1",
+      transferNumber: "TRF-CONFIRMED",
+      originLocationId: "branch-1",
+      destinationLocationId: "cedis-1",
+      status: "CONFIRMED",
+      createdAt: "2026-08-09T10:00:00.000Z",
+      items: [],
+    },
+    {
+      id: "cancelled-1",
+      transferNumber: "TRF-CANCELLED",
+      originLocationId: "branch-1",
+      destinationLocationId: "cedis-1",
+      status: "CANCELLED",
+      createdAt: "2026-08-09T10:00:00.000Z",
+      items: [],
+    },
+    {
+      id: "unknown-status-1",
+      transferNumber: "TRF-UNKNOWN-STATUS",
+      originLocationId: "branch-1",
+      destinationLocationId: "cedis-1",
+      status: "UNKNOWN",
       createdAt: "2026-08-09T10:00:00.000Z",
       items: [],
     },
@@ -119,7 +164,7 @@ describe("BranchReturnsView", () => {
     root = undefined;
   });
 
-  it("filtra devoluciones sucursal-CEDIS y confirma con Idempotency-Key", async () => {
+  it("mantiene el historial y confirma únicamente devoluciones pendientes", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -133,6 +178,14 @@ describe("BranchReturnsView", () => {
     expect(container.textContent).toContain("12.5 kg · 3 piezas");
     expect(container.textContent).not.toContain("TRF-NOT-RETURN");
     expect(container.textContent).not.toContain("TRF-WRONG-PARENT");
+    expect(container.textContent).toContain("TRF-CONFIRMED");
+    expect(container.textContent).toContain("TRF-CANCELLED");
+    expect(container.textContent).toContain("TRF-UNKNOWN-STATUS");
+    expect(
+      [...container.querySelectorAll("button")].filter(
+        (button) => button.textContent === "Confirmar devolución",
+      ),
+    ).toHaveLength(3);
 
     const confirm = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Confirmar devolución",

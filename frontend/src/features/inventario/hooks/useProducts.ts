@@ -31,6 +31,11 @@ export type InventoryTransferCancellationCommand = InventoryTransferCommand & {
   reason: string;
 };
 
+export type InventoryQueryOptions = {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+};
+
 function createIdempotencyKey() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -62,11 +67,13 @@ export function useInventoryCategories() {
   });
 }
 
-export function useInventoryLocations() {
+export function useInventoryLocations(options: InventoryQueryOptions = {}) {
   const { accessToken } = useAuth();
   return useQuery({
+    enabled: Boolean(accessToken && (options.enabled ?? true)),
     queryKey: ["inventory-locations"],
     queryFn: () => productService.listLocations(accessToken),
+    refetchInterval: options.refetchInterval,
   });
 }
 
@@ -134,11 +141,13 @@ export function useInventoryMovements(
   });
 }
 
-export function useInventoryTransfers() {
+export function useInventoryTransfers(options: InventoryQueryOptions = {}) {
   const { accessToken } = useAuth();
   return useQuery({
+    enabled: Boolean(accessToken && (options.enabled ?? true)),
     queryKey: ["inventory-transfers"],
     queryFn: () => productService.listTransfers(accessToken),
+    refetchInterval: options.refetchInterval,
   });
 }
 

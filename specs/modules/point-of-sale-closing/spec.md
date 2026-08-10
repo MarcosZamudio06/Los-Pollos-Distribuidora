@@ -133,7 +133,11 @@ Una terminal puede tener varios turnos secuenciales en la misma fecha de negocio
 
 ### Requirement: Consolidación del cierre diario
 
-El `PointOfSaleDailyClose` debe consolidar todos los turnos de sus terminales para la ubicación y fecha. No puede cerrarse mientras exista un turno abierto. Sus totales deben derivarse de turnos, ventas, pagos y movimientos asociados, sin reemplazar conteos ni diferencias por terminal.
+El `PointOfSaleDailyClose` debe conservar todos los turnos, ventas, pagos y movimientos de la ubicación y fecha, pero el estado físico monetario consolidado debe incluir una sola posición vigente por terminal. Para cada `terminalId`, el backend excluye turnos `CANCELLED` y selecciona determinísticamente el último por `openedAt DESC`, `createdAt DESC` e `id DESC`.
+
+Solo el turno seleccionado de cada terminal aporta fondo inicial neto, efectivo esperado, efectivo contado y diferencia al estado físico consolidado. El efectivo esperado de esa terminal se calcula con el fondo, depósito y retiro iniciales del turno seleccionado, más pagos `APPLIED` de método `CASH` asociados a ese turno, más movimientos no iniciales `CASH_IN` de canal `CASH`, menos `CASH_OUT`, `ADJUSTMENT` y gastos de canal `CASH` asociados al mismo turno. Los pagos y movimientos de turnos anteriores permanecen en los totales e historial de la jornada, pero no se vuelven a sumar sobre el fondo trasladado al turno sucesor.
+
+Si el turno seleccionado está `OPEN`, su efectivo esperado vigente sí forma parte del consolidado, `cashCountedTotal` permanece nulo y el turno continúa como bloqueante. Si existen filas `CashShift` pero todas están `CANCELLED`, el estado físico de terminales aporta cero; los campos heredados del cierre solo se usan cuando no existe ninguna fila `CashShift`.
 
 #### Scenario: Dos cajas en una sucursal
 
@@ -142,9 +146,29 @@ El `PointOfSaleDailyClose` debe consolidar todos los turnos de sus terminales pa
 - Entonces ambos turnos operan simultáneamente bajo el mismo cierre diario
 - Y cada venta permanece atribuida a una sola terminal, turno y cajero.
 
+#### Scenario: Reapertura secuencial en la misma terminal
+
+- Dado un turno cerrado con conteo de 6,000.00 MXN
+- Y un turno sucesor de la misma terminal que inicia con fondo trasladado de 6,000.00 MXN, recibe 200.00 MXN y cierra con 6,200.00 MXN
+- Cuando se recalcula el cierre diario
+- Entonces el estado físico consolidado de esa terminal registra efectivo esperado y contado de 6,200.00 MXN
+- Y no suma 12,200.00 MXN por duplicar el conteo anterior y el fondo trasladado.
+
+#### Scenario: Terminales paralelas y turno cancelado
+
+- Dadas varias terminales con turnos en la misma jornada
+- Y uno o más turnos cancelados
+- Cuando se recalcula el cierre diario
+- Entonces se suma la posición vigente seleccionada de cada terminal distinta
+- Y ningún turno `CANCELLED` aporta fondo, esperado, conteo ni diferencia.
+
 ### Requirement: Cierre explícito de turnos antes de la jornada
 
-La jornada debe cerrar sus turnos de caja de forma individual antes de permitir la transición del `PointOfSaleDailyClose` a `CLOSED`. Cada cajero captura el efectivo contado de su turno mediante `PATCH /api/cash-shifts/:id/close`; el sistema calcula y conserva la diferencia del turno y el resumen diario se actualiza desde esos turnos.
+La jornada debe cerrar sus turnos de caja de forma individual antes de permitir la transición del `PointOfSaleDailyClose` a `CLOSED`. Cada cajero captura el efectivo contado de su turno mediante `PATCH /api/cash-shifts/:id/close`; el sistema calcula y conserva la diferencia del turno. Abrir o cerrar un turno y registrar un movimiento del turno debe invalidar la validación vigente y recalcular el resumen diario dentro de la misma transacción, sin depender de una actualización posterior del frontend.
+
+Toda mutación que requiera un cierre editable, incluidas las operaciones de `CashShift`, ventas POS, pagos asociados, gastos, conteo de efectivo, referencias de báscula, conteos de inventario, diferencias, validación y recálculo, debe serializarse con las transiciones de estado mediante el mismo bloqueo transaccional por identificador de cierre. Después de adquirirlo, el backend vuelve a comprobar autorización, estado `DRAFT` y versión esperada cuando aplique antes de escribir. Las mutaciones propias del cierre y de sus turnos se rechazan con `DAILY_CLOSE_NOT_EDITABLE` si una transición fuera de `DRAFT` gana la serialización; ventas POS, pagos asociados y otros dominios externos se rechazan con `DAILY_CLOSE_REOPEN_REQUIRED`. Si la mutación gana, revisión, cancelación o cierre observan su nueva versión y sus totales antes de intentar la transición.
+
+El recálculo vuelve a comprobar `DRAFT` después de sincronizar operaciones y condiciona la escritura final por estado y versión. No puede persistir totales, validaciones o diferencias calculadas desde una lectura obsoleta después de que el cierre abandone `DRAFT`.
 
 #### Scenario: Cajero cierra su turno
 
@@ -160,12 +184,48 @@ La jornada debe cerrar sus turnos de caja de forma individual antes de permitir 
 - Entonces la operación permanece bloqueada con `DAILY_CLOSE_HAS_OPEN_SHIFTS`
 - Y la UI muestra "Hay turnos de caja abiertos. Cierra todos los turnos antes de finalizar la jornada.".
 
+#### Scenario: Cancelación con turno abierto
+
+- Dado un cierre diario `DRAFT` con uno o más `CashShift` en estado `OPEN`
+- Cuando `ADMIN` intenta cancelar el cierre
+- Entonces la operación permanece bloqueada con `DAILY_CLOSE_HAS_OPEN_SHIFTS`
+- Y ningún turno abierto queda oculto, huérfano o impedido de cerrarse por la cancelación.
+
 #### Scenario: Turno abandonado o terminal inaccesible
 
 - Dado un turno abierto cuyo cajero o terminal no puede ejecutar el cierre normal
 - Cuando un usuario con `cash_shifts.administrative_close` captura el efectivo y un motivo administrativo
 - Entonces el mismo endpoint cierra el turno sin requerir el `deviceId` original
 - Y conserva modo administrativo, motivo, actor, fecha, conteo y diferencia en la auditoría.
+
+### Requirement: Reapertura exacta del turno de caja
+
+Un turno `CLOSED` puede volver a `OPEN` únicamente en el mismo registro `CashShift`. La reapertura requiere al cajero propietario autenticado, el `deviceId` activo registrado de la terminal y la contraseña de la sesión confirmada por backend contra el `user.id` del principal autenticado. No existe una excepción administrativa de dispositivo para esta acción: el permiso de cierre administrativo no sustituye la propiedad del turno ni la terminal registrada.
+
+La operación adquiere el bloqueo del cierre diario, comprueba que el padre esté en `DRAFT`, rechaza turnos `OPEN` o `CANCELLED` y conserva la regla de un solo turno `OPEN` por terminal. Limpia solo el estado de cierre obsoleto (`closedAt`, actor, modo, motivo, conteo y diferencia), conserva terminal, cajero, fecha, fondos, ventas, pagos y movimientos históricos, incrementa la versión, registra auditoría y recalcula el cierre. No crea un turno sucesor ni movimientos iniciales.
+
+#### Scenario: Reabrir el mismo turno con contraseña válida
+
+- Dado un turno `CLOSED` del cajero autenticado en su terminal registrada
+- Y el cierre diario padre está en `DRAFT`
+- Cuando el cajero confirma la reapertura con la contraseña de su sesión
+- Entonces el `CashShift` conserva el mismo `id`, terminal, cajero, fecha, fondos, ventas, pagos y movimientos
+- Y pasa a `OPEN` con `closedAt`, actor, modo, motivo, conteo y diferencia en `null`
+- Y no se crea otro turno ni movimiento inicial
+- Y el cierre diario se invalida y recalcula dentro de la misma transacción.
+
+#### Scenario: Contraseña o identidad no autorizada
+
+- Dado un turno `CLOSED`
+- Cuando se envía una contraseña incorrecta, un usuario distinto al cajero propietario o un dispositivo distinto al registrado
+- Entonces el backend rechaza la operación sin escribir el turno, movimientos ni auditoría de reapertura
+- Y nunca valida la contraseña contra un identificador de usuario enviado por el cliente.
+
+#### Scenario: Estado o cierre padre no elegible
+
+- Dado un turno `OPEN` o `CANCELLED`, o un turno `CLOSED` cuyo cierre padre ya no está en `DRAFT`
+- Cuando se solicita la reapertura
+- Entonces la operación se rechaza sin crear turno ni movimiento y conserva todo el historial.
 
 ### Requirement: Inventario por ubicación
 
@@ -335,11 +395,19 @@ Las únicas transiciones permitidas son `DRAFT -> REVIEWED`, `DRAFT -> CANCELLED
 - Cuando `ADMIN` lo reabre con versión y motivo válidos
 - Entonces vuelve a `DRAFT` y conserva snapshot y auditoría previos.
 
-#### Scenario: Venta con cierre cerrado
+#### Scenario: Venta con cierre revisado o cerrado
 
-- Dada una venta asociada a un cierre `CLOSED`
-- Cuando se intenta cancelar la venta
-- Entonces el sistema exige reapertura versionada del cierre antes de permitir la cancelación operativa.
+- Dada una venta asociada a un cierre `REVIEWED` o `CLOSED`
+- Cuando se intenta cancelar o anular la venta
+- Entonces el endpoint responde `DAILY_CLOSE_REOPEN_REQUIRED`, no modifica pagos, inventario ni venta, y exige reapertura versionada del cierre antes de permitir la mutación operativa.
+
+#### Scenario: Mutación de venta en borrador
+
+- Dada una venta POS asociada a un cierre `DRAFT`
+- Cuando se crea, cancela o anula la venta
+- Entonces la operación adquiere el bloqueo del cierre antes de escribir
+- Y relee estado y autorización bajo el bloqueo
+- Y después de mutar invalida la validación vigente, incrementa la versión y recalcula el cierre dentro de la misma transacción.
 
 ### Requirement: Coordinación con ciclo CEDIS
 
@@ -402,6 +470,8 @@ Una justificación debe invalidar la validación vigente, incrementar la versió
 La UI debe presentar el cierre como un proceso secuencial de seis pasos: verificar operaciones, conciliar inventario, revisar báscula, contar caja, revisar diferencias, y firmar y cerrar. La cabecera del cierre permanece visible durante el proceso y muestra sucursal, fecha operativa, `Caja/turno: Cierre único diario`, responsable, estado, última actualización y versión.
 
 El diálogo final debe mostrar kilos, báscula, inventario, gastos, ventas, notas facturables, efectivo y diferencias sin resolver antes de confirmar la transición.
+
+Para un `CashShift` `CLOSED` elegible en un cierre `DRAFT`, la UI debe mostrar al cajero propietario una acción `Reabrir turno`. La confirmación debe solicitar la contraseña de la sesión en un diálogo con etiqueta accesible, foco visible y campo de tipo contraseña; no debe mostrar ni aceptar un usuario alterno. Después de una reapertura correcta, la UI debe refrescar el mismo turno como `OPEN` y conservar visibles sus operaciones históricas.
 
 ## RBAC
 

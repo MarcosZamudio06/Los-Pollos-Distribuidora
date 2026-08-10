@@ -71,6 +71,8 @@
 - No se debe permitir una venta a crédito si el cliente está bloqueado por mora o excede su límite de crédito, salvo autorización administrativa explícita.
 - El sistema debe calcular importes a partir de precios autorizados; los descuentos requieren autorización conforme a rol o política del negocio.
 - La venta debe conservar `saleChannel`, `documentType`, folio físico cuando aplique, y quién entregó o cobró cuando el flujo lo requiera.
+- Una venta asociada a un cierre POS `REVIEWED`, `CLOSED` o `CANCELLED` no puede crearse, cancelarse ni anularse; la operación requiere reapertura versionada y responde `DAILY_CLOSE_REOPEN_REQUIRED`.
+- Las mutaciones de una venta POS asociada a un cierre `DRAFT` deben serializarse con el bloqueo del cierre e invalidar, versionar y recalcular el cierre dentro de la misma transacción.
 - La venta facturable administrativa solo expresa relación comercial interna; no genera CFDI, SAT, PAC ni timbrado.
 
 ## 3. Compras
@@ -203,6 +205,12 @@
 - `CashTerminal` es una entidad administrada con `deviceId` único. `CashShift` conserva terminal, cajero, fecha de negocio, fondo inicial, entradas, retiros, gastos, conteo y diferencia.
 - Solo puede existir un `CashShift` abierto por terminal. Varias terminales pueden operar en paralelo y una terminal puede tener turnos secuenciales durante la misma fecha.
 - Solo puede existir un cierre diario no cancelado por ubicación y fecha; el cierre consolida sus turnos y no puede cerrarse mientras alguno permanezca abierto.
+- El estado físico monetario consolidado selecciona por cada terminal el último turno no cancelado mediante `openedAt DESC`, `createdAt DESC` e `id DESC`; solo esos turnos aportan fondo, efectivo esperado, conteo y diferencia. La operación e historial completos de la jornada permanecen visibles.
+- El efectivo esperado de cada terminal usa exclusivamente el fondo neto, pagos `APPLIED` en `CASH` y movimientos no iniciales de canal `CASH` asociados a su turno seleccionado. Un turno sucesor no vuelve a sumar los pagos del turno cuyo conteo recibió como fondo trasladado.
+- Un turno seleccionado `OPEN` aporta su esperado vigente, mantiene nulo el conteo consolidado y bloquea el cierre. Si existen turnos pero todos están `CANCELLED`, aportan cero; el cálculo heredado solo aplica cuando no existe ningún `CashShift`.
+- Reabrir un turno significa reactivar el mismo `CashShift` cerrado, conservando su terminal, cajero, fecha, ventas, pagos y movimientos históricos; no crea un turno sucesor ni movimientos iniciales nuevos. Solo puede hacerlo el cajero propietario autenticado desde el `deviceId` registrado de la terminal, con la contraseña de su sesión verificada contra el usuario autenticado; no se acepta un identificador de usuario enviado por el cliente.
+- La reapertura de un `CashShift` exige que su cierre diario padre permanezca en `DRAFT` y rechaza turnos `OPEN` o `CANCELLED`. Al reactivar, limpia únicamente el estado de cierre obsoleto (`closedAt`, actor, modo, motivo, conteo y diferencia), conserva los datos operativos y aumenta la versión.
+- Toda mutación que requiera un `PointOfSaleDailyClose` editable y toda transición de estado participan en el mismo bloqueo transaccional por cierre. Bajo el bloqueo se revalidan autorización, estado `DRAFT` y versión cuando aplique; el recálculo y la validación usan además una escritura final condicionada para no persistir resultados obsoletos.
 - Debe iniciar en `DRAFT`; puede pasar a `REVIEWED`, `CLOSED` o `CANCELLED` conforme a permisos.
 - No puede cerrarse si alguna venta, movimiento de inventario, movimiento de caja o pago incluido carece de ubicación operativa trazable.
 - Debe conciliar entradas, ventas por nota, ventas por ticket/etiqueta, otras salidas, sobrantes y faltantes por producto y unidad.

@@ -39,6 +39,11 @@ export type CashShift = {
   cashier: { id: string; name: string };
 };
 
+export type ReopenCashShiftRequest = {
+  deviceId: string;
+  password: string;
+};
+
 export type CashTerminalActivation = {
   activationCode: string;
   expiresAt: string;
@@ -113,6 +118,17 @@ export const cashManagementService = {
     (
       await apiClient.patch<Envelope<CashShift>, typeof body>(
         `/cash-shifts/${shiftId}/close`,
+        { body, headers: headers(token) },
+      )
+    ).data,
+  reopenShift: async (
+    shiftId: string,
+    body: ReopenCashShiftRequest,
+    token: string | null,
+  ) =>
+    (
+      await apiClient.patch<Envelope<CashShift>, typeof body>(
+        `/cash-shifts/${shiftId}/reopen`,
         { body, headers: headers(token) },
       )
     ).data,

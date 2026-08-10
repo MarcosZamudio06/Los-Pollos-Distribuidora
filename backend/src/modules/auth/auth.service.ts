@@ -73,11 +73,7 @@ export class AuthService {
       throw new ForbiddenException('User is inactive');
     }
 
-    const passwordMatches = await bcrypt.compare(
-      credentials.password,
-      user.passwordHash,
-    );
-    if (!passwordMatches) {
+    if (!(await this.passwordMatches(user, credentials.password))) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -195,6 +191,16 @@ export class AuthService {
     };
   }
 
+  async verifyPassword(userId: string, password: string): Promise<void> {
+    const user = await this.findUserById(userId);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!(await this.passwordMatches(user, password))) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+  }
+
   async changeOwnPassword(
     userId: string,
     dto: ChangeOwnPasswordDto,
@@ -206,11 +212,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    const currentPasswordMatches = await bcrypt.compare(
-      dto.currentPassword,
-      user.passwordHash,
-    );
-    if (!currentPasswordMatches) {
+    if (!(await this.passwordMatches(user, dto.currentPassword))) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -339,6 +341,13 @@ export class AuthService {
         role: { include: { permissions: { include: { permission: true } } } },
       },
     });
+  }
+
+  private passwordMatches(
+    user: UserRecord,
+    password: string,
+  ): Promise<boolean> {
+    return bcrypt.compare(password, user.passwordHash);
   }
 
   private async findUserByEmail(email: string): Promise<UserRecord | null> {

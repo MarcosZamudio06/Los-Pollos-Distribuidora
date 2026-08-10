@@ -373,6 +373,22 @@ export function DailyClosePage() {
       throw error;
     }
   };
+  const reopenCashShift = async (shiftId: string, password: string) => {
+    try {
+      await cashManagementService.reopenShift(
+        shiftId,
+        { deviceId, password },
+        accessToken,
+      );
+      if (selected) await selectClose(selected);
+      toast.success("Turno reabierto y listo para continuar.");
+    } catch (error) {
+      toast.error(
+        dailyCloseErrorMessage(error, "No fue posible reabrir el turno."),
+      );
+      throw error;
+    }
+  };
   const addTicket = (event: FormEvent) => {
     event.preventDefault();
     if (!selected) return;
@@ -906,9 +922,11 @@ export function DailyClosePage() {
                 user,
                 PERMISSIONS.cashShiftsAdministrativeClose,
               )}
+              canReopenClosedShifts={canEditDraft && selected.status === "DRAFT"}
               close={selected}
               currentUserId={user?.id}
               onCloseShift={closeCashShift}
+              onReopenShift={reopenCashShift}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

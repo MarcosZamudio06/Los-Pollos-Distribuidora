@@ -61,6 +61,7 @@ import {
   CatalogSelect,
   useOperationalCatalog,
 } from "../../components/shared/operational-catalogs";
+import { CedisDashboardNotifications } from "./CedisDashboardNotifications";
 
 const numberFormatter = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 2,
@@ -831,6 +832,8 @@ function DashboardContent({
       )}
 
       <RoleKpis data={data} role={role} />
+
+      <CedisDashboardNotifications />
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-6">

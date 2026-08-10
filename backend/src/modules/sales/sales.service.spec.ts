@@ -25,6 +25,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { InventoryBalanceService } from '../inventory/inventory-balance.service';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import { SalesService } from './sales.service';
 import { SalesRealtimeService } from './sales-realtime.service';
 
@@ -33,6 +34,7 @@ const now = new Date('2026-06-21T10:00:00.000Z');
 type MockPrisma = {
   $transaction: jest.Mock;
   $queryRawUnsafe: jest.Mock;
+  $executeRawUnsafe: jest.Mock;
   product: { findUnique: jest.Mock };
   customer: { findUnique: jest.Mock };
   commercialPolicy: { findFirst: jest.Mock };
@@ -90,6 +92,7 @@ function createPrisma(): MockPrisma {
   const prisma: MockPrisma = {
     $transaction: jest.fn((callback) => callback(prisma)),
     $queryRawUnsafe: jest.fn(),
+    $executeRawUnsafe: jest.fn(),
     product: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
     commercialPolicy: { findFirst: jest.fn() },
@@ -141,13 +144,18 @@ function createService(
   prisma = createPrisma(),
   salesRealtime?: Pick<SalesRealtimeService, 'publishCreated'>,
 ) {
+  const dailyCloseService = {
+    recalculateAfterDraftMutation: jest.fn().mockResolvedValue(undefined),
+  };
   return {
     service: new SalesService(
       prisma as unknown as PrismaService,
       new InventoryBalanceService(),
+      dailyCloseService as unknown as PointOfSaleDailyCloseService,
       salesRealtime as SalesRealtimeService,
     ),
     prisma,
+    dailyCloseService,
   };
 }
 
@@ -209,6 +217,9 @@ function mockHappyPath(
     operationalLocationId: 'loc-1',
     status: PointOfSaleDailyCloseStatus.DRAFT,
     cashSessionStatus: 'OPEN',
+  });
+  prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+    status: PointOfSaleDailyCloseStatus.DRAFT,
   });
   prisma.legalEntityOperationalLocation.findFirst.mockResolvedValue({
     legalEntityId: 'legal-entity-1',
@@ -1637,7 +1648,7 @@ describe('SalesService', () => {
   });
 
   it('creates a valid paid cash sale with backend pricing, sale payment, stock decrement, and no artificial account receivable', async () => {
-    const { service, prisma } = createService();
+    const { service, prisma, dailyCloseService } = createService();
     mockHappyPath(prisma);
 
     const result = await service.create(
@@ -1647,6 +1658,9 @@ describe('SalesService', () => {
     );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).toHaveBeenCalledWith('close-1', prisma);
     expect(prisma.sale.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -3510,6 +3524,39 @@ describe('SalesService', () => {
     );
   });
 
+  it('rechaza anular una venta de un cierre revisado bajo el bloqueo del cierre', async () => {
+    const { service, prisma } = createService();
+    const sale = voidSaleRecord({
+      pointOfSaleDailyClose: {
+        id: 'close-reviewed-1',
+        status: PointOfSaleDailyCloseStatus.REVIEWED,
+      },
+    });
+    prisma.sale.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(sale);
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      status: PointOfSaleDailyCloseStatus.REVIEWED,
+    });
+
+    await expect(
+      service.voidSale(
+        sale.id,
+        { reason: 'Cierre revisado', expectedVersion: sale.version },
+        { id: 'admin-1', role: 'ADMIN' },
+        'void-reviewed-1',
+      ),
+    ).rejects.toThrow(new BadRequestException('DAILY_CLOSE_REOPEN_REQUIRED'));
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-reviewed-1',
+    );
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.sale.updateMany).not.toHaveBeenCalled();
+  });
+
   it('previews a closed route settlement as an explicit reopening blocker', async () => {
     const { service, prisma } = createService();
     prisma.sale.findFirst.mockResolvedValue(
@@ -3756,7 +3803,7 @@ describe('SalesService', () => {
   });
 
   it('cancels a confirmed sale, restores stock at the original location, and records cancel-sale movements', async () => {
-    const { service, prisma } = createService();
+    const { service, prisma, dailyCloseService } = createService();
     prisma.sale.findFirst.mockResolvedValue({
       id: 'sale-1',
       saleNumber: 'SALE-000001',
@@ -3767,7 +3814,10 @@ describe('SalesService', () => {
       route: null,
       collectionStatus: CollectionStatus.PAID,
       paymentType: SalePaymentType.CASH_SALE,
-      pointOfSaleDailyClose: null,
+      pointOfSaleDailyClose: {
+        id: 'close-1',
+        status: PointOfSaleDailyCloseStatus.DRAFT,
+      },
       payments: [],
       accountReceivable: null,
       items: [
@@ -3811,6 +3861,9 @@ describe('SalesService', () => {
       version: 2,
       status: SaleStatus.CANCELLED,
       items: [],
+    });
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      status: PointOfSaleDailyCloseStatus.DRAFT,
     });
 
     const result = await service.cancel(
@@ -3870,6 +3923,9 @@ describe('SalesService', () => {
     expect(result.inventoryMovements).toEqual([
       expect.objectContaining({ type: InventoryMovementType.CANCEL_SALE }),
     ]);
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).toHaveBeenCalledWith('close-1', prisma);
   });
 
   it('cancels an unpaid credit sale and cancels its related account receivable', async () => {
@@ -4120,6 +4176,53 @@ describe('SalesService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.inventoryBalance.update).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.sale.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('blocks cancellation when the sale belongs to a reviewed POS daily close', async () => {
+    const { service, prisma } = createService();
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 'sale-pos-reviewed-1',
+      userId: 'seller-1',
+      locationId: 'loc-1',
+      status: SaleStatus.CONFIRMED,
+      version: 2,
+      paymentType: SalePaymentType.CASH_SALE,
+      pointOfSaleDailyClose: {
+        id: 'close-1',
+        status: PointOfSaleDailyCloseStatus.REVIEWED,
+      },
+      payments: [],
+      route: null,
+      accountReceivable: null,
+      items: [
+        {
+          id: 'item-1',
+          productId: 'product-1',
+          quantityKg: decimal('2.500'),
+          quantityPieces: 0,
+        },
+      ],
+    });
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      status: PointOfSaleDailyCloseStatus.REVIEWED,
+    });
+
+    await expect(
+      service.cancel(
+        'sale-pos-reviewed-1',
+        { reason: 'Cliente canceló cierre revisado', expectedVersion: 2 },
+        { id: 'admin-1', role: 'ADMIN' },
+        'cancel-key-pos-reviewed',
+      ),
+    ).rejects.toThrow(new BadRequestException('DAILY_CLOSE_REOPEN_REQUIRED'));
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
+    expect(prisma.inventoryBalance.upsert).not.toHaveBeenCalled();
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
     expect(prisma.sale.updateMany).not.toHaveBeenCalled();
   });

@@ -379,6 +379,12 @@ describe("CEDIS branch detail page", () => {
     const html = renderPage();
 
     expect(html).toContain("Fecha operativa");
+    expect(html).toContain("Revisión y confirmación");
+    expect(html).toContain("Inspecciona advertencias, diferencias y conciliación");
+    expect(html).toContain("Confirmar jornada");
+    expect(html).toContain(
+      'href="/cedis/incoming?date=2026-08-05&amp;status=PENDING"',
+    );
     expect(html).toContain("Historial diario");
     expect(html).toContain("Desglose por producto");
     expect(html).toContain("Pollo entero");

@@ -203,7 +203,7 @@ export function AlertRow({
       </div>
       {action && (
         <Link
-          className="text-sm font-bold text-[var(--erp-info)]"
+          className="text-sm font-bold text-[var(--erp-info)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(47,111,115,0.28)] focus-visible:ring-offset-2"
           to={action.to}
         >
           {action.label}

@@ -20,6 +20,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { acquireDraftDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
 import {
   ListAccountsReceivableQueryDto,
   RegisterReceivablePaymentDto,
@@ -72,11 +74,18 @@ type CreditSaleRecord = {
   } | null;
   payments?: Array<Pick<Payment, 'amount' | 'status'>>;
   accountReceivable?: AccountReceivable | null;
+  pointOfSaleDailyClose?: {
+    id: string;
+    status: PointOfSaleDailyCloseStatus;
+  } | null;
 };
 
 @Injectable()
 export class AccountsReceivableService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dailyCloseService: PointOfSaleDailyCloseService,
+  ) {}
 
   async findAll(
     query: ListAccountsReceivableQueryDto = {},
@@ -152,7 +161,7 @@ export class AccountsReceivableService {
             );
           }
 
-          const receivable = await tx.accountReceivable.findUnique({
+          let receivable = await tx.accountReceivable.findUnique({
             where: { id },
           });
 
@@ -160,17 +169,63 @@ export class AccountsReceivableService {
             throw new NotFoundException('Account receivable not found');
           }
 
-          this.assertReceivableCanReceivePayment(receivable);
-          const sale = await tx.sale.findUnique({
+          let sale = await tx.sale.findUnique({
             where: { id: receivable.saleId },
-            select: { locationId: true },
+            select: {
+              locationId: true,
+              pointOfSaleDailyClose: { select: { id: true, status: true } },
+            },
           });
-          const cashShift = await this.resolveCashShift(
-            tx,
-            dto,
-            sale?.locationId ?? null,
-            currentUser,
-          );
+          const initialSaleDailyCloseId =
+            sale?.pointOfSaleDailyClose?.id ?? null;
+          let cashShift = initialSaleDailyCloseId
+            ? null
+            : await this.resolveCashShift(
+                tx,
+                dto,
+                sale?.locationId ?? null,
+                currentUser,
+                { allowNonDraftClose: true },
+              );
+          const initialDailyCloseId =
+            initialSaleDailyCloseId ??
+            cashShift?.pointOfSaleDailyCloseId ??
+            null;
+          if (initialDailyCloseId) {
+            await acquireDraftDailyCloseLifecycleLock(tx, initialDailyCloseId);
+            receivable = await tx.accountReceivable.findUnique({
+              where: { id },
+            });
+            if (!receivable)
+              throw new NotFoundException('Account receivable not found');
+            sale = await tx.sale.findUnique({
+              where: { id: receivable.saleId },
+              select: {
+                locationId: true,
+                pointOfSaleDailyClose: {
+                  select: { id: true, status: true },
+                },
+              },
+            });
+            const currentSaleDailyCloseId =
+              sale?.pointOfSaleDailyClose?.id ?? null;
+            if (currentSaleDailyCloseId !== initialSaleDailyCloseId)
+              throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+            const authoritativeDailyCloseId =
+              currentSaleDailyCloseId ?? initialDailyCloseId;
+            cashShift = await this.resolveCashShift(
+              tx,
+              dto,
+              sale?.locationId ?? null,
+              currentUser,
+              { expectedDailyCloseId: authoritativeDailyCloseId },
+            );
+          }
+          this.assertReceivableCanReceivePayment(receivable);
+          const dailyCloseId =
+            sale?.pointOfSaleDailyClose?.id ??
+            cashShift?.pointOfSaleDailyCloseId ??
+            null;
 
           const outstandingAmount = Money.from(receivable.outstandingAmount);
           if (paymentAmount.compare(outstandingAmount) > 0) {
@@ -240,6 +295,12 @@ export class AccountsReceivableService {
             data: { collectionStatus: nextStatus },
           });
 
+          if (dailyCloseId)
+            await this.dailyCloseService.recalculateAfterDraftMutation(
+              dailyCloseId,
+              tx,
+            );
+
           return {
             payment: this.toPaymentResponse(payment),
             accountReceivable: this.toListItem(updatedReceivable),
@@ -262,9 +323,14 @@ export class AccountsReceivableService {
   async createFromConfirmedCreditSale(saleId: string) {
     return this.prisma.$transaction(
       async (tx) => {
-        const sale = (await tx.sale.findUnique({
+        let sale = (await tx.sale.findUnique({
           where: { id: saleId },
-          include: { customer: true, payments: true, accountReceivable: true },
+          include: {
+            customer: true,
+            payments: true,
+            accountReceivable: true,
+            pointOfSaleDailyClose: { select: { id: true, status: true } },
+          },
         })) as CreditSaleRecord | null;
 
         if (!sale) {
@@ -273,6 +339,28 @@ export class AccountsReceivableService {
 
         if (sale.accountReceivable) {
           return this.toListItem(sale.accountReceivable);
+        }
+
+        if (sale.pointOfSaleDailyClose?.id) {
+          await acquireDraftDailyCloseLifecycleLock(
+            tx,
+            sale.pointOfSaleDailyClose.id,
+          );
+          sale = (await tx.sale.findUnique({
+            where: { id: saleId },
+            include: {
+              customer: true,
+              payments: true,
+              accountReceivable: true,
+              pointOfSaleDailyClose: {
+                select: { id: true, status: true },
+              },
+            },
+          })) as CreditSaleRecord | null;
+          if (!sale) throw new NotFoundException('Sale not found');
+          if (sale.accountReceivable) {
+            return this.toListItem(sale.accountReceivable);
+          }
         }
 
         this.assertEligibleCreditSale(sale);
@@ -353,6 +441,12 @@ export class AccountsReceivableService {
           where: { id: sale.id },
           data: { collectionStatus: CollectionStatus.UNPAID },
         });
+
+        if (sale.pointOfSaleDailyClose?.id)
+          await this.dailyCloseService.recalculateAfterDraftMutation(
+            sale.pointOfSaleDailyClose.id,
+            tx,
+          );
 
         return this.toListItem(receivable);
       },
@@ -446,6 +540,10 @@ export class AccountsReceivableService {
     dto: RegisterReceivablePaymentDto,
     locationId: string | null,
     currentUser: Actor,
+    options: {
+      allowNonDraftClose?: boolean;
+      expectedDailyCloseId?: string;
+    } = {},
   ) {
     if (dto.routeId || dto.routeSettlementId) return null;
     if (!dto.cashShiftId && dto.paymentMethod !== 'CASH') return null;
@@ -484,13 +582,23 @@ export class AccountsReceivableService {
         message: 'The cash shift does not belong to the payment location',
       });
     if (
-      shift.status !== 'OPEN' ||
-      shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
+      options.expectedDailyCloseId &&
+      shift.pointOfSaleDailyCloseId !== options.expectedDailyCloseId
     )
+      throw new BadRequestException({
+        code: 'CASH_SHIFT_LOCATION_MISMATCH',
+        message: 'The cash shift does not belong to the sale daily close',
+      });
+    if (shift.status !== 'OPEN')
       throw new BadRequestException({
         code: 'CASH_SHIFT_NOT_OPEN',
         message: 'The selected cash shift is not open for payments',
       });
+    if (
+      !options.allowNonDraftClose &&
+      shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
+    )
+      throw new BadRequestException('DAILY_CLOSE_REOPEN_REQUIRED');
     if (shift.cashierUserId !== currentUser.id)
       throw new BadRequestException({
         code: 'CASH_SHIFT_CASHIER_MISMATCH',

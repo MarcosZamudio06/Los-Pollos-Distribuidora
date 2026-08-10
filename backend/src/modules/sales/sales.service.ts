@@ -33,6 +33,8 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { InventoryBalanceService } from '../inventory/inventory-balance.service';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { acquireDraftDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
 import {
   CancelSaleDto,
   CreateSaleDto,
@@ -426,6 +428,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
+    private readonly dailyCloseService: PointOfSaleDailyCloseService,
     @Optional() private readonly salesRealtime?: SalesRealtimeService,
   ) {}
 
@@ -677,12 +680,25 @@ export class SalesService {
           }
 
           this.assertLocationMatchesSaleChannel(dto, location.type);
-          const cashShift = await this.resolveCashShift(
+          let cashShift = await this.resolveCashShift(
             tx,
             dto,
             location.id,
             currentUser,
+            { allowNonDraftClose: true },
           );
+          if (cashShift?.pointOfSaleDailyCloseId) {
+            await acquireDraftDailyCloseLifecycleLock(
+              tx,
+              cashShift.pointOfSaleDailyCloseId,
+            );
+            cashShift = await this.resolveCashShift(
+              tx,
+              dto,
+              location.id,
+              currentUser,
+            );
+          }
           const dailyCloseId = cashShift?.pointOfSaleDailyCloseId ?? null;
 
           const customer = dto.customerId
@@ -1074,6 +1090,12 @@ export class SalesService {
             });
           }
 
+          if (dailyCloseId)
+            await this.dailyCloseService.recalculateAfterDraftMutation(
+              dailyCloseId,
+              tx,
+            );
+
           return {
             created: true,
             saleId: sale.id,
@@ -1359,13 +1381,24 @@ export class SalesService {
             );
           }
 
-          const sale = (await tx.sale.findFirst({
+          let sale = (await tx.sale.findFirst({
             where: { id },
             include: saleVoidInclude,
           })) as SaleVoidPreviewRecord | null;
 
           if (!sale) {
             throw new NotFoundException('Sale not found');
+          }
+
+          if (sale.pointOfSaleDailyClose?.id) {
+            await acquireDraftDailyCloseLifecycleLock(
+              tx,
+              sale.pointOfSaleDailyClose.id,
+            );
+            sale = await this.findVoidSale(tx, id);
+            if (!sale) {
+              throw new NotFoundException('Sale not found');
+            }
           }
 
           if (sale.status === SaleStatus.CANCELLED) {
@@ -1376,6 +1409,14 @@ export class SalesService {
             throw new ConflictException(
               'Sale version does not match expectedVersion',
             );
+          }
+
+          if (
+            sale.pointOfSaleDailyClose &&
+            sale.pointOfSaleDailyClose.status !==
+              PointOfSaleDailyCloseStatus.DRAFT
+          ) {
+            throw new BadRequestException('DAILY_CLOSE_REOPEN_REQUIRED');
           }
 
           const blockers = this.getVoidBlockers(sale);
@@ -1574,6 +1615,12 @@ export class SalesService {
             },
           });
 
+          if (sale.pointOfSaleDailyClose?.id)
+            await this.dailyCloseService.recalculateAfterDraftMutation(
+              sale.pointOfSaleDailyClose.id,
+              tx,
+            );
+
           return this.buildVoidResponse(
             cancelledSale,
             currentUser,
@@ -1631,24 +1678,7 @@ export class SalesService {
 
     return this.prisma.$transaction(
       async (tx) => {
-        const sale = (await tx.sale.findFirst({
-          where: this.buildCancellationScopeWhere(id, currentUser),
-          include: {
-            items: true,
-            payments: { where: { status: PaymentStatus.APPLIED } },
-            accountReceivable: {
-              include: {
-                payments: { where: { status: PaymentStatus.APPLIED }, take: 1 },
-              },
-            },
-            pointOfSaleDailyClose: { select: { status: true } },
-            route: { select: { settlement: { select: { status: true } } } },
-            inventoryMovements: {
-              where: { type: InventoryMovementType.CANCEL_SALE },
-              orderBy: { createdAt: 'asc' },
-            },
-          },
-        })) as SaleCancellationRecord | null;
+        let sale = await this.findCancellationSale(tx, id, currentUser);
 
         if (!sale) {
           throw new NotFoundException('Sale not found');
@@ -1673,6 +1703,15 @@ export class SalesService {
               ? this.toReceivableRecordResponse(sale.accountReceivable)
               : null,
           };
+        }
+
+        if (sale.pointOfSaleDailyClose?.id) {
+          await acquireDraftDailyCloseLifecycleLock(
+            tx,
+            sale.pointOfSaleDailyClose.id,
+          );
+          sale = await this.findCancellationSale(tx, id, currentUser);
+          if (!sale) throw new NotFoundException('Sale not found');
         }
 
         if (sale.status === SaleStatus.CANCELLED) {
@@ -1727,6 +1766,12 @@ export class SalesService {
           throw new NotFoundException('Sale not found after cancellation');
         }
 
+        if (sale.pointOfSaleDailyClose?.id)
+          await this.dailyCloseService.recalculateAfterDraftMutation(
+            sale.pointOfSaleDailyClose.id,
+            tx,
+          );
+
         return {
           sale: this.toSaleResponse(cancelledSale, currentUser),
           inventoryMovements: inventoryMovements.map((movement) =>
@@ -1763,7 +1808,8 @@ export class SalesService {
     }
 
     if (
-      sale.pointOfSaleDailyClose?.status === PointOfSaleDailyCloseStatus.CLOSED
+      sale.pointOfSaleDailyClose &&
+      sale.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
     ) {
       blockers.push({
         code: 'DAILY_CLOSE_REOPEN_REQUIRED',
@@ -1910,6 +1956,41 @@ export class SalesService {
     };
   }
 
+  private async findVoidSale(
+    tx: Prisma.TransactionClient,
+    id: string,
+  ): Promise<SaleVoidPreviewRecord | null> {
+    return (await tx.sale.findFirst({
+      where: { id },
+      include: saleVoidInclude,
+    })) as SaleVoidPreviewRecord | null;
+  }
+
+  private async findCancellationSale(
+    tx: Prisma.TransactionClient,
+    id: string,
+    currentUser: Actor,
+  ): Promise<SaleCancellationRecord | null> {
+    return (await tx.sale.findFirst({
+      where: this.buildCancellationScopeWhere(id, currentUser),
+      include: {
+        items: true,
+        payments: { where: { status: PaymentStatus.APPLIED } },
+        accountReceivable: {
+          include: {
+            payments: { where: { status: PaymentStatus.APPLIED }, take: 1 },
+          },
+        },
+        pointOfSaleDailyClose: { select: { id: true, status: true } },
+        route: { select: { settlement: { select: { status: true } } } },
+        inventoryMovements: {
+          where: { type: InventoryMovementType.CANCEL_SALE },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    })) as SaleCancellationRecord | null;
+  }
+
   private getVoidPayments(
     sale: SaleVoidPreviewRecord,
   ): Array<Payment & { version: number }> {
@@ -2005,11 +2086,10 @@ export class SalesService {
     }
 
     if (
-      sale.pointOfSaleDailyClose?.status === PointOfSaleDailyCloseStatus.CLOSED
+      sale.pointOfSaleDailyClose &&
+      sale.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
     ) {
-      throw new BadRequestException(
-        'Sale is associated with a closed POS daily close',
-      );
+      throw new BadRequestException('DAILY_CLOSE_REOPEN_REQUIRED');
     }
 
     if (sale.route?.settlement?.status === RouteSettlementStatus.CLOSED) {
@@ -2368,6 +2448,7 @@ export class SalesService {
     dto: CreateSaleDto,
     locationId: string,
     currentUser: Actor,
+    options: { allowNonDraftClose?: boolean } = {},
   ) {
     const isFixedPointOfSale = dto.saleChannel !== SaleChannel.ROUTE;
     if (!dto.cashShiftId && !isFixedPointOfSale) return null;
@@ -2410,14 +2491,17 @@ export class SalesService {
         message: 'The cash shift does not belong to the sale location',
       });
     }
-    if (
-      shift.status !== 'OPEN' ||
-      shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
-    ) {
+    if (shift.status !== 'OPEN') {
       throw new BadRequestException({
         code: 'CASH_SHIFT_NOT_OPEN',
         message: 'The selected cash shift is not open for sales',
       });
+    }
+    if (
+      !options.allowNonDraftClose &&
+      shift.pointOfSaleDailyClose.status !== PointOfSaleDailyCloseStatus.DRAFT
+    ) {
+      throw new BadRequestException('DAILY_CLOSE_REOPEN_REQUIRED');
     }
     if (shift.cashierUserId !== currentUser.id) {
       throw new BadRequestException({

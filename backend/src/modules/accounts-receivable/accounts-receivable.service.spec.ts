@@ -15,6 +15,7 @@ import {
   SaleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import { AccountsReceivableService } from './accounts-receivable.service';
 
 type MockPrisma = {
@@ -30,6 +31,7 @@ type MockPrisma = {
   sale: { findUnique: jest.Mock; update: jest.Mock };
   cashShift: { findUnique: jest.Mock };
   pointOfSaleDailyClose: { findUnique: jest.Mock; findFirst: jest.Mock };
+  $executeRawUnsafe: jest.Mock;
   $transaction: jest.Mock;
 };
 
@@ -112,7 +114,7 @@ function createPrisma(): MockPrisma {
       }),
     },
     pointOfSaleDailyClose: {
-      findUnique: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({ status: 'DRAFT' }),
       findFirst: jest.fn().mockResolvedValue({
         id: 'close-1',
         operationalLocationId: 'loc-1',
@@ -120,15 +122,23 @@ function createPrisma(): MockPrisma {
         cashSessionStatus: 'OPEN',
       }),
     },
+    $executeRawUnsafe: jest.fn(),
     $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
 }
 
 function createService(prisma = createPrisma()) {
+  const dailyCloseService = {
+    recalculateAfterDraftMutation: jest.fn().mockResolvedValue(undefined),
+  };
   return {
-    service: new AccountsReceivableService(prisma as unknown as PrismaService),
+    service: new AccountsReceivableService(
+      prisma as unknown as PrismaService,
+      dailyCloseService as unknown as PointOfSaleDailyCloseService,
+    ),
     prisma,
+    dailyCloseService,
   };
 }
 
@@ -270,6 +280,210 @@ describe('AccountsReceivableService', () => {
     });
 
     expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza registrar efectivo cuando el cierre POS ya fue revisado', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-1',
+      operationalLocationId: 'loc-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      cashierUserId: 'collector-1',
+      status: 'OPEN',
+      terminal: { deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: 'REVIEWED' },
+    });
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      status: 'REVIEWED',
+    });
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+          cashShiftId: 'shift-1',
+          deviceId: 'device-1',
+        },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-payment-reviewed-close',
+      ),
+    ).rejects.toThrow('DAILY_CLOSE_REOPEN_REQUIRED');
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza pagar una venta de un cierre revisado usando un turno de otro cierre', async () => {
+    const { service, prisma } = createService();
+    const sale = {
+      locationId: 'loc-1',
+      pointOfSaleDailyClose: { id: 'close-reviewed', status: 'REVIEWED' },
+    };
+    const foreignShift = {
+      id: 'shift-foreign',
+      operationalLocationId: 'loc-1',
+      pointOfSaleDailyCloseId: 'close-draft',
+      cashierUserId: 'collector-1',
+      status: 'OPEN',
+      terminal: { deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: 'DRAFT' },
+    };
+    const createdPayment = {
+      id: 'payment-cross-close',
+      accountReceivableId: 'ar-1',
+      saleId: 'sale-1',
+      customerId: 'customer-1',
+      amount: money('100'),
+      paymentMethod: PaymentMethod.CASH,
+      bankName: null,
+      referenceNumber: null,
+      appliedDocumentId: null,
+      appliedDocumentType: null,
+      routeId: null,
+      routeSettlementId: null,
+      operationalLocationId: 'loc-1',
+      pointOfSaleDailyCloseId: 'close-draft',
+      collectedByUserId: 'collector-1',
+      collectionPass: null,
+      status: PaymentStatus.APPLIED,
+      paidAt: new Date('2026-06-20T10:00:00.000Z'),
+    };
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
+    prisma.sale.findUnique.mockResolvedValue(sale);
+    prisma.cashShift.findUnique.mockResolvedValue(foreignShift);
+    prisma.pointOfSaleDailyClose.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === 'close-reviewed'
+            ? { status: 'REVIEWED' }
+            : { status: 'DRAFT' },
+        ),
+    );
+    prisma.payment.create.mockResolvedValue(createdPayment);
+    prisma.accountReceivable.update.mockResolvedValue(
+      createReceivable({
+        outstandingAmount: money('900'),
+        status: CollectionStatus.PARTIALLY_PAID,
+      }),
+    );
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+          cashShiftId: 'shift-foreign',
+          deviceId: 'device-1',
+        },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-cross-close-payment',
+      ),
+    ).rejects.toThrow('DAILY_CLOSE_REOPEN_REQUIRED');
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-reviewed',
+    );
+    expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-draft',
+    );
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
+    expect(prisma.sale.update).not.toHaveBeenCalled();
+  });
+
+  it('registra el pago cuando la venta y el turno pertenecen al mismo cierre', async () => {
+    const { service, prisma, dailyCloseService } = createService();
+    const sale = {
+      locationId: 'loc-1',
+      pointOfSaleDailyClose: { id: 'close-1', status: 'DRAFT' },
+    };
+    const shift = {
+      id: 'shift-1',
+      operationalLocationId: 'loc-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      cashierUserId: 'collector-1',
+      status: 'OPEN',
+      terminal: { deviceId: 'device-1', isActive: true },
+      pointOfSaleDailyClose: { status: 'DRAFT' },
+    };
+    const createdPayment = {
+      id: 'payment-same-close',
+      accountReceivableId: 'ar-1',
+      saleId: 'sale-1',
+      customerId: 'customer-1',
+      amount: money('100'),
+      paymentMethod: PaymentMethod.CASH,
+      bankName: null,
+      referenceNumber: null,
+      appliedDocumentId: null,
+      appliedDocumentType: null,
+      routeId: null,
+      routeSettlementId: null,
+      operationalLocationId: 'loc-1',
+      pointOfSaleDailyCloseId: 'close-1',
+      collectedByUserId: 'collector-1',
+      collectionPass: null,
+      status: PaymentStatus.APPLIED,
+      paidAt: new Date('2026-06-20T10:00:00.000Z'),
+    };
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
+    prisma.sale.findUnique.mockResolvedValue(sale);
+    prisma.cashShift.findUnique.mockResolvedValue(shift);
+    prisma.payment.create.mockResolvedValue(createdPayment);
+    prisma.accountReceivable.update.mockResolvedValue(
+      createReceivable({
+        outstandingAmount: money('900'),
+        status: CollectionStatus.PARTIALLY_PAID,
+      }),
+    );
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+          cashShiftId: 'shift-1',
+          deviceId: 'device-1',
+        },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-same-close-payment',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        payment: expect.objectContaining({
+          id: 'payment-same-close',
+          pointOfSaleDailyCloseId: 'close-1',
+        }),
+      }),
+    );
+
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pointOfSaleDailyCloseId: 'close-1',
+          cashShiftId: 'shift-1',
+        }),
+      }),
+    );
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).toHaveBeenCalledWith('close-1', prisma);
   });
 
   it('marks a receivable paid when the collection payment clears the full balance', async () => {
@@ -530,6 +744,12 @@ describe('AccountsReceivableService', () => {
     prisma.accountReceivable.findUnique
       .mockResolvedValueOnce(
         createReceivable({ outstandingAmount: money('1000') }),
+      )
+      .mockResolvedValueOnce(
+        createReceivable({
+          outstandingAmount: money('600'),
+          status: CollectionStatus.PARTIALLY_PAID,
+        }),
       )
       .mockResolvedValueOnce(
         createReceivable({

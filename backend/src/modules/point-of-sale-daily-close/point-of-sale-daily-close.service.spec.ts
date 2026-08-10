@@ -48,6 +48,7 @@ describe('PointOfSaleDailyCloseService', () => {
     dailyCloseEvent: { create: jest.fn() },
     dailyCloseSnapshot: { create: jest.fn() },
     product: { findUnique: jest.fn() },
+    $executeRawUnsafe: jest.fn(),
     $transaction: jest.fn(),
   };
   const service = new PointOfSaleDailyCloseService(prisma as never);
@@ -264,6 +265,31 @@ describe('PointOfSaleDailyCloseService', () => {
     ).rejects.toThrow(new BadRequestException('DAILY_CLOSE_INVALID_STATUS'));
 
     expect(prisma.pointOfSaleDailyClose.updateMany).not.toHaveBeenCalled();
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
+  });
+
+  it('blocks cancelling a draft daily close while a cash shift is open', async () => {
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      status: 'DRAFT',
+      sales: [],
+      updatedAt: new Date(),
+    });
+    prisma.cashShift.count.mockResolvedValue(1);
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.cancel('close-1', { version: 1, reason: 'Cancelar por error' }, {
+        id: 'admin-1',
+        role: 'ADMIN',
+      } as never),
+    ).rejects.toThrow(new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS'));
+
+    expect(prisma.pointOfSaleDailyClose.updateMany).not.toHaveBeenCalled();
   });
 
   it('reopens a reviewed daily close to draft', async () => {
@@ -303,6 +329,10 @@ describe('PointOfSaleDailyCloseService', () => {
         where: expect.objectContaining({ status: 'REVIEWED' }),
         data: expect.objectContaining({ status: 'DRAFT' }),
       }),
+    );
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
     );
   });
 
@@ -432,6 +462,10 @@ describe('PointOfSaleDailyCloseService', () => {
           lt: new Date('2026-07-18T06:00:00.000Z'),
         },
         status: 'CONFIRMED',
+        OR: [
+          { pointOfSaleDailyCloseId: null },
+          { pointOfSaleDailyCloseId: { not: 'close-1' } },
+        ],
       },
       data: { pointOfSaleDailyCloseId: 'close-1' },
     });
@@ -771,6 +805,218 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(result.cashDifferenceTotal).toBe(-20);
   });
 
+  it('calcula el efectivo heredado únicamente con movimientos de canal CASH', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [
+        {
+          type: 'CASH_IN',
+          movementChannel: 'TRANSFER',
+          amount: 50,
+          isOpening: false,
+        },
+        {
+          type: 'CASH_OUT',
+          movementChannel: 'CARD',
+          amount: 20,
+          isOpening: false,
+        },
+        {
+          type: 'CASH_IN',
+          movementChannel: 'CASH',
+          amount: 10,
+          isOpening: false,
+        },
+        {
+          type: 'CASH_OUT',
+          movementChannel: 'CASH',
+          amount: 5,
+          isOpening: false,
+        },
+      ],
+      cashShifts: [],
+      sales: [],
+      payments: [],
+      initialCashFund: 100,
+      initialCashIn: 0,
+      initialCashOut: 0,
+      cashCountedTotal: 105,
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close);
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue({
+      ...close,
+      netCashExpected: 105,
+      cashDifferenceTotal: 0,
+    });
+
+    await privateService.recalculate('close-1');
+
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          netCashExpected: 105,
+          cashDifferenceTotal: 0,
+        }),
+      }),
+    );
+  });
+
+  it('does not persist recalculated totals when the final status reread is no longer draft', async () => {
+    const draft = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      cashShifts: [],
+      sales: [],
+      payments: [],
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce({ ...draft, status: 'REVIEWED' });
+
+    await expect(privateService.recalculate('close-1')).rejects.toThrow(
+      new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'),
+    );
+
+    expect(prisma.pointOfSaleDailyClose.update).not.toHaveBeenCalled();
+  });
+
+  it('invalida el sello de validación cuando el recálculo detecta una operación nueva', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      version: 4,
+      lastValidatedAt: new Date('2026-07-17T12:00:00.000Z'),
+      validatedSourceVersion: 4,
+      initialCashFund: 0,
+      initialCashIn: 0,
+      initialCashOut: 0,
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      cashShifts: [],
+      sales: [],
+      payments: [],
+      cashCountedTotal: null,
+      totalInputKg: 0,
+      totalSoldKg: 0,
+      totalRemainingKg: 0,
+      totalShortageKg: 0,
+      totalSurplusKg: 0,
+      scaleReportedKg: 0,
+      scaleDifferenceKg: 0,
+      cashTotal: 0,
+      cardVoucherTotal: 0,
+      transferTotal: 0,
+      expenseTotal: 0,
+      grossSalesTotal: 0,
+      netCashExpected: 0,
+      cashDifferenceTotal: null,
+      purchaseCostTotal: 0,
+      grossProfitTotal: 0,
+      netProfitTotal: 0,
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close);
+    jest.spyOn(privateService, 'syncOperations').mockResolvedValue(true);
+    jest.spyOn(privateService, 'syncDifferences').mockResolvedValue(false);
+    jest
+      .spyOn(privateService, 'reconciliationForClose')
+      .mockResolvedValue({ items: [] });
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue({
+      ...close,
+      version: 5,
+    });
+
+    await privateService.recalculate('close-1', prisma, {
+      invalidateIfChanged: true,
+    });
+
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ version: 4 }),
+        data: expect.objectContaining({
+          version: { increment: 1 },
+          lastValidatedAt: null,
+          validatedSourceVersion: null,
+        }),
+      }),
+    );
+  });
+
+  it('no incrementa la versión en un recálculo de lectura sin cambios', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      version: 4,
+      initialCashFund: 0,
+      initialCashIn: 0,
+      initialCashOut: 0,
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      cashShifts: [],
+      sales: [],
+      payments: [],
+      cashCountedTotal: null,
+      totalInputKg: 0,
+      totalSoldKg: 0,
+      totalRemainingKg: 0,
+      totalShortageKg: 0,
+      totalSurplusKg: 0,
+      scaleReportedKg: 0,
+      scaleDifferenceKg: 0,
+      cashTotal: 0,
+      cardVoucherTotal: 0,
+      transferTotal: 0,
+      expenseTotal: 0,
+      grossSalesTotal: 0,
+      netCashExpected: 0,
+      cashDifferenceTotal: null,
+      purchaseCostTotal: 0,
+      grossProfitTotal: 0,
+      netProfitTotal: 0,
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close);
+    jest.spyOn(privateService, 'syncOperations').mockResolvedValue(false);
+    jest.spyOn(privateService, 'syncDifferences').mockResolvedValue(false);
+    jest
+      .spyOn(privateService, 'reconciliationForClose')
+      .mockResolvedValue({ items: [] });
+
+    await privateService.recalculate('close-1', prisma, {
+      invalidateIfChanged: true,
+    });
+
+    expect(prisma.pointOfSaleDailyClose.update).not.toHaveBeenCalled();
+  });
+
   it('consolidates counted cash and opening funds from closed shifts', async () => {
     const close = {
       id: 'close-1',
@@ -785,14 +1031,22 @@ describe('PointOfSaleDailyCloseService', () => {
       payments: [],
       cashShifts: [
         {
+          id: 'shift-1',
+          terminalId: 'terminal-1',
           status: 'CLOSED',
+          openedAt: new Date('2026-07-17T08:00:00.000Z'),
+          createdAt: new Date('2026-07-17T08:00:00.000Z'),
           initialCashFund: 100,
           initialCashIn: 20,
           initialCashOut: 0,
           cashCountedTotal: 120,
         },
         {
+          id: 'shift-2',
+          terminalId: 'terminal-2',
           status: 'CLOSED',
+          openedAt: new Date('2026-07-17T08:00:00.000Z'),
+          createdAt: new Date('2026-07-17T08:00:00.000Z'),
           initialCashFund: 200,
           initialCashIn: 0,
           initialCashOut: 10,
@@ -822,6 +1076,82 @@ describe('PointOfSaleDailyCloseService', () => {
         data: expect.objectContaining({
           netCashExpected: 310,
           cashCountedTotal: 310,
+          cashDifferenceTotal: 0,
+        }),
+      }),
+    );
+  });
+
+  it('does not double count a rolled-forward fund across sequential shifts', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      sales: [],
+      payments: [
+        {
+          cashShiftId: 'shift-1',
+          paymentMethod: 'CASH',
+          amount: 6000,
+          status: 'APPLIED',
+        },
+        {
+          cashShiftId: 'shift-2',
+          paymentMethod: 'CASH',
+          amount: 200,
+          status: 'APPLIED',
+        },
+      ],
+      cashShifts: [
+        {
+          id: 'shift-1',
+          terminalId: 'terminal-1',
+          status: 'CLOSED',
+          openedAt: new Date('2026-07-17T08:00:00.000Z'),
+          createdAt: new Date('2026-07-17T08:00:00.000Z'),
+          initialCashFund: 0,
+          initialCashIn: 0,
+          initialCashOut: 0,
+          cashCountedTotal: 6000,
+        },
+        {
+          id: 'shift-2',
+          terminalId: 'terminal-1',
+          status: 'CLOSED',
+          openedAt: new Date('2026-07-17T14:00:00.000Z'),
+          createdAt: new Date('2026-07-17T14:00:00.000Z'),
+          initialCashFund: 6000,
+          initialCashIn: 0,
+          initialCashOut: 0,
+          cashCountedTotal: 6200,
+        },
+      ],
+      cashCountedTotal: null,
+      updatedAt: new Date(),
+    };
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(close)
+      .mockResolvedValueOnce(close);
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue({
+      ...close,
+      netCashExpected: 6200,
+      cashCountedTotal: 6200,
+      cashDifferenceTotal: 0,
+    });
+
+    await privateService.recalculate('close-1');
+
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cashTotal: 6200,
+          netCashExpected: 6200,
+          cashCountedTotal: 6200,
           cashDifferenceTotal: 0,
         }),
       }),
@@ -895,6 +1225,7 @@ describe('PointOfSaleDailyCloseService', () => {
         cashDifferenceTotal: null,
       })
       .mockResolvedValueOnce(close);
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await service.validate('close-1', {
       id: 'seller-1',
@@ -905,7 +1236,7 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(result.errors).toContainEqual(
       expect.objectContaining({ code: 'CASH_COUNT_REQUIRED' }),
     );
-    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenLastCalledWith(
+    expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           lastValidationAttemptAt: expect.any(Date),
@@ -932,9 +1263,9 @@ describe('PointOfSaleDailyCloseService', () => {
       scaleDifferenceKg: 0,
       cashDifferenceTotal: 0,
     };
-    jest.spyOn(privateService, 'requireDraft').mockResolvedValue(close);
     jest.spyOn(privateService, 'recalculate').mockResolvedValue(recalculated);
-    prisma.pointOfSaleDailyClose.update.mockResolvedValue(recalculated);
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(recalculated);
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await service.validate('close-1', {
       id: 'seller-1',
@@ -942,7 +1273,7 @@ describe('PointOfSaleDailyCloseService', () => {
     } as never);
 
     expect(result.valid).toBe(true);
-    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+    expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           lastValidationAttemptAt: expect.any(Date),
@@ -950,6 +1281,10 @@ describe('PointOfSaleDailyCloseService', () => {
           validatedSourceVersion: 4,
         }),
       }),
+    );
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
     );
   });
 
@@ -1021,7 +1356,7 @@ describe('PointOfSaleDailyCloseService', () => {
     };
     prisma.pointOfSaleDailyClose.findUnique
       .mockResolvedValueOnce(close)
-      .mockResolvedValueOnce({ version: 3, status: 'DRAFT' })
+      .mockResolvedValueOnce(close)
       .mockResolvedValueOnce({ ...close, version: 4 });
     prisma.dailyCloseDifference.findFirst.mockResolvedValue(difference);
     prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
@@ -1058,6 +1393,10 @@ describe('PointOfSaleDailyCloseService', () => {
         data: expect.objectContaining({ type: 'DIFFERENCE_JUSTIFIED' }),
       }),
     );
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
   });
 
   it('authorizes a justified difference only with the required permission', async () => {
@@ -1077,7 +1416,7 @@ describe('PointOfSaleDailyCloseService', () => {
     };
     prisma.pointOfSaleDailyClose.findUnique
       .mockResolvedValueOnce(close)
-      .mockResolvedValueOnce({ version: 4, status: 'DRAFT' })
+      .mockResolvedValueOnce(close)
       .mockResolvedValueOnce({ ...close, version: 5 });
     prisma.dailyCloseDifference.findFirst.mockResolvedValue(difference);
     prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
@@ -1106,6 +1445,10 @@ describe('PointOfSaleDailyCloseService', () => {
       expect.objectContaining({
         data: expect.objectContaining({ type: 'DIFFERENCE_AUTHORIZED' }),
       }),
+    );
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
     );
   });
 
@@ -1144,7 +1487,7 @@ describe('PointOfSaleDailyCloseService', () => {
         }),
       }),
     );
-    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+    expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ version: { increment: 1 } }),
       }),
@@ -1259,6 +1602,120 @@ describe('PointOfSaleDailyCloseService', () => {
     expect(persistedExpense).toBe(false);
   });
 
+  it.each([
+    {
+      name: 'expense',
+      write: prisma.cashMovement.create,
+      setup: () => undefined,
+      invoke: () =>
+        service.addExpense(
+          'close-1',
+          {
+            cashShiftId: 'shift-1',
+            deviceId: 'device-1',
+            amount: 25,
+            reason: 'Hielo',
+            occurredAt: '2026-07-17T10:00:00.000Z',
+          },
+          { id: 'seller-1', role: 'ADMIN' } as never,
+          'locked-expense',
+        ),
+    },
+    {
+      name: 'cash count',
+      write: prisma.pointOfSaleDailyClose.updateMany,
+      setup: () => undefined,
+      invoke: () =>
+        service.recordCashCount('close-1', { cashCountedTotal: 100 }, {
+          id: 'seller-1',
+          role: 'ADMIN',
+        } as never),
+    },
+    {
+      name: 'refresh',
+      write: prisma.pointOfSaleDailyClose.update,
+      setup: () => undefined,
+      invoke: () =>
+        service.refresh('close-1', {
+          id: 'seller-1',
+          role: 'ADMIN',
+        } as never),
+    },
+    {
+      name: 'scale ticket',
+      write: prisma.scaleTicketReference.create,
+      setup: () => undefined,
+      invoke: () =>
+        service.addScaleTicket(
+          'close-1',
+          {
+            physicalFolio: 'B-100',
+            capturedDate: '2026-07-17',
+            netWeightKg: 10,
+          },
+          { id: 'seller-1', role: 'ADMIN' } as never,
+          'locked-scale-ticket',
+        ),
+    },
+    {
+      name: 'inventory count',
+      write: prisma.dailyCloseInventoryCount.create,
+      setup: () =>
+        prisma.product.findUnique.mockResolvedValue({
+          id: 'product-1',
+          unit: 'KG',
+        }),
+      invoke: () =>
+        service.createInventoryCount(
+          'close-1',
+          {
+            productId: 'product-1',
+            physicalQuantityKg: 10,
+            reason: 'Conteo físico',
+          },
+          { id: 'seller-1', role: 'ADMIN' } as never,
+          'locked-inventory-count',
+        ),
+    },
+  ])(
+    'rejects $name without writing when the under-lock reread is reviewed',
+    async ({ write, setup, invoke }) => {
+      const draft = {
+        id: 'close-1',
+        operationalLocationId: 'loc-1',
+        businessDate: new Date('2026-07-17T00:00:00.000Z'),
+        status: 'DRAFT',
+        lines: [],
+        scaleTicketReferences: [],
+        inventoryMovements: [],
+        cashMovements: [],
+        cashShifts: [],
+        sales: [],
+        payments: [],
+        updatedAt: new Date(),
+      };
+      jest.spyOn(privateService, 'requireDraft').mockResolvedValue(draft);
+      jest
+        .spyOn(privateService, 'projectDetailForRole')
+        .mockImplementation((close: unknown) => Promise.resolve(close));
+      prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue({
+        ...draft,
+        status: 'REVIEWED',
+      });
+      setup();
+
+      await expect(invoke()).rejects.toThrow(
+        new BadRequestException('DAILY_CLOSE_NOT_EDITABLE'),
+      );
+
+      expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        'daily-close-id:close-1',
+      );
+      expect(write).not.toHaveBeenCalled();
+    },
+  );
+
   it('persists an immutable closed snapshot with a payload hash', async () => {
     const current = {
       id: 'close-1',
@@ -1321,6 +1778,260 @@ describe('PointOfSaleDailyCloseService', () => {
         role: 'ADMIN',
       } as never),
     ).rejects.toThrow(new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS'));
+  });
+
+  it('acquires the daily-close lifecycle lock before checking shifts for close', async () => {
+    const current = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'REVIEWED',
+      version: 4,
+      validatedSourceVersion: 4,
+      sales: [],
+      payments: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      scaleTicketReferences: [],
+      inventoryCounts: [],
+      lines: [],
+      updatedAt: new Date(),
+    };
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(current);
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(current);
+    prisma.cashShift.count.mockResolvedValue(1);
+
+    await expect(
+      service.close('close-1', { version: 4 }, {
+        id: 'admin-1',
+        role: 'ADMIN',
+      } as never),
+    ).rejects.toThrow(new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS'));
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
+    expect(prisma.$executeRawUnsafe.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.cashShift.count.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('acquires the daily-close lifecycle lock before review validation', async () => {
+    const current = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      version: 4,
+    };
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(current);
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(current);
+    const validate = jest
+      .spyOn(privateService, 'validateWithin')
+      .mockResolvedValue({ valid: true, close: current });
+    jest.spyOn(privateService, 'transitionWithin').mockResolvedValue({
+      ...current,
+      status: 'REVIEWED',
+      version: 5,
+    });
+
+    await service.review('close-1', { version: 4 }, {
+      id: 'admin-1',
+      role: 'ADMIN',
+    } as never);
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      'daily-close-id:close-1',
+    );
+    expect(prisma.$executeRawUnsafe.mock.invocationCallOrder[0]).toBeLessThan(
+      validate.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('rechaza una revisión obsoleta antes de validar o mutar el cierre', async () => {
+    const current = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      version: 5,
+      lastValidatedAt: new Date('2026-07-17T18:00:00.000Z'),
+      validatedSourceVersion: 5,
+    };
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(current);
+    const validate = jest
+      .spyOn(privateService, 'validateWithin')
+      .mockResolvedValue({ valid: true, close: current });
+    const transition = jest.spyOn(privateService, 'transitionWithin');
+    prisma.pointOfSaleDailyClose.findUnique.mockReset();
+    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(current);
+    prisma.pointOfSaleDailyClose.update.mockReset();
+    prisma.pointOfSaleDailyClose.updateMany.mockReset();
+
+    await expect(
+      service.review('close-1', { version: 4 }, {
+        id: 'admin-1',
+        role: 'ADMIN',
+      } as never),
+    ).rejects.toThrow(new ConflictException('DAILY_CLOSE_VERSION_CONFLICT'));
+
+    expect(validate).not.toHaveBeenCalled();
+    expect(transition).not.toHaveBeenCalled();
+    expect(prisma.pointOfSaleDailyClose.update).not.toHaveBeenCalled();
+    expect(prisma.pointOfSaleDailyClose.updateMany).not.toHaveBeenCalled();
+    expect(current).toMatchObject({
+      status: 'DRAFT',
+      version: 5,
+      lastValidatedAt: new Date('2026-07-17T18:00:00.000Z'),
+      validatedSourceVersion: 5,
+    });
+  });
+
+  it('transiciona a REVIEWED usando la versión posterior a la validación', async () => {
+    const draft = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+      version: 4,
+      initialCashFund: 0,
+      initialCashIn: 0,
+      initialCashOut: 0,
+      lines: [],
+      scaleTicketReferences: [],
+      inventoryMovements: [],
+      cashMovements: [],
+      cashShifts: [],
+      sales: [],
+      payments: [],
+      cashCountedTotal: 0,
+      totalInputKg: 0,
+      totalSoldKg: 0,
+      totalRemainingKg: 0,
+      totalShortageKg: 0,
+      totalSurplusKg: 0,
+      scaleReportedKg: 0,
+      scaleDifferenceKg: 0,
+      cashTotal: 0,
+      cardVoucherTotal: 0,
+      transferTotal: 0,
+      expenseTotal: 0,
+      grossSalesTotal: 0,
+      netCashExpected: 0,
+      cashDifferenceTotal: 0,
+      purchaseCostTotal: 0,
+      grossProfitTotal: 0,
+      netProfitTotal: 0,
+      differences: [],
+      updatedAt: new Date(),
+    };
+    const postValidation = {
+      ...draft,
+      version: 5,
+      lastValidationAttemptAt: new Date(),
+      lastValidatedAt: new Date(),
+      validatedSourceVersion: 5,
+    };
+    const reviewed = { ...postValidation, status: 'REVIEWED', version: 6 };
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(draft);
+    jest
+      .spyOn(privateService, 'projectDetailForRole')
+      .mockImplementation((close: unknown) => Promise.resolve(close));
+    prisma.pointOfSaleDailyClose.findUnique.mockReset();
+    prisma.pointOfSaleDailyClose.update.mockReset();
+    prisma.pointOfSaleDailyClose.updateMany.mockReset();
+    prisma.sale.updateMany.mockReset();
+    prisma.payment.updateMany.mockReset();
+    prisma.inventoryMovement.findMany.mockReset();
+    prisma.inventoryMovement.updateMany.mockReset();
+    prisma.dailyCloseInventoryCount.findMany.mockReset();
+    prisma.dailyCloseDifference.findMany.mockReset();
+    prisma.dailyCloseDifference.upsert.mockReset();
+    prisma.dailyCloseDifference.update.mockReset();
+    prisma.dailyCloseEvent.create.mockReset();
+    prisma.dailyCloseSnapshot.create.mockReset();
+    prisma.inventoryMovement.findMany.mockResolvedValue([]);
+    prisma.dailyCloseInventoryCount.findMany.mockResolvedValue([]);
+    prisma.dailyCloseDifference.findMany.mockResolvedValue([]);
+    prisma.dailyCloseDifference.upsert.mockResolvedValue({});
+    prisma.dailyCloseDifference.update.mockResolvedValue({});
+    prisma.dailyCloseEvent.create.mockResolvedValue({ id: 'event-1' });
+    prisma.dailyCloseSnapshot.create.mockResolvedValue({ id: 'snapshot-1' });
+    prisma.sale.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    prisma.payment.updateMany.mockResolvedValue({ count: 0 });
+    prisma.inventoryMovement.updateMany.mockResolvedValue({ count: 0 });
+    prisma.pointOfSaleDailyClose.findUnique
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(postValidation)
+      .mockResolvedValueOnce(postValidation)
+      .mockResolvedValueOnce(reviewed);
+    prisma.pointOfSaleDailyClose.update.mockResolvedValue(postValidation);
+    prisma.pointOfSaleDailyClose.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.review('close-1', { version: 4 }, {
+      id: 'admin-1',
+      role: 'ADMIN',
+    } as never);
+
+    expect(result).toMatchObject({ status: 'REVIEWED', version: 6 });
+    expect(prisma.pointOfSaleDailyClose.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'close-1', status: 'DRAFT', version: 4 },
+        data: expect.objectContaining({
+          version: { increment: 1 },
+          lastValidatedAt: null,
+          validatedSourceVersion: null,
+        }),
+      }),
+    );
+    expect(prisma.pointOfSaleDailyClose.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 'close-1', version: 5, status: 'DRAFT' },
+      data: expect.objectContaining({
+        status: 'REVIEWED',
+        validatedSourceVersion: 6,
+        version: { increment: 1 },
+      }),
+    });
+  });
+
+  it('returns the reconciliation calculated inside the lifecycle transaction', async () => {
+    const close = {
+      id: 'close-1',
+      operationalLocationId: 'loc-1',
+      businessDate: new Date('2026-07-17T00:00:00.000Z'),
+      status: 'DRAFT',
+    };
+    const recalculated = { ...close, version: 2 };
+    const reconciliation = { closeId: 'close-1', items: [] };
+    jest.spyOn(privateService, 'requireCloseAccess').mockResolvedValue(close);
+    jest
+      .spyOn(privateService, 'requireCloseAccessWithinTransaction')
+      .mockResolvedValue(close);
+    const recalculate = jest
+      .spyOn(privateService, 'recalculate')
+      .mockResolvedValue(recalculated);
+    const reconciliationForClose = jest
+      .spyOn(privateService, 'reconciliationForClose')
+      .mockResolvedValue(reconciliation);
+
+    await expect(
+      service.getReconciliation('close-1', {
+        id: 'admin-1',
+        role: 'ADMIN',
+      } as never),
+    ).resolves.toBe(reconciliation);
+
+    expect(recalculate).toHaveBeenCalledWith('close-1', prisma, {
+      invalidateIfChanged: true,
+    });
+    expect(reconciliationForClose).toHaveBeenCalledWith(recalculated, prisma);
   });
 
   it('projects the closed daily close before returning it', async () => {

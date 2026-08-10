@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
+  CashShiftStatus,
   CashSessionStatus,
   DailyCloseDifferenceScope,
   DailyCloseDifferenceStatus,
@@ -23,6 +24,8 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { calculateCashTerminalState } from '../cash-management/cash-terminal-state';
+import { acquireDailyCloseLifecycleLock } from './daily-close-lifecycle-lock';
 import {
   calculateDailyCloseCost,
   calculateDailyCloseKilos,
@@ -123,6 +126,9 @@ const decreaseMovementTypes = new Set([
 ]);
 type DailyCloseClient = Prisma.TransactionClient | PrismaService;
 type DailyCloseActor = Pick<AuthenticatedUser, 'id' | 'role' | 'permissions'>;
+type RecalculateOptions = {
+  invalidateIfChanged?: boolean;
+};
 type DifferenceDefinition = {
   code: string;
   referenceKey: string;
@@ -229,6 +235,7 @@ export class PointOfSaleDailyCloseService {
             notes: dto.notes?.trim() || null,
           },
         });
+        await acquireDailyCloseLifecycleLock(tx, close.id);
         if (initialCashIn > 0) {
           await tx.cashMovement.create({
             data: {
@@ -343,9 +350,29 @@ export class PointOfSaleDailyCloseService {
           );
           return this.findClose(id, tx);
         }
+        const lockedClose = await this.requireDraftWithinTransaction(
+          tx,
+          id,
+          user,
+        );
+        const lockedShift = await tx.cashShift.findUnique({
+          where: { id: dto.cashShiftId },
+          include: { terminal: true },
+        });
+        if (!lockedShift || lockedShift.pointOfSaleDailyCloseId !== id)
+          throw new BadRequestException('CASH_SHIFT_NOT_FOUND');
+        if (lockedShift.status !== 'OPEN')
+          throw new ConflictException('CASH_SHIFT_NOT_OPEN');
+        if (lockedShift.cashierUserId !== user.id && user.role !== 'ADMIN')
+          throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
+        if (
+          !lockedShift.terminal.isActive ||
+          lockedShift.terminal.deviceId !== dto.deviceId.trim()
+        )
+          throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
         const movement = await tx.cashMovement.create({
           data: {
-            operationalLocationId: close.operationalLocationId,
+            operationalLocationId: lockedClose.operationalLocationId,
             pointOfSaleDailyCloseId: id,
             cashShiftId: shift.id,
             type: 'EXPENSE',
@@ -456,9 +483,14 @@ export class PointOfSaleDailyCloseService {
           );
           return this.findClose(id, tx);
         }
+        const lockedClose = await this.requireDraftWithinTransaction(
+          tx,
+          id,
+          user,
+        );
         const ticket = await tx.scaleTicketReference.create({
           data: {
-            operationalLocationId: close.operationalLocationId,
+            operationalLocationId: lockedClose.operationalLocationId,
             pointOfSaleDailyCloseId: id,
             physicalFolio: dto.physicalFolio.trim(),
             capturedDate,
@@ -527,10 +559,14 @@ export class PointOfSaleDailyCloseService {
     dto: RecordCashCountDto,
     user: AuthenticatedUser,
   ) {
-    await this.requireDraft(id, user);
     const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.pointOfSaleDailyClose.update({
-        where: { id },
+      const current = await this.requireDraftWithinTransaction(tx, id, user);
+      const result = await tx.pointOfSaleDailyClose.updateMany({
+        where: {
+          id,
+          status: PointOfSaleDailyCloseStatus.DRAFT,
+          version: current.version,
+        },
         data: {
           cashCountedTotal: dto.cashCountedTotal,
           version: { increment: 1 },
@@ -538,6 +574,8 @@ export class PointOfSaleDailyCloseService {
           validatedSourceVersion: null,
         },
       });
+      if (result.count !== 1)
+        throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
       const recalculated = await this.recalculate(id, tx);
       await this.createEvent(
         tx,
@@ -557,7 +595,7 @@ export class PointOfSaleDailyCloseService {
     dto: JustifyDailyCloseDifferenceDto,
     user: AuthenticatedUser,
   ) {
-    await this.requireDraft(id, user);
+    await this.requireCloseAccess(id, user);
     const reason = dto.reason.trim();
     const evidence = dto.evidence.trim();
     if (!reason)
@@ -566,12 +604,7 @@ export class PointOfSaleDailyCloseService {
       throw new BadRequestException('DAILY_CLOSE_DIFFERENCE_EVIDENCE_REQUIRED');
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.pointOfSaleDailyClose.findUnique({
-        where: { id },
-        select: { version: true, status: true },
-      });
-      if (!current || current.status !== PointOfSaleDailyCloseStatus.DRAFT)
-        throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+      const current = await this.requireDraftWithinTransaction(tx, id, user);
       const difference = await tx.dailyCloseDifference.findFirst({
         where: { id: differenceId, pointOfSaleDailyCloseId: id },
       });
@@ -632,15 +665,9 @@ export class PointOfSaleDailyCloseService {
       user,
       PERMISSIONS.DAILY_CLOSES_DIFFERENCES_AUTHORIZE,
     );
-    await this.requireDraft(id, user);
-
+    await this.requireCloseAccess(id, user);
     const updated = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.pointOfSaleDailyClose.findUnique({
-        where: { id },
-        select: { version: true, status: true },
-      });
-      if (!current || current.status !== PointOfSaleDailyCloseStatus.DRAFT)
-        throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+      const current = await this.requireDraftWithinTransaction(tx, id, user);
       const difference = await tx.dailyCloseDifference.findFirst({
         where: { id: differenceId, pointOfSaleDailyCloseId: id },
       });
@@ -694,10 +721,21 @@ export class PointOfSaleDailyCloseService {
   }
 
   async getReconciliation(id: string, user: AuthenticatedUser) {
-    let close = await this.requireCloseAccess(id, user);
-    if (close.status === 'DRAFT')
-      close = await this.prisma.$transaction((tx) => this.recalculate(id, tx));
-    return this.reconciliationForClose(close);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const current = await this.requireCloseAccessWithinTransaction(
+          tx,
+          id,
+          user,
+        );
+        const snapshot =
+          current.status === PointOfSaleDailyCloseStatus.DRAFT
+            ? await this.recalculate(id, tx, { invalidateIfChanged: true })
+            : current;
+        return this.reconciliationForClose(snapshot, tx);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 
   async createInventoryCount(
@@ -706,7 +744,7 @@ export class PointOfSaleDailyCloseService {
     user: AuthenticatedUser,
     idempotencyKey: string,
   ) {
-    await this.requireDraft(id, user);
+    await this.requireCloseAccess(id, user);
     this.assertCountQuantities(
       dto.physicalQuantityKg,
       dto.physicalQuantityPieces,
@@ -745,6 +783,7 @@ export class PointOfSaleDailyCloseService {
           );
           return this.findClose(id, tx);
         }
+        await this.requireDraftWithinTransaction(tx, id, user);
         const count = await tx.dailyCloseInventoryCount.create({
           data: {
             pointOfSaleDailyCloseId: id,
@@ -806,7 +845,7 @@ export class PointOfSaleDailyCloseService {
     dto: UpdateDailyCloseInventoryCountDto,
     user: AuthenticatedUser,
   ) {
-    await this.requireDraft(id, user);
+    await this.requireCloseAccess(id, user);
     if (
       dto.physicalQuantityKg === undefined &&
       dto.physicalQuantityPieces === undefined &&
@@ -837,6 +876,19 @@ export class PointOfSaleDailyCloseService {
       true,
     );
     const updated = await this.prisma.$transaction(async (tx) => {
+      await this.requireDraftWithinTransaction(tx, id, user);
+      const lockedCount = await tx.dailyCloseInventoryCount.findFirst({
+        where: { id: countId, pointOfSaleDailyCloseId: id },
+        select: { id: true, product: { select: { unit: true } } },
+      });
+      if (!lockedCount)
+        throw new NotFoundException('DAILY_CLOSE_INVENTORY_COUNT_NOT_FOUND');
+      this.assertProductCountUnit(
+        lockedCount.product.unit,
+        dto.physicalQuantityKg,
+        dto.physicalQuantityPieces,
+        true,
+      );
       await tx.dailyCloseInventoryCount.update({
         where: { id: countId },
         data: {
@@ -869,7 +921,7 @@ export class PointOfSaleDailyCloseService {
     countId: string,
     user: AuthenticatedUser,
   ) {
-    await this.requireDraft(id, user);
+    await this.requireCloseAccess(id, user);
     const count = await this.prisma.dailyCloseInventoryCount.findFirst({
       where: { id: countId, pointOfSaleDailyCloseId: id },
       select: { id: true },
@@ -877,6 +929,13 @@ export class PointOfSaleDailyCloseService {
     if (!count)
       throw new NotFoundException('DAILY_CLOSE_INVENTORY_COUNT_NOT_FOUND');
     const updated = await this.prisma.$transaction(async (tx) => {
+      await this.requireDraftWithinTransaction(tx, id, user);
+      const lockedCount = await tx.dailyCloseInventoryCount.findFirst({
+        where: { id: countId, pointOfSaleDailyCloseId: id },
+        select: { id: true },
+      });
+      if (!lockedCount)
+        throw new NotFoundException('DAILY_CLOSE_INVENTORY_COUNT_NOT_FOUND');
       await tx.dailyCloseInventoryCount.delete({ where: { id: countId } });
       await this.bump(tx, id);
       const recalculated = await this.recalculate(id, tx);
@@ -893,10 +952,10 @@ export class PointOfSaleDailyCloseService {
   }
 
   async validate(id: string, user: AuthenticatedUser) {
-    await this.requireDraft(id, user);
-    const result = await this.prisma.$transaction((tx) =>
-      this.validateWithin(id, user, tx),
-    );
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.requireDraftWithinTransaction(tx, id, user);
+      return this.validateWithin(id, user, tx);
+    });
     return {
       ...result,
       close: await this.projectDetailForRole(result.close, user),
@@ -911,7 +970,9 @@ export class PointOfSaleDailyCloseService {
     const close = await this.findClose(id, tx);
     if (close.status !== 'DRAFT')
       throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
-    const updated = await this.recalculate(id, tx);
+    const updated = await this.recalculate(id, tx, {
+      invalidateIfChanged: true,
+    });
     const errors: Array<{ code: string; message: string }> = [];
     if (
       updated.lines.some(
@@ -983,22 +1044,34 @@ export class PointOfSaleDailyCloseService {
             },
           ].filter((item) => item.value !== 0);
     const attemptedAt = new Date();
-    const validated = await tx.pointOfSaleDailyClose.update({
+    const validationData =
+      errors.length === 0
+        ? {
+            lastValidationAttemptAt: attemptedAt,
+            lastValidatedAt: attemptedAt,
+            validatedSourceVersion: updated.version,
+          }
+        : {
+            lastValidationAttemptAt: attemptedAt,
+            lastValidatedAt: null,
+            validatedSourceVersion: null,
+          };
+    const validationUpdate = await tx.pointOfSaleDailyClose.updateMany({
+      where: {
+        id,
+        status: PointOfSaleDailyCloseStatus.DRAFT,
+        version: updated.version,
+      },
+      data: validationData,
+    });
+    if (validationUpdate.count !== 1)
+      throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
+    const validated = await tx.pointOfSaleDailyClose.findUnique({
       where: { id },
-      data:
-        errors.length === 0
-          ? {
-              lastValidationAttemptAt: attemptedAt,
-              lastValidatedAt: attemptedAt,
-              validatedSourceVersion: updated.version,
-            }
-          : {
-              lastValidationAttemptAt: attemptedAt,
-              lastValidatedAt: null,
-              validatedSourceVersion: null,
-            },
       include: detailInclude,
     });
+    if (!validated || validated.status !== PointOfSaleDailyCloseStatus.DRAFT)
+      throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
     return {
       close: validated,
       valid: errors.length === 0,
@@ -1022,22 +1095,26 @@ export class PointOfSaleDailyCloseService {
     this.admin(user);
     await this.requireCloseAccess(id, user);
     const transitioned = await this.prisma.$transaction(async (tx) => {
+      const current = await this.requireDraftWithinTransaction(tx, id, user);
+      if (current.version !== dto.version)
+        throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
       const validation = await this.validateWithin(id, user, tx);
       if (!validation.valid)
         throw new BadRequestException({
           message: 'DAILY_CLOSE_VALIDATION_FAILED',
           errors: validation.errors,
         });
+      const validatedVersion = validation.close.version;
       return this.transitionWithin(
         tx,
         id,
-        dto.version,
+        validatedVersion,
         'REVIEWED',
         {
           status: 'REVIEWED',
           reviewedByUserId: user.id,
           reviewedAt: new Date(),
-          validatedSourceVersion: dto.version + 1,
+          validatedSourceVersion: validatedVersion + 1,
         },
         user,
       );
@@ -1065,6 +1142,7 @@ export class PointOfSaleDailyCloseService {
     user: DailyCloseActor,
   ) {
     this.admin(user);
+    await acquireDailyCloseLifecycleLock(tx, id);
     const current = await this.findClose(id, tx);
     const openShiftCount = await tx.cashShift.count({
       where: { pointOfSaleDailyCloseId: id, status: 'OPEN' },
@@ -1139,6 +1217,7 @@ export class PointOfSaleDailyCloseService {
     reason: string,
   ) {
     this.admin(user);
+    await acquireDailyCloseLifecycleLock(tx, id);
     return this.transitionWithin(
       tx,
       id,
@@ -1159,21 +1238,42 @@ export class PointOfSaleDailyCloseService {
   }
 
   async refresh(id: string, user: AuthenticatedUser) {
-    await this.requireDraft(id, user);
     return this.projectDetailForRole(
-      await this.prisma.$transaction((tx) => this.recalculate(id, tx)),
+      await this.prisma.$transaction(async (tx) => {
+        await this.requireDraftWithinTransaction(tx, id, user);
+        return this.recalculate(id, tx, { invalidateIfChanged: true });
+      }),
       user,
     );
+  }
+
+  async recalculateAfterDraftMutation(
+    id: string,
+    client: Prisma.TransactionClient,
+  ) {
+    await acquireDailyCloseLifecycleLock(client, id);
+    const updated = await client.pointOfSaleDailyClose.updateMany({
+      where: { id, status: PointOfSaleDailyCloseStatus.DRAFT },
+      data: {
+        version: { increment: 1 },
+        lastValidatedAt: null,
+        validatedSourceVersion: null,
+      },
+    });
+    if (updated.count !== 1)
+      throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+    return this.recalculate(id, client);
   }
 
   private async recalculate(
     id: string,
     client: DailyCloseClient = this.prisma,
+    options: RecalculateOptions = {},
   ) {
     let close = await this.findClose(id, client);
     if (close.status !== 'DRAFT') return this.withCostQuality(close);
     const { from, to } = this.operationalDay(close.businessDate);
-    await this.syncOperations(
+    const operationsChanged = await this.syncOperations(
       client,
       close.id,
       close.operationalLocationId,
@@ -1181,6 +1281,8 @@ export class PointOfSaleDailyCloseService {
       to,
     );
     close = await this.findClose(id, client);
+    if (close.status !== PointOfSaleDailyCloseStatus.DRAFT)
+      throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
     const sum = (values: Array<Prisma.Decimal | number | null>, fallback = 0) =>
       values.reduce<number>(
         (total, value) => total + Number(value ?? fallback),
@@ -1246,26 +1348,18 @@ export class PointOfSaleDailyCloseService {
         )
         .map((movement) => movement.amount),
     );
-    const activeCashShifts = (close.cashShifts ?? []).filter(
-      (shift) => shift.status !== 'CANCELLED',
-    );
-    const hasCashShifts = activeCashShifts.length > 0;
-    const openingCash = hasCashShifts
-      ? sum(
-          activeCashShifts.map(
-            (shift) =>
-              Number(shift.initialCashFund) +
-              Number(shift.initialCashIn) -
-              Number(shift.initialCashOut),
-          ),
-        )
-      : Number(close.initialCashFund ?? 0) +
-        Number(close.initialCashIn ?? 0) -
-        Number(close.initialCashOut ?? 0);
+    const terminalState = calculateCashTerminalState({
+      shifts: close.cashShifts ?? [],
+      payments: close.payments,
+      movements: close.cashMovements,
+    });
     const cashInTotal = sum(
       close.cashMovements
         .filter(
-          (movement) => movement.type === 'CASH_IN' && !movement.isOpening,
+          (movement) =>
+            movement.type === 'CASH_IN' &&
+            movement.movementChannel === 'CASH' &&
+            !movement.isOpening,
         )
         .map((movement) => movement.amount),
     );
@@ -1274,18 +1368,25 @@ export class PointOfSaleDailyCloseService {
         .filter(
           (movement) =>
             (movement.type === 'CASH_OUT' || movement.type === 'ADJUSTMENT') &&
+            movement.movementChannel === 'CASH' &&
             !movement.isOpening,
         )
         .map((movement) => movement.amount),
     );
     const reconciliation = await this.reconciliationForClose(close, client);
-    const cashCountedTotal = hasCashShifts
-      ? activeCashShifts.every(
-          (shift) =>
-            shift.status === 'CLOSED' && shift.cashCountedTotal !== null,
-        )
-        ? sum(activeCashShifts.map((shift) => shift.cashCountedTotal))
-        : null
+    const legacyCashExpected =
+      Number(close.initialCashFund ?? 0) +
+      Number(close.initialCashIn ?? 0) -
+      Number(close.initialCashOut ?? 0) +
+      cashTotal +
+      cashInTotal -
+      cashOutTotal -
+      cashExpenseTotal;
+    const cashExpected = terminalState.hasShiftRecords
+      ? terminalState.expectedCash
+      : legacyCashExpected;
+    const cashCountedTotal = terminalState.hasShiftRecords
+      ? terminalState.cashCountedTotal
       : close.cashCountedTotal;
     const data = {
       totalInputKg: kilos.totalInputKg,
@@ -1309,32 +1410,21 @@ export class PointOfSaleDailyCloseService {
       transferTotal,
       expenseTotal,
       grossSalesTotal,
-      netCashExpected:
-        openingCash + cashTotal + cashInTotal - cashOutTotal - cashExpenseTotal,
+      netCashExpected: cashExpected,
       cashCountedTotal,
       cashDifferenceTotal:
         cashCountedTotal === null
           ? null
-          : Number(cashCountedTotal) -
-            (openingCash +
-              cashTotal +
-              cashInTotal -
-              cashOutTotal -
-              cashExpenseTotal),
+          : Number(cashCountedTotal) - cashExpected,
       purchaseCostTotal,
       grossProfitTotal: grossSalesTotal - purchaseCostTotal,
       netProfitTotal: grossSalesTotal - purchaseCostTotal - expenseTotal,
     };
-    await this.syncDifferences(
+    const differencesChanged = await this.syncDifferences(
       client,
       id,
       this.buildDifferenceDefinitions({
-        cashExpected:
-          openingCash +
-          cashTotal +
-          cashInTotal -
-          cashOutTotal -
-          cashExpenseTotal,
+        cashExpected,
         cashRecorded:
           cashCountedTotal === null ? null : Number(cashCountedTotal),
         scaleExpected: kilos.totalSoldKg,
@@ -1342,12 +1432,48 @@ export class PointOfSaleDailyCloseService {
         inventory: reconciliation.items,
       }),
     );
+    const recalculatedDataChanged = Object.entries(data).some(
+      ([key, value]) => {
+        if (!Object.prototype.hasOwnProperty.call(close, key)) return false;
+        return !this.sameRecalculatedValue(
+          (close as unknown as Record<string, unknown>)[key],
+          value,
+        );
+      },
+    );
+    const changed =
+      operationsChanged || differencesChanged || recalculatedDataChanged;
+    if (options.invalidateIfChanged && !changed)
+      return { ...close, costQuality, dataAsOf: close.updatedAt };
+
     const updated = await client.pointOfSaleDailyClose.update({
-      where: { id },
-      data,
+      where: {
+        id,
+        status: PointOfSaleDailyCloseStatus.DRAFT,
+        version: close.version,
+      },
+      data: options.invalidateIfChanged
+        ? {
+            ...data,
+            version: { increment: 1 },
+            lastValidatedAt: null,
+            validatedSourceVersion: null,
+          }
+        : data,
       include: detailInclude,
     });
     return { ...updated, costQuality, dataAsOf: updated.updatedAt };
+  }
+
+  private sameRecalculatedValue(left: unknown, right: unknown): boolean {
+    if (
+      left === null ||
+      left === undefined ||
+      right === null ||
+      right === undefined
+    )
+      return left === right;
+    return Number(left) === Number(right);
   }
 
   private buildDifferenceDefinitions(input: {
@@ -1440,6 +1566,7 @@ export class PointOfSaleDailyCloseService {
         (definition) => `${definition.scope}:${definition.referenceKey}`,
       ),
     );
+    let changed = false;
 
     for (const definition of definitions) {
       const existing = previous.find(
@@ -1456,47 +1583,50 @@ export class PointOfSaleDailyCloseService {
         definition.differenceValue > 0
           ? DailyCloseDifferenceType.SURPLUS
           : DailyCloseDifferenceType.SHORTAGE;
-      await client.dailyCloseDifference.upsert({
-        where: {
-          pointOfSaleDailyCloseId_scope_referenceKey: {
-            pointOfSaleDailyCloseId: closeId,
-            scope: definition.scope,
-            referenceKey: definition.referenceKey,
+      if (!existing || valuesChanged) {
+        changed = true;
+        await client.dailyCloseDifference.upsert({
+          where: {
+            pointOfSaleDailyCloseId_scope_referenceKey: {
+              pointOfSaleDailyCloseId: closeId,
+              scope: definition.scope,
+              referenceKey: definition.referenceKey,
+            },
           },
-        },
-        create: {
-          pointOfSaleDailyCloseId: closeId,
-          code: definition.code,
-          referenceKey: definition.referenceKey,
-          scope: definition.scope,
-          unit: definition.unit,
-          expectedValue: definition.expectedValue,
-          recordedValue: definition.recordedValue,
-          differenceValue: definition.differenceValue,
-          differenceType,
-          productId: definition.productId,
-        },
-        update: {
-          code: definition.code,
-          unit: definition.unit,
-          expectedValue: definition.expectedValue,
-          recordedValue: definition.recordedValue,
-          differenceValue: definition.differenceValue,
-          differenceType,
-          productId: definition.productId,
-          ...(valuesChanged
-            ? {
-                status: DailyCloseDifferenceStatus.PENDING_JUSTIFICATION,
-                reason: null,
-                evidence: null,
-                justifiedByUserId: null,
-                justifiedAt: null,
-                authorizedByUserId: null,
-                authorizedAt: null,
-              }
-            : {}),
-        },
-      });
+          create: {
+            pointOfSaleDailyCloseId: closeId,
+            code: definition.code,
+            referenceKey: definition.referenceKey,
+            scope: definition.scope,
+            unit: definition.unit,
+            expectedValue: definition.expectedValue,
+            recordedValue: definition.recordedValue,
+            differenceValue: definition.differenceValue,
+            differenceType,
+            productId: definition.productId,
+          },
+          update: {
+            code: definition.code,
+            unit: definition.unit,
+            expectedValue: definition.expectedValue,
+            recordedValue: definition.recordedValue,
+            differenceValue: definition.differenceValue,
+            differenceType,
+            productId: definition.productId,
+            ...(valuesChanged
+              ? {
+                  status: DailyCloseDifferenceStatus.PENDING_JUSTIFICATION,
+                  reason: null,
+                  evidence: null,
+                  justifiedByUserId: null,
+                  justifiedAt: null,
+                  authorizedByUserId: null,
+                  authorizedAt: null,
+                }
+              : {}),
+          },
+        });
+      }
     }
 
     for (const difference of previous) {
@@ -1504,12 +1634,14 @@ export class PointOfSaleDailyCloseService {
         !activeKeys.has(`${difference.scope}:${difference.referenceKey}`) &&
         Number(difference.differenceValue) !== 0
       ) {
+        changed = true;
         await client.dailyCloseDifference.update({
           where: { id: difference.id },
           data: { differenceValue: 0 },
         });
       }
     }
+    return changed;
   }
 
   private async reconciliationForClose(
@@ -1740,6 +1872,29 @@ export class PointOfSaleDailyCloseService {
       throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
     return close;
   }
+
+  private async requireCloseAccessWithinTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    user: AuthenticatedUser,
+  ) {
+    await acquireDailyCloseLifecycleLock(tx, id);
+    const close = await this.findClose(id, tx);
+    await this.assertLocationAccess(close.operationalLocationId, user, tx);
+    return close;
+  }
+
+  private async requireDraftWithinTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    user: AuthenticatedUser,
+  ) {
+    const close = await this.requireCloseAccessWithinTransaction(tx, id, user);
+    if (close.status !== PointOfSaleDailyCloseStatus.DRAFT)
+      throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+    return close;
+  }
+
   private async syncOperations(
     tx: DailyCloseClient,
     closeId: string,
@@ -1747,7 +1902,7 @@ export class PointOfSaleDailyCloseService {
     from: Date,
     to: Date,
   ) {
-    await tx.sale.updateMany({
+    const detachedSales = await tx.sale.updateMany({
       where: {
         pointOfSaleDailyCloseId: closeId,
         NOT: {
@@ -1758,7 +1913,7 @@ export class PointOfSaleDailyCloseService {
       },
       data: { pointOfSaleDailyCloseId: null },
     });
-    await tx.payment.updateMany({
+    const detachedPayments = await tx.payment.updateMany({
       where: {
         pointOfSaleDailyCloseId: closeId,
         NOT: {
@@ -1770,15 +1925,19 @@ export class PointOfSaleDailyCloseService {
       },
       data: { pointOfSaleDailyCloseId: null },
     });
-    await tx.sale.updateMany({
+    const attachedSales = await tx.sale.updateMany({
       where: {
         locationId,
         createdAt: { gte: from, lt: to },
         status: 'CONFIRMED',
+        OR: [
+          { pointOfSaleDailyCloseId: null },
+          { pointOfSaleDailyCloseId: { not: closeId } },
+        ],
       },
       data: { pointOfSaleDailyCloseId: closeId },
     });
-    await tx.payment.updateMany({
+    const attachedPayments = await tx.payment.updateMany({
       where: {
         operationalLocationId: locationId,
         paidAt: { gte: from, lt: to },
@@ -1788,7 +1947,7 @@ export class PointOfSaleDailyCloseService {
       },
       data: { pointOfSaleDailyCloseId: closeId },
     });
-    await tx.inventoryMovement.updateMany({
+    const attachedInventoryMovements = await tx.inventoryMovement.updateMany({
       where: {
         locationId,
         createdAt: { gte: from, lt: to },
@@ -1797,16 +1956,25 @@ export class PointOfSaleDailyCloseService {
       },
       data: { pointOfSaleDailyCloseId: closeId },
     });
+    return [
+      detachedSales,
+      detachedPayments,
+      attachedSales,
+      attachedPayments,
+      attachedInventoryMovements,
+    ].some((result) => result.count > 0);
   }
   private async bump(tx: DailyCloseClient, id: string) {
-    await tx.pointOfSaleDailyClose.update({
-      where: { id },
+    const updated = await tx.pointOfSaleDailyClose.updateMany({
+      where: { id, status: PointOfSaleDailyCloseStatus.DRAFT },
       data: {
         version: { increment: 1 },
         lastValidatedAt: null,
         validatedSourceVersion: null,
       },
     });
+    if (updated.count !== 1)
+      throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
   }
   private async transition(
     id: string,
@@ -1815,9 +1983,10 @@ export class PointOfSaleDailyCloseService {
     data: Prisma.PointOfSaleDailyCloseUncheckedUpdateInput,
     user: DailyCloseActor,
   ) {
-    return this.prisma.$transaction((tx) =>
-      this.transitionWithin(tx, id, version, target, data, user),
-    );
+    return this.prisma.$transaction(async (tx) => {
+      await acquireDailyCloseLifecycleLock(tx, id);
+      return this.transitionWithin(tx, id, version, target, data, user);
+    });
   }
   private async transitionWithin(
     tx: Prisma.TransactionClient,
@@ -1830,6 +1999,13 @@ export class PointOfSaleDailyCloseService {
     const current = await this.findClose(id, tx);
     if (!dailyCloseTransitions[current.status].includes(target))
       throw new BadRequestException('DAILY_CLOSE_INVALID_STATUS');
+    if (target === PointOfSaleDailyCloseStatus.CANCELLED) {
+      const openShiftCount = await tx.cashShift.count({
+        where: { pointOfSaleDailyCloseId: id, status: CashShiftStatus.OPEN },
+      });
+      if (openShiftCount > 0)
+        throw new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS');
+    }
     const result = await tx.pointOfSaleDailyClose.updateMany({
       where: { id, version, status: current.status },
       data: { ...data, version: { increment: 1 } },
@@ -1979,9 +2155,12 @@ export class PointOfSaleDailyCloseService {
   private jsonPayload(value: unknown): Prisma.InputJsonValue {
     return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }
-  private async locationScope(user: AuthenticatedUser): Promise<string | null> {
+  private async locationScope(
+    user: AuthenticatedUser,
+    client: DailyCloseClient = this.prisma,
+  ): Promise<string | null> {
     if (user.role === 'ADMIN') return null;
-    const actor = await this.prisma.user.findUnique({
+    const actor = await client.user.findUnique({
       where: { id: user.id },
       select: { operationalLocationId: true, isActive: true },
     });
@@ -1992,8 +2171,9 @@ export class PointOfSaleDailyCloseService {
   private async assertLocationAccess(
     locationId: string,
     user: AuthenticatedUser,
+    client: DailyCloseClient = this.prisma,
   ) {
-    const allowedLocationId = await this.locationScope(user);
+    const allowedLocationId = await this.locationScope(user, client);
     if (allowedLocationId && allowedLocationId !== locationId)
       throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
   }

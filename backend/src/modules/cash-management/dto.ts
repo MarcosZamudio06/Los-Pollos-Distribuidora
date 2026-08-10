@@ -64,6 +64,11 @@ export class CloseCashShiftDto {
   @IsOptional() @IsString() @IsNotEmpty() administrativeReason?: string;
 }
 
+export class ReopenCashShiftDto {
+  @IsString() @IsNotEmpty() deviceId!: string;
+  @IsString() @IsNotEmpty() password!: string;
+}
+
 export class CreateCashShiftMovementDto {
   @IsString() @IsNotEmpty() deviceId!: string;
   @IsEnum(CashMovementType) type!: CashMovementType;

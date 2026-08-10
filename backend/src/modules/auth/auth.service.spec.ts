@@ -229,6 +229,19 @@ describe('AuthService persistent sessions', () => {
     );
   });
 
+  it('verifies a password for the supplied authenticated principal without changing sessions', async () => {
+    const { service, state } = createService();
+
+    await expect(
+      service.verifyPassword('user-1', 'valid-password'),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      service.verifyPassword('user-1', 'wrong-password'),
+    ).rejects.toThrow('Invalid credentials');
+    expect(state.session).toBeNull();
+  });
+
   it('rejects tokens that do not reference a persistent session', async () => {
     const { jwtService, service } = createService();
     jwtService.verifyAsync.mockResolvedValueOnce({

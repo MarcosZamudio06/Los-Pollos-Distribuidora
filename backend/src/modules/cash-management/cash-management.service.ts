@@ -15,7 +15,10 @@ import {
 import { createHash, randomInt } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { PERMISSIONS } from '../../common/authorization/permissions';
+import { AuthService } from '../auth/auth.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { acquireDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
 import {
   ActivateMigratedCashTerminalDto,
   CloseCashShiftDto,
@@ -24,6 +27,7 @@ import {
   ListCashTerminalQueryDto,
   OpenCashShiftDto,
   RequestCashTerminalActivationDto,
+  ReopenCashShiftDto,
   UpdateCashTerminalDto,
 } from './dto';
 
@@ -58,7 +62,11 @@ const terminalActivationTtlMs = 15 * 60 * 1000;
 
 @Injectable()
 export class CashManagementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dailyCloseService: PointOfSaleDailyCloseService,
+    private readonly authService: AuthService,
+  ) {}
 
   async createTerminal(dto: CreateCashTerminalDto, user: AuthenticatedUser) {
     this.requirePermission(user, PERMISSIONS.CASH_TERMINALS_REASSIGN);
@@ -339,10 +347,20 @@ export class CashManagementService {
             select: { id: true, status: true },
           }));
 
+        await acquireDailyCloseLifecycleLock(tx, dailyClose.id);
+        await this.assertDailyCloseEditable(tx, dailyClose.id);
+        const lockedTerminal = await this.assertTerminalAuthorization(
+          tx,
+          dto.terminalId,
+          dto.deviceId,
+          user,
+          terminal.operationalLocationId,
+        );
+
         const shift = await tx.cashShift.create({
           data: {
-            terminalId: terminal.id,
-            operationalLocationId: terminal.operationalLocationId,
+            terminalId: lockedTerminal.id,
+            operationalLocationId: lockedTerminal.operationalLocationId,
             pointOfSaleDailyCloseId: dailyClose.id,
             cashierUserId: user.id,
             businessDate,
@@ -358,14 +376,14 @@ export class CashManagementService {
         if (initialCashIn > 0)
           await tx.cashMovement.create({
             data: {
-              operationalLocationId: terminal.operationalLocationId,
+              operationalLocationId: lockedTerminal.operationalLocationId,
               pointOfSaleDailyCloseId: dailyClose.id,
               cashShiftId: shift.id,
               type: 'CASH_IN',
               movementChannel: 'CASH',
               amount: initialCashIn,
               reason: 'Depósito inicial de apertura',
-              reference: terminal.code,
+              reference: lockedTerminal.code,
               isOpening: true,
               occurredAt: openedAt,
               userId: user.id,
@@ -378,14 +396,14 @@ export class CashManagementService {
         if (initialCashOut > 0)
           await tx.cashMovement.create({
             data: {
-              operationalLocationId: terminal.operationalLocationId,
+              operationalLocationId: lockedTerminal.operationalLocationId,
               pointOfSaleDailyCloseId: dailyClose.id,
               cashShiftId: shift.id,
               type: 'CASH_OUT',
               movementChannel: 'CASH',
               amount: initialCashOut,
               reason: 'Retiro inicial de apertura',
-              reference: terminal.code,
+              reference: lockedTerminal.code,
               isOpening: true,
               occurredAt: openedAt,
               userId: user.id,
@@ -395,6 +413,10 @@ export class CashManagementService {
               ),
             },
           });
+        await this.dailyCloseService.recalculateAfterDraftMutation(
+          dailyClose.id,
+          tx,
+        );
         return shift;
       });
     } catch (error) {
@@ -441,6 +463,29 @@ export class CashManagementService {
           if (shift.terminal.deviceId !== dto.deviceId.trim())
             throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
         }
+        await acquireDailyCloseLifecycleLock(tx, shift.pointOfSaleDailyCloseId);
+        await this.assertDailyCloseEditable(tx, shift.pointOfSaleDailyCloseId);
+        const lockedShift = await tx.cashShift.findUnique({
+          where: { id },
+          include: { terminal: true },
+        });
+        if (!lockedShift) throw new NotFoundException('CASH_SHIFT_NOT_FOUND');
+        await this.assertActiveCashier(
+          tx,
+          user,
+          lockedShift.operationalLocationId,
+        );
+        if (lockedShift.status !== CashShiftStatus.OPEN)
+          throw new ConflictException('CASH_SHIFT_NOT_OPEN');
+        if (!isAdministrativeClose) {
+          if (lockedShift.cashierUserId !== user.id && user.role !== 'ADMIN')
+            throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
+          if (
+            !lockedShift.terminal.isActive ||
+            lockedShift.terminal.deviceId !== dto.deviceId?.trim()
+          )
+            throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
+        }
         const closedAt = new Date();
         const transition = await tx.cashShift.updateMany({
           where: { id, status: CashShiftStatus.OPEN },
@@ -463,22 +508,37 @@ export class CashManagementService {
             _sum: { amount: true },
           }),
           tx.cashMovement.aggregate({
-            where: { cashShiftId: id, type: 'CASH_IN', isOpening: false },
+            where: {
+              cashShiftId: id,
+              type: 'CASH_IN',
+              movementChannel: 'CASH',
+              isOpening: false,
+            },
             _sum: { amount: true },
           }),
           tx.cashMovement.aggregate({
-            where: { cashShiftId: id, type: 'CASH_OUT', isOpening: false },
+            where: {
+              cashShiftId: id,
+              type: { in: ['CASH_OUT', 'ADJUSTMENT'] },
+              movementChannel: 'CASH',
+              isOpening: false,
+            },
             _sum: { amount: true },
           }),
           tx.cashMovement.aggregate({
-            where: { cashShiftId: id, type: 'EXPENSE' },
+            where: {
+              cashShiftId: id,
+              type: 'EXPENSE',
+              movementChannel: 'CASH',
+              isOpening: false,
+            },
             _sum: { amount: true },
           }),
         ]);
         const expected =
-          this.money(shift.initialCashFund) +
-          this.money(shift.initialCashIn) -
-          this.money(shift.initialCashOut) +
+          this.money(lockedShift.initialCashFund) +
+          this.money(lockedShift.initialCashIn) -
+          this.money(lockedShift.initialCashOut) +
           this.money(cashPayments._sum.amount) +
           this.money(cashIn._sum.amount) -
           this.money(cashOut._sum.amount) -
@@ -498,10 +558,10 @@ export class CashManagementService {
         });
         await tx.dailyCloseEvent.create({
           data: {
-            pointOfSaleDailyCloseId: shift.pointOfSaleDailyCloseId,
+            pointOfSaleDailyCloseId: lockedShift.pointOfSaleDailyCloseId,
             type: DailyCloseEventType.CASH_SHIFT_CLOSED,
             payload: {
-              cashShiftId: shift.id,
+              cashShiftId: lockedShift.id,
               closeMode: isAdministrativeClose
                 ? CashShiftCloseMode.ADMINISTRATIVE
                 : CashShiftCloseMode.CASHIER,
@@ -512,7 +572,112 @@ export class CashManagementService {
             createdByUserId: user.id,
           },
         });
+        await this.dailyCloseService.recalculateAfterDraftMutation(
+          lockedShift.pointOfSaleDailyCloseId,
+          tx,
+        );
         return closed;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async reopenShift(
+    id: string,
+    dto: ReopenCashShiftDto,
+    user: AuthenticatedUser,
+  ) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const shift = await tx.cashShift.findUnique({
+          where: { id },
+          include: { terminal: true },
+        });
+        if (!shift) throw new NotFoundException('CASH_SHIFT_NOT_FOUND');
+
+        await acquireDailyCloseLifecycleLock(tx, shift.pointOfSaleDailyCloseId);
+        await this.assertDailyCloseEditable(tx, shift.pointOfSaleDailyCloseId);
+
+        const lockedShift = await tx.cashShift.findUnique({
+          where: { id },
+          include: { terminal: true },
+        });
+        if (!lockedShift) throw new NotFoundException('CASH_SHIFT_NOT_FOUND');
+        if (lockedShift.status === CashShiftStatus.OPEN)
+          throw new ConflictException('CASH_SHIFT_ALREADY_OPEN');
+        if (lockedShift.status === CashShiftStatus.CANCELLED)
+          throw new ConflictException('CASH_SHIFT_CANCELLED');
+        if (lockedShift.status !== CashShiftStatus.CLOSED)
+          throw new ConflictException('CASH_SHIFT_NOT_CLOSED');
+
+        await this.assertActiveCashier(
+          tx,
+          user,
+          lockedShift.operationalLocationId,
+        );
+        if (lockedShift.cashierUserId !== user.id)
+          throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
+        if (!dto.deviceId.trim())
+          throw new BadRequestException('CASH_TERMINAL_DEVICE_REQUIRED');
+        if (
+          !lockedShift.terminal.isActive ||
+          lockedShift.terminal.deviceId !== dto.deviceId.trim()
+        )
+          throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
+
+        const anotherOpenShift = await tx.cashShift.findFirst({
+          where: {
+            terminalId: lockedShift.terminalId,
+            status: CashShiftStatus.OPEN,
+            id: { not: id },
+          },
+          select: { id: true },
+        });
+        if (anotherOpenShift)
+          throw new ConflictException('CASH_SHIFT_ALREADY_OPEN');
+
+        await this.authService.verifyPassword(user.id, dto.password);
+
+        const transition = await tx.cashShift.updateMany({
+          where: { id, status: CashShiftStatus.CLOSED },
+          data: {
+            status: CashShiftStatus.OPEN,
+            closedAt: null,
+            closedByUserId: null,
+            cashCountedTotal: null,
+            cashDifferenceTotal: null,
+            closeMode: null,
+            closeReason: null,
+            version: { increment: 1 },
+          },
+        });
+        if (transition.count !== 1)
+          throw new ConflictException('CASH_SHIFT_NOT_CLOSED');
+
+        const reopened = await tx.cashShift.findUnique({
+          where: { id },
+          include: shiftInclude,
+        });
+        if (!reopened) throw new NotFoundException('CASH_SHIFT_NOT_FOUND');
+        await tx.dailyCloseEvent.create({
+          data: {
+            pointOfSaleDailyCloseId: lockedShift.pointOfSaleDailyCloseId,
+            type: DailyCloseEventType.STATUS_CHANGED,
+            payload: {
+              entity: 'CASH_SHIFT',
+              cashShiftId: lockedShift.id,
+              fromStatus: CashShiftStatus.CLOSED,
+              toStatus: CashShiftStatus.OPEN,
+              sourceVersion: lockedShift.version,
+            },
+            createdByUserId: user.id,
+          },
+        });
+        await this.dailyCloseService.recalculateAfterDraftMutation(
+          lockedShift.pointOfSaleDailyCloseId,
+          tx,
+        );
+        return reopened;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -557,15 +722,40 @@ export class CashManagementService {
               throw new ConflictException('IDEMPOTENCY_CONFLICT');
             return existing;
           }
-          if (shift.status !== CashShiftStatus.OPEN)
+          await acquireDailyCloseLifecycleLock(
+            tx,
+            shift.pointOfSaleDailyCloseId,
+          );
+          await this.assertDailyCloseEditable(
+            tx,
+            shift.pointOfSaleDailyCloseId,
+          );
+          const lockedShift = await tx.cashShift.findUnique({
+            where: { id },
+            include: { terminal: true },
+          });
+          if (!lockedShift) throw new NotFoundException('CASH_SHIFT_NOT_FOUND');
+          await this.assertActiveCashier(
+            tx,
+            user,
+            lockedShift.operationalLocationId,
+          );
+          if (lockedShift.status !== CashShiftStatus.OPEN)
             throw new ConflictException('CASH_SHIFT_NOT_OPEN');
+          if (lockedShift.cashierUserId !== user.id && user.role !== 'ADMIN')
+            throw new ForbiddenException('CASH_SHIFT_CASHIER_MISMATCH');
+          if (
+            !lockedShift.terminal.isActive ||
+            lockedShift.terminal.deviceId !== dto.deviceId.trim()
+          )
+            throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
           if (!['EXPENSE', 'CASH_IN', 'CASH_OUT'].includes(dto.type))
             throw new BadRequestException('CASH_SHIFT_MOVEMENT_TYPE_INVALID');
-          return tx.cashMovement.create({
+          const movement = await tx.cashMovement.create({
             data: {
-              operationalLocationId: shift.operationalLocationId,
-              pointOfSaleDailyCloseId: shift.pointOfSaleDailyCloseId,
-              cashShiftId: shift.id,
+              operationalLocationId: lockedShift.operationalLocationId,
+              pointOfSaleDailyCloseId: lockedShift.pointOfSaleDailyCloseId,
+              cashShiftId: lockedShift.id,
               type: dto.type,
               movementChannel: 'CASH',
               amount,
@@ -578,6 +768,11 @@ export class CashManagementService {
               idempotencyPayloadHash: payloadHash,
             },
           });
+          await this.dailyCloseService.recalculateAfterDraftMutation(
+            lockedShift.pointOfSaleDailyCloseId,
+            tx,
+          );
+          return movement;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -601,6 +796,62 @@ export class CashManagementService {
 
   private date(value: string) {
     return new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
+  }
+
+  private async assertDailyCloseEditable(
+    tx: Prisma.TransactionClient,
+    id: string,
+  ) {
+    const dailyClose = await tx.pointOfSaleDailyClose.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+    if (dailyClose?.status !== 'DRAFT')
+      throw new BadRequestException('DAILY_CLOSE_NOT_EDITABLE');
+  }
+
+  private async assertTerminalAuthorization(
+    tx: Prisma.TransactionClient,
+    terminalId: string,
+    deviceId: string,
+    user: AuthenticatedUser,
+    expectedLocationId?: string,
+  ) {
+    const terminal = await tx.cashTerminal.findUnique({
+      where: { id: terminalId },
+      include: {
+        operationalLocation: { select: { isActive: true, type: true } },
+      },
+    });
+    if (!terminal?.isActive)
+      throw new NotFoundException('CASH_TERMINAL_NOT_FOUND');
+    if (
+      expectedLocationId &&
+      terminal.operationalLocationId !== expectedLocationId
+    )
+      throw new BadRequestException('CASH_SHIFT_LOCATION_MISMATCH');
+    if (!terminal.operationalLocation.isActive)
+      throw new BadRequestException('LOCATION_INACTIVE');
+    if (!cashTerminalLocationTypes.has(terminal.operationalLocation.type))
+      throw new BadRequestException('LOCATION_NOT_POINT_OF_SALE');
+    if (terminal.deviceId !== deviceId.trim())
+      throw new BadRequestException('CASH_TERMINAL_DEVICE_MISMATCH');
+    await this.assertActiveCashier(tx, user, terminal.operationalLocationId);
+    return terminal;
+  }
+
+  private async assertActiveCashier(
+    tx: Prisma.TransactionClient,
+    user: AuthenticatedUser,
+    locationId: string,
+  ) {
+    const cashier = await tx.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, isActive: true, operationalLocationId: true },
+    });
+    if (!cashier?.isActive) throw new ForbiddenException('User is inactive');
+    if (user.role !== 'ADMIN' && cashier.operationalLocationId !== locationId)
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
   }
 
   private money(value: Prisma.Decimal | number | string | null | undefined) {
