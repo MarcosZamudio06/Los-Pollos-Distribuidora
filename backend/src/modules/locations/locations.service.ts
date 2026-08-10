@@ -60,6 +60,14 @@ type LocationListActor = Pick<
 >;
 
 const SELLER_WITHOUT_LOCATION = '__seller_without_operational_location__';
+const INVENTORY_STORAGE_LOCATION_TYPES: OperationalLocationType[] = [
+  'BRANCH',
+  'WAREHOUSE',
+  'DISTRIBUTION_CENTER',
+  'MIXED',
+  'EXTERNAL_POINT_OF_SALE',
+  'ROUTE_STOCK',
+];
 
 @Injectable()
 export class LocationsService {
@@ -264,7 +272,10 @@ export class LocationsService {
     currentUser: LocationListActor,
   ): Prisma.OperationalLocationWhereInput {
     const search = query.search?.trim();
-    const scope = this.buildScopeWhere(currentUser);
+    const scope = this.buildScopeWhere(
+      currentUser,
+      query.inventoryStorageOnly === true,
+    );
     const searchFilter: Prisma.OperationalLocationWhereInput | undefined =
       search
         ? {
@@ -275,10 +286,21 @@ export class LocationsService {
             ],
           }
         : undefined;
+    const typeFilter: Prisma.OperationalLocationWhereInput =
+      query.inventoryStorageOnly
+        ? query.type
+          ? {
+              type: query.type,
+              AND: [{ type: { in: INVENTORY_STORAGE_LOCATION_TYPES } }],
+            }
+          : { type: { in: INVENTORY_STORAGE_LOCATION_TYPES } }
+        : query.type
+          ? { type: query.type }
+          : {};
 
     return {
-      isActive: query.isActive ?? true,
-      ...(query.type ? { type: query.type } : {}),
+      isActive: query.inventoryStorageOnly ? true : (query.isActive ?? true),
+      ...typeFilter,
       ...(query.parentId ? { parentId: query.parentId } : {}),
       ...(searchFilter && Object.keys(scope).length > 0
         ? { AND: [scope, searchFilter] }
@@ -302,13 +324,14 @@ export class LocationsService {
 
   private buildScopeWhere(
     currentUser: LocationListActor,
+    inventoryStorageOnly = false,
   ): Prisma.OperationalLocationWhereInput {
     if (currentUser.role === 'ADMIN') return {};
 
     if (currentUser.role === 'WAREHOUSE') {
       const locationId = currentUser.operationalLocationId;
-      return {
-        OR: locationId
+      const warehouseLocations: Prisma.OperationalLocationWhereInput[] =
+        locationId
           ? [
               { id: locationId },
               {
@@ -317,7 +340,28 @@ export class LocationsService {
                 isActive: true,
               },
             ]
-          : [{ id: SELLER_WITHOUT_LOCATION }],
+          : [{ id: SELLER_WITHOUT_LOCATION }];
+
+      if (locationId && inventoryStorageOnly) {
+        warehouseLocations.push({
+          type: 'ROUTE_STOCK',
+          routeStockFor: {
+            originLocation: {
+              OR: [
+                { id: locationId },
+                {
+                  parentId: locationId,
+                  type: 'BRANCH',
+                  isActive: true,
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      return {
+        OR: warehouseLocations,
       };
     }
 

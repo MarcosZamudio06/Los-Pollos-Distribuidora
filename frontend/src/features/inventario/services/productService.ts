@@ -1,4 +1,8 @@
 import { apiClient } from "../../../lib/api";
+import {
+  getCanonicalInventoryBalance,
+  isCanonicalProduct,
+} from "../types";
 import type {
   InventoryAdjustmentValues,
   InventoryBalance,
@@ -79,9 +83,16 @@ export const productService = {
     );
     return unwrapList(response);
   },
-  async listLocations(accessToken?: string | null) {
+  async listLocations(
+    accessToken?: string | null,
+    options: { storageOnly?: boolean } = {},
+  ) {
     const response = await apiClient.get<ListEnvelope<InventoryLocation>>(
-      "/locations?isActive=true&limit=100",
+      withParams("/locations", {
+        isActive: true,
+        limit: 100,
+        inventoryStorageOnly: options.storageOnly,
+      }),
       {
         headers: authHeaders(accessToken),
       },
@@ -98,7 +109,27 @@ export const productService = {
         headers: authHeaders(accessToken),
       },
     );
-    return unwrapList(response);
+    const products = unwrapList(response);
+    if (filters.requireInventoryBalance !== true) {
+      return products;
+    }
+
+    if (products.some((product) => !isCanonicalProduct(product))) {
+      throw new Error("La respuesta de productos no cumple el contrato canónico.");
+    }
+
+    const locationId =
+      typeof filters.locationId === "string" ? filters.locationId : undefined;
+    if (
+      !locationId ||
+      products.some((product) => !getCanonicalInventoryBalance(product, locationId))
+    ) {
+      throw new Error(
+        "La respuesta de productos no incluyó un saldo canónico para la ubicación solicitada.",
+      );
+    }
+
+    return products;
   },
   async createProduct(values: ProductFormValues, accessToken?: string | null) {
     const response = await apiClient.post<

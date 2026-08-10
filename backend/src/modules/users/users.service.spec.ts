@@ -219,6 +219,68 @@ describe('UsersService employee administration', () => {
     );
   });
 
+  it('persists an optional CEDIS assignment alongside the primary location', async () => {
+    const prisma = prismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.role.findUnique.mockResolvedValue(role);
+    prisma.operationalLocation.findUnique
+      .mockResolvedValueOnce(location)
+      .mockResolvedValueOnce(cedisLocation);
+    prisma.user.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(
+          user({
+            ...data,
+            cedisLocationId: cedisLocation.id,
+            cedisLocation,
+          }),
+        ),
+    );
+    const service = new UsersService(prisma as unknown as PrismaService);
+
+    const result = await service.create({
+      name: 'Ana CEDIS',
+      email: 'ana-cedis@pollos.local',
+      phone: '+522291234570',
+      roleId: role.id,
+      operationalLocationId: location.id,
+      cedisLocationId: cedisLocation.id,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        operationalLocationId: location.id,
+        cedisLocationId: cedisLocation.id,
+        cedisLocation,
+      }),
+    );
+    expect(prisma.user.create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ cedisLocationId: cedisLocation.id }),
+    );
+  });
+
+  it('rejects an inactive or non-CEDIS additional assignment', async () => {
+    const prisma = prismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.role.findUnique.mockResolvedValue(role);
+    prisma.operationalLocation.findUnique
+      .mockResolvedValueOnce(location)
+      .mockResolvedValueOnce({ ...location, id: 'not-cedis' });
+    const service = new UsersService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.create({
+        name: 'Empleado sin CEDIS',
+        email: 'sin-cedis@pollos.local',
+        phone: '+522291234571',
+        roleId: role.id,
+        operationalLocationId: location.id,
+        cedisLocationId: 'not-cedis',
+      }),
+    ).rejects.toThrow('CEDIS location is not available for employees');
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
   it('maps database unique races to their actual field', async () => {
     const prisma = prismaMock();
     prisma.user.findUnique.mockResolvedValue(null);

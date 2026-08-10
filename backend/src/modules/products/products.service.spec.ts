@@ -344,6 +344,336 @@ describe('ProductsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('requires a registered active-location balance for scoped transfer product queries', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      createProduct({
+        inventoryBalances: [
+          {
+            locationId: 'location-1',
+            quantityKg: decimal(4),
+            quantityPieces: 0,
+            reservedQuantityKg: decimal(1),
+            reservedQuantityPieces: 0,
+            minQuantityKg: decimal(0),
+            minQuantityPieces: 0,
+          },
+        ],
+      }),
+    ]);
+
+    await expect(
+      service.findAll(
+        {
+          isActive: true,
+          locationId: 'location-1',
+          requireInventoryBalance: true,
+        },
+        { role: 'ADMIN' },
+      ),
+    ).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'product-1' })],
+    });
+
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          isActive: true,
+          inventoryBalances: {
+            some: {
+              locationId: 'location-1',
+              location: { isActive: true },
+            },
+          },
+        }),
+        include: expect.objectContaining({
+          inventoryBalances: {
+            where: {
+              locationId: 'location-1',
+              location: { isActive: true },
+            },
+            include: { location: true },
+          },
+        }),
+      }),
+    );
+
+    await expect(
+      service.findAll(
+        { isActive: true, requireInventoryBalance: true },
+        { role: 'ADMIN' },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('forces active products for balance-scoped queries even when isActive is false', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([]);
+
+    await service.findAll(
+      {
+        isActive: false,
+        locationId: 'location-1',
+        requireInventoryBalance: true,
+      },
+      { role: 'ADMIN' },
+    );
+
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isActive: true }),
+      }),
+    );
+  });
+
+  it('requires the balance at the requested operational location', async () => {
+    const { service, prisma } = createService();
+    const products = [
+      createProduct({
+        id: 'product-at-location',
+        inventoryBalances: [
+          {
+            locationId: 'location-1',
+            quantityKg: decimal(4),
+            quantityPieces: 0,
+            reservedQuantityKg: decimal(0),
+            reservedQuantityPieces: 0,
+            minQuantityKg: decimal(0),
+            minQuantityPieces: 0,
+          },
+        ],
+      }),
+      createProduct({
+        id: 'product-at-other-location',
+        inventoryBalances: [
+          {
+            locationId: 'location-2',
+            quantityKg: decimal(4),
+            quantityPieces: 0,
+            reservedQuantityKg: decimal(0),
+            reservedQuantityPieces: 0,
+            minQuantityKg: decimal(0),
+            minQuantityPieces: 0,
+          },
+        ],
+      }),
+    ];
+    prisma.product.findMany.mockResolvedValue(products);
+
+    const result = await service.findAll(
+      {
+        locationId: 'location-1',
+        requireInventoryBalance: true,
+      },
+      { role: 'ADMIN' },
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 'product-at-location' }),
+    ]);
+  });
+
+  it('returns only active products with a complete balance at the requested location', async () => {
+    const { service, prisma } = createService();
+    const validProduct = createProduct({
+      id: 'active-at-location',
+      inventoryBalances: [
+        {
+          locationId: 'location-1',
+          quantityKg: decimal(4),
+          quantityPieces: 0,
+          reservedQuantityKg: decimal(1),
+          reservedQuantityPieces: 0,
+          minQuantityKg: decimal(0),
+          minQuantityPieces: 0,
+        },
+      ],
+    });
+    const inactiveProduct = createProduct({
+      id: 'inactive-at-location',
+      isActive: false,
+      inventoryBalances: validProduct.inventoryBalances,
+    });
+    const zeroBalanceProduct = createProduct({
+      id: 'zero-balance-at-location',
+      inventoryBalances: [
+        {
+          locationId: 'location-1',
+          quantityKg: decimal(0),
+          quantityPieces: 0,
+          reservedQuantityKg: decimal(0),
+          reservedQuantityPieces: 0,
+          minQuantityKg: decimal(0),
+          minQuantityPieces: 0,
+        },
+      ],
+    });
+    const wrongLocationProduct = createProduct({
+      id: 'active-at-other-location',
+      inventoryBalances: validProduct.inventoryBalances?.map((balance) => ({
+        ...balance,
+        locationId: 'location-2',
+      })),
+    });
+    const malformedProduct = createProduct({
+      id: 'active-with-malformed-balance',
+      inventoryBalances: [
+        {
+          locationId: 'location-1',
+          quantityKg: decimal(4),
+        } as NonNullable<ProductRecord['inventoryBalances']>[number],
+      ],
+    });
+    const records = [
+      validProduct,
+      inactiveProduct,
+      zeroBalanceProduct,
+      wrongLocationProduct,
+      malformedProduct,
+    ];
+    prisma.product.findMany.mockImplementation(
+      ({
+        where,
+      }: {
+        where: {
+          isActive?: boolean;
+          inventoryBalances?: { some?: { locationId?: string } };
+        };
+      }) => {
+        const locationId = where.inventoryBalances?.some?.locationId;
+        return Promise.resolve(
+          records.filter(
+            (product) =>
+              (where.isActive === undefined || product.isActive) &&
+              product.inventoryBalances?.some(
+                (balance) => balance.locationId === locationId,
+              ),
+          ),
+        );
+      },
+    );
+
+    const result = await service.findAll(
+      {
+        locationId: 'location-1',
+        requireInventoryBalance: true,
+      },
+      { role: 'ADMIN' },
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 'active-at-location' }),
+      expect.objectContaining({ id: 'zero-balance-at-location' }),
+    ]);
+  });
+
+  it('includes route stock balances in strict warehouse scope when the route originates in the assigned CEDIS', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      createProduct({
+        inventoryBalances: [
+          {
+            locationId: 'route-stock-1',
+            quantityKg: decimal(4),
+            quantityPieces: 0,
+            reservedQuantityKg: decimal(1),
+            reservedQuantityPieces: 0,
+            minQuantityKg: decimal(0),
+            minQuantityPieces: 0,
+          },
+        ],
+      }),
+    ]);
+
+    await expect(
+      service.findAll(
+        {
+          locationId: 'route-stock-1',
+          requireInventoryBalance: true,
+        },
+        {
+          role: 'WAREHOUSE',
+          permissions: [],
+          operationalLocationId: 'cedis-1',
+        },
+      ),
+    ).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'product-1' })],
+    });
+
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          inventoryBalances: {
+            some: {
+              locationId: 'route-stock-1',
+              location: {
+                isActive: true,
+                OR: [
+                  { id: 'cedis-1' },
+                  {
+                    parentId: 'cedis-1',
+                    type: 'BRANCH',
+                    isActive: true,
+                  },
+                  {
+                    type: 'ROUTE_STOCK',
+                    routeStockFor: {
+                      originLocation: {
+                        OR: [
+                          { id: 'cedis-1' },
+                          {
+                            parentId: 'cedis-1',
+                            type: 'BRANCH',
+                            isActive: true,
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        include: expect.objectContaining({
+          inventoryBalances: {
+            where: {
+              locationId: 'route-stock-1',
+              location: {
+                isActive: true,
+                OR: [
+                  { id: 'cedis-1' },
+                  {
+                    parentId: 'cedis-1',
+                    type: 'BRANCH',
+                    isActive: true,
+                  },
+                  {
+                    type: 'ROUTE_STOCK',
+                    routeStockFor: {
+                      originLocation: {
+                        OR: [
+                          { id: 'cedis-1' },
+                          {
+                            parentId: 'cedis-1',
+                            type: 'BRANCH',
+                            isActive: true,
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            include: { location: true },
+          },
+        }),
+      }),
+    );
+  });
+
   it('scopes location balances to the warehouse CEDIS and its direct branches', async () => {
     const { service, prisma } = createService();
     prisma.product.findMany.mockResolvedValue([createProduct()]);

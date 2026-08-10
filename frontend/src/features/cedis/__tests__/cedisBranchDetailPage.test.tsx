@@ -72,6 +72,8 @@ const mockState = vi.hoisted(() => ({
     isLoading: false,
     refetch: vi.fn(),
   },
+  productFilters: {} as Record<string, unknown>,
+  productQueryEnabled: true,
   mutations: {
     isPending: false,
     mutateAsync: vi.fn().mockResolvedValue({}),
@@ -83,7 +85,14 @@ vi.mock("../../auth", () => ({
 }));
 
 vi.mock("../../inventario/hooks/useProducts", () => ({
-  useProducts: () => mockState.products,
+  useProducts: (
+    filters: Record<string, unknown>,
+    options?: { enabled?: boolean },
+  ) => {
+    mockState.productFilters = filters;
+    mockState.productQueryEnabled = options?.enabled ?? true;
+    return mockState.products;
+  },
 }));
 
 vi.mock("../hooks", () => ({
@@ -104,8 +113,13 @@ const product: Product = {
   id: "product-1",
   name: "Pollo entero",
   sku: "POL-001",
+  categoryId: "category-1",
+  presentationType: "WHOLE",
   unit: "KG",
   salePrice: 85,
+  minStock: 0,
+  pieceWeightEquivalent: null,
+  equivalentPolicyStatus: "DRAFT",
   isActive: true,
   inventoryBalance: {
     locationId: "cedis-1",
@@ -115,6 +129,9 @@ const product: Product = {
     reservedQuantityPieces: 0,
     availableQuantityKg: 80,
     availableQuantityPieces: 0,
+    minQuantityKg: 0,
+    minQuantityPieces: 0,
+    isLowStock: false,
   },
 };
 
@@ -317,6 +334,8 @@ const summary: CedisCycleSummary = {
   timeZone: "America/Mexico_City",
 };
 
+const transferContextKey = "2026-08-05|cycle-1|SUPPLY|cedis-1|initial";
+
 function renderPage(
   entry = "/cedis/branches/branch-1?date=2026-08-05&cycle=cycle-1",
 ) {
@@ -366,6 +385,8 @@ describe("CEDIS branch detail page", () => {
     mockState.products.isLoading = false;
     mockState.products.refetch.mockReset();
     mockState.products.refetch.mockResolvedValue({});
+    mockState.productFilters = {};
+    mockState.productQueryEnabled = true;
     mockState.mutations.isPending = false;
     mockState.mutations.mutateAsync.mockReset();
     mockState.mutations.mutateAsync.mockResolvedValue({ id: "cycle-2" });
@@ -401,6 +422,126 @@ describe("CEDIS branch detail page", () => {
       'href="/daily-close?closeId=daily-close-1&amp;locationId=branch-1&amp;date=2026-08-05"',
     );
     expect(html).toContain("Actualizar conciliación");
+  });
+
+  it("requests active products with a registered balance at the transfer source", () => {
+    renderPage();
+
+    expect(mockState.productFilters).toEqual({
+      isActive: "true",
+      locationId: "cedis-1",
+      requireInventoryBalance: true,
+    });
+    expect(mockState.productQueryEnabled).toBe(true);
+  });
+
+  it("blocks retained product data after the operational product query fails", async () => {
+    mockState.products.error = new Error("refetch failed");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () =>
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            "/cedis/branches/branch-1?date=2026-08-05&cycle=cycle-1",
+          ]}
+        >
+          <CedisBranchDetailPage />
+        </MemoryRouter>,
+      ),
+    );
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Enviar producto"))
+        ?.click();
+    });
+
+    const select = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Producto 1"]',
+    );
+    const submit = container.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    );
+    expect(select?.disabled).toBe(true);
+    expect(submit?.disabled).toBe(true);
+    expect(container.textContent).toContain(
+      "No se pudo cargar el catálogo de productos.",
+    );
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it("switches the product source to the branch for a RETURN command", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () =>
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            "/cedis/branches/branch-1?date=2026-08-05&cycle=cycle-1",
+          ]}
+        >
+          <CedisBranchDetailPage />
+        </MemoryRouter>,
+      ),
+    );
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Registrar devolución"))
+        ?.click();
+    });
+
+    expect(mockState.productFilters).toEqual({
+      isActive: "true",
+      locationId: "branch-1",
+      requireInventoryBalance: true,
+    });
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it("blocks a cycle whose authoritative branch does not match the URL", () => {
+    mockState.summary.data = {
+      ...summary,
+      branch: { ...summary.branch, id: "branch-2", name: "Sucursal Norte" },
+    };
+
+    const html = renderPage();
+
+    expect(html).toContain(
+      "El ciclo seleccionado no pertenece a la sucursal indicada.",
+    );
+    expect(html).toContain("Enviar producto");
+    expect(html).toContain("Registrar devolución");
+    expect(html).toContain('disabled=""');
+    expect(mockState.productFilters).toEqual({
+      isActive: "true",
+      locationId: "cedis-1",
+      requireInventoryBalance: true,
+    });
+    expect(mockState.productQueryEnabled).toBe(false);
+  });
+
+  it("blocks a same-branch cycle whose summary date differs from the selected date", () => {
+    mockState.summary.data = {
+      ...summary,
+      businessDate: "2026-08-04T00:00:00.000Z",
+    };
+
+    const html = renderPage();
+
+    expect(html).toContain(
+      "El ciclo seleccionado no corresponde a la fecha operativa indicada.",
+    );
+    expect(html).toContain("Enviar producto");
+    expect(html).toContain("Registrar devolución");
+    expect(mockState.productQueryEnabled).toBe(false);
   });
 
   it("oculta efectivo esperado del resumen operativo", () => {
@@ -516,6 +657,7 @@ describe("CEDIS branch detail page", () => {
       <CedisTransferCommandPanel
         branch={card.branch}
         cedis={summary.distributionCenter}
+        contextKey={transferContextKey}
         expectedVersion={summary.version}
         mode="SUPPLY"
         onClose={vi.fn()}
@@ -567,6 +709,7 @@ describe("CEDIS transfer command panel", () => {
         <CedisTransferCommandPanel
           branch={card.branch}
           cedis={summary.distributionCenter}
+          contextKey={transferContextKey}
           expectedVersion={summary.version}
           mode="SUPPLY"
           onClose={vi.fn()}
@@ -624,6 +767,76 @@ describe("CEDIS transfer command panel", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("invalidates a reviewed command when mode, date, cycle, source, or query context changes", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderPanel(onSubmit);
+    await fillSupplyForm();
+    expect(container.textContent).toContain("Confirmación requerida");
+
+    const returnProduct: Product = {
+      ...product,
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        locationId: "branch-1",
+        quantityKg: 80,
+        reservedQuantityKg: 0,
+        availableQuantityKg: 80,
+      },
+    };
+
+    await act(async () => {
+      root.render(
+        <CedisTransferCommandPanel
+          branch={card.branch}
+          cedis={summary.distributionCenter}
+          contextKey="2026-08-06|cycle-2|RETURN|branch-1|updated"
+          cycleItems={summary.items}
+          expectedSales={summary.totals.expectedSales}
+          expectedVersion={4}
+          mode="RETURN"
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+          products={[returnProduct]}
+          productsLoading={false}
+          sourceLocationId="branch-1"
+        />,
+      );
+    });
+
+    expect(container.textContent).not.toContain("Confirmación requerida");
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const input = container.querySelector(
+        'input[aria-label="Kilos 1"]',
+      ) as HTMLInputElement;
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(input, "1");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      (
+        container.querySelector('button[type="submit"]') as HTMLButtonElement
+      ).click();
+    });
+
+    expect(container.textContent).toContain("Confirmación requerida");
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Confirmar devolución"))
+        ?.click();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedVersion: 4 }),
+      expect.any(String),
+    );
+  });
+
   it("muestra lo enviado y descuenta la venta no realizada del monto esperado al devolver", async () => {
     const returnProduct: Product = {
       ...product,
@@ -642,6 +855,7 @@ describe("CEDIS transfer command panel", () => {
         <CedisTransferCommandPanel
           branch={card.branch}
           cedis={summary.distributionCenter}
+          contextKey={transferContextKey}
           cycleItems={summary.items}
           expectedSales={summary.totals.expectedSales}
           expectedVersion={summary.version}
@@ -709,6 +923,7 @@ describe("CEDIS transfer command panel", () => {
         <CedisTransferCommandPanel
           branch={card.branch}
           cedis={summary.distributionCenter}
+          contextKey={transferContextKey}
           expectedVersion={summary.version}
           mode="SUPPLY"
           onClose={vi.fn()}
@@ -729,7 +944,7 @@ describe("CEDIS transfer command panel", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("deshabilita productos sin disponibilidad en el selector", () => {
+  it("excludes products without usable availability from the selector", () => {
     const unavailableProduct: Product = {
       ...product,
       inventoryBalance: {
@@ -739,21 +954,177 @@ describe("CEDIS transfer command panel", () => {
         availableQuantityKg: 0,
       },
     };
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <CedisTransferCommandPanel
+          branch={card.branch}
+          cedis={summary.distributionCenter}
+          contextKey={transferContextKey}
+          expectedVersion={summary.version}
+          mode="SUPPLY"
+          onClose={vi.fn()}
+          onSubmit={vi.fn().mockResolvedValue(undefined)}
+          products={[unavailableProduct]}
+          productsLoading={false}
+        />,
+      );
+    });
+
+    const select = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Producto 1"]',
+    );
+    const option = select?.querySelector<HTMLOptionElement>(
+      'option[value="product-1"]',
+    );
+
+    expect(select?.disabled).toBe(false);
+    expect(option?.disabled).toBe(true);
+    expect(container.textContent).toContain("Sin disponibilidad");
+  });
+
+  it("disables stale product options and submission when the product query fails", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <CedisTransferCommandPanel
+          branch={card.branch}
+          cedis={summary.distributionCenter}
+          contextKey={transferContextKey}
+          expectedVersion={summary.version}
+          mode="SUPPLY"
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+          products={[product]}
+          productsError={new Error("refetch failed")}
+          productsLoading={false}
+        />,
+      );
+    });
+
+    const select = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Producto 1"]',
+    );
+    const submit = container.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    );
+
+    expect(select?.disabled).toBe(true);
+    expect(
+      select?.querySelector('option[value="product-1"]'),
+    ).toBeNull();
+    expect(submit?.disabled).toBe(true);
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(container.textContent).toContain(
+      "No se pudo cargar el catálogo de productos.",
+    );
+    expect(container.textContent).not.toContain("Confirmación requerida");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("renders only unique canonical products with a source balance", () => {
+    const duplicateProduct: Product = { ...product, name: "Producto duplicado" };
+    const wrongLocationProduct: Product = {
+      ...product,
+      id: "product-at-branch",
+      name: "Producto en otra ubicación",
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        locationId: "branch-1",
+      },
+    };
+    const productWithoutBalance: Product = {
+      ...product,
+      id: "catalog-product-without-balance",
+      name: "Producto sin saldo registrado",
+      inventoryBalance: null,
+    };
+    const malformedBalanceProduct: Product = {
+      ...product,
+      id: "product-with-invalid-balance",
+      name: "Producto con saldo inválido",
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        quantityKg: 5,
+        reservedQuantityKg: 6,
+        availableQuantityKg: 0,
+      },
+    };
+    const malformedProduct: Product = {
+      ...product,
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      name: "",
+    };
+    const inactiveProduct: Product = {
+      ...product,
+      id: "inactive-product",
+      name: "Producto inactivo",
+      isActive: false,
+    };
     const html = renderToStaticMarkup(
       <CedisTransferCommandPanel
         branch={card.branch}
         cedis={summary.distributionCenter}
+        contextKey={transferContextKey}
         expectedVersion={summary.version}
         mode="SUPPLY"
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
-        products={[unavailableProduct]}
+        products={[
+          product,
+          duplicateProduct,
+          wrongLocationProduct,
+          productWithoutBalance,
+          malformedBalanceProduct,
+          malformedProduct,
+          inactiveProduct,
+        ]}
         productsLoading={false}
       />,
     );
 
-    expect(html).toContain("Sin disponibilidad");
-    expect(html).toContain('disabled=""');
+    expect(html.match(/value="product-1"/g)).toHaveLength(1);
+    expect(html).toContain("Pollo entero");
+    expect(html).not.toContain("Producto duplicado");
+    expect(html).not.toContain("Producto en otra ubicación");
+    expect(html).not.toContain("Producto sin saldo registrado");
+    expect(html).not.toContain("Producto con saldo inválido");
+    expect(html).not.toContain("550e8400-e29b-41d4-a716-446655440000");
+    expect(html).not.toContain("Producto inactivo");
+  });
+
+  it("rejects a shipment-shaped partial product even with a source balance", () => {
+    const partialTransferProduct = {
+      id: "transfer-item-1",
+      name: "Pollo de embarque",
+      unit: "KG",
+      salePrice: 85,
+      isActive: true,
+      inventoryBalance: product.inventoryBalance,
+    } as Product;
+    const html = renderToStaticMarkup(
+      <CedisTransferCommandPanel
+        branch={card.branch}
+        cedis={summary.distributionCenter}
+        contextKey={transferContextKey}
+        expectedVersion={summary.version}
+        mode="SUPPLY"
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        products={[partialTransferProduct]}
+        productsLoading={false}
+      />,
+    );
+
+    expect(html).not.toContain('value="transfer-item-1"');
+    expect(html).not.toContain("Pollo de embarque");
   });
 
   it("conserva la misma Idempotency-Key al reintentar un comando fallido", async () => {

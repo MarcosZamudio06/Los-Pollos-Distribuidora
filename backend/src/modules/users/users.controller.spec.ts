@@ -93,6 +93,7 @@ describe('UsersController employee API', () => {
       phone: '2291234567',
       roleId: 'role-1',
       operationalLocationId: 'location-1',
+      cedisLocationId: 'cedis-1',
     };
     await request(app.getHttpServer())
       .post('/api/users')

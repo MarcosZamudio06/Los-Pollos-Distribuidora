@@ -57,7 +57,9 @@ type UserRecord = {
   passwordHash: string;
   roleId: string;
   operationalLocationId: string;
+  cedisLocationId: string | null;
   operationalLocation: { id: string; name: string; type: string };
+  cedisLocation: { id: string; name: string; type: string } | null;
   role: RoleRecord;
   isActive: boolean;
   mustChangePassword: boolean;
@@ -96,7 +98,11 @@ export class UsersService {
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
-        include: { role: true, operationalLocation: true },
+        include: {
+          role: true,
+          operationalLocation: true,
+          cedisLocation: true,
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
@@ -119,7 +125,11 @@ export class UsersService {
   async findOne(id: string): Promise<UserResponse> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { role: true, operationalLocation: true },
+      include: {
+        role: true,
+        operationalLocation: true,
+        cedisLocation: true,
+      },
     });
 
     if (!user) {
@@ -132,10 +142,14 @@ export class UsersService {
   async create(dto: CreateUserDto): Promise<CreatedUserResponse> {
     const email = this.normalizeEmail(dto.email);
     const phone = this.normalizePhone(dto.phone);
+    const cedisLocationId = this.normalizeOptionalLocationId(
+      dto.cedisLocationId,
+    );
     await this.assertEmailAvailable(email);
     await this.assertPhoneAvailable(phone);
     const role = await this.assertRoleExists(dto.roleId);
     await this.assertEmployeeLocation(dto.operationalLocationId, role.name);
+    await this.assertCedisLocation(cedisLocationId);
     const temporaryPassword = this.generateTemporaryPassword();
 
     const passwordHash = await bcrypt.hash(
@@ -152,11 +166,16 @@ export class UsersService {
           controlNumber: await this.nextControlNumber(),
           roleId: dto.roleId,
           operationalLocationId: dto.operationalLocationId,
+          ...(cedisLocationId ? { cedisLocationId } : {}),
           passwordHash,
           isActive: true,
           mustChangePassword: true,
         },
-        include: { role: true, operationalLocation: true },
+        include: {
+          role: true,
+          operationalLocation: true,
+          cedisLocation: true,
+        },
       })
       .catch((error: unknown) => {
         this.throwUniqueConstraintConflict(error);
@@ -189,7 +208,11 @@ export class UsersService {
             ...(dto.name !== undefined ? { name: dto.name } : {}),
             ...(email !== undefined ? { email } : {}),
           },
-          include: { role: true, operationalLocation: true },
+          include: {
+            role: true,
+            operationalLocation: true,
+            cedisLocation: true,
+          },
         });
 
         return this.toUserResponse(user);
@@ -221,7 +244,11 @@ export class UsersService {
           mustChangePassword: true,
           sessionVersion: { increment: 1 },
         },
-        include: { role: true, operationalLocation: true },
+        include: {
+          role: true,
+          operationalLocation: true,
+          cedisLocation: true,
+        },
       });
       await client.authSession.updateMany({
         where: { userId: id, revokedAt: null },
@@ -253,7 +280,11 @@ export class UsersService {
           deactivatedByUserId: actorUserId,
           deactivationReason: dto.reason ?? null,
         },
-        include: { role: true, operationalLocation: true },
+        include: {
+          role: true,
+          operationalLocation: true,
+          cedisLocation: true,
+        },
       });
       await client.authSession.updateMany({
         where: { userId: id, revokedAt: null },
@@ -275,7 +306,9 @@ export class UsersService {
       phone: user.phone,
       roleId: user.roleId,
       operationalLocationId: user.operationalLocationId,
+      cedisLocationId: user.cedisLocationId,
       operationalLocation: user.operationalLocation,
+      cedisLocation: user.cedisLocation,
       role: user.role,
       isActive: user.isActive,
       mustChangePassword: user.mustChangePassword,
@@ -322,6 +355,11 @@ export class UsersService {
     return phone.replace(/[\s-]/g, '').trim();
   }
 
+  private normalizeOptionalLocationId(value?: string): string | undefined {
+    const normalized = value?.trim();
+    return normalized || undefined;
+  }
+
   private generateTemporaryPassword(): string {
     return randomBytes(12).toString('base64url');
   }
@@ -358,6 +396,24 @@ export class UsersService {
     ) {
       throw new BadRequestException(
         'Operational location is not available for employees',
+      );
+    }
+  }
+
+  private async assertCedisLocation(locationId?: string): Promise<void> {
+    if (!locationId) return;
+
+    const location = await this.prisma.operationalLocation.findUnique({
+      where: { id: locationId },
+    });
+
+    if (
+      !location ||
+      !location.isActive ||
+      location.type !== 'DISTRIBUTION_CENTER'
+    ) {
+      throw new BadRequestException(
+        'CEDIS location is not available for employees',
       );
     }
   }
@@ -409,7 +465,11 @@ export class UsersService {
   ): Promise<UserRecord> {
     const user = await client.user.findFirst({
       where: { id, isActive: true },
-      include: { role: true, operationalLocation: true },
+      include: {
+        role: true,
+        operationalLocation: true,
+        cedisLocation: true,
+      },
     });
 
     if (!user) {

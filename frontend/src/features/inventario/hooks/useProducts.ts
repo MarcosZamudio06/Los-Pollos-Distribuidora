@@ -20,6 +20,7 @@ export type ProductFilters = {
   locationId?: string;
   lowStock?: boolean;
   isActive?: string;
+  requireInventoryBalance?: boolean;
 };
 
 export type InventoryTransferCommand = {
@@ -34,6 +35,7 @@ export type InventoryTransferCancellationCommand = InventoryTransferCommand & {
 export type InventoryQueryOptions = {
   enabled?: boolean;
   refetchInterval?: number | false;
+  storageOnly?: boolean;
 };
 
 function createIdempotencyKey() {
@@ -51,9 +53,13 @@ function invalidateInventoryQueries(queryClient: QueryClient) {
   ]);
 }
 
-export function useProducts(filters: ProductFilters) {
+export function useProducts(
+  filters: ProductFilters,
+  options: Pick<InventoryQueryOptions, "enabled"> = {},
+) {
   const { accessToken } = useAuth();
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: ["products", filters],
     queryFn: () => productService.listProducts(filters, accessToken),
   });
@@ -71,8 +77,11 @@ export function useInventoryLocations(options: InventoryQueryOptions = {}) {
   const { accessToken } = useAuth();
   return useQuery({
     enabled: Boolean(accessToken && (options.enabled ?? true)),
-    queryKey: ["inventory-locations"],
-    queryFn: () => productService.listLocations(accessToken),
+    queryKey: [
+      "inventory-locations",
+      options.storageOnly ? "storage-only" : "all",
+    ],
+    queryFn: () => productService.listLocations(accessToken, options),
     refetchInterval: options.refetchInterval,
   });
 }

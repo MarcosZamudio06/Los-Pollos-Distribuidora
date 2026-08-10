@@ -70,6 +70,10 @@ const cedisReceiptPermissionMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260805170000_add_cedis_receive_supplies_permission/migration.sql',
 );
+const userCedisAssignmentMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260810100000_add_user_cedis_assignment/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -668,6 +672,27 @@ describe('Prisma schema contract', () => {
     );
     expect(migrationSql).toContain('ADD COLUMN     "deactivatedByUserId" TEXT');
     expect(migrationSql).toContain('ADD COLUMN     "deactivationReason" TEXT');
+  });
+
+  it('keeps an optional CEDIS assignment separate from the primary user location', () => {
+    const user = getModelBlock('User');
+    const location = getModelBlock('OperationalLocation');
+    const migrationSql = readFileSync(
+      userCedisAssignmentMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(user).toMatch(/cedisLocationId\s+String\?/);
+    expect(user).toMatch(
+      /cedisLocation\s+OperationalLocation\?\s+@relation\("UserCedisAssignment", fields: \[cedisLocationId\], references: \[id\], onDelete: Restrict\)/,
+    );
+    expect(user).toContain('@@index([cedisLocationId])');
+    expect(location).toMatch(
+      /cedisUsers\s+User\[\]\s+@relation\("UserCedisAssignment"\)/,
+    );
+    expect(migrationSql).toContain('ADD COLUMN "cedisLocationId" TEXT');
+    expect(migrationSql).toContain('User_cedisLocationId_idx');
+    expect(migrationSql).toContain('User_cedisLocationId_fkey');
   });
 
   it('binds closing associations to the same location', () => {

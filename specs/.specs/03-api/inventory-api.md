@@ -17,6 +17,9 @@ Query:
 - `isActive`.
 - `locationId` para incluir disponibilidad de una ubicación operativa.
 - `lowStock` para filtrar bajo inventario por ubicación cuando se envíe `locationId`.
+- `requireInventoryBalance=true` para flujos de transferencia; requiere
+  `locationId` y devuelve solo productos activos con un `InventoryBalance`
+  registrado en esa ubicación operativa activa.
 
 Respuesta `data.items[]`:
 

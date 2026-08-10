@@ -79,4 +79,9 @@ export class ListProductsQueryDto {
   @Transform(toOptionalBoolean)
   @IsBoolean()
   lowStock?: boolean;
+
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  requireInventoryBalance?: boolean;
 }

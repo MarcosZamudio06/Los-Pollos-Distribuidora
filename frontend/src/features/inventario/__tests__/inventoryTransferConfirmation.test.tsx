@@ -13,16 +13,36 @@ const cancelMutateAsync = vi.fn().mockResolvedValue({ id: "transfer-1" });
 const detailState = vi.hoisted<{ data: InventoryTransfer | null }>(() => ({
   data: null,
 }));
+const locationsState = vi.hoisted(() => ({
+  data: [
+    {
+      id: "origin-1",
+      name: "Matriz",
+      type: "DISTRIBUTION_CENTER",
+      isActive: true,
+    },
+    {
+      id: "destination-1",
+      name: "Sucursal",
+      type: "MIXED",
+      isActive: true,
+    },
+  ] as Array<{
+    id: string;
+    name: string;
+    type: string;
+    isActive: boolean;
+  }>,
+  requestedOptions: {} as { storageOnly?: boolean },
+  error: null as unknown,
+  isLoading: false,
+}));
 
 vi.mock("../hooks/useProducts", () => ({
-  useInventoryLocations: () => ({
-    data: [
-      { id: "origin-1", name: "Matriz" },
-      { id: "destination-1", name: "Sucursal" },
-    ],
-    error: null,
-    isLoading: false,
-  }),
+  useInventoryLocations: (options?: { storageOnly?: boolean }) => {
+    locationsState.requestedOptions = options ?? {};
+    return locationsState;
+  },
   useInventoryTransfers: () => ({
     data: detailState.data ? [detailState.data] : [],
     error: null,
@@ -51,6 +71,21 @@ afterEach(async () => {
   mutateAsync.mockClear();
   cancelMutateAsync.mockClear();
   detailState.data = null;
+  locationsState.data = [
+    {
+      id: "origin-1",
+      name: "Matriz",
+      type: "DISTRIBUTION_CENTER",
+      isActive: true,
+    },
+    {
+      id: "destination-1",
+      name: "Sucursal",
+      type: "MIXED",
+      isActive: true,
+    },
+  ];
+  locationsState.requestedOptions = {};
   root = undefined;
 });
 
@@ -79,6 +114,107 @@ function changeText(input: HTMLTextAreaElement, value: string) {
 }
 
 describe("InventoryTransferView confirmation", () => {
+  it("keeps only active canonical storage locations in both selectors", async () => {
+    locationsState.data = [
+      {
+        id: "warehouse-1",
+        name: "Almacén",
+        type: "WAREHOUSE",
+        isActive: true,
+      },
+      {
+        id: "cedis-1",
+        name: "CEDIS",
+        type: "DISTRIBUTION_CENTER",
+        isActive: true,
+      },
+      {
+        id: "mixed-1",
+        name: "Ubicación mixta",
+        type: "MIXED",
+        isActive: true,
+      },
+      {
+        id: "external-1",
+        name: "Punto externo",
+        type: "EXTERNAL_POINT_OF_SALE",
+        isActive: true,
+      },
+      {
+        id: "route-stock-1",
+        name: "Ruta de reparto",
+        type: "ROUTE_STOCK",
+        isActive: true,
+      },
+      {
+        id: "branch-1",
+        name: "Sucursal",
+        type: "BRANCH",
+        isActive: true,
+      },
+      {
+        id: "inactive-1",
+        name: "Almacén inactivo",
+        type: "WAREHOUSE",
+        isActive: false,
+      },
+      {
+        id: "route-plan-1",
+        name: "Plan de ruta",
+        type: "DELIVERY_ROUTE_PLAN_DRAFT",
+        isActive: true,
+      },
+      {
+        id: "shipment-1",
+        name: "Embarque",
+        type: "SHIPMENT",
+        isActive: true,
+      },
+      {
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        name: "",
+        type: "DELIVERY_ROUTE",
+        isActive: true,
+      },
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => root?.render(<InventoryTransferView canManage />));
+
+    expect(locationsState.requestedOptions).toEqual({ storageOnly: true });
+
+    const originValues = [
+      ...container.querySelector<HTMLSelectElement>(
+        '[aria-label="Ubicación de origen"]',
+      )!.options,
+    ].map((option) => option.value);
+    const destinationValues = [
+      ...container.querySelector<HTMLSelectElement>(
+        '[aria-label="Ubicación de destino"]',
+      )!.options,
+    ].map((option) => option.value);
+
+    expect(originValues).toEqual([
+      "",
+      "warehouse-1",
+      "cedis-1",
+      "mixed-1",
+      "external-1",
+      "route-stock-1",
+      "branch-1",
+    ]);
+    expect(destinationValues).toEqual([
+      "",
+      "warehouse-1",
+      "cedis-1",
+      "mixed-1",
+      "external-1",
+      "route-stock-1",
+    ]);
+  });
+
   it("no crea antes de confirmar y crea una sola vez al confirmar", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

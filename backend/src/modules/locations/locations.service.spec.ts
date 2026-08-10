@@ -157,6 +157,138 @@ describe('LocationsService', () => {
     });
   });
 
+  it('restricts inventory selector listings to active canonical storage types', async () => {
+    const { service, prisma } = createService();
+    prisma.operationalLocation.findMany.mockResolvedValue([
+      createLocation({ type: OperationalLocationType.ROUTE_STOCK }),
+    ]);
+
+    await expect(
+      service.findAll(
+        { role: 'ADMIN' },
+        { inventoryStorageOnly: true, isActive: false },
+      ),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({ type: OperationalLocationType.ROUTE_STOCK }),
+      ],
+    });
+
+    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          isActive: true,
+          type: {
+            in: [
+              OperationalLocationType.BRANCH,
+              OperationalLocationType.WAREHOUSE,
+              OperationalLocationType.DISTRIBUTION_CENTER,
+              OperationalLocationType.MIXED,
+              OperationalLocationType.EXTERNAL_POINT_OF_SALE,
+              OperationalLocationType.ROUTE_STOCK,
+            ],
+          },
+        },
+      }),
+    );
+  });
+
+  it('composes an explicit location type with the storage-only allowlist', async () => {
+    const { service, prisma } = createService();
+    prisma.operationalLocation.findMany.mockResolvedValue([]);
+
+    await service.findAll(
+      { role: 'ADMIN' },
+      {
+        inventoryStorageOnly: true,
+        type: OperationalLocationType.ROUTE_STOCK,
+      },
+    );
+
+    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          isActive: true,
+          type: OperationalLocationType.ROUTE_STOCK,
+          AND: [
+            {
+              type: {
+                in: [
+                  OperationalLocationType.BRANCH,
+                  OperationalLocationType.WAREHOUSE,
+                  OperationalLocationType.DISTRIBUTION_CENTER,
+                  OperationalLocationType.MIXED,
+                  OperationalLocationType.EXTERNAL_POINT_OF_SALE,
+                  OperationalLocationType.ROUTE_STOCK,
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('keeps branch-origin route stock through the route association scope', async () => {
+    const { service, prisma } = createService();
+    const branchRouteStock = createLocation({
+      id: 'route-stock-branch',
+      name: 'Ruta de sucursal',
+      type: OperationalLocationType.ROUTE_STOCK,
+    });
+    prisma.operationalLocation.findMany.mockResolvedValue([branchRouteStock]);
+
+    await expect(
+      service.findAll(
+        { role: 'WAREHOUSE', operationalLocationId: 'cedis-1' },
+        { inventoryStorageOnly: true },
+      ),
+    ).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'route-stock-branch' })],
+    });
+
+    expect(prisma.operationalLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          isActive: true,
+          type: {
+            in: [
+              OperationalLocationType.BRANCH,
+              OperationalLocationType.WAREHOUSE,
+              OperationalLocationType.DISTRIBUTION_CENTER,
+              OperationalLocationType.MIXED,
+              OperationalLocationType.EXTERNAL_POINT_OF_SALE,
+              OperationalLocationType.ROUTE_STOCK,
+            ],
+          },
+          OR: [
+            { id: 'cedis-1' },
+            {
+              parentId: 'cedis-1',
+              type: OperationalLocationType.BRANCH,
+              isActive: true,
+            },
+            {
+              type: OperationalLocationType.ROUTE_STOCK,
+              routeStockFor: {
+                originLocation: {
+                  OR: [
+                    { id: 'cedis-1' },
+                    {
+                      parentId: 'cedis-1',
+                      type: OperationalLocationType.BRANCH,
+                      isActive: true,
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
   it('limits SELLER location listings to the assigned operational location', async () => {
     const { service, prisma } = createService();
     prisma.operationalLocation.findMany.mockResolvedValue([

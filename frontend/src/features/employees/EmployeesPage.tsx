@@ -23,6 +23,7 @@ type Employee = {
   isActive: boolean;
   role: Role;
   operationalLocation: Location;
+  cedisLocation: Location | null;
 };
 type ListData = {
   items: Employee[];
@@ -73,12 +74,19 @@ export function EmployeesPage() {
     phone: "",
     roleId: "",
     operationalLocationId: "",
+    cedisLocationId: "",
   });
   const [formErrors, setFormErrors] = useState<EmployeeFormErrors>({});
   const formLocations = useMemo(
     () => locationsForEmployeeRole(locations, roles, form.roleId),
     [form.roleId, locations, roles],
   );
+  const cedisLocations = useMemo(
+    () =>
+      locations.filter((location) => location.type === "DISTRIBUTION_CENTER"),
+    [locations],
+  );
+  const selectedRole = roles.find((role) => role.id === form.roleId);
   const headers = useMemo(() => authHeaders(accessToken), [accessToken]);
 
   async function load() {
@@ -144,6 +152,7 @@ export function EmployeesPage() {
         phone: "",
         roleId: "",
         operationalLocationId: "",
+        cedisLocationId: "",
       });
       setFormErrors({});
       await load();
@@ -262,7 +271,7 @@ export function EmployeesPage() {
             )}
             <section className="overflow-hidden rounded-[1.4rem] border border-[color:var(--erp-border)] bg-white shadow-[var(--erp-shadow)]">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
+                <table className="w-full min-w-[860px] text-left text-sm">
                   <thead className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] text-xs uppercase tracking-[.12em] text-[var(--erp-muted-foreground)]">
                     <tr>
                       {[
@@ -270,6 +279,7 @@ export function EmployeesPage() {
                         "Empleado",
                         "Teléfono",
                         "Punto de venta",
+                        "CEDIS asignado",
                         "Rol",
                         "Estado",
                       ].map((label) => (
@@ -284,7 +294,7 @@ export function EmployeesPage() {
                       <tr>
                         <td
                           className="p-8 text-center text-[var(--erp-muted-foreground)]"
-                          colSpan={6}
+                          colSpan={7}
                         >
                           Cargando empleados…
                         </td>
@@ -293,7 +303,7 @@ export function EmployeesPage() {
                       <tr>
                         <td
                           className="p-8 text-center text-[var(--erp-muted-foreground)]"
-                          colSpan={6}
+                          colSpan={7}
                         >
                           No hay empleados para estos filtros.
                         </td>
@@ -316,6 +326,9 @@ export function EmployeesPage() {
                           <td className="px-4 py-4">{employee.phone}</td>
                           <td className="px-4 py-4">
                             {employee.operationalLocation.name}
+                          </td>
+                          <td className="px-4 py-4">
+                            {employee.cedisLocation?.name ?? "Sin asignar"}
                           </td>
                           <td className="px-4 py-4">{employee.role.name}</td>
                           <td className="px-4 py-4">
@@ -446,6 +459,7 @@ export function EmployeesPage() {
                       ...form,
                       roleId: event.target.value,
                       operationalLocationId: "",
+                      cedisLocationId: "",
                     };
                     setForm(nextForm);
                     setFormErrors({
@@ -512,6 +526,27 @@ export function EmployeesPage() {
                   </span>
                 )}
               </label>
+              {selectedRole?.name === "SELLER" && (
+                <label className="grid gap-1.5 text-sm font-semibold">
+                  CEDIS asignado (opcional)
+                  <Select
+                    value={form.cedisLocationId}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        cedisLocationId: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Sin CEDIS asignado</option>
+                    {cedisLocations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              )}
               <Button disabled={creating} size="lg" type="submit">
                 {creating ? "Registrando…" : "Registrar empleado"}
               </Button>

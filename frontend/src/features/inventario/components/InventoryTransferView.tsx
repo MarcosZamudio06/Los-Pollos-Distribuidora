@@ -9,7 +9,11 @@ import {
   useInventoryTransfers,
 } from "../hooks/useProducts";
 import { CatalogSelect } from "@/components/shared/operational-catalogs";
-import type { InventoryTransfer, InventoryTransferValues } from "../types";
+import {
+  isInventoryStorageLocation,
+  type InventoryTransfer,
+  type InventoryTransferValues,
+} from "../types";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { toast } from "sonner";
 
@@ -54,12 +58,14 @@ export function InventoryTransferView({
   const createTransfer = useCreateInventoryTransfer();
   const confirmTransfer = useConfirmInventoryTransfer();
   const cancelTransfer = useCancelInventoryTransfer();
-  const locations = useInventoryLocations();
-  const locationOptions = locations.data?.map((location) => ({
-    id: location.id,
-    label: location.name ?? location.id,
-    type: location.type,
-  }));
+  const locations = useInventoryLocations({ storageOnly: true });
+  const locationOptions = locations.data
+    ?.filter(isInventoryStorageLocation)
+    .map((location) => ({
+      id: location.id,
+      label: location.name,
+      type: location.type,
+    }));
   const destinationOptions = locationOptions?.filter(
     (item) => item.id !== values.originLocationId && item.type !== "BRANCH",
   );

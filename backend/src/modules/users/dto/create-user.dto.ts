@@ -1,4 +1,10 @@
-import { IsEmail, IsNotEmpty, IsString, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -15,6 +21,10 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   operationalLocationId!: string;
+
+  @IsOptional()
+  @IsString()
+  cedisLocationId?: string;
 
   @IsString()
   @Matches(/^\+?[0-9][0-9\s-]{6,19}$/)

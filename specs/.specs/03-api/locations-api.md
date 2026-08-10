@@ -14,6 +14,11 @@ Query:
 - `type`: `BRANCH`, `WAREHOUSE`, `DISTRIBUTION_CENTER`, `MIXED`, `EXTERNAL_POINT_OF_SALE`, `ROUTE_STOCK`.
 - `parentId`.
 - `isActive`.
+- `inventoryStorageOnly=true` for inventory-transfer selectors; this scope
+  returns only active `OperationalLocation` records whose `type` belongs to the
+  canonical inventory-storage allowlist, including `ROUTE_STOCK`.
+- When `type` and `inventoryStorageOnly=true` are combined, the filters are
+  intersected; a non-canonical type returns no records.
 
 Respuesta `data.items[]`:
 
@@ -23,6 +28,9 @@ Respuesta `data.items[]`:
 Validaciones:
 
 - `ADMIN` ve el catálogo global. `SELLER`, `DRIVER` y `COLLECTIONS` solo ven su ubicación asignada. `WAREHOUSE` ve el CEDIS asignado y sus sucursales directas activas.
+- With `inventoryStorageOnly=true`, `WAREHOUSE` also sees active `ROUTE_STOCK`
+  locations associated with a delivery route originating at the assigned CEDIS
+  or one of its active direct branches; route-planning records are excluded.
 - Un `DISTRIBUTION_CENTER` tiene `parentId=null`; un `BRANCH` requiere como padre un CEDIS activo. `ROUTE_STOCK` y `EXTERNAL_POINT_OF_SALE` conservan su relación operativa compatible con su sucursal.
 
 ## GET /api/locations/:id

@@ -448,6 +448,9 @@ Validaciones:
 - `email` requerido y único.
 - `password` requerido al crear.
 - `roleId` requerido.
+- `operationalLocationId` requerido como ubicación principal.
+- `cedisLocationId` opcional; si existe, debe referenciar un CEDIS activo de tipo
+  `DISTRIBUTION_CENTER`.
 - `passwordHash` nunca debe devolverse por API.
 
 ## InventoryMovement

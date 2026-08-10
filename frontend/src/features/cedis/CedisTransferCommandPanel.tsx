@@ -2,7 +2,12 @@ import { useState, type FormEvent } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, Plus, Trash2 } from "lucide-react";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { formatMoney, Money } from "../../lib/money";
-import type { Product, OperationalUnit } from "../inventario/types";
+import {
+  getCanonicalInventoryBalance,
+  isCanonicalProduct,
+  type Product,
+  type OperationalUnit,
+} from "../inventario/types";
 import type {
   CedisCycleCommand,
   CedisCycleItem,
@@ -32,6 +37,7 @@ type AvailabilityStatus = "SUFFICIENT" | "INSUFFICIENT" | "NONE";
 type CedisTransferCommandPanelProps = {
   branch: CedisDashboardLocation;
   cedis: CedisDashboardLocation;
+  contextKey: string;
   expectedVersion: number;
   mode: TransferMode;
   onClose: () => void;
@@ -42,6 +48,7 @@ type CedisTransferCommandPanelProps = {
   products: Product[];
   productsError?: unknown;
   productsLoading: boolean;
+  sourceLocationId?: string;
   cycleItems?: CedisCycleItem[];
   expectedSales?: string;
 };
@@ -65,13 +72,15 @@ function productUnit(product: Product | undefined): OperationalUnit {
   return product?.unit ?? product?.operationalUnit ?? "KG";
 }
 
+function productBalance(product: Product | undefined, locationId?: string) {
+  return product ? getCanonicalInventoryBalance(product, locationId) : undefined;
+}
+
 function productAvailability(
   product: Product | undefined,
+  locationId?: string,
 ): ProductAvailability {
-  const balance =
-    product?.inventoryBalance ??
-    product?.locationBalance ??
-    product?.balances?.[0];
+  const balance = productBalance(product, locationId);
 
   return {
     quantityKg: balance?.quantityKg ?? 0,
@@ -168,9 +177,10 @@ function isPositiveCycleBalance(item: CedisCycleItem) {
 function hasProductAvailability(
   product: Product,
   unitOverride?: OperationalUnit,
+  locationId?: string,
 ) {
   const unit = unitOverride ?? productUnit(product);
-  const balance = productAvailability(product);
+  const balance = productAvailability(product, locationId);
   return (
     (unit !== "PIECE" && balance.availableQuantityKg > 0) ||
     (unit !== "KG" && balance.availableQuantityPieces > 0)
@@ -193,8 +203,9 @@ function lineQuantities(line: TransferLineDraft) {
 function lineAvailability(
   product: Product | undefined,
   line: TransferLineDraft,
+  locationId?: string,
 ) {
-  const balance = productAvailability(product);
+  const balance = productAvailability(product, locationId);
   const requested = lineQuantities(line);
   const shortageKg = Math.max(
     requested.quantityKg - balance.availableQuantityKg,
@@ -229,8 +240,9 @@ function returnLineAvailability(
   product: Product | undefined,
   line: TransferLineDraft,
   cycleItem: CedisCycleItem | undefined,
+  locationId?: string,
 ) {
-  const details = lineAvailability(product, line);
+  const details = lineAvailability(product, line, locationId);
   if (!cycleItem) {
     return {
       ...details,
@@ -300,11 +312,31 @@ function statusTone(status: AvailabilityStatus) {
 }
 
 function productIsActive(product: Product) {
+  return product.isActive === true;
+}
+
+function isUsableInventoryProduct(
+  product: Product,
+  sourceLocationId: string,
+) {
   return (
-    product.isActive !== false &&
-    product.active !== false &&
-    product.status !== "INACTIVE"
+    isCanonicalProduct(product) &&
+    productIsActive(product) &&
+    Boolean(productBalance(product, sourceLocationId))
   );
+}
+
+function uniqueInventoryProducts(
+  products: Product[],
+  sourceLocationId: string,
+) {
+  const seenIds = new Set<string>();
+  return products.filter((product) => {
+    if (!isUsableInventoryProduct(product, sourceLocationId)) return false;
+    if (seenIds.has(product.id)) return false;
+    seenIds.add(product.id);
+    return true;
+  });
 }
 
 function quantityLabel(line: TransferLineDraft) {
@@ -378,11 +410,13 @@ function AvailabilityPanel({
   line,
   mode,
   product,
+  sourceLocationId,
 }: {
   cycleItem?: CedisCycleItem;
   line: TransferLineDraft;
   mode: TransferMode;
   product: Product | undefined;
+  sourceLocationId: string;
 }) {
   if (!product) {
     return (
@@ -394,12 +428,14 @@ function AvailabilityPanel({
 
   const details =
     mode === "RETURN"
-      ? returnLineAvailability(product, line, cycleItem)
+      ? returnLineAvailability(product, line, cycleItem, sourceLocationId)
       : {
-          ...lineAvailability(product, line),
-          returnAvailableKg: productAvailability(product).availableQuantityKg,
+          ...lineAvailability(product, line, sourceLocationId),
+          returnAvailableKg: productAvailability(product, sourceLocationId)
+            .availableQuantityKg,
           returnAvailablePieces:
-            productAvailability(product).availableQuantityPieces,
+            productAvailability(product, sourceLocationId)
+              .availableQuantityPieces,
         };
   const source = mode === "SUPPLY" ? "CEDIS" : "sucursal";
   const requested = formatUnitQuantity(
@@ -664,6 +700,7 @@ function ReturnFinancialPreview({
 export function CedisTransferCommandPanel({
   branch,
   cedis,
+  contextKey,
   expectedVersion,
   mode,
   onClose,
@@ -671,6 +708,7 @@ export function CedisTransferCommandPanel({
   products,
   productsError,
   productsLoading,
+  sourceLocationId: sourceLocationIdProp,
   cycleItems = [],
   expectedSales,
 }: CedisTransferCommandPanelProps) {
@@ -679,18 +717,30 @@ export function CedisTransferCommandPanel({
   const [confirmation, setConfirmation] = useState<{
     payload: CedisCycleCommand;
     idempotencyKey: string;
+    contextKey: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const isSupply = mode === "SUPPLY";
-  const activeProducts = products.filter(productIsActive);
-  const availableProducts = activeProducts.filter(hasTransferAvailability);
+  const sourceLocationId =
+    sourceLocationIdProp ?? (isSupply ? cedis.id : branch.id);
+  const hasProductsError = Boolean(productsError);
+  const inventoryProducts = hasProductsError
+    ? []
+    : uniqueInventoryProducts(products, sourceLocationId);
+  const availableProducts = inventoryProducts.filter(hasTransferAvailability);
   const sourceLabel = isSupply ? "CEDIS" : "la sucursal";
   const title = isSupply ? "Enviar producto" : "Registrar devolución";
   const submitLabel = isSupply
     ? "Confirmar suministro"
     : "Confirmar devolución";
+  const currentConfirmation =
+    confirmation?.contextKey === contextKey ? confirmation : null;
+  const contextChanged = Boolean(
+    confirmation && confirmation.contextKey !== contextKey,
+  );
+  const visibleError = contextChanged ? null : error;
 
   function cycleItemForProduct(productId: string) {
     return cycleItems.find((item) => item.productId === productId);
@@ -702,11 +752,11 @@ export function CedisTransferCommandPanel({
 
   function hasTransferAvailability(product: Product) {
     if (isSupply || cycleItems.length === 0)
-      return hasProductAvailability(product);
+      return hasProductAvailability(product, undefined, sourceLocationId);
     const cycleItem = cycleItemForProduct(product.id);
     return (
       Boolean(cycleItem && isPositiveCycleBalance(cycleItem)) &&
-      hasProductAvailability(product, cycleItem?.unit)
+      hasProductAvailability(product, cycleItem?.unit, sourceLocationId)
     );
   }
 
@@ -714,7 +764,7 @@ export function CedisTransferCommandPanel({
     product: Product | undefined,
     dimension: "KG" | "PIECE",
   ) {
-    const balance = productAvailability(product);
+    const balance = productAvailability(product, sourceLocationId);
     if (isSupply) {
       return dimension === "KG"
         ? balance.availableQuantityKg
@@ -740,7 +790,7 @@ export function CedisTransferCommandPanel({
   }
 
   function selectProduct(index: number, productId: string) {
-    const product = activeProducts.find((item) => item.id === productId);
+    const product = availableProducts.find((item) => item.id === productId);
     if (
       productId &&
       (!product ||
@@ -775,7 +825,9 @@ export function CedisTransferCommandPanel({
       if (selectedProductIds.has(line.productId))
         return `No repitas el mismo producto en la línea ${index + 1}.`;
       selectedProductIds.add(line.productId);
-      const product = activeProducts.find((item) => item.id === line.productId);
+      const product = availableProducts.find(
+        (item) => item.id === line.productId,
+      );
       if (!product)
         return `El producto de la línea ${index + 1} ya no está disponible en el catálogo.`;
       const kg = Number(line.quantityKg);
@@ -794,11 +846,12 @@ export function CedisTransferCommandPanel({
       if (line.unit === "KG_AND_PIECE" && !hasKg && !hasPieces)
         return `Captura kilos o piezas en la línea ${index + 1}.`;
       const availability = isSupply
-        ? lineAvailability(product, line)
+        ? lineAvailability(product, line, sourceLocationId)
         : returnLineAvailability(
             product,
             line,
             cycleItemForProduct(line.productId),
+            sourceLocationId,
           );
       if (availability.status === "NONE")
         return isSupply
@@ -831,6 +884,10 @@ export function CedisTransferCommandPanel({
 
   function review(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (hasProductsError) {
+      setError("No se pudo cargar el catálogo de productos.");
+      return;
+    }
     const validationError = validateLines();
     if (validationError) {
       setError(validationError);
@@ -841,11 +898,23 @@ export function CedisTransferCommandPanel({
     setConfirmation({
       payload: toPayload(),
       idempotencyKey: createIdempotencyKey(),
+      contextKey,
     });
   }
 
   async function confirm() {
-    if (!confirmation || isSubmitting) return;
+    if (
+      !confirmation ||
+      confirmation.contextKey !== contextKey ||
+      isSubmitting ||
+      hasProductsError
+    ) {
+      if (confirmation && confirmation.contextKey !== contextKey) {
+        setConfirmation(null);
+        setError("La revisión quedó invalidada por un cambio de contexto.");
+      }
+      return;
+    }
     setIsSubmitting(true);
     setHasSubmitted(true);
     setError(null);
@@ -859,7 +928,7 @@ export function CedisTransferCommandPanel({
     }
   }
 
-  if (confirmation) {
+  if (currentConfirmation) {
     return (
       <Card
         aria-labelledby="cedis-command-confirm-title"
@@ -912,8 +981,8 @@ export function CedisTransferCommandPanel({
               </tr>
             </thead>
             <tbody>
-              {confirmation.payload.items.map((line, index) => {
-                const product = activeProducts.find(
+              {currentConfirmation.payload.items.map((line, index) => {
+                const product = availableProducts.find(
                   (item) => item.id === line.productId,
                 );
                 const cycleItem = cycleItemForProduct(line.productId);
@@ -968,12 +1037,14 @@ export function CedisTransferCommandPanel({
             </tbody>
           </table>
         </div>
-        {error && (
+        {(visibleError || hasProductsError) && (
           <p
             className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-[var(--erp-danger)]"
             role="alert"
           >
-            {error}
+            {hasProductsError
+              ? "No se pudo cargar el catálogo de productos."
+              : visibleError}
           </p>
         )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -988,7 +1059,10 @@ export function CedisTransferCommandPanel({
           >
             Volver a editar
           </Button>
-          <Button disabled={isSubmitting} onClick={() => void confirm()}>
+          <Button
+            disabled={isSubmitting || hasProductsError}
+            onClick={() => void confirm()}
+          >
             {isSubmitting
               ? "Enviando…"
               : hasSubmitted && error
@@ -1053,7 +1127,7 @@ export function CedisTransferCommandPanel({
       ) : null}
       <form className="mt-5 space-y-4" noValidate onSubmit={review}>
         {lines.map((line, index) => {
-          const product = activeProducts.find(
+          const product = availableProducts.find(
             (item) => item.id === line.productId,
           );
           const cycleItem = cycleItemForProduct(line.productId);
@@ -1087,7 +1161,11 @@ export function CedisTransferCommandPanel({
                   Producto
                   <Select
                     aria-label={`Producto ${index + 1}`}
-                    disabled={productsLoading || activeProducts.length === 0}
+                    disabled={
+                      hasProductsError ||
+                      productsLoading ||
+                      inventoryProducts.length === 0
+                    }
                     onChange={(event) =>
                       selectProduct(index, event.target.value)
                     }
@@ -1098,7 +1176,7 @@ export function CedisTransferCommandPanel({
                         ? "Cargando catálogo…"
                         : "Selecciona producto"}
                     </option>
-                    {activeProducts.map((item) => (
+                    {inventoryProducts.map((item) => (
                       <option
                         disabled={
                           !hasTransferAvailability(item) ||
@@ -1116,8 +1194,10 @@ export function CedisTransferCommandPanel({
                         {hasTransferAvailability(item)
                           ? formatUnitQuantity(
                               transferUnit(item),
-                              productAvailability(item).availableQuantityKg,
-                              productAvailability(item).availableQuantityPieces,
+                              productAvailability(item, sourceLocationId)
+                                .availableQuantityKg,
+                              productAvailability(item, sourceLocationId)
+                                .availableQuantityPieces,
                             )
                           : "Sin disponibilidad"}
                       </option>
@@ -1182,6 +1262,7 @@ export function CedisTransferCommandPanel({
                 line={line}
                 mode={mode}
                 product={product}
+                sourceLocationId={sourceLocationId}
               />
               {!isSupply && <ReturnLineContext cycleItem={cycleItem} />}
               <p className="mt-3 text-xs text-[var(--erp-muted-foreground)]">
@@ -1221,7 +1302,11 @@ export function CedisTransferCommandPanel({
             Cancelar
           </Button>
           <Button
-            disabled={productsLoading || availableProducts.length === 0}
+            disabled={
+              hasProductsError ||
+              productsLoading ||
+              availableProducts.length === 0
+            }
             type="submit"
           >
             Revisar antes de confirmar

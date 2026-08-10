@@ -109,6 +109,10 @@ function dateLabel(value: string) {
   }).format(date);
 }
 
+function normalizeDateOnly(value: string | null | undefined) {
+  return value?.trim().slice(0, 10) ?? "";
+}
+
 function dateTimeLabel(value: string | null | undefined) {
   if (!value) return "Sin fecha";
   const date = new Date(value);
@@ -1447,6 +1451,7 @@ export function CedisBranchDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const businessDate = searchParams.get("date") ?? getOperationalDate();
+  const selectedBusinessDate = normalizeDateOnly(businessDate);
   const cycleIdFromUrl = searchParams.get("cycle") ?? undefined;
   const page = parsePage(searchParams.get("page"));
   const branchQuery = useOperationalLocation(branchId);
@@ -1468,22 +1473,69 @@ export function CedisBranchDetailPage() {
     );
   const cycleId = cycleIdFromUrl ?? selectedCard?.cycle?.id;
   const summaryQuery = useCedisCycleSummary(cycleId);
+  const routeBranchId = branchId ?? branchQuery.data?.id;
+  const cycleLocationValid =
+    !cycleId ||
+    Boolean(
+      summaryQuery.data &&
+        routeBranchId &&
+        summaryQuery.data.id === cycleId &&
+        summaryQuery.data.branch.id === routeBranchId &&
+        branchQuery.data?.parentId &&
+        summaryQuery.data.distributionCenter.id === branchQuery.data.parentId,
+    );
+  const cycleDateValid =
+    !cycleId ||
+    Boolean(
+      summaryQuery.data &&
+        normalizeDateOnly(summaryQuery.data.businessDate) ===
+          selectedBusinessDate,
+    );
+  const cycleRelationValid = cycleLocationValid && cycleDateValid;
+  const cycleRelationBlockedReason = cycleId
+    ? summaryQuery.isError
+      ? "No se pudo validar la relación entre el ciclo y la sucursal."
+      : !summaryQuery.data
+        ? "Validando que el ciclo pertenezca a la sucursal seleccionada."
+        : !cycleDateValid
+          ? "El ciclo seleccionado no corresponde a la fecha operativa indicada."
+          : !cycleLocationValid
+            ? "El ciclo seleccionado no pertenece a la sucursal indicada."
+            : null
+    : null;
+  const effectiveCycleId = cycleRelationValid ? cycleId : undefined;
   const [transferMode, setTransferMode] = useState<TransferMode | null>(null);
   const transferSourceLocationId =
     transferMode === "RETURN"
       ? (branchQuery.data?.id ?? branchId)
       : parentQuery.data?.id;
-  const productsQuery = useProducts({
-    isActive: "true",
-    locationId: transferSourceLocationId,
-  });
-  const createSupply = useCreateCedisSupply(cycleId ?? "disabled");
-  const createReturn = useCreateCedisReturn(cycleId ?? "disabled");
-  const refreshCycle = useRefreshCedisCycle(cycleId ?? "disabled");
+  const productsQuery = useProducts(
+    {
+      isActive: "true",
+      locationId: transferSourceLocationId,
+      requireInventoryBalance: true,
+    },
+    { enabled: Boolean(transferSourceLocationId && effectiveCycleId) },
+  );
+  const transferContextKey = [
+    selectedBusinessDate,
+    effectiveCycleId ?? "",
+    transferMode ?? "",
+    transferSourceLocationId ?? "",
+    summaryQuery.status,
+    summaryQuery.dataUpdatedAt,
+    summaryQuery.errorUpdatedAt,
+    productsQuery.status,
+    productsQuery.dataUpdatedAt,
+    productsQuery.errorUpdatedAt,
+  ].join("|");
+  const createSupply = useCreateCedisSupply(effectiveCycleId ?? "disabled");
+  const createReturn = useCreateCedisReturn(effectiveCycleId ?? "disabled");
+  const refreshCycle = useRefreshCedisCycle(effectiveCycleId ?? "disabled");
   const openCycle = useOpenCedisCycle();
-  const closeCycle = useCloseCedisCycle(cycleId ?? "disabled");
-  const reopenCycle = useReopenCedisCycle(cycleId ?? "disabled");
-  const cancelCycle = useCancelCedisCycle(cycleId ?? "disabled");
+  const closeCycle = useCloseCedisCycle(effectiveCycleId ?? "disabled");
+  const reopenCycle = useReopenCedisCycle(effectiveCycleId ?? "disabled");
+  const cancelCycle = useCancelCedisCycle(effectiveCycleId ?? "disabled");
   const [action, setAction] = useState<ActionType | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionRequest, setActionRequest] = useState<ActionRequest | null>(
@@ -1494,8 +1546,9 @@ export function CedisBranchDetailPage() {
     expectedVersion: number;
   }> | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const summary = cycleRelationValid ? summaryQuery.data : undefined;
   const branch = locationFromValue(
-    summaryQuery.data?.branch ?? selectedCard?.branch,
+    summary?.branch ?? selectedCard?.branch,
     {
       id: branchId ?? "branch",
       name: branchQuery.data?.name ?? "Sucursal",
@@ -1505,7 +1558,7 @@ export function CedisBranchDetailPage() {
       longitude: branchQuery.data?.longitude,
     },
   );
-  const cedis = locationFromValue(summaryQuery.data?.distributionCenter, {
+  const cedis = locationFromValue(summary?.distributionCenter, {
     id: searchParams.get("cedis") ?? parentQuery.data?.id ?? "cedis",
     name: parentQuery.data?.name ?? "CEDIS asignado",
     code: parentQuery.data?.code,
@@ -1513,7 +1566,6 @@ export function CedisBranchDetailPage() {
     latitude: parentQuery.data?.latitude,
     longitude: parentQuery.data?.longitude,
   });
-  const summary = summaryQuery.data;
   const cycleCard =
     selectedCard ??
     (summary
@@ -1557,40 +1609,49 @@ export function CedisBranchDetailPage() {
   const canClose = hasPermission(user, PERMISSIONS.cedisClose);
   const canViewCosts = hasPermission(user, PERMISSIONS.cedisViewCosts);
   const status = summary?.status ?? selectedCard?.cycle?.status ?? null;
-  const transferBlockedReason = !status
-    ? "No hay un ciclo abierto para esta fecha."
-    : status === "CLOSED"
-      ? "El ciclo está cerrado y no admite transferencias."
-      : status === "CANCELLED"
-        ? "El ciclo está cancelado y no admite transferencias."
-        : null;
-  const refreshBlockedReason = !status
-    ? "No hay un ciclo para actualizar."
-    : status === "CLOSED"
-      ? "El ciclo está cerrado; no se puede recalcular."
-      : status === "CANCELLED"
-        ? "El ciclo está cancelado; no se puede recalcular."
-        : null;
-  const closeBlockedReason = !status
-    ? "No hay un ciclo para cerrar."
-    : status !== "READY_FOR_REVIEW"
-      ? "El ciclo debe estar listo para revisión antes de cerrarse."
-      : null;
+  const transferBlockedReason =
+    cycleRelationBlockedReason ??
+    (!status
+      ? "No hay un ciclo abierto para esta fecha."
+      : status === "CLOSED"
+        ? "El ciclo está cerrado y no admite transferencias."
+        : status === "CANCELLED"
+          ? "El ciclo está cancelado y no admite transferencias."
+          : null);
+  const refreshBlockedReason =
+    cycleRelationBlockedReason ??
+    (!status
+      ? "No hay un ciclo para actualizar."
+      : status === "CLOSED"
+        ? "El ciclo está cerrado; no se puede recalcular."
+        : status === "CANCELLED"
+          ? "El ciclo está cancelado; no se puede recalcular."
+          : null);
+  const closeBlockedReason =
+    cycleRelationBlockedReason ??
+    (!status
+      ? "No hay un ciclo para cerrar."
+      : status !== "READY_FOR_REVIEW"
+        ? "El ciclo debe estar listo para revisión antes de cerrarse."
+        : null);
   const reopenBlockedReason =
-    status !== "CLOSED" ? "Solo un ciclo cerrado puede reabrirse." : null;
-  const cancelBlockedReason = !status
-    ? "No hay un ciclo para cancelar."
-    : status === "CLOSED"
-      ? "El ciclo cerrado no puede cancelarse."
-      : status === "CANCELLED"
-        ? "El ciclo ya está cancelado."
-        : summary?.dailyClose && summary.dailyClose.status !== "CANCELLED"
-          ? "Cancela primero el cierre diario relacionado."
-          : summary?.transfers.some(
-                (link) => link.transfer.status !== "CANCELLED",
-              )
-            ? "Cancela primero todas las transferencias vinculadas."
-            : null;
+    cycleRelationBlockedReason ??
+    (status !== "CLOSED" ? "Solo un ciclo cerrado puede reabrirse." : null);
+  const cancelBlockedReason =
+    cycleRelationBlockedReason ??
+    (!status
+      ? "No hay un ciclo para cancelar."
+      : status === "CLOSED"
+        ? "El ciclo cerrado no puede cancelarse."
+        : status === "CANCELLED"
+          ? "El ciclo ya está cancelado."
+          : summary?.dailyClose && summary.dailyClose.status !== "CANCELLED"
+            ? "Cancela primero el cierre diario relacionado."
+            : summary?.transfers.some(
+                  (link) => link.transfer.status !== "CANCELLED",
+                )
+              ? "Cancela primero todas las transferencias vinculadas."
+              : null);
   const activeActionPending =
     openCycle.isPending ||
     closeCycle.isPending ||
@@ -1635,7 +1696,10 @@ export function CedisBranchDetailPage() {
     payload: CedisCycleCommand,
     idempotencyKey: string,
   ) {
-    if (!cycleId) return;
+    if (!effectiveCycleId) return;
+    if (productsQuery.error) {
+      throw new Error("No se pudo cargar el catálogo de productos.");
+    }
     const input: CedisMutationInput<CedisCycleCommand> = {
       payload,
       idempotencyKey,
@@ -1689,7 +1753,7 @@ export function CedisBranchDetailPage() {
       );
       return;
     }
-    if (!cycleId && action !== "OPEN") return;
+    if (!effectiveCycleId && action !== "OPEN") return;
     const request: ActionRequest = actionRequest ?? {
       type: action,
       idempotencyKey: createIdempotencyKey(),
@@ -1955,13 +2019,16 @@ export function CedisBranchDetailPage() {
           <CedisTransferCommandPanel
             branch={branch}
             cedis={cedis}
+            contextKey={transferContextKey}
             expectedVersion={summary.version}
+            key={transferContextKey}
             mode={transferMode}
             onClose={closeTransferPanel}
             onSubmit={submitTransfer}
             products={productsQuery.data ?? []}
             productsError={productsQuery.error}
             productsLoading={productsQuery.isLoading}
+            sourceLocationId={transferSourceLocationId}
             cycleItems={summary.items}
             expectedSales={summary.totals.expectedSales}
           />

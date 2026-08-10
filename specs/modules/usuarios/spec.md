@@ -27,6 +27,8 @@ Administrar usuarios internos del sistema.
 - email.
 - password.
 - roleId.
+- operationalLocationId.
+- cedisLocationId opcional.
 - isActive.
 
 ## Reglas
@@ -36,6 +38,11 @@ Administrar usuarios internos del sistema.
 - Password nunca debe devolverse.
 - No eliminar usuario físicamente.
 - No permitir que un usuario se desactive a sí mismo si es único ADMIN activo.
+- `operationalLocationId` conserva el punto de venta o ubicación operativa
+  principal del empleado.
+- `cedisLocationId` es opcional y, cuando se captura, debe referenciar un CEDIS
+  activo de tipo `DISTRIBUTION_CENTER`; no sustituye la ubicación principal ni
+  concede permisos adicionales por sí mismo.
 
 ## Permisos
 
@@ -76,6 +83,8 @@ Pantalla de usuarios con:
 
 - Tabla.
 - Crear usuario.
+- Al registrar un empleado de punto de venta, permitir seleccionar un CEDIS
+  adicional sin perder la asignación del punto de venta.
 - Editar usuario.
 - Cambiar estado.
 - Asignar perfil y revisar permisos efectivos.

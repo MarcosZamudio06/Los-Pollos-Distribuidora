@@ -137,10 +137,19 @@ export class ProductsService {
         'locationId is required for lowStock filter',
       );
     }
+    if (query.requireInventoryBalance === true && !query.locationId) {
+      throw new BadRequestException(
+        'locationId is required for requireInventoryBalance filter',
+      );
+    }
 
     const search = query.search?.trim();
-    const where = this.buildListWhere(query);
-    const include = this.buildListInclude(query.locationId, currentUser);
+    const where = this.buildListWhere(query, currentUser);
+    const include = this.buildListInclude(
+      query.locationId,
+      currentUser,
+      query.requireInventoryBalance === true,
+    );
     let products: ProductRecord[];
 
     if (search) {
@@ -186,7 +195,18 @@ export class ProductsService {
       });
     }
 
-    const items = products.map((product) =>
+    const responseProducts =
+      query.requireInventoryBalance === true && query.locationId
+        ? products.flatMap((product) => {
+            const balance = product.inventoryBalances?.find(
+              (item) => item.locationId === query.locationId,
+            );
+            return this.hasValidOperationalBalance(balance)
+              ? [{ ...product, inventoryBalances: [balance] }]
+              : [];
+          })
+        : products;
+    const items = responseProducts.map((product) =>
       this.toProductResponse(product, {
         includePurchaseCost:
           currentUser.permissions?.includes(PERMISSIONS.COSTS_READ) ?? false,
@@ -351,14 +371,36 @@ export class ProductsService {
 
   private buildListWhere(
     query: ListProductsQueryDto,
+    actor: ProductReadActor,
   ): Prisma.ProductWhereInput {
+    const locationScope = this.buildLocationScopeWhere(
+      actor,
+      query.requireInventoryBalance === true,
+    );
+
     return {
-      isActive: query.isActive ?? true,
+      isActive:
+        query.requireInventoryBalance === true
+          ? true
+          : (query.isActive ?? true),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.presentationType
         ? { presentationType: query.presentationType }
         : {}),
       ...(query.unit ? { unit: query.unit } : {}),
+      ...(query.requireInventoryBalance === true && query.locationId
+        ? {
+            inventoryBalances: {
+              some: {
+                locationId: query.locationId,
+                location: {
+                  isActive: true,
+                  ...(locationScope ?? {}),
+                },
+              },
+            },
+          }
+        : {}),
     };
   }
 
@@ -366,6 +408,7 @@ export class ProductsService {
     locationId: string | undefined,
     actor: Pick<AuthenticatedUser, 'role'> &
       Partial<Pick<AuthenticatedUser, 'operationalLocationId'>>,
+    requireInventoryBalance = false,
   ) {
     if (!locationId) {
       return PRODUCT_INCLUDE;
@@ -376,7 +419,12 @@ export class ProductsService {
       inventoryBalances: {
         where: {
           locationId,
-          location: this.buildLocationScopeWhere(actor),
+          location: requireInventoryBalance
+            ? {
+                isActive: true,
+                ...(this.buildLocationScopeWhere(actor, true) ?? {}),
+              }
+            : this.buildLocationScopeWhere(actor),
         },
         include: { location: true },
       },
@@ -386,20 +434,79 @@ export class ProductsService {
   private buildLocationScopeWhere(
     actor: Pick<AuthenticatedUser, 'role'> &
       Partial<Pick<AuthenticatedUser, 'operationalLocationId'>>,
+    includeRouteStock = false,
   ): Prisma.OperationalLocationWhereInput | undefined {
     if (actor.role === 'ADMIN') return undefined;
 
     const locationId = actor.operationalLocationId ?? '__without_location__';
     if (actor.role === 'WAREHOUSE') {
+      const locations: Prisma.OperationalLocationWhereInput[] = [
+        { id: locationId },
+        { parentId: locationId, type: 'BRANCH', isActive: true },
+      ];
+      if (includeRouteStock && actor.operationalLocationId) {
+        locations.push({
+          type: 'ROUTE_STOCK',
+          routeStockFor: {
+            originLocation: {
+              OR: [
+                { id: locationId },
+                {
+                  parentId: locationId,
+                  type: 'BRANCH',
+                  isActive: true,
+                },
+              ],
+            },
+          },
+        });
+      }
       return {
-        OR: [
-          { id: locationId },
-          { parentId: locationId, type: 'BRANCH', isActive: true },
-        ],
+        OR: locations,
       };
     }
 
     return { id: locationId };
+  }
+
+  private hasValidOperationalBalance(
+    balance: InventoryBalanceRecord | undefined,
+  ): balance is InventoryBalanceRecord {
+    if (!balance) return false;
+
+    const quantityKg = this.toFiniteNumber(balance.quantityKg);
+    const quantityPieces = this.toFiniteNumber(balance.quantityPieces);
+    const reservedQuantityKg = this.toFiniteNumber(balance.reservedQuantityKg);
+    const reservedQuantityPieces = this.toFiniteNumber(
+      balance.reservedQuantityPieces,
+    );
+    const minQuantityKg = this.toFiniteNumber(balance.minQuantityKg);
+    const minQuantityPieces = this.toFiniteNumber(balance.minQuantityPieces);
+
+    if (
+      quantityKg === null ||
+      quantityPieces === null ||
+      reservedQuantityKg === null ||
+      reservedQuantityPieces === null ||
+      minQuantityKg === null ||
+      minQuantityPieces === null
+    ) {
+      return false;
+    }
+
+    return (
+      quantityKg >= 0 &&
+      Number.isInteger(quantityPieces) &&
+      quantityPieces >= 0 &&
+      reservedQuantityKg >= 0 &&
+      Number.isInteger(reservedQuantityPieces) &&
+      reservedQuantityPieces >= 0 &&
+      minQuantityKg >= 0 &&
+      Number.isInteger(minQuantityPieces) &&
+      minQuantityPieces >= 0 &&
+      quantityKg - reservedQuantityKg >= 0 &&
+      quantityPieces - reservedQuantityPieces >= 0
+    );
   }
 
   private buildPagination(query: ListProductsQueryDto): {
@@ -609,6 +716,12 @@ export class ProductsService {
 
   private toNumber(value: DecimalLike): number {
     return value === null || value === undefined ? 0 : Number(value.toString());
+  }
+
+  private toFiniteNumber(value: DecimalLike): number | null {
+    if (value === null || value === undefined) return null;
+    const numberValue = Number(value.toString());
+    return Number.isFinite(numberValue) ? numberValue : null;
   }
 
   private throwDuplicateSkuConflict(error: unknown): void {

@@ -55,4 +55,9 @@ export class ListLocationsQueryDto {
   @Transform(toOptionalBoolean)
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  inventoryStorageOnly?: boolean;
 }

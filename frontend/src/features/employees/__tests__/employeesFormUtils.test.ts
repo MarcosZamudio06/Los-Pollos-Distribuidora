@@ -11,6 +11,7 @@ const validDraft: EmployeeFormDraft = {
   phone: "2291234567",
   roleId: "role-1",
   operationalLocationId: "location-1",
+  cedisLocationId: "cedis-1",
 };
 
 describe("employee form validation", () => {
@@ -34,6 +35,16 @@ describe("employee form validation", () => {
 
   it("accepts a valid name, email and ten-character phone", () => {
     expect(validateEmployeeForm(validDraft)).toEqual({});
+  });
+
+  it("allows an optional CEDIS assignment without replacing the primary location", () => {
+    expect(
+      validateEmployeeForm({
+        ...validDraft,
+        operationalLocationId: "branch-1",
+        cedisLocationId: "cedis-1",
+      }),
+    ).toEqual({});
   });
 
   it("requires a role and operational location", () => {

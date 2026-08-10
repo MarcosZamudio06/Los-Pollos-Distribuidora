@@ -4,6 +4,7 @@ export type EmployeeFormDraft = {
   phone: string;
   roleId: string;
   operationalLocationId: string;
+  cedisLocationId?: string;
 };
 
 export type EmployeeFormErrors = Partial<
