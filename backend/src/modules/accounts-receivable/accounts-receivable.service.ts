@@ -356,7 +356,7 @@ export class AccountsReceivableService {
                 select: { id: true, status: true },
               },
             },
-          })) as CreditSaleRecord | null;
+          }));
           if (!sale) throw new NotFoundException('Sale not found');
           if (sale.accountReceivable) {
             return this.toListItem(sale.accountReceivable);

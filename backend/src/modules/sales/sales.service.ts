@@ -1988,7 +1988,7 @@ export class SalesService {
           orderBy: { createdAt: 'asc' },
         },
       },
-    })) as SaleCancellationRecord | null;
+    }));
   }
 
   private getVoidPayments(

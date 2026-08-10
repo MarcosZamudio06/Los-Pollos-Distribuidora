@@ -140,7 +140,7 @@ export class PaymentsService {
                   },
                 },
               },
-            })) as PaymentWithReceivable | null;
+            }));
             if (!payment) throw new NotFoundException('Payment not found');
             if (payment.status === PaymentStatus.CANCELLED)
               throw new BadRequestException('Payment is already cancelled');
