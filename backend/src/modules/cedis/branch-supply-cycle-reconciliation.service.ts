@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ProductUnit } from '@prisma/client';
 import { Money } from '../../../../shared/money';
+import {
+  getUnresolvedDailyCloseDifferenceBlockers,
+} from '../point-of-sale-daily-close/daily-close-difference-policy';
 
 export type ReconciliationDecimal =
   number | string | { toString(): string } | null | undefined;
@@ -612,20 +615,16 @@ export class BranchSupplyCycleReconciliationService {
           CLOSE_BLOCKER_PHASE,
         );
       }
-      for (const difference of dailyClose.differences) {
-        if (
-          !this.isZero(difference.differenceValue) &&
-          difference.status !== 'AUTHORIZED'
-        ) {
-          this.addBlocker(
-            blockers,
-            'DAILY_CLOSE_DIFFERENCE_UNRESOLVED',
-            'Mandatory daily close differences must be justified and authorized.',
-            CLOSE_BLOCKER_PHASE,
-            difference.referenceKey,
-          );
-        }
-      }
+      for (const difference of getUnresolvedDailyCloseDifferenceBlockers(
+        dailyClose.differences,
+      ))
+        this.addBlocker(
+          blockers,
+          difference.code,
+          'Mandatory daily close differences must be justified and authorized.',
+          CLOSE_BLOCKER_PHASE,
+          difference.referenceKey,
+        );
     }
 
     const shrinkageCost = Money.sum(

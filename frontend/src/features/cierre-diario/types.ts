@@ -265,8 +265,15 @@ export function dailyCloseArray<T>(value: Array<T> | undefined): Array<T> {
 export type DailyCloseValidationResult = {
   close: DailyClose;
   valid: boolean;
-  errors: Array<{ code: string; message: string }>;
+  errors: Array<{
+    code: string;
+    message: string;
+    differenceId?: string;
+    referenceKey?: string;
+    status?: DailyCloseDifferenceStatus;
+  }>;
   differences: Array<{
+    id?: string;
     code: string;
     value: number;
     unit: string;

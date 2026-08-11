@@ -36,6 +36,24 @@ describe("branch orders service", () => {
     );
   });
 
+  it("transports explicit timestamp bounds without converting them to civil dates", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(okJson({ items: [] }));
+
+    await ordersService.listBranchOrders(
+      {
+        locationId: "loc-1",
+        dateFrom: "2026-07-01T06:00:00.000Z",
+        dateTo: "2026-07-02T05:59:59.999Z",
+      },
+      "access-token",
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/sales/orders?locationId=loc-1&dateFrom=2026-07-01T06%3A00%3A00.000Z&dateTo=2026-07-02T05%3A59%3A59.999Z",
+      expect.any(Object),
+    );
+  });
+
   it("requests two persisted orders when the periodic cleanup runs", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(okJson({ items: [] }));
 

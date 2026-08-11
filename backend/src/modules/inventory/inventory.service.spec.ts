@@ -860,8 +860,8 @@ describe('InventoryService', () => {
       locationId: 'location-1',
       type: InventoryMovementType.ADJUSTMENT,
       referenceType: 'MANUAL',
-      dateFrom: '2026-06-01T00:00:00.000Z',
-      dateTo: '2026-06-30T23:59:59.999Z',
+      dateFrom: '2026-06-29',
+      dateTo: '2026-06-29',
     });
 
     expect(prisma.inventoryMovement.findMany).toHaveBeenCalledWith(
@@ -872,8 +872,8 @@ describe('InventoryService', () => {
           type: InventoryMovementType.ADJUSTMENT,
           referenceType: 'MANUAL',
           createdAt: {
-            gte: new Date('2026-06-01T00:00:00.000Z'),
-            lte: new Date('2026-06-30T23:59:59.999Z'),
+            gte: new Date('2026-06-29T06:00:00.000Z'),
+            lt: new Date('2026-06-30T06:00:00.000Z'),
           },
           OR: [
             { referenceType: null },

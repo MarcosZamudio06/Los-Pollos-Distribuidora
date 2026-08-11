@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   BranchSupplyCycleStatus,
   InventoryMovementType,
@@ -26,6 +28,7 @@ import {
   toInventoryBalanceAvailability,
   type InventoryBalanceAvailability,
 } from './inventory-balance.service';
+import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -254,6 +257,7 @@ export class InventoryTransfersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async findAll(
@@ -1849,7 +1853,11 @@ export class InventoryTransfersService {
     query: ListInventoryTransfersQueryDto,
     actor?: InventoryTransferActor,
   ): Prisma.InventoryTransferWhereInput {
-    const createdAt = this.buildCreatedAtFilter(query.dateFrom, query.dateTo);
+    const createdAt = buildCivilDateRangeFilter(
+      query.dateFrom,
+      query.dateTo,
+      this.config?.get<string>('app.timezone'),
+    );
     const locationId =
       actor?.role === 'WAREHOUSE'
         ? (actor.operationalLocationId ?? '__warehouse_without_location__')
@@ -1874,20 +1882,6 @@ export class InventoryTransfersService {
             ],
           }
         : {}),
-    };
-  }
-
-  private buildCreatedAtFilter(
-    dateFrom?: string,
-    dateTo?: string,
-  ): Prisma.DateTimeFilter | undefined {
-    if (!dateFrom && !dateTo) {
-      return undefined;
-    }
-
-    return {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(dateTo) } : {}),
     };
   }
 

@@ -13,13 +13,27 @@ const differenceLabel: Record<string, string> = {
 export function validationDifferences(
   result: DailyCloseValidationResult,
 ): ValidationItem[] {
-  const differences = result.differences.map((difference) => ({
-    code: difference.code,
-    message:
-      difference.expectedValue === undefined
-        ? `${differenceLabel[difference.code] ?? difference.code}: ${difference.value.toFixed(3)} ${difference.unit}`
-        : `${differenceLabel[difference.code] ?? difference.code}: esperado ${difference.expectedValue.toFixed(3)} ${difference.unit}, registrado ${difference.recordedValue === null || difference.recordedValue === undefined ? "pendiente" : `${difference.recordedValue.toFixed(3)} ${difference.unit}`}, diferencia ${difference.value.toFixed(3)} ${difference.unit} (${difference.differenceType === "SURPLUS" ? "sobrante" : "faltante"}).`,
-  }));
+  const differences = result.differences.map((difference) => {
+    const unresolved =
+      difference.status !== undefined
+        ? difference.status !== "AUTHORIZED"
+        : result.errors.some(
+            (error) =>
+              error.code === "DAILY_CLOSE_DIFFERENCE_UNRESOLVED" &&
+              (error.referenceKey === difference.referenceKey ||
+                error.referenceKey === difference.code),
+          );
+    const resolutionSuffix = unresolved
+      ? " · Requiere justificación y autorización"
+      : "";
+    return {
+      code: difference.code,
+      message:
+        difference.expectedValue === undefined
+          ? `${differenceLabel[difference.code] ?? difference.code}: ${difference.value.toFixed(3)} ${difference.unit}${resolutionSuffix}`
+          : `${differenceLabel[difference.code] ?? difference.code}: esperado ${difference.expectedValue.toFixed(3)} ${difference.unit}, registrado ${difference.recordedValue === null || difference.recordedValue === undefined ? "pendiente" : `${difference.recordedValue.toFixed(3)} ${difference.unit}`}, diferencia ${difference.value.toFixed(3)} ${difference.unit} (${difference.differenceType === "SURPLUS" ? "sobrante" : "faltante"})${resolutionSuffix}.`,
+    };
+  });
   if (Number(result.close.totalShortageKg) !== 0)
     differences.push({
       code: "SHORTAGE",

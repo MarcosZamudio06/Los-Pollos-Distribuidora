@@ -379,6 +379,9 @@ Validaciones:
 - Bloquear si ventas, movimientos, pagos o caja carecen de ubicación.
 - Bloquear si datos asociados cambiaron durante la validación.
 - Bloquear con `CASH_COUNT_REQUIRED` si no existe efectivo contado.
+- Bloquear con `DAILY_CLOSE_DIFFERENCE_UNRESOLVED` si existe una diferencia no
+  cero cuyo estado no sea `AUTHORIZED`; el error incluye la referencia de la
+  diferencia para dirigir la justificación y autorización.
 - Si existe ciclo CEDIS asociado, bloquear si no tiene suministro confirmado, contiene `DRAFT`, `REQUESTED` o `IN_TRANSIT`, no está refrescado para su versión vigente o presenta integridad inválida.
 - Solo una validación sin errores actualiza `validatedVersion` y `validatedAt`; todo intento registra `lastValidationAttemptAt` sin marcar el cierre como validado.
 
@@ -439,7 +442,8 @@ Permisos: `ADMIN`.
 
 Body: `{"version": 4}`.
 
-Validaciones: ejecutar validación vigente y rechazar errores bloqueantes.
+Validaciones: ejecutar validación vigente y rechazar errores bloqueantes,
+incluidas las diferencias no cero pendientes de justificación o autorización.
 
 ## PATCH /api/point-of-sale-daily-closes/:id/close
 
@@ -458,6 +462,9 @@ Body:
 Validaciones:
 
 - Estado `REVIEWED` y versión validada vigente.
+- No existen diferencias no cero pendientes de justificación o autorización;
+  de lo contrario responde `DAILY_CLOSE_DIFFERENCE_UNRESOLVED` con sus
+  referencias.
 - Sin operaciones asociadas sin ubicación.
 - Recalcular y persistir snapshot de kilos, ingresos, gastos y utilidad.
 - Si existe ciclo CEDIS asociado, exigirlo `READY_FOR_REVIEW` y con versión vigente.
@@ -537,6 +544,7 @@ Validaciones:
 - `DAILY_CLOSE_DIFFERENCE_EVIDENCE_REQUIRED`
 - `DAILY_CLOSE_DIFFERENCE_ALREADY_RESOLVED`
 - `DAILY_CLOSE_DIFFERENCE_NOT_READY_FOR_AUTHORIZATION`
+- `DAILY_CLOSE_DIFFERENCE_UNRESOLVED`
 
 ## Decisiones abiertas
 

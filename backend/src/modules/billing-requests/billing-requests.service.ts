@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import {
   BillingRequestStatus,
@@ -27,6 +29,7 @@ import {
   BillingBalanceError,
   validateRequestedAmount,
 } from '../billing/billability-evaluator';
+import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
 type InvoiceWithDocuments = {
@@ -104,7 +107,10 @@ const detailInclude = {
 
 @Injectable()
 export class BillingRequestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async findAll(query: ListBillingRequestsQueryDto, actor: Actor) {
     const where = this.applyScope(this.buildWhere(query), actor);
@@ -1388,19 +1394,18 @@ export class BillingRequestsService {
   private buildWhere(
     query: ListBillingRequestsQueryDto,
   ): Prisma.BillingRequestWhereInput {
+    const requestedAt = buildCivilDateRangeFilter(
+      query.dateFrom,
+      query.dateTo,
+      this.config?.get<string>('app.timezone'),
+    );
+
     return {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.saleId ? { saleId: query.saleId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.locationId ? { sale: { locationId: query.locationId } } : {}),
-      ...(query.dateFrom || query.dateTo
-        ? {
-            requestedAt: {
-              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-            },
-          }
-        : {}),
+      ...(requestedAt ? { requestedAt } : {}),
     };
   }
 

@@ -167,8 +167,8 @@ describe('PurchasesService', () => {
           locationId: 'loc-1',
           status: PurchaseStatus.CONFIRMED,
           createdAt: {
-            gte: new Date('2026-07-01'),
-            lte: new Date('2026-07-31'),
+            gte: new Date('2026-07-01T06:00:00.000Z'),
+            lt: new Date('2026-08-01T06:00:00.000Z'),
           },
         }),
         include: expect.objectContaining({ supplier: true, location: true }),

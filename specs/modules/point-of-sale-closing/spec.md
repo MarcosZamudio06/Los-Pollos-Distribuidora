@@ -314,6 +314,15 @@ El cierre en borrador debe permitir a `ADMIN` y `SELLER` dentro de su ubicación
 - Cuando se valida o intenta revisar el cierre
 - Entonces se devuelve `CASH_COUNT_REQUIRED` y no se permite avanzar a `REVIEWED`.
 
+#### Scenario: Diferencia obligatoria pendiente
+
+- Dado un cierre en borrador con una diferencia no cero en
+  `PENDING_JUSTIFICATION` o `PENDING_AUTHORIZATION`
+- Cuando se valida o intenta revisar el cierre
+- Entonces la operación devuelve `DAILY_CLOSE_DIFFERENCE_UNRESOLVED` con la
+  referencia de la diferencia
+- Y no permite avanzar a `REVIEWED` hasta que la diferencia quede `AUTHORIZED`.
+
 #### Scenario: Venta a crédito
 
 - Dada una venta a crédito sin pago
@@ -364,6 +373,15 @@ Al revisar, cerrar o reabrir, el sistema debe crear un `DailyCloseSnapshot` inmu
 - Cuando `ADMIN` lo cierra
 - Entonces el sistema guarda un snapshot `CLOSED` dentro de la misma transacción que la transición.
 - Y si no se puede guardar el snapshot o su evento de auditoría, el cierre conserva su estado previo.
+
+#### Scenario: Cierre con diferencia pendiente
+
+- Dado un cierre `REVIEWED` con una diferencia no cero que no está
+  `AUTHORIZED`
+- Cuando `ADMIN` intenta cerrarlo
+- Entonces se rechaza con `DAILY_CLOSE_DIFFERENCE_UNRESOLVED`
+- Y conserva el estado `REVIEWED` hasta que la diferencia se resuelva en un
+  borrador administrativo.
 
 ### Requirement: Validación previa al cierre
 

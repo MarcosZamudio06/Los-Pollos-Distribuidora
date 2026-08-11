@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import {
   EquivalentStatus,
@@ -22,6 +24,7 @@ import {
   CreatePurchaseItemDto,
   ListPurchasesQueryDto,
 } from './dto';
+import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -151,6 +154,7 @@ export class PurchasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async findAll(
@@ -644,19 +648,17 @@ export class PurchasesService {
         ? (currentUser.operationalLocationId ??
           '__warehouse_without_location__')
         : query.locationId;
+    const createdAt = buildCivilDateRangeFilter(
+      query.dateFrom,
+      query.dateTo,
+      this.config?.get<string>('app.timezone'),
+    );
 
     return {
       ...(query.supplierId ? { supplierId: query.supplierId } : {}),
       ...(scopedLocationId ? { locationId: scopedLocationId } : {}),
       ...(query.status ? { status: query.status } : {}),
-      ...(query.dateFrom || query.dateTo
-        ? {
-            createdAt: {
-              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-            },
-          }
-        : {}),
+      ...(createdAt ? { createdAt } : {}),
     };
   }
 

@@ -1,4 +1,5 @@
 import { Transform, Type, type TransformFnParams } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
@@ -15,6 +16,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { BillingRequestStatus } from '@prisma/client';
+import {
+  CIVIL_DATE_FROM_QUERY_DESCRIPTION,
+  CIVIL_DATE_TO_QUERY_DESCRIPTION,
+} from '../../../common/utils/civil-date-range';
 
 function trim({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -26,8 +31,20 @@ export class ListBillingRequestsQueryDto {
   @IsOptional() @Transform(trim) @IsString() customerId?: string;
   @IsOptional() @Transform(trim) @IsString() saleId?: string;
   @IsOptional() @IsEnum(BillingRequestStatus) status?: BillingRequestStatus;
-  @IsOptional() @IsDateString() dateFrom?: string;
-  @IsOptional() @IsDateString() dateTo?: string;
+  @IsOptional()
+  @ApiPropertyOptional({
+    description: CIVIL_DATE_FROM_QUERY_DESCRIPTION,
+    example: '2026-06-01',
+  })
+  @IsDateString()
+  dateFrom?: string;
+  @IsOptional()
+  @ApiPropertyOptional({
+    description: CIVIL_DATE_TO_QUERY_DESCRIPTION,
+    example: '2026-06-30',
+  })
+  @IsDateString()
+  dateTo?: string;
   @IsOptional() @Transform(trim) @IsString() locationId?: string;
 }
 

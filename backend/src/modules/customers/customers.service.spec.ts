@@ -772,6 +772,8 @@ describe('CustomersService', () => {
     await expect(
       service.findSales('customer-1', {
         paymentType: SalePaymentType.CREDIT_SALE,
+        dateFrom: '2026-06-30',
+        dateTo: '2026-06-30',
       }),
     ).resolves.toEqual({
       items: [
@@ -788,7 +790,13 @@ describe('CustomersService', () => {
     });
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ customerId: 'customer-1' }),
+        where: expect.objectContaining({
+          customerId: 'customer-1',
+          createdAt: {
+            gte: new Date('2026-06-30T06:00:00.000Z'),
+            lt: new Date('2026-07-01T06:00:00.000Z'),
+          },
+        }),
       }),
     );
   });
@@ -817,6 +825,8 @@ describe('CustomersService', () => {
     await expect(
       service.findPayments('customer-1', {
         paymentMethod: PaymentMethod.TRANSFER,
+        dateFrom: '2026-06-30',
+        dateTo: '2026-06-30',
       }),
     ).resolves.toEqual({
       items: [
@@ -837,6 +847,10 @@ describe('CustomersService', () => {
             { sale: { customerId: 'customer-1' } },
             { accountReceivable: { customerId: 'customer-1' } },
           ],
+          paidAt: {
+            gte: new Date('2026-06-30T06:00:00.000Z'),
+            lt: new Date('2026-07-01T06:00:00.000Z'),
+          },
         }),
       }),
     );

@@ -31,6 +31,9 @@ import {
   calculateDailyCloseKilos,
 } from './daily-close-calculations';
 import {
+  getUnresolvedDailyCloseDifferenceBlockers,
+} from './daily-close-difference-policy';
+import {
   CreateDailyCloseInventoryCountDto,
   CreateExpenseDto,
   CreateScaleTicketDto,
@@ -1002,6 +1005,7 @@ export class PointOfSaleDailyCloseService {
       (
         updated as {
           differences?: Array<{
+            id?: string;
             code: string;
             scope: DailyCloseDifferenceScope;
             unit: DailyCloseDifferenceUnit;
@@ -1018,6 +1022,7 @@ export class PointOfSaleDailyCloseService {
     const differences =
       storedDifferences.length > 0
         ? storedDifferences.map((difference) => ({
+            id: difference.id,
             code: difference.code,
             scope: difference.scope,
             referenceKey: difference.referenceKey,
@@ -1034,15 +1039,40 @@ export class PointOfSaleDailyCloseService {
         : [
             {
               code: 'SCALE_DIFFERENCE',
+              referenceKey: 'SCALE',
               value: Number(updated.scaleDifferenceKg),
               unit: 'kg',
+              status: undefined,
             },
             {
               code: 'CASH_DIFFERENCE',
+              referenceKey: 'CASH',
               value: Number(updated.cashDifferenceTotal),
               unit: 'MXN',
+              status: undefined,
             },
           ].filter((item) => item.value !== 0);
+    const differenceBlockers = getUnresolvedDailyCloseDifferenceBlockers(
+      storedDifferences.length > 0
+        ? storedDifferences
+        : differences.map((difference) => ({
+            code: difference.code,
+            referenceKey: difference.referenceKey,
+            differenceValue: difference.value,
+            status: difference.status,
+          })),
+    );
+    errors.push(
+      ...differenceBlockers.map((blocker) => ({
+        code: blocker.code,
+        message: `La diferencia ${blocker.referenceKey} debe justificarse y autorizarse antes de revisar el cierre.`,
+        ...(blocker.differenceId
+          ? { differenceId: blocker.differenceId }
+          : {}),
+        referenceKey: blocker.referenceKey,
+        status: blocker.status,
+      })),
+    );
     const attemptedAt = new Date();
     const validationData =
       errors.length === 0
@@ -1149,6 +1179,16 @@ export class PointOfSaleDailyCloseService {
     });
     if (openShiftCount > 0)
       throw new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS');
+    const differenceBlockers = getUnresolvedDailyCloseDifferenceBlockers(
+      current.differences ?? [],
+    );
+    if (differenceBlockers.length > 0)
+      throw new ConflictException({
+        code: 'DAILY_CLOSE_DIFFERENCE_UNRESOLVED',
+        message:
+          'Mandatory daily close differences must be justified and authorized before closing',
+        blockers: differenceBlockers,
+      });
     if (current.validatedSourceVersion !== current.version)
       throw new ConflictException('DAILY_CLOSE_REVALIDATION_REQUIRED');
     const closedAt = new Date();

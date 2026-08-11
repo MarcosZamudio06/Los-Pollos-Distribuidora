@@ -1616,8 +1616,8 @@ describe('InventoryTransfersService', () => {
         originLocationId: 'origin-1',
         destinationLocationId: 'destination-1',
         status: InventoryTransferStatus.REQUESTED,
-        dateFrom: '2026-06-01T00:00:00.000Z',
-        dateTo: '2026-06-30T23:59:59.999Z',
+        dateFrom: '2026-06-29',
+        dateTo: '2026-06-29',
       }),
     ).resolves.toEqual({
       items: [
@@ -1635,8 +1635,8 @@ describe('InventoryTransfersService', () => {
         destinationLocationId: 'destination-1',
         status: InventoryTransferStatus.REQUESTED,
         createdAt: {
-          gte: new Date('2026-06-01T00:00:00.000Z'),
-          lte: new Date('2026-06-30T23:59:59.999Z'),
+          gte: new Date('2026-06-29T06:00:00.000Z'),
+          lt: new Date('2026-06-30T06:00:00.000Z'),
         },
       }),
       include: expect.any(Object),

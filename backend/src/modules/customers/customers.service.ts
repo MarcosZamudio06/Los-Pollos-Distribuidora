@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CollectionStatus, CreditStatus, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
@@ -17,6 +19,7 @@ import {
 } from './dto';
 import { calculateCreditState } from '../sales/credit-decision';
 import { Money, toMoneyString } from '../../../../shared/money';
+import { buildCivilDateRangeWhere } from '../../common/utils/civil-date-range';
 
 type CustomerRecord = Prisma.CustomerGetPayload<{
   include: {
@@ -98,7 +101,10 @@ type CustomerListResponse = { items: CustomerResponse[] };
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async findAll(
     query: ListCustomersQueryDto = {},
@@ -139,7 +145,12 @@ export class CustomersService {
         ...(query.collectionStatus
           ? { collectionStatus: query.collectionStatus }
           : {}),
-        ...this.buildDateRangeWhere('createdAt', query.dateFrom, query.dateTo),
+        ...buildCivilDateRangeWhere(
+          'createdAt',
+          query.dateFrom,
+          query.dateTo,
+          this.config?.get<string>('app.timezone'),
+        ),
       },
       include: {
         payments: true,
@@ -171,7 +182,12 @@ export class CustomersService {
           ? { bankName: { contains: query.bankName, mode: 'insensitive' } }
           : {}),
         ...(query.status ? { status: query.status } : {}),
-        ...this.buildDateRangeWhere('paidAt', query.dateFrom, query.dateTo),
+        ...buildCivilDateRangeWhere(
+          'paidAt',
+          query.dateFrom,
+          query.dateTo,
+          this.config?.get<string>('app.timezone'),
+        ),
       },
       orderBy: { paidAt: 'desc' },
       ...this.buildPagination(query),
@@ -312,23 +328,6 @@ export class CustomersService {
         },
       },
     };
-  }
-
-  private buildDateRangeWhere<TField extends string>(
-    field: TField,
-    dateFrom?: string,
-    dateTo?: string,
-  ): Record<TField, { gte?: Date; lte?: Date }> | Record<string, never> {
-    if (!dateFrom && !dateTo) {
-      return {};
-    }
-
-    return {
-      [field]: {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(dateTo ? { lte: new Date(dateTo) } : {}),
-      },
-    } as Record<TField, { gte?: Date; lte?: Date }>;
   }
 
   private buildPagination(query: { page?: number; limit?: number }): {

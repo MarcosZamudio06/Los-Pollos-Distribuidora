@@ -107,4 +107,31 @@ describe("daily close validation contract", () => {
       "INCOMPLETE_SCALE_REFERENCE_ticket-1",
     ]);
   });
+
+  it("labels unresolved differences as requiring resolution before review", () => {
+    const result: DailyCloseValidationResult = {
+      close,
+      valid: false,
+      errors: [
+        {
+          code: "DAILY_CLOSE_DIFFERENCE_UNRESOLVED",
+          message: "La diferencia SCALE debe resolverse.",
+          referenceKey: "SCALE",
+          status: "PENDING_JUSTIFICATION",
+        },
+      ],
+      differences: [
+        {
+          code: "SCALE_DIFFERENCE",
+          value: -5,
+          unit: "kg",
+          status: "PENDING_JUSTIFICATION",
+        },
+      ],
+    };
+
+    expect(validationDifferences(result)[0]?.message).toContain(
+      "Requiere justificación y autorización",
+    );
+  });
 });

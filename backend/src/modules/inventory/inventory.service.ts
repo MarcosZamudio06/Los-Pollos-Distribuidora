@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import type { InventoryMovementType, ProductUnit } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -19,6 +21,7 @@ import {
   InventoryBalanceService,
   toInventoryBalanceAvailability,
 } from './inventory-balance.service';
+import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -154,6 +157,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async findBalances(
@@ -558,7 +562,11 @@ export class InventoryService {
     query: ListInventoryMovementsQueryDto,
     actor?: InventoryScopeActor,
   ): Prisma.InventoryMovementWhereInput {
-    const createdAt = this.buildCreatedAtFilter(query.dateFrom, query.dateTo);
+    const createdAt = buildCivilDateRangeFilter(
+      query.dateFrom,
+      query.dateTo,
+      this.config?.get<string>('app.timezone'),
+    );
     const scope = this.buildLocationScopeWhere(actor);
 
     return {
@@ -621,20 +629,6 @@ export class InventoryService {
     }
 
     return { id: locationId };
-  }
-
-  private buildCreatedAtFilter(
-    dateFrom?: string,
-    dateTo?: string,
-  ): Prisma.DateTimeFilter | undefined {
-    if (!dateFrom && !dateTo) {
-      return undefined;
-    }
-
-    return {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(dateTo) } : {}),
-    };
   }
 
   private buildPagination(query: { page?: number; limit?: number }): {

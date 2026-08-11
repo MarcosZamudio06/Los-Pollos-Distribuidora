@@ -155,6 +155,41 @@ const authorizedItem = (
 });
 
 describe('BillingRequestsService', () => {
+  it('lists requests through the complete requested civil day', async () => {
+    const { prisma } = createPrisma();
+    const service = new BillingRequestsService(
+      prisma as unknown as PrismaService,
+    );
+    prisma.billingRequest.findMany.mockResolvedValue([request()]);
+    prisma.billingRequest.count.mockResolvedValue(1);
+
+    const result = await service.findAll(
+      {
+        page: 1,
+        limit: 20,
+        dateFrom: '2026-07-17',
+        dateTo: '2026-07-17',
+      },
+      admin,
+    );
+
+    expect(prisma.billingRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          requestedAt: {
+            gte: new Date('2026-07-17T06:00:00.000Z'),
+            lt: new Date('2026-07-18T06:00:00.000Z'),
+          },
+        },
+        skip: 0,
+        take: 20,
+      }),
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 'request-1', requestedAt: now }),
+    ]);
+  });
+
   it('loads request documents with sale items required for invoice reconciliation', async () => {
     const { prisma } = createPrisma();
     const service = new BillingRequestsService(

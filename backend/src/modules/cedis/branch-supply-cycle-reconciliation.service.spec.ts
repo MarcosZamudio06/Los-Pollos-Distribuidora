@@ -412,7 +412,10 @@ describe('BranchSupplyCycleReconciliationService', () => {
     );
   });
 
-  it('blocks closure for pending transfers, open shifts, and unresolved differences', () => {
+  it.each([
+    'PENDING_JUSTIFICATION',
+    'PENDING_AUTHORIZATION',
+  ])('blocks closure for %s daily-close differences', (differenceStatus) => {
     const result = service.calculate(
       baseInput({
         transfers: [
@@ -431,7 +434,7 @@ describe('BranchSupplyCycleReconciliationService', () => {
               id: 'difference-1',
               referenceKey: 'CASH',
               differenceValue: '-10.00',
-              status: 'PENDING_JUSTIFICATION',
+              status: differenceStatus,
             },
           ],
         }),

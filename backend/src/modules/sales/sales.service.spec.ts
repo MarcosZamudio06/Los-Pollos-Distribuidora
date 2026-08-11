@@ -918,8 +918,8 @@ describe('SalesService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           createdAt: {
-            gte: new Date('2026-06-01'),
-            lte: new Date('2026-06-30'),
+            gte: new Date('2026-06-01T06:00:00.000Z'),
+            lt: new Date('2026-07-01T06:00:00.000Z'),
           },
           customerId: 'customer-1',
           userId: 'seller-1',
@@ -2266,7 +2266,11 @@ describe('SalesService', () => {
     ]);
 
     const result = await service.findBranchOrders(
-      { locationId: 'loc-1' },
+      {
+        locationId: 'loc-1',
+        dateFrom: '2026-06-21',
+        dateTo: '2026-06-21',
+      },
       seller(),
     );
 
@@ -2275,6 +2279,10 @@ describe('SalesService', () => {
         where: expect.objectContaining({
           locationId: 'loc-1',
           status: SaleStatus.CONFIRMED,
+          createdAt: {
+            gte: new Date('2026-06-21T06:00:00.000Z'),
+            lt: new Date('2026-06-22T06:00:00.000Z'),
+          },
         }),
       }),
     );

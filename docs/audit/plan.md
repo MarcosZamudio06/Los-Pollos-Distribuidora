@@ -268,7 +268,7 @@ COMPLETED
 
 ### AUD-008 — Bootstrap productivo desconectado e incompleto para rotación
 
-PROCESS
+COMPLETED
 
 - **Severidad:** ALTA
 - **Categoría:** despliegue, datos maestros, seguridad operacional

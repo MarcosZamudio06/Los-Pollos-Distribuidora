@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   AgingStatus,
   BillingRequestStatus,
@@ -46,6 +47,7 @@ import {
 } from './dto';
 import { evaluateCreditDecision } from './credit-decision';
 import { SalesRealtimeService } from './sales-realtime.service';
+import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -437,6 +439,7 @@ export class SalesService {
     private readonly balanceService: InventoryBalanceService,
     private readonly dailyCloseService: PointOfSaleDailyCloseService,
     @Optional() private readonly salesRealtime?: SalesRealtimeService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async findAll(query: ListSalesQueryDto = {}, currentUser: Actor) {
@@ -464,18 +467,16 @@ export class SalesService {
 
   async findBranchOrders(query: ListBranchOrdersQueryDto, currentUser: Actor) {
     await this.assertBranchOrderLocationAccess(query.locationId, currentUser);
+    const createdAt = buildCivilDateRangeFilter(
+      query.dateFrom,
+      query.dateTo,
+      this.config?.get<string>('app.timezone'),
+    );
     const orders = await this.prisma.sale.findMany({
       where: {
         locationId: query.locationId,
         status: SaleStatus.CONFIRMED,
-        ...(query.dateFrom || query.dateTo
-          ? {
-              createdAt: {
-                ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-                ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-              },
-            }
-          : {}),
+        ...(createdAt ? { createdAt } : {}),
         ...(query.saleChannel ? { saleChannel: query.saleChannel } : {}),
         ...(query.paymentType ? { paymentType: query.paymentType } : {}),
       },
@@ -2798,13 +2799,13 @@ export class SalesService {
     query: ListSalesQueryDto,
   ): Prisma.SaleWhereInput {
     const where: Prisma.SaleWhereInput = {};
+    const createdAt = buildCivilDateRangeFilter(
+      query.dateFrom,
+      query.dateTo,
+      this.config?.get<string>('app.timezone'),
+    );
 
-    if (query.dateFrom || query.dateTo) {
-      where.createdAt = {
-        ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-        ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
-      };
-    }
+    if (createdAt) where.createdAt = createdAt;
     if (query.userId) where.userId = query.userId;
     if (query.customerId) where.customerId = query.customerId;
     if (query.locationId) where.locationId = query.locationId;
