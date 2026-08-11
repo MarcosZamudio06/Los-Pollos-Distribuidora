@@ -132,6 +132,18 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Validate production Compose configuration
+        env:
+          CORS_ORIGIN: https://erp.example.test
+          DATABASE_URL: postgresql://user:password@db:5432/app
+          JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
+          JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+          OSRM_URL: https://osrm.example.test
+          PHOTON_URL: https://photon.example.test
+          TRUST_PROXY_HOPS: 1
+          VROOM_URL: https://vroom.example.test
+        run: docker compose -f docker-compose.production.yml config >/dev/null
+
       - name: Build backend image
         run: docker build --file docker/backend/Dockerfile --tag pollos-backend:ci .
 
