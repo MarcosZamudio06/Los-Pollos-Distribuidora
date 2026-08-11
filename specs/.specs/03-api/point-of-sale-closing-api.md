@@ -77,7 +77,7 @@ Validaciones:
 
 Propósito: consultar o registrar terminales persistentes administradas.
 
-- `GET` permite `ADMIN` y `SELLER` dentro de su ubicación.
+- `GET` requiere `cash_shift.open_own`; permite `ADMIN`, `SELLER` y `COLLECTIONS` dentro de la ubicación asignada. Para actores no administrativos la ubicación y el `deviceId` se derivan y validan contra el usuario autenticado.
 - `SELLER` debe enviar su `deviceId` y sólo recibe la terminal activa que coincide; no puede enumerar identidades de otros dispositivos.
 - `POST` requiere `ADMIN` y recibe `operationalLocationId`, `code`, `name` y `deviceId`.
 - `PATCH /api/cash-terminals/:id` permite a `ADMIN` enlazar una terminal migrada al dispositivo real, renombrarla o desactivarla.
@@ -108,11 +108,15 @@ Propósito: vincular de forma supervisada una terminal migrada al navegador que 
 
 Propósito: obtener exclusivamente el turno abierto del usuario autenticado para `deviceId`.
 
+Permiso: `cash_shift.open_own`.
+
 No busca el último turno de la sucursal ni devuelve el turno de otro cajero.
 
 ## POST /api/cash-shifts
 
 Propósito: abrir un turno independiente en una terminal registrada.
+
+Permiso: `cash_shift.open_own`.
 
 Body: `terminalId`, `deviceId`, `businessDate`, `initialCashFund`, `initialCashIn`, `initialCashOut`, `notes` opcionales.
 
@@ -123,6 +127,7 @@ Body: `terminalId`, `deviceId`, `businessDate`, `initialCashFund`, `initialCashI
 - Los movimientos iniciales conservan `cashShiftId`.
 - La apertura invalida la validación vigente y recalcula el cierre diario asociado dentro de la misma transacción.
 - La apertura y las transiciones a `REVIEWED` o `CLOSED` se serializan por cierre; después del bloqueo, el backend vuelve a exigir que el padre esté en `DRAFT` antes de insertar el turno.
+- `COLLECTIONS` puede abrir únicamente su turno propio en su ubicación operativa asignada y con el `deviceId` exacto de la terminal; no puede abrir turnos de otra ubicación ni de otro cajero.
 
 ## PATCH /api/cash-shifts/:id/close
 
@@ -132,11 +137,14 @@ Body normal: `deviceId`, `cashCountedTotal`.
 
 Body administrativo para un turno abandonado o una terminal inaccesible: `cashCountedTotal`, `administrativeReason`. No se envía ni se inventa el `deviceId` original.
 
+El cierre normal requiere `cash_shift.close_own`; el cierre administrativo continúa requiriendo `cash_shifts.administrative_close`.
+
 El backend valida cajero o privilegio administrativo, calcula efectivo esperado y persiste `cashDifferenceTotal` sin alterar las diferencias de otros turnos.
 Los depósitos y retiros iniciales se representan también como movimientos auditables, pero se contabilizan una sola vez en el efectivo esperado.
 El cierre del turno invalida la validación vigente y recalcula el cierre diario asociado dentro de la misma transacción.
 
 - El cierre normal exige cajero propietario y coincidencia exacta del `deviceId`.
+- `COLLECTIONS` puede cerrar únicamente su propio turno `OPEN` mientras el cierre diario padre permanezca en `DRAFT`; no puede cerrar turnos ajenos ni realizar cierres administrativos.
 - El cierre administrativo exige `cash_shifts.administrative_close`, motivo no vacío y conserva `closeMode=ADMINISTRATIVE` y `closeReason`.
 - Toda modalidad conserva actor, fecha, conteo y diferencia; el cierre administrativo registra además un evento auditable asociado al cierre diario.
 - Los códigos `CASH_SHIFT_NOT_OPEN`, `CASH_SHIFT_CASHIER_MISMATCH`, `CASH_TERMINAL_DEVICE_MISMATCH`, `CASH_SHIFT_ADMINISTRATIVE_REASON_REQUIRED` y `CASH_SHIFT_ADMINISTRATIVE_PERMISSION_REQUIRED` son estables.

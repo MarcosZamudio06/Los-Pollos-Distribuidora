@@ -99,12 +99,28 @@ const admin = {
   permissions: [
     PERMISSIONS.CASH_TERMINALS_REASSIGN,
     PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE,
+    PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+    PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
   ],
   operationalLocationId: 'loc-1',
 } as never;
 const cashier = {
   id: 'cashier-1',
   role: 'SELLER',
+  permissions: [
+    PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+    PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+  ],
+  operationalLocationId: 'loc-1',
+} as never;
+const collectionCashier = {
+  id: 'collector-1',
+  role: 'COLLECTIONS',
+  permissions: [
+    PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+    PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+    PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+  ],
   operationalLocationId: 'loc-1',
 } as never;
 
@@ -173,7 +189,7 @@ describe('CashManagementService', () => {
       id: 'shift-2',
       terminalId: 'terminal-2',
       pointOfSaleDailyCloseId: 'close-1',
-      cashierUserId: 'cashier-1',
+      cashierUserId: 'collector-1',
       status: 'OPEN',
     });
     const { service, dailyCloseService } = createService(prisma);
@@ -185,7 +201,7 @@ describe('CashManagementService', () => {
         businessDate: '2026-07-27',
         initialCashFund: 500,
       },
-      cashier,
+      collectionCashier,
     );
 
     expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
@@ -200,7 +216,7 @@ describe('CashManagementService', () => {
       data: expect.objectContaining({
         terminalId: 'terminal-2',
         pointOfSaleDailyCloseId: 'close-1',
-        cashierUserId: 'cashier-1',
+        cashierUserId: 'collector-1',
       }),
       include: expect.any(Object),
     });
@@ -208,6 +224,29 @@ describe('CashManagementService', () => {
     expect(
       dailyCloseService.recalculateAfterDraftMutation,
     ).toHaveBeenCalledWith('close-1', prisma);
+  });
+
+  it('rejects opening a shift without the own-shift permission', async () => {
+    const prisma = createPrisma();
+    const { service } = createService(prisma);
+
+    await expect(
+      service.openShift(
+        {
+          terminalId: 'terminal-1',
+          deviceId: 'device-1',
+          businessDate: '2026-07-27',
+        },
+        {
+          ...collectionCashier,
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException('CASH_SHIFT_OPEN_PERMISSION_REQUIRED'),
+    );
+
+    expect(prisma.cashTerminal.findUnique).not.toHaveBeenCalled();
   });
 
   it('rejects opening a shift from a device not registered to the terminal', async () => {
@@ -625,7 +664,7 @@ describe('CashManagementService', () => {
     prisma.cashShift.findUnique.mockResolvedValue({
       id: 'shift-1',
       status: 'OPEN',
-      cashierUserId: 'cashier-1',
+      cashierUserId: 'collector-1',
       pointOfSaleDailyCloseId: 'close-1',
       initialCashFund: 100,
       initialCashIn: 20,
@@ -655,7 +694,7 @@ describe('CashManagementService', () => {
     await service.closeShift(
       'shift-1',
       { deviceId: 'device-1', cashCountedTotal: 165 },
-      cashier,
+      collectionCashier,
     );
 
     expect(prisma.cashMovement.aggregate).toHaveBeenCalledWith({
@@ -745,6 +784,35 @@ describe('CashManagementService', () => {
         }),
       }),
     );
+  });
+
+  it('rejects a normal close without the own-close permission', async () => {
+    const prisma = createPrisma();
+    prisma.cashShift.findUnique.mockResolvedValue({
+      id: 'shift-1',
+      status: 'OPEN',
+      cashierUserId: 'collector-1',
+      terminal: { deviceId: 'device-1', isActive: true },
+    });
+    const { service } = createService(prisma);
+
+    await expect(
+      service.closeShift(
+        'shift-1',
+        { deviceId: 'device-1', cashCountedTotal: 100 },
+        {
+          ...collectionCashier,
+          permissions: [
+            PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+            PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+          ],
+        },
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException('CASH_SHIFT_CLOSE_PERMISSION_REQUIRED'),
+    );
+
+    expect(prisma.cashShift.updateMany).not.toHaveBeenCalled();
   });
 
   it('reopens the same closed shift after verifying the authenticated cashier password', async () => {

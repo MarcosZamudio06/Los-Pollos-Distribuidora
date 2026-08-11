@@ -120,7 +120,7 @@ Reglas UI:
 ## Permisos
 
 - `ADMIN`: consulta global y cancelación de pagos conforme a política.
-- `COLLECTIONS`: consulta de saldos y registro de pagos.
+- `COLLECTIONS`: consulta de saldos y registro de pagos. El método `CASH` solo se muestra cuando la capacidad efectiva incluye `collections.receive_cash`; antes de registrar efectivo, la pantalla debe consultar el turno propio abierto del dispositivo y ofrecer acceso a apertura de turno cuando falte.
 - `SELLER`: consulta limitada conforme a política.
 - `WAREHOUSE` y `DRIVER`: sin acceso directo, salvo cobros de ruta desde flujo de reparto para `DRIVER`.
 

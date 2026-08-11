@@ -1,5 +1,129 @@
 # Backend deployment
 
+## Quick path: first production deployment
+
+Use the following order for a new or migrated production database. The
+bootstrap job is one-shot and runs only after migrations complete successfully.
+
+1. Set the regular required production environment. Do not set
+   `SEED_ADMIN_PASSWORD` in an environment file used by the long-lived
+   services. The bootstrap password is supplied only to its one-shot command,
+   must be nonblank and at least 10 characters, and must not be printed,
+   committed, or included in logs.
+2. Validate Compose interpolation without starting services:
+
+   ```bash
+   docker compose -f docker-compose.production.yml config >/dev/null
+   ```
+
+3. Apply migrations:
+
+   ```bash
+   docker compose -f docker-compose.production.yml --profile migration run --rm migrate
+   ```
+
+4. Create the operational baseline:
+
+   ```bash
+   (
+     read -r -s -p 'SEED_ADMIN_PASSWORD (minimum 10 characters): ' SEED_ADMIN_PASSWORD
+     printf '\n'
+     export SEED_ADMIN_PASSWORD
+     docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap
+   )
+   ```
+
+5. Stop if either one-shot job fails. Only then deploy the long-lived backend
+   and frontend services.
+
+The bootstrap creates or reconciles the production roles, permissions,
+role-permission links, main CEDIS, main branch, and administrator. It does not
+run the development Prisma seed.
+
+## Verify postconditions safely
+
+Use read-only queries through the managed PostgreSQL console or an approved
+database client. Never select or display `passwordHash`, session tokens, or the
+bootstrap secret. Confirm the operational baseline with queries such as:
+
+```sql
+SELECT
+  u.email,
+  u."controlNumber",
+  u."isActive",
+  u."mustChangePassword",
+  u."sessionVersion",
+  r.name AS role_name,
+  l.code AS operational_location_code,
+  l.type AS operational_location_type
+FROM "User" u
+JOIN "Role" r ON r.id = u."roleId"
+JOIN "OperationalLocation" l ON l.id = u."operationalLocationId"
+WHERE u.email = 'admin@pollos.local';
+
+SELECT
+  branch.code AS branch_code,
+  branch.type AS branch_type,
+  branch."isActive" AS branch_is_active,
+  cedis.code AS cedis_code,
+  cedis.type AS cedis_type,
+  cedis."isActive" AS cedis_is_active
+FROM "OperationalLocation" branch
+JOIN "OperationalLocation" cedis ON cedis.id = branch."parentId"
+WHERE branch.code = 'MAIN' AND cedis.code = 'MAIN-CEDIS';
+
+SELECT
+  r.name AS role_name,
+  COUNT(rp."permissionId") AS assigned_permission_count
+FROM "Role" r
+LEFT JOIN "RolePermission" rp ON rp."roleId" = r.id
+WHERE r.name IN ('ADMIN', 'SELLER', 'WAREHOUSE', 'DRIVER', 'COLLECTIONS', 'BILLING')
+GROUP BY r.name
+ORDER BY r.name;
+```
+
+Treat the baseline as verified only when the first query returns the
+administrator with `role_name = ADMIN` and `operational_location_code = MAIN`,
+the second returns the active `MAIN` branch linked to the active `MAIN-CEDIS`,
+and the third returns one row per expected role with its observed permission
+link count. The queries do not disclose password or session secrets.
+
+## Rerun versus explicit administrator rotation
+
+A normal bootstrap rerun is idempotent and preserves the existing
+administrator's `passwordHash`, `mustChangePassword`, and `sessionVersion`.
+Use it to reconcile missing operational data without changing credentials:
+
+```bash
+(
+  read -r -s -p 'SEED_ADMIN_PASSWORD (minimum 10 characters): ' SEED_ADMIN_PASSWORD
+  printf '\n'
+  export SEED_ADMIN_PASSWORD
+  docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap
+)
+```
+
+Changing `SEED_ADMIN_PASSWORD` alone does not rotate an existing administrator.
+For an intentional credential reset, use the separate explicit route and record
+the operational change outside the secret value:
+
+```bash
+(
+  read -r -s -p 'SEED_ADMIN_PASSWORD (minimum 10 characters): ' SEED_ADMIN_PASSWORD
+  printf '\n'
+  export SEED_ADMIN_PASSWORD
+  docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap npm run bootstrap:production:rotate-admin
+)
+```
+
+The separate package script invokes `--rotate-admin-password`; do not append
+that flag to the normal bootstrap command.
+
+The explicit route writes the new password hash, sets `mustChangePassword`,
+increments `sessionVersion`, and revokes active sessions. It is the only
+bootstrap route that changes `passwordHash`. Verify only the non-secret
+postconditions above after it completes.
+
 ## Required routing providers
 
 Production requires backend-reachable managed endpoints for Photon, VROOM, and
@@ -21,14 +145,14 @@ docker compose -f docker-compose.production.yml config >/dev/null
 
 1. Build and publish the backend image once. Set `BACKEND_IMAGE` to its
    immutable digest for both `migrate` and `backend`.
-2. Apply migrations as the only migration job:
+2. Apply migrations as a separate deployment job:
 
 ```bash
 docker compose -f docker-compose.production.yml --profile migration run --rm migrate
 ```
 
-3. Stop the release if the job exits unsuccessfully. Do not restart, replace,
-   or scale backend replicas after a failed migration.
+3. Run the bootstrap job from the quick path after a successful migration. Stop
+   the release if either one-shot job exits unsuccessfully.
 4. Deploy backend replicas gradually and wait for `GET /api/health/ready` to
    return HTTP 200 before routing traffic to each replica.
 5. Deploy frontend after the backend rollout is ready.

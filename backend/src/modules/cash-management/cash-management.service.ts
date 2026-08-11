@@ -93,6 +93,11 @@ export class CashManagementService {
     query: ListCashTerminalQueryDto,
     user: AuthenticatedUser,
   ) {
+    this.requirePermission(
+      user,
+      PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+      'CASH_SHIFT_OPEN_PERMISSION_REQUIRED',
+    );
     const locationId =
       user.role === 'ADMIN'
         ? query.operationalLocationId
@@ -273,6 +278,11 @@ export class CashManagementService {
   }
 
   async currentShift(deviceId: string, user: AuthenticatedUser) {
+    this.requirePermission(
+      user,
+      PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+      'CASH_SHIFT_OPEN_PERMISSION_REQUIRED',
+    );
     return this.prisma.cashShift.findFirst({
       where: {
         cashierUserId: user.id,
@@ -286,6 +296,11 @@ export class CashManagementService {
   }
 
   async openShift(dto: OpenCashShiftDto, user: AuthenticatedUser) {
+    this.requirePermission(
+      user,
+      PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+      'CASH_SHIFT_OPEN_PERMISSION_REQUIRED',
+    );
     const terminal = await this.prisma.cashTerminal.findUnique({
       where: { id: dto.terminalId },
       include: {
@@ -456,6 +471,11 @@ export class CashManagementService {
             'CASH_SHIFT_ADMINISTRATIVE_PERMISSION_REQUIRED',
           );
         } else {
+          this.requirePermission(
+            user,
+            PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+            'CASH_SHIFT_CLOSE_PERMISSION_REQUIRED',
+          );
           if (!dto.deviceId?.trim())
             throw new BadRequestException('CASH_TERMINAL_DEVICE_REQUIRED');
           if (shift.cashierUserId !== user.id && user.role !== 'ADMIN')

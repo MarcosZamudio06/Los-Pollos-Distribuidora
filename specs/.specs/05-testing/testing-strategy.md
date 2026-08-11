@@ -45,7 +45,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 ### Seguridad y permisos
 
 - Validar JWT, expiración y usuario activo.
-- Validar RBAC para roles `ADMIN`, `SELLER`, `WAREHOUSE`, `DRIVER` y `COLLECTIONS`.
+- Validar RBAC para roles `ADMIN`, `SELLER`, `WAREHOUSE`, `DRIVER` y `COLLECTIONS`, incluyendo capacidades efectivas `collections.receive_cash`, `cash_shift.open_own` y `cash_shift.close_own`.
 - Validar que respuestas de usuario no expongan `passwordHash`.
 - Validar permisos por alcance: vendedor propio, repartidor asignado y ubicación autorizada cuando aplique.
 - Validar permisos CEDIS: `ADMIN` global, `WAREHOUSE` en su CEDIS y `SELLER` en su sucursal, sin costos para `SELLER`.
@@ -116,6 +116,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Crear venta de contado con método de pago.
 - Rechazar venta de contado sin sesión `PointOfSaleDailyClose` abierta y verificar que no persista efectos parciales.
 - Verificar que ventas y pagos de punto fijo conserven `cashShiftId`, que el cierre se derive del turno y que cajero/dispositivo distintos sean rechazados.
+- Cubrir la matriz `ADMIN`/`SELLER`/`COLLECTIONS` para abrir, consultar y cerrar turno propio, con ubicación ajena, turno ajeno, dispositivo incorrecto, estado padre no `DRAFT`, cierre administrativo, reapertura y movimientos; solo `COLLECTIONS` con las tres capacidades nuevas puede completar el flujo fijo de cobranza `CASH`.
 - Rechazar `CASH_SALE` sin pagos o con pagos parciales, incluso cuando exista un cliente activo, sin crear venta ni cuenta por cobrar.
 - Requerir cambio explícito a `CREDIT_SALE` para confirmar pagos parciales y ejecutar la evaluación de crédito.
 - Crear venta a crédito con cliente autorizado y cuenta por cobrar.
@@ -158,6 +159,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Verificar idempotencia en registro y cancelación de pagos.
 - Distinguir pagos de cuentas por cobrar frente a ventas de contado.
 - Rechazar pagos de cobranza en efectivo sin sesión abierta en la ubicación fija y verificar que el saldo no cambie.
+- Rechazar pagos `CASH` fijos de `COLLECTIONS` sin `collections.receive_cash`, y conservar las rutas `TRANSFER`/`DEPOSIT`/`CARD`/`CHECK` y `CASH` de ruta sin dependencia del turno fijo.
 
 ### Compras
 

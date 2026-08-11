@@ -8,6 +8,7 @@ import type { AccountReceivable, PaymentMethod } from "../types";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { toast } from "sonner";
 import { getPosDeviceId } from "../../../lib/deviceIdentity";
+import { hasPermission, PERMISSIONS, useAuth } from "../../auth";
 
 type PaymentRegistrationDialogProps = {
   account: AccountReceivable;
@@ -28,9 +29,16 @@ export function PaymentRegistrationDialog({
   account,
   onClose,
 }: PaymentRegistrationDialogProps) {
+  const { user } = useAuth();
+  const canReceiveCash = hasPermission(
+    user,
+    PERMISSIONS.collectionsReceiveCash,
+  );
   const outstandingAmount = toNumber(account.outstandingAmount);
   const registerPayment = useRegisterReceivablePayment(account.id);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() =>
+    canReceiveCash ? "CASH" : "TRANSFER",
+  );
   const openCashSession = useOpenCashSession(
     paymentMethod === "CASH"
       ? (account.saleLocationId ?? undefined)
@@ -161,11 +169,13 @@ export function PaymentRegistrationDialog({
                 value={paymentMethod}
                 onChange={(event) => setPaymentMethod(event.target.value)}
               >
-                {paymentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
+                {paymentMethods
+                  .filter((method) => method !== "CASH" || canReceiveCash)
+                  .map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
               </select>
             </label>
             <label className="grid gap-2 text-sm font-semibold">

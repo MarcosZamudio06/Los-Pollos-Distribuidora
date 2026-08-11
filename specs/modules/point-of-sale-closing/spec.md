@@ -115,6 +115,15 @@ Una terminal puede tener varios turnos secuenciales en la misma fecha de negocio
 - Entonces el servidor crea o reutiliza el cierre diario de la sucursal y fecha
 - Y crea un turno independiente con terminal, cajero, fondo, estado abierto y hora del servidor
 - Y cualquier depósito o retiro inicial queda asociado al turno.
+- Cuando el cajero es `COLLECTIONS`, la apertura solo se autoriza con `cash_shift.open_own`, en su ubicación operativa asignada, para su propio usuario y con coincidencia exacta del dispositivo; no habilita ventas POS, movimientos ni turnos ajenos.
+
+#### Scenario: COLLECTIONS cierra su propio turno
+
+- Dado un `COLLECTIONS` con `cash_shift.close_own` y un `CashShift` `OPEN` cuyo `cashierUserId`, ubicación y terminal corresponden al usuario actual
+- Cuando registra el conteo y solicita el cierre normal
+- Entonces el turno pasa a `CLOSED`, conserva actor, conteo y diferencia, y el cierre diario padre se recalcula
+- Y una ubicación ajena, un turno de otro cajero, un dispositivo distinto o un cierre padre no `DRAFT` se rechazan sin escritura parcial
+- Y `COLLECTIONS` no puede cerrar administrativamente, reabrir turnos ni registrar movimientos de caja.
 
 #### Scenario: Venta sin turno
 
@@ -478,7 +487,7 @@ Para un `CashShift` `CLOSED` elegible en un cierre `DRAFT`, la UI debe mostrar a
 - `ADMIN`: acceso completo, revisión, cierre, cancelación y reapertura.
 - `SELLER`: captura ventas, referencias y borrador de su ubicación.
 - `WAREHOUSE`: consulta entradas, traspasos y kilos para conciliación.
-- `COLLECTIONS`: consulta pagos e ingresos autorizados; no modifica inventario.
+- `COLLECTIONS`: consulta pagos e ingresos autorizados y puede abrir/cerrar únicamente su turno propio mediante `cash_shift.open_own` y `cash_shift.close_own`; no crea ventas POS, modifica inventario, registra movimientos, reabre turnos ni cierra la jornada diaria.
 - `CASHIER`: decisión abierta, no forma parte del MVP.
 
 Los costos de compra, la utilidad bruta, la utilidad neta, la calidad del costo y los snapshots de costo son información administrativa. El backend no debe enviarlos a `SELLER`, incluidos los costos anidados en partidas de venta, las líneas `PROFIT` y las respuestas de validación o actualización del cierre. `SELLER` conserva acceso a sus ventas, pagos, efectivo contado y diferencias de caja autorizadas.

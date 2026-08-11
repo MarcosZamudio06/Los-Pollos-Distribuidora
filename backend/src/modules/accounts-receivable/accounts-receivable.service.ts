@@ -19,6 +19,7 @@ import {
   type Payment,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import { acquireDraftDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
@@ -30,7 +31,7 @@ import { calculateReceivableAging } from './receivable-aging';
 import { Money, toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
-type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'permissions'>;
 
 type ReceivableRecord = AccountReceivable & {
   customer?: {
@@ -139,6 +140,8 @@ export class AccountsReceivableService {
     if (!paymentAmount.isPositive()) {
       throw new BadRequestException('amount must be greater than 0');
     }
+
+    this.assertFixedCashCollectionPermission(dto, currentUser);
 
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
     const payloadHash = this.hashPayload(
@@ -520,6 +523,20 @@ export class AccountsReceivableService {
       throw new BadRequestException(
         'Cannot register payments on paid or cancelled accounts receivable',
       );
+    }
+  }
+
+  private assertFixedCashCollectionPermission(
+    dto: RegisterReceivablePaymentDto,
+    currentUser: Actor,
+  ): void {
+    if (
+      dto.paymentMethod === 'CASH' &&
+      !dto.routeId &&
+      !dto.routeSettlementId &&
+      !currentUser.permissions?.includes(PERMISSIONS.COLLECTIONS_RECEIVE_CASH)
+    ) {
+      throw new ForbiddenException('COLLECTIONS_CASH_PERMISSION_REQUIRED');
     }
   }
 

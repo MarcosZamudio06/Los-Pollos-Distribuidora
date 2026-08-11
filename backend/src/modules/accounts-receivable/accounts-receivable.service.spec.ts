@@ -11,10 +11,12 @@ import {
   CreditStatus,
   PaymentMethod,
   PaymentStatus,
+  Prisma,
   SalePaymentType,
   SaleStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import { AccountsReceivableService } from './accounts-receivable.service';
 
@@ -227,7 +229,11 @@ describe('AccountsReceivableService', () => {
           appliedDocumentId: 'N-1001',
           paidAt: '2026-06-19T10:00:00.000Z',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [],
+        },
         'idem-payment-1',
       ),
     ).resolves.toEqual({
@@ -272,13 +278,41 @@ describe('AccountsReceivableService', () => {
           amount: 100,
           paymentMethod: PaymentMethod.CASH,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-payment-no-cash-session',
       ),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'CASH_SHIFT_REQUIRED' }),
     });
 
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects fixed cash collection without the fixed-cash permission', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+          cashShiftId: 'shift-1',
+          deviceId: 'device-1',
+        },
+        { id: 'collector-1', role: 'COLLECTIONS', permissions: [] },
+        'idem-payment-without-cash-permission',
+      ),
+    ).rejects.toThrow('COLLECTIONS_CASH_PERMISSION_REQUIRED');
+
+    expect(prisma.cashShift.findUnique).not.toHaveBeenCalled();
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
@@ -309,7 +343,11 @@ describe('AccountsReceivableService', () => {
           cashShiftId: 'shift-1',
           deviceId: 'device-1',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-payment-reviewed-close',
       ),
     ).rejects.toThrow('DAILY_CLOSE_REOPEN_REQUIRED');
@@ -386,7 +424,11 @@ describe('AccountsReceivableService', () => {
           cashShiftId: 'shift-foreign',
           deviceId: 'device-1',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-cross-close-payment',
       ),
     ).resolves.toEqual(
@@ -435,7 +477,7 @@ describe('AccountsReceivableService', () => {
       saleId: 'sale-1',
       customerId: 'customer-1',
       amount: money('10'),
-      paymentMethod: PaymentMethod.TRANSFER,
+      paymentMethod: PaymentMethod.CASH,
       status: PaymentStatus.APPLIED,
       paidAt: new Date('2026-06-20T10:00:00.000Z'),
       pointOfSaleDailyCloseId: null,
@@ -457,7 +499,11 @@ describe('AccountsReceivableService', () => {
           cashShiftId: 'shift-ignored',
           deviceId: 'device-ignored',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-transfer-after-close',
       ),
     ).resolves.toEqual(
@@ -501,7 +547,7 @@ describe('AccountsReceivableService', () => {
       saleId: 'sale-1',
       customerId: 'customer-1',
       amount: money('100'),
-      paymentMethod: PaymentMethod.TRANSFER,
+      paymentMethod: PaymentMethod.CASH,
       routeId: 'route-1',
       routeSettlementId: 'settlement-1',
       status: PaymentStatus.APPLIED,
@@ -520,11 +566,15 @@ describe('AccountsReceivableService', () => {
       {
         accountReceivableId: 'ar-1',
         amount: 100,
-        paymentMethod: PaymentMethod.TRANSFER,
+        paymentMethod: PaymentMethod.CASH,
         routeId: 'route-1',
         routeSettlementId: 'settlement-1',
       },
-      { id: 'collector-1', role: 'COLLECTIONS' },
+      {
+        id: 'collector-1',
+        role: 'COLLECTIONS',
+        permissions: [],
+      },
       'idem-route-payment',
     );
 
@@ -602,7 +652,11 @@ describe('AccountsReceivableService', () => {
           cashShiftId: 'shift-1',
           deviceId: 'device-1',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-same-close-payment',
       ),
     ).resolves.toEqual(
@@ -663,7 +717,11 @@ describe('AccountsReceivableService', () => {
         deviceId: 'device-1',
         paidAt: '2026-06-20T10:00:00.000Z',
       },
-      { id: 'collector-1', role: 'COLLECTIONS' },
+      {
+        id: 'collector-1',
+        role: 'COLLECTIONS',
+        permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+      },
       'idem-payment-2',
     );
 
@@ -704,7 +762,11 @@ describe('AccountsReceivableService', () => {
           amount: 100,
           paymentMethod: PaymentMethod.CASH,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-payment-3',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -717,7 +779,11 @@ describe('AccountsReceivableService', () => {
           amount: 1000.01,
           paymentMethod: PaymentMethod.CASH,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-payment-4',
       ),
     ).rejects.toThrow('Payment amount cannot exceed outstanding balance');
@@ -736,7 +802,11 @@ describe('AccountsReceivableService', () => {
           amount: 10,
           paymentMethod: PaymentMethod.CASH,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-missing',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -756,7 +826,11 @@ describe('AccountsReceivableService', () => {
           amount: 10,
           paymentMethod: PaymentMethod.CASH,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-paid',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -819,7 +893,11 @@ describe('AccountsReceivableService', () => {
           referenceNumber: 'REF-1234',
           paidAt: '2026-06-19T10:00:00.000Z',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'same-key',
       ),
     ).resolves.toEqual({
@@ -847,7 +925,11 @@ describe('AccountsReceivableService', () => {
           paymentMethod: PaymentMethod.TRANSFER,
           paidAt: '2026-06-19T10:00:00.000Z',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'same-key',
       ),
     ).rejects.toBeInstanceOf(ConflictException);
@@ -922,7 +1004,11 @@ describe('AccountsReceivableService', () => {
           deviceId: 'device-1',
           paidAt: '2026-06-19T10:00:00.000Z',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'race-key',
       ),
     ).resolves.toEqual({
@@ -950,7 +1036,15 @@ describe('AccountsReceivableService', () => {
       const invocation = ++readers;
       if (invocation === 2) releaseReaders();
       await bothReadersStarted;
-      if (invocation === 2) throw { code: 'P2034' };
+      if (invocation === 2) {
+        throw new Prisma.PrismaClientKnownRequestError(
+          'Serializable transaction conflict',
+          {
+            code: 'P2034',
+            clientVersion: '6.19.3',
+          },
+        );
+      }
       return createReceivable({ outstandingAmount: money('100') });
     });
     prisma.payment.create.mockResolvedValue({
@@ -978,7 +1072,11 @@ describe('AccountsReceivableService', () => {
           amount: 40,
           paymentMethod: PaymentMethod.TRANSFER,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-concurrent-winner',
       ),
       service.registerPayment(
@@ -988,7 +1086,11 @@ describe('AccountsReceivableService', () => {
           amount: 60,
           paymentMethod: PaymentMethod.TRANSFER,
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'idem-concurrent-loser',
       ),
     ]);
@@ -1038,7 +1140,11 @@ describe('AccountsReceivableService', () => {
         paymentMethod: PaymentMethod.TRANSFER,
         paidAt: '2026-06-19T10:00:00.000Z',
       },
-      { id: 'collector-1', role: 'COLLECTIONS' },
+      {
+        id: 'collector-1',
+        role: 'COLLECTIONS',
+        permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+      },
       'new-key',
     );
 
@@ -1104,7 +1210,11 @@ describe('AccountsReceivableService', () => {
           cashShiftId: 'shift-1',
           deviceId: 'device-1',
         },
-        { id: 'collector-1', role: 'COLLECTIONS' },
+        {
+          id: 'collector-1',
+          role: 'COLLECTIONS',
+          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
+        },
         'sale-update-key',
       ),
     ).rejects.toThrow('sale update failed');

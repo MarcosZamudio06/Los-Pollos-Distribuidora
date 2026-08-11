@@ -180,7 +180,7 @@ COMPLETED
 
 ### AUD-004 — Descuentos de cabecera no se distribuyen a partidas
 
-EN PROCESO
+COMPLETED
 
 - **Severidad:** ALTA
 - **Categoría:** integridad financiera, facturación administrativa
@@ -224,7 +224,7 @@ COMPLETED
 
 ### AUD-006 — Ajustes de inventario no son idempotentes
 
-EN PROCESO
+COMPLETED
 
 - **Severidad:** ALTA
 - **Categoría:** idempotencia, concurrencia, inventario
@@ -246,6 +246,8 @@ EN PROCESO
 
 ### AUD-007 — El rol COLLECTIONS no puede satisfacer el contrato de cobro en efectivo
 
+COMPLETED
+
 - **Severidad:** ALTA
 - **Categoría:** autorización, roles, caja, cobranza
 - **Archivos afectados:** `backend/src/modules/accounts-receivable/accounts-receivable.controller.ts:56-76`; `backend/src/modules/cash-management/cash-management.controller.ts:97-148`; spec de CxC.
@@ -266,6 +268,8 @@ EN PROCESO
 
 ### AUD-008 — Bootstrap productivo desconectado e incompleto para rotación
 
+PROCESS
+
 - **Severidad:** ALTA
 - **Categoría:** despliegue, datos maestros, seguridad operacional
 - **Archivos afectados:** `backend/prisma/bootstrap-production.ts`; `backend/package.json:15-17`; `docker-compose.production.yml:1-44`; `.env.example`.
@@ -285,6 +289,8 @@ EN PROCESO
 - **Dependencias:** coordinar con AUD-003.
 
 ### AUD-009 — `dateTo` excluye el día civil solicitado
+
+
 
 - **Severidad:** ALTA
 - **Categoría:** consultas, frontend/backend, reportes operativos

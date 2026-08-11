@@ -105,9 +105,11 @@ export function DailyClosePage() {
   const closeLocations = useMemo(
     () =>
       (locations.data ?? []).filter((location) =>
-        canUseLocationForDailyClose(location.type),
+        canUseLocationForDailyClose(location.type) &&
+        (user?.role === "ADMIN" ||
+          location.id === user?.operationalLocationId),
       ),
-    [locations.data],
+    [locations.data, user?.operationalLocationId, user?.role],
   );
   const canViewInventory = user?.role !== "COLLECTIONS";
   const canViewFinancials = user?.role !== "WAREHOUSE";

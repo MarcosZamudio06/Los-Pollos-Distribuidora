@@ -18,6 +18,7 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un usuario `SELLER`, `WAREHOUSE` o `ADMIN` con `cedis.receive_supplies`, cuando consulta recepción CEDIS, entonces solo ve suministros dentro de su alcance operativo y puede recibirlos conforme a la ubicación autorizada.
 - Dado un usuario `DRIVER`, cuando consulta reparto, entonces solo ve rutas y pedidos asignados a su usuario; no puede crear productos, modificar precios, cancelar ventas ni ver reportes financieros globales.
 - Dado un usuario `COLLECTIONS`, cuando opera cobranza, entonces puede consultar cuentas por cobrar, saldos, pagos, cobros en ruta y liquidaciones autorizadas; no puede modificar inventario ni registrar ventas desde POS.
+- Dado un usuario `COLLECTIONS` con `collections.receive_cash`, `cash_shift.open_own` y `cash_shift.close_own`, cuando cobra en efectivo en su ubicación, entonces puede abrir, consultar y cerrar su propio turno con el dispositivo registrado; no puede usar una ubicación ajena, un turno ajeno, cerrar administrativamente, reabrir ni registrar movimientos.
 - Dado cualquier pantalla con navegación por rol, cuando el rol no tiene acceso a un módulo, entonces el menú y la ruta protegida no permiten operar ese módulo.
 
 ## Inventario por ubicación operativa
@@ -148,6 +149,8 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado una cuenta por cobrar vigente, cuando se registra pago total válido, entonces saldo pendiente queda en cero y estado pagado.
 - Dado un pago de cobranza del MVP, cuando se registra, entonces `Payment.accountReceivableId` es requerido y el pago se aplica a exactamente una cuenta por cobrar.
 - Dado un pago de cobranza en efectivo en una ubicación fija, cuando se registra sin sesión abierta, entonces se rechaza y no modifica el saldo de la cuenta por cobrar.
+- Dado un pago de cobranza en efectivo en una ubicación fija, cuando `COLLECTIONS` no tiene `collections.receive_cash`, entonces se rechaza con `COLLECTIONS_CASH_PERMISSION_REQUIRED` y no consulta ni muta el turno o el saldo.
+- Dado un pago `TRANSFER`, `DEPOSIT`, `CARD` o `CHECK`, o un cobro `CASH` de ruta con su contexto autorizado, cuando `COLLECTIONS` registra el pago, entonces no se exige `cash_shift.open_own` ni `cashShiftId` de caja fija.
 - Dado una venta de contado completamente pagada, cuando se registra el pago inicial, entonces el `Payment` queda asociado a la venta sin crear una cuenta por cobrar artificial.
 - Dado dinero recibido en el sistema, cuando se audita la fuente monetaria, entonces solo `Payment` puede ser fuente de verdad y cualquier total en reparto o liquidación debe ser derivado.
 - Dado un pago mayor al saldo pendiente, cuando no existe regla futura explícita para anticipos o saldos a favor, entonces se rechaza.

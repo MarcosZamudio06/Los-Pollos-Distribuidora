@@ -94,6 +94,8 @@ Validaciones:
 - `Payment` es la única fuente monetaria del cobro recibido.
 - Todos los importes monetarios de respuesta se serializan como strings canónicos con dos decimales.
 - Un pago `CASH` de una ubicación fija requiere turno abierto del cajero y dispositivo registrados; conserva `cashShiftId` y deriva `pointOfSaleDailyCloseId`. Los cobros de ruta siguen `RouteSettlement`.
+- Un pago `CASH` de una ubicación fija requiere además el permiso atómico `collections.receive_cash`. El actor `COLLECTIONS` solo puede usar su turno `OPEN`, en su ubicación operativa asignada y en su dispositivo registrado; no puede usar el turno de otro cajero ni una ubicación ajena.
+- Los cobros `CASH` de ruta no requieren `collections.receive_cash` ni `CashShift`; permanecen sujetos al contexto y permisos de ruta.
 - La fecha de la venta y la fecha de cobro son hechos distintos: un cierre `REVIEWED`, `CLOSED` o `CANCELLED` de la venta no bloquea una cobranza posterior ni exige reabrir ese cierre.
 - Un pago `CASH` de una ubicación fija debe usar el `CashShift` abierto del momento de cobro. El cierre derivado del turno puede ser distinto al cierre de la venta y es el único cierre que se bloquea y recalcula para esta mutación.
 - Las transferencias, depósitos, tarjetas y cheques no requieren turno ni dispositivo. Si no pertenecen a una ruta ni se les asigna un contexto POS de cobranza, se registran sin `pointOfSaleDailyCloseId` y no recalculan el cierre histórico de la venta.

@@ -1,6 +1,9 @@
 export const PERMISSIONS = {
   ACCESS_AUDIT_READ: 'access_audit.read',
   ACCESS_PROFILES_MANAGE: 'access_profiles.manage',
+  COLLECTIONS_RECEIVE_CASH: 'collections.receive_cash',
+  CASH_SHIFT_OPEN_OWN: 'cash_shift.open_own',
+  CASH_SHIFT_CLOSE_OWN: 'cash_shift.close_own',
   CASH_SHIFTS_ADMINISTRATIVE_CLOSE: 'cash_shifts.administrative_close',
   CASH_TERMINALS_REASSIGN: 'cash_terminals.reassign',
   CEDIS_CLOSE: 'cedis.close',
@@ -44,6 +47,18 @@ export const PERMISSION_DEFINITIONS = [
   {
     key: PERMISSIONS.ACCESS_PROFILES_MANAGE,
     description: 'Manage access profiles and their permissions.',
+  },
+  {
+    key: PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+    description: 'Receive fixed-location cash collection payments.',
+  },
+  {
+    key: PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+    description: "Open and inspect the authenticated user's own cash shift.",
+  },
+  {
+    key: PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+    description: "Close the authenticated user's own cash shift.",
   },
   {
     key: PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE,
@@ -126,6 +141,9 @@ export const PERMISSION_METADATA: Record<
 > = {
   [PERMISSIONS.ACCESS_AUDIT_READ]: { group: 'Security', risk: 'sensitive' },
   [PERMISSIONS.ACCESS_PROFILES_MANAGE]: { group: 'Security', risk: 'critical' },
+  [PERMISSIONS.COLLECTIONS_RECEIVE_CASH]: { group: 'Cash', risk: 'sensitive' },
+  [PERMISSIONS.CASH_SHIFT_OPEN_OWN]: { group: 'Cash', risk: 'sensitive' },
+  [PERMISSIONS.CASH_SHIFT_CLOSE_OWN]: { group: 'Cash', risk: 'sensitive' },
   [PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE]: {
     group: 'Cash',
     risk: 'critical',
@@ -158,9 +176,18 @@ export const PERMISSION_METADATA: Record<
 export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
   ADMIN: PERMISSION_DEFINITIONS.map(({ key }) => key),
   BILLING: [PERMISSIONS.FISCAL_INFORMATION_EXPORT],
-  COLLECTIONS: [],
+  COLLECTIONS: [
+    PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+    PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+    PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+  ],
   DRIVER: [],
-  SELLER: [PERMISSIONS.CEDIS_VIEW, PERMISSIONS.CEDIS_RECEIVE_SUPPLIES],
+  SELLER: [
+    PERMISSIONS.CEDIS_VIEW,
+    PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
+    PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+    PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+  ],
   WAREHOUSE: [
     PERMISSIONS.COSTS_READ,
     PERMISSIONS.CEDIS_VIEW,

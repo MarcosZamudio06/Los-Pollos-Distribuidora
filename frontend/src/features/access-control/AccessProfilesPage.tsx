@@ -94,6 +94,20 @@ const permissionCopy: Record<string, { label: string; description: string }> = {
     label: "Administrar perfiles de acceso",
     description: "Administrar perfiles de acceso y sus permisos.",
   },
+  "collections.receive_cash": {
+    label: "Recibir efectivo de cobranza",
+    description:
+      "Recibir pagos de cobranza en efectivo en la ubicación asignada.",
+  },
+  "cash_shift.open_own": {
+    label: "Abrir y consultar turno propio",
+    description:
+      "Abrir y consultar el turno de caja propio en la ubicación asignada.",
+  },
+  "cash_shift.close_own": {
+    label: "Cerrar turno propio",
+    description: "Cerrar el turno de caja propio con su dispositivo registrado.",
+  },
   "cash_terminals.reassign": {
     label: "Reasignar terminales de caja",
     description: "Reasignar terminales de caja a una ubicación operativa.",

@@ -8,11 +8,14 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CashManagementService } from './cash-management.service';
 import {
@@ -29,11 +32,12 @@ import {
 } from './dto';
 
 @Controller()
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CashManagementController {
   constructor(private readonly service: CashManagementService) {}
 
   @Get('cash-terminals')
-  @Roles('ADMIN', 'SELLER')
+  @RequirePermissions(PERMISSIONS.CASH_SHIFT_OPEN_OWN)
   listTerminals(
     @Query() query: ListCashTerminalQueryDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -95,7 +99,7 @@ export class CashManagementController {
   }
 
   @Get('cash-shifts/current')
-  @Roles('ADMIN', 'SELLER')
+  @RequirePermissions(PERMISSIONS.CASH_SHIFT_OPEN_OWN)
   currentShift(
     @Query() query: CurrentCashShiftQueryDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -107,7 +111,7 @@ export class CashManagementController {
   }
 
   @Post('cash-shifts')
-  @Roles('ADMIN', 'SELLER')
+  @RequirePermissions(PERMISSIONS.CASH_SHIFT_OPEN_OWN)
   openShift(
     @Body() dto: OpenCashShiftDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -119,7 +123,7 @@ export class CashManagementController {
   }
 
   @Patch('cash-shifts/:id/close')
-  @Roles('ADMIN', 'SELLER')
+  @RequirePermissions(PERMISSIONS.CASH_SHIFT_CLOSE_OWN)
   closeShift(
     @Param('id') id: string,
     @Body() dto: CloseCashShiftDto,

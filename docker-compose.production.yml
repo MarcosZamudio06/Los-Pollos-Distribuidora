@@ -12,6 +12,24 @@ services:
     networks:
       - app_network
 
+  bootstrap:
+    profiles: ["migration"]
+    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Managed PostgreSQL DATABASE_URL is required}
+      NODE_ENV: production
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    command: npm run bootstrap:production
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app_network
+
   backend:
     image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
     build:

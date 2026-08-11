@@ -48,6 +48,8 @@ const productionAdmin = {
   mustChangePassword: true,
 } as const;
 
+const MIN_PASSWORD_LENGTH = 10;
+
 export type ProductionBootstrapClient = {
   role: {
     upsert: (args: Prisma.RoleUpsertArgs) => Promise<unknown>;
@@ -68,7 +70,10 @@ export type ProductionBootstrapClient = {
     upsert: (args: Prisma.OperationalLocationUpsertArgs) => Promise<unknown>;
   };
   user: {
-    upsert: (args: Prisma.UserUpsertArgs) => Promise<unknown>;
+    upsert: (args: Prisma.UserUpsertArgs) => Promise<{ id: string }>;
+  };
+  authSession: {
+    updateMany: (args: Prisma.AuthSessionUpdateManyArgs) => Promise<unknown>;
   };
 };
 
@@ -81,10 +86,31 @@ type ProductionBootstrapDependencies = {
   hashPassword?: (password: string, rounds: number) => Promise<string>;
 };
 
+export type ProductionBootstrapOptions = {
+  rotateAdminPassword?: boolean;
+};
+
+export function parseProductionBootstrapArgs(
+  argv: string[],
+): ProductionBootstrapOptions {
+  if (argv.length === 0) return { rotateAdminPassword: false };
+  if (argv.length === 1 && argv[0] === '--rotate-admin-password') {
+    return { rotateAdminPassword: true };
+  }
+
+  const unknownArgument = argv.find(
+    (argument) => argument !== '--rotate-admin-password',
+  );
+  throw new Error(
+    `Unknown argument: ${unknownArgument ?? '--rotate-admin-password'}`,
+  );
+}
+
 export async function bootstrapProduction(
   prisma: ProductionBootstrapClient,
   env: ProductionBootstrapEnv,
   dependencies: ProductionBootstrapDependencies = {},
+  options: ProductionBootstrapOptions = {},
 ): Promise<void> {
   if (env.NODE_ENV !== 'production') {
     throw new Error('Production bootstrap requires NODE_ENV=production');
@@ -92,6 +118,9 @@ export async function bootstrapProduction(
 
   if (!env.SEED_ADMIN_PASSWORD?.trim()) {
     throw new Error('SEED_ADMIN_PASSWORD is required for production bootstrap');
+  }
+  if (env.SEED_ADMIN_PASSWORD.length < MIN_PASSWORD_LENGTH) {
+    throw new Error('SEED_ADMIN_PASSWORD must be at least 10 characters long');
   }
 
   const hashPassword = dependencies.hashPassword ?? bcrypt.hash;
@@ -155,15 +184,24 @@ export async function bootstrapProduction(
     },
   });
 
-  await prisma.user.upsert({
+  const adminUpdate: Prisma.UserUpdateInput = {
+    name: productionAdmin.name,
+    isActive: productionAdmin.isActive,
+    role: { connect: { name: 'ADMIN' } },
+    operationalLocation: { connect: { code: productionLocation.code } },
+  };
+
+  if (options.rotateAdminPassword) {
+    Object.assign(adminUpdate, {
+      passwordHash,
+      mustChangePassword: true,
+      sessionVersion: { increment: 1 },
+    });
+  }
+
+  const admin = await prisma.user.upsert({
     where: { email: productionAdmin.email },
-    update: {
-      name: productionAdmin.name,
-      isActive: productionAdmin.isActive,
-      mustChangePassword: productionAdmin.mustChangePassword,
-      role: { connect: { name: 'ADMIN' } },
-      operationalLocation: { connect: { code: productionLocation.code } },
-    },
+    update: adminUpdate,
     create: {
       ...productionAdmin,
       passwordHash,
@@ -171,18 +209,31 @@ export async function bootstrapProduction(
       operationalLocation: { connect: { code: productionLocation.code } },
     },
   });
+
+  if (options.rotateAdminPassword) {
+    await prisma.authSession.updateMany({
+      where: { userId: admin.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+}
+
+async function main(): Promise<void> {
+  let prisma: PrismaClient | undefined;
+  try {
+    const options = parseProductionBootstrapArgs(process.argv.slice(2));
+    prisma = new PrismaClient();
+    await bootstrapProduction(prisma, process.env, {}, options);
+  } catch (error: unknown) {
+    console.error(error);
+    process.exitCode = 1;
+  } finally {
+    if (prisma) {
+      await prisma.$disconnect();
+    }
+  }
 }
 
 if (require.main === module) {
-  const prisma = new PrismaClient();
-
-  bootstrapProduction(prisma, process.env)
-    .then(async () => {
-      await prisma.$disconnect();
-    })
-    .catch(async (error: unknown) => {
-      console.error(error);
-      await prisma.$disconnect();
-      process.exit(1);
-    });
+  void main();
 }

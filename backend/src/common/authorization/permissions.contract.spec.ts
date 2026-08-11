@@ -4,9 +4,10 @@ import {
   PERMISSIONS,
   ROLE_PERMISSION_KEYS,
 } from './permissions';
+import type { Permission } from './permissions';
 
 describe('CEDIS permission contract', () => {
-  const cedisPermissions = [
+  const cedisPermissions: Permission[] = [
     PERMISSIONS.CEDIS_VIEW,
     PERMISSIONS.CEDIS_MANAGE,
     PERMISSIONS.CEDIS_DISPATCH,
@@ -54,10 +55,56 @@ describe('CEDIS permission contract', () => {
       PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
       PERMISSIONS.CEDIS_RECEIVE_RETURNS,
     ]);
+    expect(
+      ROLE_PERMISSION_KEYS.SELLER.filter((permission) =>
+        cedisPermissions.includes(permission),
+      ),
+    ).toEqual([PERMISSIONS.CEDIS_VIEW, PERMISSIONS.CEDIS_RECEIVE_SUPPLIES]);
+    expect(ROLE_PERMISSION_KEYS.SELLER).not.toContain(PERMISSIONS.COSTS_READ);
+  });
+});
+
+describe('cash collection permission contract', () => {
+  it('defines own-shift and fixed-cash permissions with least-privilege roles', () => {
+    expect(PERMISSIONS.COLLECTIONS_RECEIVE_CASH).toBe(
+      'collections.receive_cash',
+    );
+    expect(PERMISSIONS.CASH_SHIFT_OPEN_OWN).toBe('cash_shift.open_own');
+    expect(PERMISSIONS.CASH_SHIFT_CLOSE_OWN).toBe('cash_shift.close_own');
+
+    for (const permission of [
+      PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+      PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+      PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+    ]) {
+      expect(PERMISSION_DEFINITIONS.map(({ key }) => key)).toContain(
+        permission,
+      );
+      expect(PERMISSION_METADATA[permission]).toEqual(
+        expect.objectContaining({ group: 'Cash' }),
+      );
+    }
+
+    expect(ROLE_PERMISSION_KEYS.COLLECTIONS).toEqual([
+      PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+      PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+      PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+    ]);
+    expect(ROLE_PERMISSION_KEYS.ADMIN).toEqual(
+      expect.arrayContaining([
+        PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
+        PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+        PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
+      ]),
+    );
     expect(ROLE_PERMISSION_KEYS.SELLER).toEqual([
       PERMISSIONS.CEDIS_VIEW,
       PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
+      PERMISSIONS.CASH_SHIFT_OPEN_OWN,
+      PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
     ]);
-    expect(ROLE_PERMISSION_KEYS.SELLER).not.toContain(PERMISSIONS.COSTS_READ);
+    expect(ROLE_PERMISSION_KEYS.COLLECTIONS).not.toContain(
+      PERMISSIONS.CASH_SHIFTS_ADMINISTRATIVE_CLOSE,
+    );
   });
 });

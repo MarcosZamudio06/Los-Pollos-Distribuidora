@@ -4,52 +4,61 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   bootstrapProduction,
+  parseProductionBootstrapArgs,
   ProductionBootstrapClient,
 } from '../../prisma/bootstrap-production';
 import { PERMISSION_DEFINITIONS } from '../common/authorization/permissions';
 import { assertSeedEnvironment } from '../../prisma/seed-guard';
 
-type UpsertMock<T> = jest.MockedFunction<(args: T) => Promise<unknown>>;
+type AsyncMock<T> = jest.MockedFunction<(args: T) => Promise<unknown>>;
 
-function upsertMock<T>(): UpsertMock<T> {
+function asyncMock<T>(): AsyncMock<T> {
   return jest.fn<Promise<unknown>, [T]>().mockResolvedValue(undefined);
 }
 
 function createClient() {
-  const roleUpsert = upsertMock<Prisma.RoleUpsertArgs>();
+  const roleUpsert = asyncMock<Prisma.RoleUpsertArgs>();
   const roleFindUnique = jest
     .fn<Promise<{ id: string }>, [Prisma.RoleFindUniqueArgs]>()
     .mockResolvedValue({ id: 'role-id' });
-  const permissionUpsert = upsertMock<Prisma.PermissionUpsertArgs>();
+  const permissionUpsert = asyncMock<Prisma.PermissionUpsertArgs>();
   const permissionFindUnique = jest
     .fn<Promise<{ id: string }>, [Prisma.PermissionFindUniqueArgs]>()
     .mockResolvedValue({ id: 'permission-id' });
   const rolePermissionCreateMany =
-    upsertMock<Prisma.RolePermissionCreateManyArgs>();
-  const locationUpsert = upsertMock<Prisma.OperationalLocationUpsertArgs>();
-  const userUpsert = upsertMock<Prisma.UserUpsertArgs>();
+    asyncMock<Prisma.RolePermissionCreateManyArgs>();
+  const locationUpsert = asyncMock<Prisma.OperationalLocationUpsertArgs>();
+  const userUpsert = jest
+    .fn<Promise<{ id: string }>, [Prisma.UserUpsertArgs]>()
+    .mockResolvedValue({ id: 'admin-id' });
+  const authSessionUpdateMany = asyncMock<Prisma.AuthSessionUpdateManyArgs>();
   const client: ProductionBootstrapClient = {
     role: { upsert: roleUpsert, findUnique: roleFindUnique },
     permission: { upsert: permissionUpsert, findUnique: permissionFindUnique },
     rolePermission: { createMany: rolePermissionCreateMany },
     operationalLocation: { upsert: locationUpsert },
     user: { upsert: userUpsert },
+    authSession: { updateMany: authSessionUpdateMany },
   };
 
   return {
     client,
     roleUpsert,
-    roleFindUnique,
     permissionUpsert,
-    permissionFindUnique,
     rolePermissionCreateMany,
     locationUpsert,
     userUpsert,
+    authSessionUpdateMany,
   };
 }
 
+const productionEnv = {
+  NODE_ENV: 'production',
+  SEED_ADMIN_PASSWORD: 'production-secret',
+};
+
 describe('Production bootstrap contract', () => {
-  it('registers a separate command and leaves prisma db seed unchanged', () => {
+  it('registers separate normal and explicit rotation commands without changing development seed', () => {
     const packageJson = JSON.parse(
       readFileSync(resolve(__dirname, '../../package.json'), 'utf8'),
     ) as {
@@ -60,35 +69,61 @@ describe('Production bootstrap contract', () => {
     expect(packageJson.scripts?.['bootstrap:production']).toBe(
       'ts-node prisma/bootstrap-production.ts',
     );
+    expect(packageJson.scripts?.['bootstrap:production:rotate-admin']).toBe(
+      'ts-node prisma/bootstrap-production.ts --rotate-admin-password',
+    );
     expect(packageJson.scripts?.['seed:development']).toBe('prisma db seed');
     expect(packageJson.prisma?.seed).toBe('ts-node prisma/seed.ts');
     expect(packageJson.scripts?.['bootstrap:production']).not.toContain(
       'prisma db seed',
     );
+    expect(packageJson.scripts?.['bootstrap:production:rotate-admin']).not.toContain(
+      'prisma db seed',
+    );
   });
 
-  it.each([undefined, '', '   '])(
-    'rejects an unusable SEED_ADMIN_PASSWORD (%p) before writing data',
-    async (password) => {
-      const { client, roleUpsert, locationUpsert, userUpsert } = createClient();
+  it.each([
+    [undefined, 'SEED_ADMIN_PASSWORD is required for production bootstrap'],
+    ['', 'SEED_ADMIN_PASSWORD is required for production bootstrap'],
+    ['   ', 'SEED_ADMIN_PASSWORD is required for production bootstrap'],
+    [
+      'shortpass',
+      'SEED_ADMIN_PASSWORD must be at least 10 characters long',
+    ],
+  ])(
+    'rejects an unusable SEED_ADMIN_PASSWORD (%p) before hashing or writing data',
+    async (password, expectedError) => {
+      const {
+        client,
+        roleUpsert,
+        permissionUpsert,
+        rolePermissionCreateMany,
+        locationUpsert,
+        userUpsert,
+        authSessionUpdateMany,
+      } = createClient();
+      const hashPassword = jest.fn().mockResolvedValue('unused-hash');
 
       await expect(
         bootstrapProduction(client, {
           NODE_ENV: 'production',
           SEED_ADMIN_PASSWORD: password,
-        }),
-      ).rejects.toThrow(
-        'SEED_ADMIN_PASSWORD is required for production bootstrap',
-      );
+        }, { hashPassword }),
+      ).rejects.toThrow(expectedError);
 
+      expect(hashPassword).not.toHaveBeenCalled();
       expect(roleUpsert).not.toHaveBeenCalled();
+      expect(permissionUpsert).not.toHaveBeenCalled();
+      expect(rolePermissionCreateMany).not.toHaveBeenCalled();
       expect(locationUpsert).not.toHaveBeenCalled();
       expect(userUpsert).not.toHaveBeenCalled();
+      expect(authSessionUpdateMany).not.toHaveBeenCalled();
     },
   );
 
-  it('preserves surrounding whitespace in a nonempty password', async () => {
+  it('preserves surrounding whitespace in a valid password', async () => {
     const { client, userUpsert } = createClient();
+
     await bootstrapProduction(client, {
       NODE_ENV: 'production',
       SEED_ADMIN_PASSWORD: '  intentional secret  ',
@@ -104,7 +139,7 @@ describe('Production bootstrap contract', () => {
     );
   });
 
-  it('rejects non-production execution without changing the development seed guard', async () => {
+  it('rejects non-production execution before writing and leaves development seed guarded', async () => {
     const { client, roleUpsert } = createClient();
 
     await expect(
@@ -121,97 +156,178 @@ describe('Production bootstrap contract', () => {
     expect(() => assertSeedEnvironment('development')).not.toThrow();
   });
 
-  it('idempotently upserts access data, the initial location, and the administrator', async () => {
+  it('creates the complete operational set on an empty database', async () => {
     const {
       client,
       roleUpsert,
-      roleFindUnique,
       permissionUpsert,
-      permissionFindUnique,
       rolePermissionCreateMany,
       locationUpsert,
       userUpsert,
     } = createClient();
-    const env = {
-      NODE_ENV: 'production',
-      SEED_ADMIN_PASSWORD: 'production-secret',
-    };
 
-    await bootstrapProduction(client, env);
-    await bootstrapProduction(client, env);
+    await bootstrapProduction(client, productionEnv, {
+      hashPassword: jest.fn().mockResolvedValue('hashed-production-secret'),
+    });
 
-    expect(roleUpsert).toHaveBeenCalledTimes(12);
-    expect(roleFindUnique).toHaveBeenCalledTimes(12);
+    expect(roleUpsert).toHaveBeenCalledTimes(6);
     expect(permissionUpsert).toHaveBeenCalledTimes(
-      PERMISSION_DEFINITIONS.length * 2,
+      PERMISSION_DEFINITIONS.length,
     );
-    expect(permissionFindUnique).toHaveBeenCalled();
-    expect(rolePermissionCreateMany).toHaveBeenCalledTimes(12);
-    expect(locationUpsert).toHaveBeenCalledTimes(4);
-    expect(userUpsert).toHaveBeenCalledTimes(2);
-    for (const call of roleUpsert.mock.calls) {
-      const upsert = call[0];
-      expect(upsert.where).toEqual({ name: upsert.create.name });
-    }
-    for (const call of rolePermissionCreateMany.mock.calls) {
-      expect(call[0].skipDuplicates).toBe(true);
-      expect(call[0]).not.toHaveProperty('data.deleteMany');
-    }
-    for (const call of locationUpsert.mock.calls) {
-      expect(call[0]).toMatchObject({
-        create: expect.objectContaining({ code: expect.any(String) }),
-      });
-    }
-    expect(locationUpsert.mock.calls).toEqual(
+    expect(rolePermissionCreateMany).toHaveBeenCalledTimes(6);
+    expect(locationUpsert).toHaveBeenCalledTimes(2);
+    expect(userUpsert).toHaveBeenCalledTimes(1);
+    expect(userUpsert.mock.calls[0]?.[0]).toMatchObject({
+      where: { email: 'admin@pollos.local' },
+      create: {
+        email: 'admin@pollos.local',
+        passwordHash: 'hashed-production-secret',
+        role: { connect: { name: 'ADMIN' } },
+        operationalLocation: { connect: { code: 'MAIN' } },
+      },
+    });
+    expect(locationUpsert.mock.calls.map(([args]) => args.where)).toEqual([
+      { code: 'MAIN-CEDIS' },
+      { code: 'MAIN' },
+    ]);
+    expect(rolePermissionCreateMany.mock.calls).toEqual(
       expect.arrayContaining([
-        [
-          expect.objectContaining({
-            where: { code: 'MAIN-CEDIS' },
-            create: expect.objectContaining({ type: 'DISTRIBUTION_CENTER' }),
-          }),
-        ],
-        [
-          expect.objectContaining({
-            where: { code: 'MAIN' },
-            create: expect.objectContaining({
-              parent: { connect: { code: 'MAIN-CEDIS' } },
-            }),
-          }),
-        ],
+        [expect.objectContaining({ skipDuplicates: true })],
       ]),
     );
-    for (const call of userUpsert.mock.calls) {
-      const adminUpsert = call[0];
-      expect(adminUpsert).toMatchObject({
-        where: { email: 'admin@pollos.local' },
-        update: {
-          name: 'System Administrator',
-          isActive: true,
-          mustChangePassword: true,
-          role: { connect: { name: 'ADMIN' } },
-          operationalLocation: { connect: { code: 'MAIN' } },
-        },
-        create: {
-          name: 'System Administrator',
-          email: 'admin@pollos.local',
-          controlNumber: 'EPDP-000001',
-          phone: '+520000000001',
-          isActive: true,
-          mustChangePassword: true,
-          role: { connect: { name: 'ADMIN' } },
-          operationalLocation: { connect: { code: 'MAIN' } },
-        },
-      });
-      expect(adminUpsert.update).not.toHaveProperty('passwordHash');
-      const hash = adminUpsert.create.passwordHash;
-      if (typeof hash !== 'string') throw new Error('Expected password hash');
-      await expect(bcrypt.compare('production-secret', hash)).resolves.toBe(
-        true,
-      );
-      expect(hash).toMatch(/^\$2[aby]\$12\$/);
-    }
-    expect(userUpsert.mock.calls[0]?.[0].create.passwordHash).not.toBe(
-      userUpsert.mock.calls[1]?.[0].create.passwordHash,
+  });
+
+  it('does not change password or session state during a normal rerun', async () => {
+    const { client, userUpsert, authSessionUpdateMany } = createClient();
+
+    await bootstrapProduction(client, productionEnv, {
+      hashPassword: jest.fn().mockResolvedValue('hashed-production-secret'),
+    });
+    await bootstrapProduction(client, {
+      ...productionEnv,
+      SEED_ADMIN_PASSWORD: 'a-different-secret',
+    });
+
+    const normalRerun = userUpsert.mock.calls[1]?.[0];
+    expect(normalRerun?.update).not.toHaveProperty('passwordHash');
+    expect(normalRerun?.update).not.toHaveProperty('mustChangePassword');
+    expect(normalRerun?.update).not.toHaveProperty('sessionVersion');
+    expect(authSessionUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rotates the existing administrator only through the explicit route', async () => {
+    const { client, userUpsert, authSessionUpdateMany } = createClient();
+
+    await bootstrapProduction(
+      client,
+      { ...productionEnv, SEED_ADMIN_PASSWORD: 'rotated-secret' },
+      { hashPassword: jest.fn().mockResolvedValue('rotated-hash') },
+      { rotateAdminPassword: true },
     );
+
+    const rotation = userUpsert.mock.calls[0]?.[0];
+    expect(rotation?.update).toMatchObject({
+      passwordHash: 'rotated-hash',
+      mustChangePassword: true,
+      sessionVersion: { increment: 1 },
+    });
+    expect(Object.keys(rotation?.update ?? {}).sort()).toEqual([
+      'isActive',
+      'mustChangePassword',
+      'name',
+      'operationalLocation',
+      'passwordHash',
+      'role',
+      'sessionVersion',
+    ]);
+    expect(authSessionUpdateMany).toHaveBeenCalledWith({
+      where: { userId: 'admin-id', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
+  it('parses only the documented explicit rotation flag', () => {
+    expect(parseProductionBootstrapArgs([])).toEqual({
+      rotateAdminPassword: false,
+    });
+    expect(parseProductionBootstrapArgs(['--rotate-admin-password'])).toEqual({
+      rotateAdminPassword: true,
+    });
+    expect(() => parseProductionBootstrapArgs(['--unknown'])).toThrow(
+      'Unknown argument: --unknown',
+    );
+    expect(() =>
+      parseProductionBootstrapArgs(['--rotate-admin-password', '--unknown']),
+    ).toThrow('Unknown argument: --unknown');
+  });
+
+  it('wires the one-shot migration-profile bootstrap without leaking its secret to backend', () => {
+    const compose = readFileSync(
+      resolve(__dirname, '../../../docker-compose.production.yml'),
+      'utf8',
+    );
+    const backendStart = compose.indexOf('\n  backend:');
+    const frontendStart = compose.indexOf('\n  frontend:');
+    const backendSection = compose.slice(backendStart, frontendStart);
+
+    expect(compose).toContain('  bootstrap:');
+    expect(compose).toContain('profiles: ["migration"]');
+    expect(compose).toContain('command: npm run bootstrap:production');
+    expect(compose).toContain('SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}');
+    expect(compose).not.toContain(
+      'SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD is required for production bootstrap}',
+    );
+    expect(compose).toContain(
+      '    depends_on:\n      migrate:\n        condition: service_completed_successfully',
+    );
+    expect(compose).toContain('bootstrap:\n    profiles: ["migration"]');
+    expect(compose).not.toContain(
+      'command: npm run bootstrap:production --rotate-admin-password',
+    );
+    expect(backendSection).not.toContain('SEED_ADMIN_PASSWORD');
+  });
+
+  it('documents the safe deployment path, verifiable postconditions, and explicit rerun rotation', () => {
+    const envExample = readFileSync(
+      resolve(__dirname, '../../../.env.example'),
+      'utf8',
+    );
+    const runbook = readFileSync(
+      resolve(__dirname, '../../../docs/runbooks/backend-deployment.md'),
+      'utf8',
+    );
+
+    expect(envExample).toContain('SEED_ADMIN_PASSWORD=\n');
+    expect(envExample).not.toMatch(/SEED_ADMIN_PASSWORD=\S+/);
+    expect(runbook).toContain('at least 10 characters');
+    expect(runbook).toContain('read -r -s');
+    expect(runbook).toContain(
+      'docker compose -f docker-compose.production.yml --profile migration run --rm migrate',
+    );
+    expect(runbook).toContain(
+      'docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap',
+    );
+    expect(runbook).toContain('--rotate-admin-password');
+    expect(runbook).toContain('JOIN "Role"');
+    expect(runbook).toContain('JOIN "OperationalLocation"');
+    expect(runbook).toContain('GROUP BY r.name');
+    expect(runbook).not.toContain('COUNT(*) AS role_permission_count');
+    expect(runbook).toContain('passwordHash');
+    expect(runbook).toContain('sessionVersion');
+    expect(runbook).toMatch(
+      /must not be printed,?\s*committed,?\s*or included in logs/,
+    );
+    expect(runbook).not.toMatch(/SEED_ADMIN_PASSWORD\s*=\s*[^\n#]+\S/);
+  });
+
+  it('closes Prisma on both CLI success and failure', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../../prisma/bootstrap-production.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('finally');
+    expect(source).toContain('await prisma.$disconnect()');
+    expect(source).toContain('process.exitCode = 1');
   });
 });

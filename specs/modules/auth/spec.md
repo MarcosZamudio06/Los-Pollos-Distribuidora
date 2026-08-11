@@ -75,6 +75,8 @@ Gestionar autenticación, sesión y autorización del sistema.
 - Refresh requiere la cookie de refresh válida.
 - Permisos CEDIS: `cedis.view`, `cedis.manage`, `cedis.dispatch`, `cedis.receive_supplies`, `cedis.receive_returns`, `cedis.reconcile`, `cedis.close`, `cedis.view_costs`.
 - `ADMIN` recibe todos los permisos CEDIS. `WAREHOUSE` recibe consulta, despacho y recepción de suministros y devoluciones; `SELLER` recibe consulta y recepción de suministros únicamente dentro de su sucursal. `cedis.view_costs` no sustituye ni concede `costs.read`.
+- Permisos de caja propia: `cash_shift.open_own` permite consultar terminales propias, consultar el turno actual y abrir un turno en la ubicación asignada; `cash_shift.close_own` permite cerrar únicamente el turno propio con el dispositivo registrado.
+- `collections.receive_cash` permite registrar pagos `CASH` de cobranza en ubicación fija. `COLLECTIONS` recibe `collections.receive_cash`, `cash_shift.open_own` y `cash_shift.close_own`; `SELLER` conserva los dos permisos de turno propio; ningún rol operativo recibe por implicación `cash_shifts.administrative_close`, reapertura de turnos, movimientos de caja ni ventas POS adicionales.
 
 ## UI
 

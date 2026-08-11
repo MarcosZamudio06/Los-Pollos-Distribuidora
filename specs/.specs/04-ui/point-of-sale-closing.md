@@ -148,6 +148,8 @@ Cada diferencia debe mostrar esperado, registrado, diferencia, tipo de sobrante 
 
 `CASHIER` no se agrega; queda como decisión abierta.
 
+La tabla anterior describe la jornada diaria y no el ciclo de un `CashShift`. Para el turno propio, `COLLECTIONS` puede consultar terminales, abrir y cerrar su propio turno cuando sus capacidades efectivas incluyan `cash_shift.open_own` y `cash_shift.close_own`. La UI debe limitar la selección a la ubicación operativa asignada y el backend debe rechazar turno, terminal, dispositivo o ubicación ajenos. `COLLECTIONS` no puede editar la jornada, registrar gastos o movimientos, reabrir turnos, activar terminales ni cerrar administrativamente.
+
 ## Estados de pantalla
 
 - Loading: esqueletos por sección y acciones deshabilitadas.
