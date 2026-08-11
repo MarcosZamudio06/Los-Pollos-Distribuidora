@@ -32,6 +32,11 @@ export type InventoryTransferCancellationCommand = InventoryTransferCommand & {
   reason: string;
 };
 
+export type InventoryAdjustmentCommand = {
+  values: InventoryAdjustmentValues;
+  idempotencyKey: string;
+};
+
 export type InventoryQueryOptions = {
   enabled?: boolean;
   refetchInterval?: number | false;
@@ -131,8 +136,8 @@ export function useCreateInventoryAdjustment() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (values: InventoryAdjustmentValues) =>
-      productService.createAdjustment(values, accessToken),
+    mutationFn: ({ values, idempotencyKey }: InventoryAdjustmentCommand) =>
+      productService.createAdjustment(values, accessToken, idempotencyKey),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["inventory-balances"] });
       void queryClient.invalidateQueries({ queryKey: ["inventory-movements"] });

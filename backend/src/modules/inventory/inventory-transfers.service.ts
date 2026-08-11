@@ -772,58 +772,6 @@ export class InventoryTransfersService {
         destinationChange,
         reason,
       );
-
-      const shortage = {
-        quantityKg: Math.max(sent.quantityKg - received.quantityKg, 0),
-        quantityPieces: Math.max(
-          sent.quantityPieces - received.quantityPieces,
-          0,
-        ),
-      };
-      if (shortage.quantityKg > 0 || shortage.quantityPieces > 0) {
-        const balanceChange = await this.currentBalanceChange(
-          tx,
-          item.productId,
-          transfer.destinationLocationId,
-        );
-        await this.createReceiptAdjustmentMovement(
-          tx,
-          item,
-          userId,
-          InventoryMovementType.SHRINKAGE,
-          transfer.destinationLocationId,
-          shortage,
-          balanceChange,
-          options.receiptId,
-          `Supply shortage for ${transfer.transferNumber}`,
-        );
-      }
-
-      const surplus = {
-        quantityKg: Math.max(received.quantityKg - sent.quantityKg, 0),
-        quantityPieces: Math.max(
-          received.quantityPieces - sent.quantityPieces,
-          0,
-        ),
-      };
-      if (surplus.quantityKg > 0 || surplus.quantityPieces > 0) {
-        const balanceChange = await this.currentBalanceChange(
-          tx,
-          item.productId,
-          transfer.destinationLocationId,
-        );
-        await this.createReceiptAdjustmentMovement(
-          tx,
-          item,
-          userId,
-          InventoryMovementType.IN,
-          transfer.destinationLocationId,
-          surplus,
-          balanceChange,
-          options.receiptId,
-          `Supply surplus for ${transfer.transferNumber}`,
-        );
-      }
     }
 
     const confirmed = (await tx.inventoryTransfer.update({
@@ -1895,61 +1843,6 @@ export class InventoryTransfersService {
       },
       include: { product: true, location: true },
     });
-  }
-
-  private async createReceiptAdjustmentMovement(
-    tx: Prisma.TransactionClient,
-    item: TransferItemRecord,
-    userId: string,
-    type: InventoryMovementType,
-    locationId: string,
-    quantities: NormalizedQuantities,
-    balanceChange: AppliedBalanceChange,
-    receiptId: string,
-    reason: string,
-  ): Promise<void> {
-    await tx.inventoryMovement.create({
-      data: {
-        productId: item.productId,
-        locationId,
-        userId,
-        type,
-        quantity:
-          quantities.quantityKg > 0
-            ? quantities.quantityKg
-            : quantities.quantityPieces,
-        quantityKg: quantities.quantityKg,
-        quantityPieces: quantities.quantityPieces,
-        previousStock: balanceChange.previousQuantityKg,
-        newStock: balanceChange.newQuantityKg,
-        previousQuantityKg: balanceChange.previousQuantityKg,
-        newQuantityKg: balanceChange.newQuantityKg,
-        previousQuantityPieces: balanceChange.previousQuantityPieces,
-        newQuantityPieces: balanceChange.newQuantityPieces,
-        reason,
-        referenceType: 'BRANCH_SUPPLY_RECEIPT',
-        referenceId: receiptId,
-      },
-      include: { product: true, location: true },
-    });
-  }
-
-  private async currentBalanceChange(
-    tx: Prisma.TransactionClient,
-    productId: string,
-    locationId: string,
-  ): Promise<AppliedBalanceChange> {
-    const balance = await this.balanceService.get(tx, productId, locationId);
-    if (!balance) {
-      throw new BadRequestException('Inventory balance could not be updated');
-    }
-
-    return {
-      previousQuantityKg: balance.quantityKg,
-      previousQuantityPieces: balance.quantityPieces,
-      newQuantityKg: balance.quantityKg,
-      newQuantityPieces: balance.quantityPieces,
-    };
   }
 
   private buildTransferWhere(

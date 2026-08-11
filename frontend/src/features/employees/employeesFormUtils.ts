@@ -32,6 +32,7 @@ const warehouseLocationTypes = new Set([
 ]);
 const sellerLocationTypes = new Set([
   "BRANCH",
+  "DISTRIBUTION_CENTER",
   "MIXED",
   "EXTERNAL_POINT_OF_SALE",
 ]);
@@ -76,7 +77,7 @@ export function validateEmployeeForm(
 
   if (!draft.roleId) errors.roleId = "Selecciona un rol.";
   if (!draft.operationalLocationId)
-    errors.operationalLocationId = "Selecciona un punto de venta.";
+    errors.operationalLocationId = "Selecciona una ubicación operativa.";
 
   return errors;
 }

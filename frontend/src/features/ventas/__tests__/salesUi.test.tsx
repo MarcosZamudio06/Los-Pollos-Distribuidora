@@ -289,6 +289,10 @@ const confirmedSale: SaleDetail = {
       quantityKg: 0,
       quantityPieces: 3,
       subtotal: 276,
+      discount: 27.6,
+      taxableBase: 248.4,
+      tax: 0,
+      total: 248.4,
       unit: "PIECE",
     },
   ],
@@ -3199,6 +3203,11 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("Estado: ISSUED");
     expect(html).toContain("Venta a crédito");
     expect(html).toContain("Sin ruta asignada");
+    expect(html).toContain("Descuento");
+    expect(html).toContain("Base gravable");
+    expect(html).toContain("Total de partida");
+    expect(html).toContain("$27.60");
+    expect(html).toContain("$248.40");
   });
 
   it("separa la asignación de ruta del estado comercial de la venta", () => {

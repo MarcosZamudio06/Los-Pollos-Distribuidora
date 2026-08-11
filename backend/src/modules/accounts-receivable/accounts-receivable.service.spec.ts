@@ -321,8 +321,8 @@ describe('AccountsReceivableService', () => {
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
-  it('rechaza pagar una venta de un cierre revisado usando un turno de otro cierre', async () => {
-    const { service, prisma } = createService();
+  it('registra efectivo en el cierre del turno actual aunque la venta pertenezca a otro cierre', async () => {
+    const { service, prisma, dailyCloseService } = createService();
     const sale = {
       locationId: 'loc-1',
       pointOfSaleDailyClose: { id: 'close-reviewed', status: 'REVIEWED' },
@@ -389,19 +389,160 @@ describe('AccountsReceivableService', () => {
         { id: 'collector-1', role: 'COLLECTIONS' },
         'idem-cross-close-payment',
       ),
-    ).rejects.toThrow('DAILY_CLOSE_REOPEN_REQUIRED');
+    ).resolves.toEqual(
+      expect.objectContaining({
+        payment: expect.objectContaining({
+          id: 'payment-cross-close',
+          pointOfSaleDailyCloseId: 'close-draft',
+        }),
+      }),
+    );
 
     expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      'daily-close-id:close-reviewed',
+      'daily-close-id:close-draft',
     );
     expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      'daily-close-id:close-draft',
+      'daily-close-id:close-reviewed',
     );
-    expect(prisma.payment.create).not.toHaveBeenCalled();
-    expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
-    expect(prisma.sale.update).not.toHaveBeenCalled();
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pointOfSaleDailyCloseId: 'close-draft',
+          cashShiftId: 'shift-foreign',
+        }),
+      }),
+    );
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).toHaveBeenCalledWith('close-draft', prisma);
+  });
+
+  it('registra una transferencia posterior aunque el cierre de la venta esté cerrado', async () => {
+    const { service, prisma, dailyCloseService } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(
+      createReceivable({ outstandingAmount: money('124') }),
+    );
+    prisma.sale.findUnique.mockResolvedValue({
+      locationId: 'loc-1',
+      pointOfSaleDailyClose: { id: 'sale-close-closed', status: 'CLOSED' },
+    });
+    prisma.payment.create.mockResolvedValue({
+      id: 'payment-transfer-after-close',
+      accountReceivableId: 'ar-1',
+      saleId: 'sale-1',
+      customerId: 'customer-1',
+      amount: money('10'),
+      paymentMethod: PaymentMethod.TRANSFER,
+      status: PaymentStatus.APPLIED,
+      paidAt: new Date('2026-06-20T10:00:00.000Z'),
+      pointOfSaleDailyCloseId: null,
+    });
+    prisma.accountReceivable.update.mockResolvedValue(
+      createReceivable({
+        outstandingAmount: money('114'),
+        status: CollectionStatus.PARTIALLY_PAID,
+      }),
+    );
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 10,
+          paymentMethod: PaymentMethod.TRANSFER,
+          cashShiftId: 'shift-ignored',
+          deviceId: 'device-ignored',
+        },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-transfer-after-close',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        payment: expect.objectContaining({
+          id: 'payment-transfer-after-close',
+          pointOfSaleDailyCloseId: null,
+        }),
+        accountReceivable: expect.objectContaining({
+          outstandingAmount: '114.00',
+        }),
+      }),
+    );
+
+    expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).not.toHaveBeenCalled();
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pointOfSaleDailyCloseId: null,
+          cashShiftId: null,
+          operationalLocationId: 'loc-1',
+        }),
+      }),
+    );
+  });
+
+  it('mantiene los cobros de ruta fuera del cierre POS', async () => {
+    const { service, prisma, dailyCloseService } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
+    prisma.sale.findUnique.mockResolvedValue({
+      locationId: 'route-stock-1',
+      pointOfSaleDailyClose: { id: 'sale-close-closed', status: 'CLOSED' },
+    });
+    prisma.payment.create.mockResolvedValue({
+      id: 'payment-route',
+      accountReceivableId: 'ar-1',
+      saleId: 'sale-1',
+      customerId: 'customer-1',
+      amount: money('100'),
+      paymentMethod: PaymentMethod.TRANSFER,
+      routeId: 'route-1',
+      routeSettlementId: 'settlement-1',
+      status: PaymentStatus.APPLIED,
+      paidAt: new Date('2026-06-20T10:00:00.000Z'),
+      pointOfSaleDailyCloseId: null,
+    });
+    prisma.accountReceivable.update.mockResolvedValue(
+      createReceivable({
+        outstandingAmount: money('900'),
+        status: CollectionStatus.PARTIALLY_PAID,
+      }),
+    );
+
+    await service.registerPayment(
+      'ar-1',
+      {
+        accountReceivableId: 'ar-1',
+        amount: 100,
+        paymentMethod: PaymentMethod.TRANSFER,
+        routeId: 'route-1',
+        routeSettlementId: 'settlement-1',
+      },
+      { id: 'collector-1', role: 'COLLECTIONS' },
+      'idem-route-payment',
+    );
+
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          routeId: 'route-1',
+          routeSettlementId: 'settlement-1',
+          pointOfSaleDailyCloseId: null,
+          cashShiftId: null,
+        }),
+      }),
+    );
+    expect(prisma.cashShift.findUnique).not.toHaveBeenCalled();
+    expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).not.toHaveBeenCalled();
   });
 
   it('registra el pago cuando la venta y el turno pertenecen al mismo cierre', async () => {
@@ -487,7 +628,7 @@ describe('AccountsReceivableService', () => {
   });
 
   it('marks a receivable paid when the collection payment clears the full balance', async () => {
-    const { service, prisma } = createService();
+    const { service, prisma, dailyCloseService } = createService();
     prisma.payment.findFirst.mockResolvedValue(null);
     prisma.accountReceivable.findUnique.mockResolvedValue(
       createReceivable({ outstandingAmount: money('1000') }),
@@ -535,6 +676,17 @@ describe('AccountsReceivableService', () => {
         }),
       }),
     );
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pointOfSaleDailyCloseId: 'close-1',
+          cashShiftId: 'shift-1',
+        }),
+      }),
+    );
+    expect(
+      dailyCloseService.recalculateAfterDraftMutation,
+    ).toHaveBeenCalledWith('close-1', prisma);
   });
 
   it('rejects collection payments that target another receivable or exceed balance', async () => {
@@ -568,7 +720,7 @@ describe('AccountsReceivableService', () => {
         { id: 'collector-1', role: 'COLLECTIONS' },
         'idem-payment-4',
       ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow('Payment amount cannot exceed outstanding balance');
   });
 
   it('rejects payments on missing, paid, or cancelled receivables', async () => {
@@ -784,6 +936,75 @@ describe('AccountsReceivableService', () => {
       }),
     });
     expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
+  });
+
+  it('does not apply a second concurrent payment after a serializable conflict', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    let readers = 0;
+    let releaseReaders!: () => void;
+    const bothReadersStarted = new Promise<void>((resolve) => {
+      releaseReaders = resolve;
+    });
+    prisma.accountReceivable.findUnique.mockImplementation(async () => {
+      const invocation = ++readers;
+      if (invocation === 2) releaseReaders();
+      await bothReadersStarted;
+      if (invocation === 2) throw { code: 'P2034' };
+      return createReceivable({ outstandingAmount: money('100') });
+    });
+    prisma.payment.create.mockResolvedValue({
+      id: 'payment-concurrent-winner',
+      accountReceivableId: 'ar-1',
+      saleId: 'sale-1',
+      customerId: 'customer-1',
+      amount: money('40'),
+      paymentMethod: PaymentMethod.TRANSFER,
+      status: PaymentStatus.APPLIED,
+      paidAt: new Date('2026-06-20T10:00:00.000Z'),
+    });
+    prisma.accountReceivable.update.mockResolvedValue(
+      createReceivable({
+        outstandingAmount: money('60'),
+        status: CollectionStatus.PARTIALLY_PAID,
+      }),
+    );
+
+    const results = await Promise.allSettled([
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 40,
+          paymentMethod: PaymentMethod.TRANSFER,
+        },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-concurrent-winner',
+      ),
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 60,
+          paymentMethod: PaymentMethod.TRANSFER,
+        },
+        { id: 'collector-1', role: 'COLLECTIONS' },
+        'idem-concurrent-loser',
+      ),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.some(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof ConflictException,
+      ),
+    ).toBe(true);
+    expect(prisma.payment.create).toHaveBeenCalledTimes(1);
+    expect(prisma.accountReceivable.update).toHaveBeenCalledTimes(1);
   });
 
   it('persists Idempotency-Key metadata on new collection payments', async () => {

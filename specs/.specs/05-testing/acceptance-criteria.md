@@ -32,6 +32,9 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado una ubicación operativa inactiva como origen o destino de un traspaso nuevo, cuando se intenta crear o solicitar el traspaso, entonces el backend rechaza la operación y no crea `InventoryTransfer` ni `InventoryTransferItem`.
 - Dado un traspaso existente, cuando su origen o destino queda inactivo antes de confirmarlo, entonces la confirmación se rechaza y no genera movimientos `TRANSFER_OUT` ni `TRANSFER_IN`.
 - Dado un ajuste de inventario válido, cuando se confirma, entonces registra movimiento con producto, ubicación, usuario, unidad, cantidades y motivo obligatorio.
+- Dado un ajuste confirmado con `Idempotency-Key`, cuando el cliente reintenta el mismo payload, entonces recibe el movimiento original y el saldo no cambia por segunda vez.
+- Dada una clave de ajuste ya usada, cuando se reintenta con payload distinto, entonces responde `409 IDEMPOTENCY_CONFLICT` sin modificar saldo ni crear movimiento.
+- Dadas dos solicitudes concurrentes con la misma clave, cuando ambas alcanzan el backend, entonces solo persiste un movimiento y la respuesta reintentada devuelve ese resultado.
 - Dado una merma, devolución, rechazo parcial o pérdida operativa, cuando afecta inventario, entonces se registra como movimiento trazable con motivo obligatorio.
 - Dado stock insuficiente en una ubicación, cuando se intenta vender, ajustar salida o confirmar traspaso desde esa ubicación, entonces la operación se rechaza sin saldo negativo.
 - Dado un producto con bajo inventario, cuando se consulta bajo stock, entonces se evalúa por ubicación y por unidad aplicable.
@@ -81,8 +84,9 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un ciclo `CLOSED` o `CANCELLED`, cuando se intenta suministrar, devolver o refrescar, entonces se rechaza sin modificar historial.
 - Dado una devolución confirmada, cuando se concilia el cierre, entonces participa una sola vez mediante `TRANSFER_OUT` en la sucursal.
 - Dado un suministro pendiente, cuando la sucursal registra cantidades recibidas iguales a las enviadas, entonces confirma salida y entrada sin diferencia.
-- Dado un suministro pendiente con faltante, cuando se registra una nota y las cantidades recibidas, entonces la sucursal queda con lo recibido y se crea una merma `SHRINKAGE` trazable.
-- Dado un suministro pendiente con sobrante, cuando se registra una nota y las cantidades recibidas, entonces la sucursal recibe un ajuste `IN` por el excedente.
+- Dado un suministro pendiente con faltante, cuando se registra una nota y las cantidades recibidas, entonces la sucursal queda con lo recibido y la diferencia queda trazable en `BranchSupplyReceiptItem` sin movimiento `SHRINKAGE` sobre su saldo.
+- Dado un suministro pendiente con sobrante, cuando se registra una nota y las cantidades recibidas, entonces la sucursal queda con lo recibido y la diferencia queda trazable en `BranchSupplyReceiptItem` sin un segundo movimiento `IN`.
+- Dada una recepción con diferencia, cuando se concilia el ciclo CEDIS, entonces la cantidad entregada es la recibida y la variación de tránsito no se mezcla con mermas físicas de la sucursal.
 - Dado un suministro ya recibido, cuando se intenta recibirlo nuevamente, entonces se rechaza o se devuelve la recepción original sin duplicar movimientos.
 - Dado una diferencia sin nota, cuando se intenta recibir, entonces se rechaza sin confirmar la transferencia.
 - Dado un cálculo que requiere conversión kilo/pieza sin equivalencia y redondeo aprobados, cuando se procesa, entonces se rechaza sin inventar el factor ni la regla.

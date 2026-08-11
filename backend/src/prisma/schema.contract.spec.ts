@@ -270,6 +270,13 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('CREATE TABLE "BranchSupplyCycleEvent"');
   });
 
+  it('persists idempotency metadata for inventory adjustments', () => {
+    const movement = getModelBlock('InventoryMovement');
+
+    expect(movement).toMatch(/idempotencyKey\s+String\?\s+@unique/);
+    expect(movement).toMatch(/idempotencyPayloadHash\s+String\?/);
+  });
+
   it('enforces branch supply cycle identity, linkage, and append-only contracts', () => {
     const user = getModelBlock('User');
     const location = getModelBlock('OperationalLocation');

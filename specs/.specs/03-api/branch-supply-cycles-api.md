@@ -178,11 +178,14 @@ Validaciones:
   son enteras.
 - La nota es obligatoria cuando alguna diferencia no es cero.
 - La operación es transaccional: recepción, confirmación de salida, entrada
-  recibida, ajuste de diferencia, versión del ciclo y evento se persisten juntos.
+  recibida, diferencia de tránsito, versión del ciclo y evento se persisten juntos.
 - La salida del CEDIS usa lo enviado; la entrada de la sucursal usa lo recibido.
 - La confirmación consume la reserva del origen exactamente una vez.
-- Un faltante crea `SHRINKAGE`; un sobrante crea `IN`, ambos con
-  `referenceType=BRANCH_SUPPLY_RECEIPT` y `referenceId` de la recepción.
+- Un faltante o sobrante queda exclusivamente en los campos `sent*`, `received*`
+  y `difference*` de `BranchSupplyReceiptItem`; no crea un movimiento físico
+  adicional sobre la sucursal.
+- La conciliación usa lo recibido como cantidad entregada y excluye marcadores
+  históricos `SHRINKAGE`/`IN` referenciados a una recepción.
 - Repetir la misma clave y payload devuelve el resultado original; cambiar el
   payload responde `IDEMPOTENCY_CONFLICT`.
 - Una versión obsoleta responde `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`.

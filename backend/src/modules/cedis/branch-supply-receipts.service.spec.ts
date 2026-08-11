@@ -203,6 +203,87 @@ describe('BranchSupplyReceiptsService', () => {
     );
   });
 
+  it('persists signed KG and PIECE transit differences as receipt evidence', async () => {
+    const prisma = createPrisma();
+    const inventoryTransfers = {
+      receiveSupply: jest.fn().mockResolvedValue({ status: 'CONFIRMED' }),
+    } as unknown as jest.Mocked<
+      Pick<InventoryTransfersService, 'receiveSupply'>
+    >;
+    const service = new BranchSupplyReceiptsService(
+      prisma as unknown as PrismaService,
+      inventoryTransfers as unknown as InventoryTransfersService,
+    );
+    const link = createLink();
+    link.inventoryTransfer.items[0] = {
+      ...link.inventoryTransfer.items[0],
+      unit: ProductUnit.KG_AND_PIECE,
+      quantityPieces: 5,
+    };
+    const receiptItem = {
+      transferItemId: 'transfer-item-1',
+      productId: 'product-1',
+      productNameSnapshot: 'Pollo entero',
+      unit: ProductUnit.KG_AND_PIECE,
+      sentKg: new Prisma.Decimal('10.000'),
+      sentPieces: 5,
+      receivedKg: new Prisma.Decimal('8.000'),
+      receivedPieces: 4,
+      differenceKg: new Prisma.Decimal('-2.000'),
+      differencePieces: -1,
+    };
+    prisma.branchSupplyReceipt.findUnique.mockResolvedValue(null);
+    prisma.branchSupplyCycleTransfer.findUnique
+      .mockResolvedValueOnce(link)
+      .mockResolvedValueOnce({
+        ...link,
+        inventoryTransfer: {
+          ...link.inventoryTransfer,
+          status: 'CONFIRMED',
+          branchSupplyReceipt: {
+            id: 'receipt-difference-1',
+            receivedAt: businessDate,
+            notes: 'Faltante en tránsito',
+            receivedBy: { id: seller.id, name: 'Vendedor' },
+            items: [receiptItem],
+          },
+        },
+      });
+    prisma.branchSupplyReceipt.create.mockResolvedValue({
+      id: 'receipt-difference-1',
+    });
+
+    await service.receive(
+      'transfer-1',
+      {
+        expectedCycleVersion: 2,
+        notes: 'Faltante en tránsito',
+        items: [
+          {
+            transferItemId: 'transfer-item-1',
+            quantityKg: 8,
+            quantityPieces: 4,
+          },
+        ],
+      },
+      seller,
+      'receipt-difference-key',
+    );
+
+    expect(prisma.branchSupplyReceiptItem.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          sentKg: 10,
+          sentPieces: 5,
+          receivedKg: 8,
+          receivedPieces: 4,
+          differenceKg: -2,
+          differencePieces: -1,
+        }),
+      ],
+    });
+  });
+
   it('replays an idempotent receipt without delegating inventory or versioning again', async () => {
     const prisma = createPrisma();
     const inventoryTransfers = {

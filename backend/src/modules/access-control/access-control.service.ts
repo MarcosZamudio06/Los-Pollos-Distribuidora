@@ -15,6 +15,7 @@ import {
 } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
+import { isEmployeeLocationAllowed } from '../../common/authorization/employee-location-policy';
 import type { AuthenticatedPrincipal } from '../auth/auth.types';
 import {
   ListAccessAuditLogsDto,
@@ -39,21 +40,6 @@ type UserWithAccess = Prisma.UserGetPayload<{
 }>;
 type AccessClient = Prisma.TransactionClient | PrismaService;
 type RequestContext = { requestId?: string; ipAddress?: string };
-
-const EMPLOYEE_LOCATION_TYPES = [
-  'BRANCH',
-  'WAREHOUSE',
-  'DISTRIBUTION_CENTER',
-  'MIXED',
-  'EXTERNAL_POINT_OF_SALE',
-];
-const WAREHOUSE_LOCATION_TYPES = [
-  'BRANCH',
-  'WAREHOUSE',
-  'DISTRIBUTION_CENTER',
-  'MIXED',
-];
-const SELLER_LOCATION_TYPES = ['BRANCH', 'MIXED', 'EXTERNAL_POINT_OF_SALE'];
 
 @Injectable()
 export class AccessControlService {
@@ -517,14 +503,10 @@ export class AccessControlService {
     roleName: string,
     location: { type: string; isActive: boolean } | null,
   ): void {
-    const allowedTypes =
-      roleName === 'ADMIN'
-        ? EMPLOYEE_LOCATION_TYPES
-        : roleName === 'WAREHOUSE'
-          ? WAREHOUSE_LOCATION_TYPES
-          : SELLER_LOCATION_TYPES;
-
-    if (!location?.isActive || !allowedTypes.includes(location.type)) {
+    if (
+      !location?.isActive ||
+      !isEmployeeLocationAllowed(roleName, location.type)
+    ) {
       throw new BadRequestException(
         'Operational location is not available for the selected access profile',
       );

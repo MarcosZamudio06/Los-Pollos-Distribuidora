@@ -408,13 +408,47 @@ export function SaleDetailView({
                                 </p>
                               )}
                             </div>
-                            <div className="rounded-2xl bg-white px-4 py-3 text-right shadow-sm">
-                              <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
-                                Subtotal
-                              </p>
-                              <p className="mt-1 font-black tabular-nums">
-                                {money(item.subtotal)}
-                              </p>
+                            <div className="grid min-w-64 grid-cols-2 gap-x-5 gap-y-3 rounded-2xl bg-white px-4 py-3 text-right shadow-sm">
+                              <div>
+                                <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+                                  Subtotal
+                                </p>
+                                <p className="mt-1 font-black tabular-nums">
+                                  {money(item.subtotal)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+                                  Descuento
+                                </p>
+                                <p className="mt-1 font-black tabular-nums text-[var(--erp-danger)]">
+                                  {money(item.discount)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+                                  Base gravable
+                                </p>
+                                <p className="mt-1 font-black tabular-nums">
+                                  {money(item.taxableBase)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+                                  Impuesto
+                                </p>
+                                <p className="mt-1 font-black tabular-nums">
+                                  {money(item.tax)}
+                                </p>
+                              </div>
+                              <div className="col-span-2 border-t border-[color:var(--erp-border)] pt-3">
+                                <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+                                  Total de partida
+                                </p>
+                                <p className="mt-1 text-lg font-black tabular-nums text-[var(--erp-foreground)]">
+                                  {money(item.total)}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         </article>

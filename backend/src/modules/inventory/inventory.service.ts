@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { InventoryMovementType, ProductUnit } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -74,6 +76,8 @@ type InventoryMovementRecord = {
   purchaseId?: string | null;
   routeSettlementId?: string | null;
   pointOfSaleDailyCloseId?: string | null;
+  idempotencyKey?: string | null;
+  idempotencyPayloadHash?: string | null;
   createdAt: Date;
   product?: { name: string } | null;
   location?: { name: string } | null;
@@ -176,81 +180,106 @@ export class InventoryService {
   async createAdjustment(
     dto: CreateInventoryAdjustmentDto,
     userId: string,
+    idempotencyKey: string,
     actor?: InventoryScopeActor,
   ): Promise<MovementResponse> {
+    const normalizedIdempotencyKey =
+      this.normalizeIdempotencyKey(idempotencyKey);
     const reason = this.normalizeRequiredReason(dto.reason);
+    const payloadHash = this.hashPayload(
+      this.buildAdjustmentPayload(dto, userId, reason),
+    );
 
-    return this.prisma.$transaction(
-      async (tx) => {
-        const product = await tx.product.findUnique({
-          where: { id: dto.productId },
-          select: { id: true, name: true, unit: true, isActive: true },
-        });
-        this.assertProductAvailable(product);
+    return this.withSerializableRetry(
+      () =>
+        this.prisma.$transaction(
+          async (tx) => {
+            const replay = (await tx.inventoryMovement.findUnique({
+              where: { idempotencyKey: normalizedIdempotencyKey },
+              include: { product: true, location: true },
+            })) as InventoryMovementRecord | null;
+            if (replay) {
+              return this.resolveAdjustmentReplay(replay, payloadHash);
+            }
 
-        const location = await tx.operationalLocation.findUnique({
-          where: { id: dto.locationId },
-          select: {
-            id: true,
-            name: true,
-            isActive: true,
-            parentId: true,
-            type: true,
+            const product = await tx.product.findUnique({
+              where: { id: dto.productId },
+              select: { id: true, name: true, unit: true, isActive: true },
+            });
+            this.assertProductAvailable(product);
+
+            const location = await tx.operationalLocation.findUnique({
+              where: { id: dto.locationId },
+              select: {
+                id: true,
+                name: true,
+                isActive: true,
+                parentId: true,
+                type: true,
+              },
+            });
+            this.assertLocationAvailable(location);
+            this.assertLocationScope(location, actor);
+
+            const quantities = this.normalizeQuantities(dto, product.unit);
+            const direction = this.getMovementDirection(dto.type);
+            const {
+              previousQuantityKg,
+              previousQuantityPieces,
+              newQuantityKg,
+              newQuantityPieces,
+            } =
+              direction === -1
+                ? await this.balanceService.decreaseAvailable(
+                    tx,
+                    dto.productId,
+                    dto.locationId,
+                    quantities,
+                    'Inventory adjustment cannot leave negative available stock',
+                  )
+                : await this.balanceService.increase(
+                    tx,
+                    dto.productId,
+                    dto.locationId,
+                    quantities,
+                  );
+
+            const movement = (await tx.inventoryMovement.create({
+              data: {
+                productId: dto.productId,
+                locationId: dto.locationId,
+                userId,
+                type: dto.type,
+                quantity: quantities.genericQuantity,
+                quantityKg: quantities.quantityKg,
+                quantityPieces: quantities.quantityPieces,
+                previousStock: previousQuantityKg,
+                newStock: newQuantityKg,
+                previousQuantityKg,
+                newQuantityKg,
+                previousQuantityPieces,
+                newQuantityPieces,
+                reason,
+                referenceType: this.normalizeOptionalText(dto.referenceType),
+                referenceId: this.normalizeOptionalText(dto.referenceId),
+                routeSettlementId: this.normalizeOptionalText(
+                  dto.routeSettlementId,
+                ),
+                pointOfSaleDailyCloseId: this.normalizeOptionalText(
+                  dto.pointOfSaleDailyCloseId,
+                ),
+                idempotencyKey: normalizedIdempotencyKey,
+                idempotencyPayloadHash: payloadHash,
+              },
+              include: { product: true, location: true },
+            })) as InventoryMovementRecord;
+
+            return this.toMovementResponse(movement);
           },
-        });
-        this.assertLocationAvailable(location);
-        this.assertLocationScope(location, actor);
-
-        const quantities = this.normalizeQuantities(dto, product.unit);
-        const direction = this.getMovementDirection(dto.type);
-        const {
-          previousQuantityKg,
-          previousQuantityPieces,
-          newQuantityKg,
-          newQuantityPieces,
-        } =
-          direction === -1
-            ? await this.balanceService.decreaseAvailable(
-                tx,
-                dto.productId,
-                dto.locationId,
-                quantities,
-                'Inventory adjustment cannot leave negative available stock',
-              )
-            : await this.balanceService.increase(
-                tx,
-                dto.productId,
-                dto.locationId,
-                quantities,
-              );
-
-        const movement = (await tx.inventoryMovement.create({
-          data: {
-            productId: dto.productId,
-            locationId: dto.locationId,
-            userId,
-            type: dto.type,
-            quantity: quantities.genericQuantity,
-            quantityKg: quantities.quantityKg,
-            quantityPieces: quantities.quantityPieces,
-            previousStock: previousQuantityKg,
-            newStock: newQuantityKg,
-            previousQuantityKg,
-            newQuantityKg,
-            previousQuantityPieces,
-            newQuantityPieces,
-            reason,
-            referenceType: dto.referenceType ?? null,
-            referenceId: dto.referenceId ?? null,
-            routeSettlementId: dto.routeSettlementId ?? null,
-            pointOfSaleDailyCloseId: dto.pointOfSaleDailyCloseId ?? null,
-          },
-          include: { product: true, location: true },
-        })) as InventoryMovementRecord;
-
-        return this.toMovementResponse(movement);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
+      normalizedIdempotencyKey,
+      payloadHash,
     );
   }
 
@@ -280,6 +309,107 @@ export class InventoryService {
     }
 
     return normalized;
+  }
+
+  private normalizeIdempotencyKey(idempotencyKey?: string): string {
+    const normalized = idempotencyKey?.trim();
+    if (!normalized) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
+    return normalized;
+  }
+
+  private normalizeOptionalText(value?: string | null): string | null {
+    const normalized = value?.trim();
+    return normalized || null;
+  }
+
+  private buildAdjustmentPayload(
+    dto: CreateInventoryAdjustmentDto,
+    userId: string,
+    reason: string,
+  ): Record<string, unknown> {
+    return {
+      productId: dto.productId,
+      locationId: dto.locationId,
+      type: dto.type,
+      unit: dto.unit,
+      quantityKg: dto.quantityKg ?? 0,
+      quantityPieces: dto.quantityPieces ?? 0,
+      reason,
+      referenceType: this.normalizeOptionalText(dto.referenceType),
+      referenceId: this.normalizeOptionalText(dto.referenceId),
+      routeSettlementId: this.normalizeOptionalText(dto.routeSettlementId),
+      pointOfSaleDailyCloseId: this.normalizeOptionalText(
+        dto.pointOfSaleDailyCloseId,
+      ),
+      userId,
+    };
+  }
+
+  private hashPayload(payload: Record<string, unknown>): string {
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
+  private resolveAdjustmentReplay(
+    movement: InventoryMovementRecord,
+    payloadHash: string,
+  ): MovementResponse {
+    if (movement.idempotencyPayloadHash !== payloadHash) {
+      throw new ConflictException({
+        code: 'IDEMPOTENCY_CONFLICT',
+        message:
+          'Idempotency-Key was already used for a different inventory adjustment payload',
+      });
+    }
+
+    return this.toMovementResponse(movement);
+  }
+
+  private async withSerializableRetry(
+    operation: () => Promise<MovementResponse>,
+    idempotencyKey: string,
+    payloadHash: string,
+  ): Promise<MovementResponse> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isRetryableConflict(error) || attempt === 3) {
+          if (this.isRetryableConflict(error)) {
+            const replay = (await this.prisma.inventoryMovement.findUnique({
+              where: { idempotencyKey },
+              include: { product: true, location: true },
+            })) as InventoryMovementRecord | null;
+            if (replay)
+              return this.resolveAdjustmentReplay(replay, payloadHash);
+
+            throw new ConflictException({
+              code: 'INVENTORY_CONCURRENCY_CONFLICT',
+              message:
+                'The inventory operation could not be completed after concurrent retries',
+            });
+          }
+          throw error;
+        }
+      }
+    }
+
+    throw new ConflictException({
+      code: 'INVENTORY_CONCURRENCY_CONFLICT',
+      message:
+        'The inventory operation could not be completed after concurrent retries',
+    });
+  }
+
+  private isRetryableConflict(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      ((error as { code?: unknown }).code === 'P2002' ||
+        (error as { code?: unknown }).code === 'P2034')
+    );
   }
 
   private assertProductAvailable(
@@ -437,6 +567,11 @@ export class InventoryService {
       ...(query.type ? { type: query.type } : {}),
       ...(query.referenceType ? { referenceType: query.referenceType } : {}),
       ...(query.referenceId ? { referenceId: query.referenceId } : {}),
+      OR: [
+        { referenceType: null },
+        { referenceType: { not: 'BRANCH_SUPPLY_RECEIPT' } },
+        { type: { notIn: ['SHRINKAGE', 'IN'] } },
+      ],
       ...(query.pointOfSaleDailyCloseId
         ? { pointOfSaleDailyCloseId: query.pointOfSaleDailyCloseId }
         : {}),

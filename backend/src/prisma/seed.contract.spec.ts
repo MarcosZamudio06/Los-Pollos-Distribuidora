@@ -396,4 +396,21 @@ describe('Prisma seed contract', () => {
     expect(productionCompose).toContain('npm run migrate:deploy');
     expect(productionCompose).not.toContain('command: npm run start:docker');
   });
+
+  it('requires and propagates managed routing providers in production', () => {
+    const productionCompose = readFileSync(productionComposePath, 'utf8');
+
+    expect(productionCompose).toContain(
+      'PHOTON_URL: ${PHOTON_URL:?Managed Photon PHOTON_URL is required}',
+    );
+    expect(productionCompose).toContain(
+      'VROOM_URL: ${VROOM_URL:?Managed VROOM VROOM_URL is required}',
+    );
+    expect(productionCompose).toContain(
+      'OSRM_URL: ${OSRM_URL:?Managed OSRM OSRM_URL is required}',
+    );
+    expect(productionCompose).toContain(
+      'ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-10000}',
+    );
+  });
 });

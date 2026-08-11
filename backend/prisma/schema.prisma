@@ -875,6 +875,8 @@ model InventoryMovement {
   purchaseId              String?
   routeSettlementId       String?
   pointOfSaleDailyCloseId String?
+  idempotencyKey          String?                     @unique
+  idempotencyPayloadHash  String?
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt
   product                 Product                     @relation(fields: [productId], references: [id])

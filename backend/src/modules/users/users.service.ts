@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
+import { isEmployeeLocationAllowed } from '../../common/authorization/employee-location-policy';
 import {
   CreateUserDto,
   DeactivateUserDto,
@@ -22,20 +23,6 @@ import {
 const ADMIN_ROLE_NAME = 'ADMIN';
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_TEMPORARY_PASSWORD_LENGTH = 10;
-const EMPLOYEE_LOCATION_TYPES = [
-  'BRANCH',
-  'WAREHOUSE',
-  'DISTRIBUTION_CENTER',
-  'MIXED',
-  'EXTERNAL_POINT_OF_SALE',
-];
-const WAREHOUSE_LOCATION_TYPES = [
-  'BRANCH',
-  'WAREHOUSE',
-  'DISTRIBUTION_CENTER',
-  'MIXED',
-];
-const SELLER_LOCATION_TYPES = ['BRANCH', 'MIXED', 'EXTERNAL_POINT_OF_SALE'];
 const LAST_ADMIN_TRANSACTION_OPTIONS = {
   isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel,
 } as const;
@@ -383,16 +370,10 @@ export class UsersService {
     const location = await this.prisma.operationalLocation.findUnique({
       where: { id: locationId },
     });
-    const allowedLocationTypes =
-      roleName === 'ADMIN'
-        ? EMPLOYEE_LOCATION_TYPES
-        : roleName === 'WAREHOUSE'
-          ? WAREHOUSE_LOCATION_TYPES
-          : SELLER_LOCATION_TYPES;
     if (
       !location ||
       !location.isActive ||
-      !allowedLocationTypes.includes(location.type)
+      !isEmployeeLocationAllowed(roleName, location.type)
     ) {
       throw new BadRequestException(
         'Operational location is not available for employees',

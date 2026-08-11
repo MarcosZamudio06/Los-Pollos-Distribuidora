@@ -53,11 +53,11 @@ crear stock global ni ocultar inconsistencias históricas.
 - [x] Consumir físicamente la existencia y la reserva del origen de forma atómica y serializable.
 - [x] Acreditar el destino con cantidades confirmadas y crear movimientos `TRANSFER_OUT`/`TRANSFER_IN` con saldos anterior y posterior.
 - [x] Acreditar recepciones CEDIS únicamente por cantidades recibidas.
-- [x] Registrar faltantes como `SHRINKAGE` y sobrantes como `IN` con referencia de recepción.
+- [x] Conservar faltantes y sobrantes de tránsito en `BranchSupplyReceiptItem`, sin crear movimientos físicos adicionales en el destino.
 - [x] Rechazar reservas ausentes o incompatibles con `INVENTORY_RESERVATION_INTEGRITY_ERROR` sin reconstruir stock.
 - [x] Confirmar el traspaso, incrementar la versión del ciclo e invalidar su reconciliación mediante evento auditable.
 - [x] Preservar reintentos serializables e idempotentes sin duplicar movimientos, eventos ni versionados.
-- [x] Cubrir confirmación, recepción exacta, faltantes, sobrantes, idempotencia y ausencia de movimientos duplicados.
+- [x] Cubrir confirmación, recepción exacta, faltantes, sobrantes, ecuación de saldo, idempotencia y ausencia de movimientos duplicados.
 
 ### Fase 7: Protección de ventas y ajustes
 

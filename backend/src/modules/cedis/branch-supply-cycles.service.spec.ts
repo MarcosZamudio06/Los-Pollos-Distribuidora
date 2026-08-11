@@ -1053,6 +1053,18 @@ describe('BranchSupplyCyclesService', () => {
     expect(result.totals.suppliedKg).toBe(10);
     expect(result.totals.returnedKg).toBe(0);
     expect(inventoryTransfers.create).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.inventoryMovement.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          type: 'SHRINKAGE',
+          OR: [
+            { referenceType: null },
+            { referenceType: { not: 'BRANCH_SUPPLY_RECEIPT' } },
+          ],
+        }),
+      }),
+    );
     expect(prisma.branchSupplyCycle.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

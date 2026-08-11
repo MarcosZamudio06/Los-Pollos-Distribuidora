@@ -30,11 +30,13 @@ export function PaymentRegistrationDialog({
 }: PaymentRegistrationDialogProps) {
   const outstandingAmount = toNumber(account.outstandingAmount);
   const registerPayment = useRegisterReceivablePayment(account.id);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const openCashSession = useOpenCashSession(
-    account.saleLocationId ?? undefined,
+    paymentMethod === "CASH"
+      ? (account.saleLocationId ?? undefined)
+      : undefined,
   );
   const [amount, setAmount] = useState(String(outstandingAmount));
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [bankName, setBankName] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [appliedDocumentId, setAppliedDocumentId] = useState("");
@@ -75,8 +77,12 @@ export function PaymentRegistrationDialog({
   async function confirmRegistration() {
     if (!pendingPayment || registerPayment.isPending) return;
     try {
-      await registerPayment.mutateAsync(pendingPayment);
-      toast.success("Pago registrado correctamente.");
+      const result = await registerPayment.mutateAsync(pendingPayment);
+      toast.success(
+        result.payment.pointOfSaleDailyCloseId
+          ? `Pago registrado correctamente en el cierre de cobranza ${result.payment.pointOfSaleDailyCloseId}.`
+          : "Pago registrado correctamente sin turno ni reapertura del cierre de la venta.",
+      );
       setPendingPayment(null);
       onClose();
     } catch {
@@ -238,7 +244,7 @@ export function PaymentRegistrationDialog({
                 Boolean(amountError) ||
                 cannotPay ||
                 cashSessionError ||
-                openCashSession.isLoading ||
+                (paymentMethod === "CASH" && openCashSession.isLoading) ||
                 registerPayment.isPending
               }
               type="submit"
@@ -268,10 +274,19 @@ export function PaymentRegistrationDialog({
         <p>
           <strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}
         </p>
-        <p>
-          <strong>Terminal:</strong>{" "}
-          {openCashSession.data?.terminal.name ?? "No seleccionada"}
-        </p>
+        {pendingPayment?.paymentMethod === "CASH" && (
+          <>
+            <p>
+              <strong>Terminal:</strong>{" "}
+              {openCashSession.data?.terminal.name ?? "No seleccionada"}
+            </p>
+            <p>
+              <strong>Cierre de cobranza:</strong>{" "}
+              {openCashSession.data?.pointOfSaleDailyCloseId ??
+                "Se deriva del turno abierto"}
+            </p>
+          </>
+        )}
         <p>
           <strong>Fecha:</strong>{" "}
           {pendingPayment?.paidAt

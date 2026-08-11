@@ -168,70 +168,59 @@ export class AccountsReceivableService {
           if (!receivable) {
             throw new NotFoundException('Account receivable not found');
           }
+          this.assertReceivableCanReceivePayment(receivable);
+          let outstandingAmount = Money.from(receivable.outstandingAmount);
+          if (paymentAmount.compare(outstandingAmount) > 0) {
+            throw new BadRequestException(
+              'Payment amount cannot exceed outstanding balance',
+            );
+          }
 
+          // The sale close is historical context. Only the collection context
+          // may authorize and recalculate this payment.
           let sale = await tx.sale.findUnique({
             where: { id: receivable.saleId },
-            select: {
-              locationId: true,
-              pointOfSaleDailyClose: { select: { id: true, status: true } },
-            },
+            select: { locationId: true },
           });
-          const initialSaleDailyCloseId =
-            sale?.pointOfSaleDailyClose?.id ?? null;
-          let cashShift = initialSaleDailyCloseId
-            ? null
-            : await this.resolveCashShift(
-                tx,
-                dto,
-                sale?.locationId ?? null,
-                currentUser,
-                { allowNonDraftClose: true },
-              );
-          const initialDailyCloseId =
-            initialSaleDailyCloseId ??
-            cashShift?.pointOfSaleDailyCloseId ??
-            null;
-          if (initialDailyCloseId) {
-            await acquireDraftDailyCloseLifecycleLock(tx, initialDailyCloseId);
+          let cashShift = await this.resolveCashShift(
+            tx,
+            dto,
+            sale?.locationId ?? null,
+            currentUser,
+            { allowNonDraftClose: true },
+          );
+          let collectionDailyCloseId =
+            cashShift?.pointOfSaleDailyCloseId ?? null;
+
+          if (collectionDailyCloseId) {
+            await acquireDraftDailyCloseLifecycleLock(
+              tx,
+              collectionDailyCloseId,
+            );
             receivable = await tx.accountReceivable.findUnique({
               where: { id },
             });
             if (!receivable)
               throw new NotFoundException('Account receivable not found');
+            this.assertReceivableCanReceivePayment(receivable);
+            outstandingAmount = Money.from(receivable.outstandingAmount);
+            if (paymentAmount.compare(outstandingAmount) > 0) {
+              throw new BadRequestException(
+                'Payment amount cannot exceed outstanding balance',
+              );
+            }
             sale = await tx.sale.findUnique({
               where: { id: receivable.saleId },
-              select: {
-                locationId: true,
-                pointOfSaleDailyClose: {
-                  select: { id: true, status: true },
-                },
-              },
+              select: { locationId: true },
             });
-            const currentSaleDailyCloseId =
-              sale?.pointOfSaleDailyClose?.id ?? null;
-            if (currentSaleDailyCloseId !== initialSaleDailyCloseId)
-              throw new ConflictException('DAILY_CLOSE_VERSION_CONFLICT');
-            const authoritativeDailyCloseId =
-              currentSaleDailyCloseId ?? initialDailyCloseId;
             cashShift = await this.resolveCashShift(
               tx,
               dto,
               sale?.locationId ?? null,
               currentUser,
-              { expectedDailyCloseId: authoritativeDailyCloseId },
+              { expectedCollectionDailyCloseId: collectionDailyCloseId },
             );
-          }
-          this.assertReceivableCanReceivePayment(receivable);
-          const dailyCloseId =
-            sale?.pointOfSaleDailyClose?.id ??
-            cashShift?.pointOfSaleDailyCloseId ??
-            null;
-
-          const outstandingAmount = Money.from(receivable.outstandingAmount);
-          if (paymentAmount.compare(outstandingAmount) > 0) {
-            throw new BadRequestException(
-              'Payment amount cannot exceed outstanding balance',
-            );
+            collectionDailyCloseId = cashShift?.pointOfSaleDailyCloseId ?? null;
           }
 
           const newOutstandingAmount =
@@ -268,8 +257,7 @@ export class AccountsReceivableService {
                 dto.routeSettlementId,
               ),
               operationalLocationId: sale?.locationId ?? null,
-              pointOfSaleDailyCloseId:
-                cashShift?.pointOfSaleDailyCloseId ?? null,
+              pointOfSaleDailyCloseId: collectionDailyCloseId,
               cashShiftId: cashShift?.id ?? null,
               status: PaymentStatus.APPLIED,
               paidAt,
@@ -295,9 +283,9 @@ export class AccountsReceivableService {
             data: { collectionStatus: nextStatus },
           });
 
-          if (dailyCloseId)
+          if (collectionDailyCloseId)
             await this.dailyCloseService.recalculateAfterDraftMutation(
-              dailyCloseId,
+              collectionDailyCloseId,
               tx,
             );
 
@@ -346,7 +334,7 @@ export class AccountsReceivableService {
             tx,
             sale.pointOfSaleDailyClose.id,
           );
-          sale = (await tx.sale.findUnique({
+          sale = await tx.sale.findUnique({
             where: { id: saleId },
             include: {
               customer: true,
@@ -356,7 +344,7 @@ export class AccountsReceivableService {
                 select: { id: true, status: true },
               },
             },
-          }));
+          });
           if (!sale) throw new NotFoundException('Sale not found');
           if (sale.accountReceivable) {
             return this.toListItem(sale.accountReceivable);
@@ -542,11 +530,11 @@ export class AccountsReceivableService {
     currentUser: Actor,
     options: {
       allowNonDraftClose?: boolean;
-      expectedDailyCloseId?: string;
+      expectedCollectionDailyCloseId?: string;
     } = {},
   ) {
     if (dto.routeId || dto.routeSettlementId) return null;
-    if (!dto.cashShiftId && dto.paymentMethod !== 'CASH') return null;
+    if (dto.paymentMethod !== 'CASH') return null;
     if (!locationId) throw new BadRequestException('PAYMENT_LOCATION_REQUIRED');
     if (!dto.cashShiftId)
       throw new BadRequestException({
@@ -582,12 +570,12 @@ export class AccountsReceivableService {
         message: 'The cash shift does not belong to the payment location',
       });
     if (
-      options.expectedDailyCloseId &&
-      shift.pointOfSaleDailyCloseId !== options.expectedDailyCloseId
+      options.expectedCollectionDailyCloseId &&
+      shift.pointOfSaleDailyCloseId !== options.expectedCollectionDailyCloseId
     )
       throw new BadRequestException({
         code: 'CASH_SHIFT_LOCATION_MISMATCH',
-        message: 'The cash shift does not belong to the sale daily close',
+        message: 'The cash shift does not belong to the collection daily close',
       });
     if (shift.status !== 'OPEN')
       throw new BadRequestException({

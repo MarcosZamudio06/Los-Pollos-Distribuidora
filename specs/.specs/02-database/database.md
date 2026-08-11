@@ -617,6 +617,8 @@ Campos:
 - saleId
 - purchaseId
 - routeSettlementId
+- idempotencyKey
+- idempotencyPayloadHash
 - createdAt
 
 Tipos:
@@ -633,11 +635,24 @@ Tipos:
 - SHRINKAGE
 - RETURN
 
+Reglas de idempotencia:
+
+- `idempotencyKey` es único cuando existe y `idempotencyPayloadHash` debe existir
+  junto con la clave.
+- Solo el comando `POST /api/inventory/adjustments` persiste estos campos; los
+  movimientos históricos de otras operaciones conservan ambos valores nulos.
+- El hash representa el payload canónico, incluyendo actor, ubicación, tipo,
+  unidad, cantidades normalizadas, motivo y referencias opcionales.
+- Un replay con clave y hash iguales es solo lectura; una colisión de clave con
+  hash distinto es un conflicto de idempotencia.
+
 Notas:
 
 - `previousStock` y `newStock` son compatibles con un modelo simple, pero para el alcance revisado deben preferirse campos por kilo/pieza y ubicación.
 - Toda merma, diferencia de peso, pérdida operativa, devolución o rechazo parcial debe quedar como movimiento con motivo obligatorio.
 - Las referencias específicas (`saleId`, `purchaseId`, `transferId`, `routeSettlementId`) deben usarse cuando aplique para reforzar integridad; `referenceType` y `referenceId` solo deben complementar trazabilidad genérica.
+- Una cantidad positiva por KG o PIECE debe coincidir con el delta entre el saldo anterior y posterior según la dirección del tipo. No se permiten movimientos físicos positivos con delta cero.
+- La diferencia de tránsito de una recepción CEDIS no es un movimiento físico de la ubicación destino; su fuente de verdad es `BranchSupplyReceiptItem`.
 
 ### InventoryTransfer
 
@@ -810,8 +825,8 @@ Reglas:
 - `difference = received - sent` y no se acepta como fuente de verdad desde el
   cliente.
 - Kilos no negativos y piezas enteras no negativas.
-- Las diferencias se reflejan en movimientos `SHRINKAGE` o `IN` con referencia
-  a la recepción.
+- Las diferencias son variaciones de tránsito append-only y no se reflejan como
+  movimientos `SHRINKAGE` o `IN` en la ubicación destino.
 
 ### BranchSupplyCycleItem
 

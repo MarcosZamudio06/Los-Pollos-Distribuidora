@@ -356,4 +356,33 @@ describe("CEDIS incoming supplies UI", () => {
 
     await unmountPage(mounted);
   });
+
+  it("muestra el faltante desde la recepción sin presentarlo como merma del saldo", async () => {
+    const receivedWithShortage = supply("two", "RECEIVED");
+    receivedWithShortage.receipt = {
+      ...receivedWithShortage.receipt!,
+      notes: "Faltó producto durante el traslado",
+      items: [
+        {
+          ...receivedWithShortage.receipt!.items[0],
+          receivedKg: "9.000",
+          differenceKg: "-1.000",
+        },
+      ],
+    };
+    mockState.detail.data = receivedWithShortage;
+    const mounted = await mountPage(
+      "/cedis/incoming?date=2026-08-05&status=ALL",
+    );
+
+    await openSupply(mounted.container, "TRF-two");
+
+    const dialog = mounted.container.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("10.000 kg");
+    expect(dialog?.textContent).toContain("9.000 kg");
+    expect(dialog?.textContent).toContain("-1.000 kg");
+    expect(dialog?.textContent).not.toContain("Merma");
+
+    await unmountPage(mounted);
+  });
 });

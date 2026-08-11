@@ -37,11 +37,14 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
   directas son `BRANCH` con `parentId` igual al CEDIS activo.
 - Las consultas de sucursales CEDIS solo devuelven hijas directas activas y
   respetan el alcance de ubicación del usuario.
-- Una diferencia física debe quedar como ajuste trazable.
-- Una recepción CEDIS conserva la cantidad enviada, incrementa la sucursal por la cantidad recibida y registra faltantes como `SHRINKAGE` o sobrantes como `IN`, con referencia a la recepción.
+- Una diferencia física ocurrida bajo custodia de una ubicación debe quedar como ajuste trazable con impacto real en su saldo.
+- Una recepción CEDIS conserva la cantidad enviada, incrementa la sucursal únicamente por la cantidad recibida y conserva el faltante o sobrante de tránsito en `BranchSupplyReceiptItem`; la variación de recepción no crea movimientos `SHRINKAGE` ni `IN` sobre el saldo destino.
+- Todo `InventoryMovement` con cantidad positiva debe reflejar el mismo cambio en sus saldos anterior y posterior por KG y/o PIECE; un movimiento físico no puede tener delta cero.
 - Un traspaso puede salir de matriz y llegar a pollería o a `ROUTE_STOCK`.
 - Una sucursal solo puede recibir inventario mediante un `InventoryTransfer` cuyo origen sea su CEDIS padre activo; las recepciones externas directas están prohibidas.
 - Crear, confirmar y cancelar traspasos debe soportar idempotencia para no duplicar movimientos.
+- `POST /api/inventory/adjustments` exige `Idempotency-Key`, persiste la clave y el hash canónico del comando en `InventoryMovement`, y reintenta conflictos serializables sin duplicar saldos ni movimientos.
+- Una repetición con la misma clave y payload canónico devuelve el movimiento original; la misma clave con payload distinto responde `409 IDEMPOTENCY_CONFLICT`.
 - Los traspasos vinculados a un ciclo CEDIS conservan las mismas reglas de inventario; el ciclo solo deriva dirección, alcance y trazabilidad.
 - Un suministro del ciclo se crea `REQUESTED` con dirección CEDIS → sucursal; una devolución se crea `REQUESTED` con dirección sucursal → CEDIS.
 - Confirmar o cancelar un traspaso vinculado debe validar que el ciclo no esté `CLOSED` ni `CANCELLED` e invalidar su proyección vigente.

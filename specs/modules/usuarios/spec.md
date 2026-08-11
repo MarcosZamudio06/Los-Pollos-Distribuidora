@@ -40,6 +40,8 @@ Administrar usuarios internos del sistema.
 - No permitir que un usuario se desactive a sí mismo si es único ADMIN activo.
 - `operationalLocationId` conserva el punto de venta o ubicación operativa
   principal del empleado.
+- Cualquier rol canónico puede usar un CEDIS activo de tipo
+  `DISTRIBUTION_CENTER` como `operationalLocationId` principal.
 - `cedisLocationId` es opcional y, cuando se captura, debe referenciar un CEDIS
   activo de tipo `DISTRIBUTION_CENTER`; no sustituye la ubicación principal ni
   concede permisos adicionales por sí mismo.
@@ -55,12 +57,12 @@ Administrar usuarios internos del sistema.
   abastecimiento y recepción de devoluciones; `SELLER` recibe únicamente
   consulta dentro de su sucursal y no recibe costos por implicación del rol.
 - La asignación de ubicación permite `DISTRIBUTION_CENTER`, `WAREHOUSE`,
-  `MIXED` y `BRANCH` para `WAREHOUSE`, conserva ubicaciones operativas de venta
-  para `SELLER` y no permite asignar un CEDIS a un vendedor por defecto.
+  `MIXED` y `BRANCH` para `WAREHOUSE`; `SELLER` puede usar un punto de venta
+  operativo o un CEDIS activo como ubicación principal.
 - La administración técnica no concede automáticamente autorizaciones financieras.
 - Cambiar un perfil o sus permisos debe conservar actor, valores anterior y nuevo, fecha y motivo cuando corresponda.
 - El cambio de perfil se realiza únicamente mediante `/users/:id/access-profile`, con `expectedRoleId` y motivo.
-- El cambio de perfil valida que la ubicación asignada sea compatible con el nuevo rol; `WAREHOUSE` puede operar en CEDIS, almacén, ubicación mixta o sucursal, y `SELLER` no puede recibir un CEDIS.
+- El cambio de perfil valida que la ubicación asignada sea compatible con el nuevo rol; `WAREHOUSE` puede operar en CEDIS, almacén, ubicación mixta o sucursal, y `SELLER` puede operar en un punto de venta o CEDIS activo.
 - El cambio de perfil revoca todas las sesiones activas del usuario.
 - `/users/:id/sessions/revoke` permite cerrar sesiones activas con motivo y auditoría.
 - La respuesta de acceso incluye el perfil efectivo, permisos y sesiones activas sin exponer hashes ni tokens.
@@ -83,8 +85,9 @@ Pantalla de usuarios con:
 
 - Tabla.
 - Crear usuario.
-- Al registrar un empleado de punto de venta, permitir seleccionar un CEDIS
-  adicional sin perder la asignación del punto de venta.
+- Al registrar un empleado, permitir seleccionar un CEDIS como ubicación
+  operativa principal o como asignación adicional sin perder la ubicación
+  principal.
 - Editar usuario.
 - Cambiar estado.
 - Asignar perfil y revisar permisos efectivos.

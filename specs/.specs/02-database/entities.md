@@ -267,6 +267,8 @@ Validaciones:
 - `difference = received - sent` por dimensión y no puede ser recalculada desde
   un valor enviado por el cliente.
 - No se actualiza ni elimina después de persistirse.
+- Es la fuente de verdad de faltantes y sobrantes de tránsito; estas diferencias
+  no crean movimientos físicos adicionales en la ubicación destino.
 
 ## BranchSupplyCycleItem
 
@@ -449,6 +451,8 @@ Validaciones:
 - `password` requerido al crear.
 - `roleId` requerido.
 - `operationalLocationId` requerido como ubicación principal.
+- Cualquier rol puede usar un CEDIS activo de tipo `DISTRIBUTION_CENTER` como
+  ubicación principal.
 - `cedisLocationId` opcional; si existe, debe referenciar un CEDIS activo de tipo
   `DISTRIBUTION_CENTER`.
 - `passwordHash` nunca debe devolverse por API.
@@ -467,6 +471,10 @@ Validaciones:
 - Debe registrar cantidades por kilo y/o pieza cuando aplique.
 - No debe permitir stock negativo por ubicación.
 - La merma, diferencia de peso, devolución o rechazo parcial requiere motivo obligatorio.
+- Toda cantidad positiva debe coincidir con el delta entre saldos anterior y posterior según la dirección del tipo; un movimiento físico no puede tener delta cero.
+- La variación entre lo enviado y lo recibido en un suministro CEDIS pertenece a `BranchSupplyReceiptItem` y no a `InventoryMovement`.
+- Los ajustes manuales persisten `idempotencyKey` único y `idempotencyPayloadHash`; la pareja es nula para movimientos producidos por otros comandos.
+- Un replay con hash igual no actualiza `InventoryBalance` ni crea otro movimiento; una clave reutilizada con hash diferente es `IDEMPOTENCY_CONFLICT`.
 
 ## DeliveryRoute
 

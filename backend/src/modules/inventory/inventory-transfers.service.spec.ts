@@ -100,6 +100,46 @@ function createPrisma(): MockPrisma {
   return prisma;
 }
 
+function expectMovementEquations(
+  prisma: MockPrisma,
+  expectedGlobalDelta: { quantityKg: number; quantityPieces: number },
+) {
+  const movements = prisma.inventoryMovement.create.mock.calls.map(
+    ([args]) =>
+      args.data as {
+        quantityKg: number;
+        quantityPieces: number;
+        previousQuantityKg: number;
+        newQuantityKg: number;
+        previousQuantityPieces: number;
+        newQuantityPieces: number;
+      },
+  );
+
+  for (const movement of movements) {
+    expect(Math.abs(movement.newQuantityKg - movement.previousQuantityKg)).toBe(
+      movement.quantityKg,
+    );
+    expect(
+      Math.abs(movement.newQuantityPieces - movement.previousQuantityPieces),
+    ).toBe(movement.quantityPieces);
+  }
+  expect(
+    movements.reduce(
+      (sum, movement) =>
+        sum + movement.newQuantityKg - movement.previousQuantityKg,
+      0,
+    ),
+  ).toBe(expectedGlobalDelta.quantityKg);
+  expect(
+    movements.reduce(
+      (sum, movement) =>
+        sum + movement.newQuantityPieces - movement.previousQuantityPieces,
+      0,
+    ),
+  ).toBe(expectedGlobalDelta.quantityPieces);
+}
+
 function createService(prisma = createPrisma()) {
   return {
     service: new InventoryTransfersService(
@@ -887,7 +927,7 @@ describe('InventoryTransfersService', () => {
     expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
   });
 
-  it('confirms sent quantities and records a shortage adjustment for a receipt', async () => {
+  it('confirms sent quantities without recording a destination shortage movement', async () => {
     const { service, prisma } = createService();
     const cycleLink = {
       id: 'cycle-transfer-1',
@@ -962,19 +1002,15 @@ describe('InventoryTransfersService', () => {
       },
     );
 
-    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(3);
-    expect(prisma.inventoryMovement.create).toHaveBeenNthCalledWith(
-      3,
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(2);
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          type: InventoryMovementType.SHRINKAGE,
           referenceType: 'BRANCH_SUPPLY_RECEIPT',
-          referenceId: 'receipt-1',
-          quantityKg: 2.5,
-          quantityPieces: 1,
         }),
       }),
     );
+    expectMovementEquations(prisma, { quantityKg: -2.5, quantityPieces: -1 });
     expect(prisma.inventoryTransfer.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -1080,7 +1116,7 @@ describe('InventoryTransfersService', () => {
     expect(prisma.inventoryTransfer.update).not.toHaveBeenCalled();
   });
 
-  it('credits only received quantities and records a receipt surplus without duplicate physical credit', async () => {
+  it('credits only received quantities without recording a second surplus movement', async () => {
     const { service, prisma } = createService();
     const cycleLink = {
       id: 'cycle-transfer-1',
@@ -1167,18 +1203,15 @@ describe('InventoryTransfersService', () => {
         }),
       }),
     );
-    expect(prisma.inventoryMovement.create).toHaveBeenNthCalledWith(
-      3,
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(2);
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          type: InventoryMovementType.IN,
           referenceType: 'BRANCH_SUPPLY_RECEIPT',
-          referenceId: 'receipt-surplus-1',
-          quantityKg: 2.5,
-          quantityPieces: 1,
         }),
       }),
     );
+    expectMovementEquations(prisma, { quantityKg: 2.5, quantityPieces: 1 });
     expect(prisma.inventoryBalance.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: {

@@ -7,10 +7,13 @@ import {
   useInventoryLocations,
   useInventoryTransferDetail,
   useInventoryTransfers,
+  useProducts,
 } from "../hooks/useProducts";
 import { CatalogSelect } from "@/components/shared/operational-catalogs";
 import {
   isInventoryStorageLocation,
+  getCanonicalInventoryBalance,
+  type Product,
   type InventoryTransfer,
   type InventoryTransferValues,
 } from "../types";
@@ -43,6 +46,21 @@ function createIdempotencyKey() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
+function productUnit(product: Product) {
+  return product.unit ?? product.operationalUnit ?? "KG";
+}
+
+function hasAvailableQuantity(product: Product, locationId: string) {
+  const balance = getCanonicalInventoryBalance(product, locationId);
+  if (!balance) return false;
+
+  const unit = productUnit(product);
+  return (
+    (unit !== "PIECE" && balance.availableQuantityKg > 0) ||
+    (unit !== "KG" && balance.availableQuantityPieces > 0)
+  );
+}
+
 export function InventoryTransferView({
   canManage,
 }: InventoryTransferViewProps) {
@@ -59,6 +77,18 @@ export function InventoryTransferView({
   const confirmTransfer = useConfirmInventoryTransfer();
   const cancelTransfer = useCancelInventoryTransfer();
   const locations = useInventoryLocations({ storageOnly: true });
+  const products = useProducts(
+    {
+      isActive: "true",
+      ...(values.originLocationId
+        ? {
+            locationId: values.originLocationId,
+            requireInventoryBalance: true,
+          }
+        : {}),
+    },
+    { enabled: Boolean(values.originLocationId) },
+  );
   const locationOptions = locations.data
     ?.filter(isInventoryStorageLocation)
     .map((location) => ({
@@ -69,6 +99,13 @@ export function InventoryTransferView({
   const destinationOptions = locationOptions?.filter(
     (item) => item.id !== values.originLocationId && item.type !== "BRANCH",
   );
+  const productOptions = (products.data ?? [])
+    .filter((product) =>
+      values.originLocationId
+        ? hasAvailableQuantity(product, values.originLocationId)
+        : false,
+    )
+    .map((product) => ({ id: product.id, label: product.name }));
 
   function validate() {
     if (!values.originLocationId || !values.destinationLocationId)
@@ -211,7 +248,17 @@ export function InventoryTransferView({
               isLoading={locations.isLoading}
               label="Ubicación de origen"
               onChange={(originLocationId) =>
-                setValues({ ...values, originLocationId })
+                setValues({
+                  ...values,
+                  originLocationId,
+                  items: values.items.map((item) => ({
+                    ...item,
+                    productId: "",
+                    unit: "KG",
+                    quantityKg: undefined,
+                    quantityPieces: undefined,
+                  })),
+                })
               }
               options={locationOptions}
               placeholder="Selecciona origen"
@@ -243,20 +290,35 @@ export function InventoryTransferView({
               key={index}
               className="grid gap-3 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-3 md:grid-cols-4"
             >
-              <input
+              <CatalogSelect
                 className={fieldClass}
-                placeholder="ID del producto"
-                value={item.productId}
-                onChange={(event) =>
+                error={products.error}
+                isLoading={products.isLoading}
+                label="Producto"
+                onChange={(productId) => {
+                  const product = products.data?.find(
+                    (candidate) => candidate.id === productId,
+                  );
                   setValues({
                     ...values,
                     items: values.items.map((line, lineIndex) =>
                       lineIndex === index
-                        ? { ...line, productId: event.target.value }
+                        ? {
+                            ...line,
+                            productId,
+                            unit: product ? productUnit(product) : "KG",
+                          }
                         : line,
                     ),
-                  })
+                  });
+                }}
+                options={productOptions}
+                placeholder={
+                  values.originLocationId
+                    ? "Selecciona producto"
+                    : "Selecciona origen primero"
                 }
+                value={item.productId}
               />
               <select
                 className={fieldClass}

@@ -29,6 +29,16 @@ describe('Money', () => {
     expect(Money.sum(allocations).toString()).toBe('0.01');
   });
 
+  it('allocates a full 100 percent discount without exceeding item amounts', () => {
+    const allocations = Money.from('100.00').allocate(['33.34', '66.66']);
+
+    expect(allocations.map((value) => value.toString())).toEqual([
+      '33.34',
+      '66.66',
+    ]);
+    expect(Money.sum(allocations).toString()).toBe('100.00');
+  });
+
   it('serializes canonical monetary strings', () => {
     expect(toMoneyString('12')).toBe('12.00');
     expect(isMoneyString('12.00')).toBe(true);

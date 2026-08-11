@@ -10,6 +10,10 @@ const labelClass =
 
 const initialReferenceType = "MANUAL";
 
+function createIdempotencyKey() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
+
 export function InventoryAdjustmentModal({
   locationId = "",
   onClose,
@@ -27,6 +31,7 @@ export function InventoryAdjustmentModal({
     referenceId: "",
   });
   const [error, setError] = useState<string | null>(null);
+  const [idempotencyKey] = useState(createIdempotencyKey);
   const createAdjustment = useCreateInventoryAdjustment();
 
   function validate() {
@@ -59,10 +64,13 @@ export function InventoryAdjustmentModal({
     if (validationError) return setError(validationError);
     try {
       await createAdjustment.mutateAsync({
-        ...values,
-        reason: values.reason.trim(),
-        referenceType: values.referenceType?.trim() || undefined,
-        referenceId: values.referenceId?.trim() || undefined,
+        values: {
+          ...values,
+          reason: values.reason.trim(),
+          referenceType: values.referenceType?.trim() || undefined,
+          referenceId: values.referenceId?.trim() || undefined,
+        },
+        idempotencyKey,
       });
       onClose();
     } catch (caughtError) {

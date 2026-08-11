@@ -177,6 +177,49 @@ describe('UsersService employee administration', () => {
     );
   });
 
+  it.each(['ADMIN', 'BILLING', 'COLLECTIONS', 'DRIVER', 'SELLER', 'WAREHOUSE'])(
+    'allows %s users to use an active CEDIS as their primary location',
+    async (roleName) => {
+      const prisma = prismaMock();
+      const roleForTest = {
+        id: `role-${roleName.toLowerCase()}`,
+        name: roleName,
+      };
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.role.findUnique.mockResolvedValue(roleForTest);
+      prisma.operationalLocation.findUnique.mockResolvedValue(cedisLocation);
+      prisma.user.create.mockImplementation(
+        ({ data }: { data: Record<string, unknown> }) =>
+          Promise.resolve(
+            user({
+              ...data,
+              role: roleForTest,
+              roleId: roleForTest.id,
+              operationalLocationId: cedisLocation.id,
+              operationalLocation: cedisLocation,
+            }),
+          ),
+      );
+      const service = new UsersService(prisma as unknown as PrismaService);
+
+      await expect(
+        service.create({
+          name: 'Vendedor CEDIS',
+          email: `${roleName.toLowerCase()}-cedis@pollos.local`,
+          phone: '+522291234572',
+          roleId: roleForTest.id,
+          operationalLocationId: cedisLocation.id,
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          operationalLocationId: cedisLocation.id,
+          role: roleForTest,
+          operationalLocation: cedisLocation,
+        }),
+      );
+    },
+  );
+
   it('allows WAREHOUSE users to be assigned to an active branch', async () => {
     const prisma = prismaMock();
     const branch = {

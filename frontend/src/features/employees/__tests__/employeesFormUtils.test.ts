@@ -33,6 +33,22 @@ describe("employee form validation", () => {
     ]);
   });
 
+  it("includes CEDIS as a primary location for SELLER employees", () => {
+    const locations = locationsForEmployeeRole(
+      [
+        { id: "cedis-1", type: "DISTRIBUTION_CENTER" },
+        { id: "branch-1", type: "BRANCH" },
+      ],
+      [{ id: "role-seller", name: "SELLER" }],
+      "role-seller",
+    );
+
+    expect(locations.map((location) => location.id)).toEqual([
+      "cedis-1",
+      "branch-1",
+    ]);
+  });
+
   it("accepts a valid name, email and ten-character phone", () => {
     expect(validateEmployeeForm(validDraft)).toEqual({});
   });
@@ -54,7 +70,7 @@ describe("employee form validation", () => {
     expect(
       validateEmployeeForm({ ...validDraft, operationalLocationId: "" })
         .operationalLocationId,
-    ).toContain("punto");
+    ).toContain("ubicación");
   });
 
   it("rejects names longer than 300 characters", () => {

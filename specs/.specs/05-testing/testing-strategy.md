@@ -60,6 +60,9 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Rechazar conversión kilo/pieza sin equivalencia oficial aprobada cuando el producto la requiera.
 - Conservar equivalencia aplicada en venta o compra cuando corresponda.
 - Registrar motivo obligatorio en ajustes, mermas, devoluciones, rechazos parciales o pérdidas.
+- Probar ajustes con replay de la misma clave y payload, colisión de clave con
+  payload distinto, carrera concurrente, timeout simulado y recuperación tras
+  `P2034`, verificando que el saldo y el movimiento no se dupliquen.
 - Pendiente/condicional: pruebas de redondeo exacto hasta que negocio defina política final.
 
 ### Traspasos
@@ -90,8 +93,11 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Mantener KG y PIECE separados y bloquear conversiones sin equivalencia y redondeo aprobados.
 - Verificar que una devolución no se descuente dos veces durante el cierre diario.
 - Validar alcance de `cedis.receive_supplies` para `ADMIN`, `WAREHOUSE` y `SELLER`.
-- Validar recepción exacta, faltante y sobrante con movimientos `TRANSFER_OUT`,
-  `TRANSFER_IN`, `SHRINKAGE` e `IN` trazables.
+- Validar recepción exacta, faltante y sobrante con movimientos físicos
+  `TRANSFER_OUT`/`TRANSFER_IN` y variaciones trazables exclusivamente en
+  `BranchSupplyReceiptItem`.
+- Validar que la cantidad positiva de cada movimiento físico coincida con el
+  delta entre saldos anterior y posterior por KG y PIECE.
 - Validar nota obligatoria con diferencia, partidas completas, unidades y piezas
   enteras.
 - Validar una recepción por suministro, idempotencia y conflicto por payload.

@@ -1347,6 +1347,10 @@ export class BranchSupplyCyclesService {
             where: {
               locationId: cycle.branchLocationId,
               type: InventoryMovementType.SHRINKAGE,
+              OR: [
+                { referenceType: null },
+                { referenceType: { not: 'BRANCH_SUPPLY_RECEIPT' } },
+              ],
               createdAt: { gte: from, lt: to },
             },
             select: {
@@ -1358,30 +1362,10 @@ export class BranchSupplyCyclesService {
           });
         })()
       : Promise.resolve([]);
-    const surplusQuery: Promise<ShrinkageRecord[]> = inventoryMovementDelegate
-      ? (() => {
-          const { from, to } = this.operationalDay(cycle.businessDate);
-          return inventoryMovementDelegate.findMany({
-            where: {
-              locationId: cycle.branchLocationId,
-              type: InventoryMovementType.IN,
-              referenceType: 'BRANCH_SUPPLY_RECEIPT',
-              createdAt: { gte: from, lt: to },
-            },
-            select: {
-              id: true,
-              productId: true,
-              quantityKg: true,
-              quantityPieces: true,
-            },
-          });
-        })()
-      : Promise.resolve([]);
-    const [sales, dailyCloseRecord, shrinkages, surpluses] = await Promise.all([
+    const [sales, dailyCloseRecord, shrinkages] = await Promise.all([
       salesQuery,
       this.findDailyCloseForCycle(tx, cycle),
       shrinkageQuery,
-      surplusQuery,
     ]);
 
     const dailyClose = dailyCloseRecord
@@ -1473,12 +1457,6 @@ export class BranchSupplyCyclesService {
         roundingModeSnapshot: snapshot.roundingModeSnapshot,
       })),
       shrinkages: shrinkages.map((movement) => ({
-        id: movement.id,
-        productId: movement.productId,
-        quantityKg: movement.quantityKg,
-        quantityPieces: movement.quantityPieces,
-      })),
-      surpluses: surpluses.map((movement) => ({
         id: movement.id,
         productId: movement.productId,
         quantityKg: movement.quantityKg,

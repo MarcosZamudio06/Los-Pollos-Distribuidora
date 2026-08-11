@@ -160,7 +160,6 @@ export type ReconciliationInput = {
   sales: ReconciliationSale[];
   productSnapshots: ReconciliationProductSnapshot[];
   shrinkages: ReconciliationShrinkage[];
-  surpluses?: ReconciliationShrinkage[];
 };
 
 export type ReconciliationItem = {
@@ -356,9 +355,19 @@ export class BranchSupplyCycleReconciliationService {
           item.productCost,
           blockers,
         );
+        const receiptItem =
+          link.role === 'SUPPLY' && transfer.receipt
+            ? transfer.receipt.items.find(
+                (candidate) => candidate.transferItemId === item.id,
+              )
+            : null;
         const quantity = this.physicalQuantity(
-          item.quantityKg,
-          item.quantityPieces,
+          receiptItem?.receivedKg ??
+            (link.role === 'SUPPLY' && transfer.receipt ? 0 : item.quantityKg),
+          receiptItem?.receivedPieces ??
+            (link.role === 'SUPPLY' && transfer.receipt
+              ? 0
+              : item.quantityPieces),
           item.productId,
           blockers,
         );
@@ -464,45 +473,6 @@ export class BranchSupplyCycleReconciliationService {
             }
           : null,
         shrinkage.productId,
-        blockers,
-      );
-    }
-
-    for (const surplus of input.surpluses ?? []) {
-      const snapshot = snapshots.get(surplus.productId);
-      const aggregate = this.aggregateForItem(
-        aggregates,
-        snapshots,
-        surplus.productId,
-        snapshot?.productNameSnapshot ?? surplus.productId,
-        snapshot?.productSkuSnapshot ?? null,
-        snapshot?.productUnitSnapshot ?? ProductUnit.KG,
-        undefined,
-        undefined,
-        blockers,
-      );
-      const quantity = this.physicalQuantity(
-        surplus.quantityKg,
-        surplus.quantityPieces,
-        surplus.productId,
-        blockers,
-      );
-      aggregate.deliveredKg += quantity.kg;
-      aggregate.deliveredPieces += quantity.pieces;
-      aggregate.deliveredValueQuantity += this.valuationQuantity(
-        aggregate.productUnitSnapshot,
-        quantity.kg,
-        quantity.pieces,
-        aggregate.appliedEquivalentFactorSnapshot,
-        aggregate.equivalenceFromUnitSnapshot &&
-          aggregate.equivalenceToUnitSnapshot
-          ? {
-              unitFrom: aggregate.equivalenceFromUnitSnapshot,
-              unitTo: aggregate.equivalenceToUnitSnapshot,
-              factor: aggregate.appliedEquivalentFactorSnapshot,
-            }
-          : null,
-        surplus.productId,
         blockers,
       );
     }

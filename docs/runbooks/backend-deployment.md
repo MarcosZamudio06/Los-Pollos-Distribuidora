@@ -1,5 +1,22 @@
 # Backend deployment
 
+## Required routing providers
+
+Production requires backend-reachable managed endpoints for Photon, VROOM, and
+OSRM. Set `PHOTON_URL`, `VROOM_URL`, and `OSRM_URL` before rendering or starting
+the production Compose project. `ROUTING_TIMEOUT_MS` is optional and defaults to
+10 seconds.
+
+The production Compose file rejects missing provider URLs during interpolation,
+before starting a backend that cannot finish NestJS bootstrap. Do not use
+`localhost` unless the provider runs inside the backend container itself.
+
+Validate the complete environment before a release:
+
+```bash
+docker compose -f docker-compose.production.yml config >/dev/null
+```
+
 ## Release sequence
 
 1. Build and publish the backend image once. Set `BACKEND_IMAGE` to its

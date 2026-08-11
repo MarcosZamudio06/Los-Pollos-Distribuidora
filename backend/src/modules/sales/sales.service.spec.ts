@@ -447,6 +447,17 @@ describe('SalesService', () => {
           discountEvidence: 'Photo evidence: case-123',
           discount: '25.00',
           total: '225.00',
+          items: {
+            create: [
+              expect.objectContaining({
+                subtotal: '250.00',
+                discount: '25.00',
+                taxableBase: '225.00',
+                tax: '0.00',
+                total: '225.00',
+              }),
+            ],
+          },
         }),
       }),
     );
@@ -454,6 +465,216 @@ describe('SalesService', () => {
       where: { id: 'discount-auth-1', usedAt: null },
       data: { usedAt: expect.any(Date) },
     });
+  });
+
+  it('allocates an authorized discount across items and reserves the discounted item totals', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+      name: 'Cliente Uno',
+      isActive: true,
+      creditStatus: CreditStatus.ACTIVE,
+      creditLimit: decimal('1000'),
+      creditDays: 15,
+      commercialPolicyId: 'policy-1',
+    });
+    prisma.discountAuthorization.findFirst.mockResolvedValue({
+      id: 'discount-auth-1',
+      commercialPolicyId: 'policy-1',
+      authorizedForUserId: 'seller-1',
+      maximumPercentage: decimal('1'),
+      reason: 'Commercial adjustment',
+      evidence: 'Authorization case-1',
+      expiresAt: new Date('2027-07-01T00:00:00.000Z'),
+      usedAt: null,
+      commercialPolicy: {
+        id: 'policy-1',
+        isActive: true,
+        effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+        effectiveTo: null,
+        maximumDiscountPercentage: decimal('15'),
+      },
+    });
+    prisma.discountAuthorization.updateMany.mockResolvedValue({ count: 1 });
+    prisma.product.findUnique.mockImplementation(({ where }) =>
+      Promise.resolve(
+        where.id === 'product-1'
+          ? {
+              id: 'product-1',
+              name: 'Product one',
+              sku: 'ONE-001',
+              unit: ProductUnit.PIECE,
+              salePrice: decimal('33.34'),
+              purchaseCost: decimal('20'),
+              isActive: true,
+              unitEquivalents: [],
+            }
+          : {
+              id: 'product-2',
+              name: 'Product two',
+              sku: 'TWO-001',
+              unit: ProductUnit.PIECE,
+              salePrice: decimal('66.66'),
+              purchaseCost: decimal('40'),
+              isActive: true,
+              unitEquivalents: [],
+            },
+      ),
+    );
+    prisma.inventoryBalance.findUnique.mockReset();
+    for (const productId of ['product-1', 'product-2']) {
+      prisma.inventoryBalance.findUnique
+        .mockResolvedValueOnce({
+          productId,
+          locationId: 'loc-1',
+          quantityKg: decimal(0),
+          quantityPieces: 10,
+          reservedQuantityKg: decimal(0),
+          reservedQuantityPieces: 0,
+        })
+        .mockResolvedValueOnce({
+          productId,
+          locationId: 'loc-1',
+          quantityKg: decimal(0),
+          quantityPieces: 9,
+          reservedQuantityKg: decimal(0),
+          reservedQuantityPieces: 0,
+        });
+    }
+    prisma.sale.create.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'sale-1',
+        saleNumber: data.saleNumber,
+        createdAt: now,
+        updatedAt: now,
+        ...data,
+        items: data.items.create.map(
+          (item: Record<string, unknown>, index: number) => ({
+            id: `item-${index + 1}`,
+            saleId: 'sale-1',
+            ...item,
+          }),
+        ),
+      }),
+    );
+
+    const result = await service.create(
+      validCashSale({
+        customerId: 'customer-1',
+        commercialPolicyId: 'policy-1',
+        discountAuthorizationId: 'discount-auth-1',
+        initialPayment: {
+          amount: '99.00',
+          paymentMethod: PaymentMethod.CASH,
+        },
+        requiresAdministrativeInvoice: true,
+        billingRequest: { reason: 'Customer request' },
+        items: [
+          {
+            productId: 'product-1',
+            unit: ProductUnit.PIECE,
+            quantityKg: 0,
+            quantityPieces: 1,
+          },
+          {
+            productId: 'product-2',
+            unit: ProductUnit.PIECE,
+            quantityKg: 0,
+            quantityPieces: 1,
+          },
+        ],
+      }),
+      seller(),
+      'idem-allocated-discount',
+    );
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          subtotal: '100.00',
+          discount: '1.00',
+          total: '99.00',
+          items: {
+            create: [
+              expect.objectContaining({
+                subtotal: '33.34',
+                discount: '0.33',
+                taxableBase: '33.01',
+                tax: '0.00',
+                total: '33.01',
+              }),
+              expect.objectContaining({
+                subtotal: '66.66',
+                discount: '0.67',
+                taxableBase: '65.99',
+                tax: '0.00',
+                total: '65.99',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(prisma.billingRequestSaleDocument.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        requestedSubtotal: '99.00',
+        requestedTax: '0.00',
+        requestedTotal: '99.00',
+        requestedItems: {
+          create: [
+            {
+              saleItemId: 'item-1',
+              requestedSubtotal: '33.01',
+              requestedTax: '0.00',
+              requestedTotal: '33.01',
+            },
+            {
+              saleItemId: 'item-2',
+              requestedSubtotal: '65.99',
+              requestedTax: '0.00',
+              requestedTotal: '65.99',
+            },
+          ],
+        },
+      }),
+    });
+    expect(prisma.saleDocument.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productSnapshot: expect.objectContaining({
+          items: [
+            expect.objectContaining({
+              subtotal: '33.34',
+              discount: '0.33',
+              taxableBase: '33.01',
+              tax: '0.00',
+              total: '33.01',
+            }),
+            expect.objectContaining({
+              subtotal: '66.66',
+              discount: '0.67',
+              taxableBase: '65.99',
+              tax: '0.00',
+              total: '65.99',
+            }),
+          ],
+        }),
+      }),
+    });
+    expect(result.sale.items).toEqual([
+      expect.objectContaining({
+        discount: '0.33',
+        taxableBase: '33.01',
+        tax: '0.00',
+        total: '33.01',
+      }),
+      expect.objectContaining({
+        discount: '0.67',
+        taxableBase: '65.99',
+        tax: '0.00',
+        total: '65.99',
+      }),
+    ]);
   });
 
   it('rejects a seller who attempts to use another seller authorization before inventory is affected', async () => {
@@ -489,6 +710,46 @@ describe('SalesService', () => {
     ).rejects.toThrow(
       new ForbiddenException('DISCOUNT_AUTHORIZATION_FORBIDDEN'),
     );
+
+    expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a discount authorization above the commercial policy limit', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.discountAuthorization.findFirst.mockResolvedValue({
+      id: 'discount-auth-1',
+      commercialPolicyId: 'policy-1',
+      authorizedForUserId: 'seller-1',
+      maximumPercentage: decimal('16'),
+      reason: 'Damaged packaging',
+      evidence: 'Photo evidence',
+      expiresAt: null,
+      usedAt: null,
+      commercialPolicy: {
+        id: 'policy-1',
+        isActive: true,
+        effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+        effectiveTo: null,
+        maximumDiscountPercentage: decimal('15'),
+      },
+    });
+
+    await expect(
+      service.create(
+        validCashSale({
+          commercialPolicyId: 'policy-1',
+          discountAuthorizationId: 'discount-auth-1',
+        }),
+        seller(),
+        'idem-over-policy-discount',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'DISCOUNT_PERCENTAGE_INVALID',
+      }),
+    });
 
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
@@ -3312,6 +3573,100 @@ describe('SalesService', () => {
           newQuantityKg: 3.75,
           previousQuantityPieces: 10,
           newQuantityPieces: 8,
+        }),
+      }),
+    );
+  });
+
+  it('prices PIECE products with quantityPieces and preserves their monetary and inventory values', async () => {
+    const { service, prisma } = createService();
+    mockHappyPath(prisma);
+    prisma.product.findUnique.mockResolvedValue({
+      id: 'product-1',
+      name: 'Chicken wings',
+      sku: 'WNG-001',
+      unit: ProductUnit.PIECE,
+      salePrice: decimal('12'),
+      purchaseCost: decimal('8'),
+      isActive: true,
+      unitEquivalents: [],
+    });
+    prisma.inventoryBalance.findUnique.mockReset();
+    prisma.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: decimal(0),
+        quantityPieces: 9,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+      })
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'loc-1',
+        quantityKg: decimal(0),
+        quantityPieces: 7,
+        reservedQuantityKg: decimal(0),
+        reservedQuantityPieces: 0,
+      });
+
+    await service.create(
+      validCashSale({
+        initialPayment: {
+          amount: '24.00',
+          paymentMethod: PaymentMethod.CASH,
+          paidAt: now.toISOString(),
+        },
+        items: [
+          {
+            productId: 'product-1',
+            unit: ProductUnit.PIECE,
+            quantityKg: 0,
+            quantityPieces: 2,
+          },
+        ],
+      }),
+      seller(),
+      'idem-piece-pricing',
+    );
+
+    expect(prisma.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          subtotal: '24.00',
+          total: '24.00',
+          items: {
+            create: [
+              expect.objectContaining({
+                unit: ProductUnit.PIECE,
+                quantity: 2,
+                quantityKg: 0,
+                quantityPieces: 2,
+                quantitySnapshot: 2,
+                unitPrice: '12.00',
+                subtotal: '24.00',
+                total: '24.00',
+                unitCostSnapshot: '8.00',
+                costSubtotalSnapshot: '16.00',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ amount: '24.00' }),
+      }),
+    );
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          quantity: 2,
+          quantityKg: 0,
+          quantityPieces: 2,
+          previousQuantityPieces: 9,
+          newQuantityPieces: 7,
         }),
       }),
     );

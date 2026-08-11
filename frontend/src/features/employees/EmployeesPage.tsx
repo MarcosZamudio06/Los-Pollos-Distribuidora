@@ -87,6 +87,9 @@ export function EmployeesPage() {
     [locations],
   );
   const selectedRole = roles.find((role) => role.id === form.roleId);
+  const selectedOperationalLocation = locations.find(
+    (location) => location.id === form.operationalLocationId,
+  );
   const headers = useMemo(() => authHeaders(accessToken), [accessToken]);
 
   async function load() {
@@ -230,7 +233,7 @@ export function EmployeesPage() {
                   value={locationId}
                   onChange={(event) => setLocationId(event.target.value)}
                 >
-                  <option value="">Todos los puntos de venta</option>
+                  <option value="">Todas las ubicaciones operativas</option>
                   {locations.map((location) => (
                     <option key={location.id} value={location.id}>
                       {location.name} · {locationTypeLabel(location.type)}
@@ -278,7 +281,7 @@ export function EmployeesPage() {
                         "Control",
                         "Empleado",
                         "Teléfono",
-                        "Punto de venta",
+                        "Ubicación operativa",
                         "CEDIS asignado",
                         "Rol",
                         "Estado",
@@ -328,7 +331,11 @@ export function EmployeesPage() {
                             {employee.operationalLocation.name}
                           </td>
                           <td className="px-4 py-4">
-                            {employee.cedisLocation?.name ?? "Sin asignar"}
+                            {employee.cedisLocation?.name ??
+                              (employee.operationalLocation.type ===
+                              "DISTRIBUTION_CENTER"
+                                ? employee.operationalLocation.name
+                                : "Sin asignar")}
                           </td>
                           <td className="px-4 py-4">{employee.role.name}</td>
                           <td className="px-4 py-4">
@@ -486,7 +493,7 @@ export function EmployeesPage() {
                 )}
               </label>
               <label className="grid gap-1.5 text-sm font-semibold">
-                Punto de venta
+                Ubicación operativa
                 <Select
                   required
                   aria-invalid={Boolean(formErrors.operationalLocationId)}
@@ -509,7 +516,7 @@ export function EmployeesPage() {
                     });
                   }}
                 >
-                  <option value="">Selecciona un punto de venta</option>
+                  <option value="">Selecciona una ubicación operativa</option>
                   {formLocations.map((location) => (
                     <option key={location.id} value={location.id}>
                       {location.name} · {locationTypeLabel(location.type)}
@@ -526,7 +533,9 @@ export function EmployeesPage() {
                   </span>
                 )}
               </label>
-              {selectedRole?.name === "SELLER" && (
+              {selectedRole?.name === "SELLER" &&
+                selectedOperationalLocation?.type !==
+                  "DISTRIBUTION_CENTER" && (
                 <label className="grid gap-1.5 text-sm font-semibold">
                   CEDIS asignado (opcional)
                   <Select

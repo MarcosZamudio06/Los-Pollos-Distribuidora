@@ -112,11 +112,18 @@ type PreparedItem = {
   unitEquivalentId: string | null;
   quantityKg: number;
   quantityPieces: number;
-  billableQuantityKg: number;
+  billableQuantity: number;
   unitPrice: Money;
   subtotal: Money;
   equivalentFactor: number | null;
   roundingMode: string | null;
+};
+
+type PricedItem = PreparedItem & {
+  discount: Money;
+  taxableBase: Money;
+  tax: Money;
+  total: Money;
 };
 
 type DiscountAuthorization = {
@@ -727,7 +734,26 @@ export class SalesService {
             ? toMoneyString(discountAuthorization.maximumPercentage)
             : '0.00';
           const discount = subtotal.percentage(discountPercentage);
-          const total = subtotal.subtract(discount);
+          const itemDiscounts = discount.allocate(
+            preparedItems.map((item) => item.subtotal.toString()),
+          );
+          const pricedItems: PricedItem[] = preparedItems.map((item, index) => {
+            const itemDiscount = itemDiscounts[index] ?? Money.zero();
+            const taxableBase = item.subtotal.subtract(itemDiscount);
+            const tax = Money.zero();
+            return {
+              ...item,
+              discount: itemDiscount,
+              taxableBase,
+              tax,
+              total: taxableBase.add(tax),
+            };
+          });
+          const taxableBase = Money.sum(
+            pricedItems.map((item) => item.taxableBase),
+          );
+          const tax = Money.sum(pricedItems.map((item) => item.tax));
+          const total = Money.sum(pricedItems.map((item) => item.total));
           const totalPaid = Money.sum(
             payments.map((payment) => payment.amount),
           );
@@ -844,14 +870,14 @@ export class SalesService {
                 : CollectionStatus.PAID,
               subtotal: subtotal.toString(),
               discount: discount.toString(),
-              tax: '0.00',
+              tax: tax.toString(),
               total: total.toString(),
               paymentType: dto.paymentType,
               status: SaleStatus.CONFIRMED,
               items: {
-                create: preparedItems.map((item) => ({
+                create: pricedItems.map((item) => ({
                   productId: item.product.id,
-                  quantity: item.billableQuantityKg,
+                  quantity: item.billableQuantity,
                   quantityKg: item.quantityKg,
                   quantityPieces: item.quantityPieces,
                   unit: item.product.unit,
@@ -862,15 +888,15 @@ export class SalesService {
                   productNameSnapshot: item.product.name,
                   productSkuSnapshot: item.product.sku ?? null,
                   unitPriceSnapshot: item.unitPrice.toString(),
-                  quantitySnapshot: item.billableQuantityKg,
+                  quantitySnapshot: item.billableQuantity,
                   subtotal: item.subtotal.toString(),
-                  discount: '0.00',
-                  taxableBase: item.subtotal.toString(),
-                  tax: '0.00',
-                  total: item.subtotal.toString(),
+                  discount: item.discount.toString(),
+                  taxableBase: item.taxableBase.toString(),
+                  tax: item.tax.toString(),
+                  total: item.total.toString(),
                   unitCostSnapshot: toMoneyString(item.product.purchaseCost),
                   costSubtotalSnapshot: Money.from(item.product.purchaseCost)
-                    .multiply(String(item.billableQuantityKg))
+                    .multiply(String(item.billableQuantity))
                     .toString(),
                   costSnapshotSource: 'SALE_CONFIRMATION',
                 })),
@@ -935,11 +961,11 @@ export class SalesService {
                   ) as Prisma.InputJsonValue,
                 }
               : {}),
-            productSnapshot: this.buildProductSnapshot(preparedItems),
+            productSnapshot: this.buildProductSnapshot(pricedItems),
             priceSnapshot: this.buildPriceSnapshot({
               subtotal,
               discount,
-              tax: Money.zero(),
+              tax,
               total,
               paid: totalPaid,
               outstanding: outstandingAmount,
@@ -1067,8 +1093,8 @@ export class SalesService {
               data: {
                 billingRequestId: billingRequest.id,
                 saleDocumentId: requestedDocument.id,
-                requestedSubtotal: total.toString(),
-                requestedTax: '0.00',
+                requestedSubtotal: taxableBase.toString(),
+                requestedTax: tax.toString(),
                 requestedTotal: total.toString(),
                 createdByUserId: currentUser.id,
                 requestedItems: {
@@ -2236,12 +2262,15 @@ export class SalesService {
         );
       }
 
-      const billableQuantityKg = this.roundQuantity(
-        quantityKg +
-          (quantityPieces > 0 && equivalent
-            ? this.convertPiecesToKg(quantityPieces, equivalent)
-            : 0),
-      );
+      const billableQuantity =
+        product.unit === ProductUnit.PIECE
+          ? quantityPieces
+          : this.roundQuantity(
+              quantityKg +
+                (quantityPieces > 0 && equivalent
+                  ? this.convertPiecesToKg(quantityPieces, equivalent)
+                  : 0),
+            );
 
       const unitPrice = Money.from(product.salePrice);
       prepared.push({
@@ -2249,9 +2278,9 @@ export class SalesService {
         unitEquivalentId: this.normalizeOptionalText(item.unitEquivalentId),
         quantityKg,
         quantityPieces,
-        billableQuantityKg,
+        billableQuantity,
         unitPrice,
-        subtotal: unitPrice.multiply(String(billableQuantityKg)),
+        subtotal: unitPrice.multiply(String(billableQuantity)),
         equivalentFactor: equivalent ? this.toNumber(equivalent.factor) : null,
         roundingMode: equivalent?.roundingMode ?? null,
       });
@@ -2411,7 +2440,7 @@ export class SalesService {
             locationId,
             userId,
             type: InventoryMovementType.SALE,
-            quantity: item.billableQuantityKg,
+            quantity: item.billableQuantity,
             quantityKg: item.quantityKg,
             quantityPieces: item.quantityPieces,
             previousStock: item.previousQuantityKg,
@@ -2684,6 +2713,10 @@ export class SalesService {
               item.appliedEquivalentFactor,
             ),
             subtotal: this.moneyToString(item.subtotal),
+            discount: this.moneyToString(item.discount),
+            taxableBase: this.moneyToString(item.taxableBase),
+            tax: this.moneyToString(item.tax),
+            total: this.moneyToString(item.total),
             unitCostSnapshot: this.moneyToString(item.unitCostSnapshot),
             costSubtotalSnapshot: this.moneyToString(item.costSubtotalSnapshot),
             costSnapshotSource: item.costSnapshotSource,
@@ -2885,6 +2918,10 @@ export class SalesService {
           ),
           roundingMode: item.roundingMode ?? null,
           subtotal: this.moneyToString(item.subtotal),
+          discount: this.moneyToString(item.discount),
+          taxableBase: this.moneyToString(item.taxableBase),
+          tax: this.moneyToString(item.tax),
+          total: this.moneyToString(item.total),
         })) ?? [],
       customer: sale.customer ?? null,
       commercialPolicy: this.toCommercialPolicyResponse(
@@ -3137,7 +3174,7 @@ export class SalesService {
     };
   }
 
-  private buildProductSnapshot(items: PreparedItem[]) {
+  private buildProductSnapshot(items: PricedItem[]) {
     return {
       items: items.map((item) => ({
         productId: item.product.id,
@@ -3148,6 +3185,10 @@ export class SalesService {
         quantityPieces: item.quantityPieces,
         unitPrice: item.unitPrice.toString(),
         subtotal: item.subtotal.toString(),
+        discount: item.discount.toString(),
+        taxableBase: item.taxableBase.toString(),
+        tax: item.tax.toString(),
+        total: item.total.toString(),
         equivalentFactor: item.equivalentFactor,
         roundingMode: item.roundingMode,
       })),
@@ -3216,6 +3257,10 @@ export class SalesService {
           quantityPieces: this.snapshotNumber(snapshot, 'quantityPieces'),
           unitPrice: this.snapshotNumber(snapshot, 'unitPrice'),
           subtotal: this.snapshotNumber(snapshot, 'subtotal'),
+          discount: this.snapshotNumber(snapshot, 'discount'),
+          taxableBase: this.snapshotNumber(snapshot, 'taxableBase'),
+          tax: this.snapshotNumber(snapshot, 'tax'),
+          total: this.snapshotNumber(snapshot, 'total'),
         };
       }),
       subtotal: this.decimalToString(this.snapshotNumber(price, 'subtotal')),

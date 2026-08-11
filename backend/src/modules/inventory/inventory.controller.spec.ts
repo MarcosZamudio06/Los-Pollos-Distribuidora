@@ -124,6 +124,7 @@ describe('InventoryController API', () => {
     await request(app.getHttpServer())
       .post('/api/inventory/adjustments')
       .set('Authorization', 'Bearer warehouse-token')
+      .set('Idempotency-Key', 'adjustment-key')
       .send({
         productId: 'product-1',
         locationId: 'location-1',
@@ -156,6 +157,7 @@ describe('InventoryController API', () => {
         reason: 'Physical count correction',
       }),
       'warehouse-1',
+      'adjustment-key',
       expect.objectContaining({ role: 'WAREHOUSE' }),
     );
   });
@@ -255,6 +257,26 @@ describe('InventoryController API', () => {
         unit: ProductUnit.KG,
       })
       .expect(400);
+
+    expect(inventoryService.createAdjustment).not.toHaveBeenCalled();
+  });
+
+  it('requires Idempotency-Key for inventory adjustments', async () => {
+    await request(app.getHttpServer())
+      .post('/api/inventory/adjustments')
+      .set('Authorization', 'Bearer warehouse-token')
+      .send({
+        productId: 'product-1',
+        locationId: 'location-1',
+        type: InventoryMovementType.ADJUSTMENT,
+        quantityKg: 2.5,
+        unit: ProductUnit.KG,
+        reason: 'Physical count correction',
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Idempotency-Key header is required');
+      });
 
     expect(inventoryService.createAdjustment).not.toHaveBeenCalled();
   });

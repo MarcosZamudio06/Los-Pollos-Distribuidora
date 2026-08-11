@@ -73,6 +73,8 @@ Toda comparación ocurre después de bloquear las filas y antes de escribir. Una
 
 La validación posterior no se limita al código de remediación resuelto. Un `SaleConsistencyValidator` canónico debe comprobar siempre la ecuación y base gravable de cada partida; las sumas de subtotal, descuento, impuesto, base gravable y total contra la cabecera; la autorización y cálculo del descuento; los pagos aplicados; el importe original y saldo de la cuenta por cobrar; las reservas activas solicitadas por documento y partida; y las aplicaciones vigentes facturadas por documento y partida. La venta solo es consistente cuando no existe ningún hallazgo.
 
+En ventas nuevas, el descuento autorizado se calcula una sola vez sobre el subtotal de cabecera y se distribuye proporcionalmente entre las partidas usando sus subtotales como ponderadores. La distribución opera en centavos mediante el método de residuo mayor; los empates conservan el orden original de las partidas. Cada partida persiste `discount`, `taxableBase = subtotal - discount`, `tax` y `total = taxableBase + tax`, y sus sumas deben coincidir exactamente con la cabecera. Los snapshots documentales y el detalle de venta exponen el mismo desglose; una solicitud inmediata reserva esos importes persistidos, no importes brutos reconstruidos.
+
 Si cualquier dimensión continúa inconsistente, la transacción responde `SALE_CONSISTENCY_VALIDATION_FAILED` con `findings[]` de códigos estables y no cierra la remediación, aunque la inconsistencia específica que originó el registro ya no exista. El backfill debe detectar cualquier diferencia entre partidas y cabecera, no solo ventas con descuento o impuesto ni únicamente la ecuación de cabecera.
 
 ## Política de facturabilidad y vencimiento

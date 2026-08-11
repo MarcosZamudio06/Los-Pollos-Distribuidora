@@ -195,18 +195,17 @@ describe('BranchSupplyCycleReconciliationService', () => {
             ],
           },
         ],
-        shrinkages: [
-          {
-            id: 'shortage-1',
-            productId: 'product-1',
-            quantityKg: 0,
-            quantityPieces: 2,
-          },
-        ],
-        surpluses: [],
+        shrinkages: [],
       }),
     );
 
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        deliveredPieces: 8,
+        shrinkagePieces: 0,
+        differencePieces: 0,
+      }),
+    );
     expect(result.blockers).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'TRANSFER_INTEGRITY_ERROR' }),
@@ -248,14 +247,6 @@ describe('BranchSupplyCycleReconciliationService', () => {
       baseInput({
         dailyClose: dailyClose({ grossSalesTotal: '1200.00' }),
         transfers: [supplyWithSurplus],
-        surpluses: [
-          {
-            id: 'surplus-1',
-            productId: 'product-1',
-            quantityKg: 0,
-            quantityPieces: 2,
-          },
-        ],
         sales: [
           {
             id: 'sale-surplus-1',

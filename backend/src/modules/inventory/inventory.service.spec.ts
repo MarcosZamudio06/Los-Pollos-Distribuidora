@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
 import type { CreateInventoryAdjustmentDto } from './dto';
 import { InventoryBalanceService } from './inventory-balance.service';
@@ -17,10 +18,18 @@ type MockPrisma = {
     updateMany: jest.Mock;
     upsert: jest.Mock;
   };
-  inventoryMovement: { create: jest.Mock; findMany: jest.Mock };
+  inventoryMovement: {
+    create: jest.Mock;
+    findUnique: jest.Mock;
+    findMany: jest.Mock;
+  };
 };
 
 const now = new Date('2026-06-29T12:00:00.000Z');
+
+function hashAdjustmentPayload(payload: Record<string, unknown>): string {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
 
 function decimal(value: string | number): Prisma.Decimal {
   return new Prisma.Decimal(value);
@@ -39,7 +48,11 @@ function createPrisma(): MockPrisma {
       updateMany: jest.fn(),
       upsert: jest.fn(),
     },
-    inventoryMovement: { create: jest.fn(), findMany: jest.fn() },
+    inventoryMovement: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
   prisma.$transaction.mockImplementation(
     (callback: (tx: MockPrisma) => unknown) => callback(prisma),
@@ -120,6 +133,7 @@ describe('InventoryService', () => {
         referenceType: 'MANUAL',
       },
       'user-1',
+      'adjustment-key',
     );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -172,6 +186,155 @@ describe('InventoryService', () => {
         newQuantityKg: 10,
       }),
     );
+  });
+
+  it('replays the persisted movement for the same idempotency key and payload', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryMovement.findUnique.mockResolvedValue({
+      id: 'movement-1',
+      productId: 'product-1',
+      locationId: 'location-1',
+      userId: 'user-1',
+      type: InventoryMovementType.ADJUSTMENT,
+      quantityKg: decimal(2.5),
+      quantityPieces: 0,
+      previousQuantityKg: decimal(7.5),
+      newQuantityKg: decimal(10),
+      previousQuantityPieces: 0,
+      newQuantityPieces: 0,
+      reason: 'Physical count correction',
+      referenceType: 'MANUAL',
+      referenceId: null,
+      routeSettlementId: null,
+      pointOfSaleDailyCloseId: null,
+      idempotencyPayloadHash: hashAdjustmentPayload({
+        productId: 'product-1',
+        locationId: 'location-1',
+        type: InventoryMovementType.ADJUSTMENT,
+        unit: ProductUnit.KG,
+        quantityKg: 2.5,
+        quantityPieces: 0,
+        reason: 'Physical count correction',
+        referenceType: 'MANUAL',
+        referenceId: null,
+        routeSettlementId: null,
+        pointOfSaleDailyCloseId: null,
+        userId: 'user-1',
+      }),
+      createdAt: now,
+      product: { name: 'Pechuga' },
+      location: { name: 'Matriz' },
+    });
+
+    const result = await service.createAdjustment(
+      {
+        productId: 'product-1',
+        locationId: 'location-1',
+        type: InventoryMovementType.ADJUSTMENT,
+        unit: ProductUnit.KG,
+        quantityKg: 2.5,
+        reason: 'Physical count correction',
+        referenceType: 'MANUAL',
+      },
+      'user-1',
+      'adjustment-key',
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({ id: 'movement-1', newQuantityKg: 10 }),
+    );
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(prisma.inventoryBalance.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects an idempotency key reused with a different payload before changing stock', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryMovement.findUnique.mockResolvedValue({
+      id: 'movement-1',
+      idempotencyPayloadHash: 'different-payload-hash',
+    });
+
+    await expect(
+      service.createAdjustment(
+        {
+          productId: 'product-1',
+          locationId: 'location-1',
+          type: InventoryMovementType.ADJUSTMENT,
+          unit: ProductUnit.KG,
+          quantityKg: 2.5,
+          reason: 'Physical count correction',
+        },
+        'user-1',
+        'adjustment-key',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'IDEMPOTENCY_CONFLICT' }),
+    });
+
+    expect(prisma.inventoryBalance.upsert).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('retries a serializable conflict and replays the committed adjustment', async () => {
+    const { service, prisma } = createService();
+    const existingMovement = {
+      id: 'movement-1',
+      productId: 'product-1',
+      locationId: 'location-1',
+      userId: 'user-1',
+      type: InventoryMovementType.ADJUSTMENT,
+      quantityKg: decimal(2.5),
+      quantityPieces: 0,
+      previousQuantityKg: decimal(7.5),
+      newQuantityKg: decimal(10),
+      previousQuantityPieces: 0,
+      newQuantityPieces: 0,
+      reason: 'Physical count correction',
+      referenceType: 'MANUAL',
+      referenceId: null,
+      routeSettlementId: null,
+      pointOfSaleDailyCloseId: null,
+      idempotencyPayloadHash: hashAdjustmentPayload({
+        productId: 'product-1',
+        locationId: 'location-1',
+        type: InventoryMovementType.ADJUSTMENT,
+        unit: ProductUnit.KG,
+        quantityKg: 2.5,
+        quantityPieces: 0,
+        reason: 'Physical count correction',
+        referenceType: null,
+        referenceId: null,
+        routeSettlementId: null,
+        pointOfSaleDailyCloseId: null,
+        userId: 'user-1',
+      }),
+      createdAt: now,
+      product: { name: 'Pechuga' },
+      location: { name: 'Matriz' },
+    };
+    prisma.$transaction
+      .mockRejectedValueOnce({ code: 'P2034' })
+      .mockImplementationOnce((callback: (tx: MockPrisma) => unknown) =>
+        callback(prisma),
+      );
+    prisma.inventoryMovement.findUnique.mockResolvedValueOnce(existingMovement);
+
+    await expect(
+      service.createAdjustment(
+        {
+          productId: 'product-1',
+          locationId: 'location-1',
+          type: InventoryMovementType.ADJUSTMENT,
+          unit: ProductUnit.KG,
+          quantityKg: 2.5,
+          reason: 'Physical count correction',
+        },
+        'user-1',
+        'adjustment-key',
+      ),
+    ).resolves.toEqual(expect.objectContaining({ id: 'movement-1' }));
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
   });
 
   it('limits warehouse balance queries to its CEDIS and direct branches', async () => {
@@ -243,6 +406,7 @@ describe('InventoryService', () => {
           quantityKg: 1,
         } as unknown as CreateInventoryAdjustmentDto,
         'user-1',
+        'adjustment-key',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -285,6 +449,7 @@ describe('InventoryService', () => {
           reason: 'Spoilage found during count',
         },
         'user-1',
+        'adjustment-key',
       ),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
@@ -329,6 +494,7 @@ describe('InventoryService', () => {
           reason: 'Spoilage found during count',
         },
         'user-1',
+        'adjustment-key',
       ),
     ).rejects.toMatchObject({
       response: expect.objectContaining({
@@ -397,6 +563,7 @@ describe('InventoryService', () => {
         reason: 'Spoilage found during count',
       },
       'user-1',
+      'adjustment-key',
     );
 
     expect(prisma.inventoryBalance.updateMany).toHaveBeenCalledWith({
@@ -459,6 +626,7 @@ describe('InventoryService', () => {
           reason: 'Spoilage found during count',
         },
         'user-1',
+        'adjustment-key',
       ),
     ).rejects.toMatchObject({
       response: expect.objectContaining({
@@ -541,6 +709,7 @@ describe('InventoryService', () => {
         reason: 'Physical count correction',
       },
       'user-1',
+      'adjustment-key',
     );
 
     expect(prisma.inventoryBalance.upsert).toHaveBeenCalledWith({
@@ -632,6 +801,7 @@ describe('InventoryService', () => {
           referenceType: 'MANUAL',
         },
         'user-1',
+        'adjustment-key',
       ),
     ).resolves.toEqual(expect.objectContaining({ quantityPieces: 4 }));
 
@@ -705,6 +875,11 @@ describe('InventoryService', () => {
             gte: new Date('2026-06-01T00:00:00.000Z'),
             lte: new Date('2026-06-30T23:59:59.999Z'),
           },
+          OR: [
+            { referenceType: null },
+            { referenceType: { not: 'BRANCH_SUPPLY_RECEIPT' } },
+            { type: { notIn: ['SHRINKAGE', 'IN'] } },
+          ],
         }),
         include: { product: true, location: true },
         orderBy: { createdAt: 'desc' },
@@ -816,6 +991,7 @@ describe('InventoryService', () => {
           reason: 'Physical count correction',
         },
         'user-1',
+        'adjustment-key',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -842,6 +1018,7 @@ describe('InventoryService', () => {
           reason: 'Physical count correction',
         },
         'user-1',
+        'adjustment-key',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

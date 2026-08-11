@@ -175,6 +175,10 @@ export type CreateSaleResponse = {
       quantityPieces?: number | string | null;
       unitPrice?: number | string | null;
       subtotal?: number | string | null;
+      discount?: number | string | null;
+      taxableBase?: number | string | null;
+      tax?: number | string | null;
+      total?: number | string | null;
     }>;
     creditWarnings?: string[];
   };
@@ -239,6 +243,10 @@ export type TicketData = {
     quantityPieces?: number | string | null;
     unitPrice?: number | string | null;
     subtotal?: number | string | null;
+    discount?: number | string | null;
+    taxableBase?: number | string | null;
+    tax?: number | string | null;
+    total?: number | string | null;
   }>;
   subtotal?: number | string | null;
   discount?: number | string | null;
@@ -355,6 +363,10 @@ export type SaleDetail = SaleListItem & {
     appliedEquivalentFactor?: number | string | null;
     roundingMode?: string | null;
     subtotal?: number | string | null;
+    discount?: number | string | null;
+    taxableBase?: number | string | null;
+    tax?: number | string | null;
+    total?: number | string | null;
   }>;
   customer?: Record<string, unknown> | null;
   commercialPolicy?: Record<string, unknown> | null;

@@ -183,14 +183,15 @@ export const productService = {
   },
   async createAdjustment(
     values: InventoryAdjustmentValues,
-    accessToken?: string | null,
+    accessToken: string | null | undefined,
+    idempotencyKey: string,
   ) {
     const response = await apiClient.post<
       ItemEnvelope<InventoryMovement>,
       InventoryAdjustmentValues
     >("/inventory/adjustments", {
       body: values,
-      headers: authHeaders(accessToken),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },

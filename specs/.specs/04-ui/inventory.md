@@ -107,6 +107,12 @@ Campos:
 - Motivo obligatorio.
 - Referencia operativa opcional.
 
+Al enviar un ajuste, la UI debe generar una `Idempotency-Key` por intento de
+comando y conservarla mientras la solicitud pueda reintentarse. Un timeout o
+error de transporte debe permitir reintentar el mismo payload con la misma
+clave; una respuesta terminal cierra el intento y un nuevo formulario genera
+una clave nueva.
+
 Tipos esperados incluyen ajuste, merma, devolución o pérdida operativa según API y reglas de negocio.
 
 ## Movimientos de inventario
@@ -246,3 +252,8 @@ Permisos adicionales:
 - `COLLECTIONS` no modifica inventario.
 
 Las diferencias deben mostrarse como advertencias visibles y nunca compensarse automáticamente.
+
+La variación entre lo enviado y lo recibido en un suministro CEDIS debe
+mostrarse en la evidencia de recepción con sus cantidades y diferencia. No debe
+presentarse como merma o entrada física adicional en el listado de movimientos
+de la ubicación destino.

@@ -112,9 +112,11 @@ cantidad enviada, la cantidad recibida, la diferencia por KG y PIECE, el actor,
 la fecha y una nota opcional. Las cantidades enviadas nunca se sobrescriben.
 
 La confirmación desde sucursal MUST descontar del CEDIS lo enviado, incrementar
-en la sucursal únicamente lo recibido y registrar la diferencia como movimiento
-trazable: `SHRINKAGE` cuando falte mercancía o `IN` cuando exista sobrante. Una
-diferencia MUST requerir una nota no vacía.
+en la sucursal únicamente lo recibido y conservar la diferencia de tránsito en
+`BranchSupplyReceiptItem`, separada del libro físico de `InventoryMovement`. Una
+diferencia MUST requerir una nota no vacía. La conciliación MUST considerar como
+entregado lo recibido y MUST NOT reclasificar el faltante de tránsito como merma
+física de la sucursal ni el sobrante como una segunda entrada.
 
 #### Scenario: Recepción exacta
 
@@ -128,13 +130,14 @@ diferencia MUST requerir una nota no vacía.
 - GIVEN un suministro `REQUESTED` con cantidades enviadas mayores que las recibidas
 - WHEN la sucursal registra una nota y las cantidades físicas recibidas
 - THEN el CEDIS descuenta lo enviado, la sucursal conserva como saldo lo recibido
-- AND se registra una merma trazable por la diferencia
+- AND la diferencia queda trazable en la recepción sin crear una merma física en la sucursal
 
 #### Scenario: Sobrante recibido
 
 - GIVEN un suministro `REQUESTED` con una cantidad recibida mayor que la enviada
 - WHEN la sucursal registra una nota y la cantidad física
-- THEN el CEDIS descuenta lo enviado, la sucursal recibe un ajuste `IN` trazable
+- THEN el CEDIS descuenta lo enviado, la sucursal recibe la cantidad física una sola vez
+- AND el sobrante queda trazable en la recepción sin crear un segundo movimiento `IN`
 
 #### Scenario: Recepción idempotente
 

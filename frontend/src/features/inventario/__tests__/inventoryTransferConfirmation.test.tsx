@@ -37,8 +37,37 @@ const locationsState = vi.hoisted(() => ({
   error: null as unknown,
   isLoading: false,
 }));
+const productsState = vi.hoisted(() => ({
+  data: [
+    {
+      id: "product-1",
+      name: "Pollo entero",
+      unit: "KG",
+      isActive: true,
+      inventoryBalance: {
+        locationId: "origin-1",
+        quantityKg: 20,
+        quantityPieces: 0,
+        reservedQuantityKg: 2,
+        reservedQuantityPieces: 0,
+        availableQuantityKg: 18,
+        availableQuantityPieces: 0,
+        minQuantityKg: 0,
+        minQuantityPieces: 0,
+        isLowStock: false,
+      },
+    },
+  ],
+  requestedFilters: {} as Record<string, unknown>,
+  error: null as unknown,
+  isLoading: false,
+}));
 
 vi.mock("../hooks/useProducts", () => ({
+  useProducts: (filters: Record<string, unknown>) => {
+    productsState.requestedFilters = filters;
+    return productsState;
+  },
   useInventoryLocations: (options?: { storageOnly?: boolean }) => {
     locationsState.requestedOptions = options ?? {};
     return locationsState;
@@ -86,6 +115,7 @@ afterEach(async () => {
     },
   ];
   locationsState.requestedOptions = {};
+  productsState.requestedFilters = {};
   root = undefined;
 });
 
@@ -114,6 +144,33 @@ function changeText(input: HTMLTextAreaElement, value: string) {
 }
 
 describe("InventoryTransferView confirmation", () => {
+  it("shows available products from the selected origin in the product selector", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => root?.render(<InventoryTransferView canManage />));
+
+    const origin = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Ubicación de origen"]',
+    )!;
+    await act(async () => select(origin, "origin-1"));
+
+    const product = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Producto"]',
+    );
+
+    expect(productsState.requestedFilters).toEqual({
+      isActive: "true",
+      locationId: "origin-1",
+      requireInventoryBalance: true,
+    });
+    expect(product).not.toBeNull();
+    expect(
+      [...(product?.options ?? [])].map((option) => option.textContent),
+    ).toContain("Pollo entero");
+  });
+
   it("keeps only active canonical storage locations in both selectors", async () => {
     locationsState.data = [
       {
@@ -220,7 +277,6 @@ describe("InventoryTransferView confirmation", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     await act(async () => root?.render(<InventoryTransferView canManage />));
-    const inputs = [...container.querySelectorAll("input")];
     const origin = container.querySelector<HTMLSelectElement>(
       '[aria-label="Ubicación de origen"]',
     )!;
@@ -230,8 +286,14 @@ describe("InventoryTransferView confirmation", () => {
     await act(async () => {
       select(origin, "origin-1");
       select(destination, "destination-1");
-      change(inputs[1], "product-1");
-      change(inputs[2], "2");
+      select(
+        container.querySelector<HTMLSelectElement>('[aria-label="Producto"]')!,
+        "product-1",
+      );
+      change(
+        container.querySelector<HTMLInputElement>('[placeholder="Kg"]')!,
+        "2",
+      );
     });
     const form = container.querySelector("form");
     await act(async () =>

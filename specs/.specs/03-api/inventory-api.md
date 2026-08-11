@@ -241,6 +241,11 @@ Respuesta `data`:
 
 - Movimiento creado: `id`, `productId`, `locationId`, `type`, cantidades, saldos anteriores/nuevos, `reason`, `createdAt`.
 
+Header requerido:
+
+- `Idempotency-Key`: clave estable para el comando; el cliente debe conservarla
+  durante reintentos del mismo payload hasta recibir una respuesta terminal.
+
 Validaciones:
 
 - `productId`, `locationId`, `type`, `unit` y `reason` requeridos.
@@ -250,6 +255,12 @@ Validaciones:
 - No permitir que un ajuste negativo consuma `reservedQuantityKg` o `reservedQuantityPieces`.
 - Usar equivalencia aprobada si el ajuste requiere convertir kilo/pieza.
 - Si el ajuste corresponde a diferencia de ruta, debe conservar referencia a `routeId` o `routeSettlementId` mediante `referenceType/referenceId`.
+- La misma clave con el mismo payload canónico devuelve el movimiento original
+  sin volver a modificar el saldo.
+- La misma clave con payload distinto responde `409 Conflict` con código
+  `IDEMPOTENCY_CONFLICT`.
+- Un conflicto serializable o de unicidad transitorio se reintenta; si no puede
+  resolverse, responde `409 Conflict` con `INVENTORY_CONCURRENCY_CONFLICT`.
 
 ## GET /api/inventory/movements
 
@@ -276,6 +287,10 @@ Validaciones:
 
 - Todo movimiento debe conservar ubicación operativa.
 - Ajustes, mermas, devoluciones y rechazos parciales requieren motivo obligatorio.
+- Toda cantidad positiva debe corresponder al delta de saldos por KG y/o PIECE.
+- El listado representa únicamente movimientos físicos; excluye marcadores
+  históricos `SHRINKAGE`/`IN` con `referenceType=BRANCH_SUPPLY_RECEIPT`. La
+  variación de tránsito se consulta en la recepción CEDIS.
 
 ## Extensión: conciliación de punto de venta
 
