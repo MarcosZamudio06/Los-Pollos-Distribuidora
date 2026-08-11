@@ -218,7 +218,7 @@ function SalesAndDocuments({ close }: { close: DailyClose }) {
               />
             ) : (
               sales.map((sale) => (
-                <tr key={sale.id}>
+                <tr key={sale.id ?? sale.saleNumber}>
                   <Td className="font-bold">{sale.saleNumber}</Td>
                   <Td>
                     {documentTypeLabels[sale.documentType] ?? sale.documentType}

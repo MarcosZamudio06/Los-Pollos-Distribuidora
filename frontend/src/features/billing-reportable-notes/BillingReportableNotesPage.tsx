@@ -711,6 +711,7 @@ export function BillingReportableNotesPage() {
             className="fixed inset-0 z-40 bg-[rgba(17,24,21,0.42)] backdrop-blur-[2px]"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
+            key={detailId}
             transition={{
               duration: shouldReduceMotion ? 0 : 0.2,
               ease: "easeOut",

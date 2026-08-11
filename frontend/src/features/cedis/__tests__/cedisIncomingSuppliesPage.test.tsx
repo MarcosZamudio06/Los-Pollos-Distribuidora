@@ -263,13 +263,15 @@ describe("CEDIS incoming supplies UI", () => {
     const kilos = dialog?.querySelector(
       'input[aria-label="Pollo entero kilos recibidos"]',
     ) as HTMLInputElement | null;
-    const setValue = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )?.set;
-    setValue?.call(kilos, "8.5");
-    kilos?.dispatchEvent(new Event("input", { bubbles: true }));
-    kilos?.dispatchEvent(new Event("change", { bubbles: true }));
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(kilos, "8.5");
+      kilos?.dispatchEvent(new Event("input", { bubbles: true }));
+      kilos?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
 
     await act(async () => {
       (
