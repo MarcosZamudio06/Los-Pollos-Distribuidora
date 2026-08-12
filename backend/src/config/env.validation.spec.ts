@@ -89,6 +89,32 @@ describe('validateEnvironment', () => {
     );
   });
 
+  it('validates the bounded session activity write threshold', () => {
+    expect(validateEnvironment({})).toEqual(
+      expect.objectContaining({
+        AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS: 300,
+      }),
+    );
+    expect(
+      validateEnvironment({
+        AUTH_SESSION_IDLE_TTL_SECONDS: '600',
+        AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS: '120',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS: 120,
+      }),
+    );
+    expect(() =>
+      validateEnvironment({
+        AUTH_SESSION_IDLE_TTL_SECONDS: '120',
+        AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS: '120',
+      }),
+    ).toThrow(
+      'AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS must be less than AUTH_SESSION_IDLE_TTL_SECONDS',
+    );
+  });
+
   it('rejects a production environment without an explicit database URL', () => {
     expect(() =>
       validateEnvironment({

@@ -9,6 +9,7 @@ import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PointOfSaleDailyCloseService } from './point-of-sale-daily-close.service';
 
 describe('PointOfSaleDailyCloseService', () => {
+  const originalAppTimezone = process.env.APP_TIMEZONE;
   const prisma = {
     user: { findUnique: jest.fn() },
     operationalLocation: { findUnique: jest.fn() },
@@ -85,6 +86,11 @@ describe('PointOfSaleDailyCloseService', () => {
     prisma.$transaction.mockImplementation(
       (callback: (tx: typeof prisma) => unknown) => callback(prisma),
     );
+  });
+
+  afterEach(() => {
+    if (originalAppTimezone === undefined) delete process.env.APP_TIMEZONE;
+    else process.env.APP_TIMEZONE = originalAppTimezone;
   });
 
   it('rejects opening an inactive location', async () => {
@@ -477,11 +483,24 @@ describe('PointOfSaleDailyCloseService', () => {
   });
 
   it('uses America/Mexico_City boundaries for the operational day', () => {
+    delete process.env.APP_TIMEZONE;
+
     expect(
       privateService.operationalDay(new Date('2026-07-17T00:00:00.000Z')),
     ).toEqual({
       from: new Date('2026-07-17T06:00:00.000Z'),
       to: new Date('2026-07-18T06:00:00.000Z'),
+    });
+  });
+
+  it('uses America/Cancun boundaries for the operational day', () => {
+    process.env.APP_TIMEZONE = 'America/Cancun';
+
+    expect(
+      privateService.operationalDay(new Date('2026-07-17T00:00:00.000Z')),
+    ).toEqual({
+      from: new Date('2026-07-17T05:00:00.000Z'),
+      to: new Date('2026-07-18T05:00:00.000Z'),
     });
   });
 

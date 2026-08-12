@@ -40,6 +40,7 @@ export function configureHttpApplication(
   app.setGlobalPrefix(apiPrefix);
   app.enableCors({
     credentials: true,
+    exposedHeaders: ['Retry-After'],
     origin: (origin, callback) => {
       callback(null, !origin || allowedOrigins.has(origin));
     },

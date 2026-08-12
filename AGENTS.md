@@ -331,6 +331,5 @@ Riesgos o pendientes:
 
 ## Manera de trabajar
 
-Siempre trabaja de manera lineal, sin sub agentes
 SIEMPRE usar pnpm en lugar de npm
 TODOS HEADERS GENERADO DE UNA UI TIENEN QUE SER BLANCOS, NO NEGROS

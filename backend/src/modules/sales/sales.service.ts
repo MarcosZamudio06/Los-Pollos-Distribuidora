@@ -1998,7 +1998,7 @@ export class SalesService {
     id: string,
     currentUser: Actor,
   ): Promise<SaleCancellationRecord | null> {
-    return (await tx.sale.findFirst({
+    return await tx.sale.findFirst({
       where: this.buildCancellationScopeWhere(id, currentUser),
       include: {
         items: true,
@@ -2015,7 +2015,7 @@ export class SalesService {
           orderBy: { createdAt: 'asc' },
         },
       },
-    }));
+    });
   }
 
   private getVoidPayments(
@@ -2213,11 +2213,21 @@ export class SalesService {
           'Sale item quantity must be greater than 0',
         );
       }
+    }
 
-      const product = (await tx.product.findUnique({
-        where: { id: item.productId },
-        include: { unitEquivalents: true },
-      })) as SaleProduct | null;
+    const productIds = [...new Set(items.map((item) => item.productId))];
+    const products = (await tx.product.findMany({
+      where: { id: { in: productIds } },
+      include: { unitEquivalents: true },
+    })) as SaleProduct[];
+    const productsById = new Map(
+      products.map((product) => [product.id, product]),
+    );
+
+    for (const item of items) {
+      const quantityKg = this.roundQuantity(item.quantityKg ?? 0);
+      const quantityPieces = item.quantityPieces ?? 0;
+      const product = productsById.get(item.productId);
 
       if (!product?.isActive) {
         throw new NotFoundException('Product not found');

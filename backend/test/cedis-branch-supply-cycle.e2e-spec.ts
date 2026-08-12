@@ -14,6 +14,7 @@ import { PrismaService } from '../src/database/prisma.service';
 import { AppModule } from '../src/app.module';
 import { AccountsReceivableAgingJob } from '../src/modules/accounts-receivable/accounts-receivable-aging.job';
 import { seed } from '../prisma/seed';
+import { assertDisposableE2eEnvironment } from './e2e-environment';
 
 const routingEnvironment = {
   OSRM_URL: 'http://localhost:5000',
@@ -36,11 +37,7 @@ describe('CEDIS branch supply cycle (e2e)', () => {
   let returnTransferId: string;
 
   beforeAll(async () => {
-    if (!process.env.DATABASE_URL) {
-      throw new Error(
-        'DATABASE_URL is required for the CEDIS PostgreSQL E2E suite',
-      );
-    }
+    assertDisposableE2eEnvironment();
     process.env.JWT_ACCESS_SECRET ??=
       'e2e-access-secret-at-least-32-characters';
     process.env.JWT_REFRESH_SECRET ??=

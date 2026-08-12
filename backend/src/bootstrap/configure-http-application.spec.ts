@@ -165,6 +165,9 @@ describe('configureHttpApplication', () => {
       'https://erp.example.com',
     );
     expect(response.headers['access-control-allow-credentials']).toBe('true');
+    expect(response.headers['access-control-expose-headers']).toContain(
+      'Retry-After',
+    );
     expect(response.headers['x-request-id']).toBe(requestId);
   });
 

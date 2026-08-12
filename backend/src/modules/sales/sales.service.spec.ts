@@ -35,7 +35,7 @@ type MockPrisma = {
   $transaction: jest.Mock;
   $queryRawUnsafe: jest.Mock;
   $executeRawUnsafe: jest.Mock;
-  product: { findUnique: jest.Mock };
+  product: { findMany: jest.Mock };
   customer: { findUnique: jest.Mock };
   commercialPolicy: { findFirst: jest.Mock };
   discountAuthorization: { findFirst: jest.Mock; updateMany: jest.Mock };
@@ -93,7 +93,7 @@ function createPrisma(): MockPrisma {
     $transaction: jest.fn((callback) => callback(prisma)),
     $queryRawUnsafe: jest.fn(),
     $executeRawUnsafe: jest.fn(),
-    product: { findUnique: jest.fn() },
+    product: { findMany: jest.fn() },
     customer: { findUnique: jest.fn() },
     commercialPolicy: { findFirst: jest.fn() },
     discountAuthorization: { findFirst: jest.fn(), updateMany: jest.fn() },
@@ -224,16 +224,18 @@ function mockHappyPath(
   prisma.legalEntityOperationalLocation.findFirst.mockResolvedValue({
     legalEntityId: 'legal-entity-1',
   });
-  prisma.product.findUnique.mockResolvedValue({
-    id: 'product-1',
-    name: 'Chicken breast',
-    sku: 'PCH-001',
-    unit: ProductUnit.KG,
-    salePrice: decimal('100'),
-    purchaseCost: decimal('62.50'),
-    isActive: true,
-    unitEquivalents: [],
-  });
+  prisma.product.findMany.mockResolvedValue([
+    {
+      id: 'product-1',
+      name: 'Chicken breast',
+      sku: 'PCH-001',
+      unit: ProductUnit.KG,
+      salePrice: decimal('100'),
+      purchaseCost: decimal('62.50'),
+      isActive: true,
+      unitEquivalents: [],
+    },
+  ]);
   prisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
   prisma.inventoryBalance.findUnique
     .mockResolvedValueOnce({
@@ -384,6 +386,116 @@ function voidSaleRecord(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SalesService', () => {
+  it('loads distinct sale products once while preserving duplicate item order', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Chicken breast',
+        unit: ProductUnit.KG,
+        salePrice: decimal('100'),
+        purchaseCost: decimal('62.5'),
+        isActive: true,
+        unitEquivalents: [],
+      },
+      {
+        id: 'product-2',
+        name: 'Chicken wing',
+        unit: ProductUnit.PIECE,
+        salePrice: decimal('10'),
+        purchaseCost: decimal('7.5'),
+        isActive: true,
+        unitEquivalents: [],
+      },
+    ]);
+    const prepareItems = (
+      service as unknown as {
+        prepareItems: (
+          tx: unknown,
+          items: unknown[],
+        ) => Promise<Array<{ product: { id: string } }>>;
+      }
+    ).prepareItems.bind(service);
+
+    const prepared = await prepareItems(prisma, [
+      { productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1 },
+      { productId: 'product-2', unit: ProductUnit.PIECE, quantityPieces: 2 },
+      { productId: 'product-1', unit: ProductUnit.KG, quantityKg: 3 },
+    ]);
+
+    expect(prisma.product.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ['product-1', 'product-2'] } },
+      include: { unitEquivalents: true },
+    });
+    expect(prepared.map((item) => item.product.id)).toEqual([
+      'product-1',
+      'product-2',
+      'product-1',
+    ]);
+  });
+
+  it.each([
+    {
+      items: [
+        { productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1 },
+        { productId: 'product-2', unit: ProductUnit.KG, quantityKg: -1 },
+      ],
+      expectedMessage: 'Sale item quantities cannot be negative',
+    },
+    {
+      items: [
+        { productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1 },
+        { productId: 'product-2', unit: ProductUnit.KG, quantityKg: 0 },
+      ],
+      expectedMessage: 'Sale item quantity must be greater than 0',
+    },
+  ])(
+    'rejects invalid rounded quantities before the bulk product lookup',
+    async ({ items, expectedMessage }) => {
+      const { service, prisma } = createService();
+      prisma.product.findMany.mockRejectedValue(new Error('database unavailable'));
+      const prepareItems = (
+        service as unknown as {
+          prepareItems: (tx: unknown, items: unknown[]) => Promise<unknown>;
+        }
+      ).prepareItems.bind(service);
+
+      await expect(prepareItems(prisma, items)).rejects.toEqual(
+        new BadRequestException(expectedMessage),
+      );
+      expect(prisma.product.findMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retains the missing product validation after the bulk product lookup', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Chicken breast',
+        unit: ProductUnit.KG,
+        salePrice: decimal('100'),
+        purchaseCost: decimal('62.5'),
+        isActive: true,
+        unitEquivalents: [],
+      },
+    ]);
+    const prepareItems = (
+      service as unknown as {
+        prepareItems: (tx: unknown, items: unknown[]) => Promise<unknown>;
+      }
+    ).prepareItems.bind(service);
+
+    await expect(
+      prepareItems(prisma, [
+        { productId: 'product-1', unit: ProductUnit.KG, quantityKg: 1 },
+        { productId: 'missing-product', unit: ProductUnit.KG, quantityKg: 1 },
+      ]),
+    ).rejects.toEqual(new NotFoundException('Product not found'));
+    expect(prisma.product.findMany).toHaveBeenCalledTimes(1);
+  });
+
   it.each([1, 50, 100])(
     'rejects a seller attempt to submit a free %s%% discount before inventory is affected',
     async (discount) => {
@@ -497,29 +609,31 @@ describe('SalesService', () => {
       },
     });
     prisma.discountAuthorization.updateMany.mockResolvedValue({ count: 1 });
-    prisma.product.findUnique.mockImplementation(({ where }) =>
+    prisma.product.findMany.mockImplementation(({ where }) =>
       Promise.resolve(
-        where.id === 'product-1'
-          ? {
-              id: 'product-1',
-              name: 'Product one',
-              sku: 'ONE-001',
-              unit: ProductUnit.PIECE,
-              salePrice: decimal('33.34'),
-              purchaseCost: decimal('20'),
-              isActive: true,
-              unitEquivalents: [],
-            }
-          : {
-              id: 'product-2',
-              name: 'Product two',
-              sku: 'TWO-001',
-              unit: ProductUnit.PIECE,
-              salePrice: decimal('66.66'),
-              purchaseCost: decimal('40'),
-              isActive: true,
-              unitEquivalents: [],
-            },
+        where.id.in.map((id: string) =>
+          id === 'product-1'
+            ? {
+                id: 'product-1',
+                name: 'Product one',
+                sku: 'ONE-001',
+                unit: ProductUnit.PIECE,
+                salePrice: decimal('33.34'),
+                purchaseCost: decimal('20'),
+                isActive: true,
+                unitEquivalents: [],
+              }
+            : {
+                id: 'product-2',
+                name: 'Product two',
+                sku: 'TWO-001',
+                unit: ProductUnit.PIECE,
+                salePrice: decimal('66.66'),
+                purchaseCost: decimal('40'),
+                isActive: true,
+                unitEquivalents: [],
+              },
+        ),
       ),
     );
     prisma.inventoryBalance.findUnique.mockReset();
@@ -774,7 +888,7 @@ describe('SalesService', () => {
       ),
     ).rejects.toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
 
-    expect(prisma.product.findUnique).not.toHaveBeenCalled();
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
     expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
     expect(prisma.sale.create).not.toHaveBeenCalled();
   });
@@ -844,7 +958,7 @@ describe('SalesService', () => {
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(prisma.product.findUnique).not.toHaveBeenCalled();
+      expect(prisma.product.findMany).not.toHaveBeenCalled();
       expect(prisma.inventoryBalance.updateMany).not.toHaveBeenCalled();
       expect(prisma.sale.create).not.toHaveBeenCalled();
     },
@@ -2537,16 +2651,18 @@ describe('SalesService', () => {
   it('persists cash tendered and calculated change without creating an additional payment or inventory record', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1',
-      name: 'Chicken breast',
-      sku: 'PCH-001',
-      unit: ProductUnit.KG,
-      salePrice: decimal('75'),
-      purchaseCost: decimal('62.50'),
-      isActive: true,
-      unitEquivalents: [],
-    });
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Chicken breast',
+        sku: 'PCH-001',
+        unit: ProductUnit.KG,
+        salePrice: decimal('75'),
+        purchaseCost: decimal('62.50'),
+        isActive: true,
+        unitEquivalents: [],
+      },
+    ]);
 
     const result = await service.create(
       validCashSale({
@@ -3488,27 +3604,29 @@ describe('SalesService', () => {
   it('converts KG_AND_PIECE pieces to canonical kilograms for pricing while preserving both inventory quantities', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1',
-      name: 'Whole chicken',
-      sku: 'CHK-001',
-      unit: ProductUnit.KG_AND_PIECE,
-      salePrice: decimal('80'),
-      purchaseCost: decimal('50'),
-      isActive: true,
-      unitEquivalents: [
-        {
-          id: 'eq-1',
-          unitFrom: ProductUnit.PIECE,
-          unitTo: ProductUnit.KG,
-          factor: decimal('1.250'),
-          roundingMode: 'HALF_UP',
-          effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
-          effectiveTo: null,
-          status: 'ACTIVE',
-        },
-      ],
-    });
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Whole chicken',
+        sku: 'CHK-001',
+        unit: ProductUnit.KG_AND_PIECE,
+        salePrice: decimal('80'),
+        purchaseCost: decimal('50'),
+        isActive: true,
+        unitEquivalents: [
+          {
+            id: 'eq-1',
+            unitFrom: ProductUnit.PIECE,
+            unitTo: ProductUnit.KG,
+            factor: decimal('1.250'),
+            roundingMode: 'HALF_UP',
+            effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+            effectiveTo: null,
+            status: 'ACTIVE',
+          },
+        ],
+      },
+    ]);
     prisma.inventoryBalance.findUnique.mockReset();
     prisma.inventoryBalance.findUnique
       .mockResolvedValueOnce({
@@ -3589,16 +3707,18 @@ describe('SalesService', () => {
   it('prices PIECE products with quantityPieces and preserves their monetary and inventory values', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1',
-      name: 'Chicken wings',
-      sku: 'WNG-001',
-      unit: ProductUnit.PIECE,
-      salePrice: decimal('12'),
-      purchaseCost: decimal('8'),
-      isActive: true,
-      unitEquivalents: [],
-    });
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Chicken wings',
+        sku: 'WNG-001',
+        unit: ProductUnit.PIECE,
+        salePrice: decimal('12'),
+        purchaseCost: decimal('8'),
+        isActive: true,
+        unitEquivalents: [],
+      },
+    ]);
     prisma.inventoryBalance.findUnique.mockReset();
     prisma.inventoryBalance.findUnique
       .mockResolvedValueOnce({
@@ -3683,16 +3803,18 @@ describe('SalesService', () => {
   it('allows KG_AND_PIECE products to sell kilograms without requiring an equivalence', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1',
-      name: 'Whole chicken',
-      sku: 'CHK-001',
-      unit: ProductUnit.KG_AND_PIECE,
-      salePrice: decimal('80'),
-      purchaseCost: decimal('50'),
-      isActive: true,
-      unitEquivalents: [],
-    });
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Whole chicken',
+        sku: 'CHK-001',
+        unit: ProductUnit.KG_AND_PIECE,
+        salePrice: decimal('80'),
+        purchaseCost: decimal('50'),
+        isActive: true,
+        unitEquivalents: [],
+      },
+    ]);
 
     await expect(
       service.create(
@@ -3745,26 +3867,28 @@ describe('SalesService', () => {
   it('rejects an equivalence that does not convert any requested pieces', async () => {
     const { service, prisma } = createService();
     mockHappyPath(prisma);
-    prisma.product.findUnique.mockResolvedValue({
-      id: 'product-1',
-      name: 'Chicken breast',
-      sku: 'PCH-001',
-      unit: ProductUnit.KG,
-      salePrice: decimal('100'),
-      purchaseCost: decimal('62.50'),
-      isActive: true,
-      unitEquivalents: [
-        {
-          id: 'eq-1',
-          unitFrom: ProductUnit.PIECE,
-          unitTo: ProductUnit.KG,
-          factor: decimal('1.250'),
-          effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
-          effectiveTo: null,
-          status: 'ACTIVE',
-        },
-      ],
-    });
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'product-1',
+        name: 'Chicken breast',
+        sku: 'PCH-001',
+        unit: ProductUnit.KG,
+        salePrice: decimal('100'),
+        purchaseCost: decimal('62.50'),
+        isActive: true,
+        unitEquivalents: [
+          {
+            id: 'eq-1',
+            unitFrom: ProductUnit.PIECE,
+            unitTo: ProductUnit.KG,
+            factor: decimal('1.250'),
+            effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+            effectiveTo: null,
+            status: 'ACTIVE',
+          },
+        ],
+      },
+    ]);
 
     await expect(
       service.create(

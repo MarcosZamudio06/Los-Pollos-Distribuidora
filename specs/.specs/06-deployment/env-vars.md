@@ -12,6 +12,7 @@ JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 AUTH_SESSION_ABSOLUTE_TTL_SECONDS=604800
 AUTH_SESSION_IDLE_TTL_SECONDS=86400
+AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS=300
 BCRYPT_SALT_ROUNDS=10
 CORS_ORIGIN=http://localhost:3000
 HTTP_BODY_LIMIT=1mb
@@ -53,6 +54,9 @@ RESTORE_DATABASE_URL=postgresql://user:password@restore-host:5432/pollo_distribu
 - `.env.example` sí debe mantenerse actualizado.
 - Los secretos productivos deben ser diferentes a los de desarrollo.
 - La vigencia criptográfica del refresh token no debe superar la expiración absoluta de la sesión.
+- `AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS` controla cada cuánto se
+  actualiza `lastUsedAt` de una sesión activa para reducir escrituras; su valor
+  predeterminado es `300` y debe cumplir `0 < threshold < AUTH_SESSION_IDLE_TTL_SECONDS`.
 - `CORS_ORIGIN` acepta una allowlist separada por comas. No acepta `*` cuando
   las credenciales están habilitadas.
 - `SWAGGER_ENABLED` solo puede habilitar Swagger fuera de producción.

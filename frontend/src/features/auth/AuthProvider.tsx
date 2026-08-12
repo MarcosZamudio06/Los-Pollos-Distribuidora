@@ -170,7 +170,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         establishSession(await authApi.login(credentials));
       } catch (caughtError) {
         clearSession();
-        setError(getErrorMessage(caughtError));
+        setError(null);
         throw caughtError;
       }
     },

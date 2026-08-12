@@ -17,6 +17,11 @@ export type CivilDateRangeFilter = {
   lt?: Date;
 };
 
+export type CivilDateRange = {
+  from: Date;
+  to: Date;
+};
+
 type CivilDateParts = {
   year: number;
   month: number;
@@ -83,6 +88,24 @@ export function buildCivilDateRangeFilter(
   return filter;
 }
 
+/**
+ * Resolves the half-open operational window for one stored civil business date.
+ * Date values are expected to contain the civil date at UTC midnight.
+ */
+export function getCivilDateRange(
+  businessDate: Date | string,
+  timeZone?: string,
+): CivilDateRange {
+  const civilDate = toCivilDateString(businessDate);
+  const filter = buildCivilDateRangeFilter(civilDate, civilDate, timeZone);
+
+  if (!filter?.gte || !filter.lt) {
+    throw new BadRequestException('Unable to resolve the civil date range');
+  }
+
+  return { from: filter.gte, to: filter.lt };
+}
+
 export function buildCivilDateRangeWhere<TField extends string>(
   field: TField,
   dateFrom?: string,
@@ -93,6 +116,25 @@ export function buildCivilDateRangeWhere<TField extends string>(
   return filter
     ? ({ [field]: filter } as Record<TField, CivilDateRangeFilter>)
     : {};
+}
+
+function toCivilDateString(value: Date | string): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new BadRequestException(
+        'businessDate must be a valid calendar date',
+      );
+    }
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (!DATE_ONLY_PATTERN.test(value)) {
+    throw new BadRequestException(
+      'businessDate must be a YYYY-MM-DD civil date',
+    );
+  }
+
+  return value;
 }
 
 function parseBoundary(

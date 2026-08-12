@@ -23,6 +23,10 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PERMISSIONS } from '../../common/authorization/permissions';
+import {
+  DEFAULT_APP_TIMEZONE,
+  getCivilDateRange,
+} from '../../common/utils/civil-date-range';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { calculateCashTerminalState } from '../cash-management/cash-terminal-state';
 import { acquireDailyCloseLifecycleLock } from './daily-close-lifecycle-lock';
@@ -2470,7 +2474,7 @@ export class PointOfSaleDailyCloseService {
     return date;
   }
   private currentOperationalDate(now = new Date()) {
-    const timeZone = process.env.APP_TIMEZONE?.trim() || 'America/Mexico_City';
+    const timeZone = process.env.APP_TIMEZONE?.trim() || DEFAULT_APP_TIMEZONE;
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone,
       year: 'numeric',
@@ -2482,15 +2486,7 @@ export class PointOfSaleDailyCloseService {
     return `${value('year')}-${value('month')}-${value('day')}`;
   }
   private operationalDay(businessDate: Date) {
-    const from = new Date(
-      Date.UTC(
-        businessDate.getUTCFullYear(),
-        businessDate.getUTCMonth(),
-        businessDate.getUTCDate(),
-        6,
-      ),
-    );
-    return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000) };
+    return getCivilDateRange(businessDate);
   }
   private withCostQuality<
     T extends {

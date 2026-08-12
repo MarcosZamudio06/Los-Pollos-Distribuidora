@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import { DEFAULT_APP_TIMEZONE } from '../common/utils/civil-date-range';
 
 export type AppConfig = {
   apiPrefix: string;
@@ -12,7 +13,7 @@ export const appConfig = registerAs('app', (): AppConfig => {
 
   return {
     apiPrefix: process.env.API_PREFIX?.trim() || 'api',
-    timezone: process.env.APP_TIMEZONE?.trim() || 'America/Mexico_City',
+    timezone: process.env.APP_TIMEZONE?.trim() || DEFAULT_APP_TIMEZONE,
     port: Number.isNaN(parsedPort) || parsedPort <= 0 ? 3000 : parsedPort,
     swaggerPath: process.env.SWAGGER_PATH?.trim() || 'docs',
   };

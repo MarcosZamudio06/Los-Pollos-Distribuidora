@@ -76,18 +76,20 @@ jobs:
       postgres:
         image: postgis/postgis:16-3.5
         env:
-          POSTGRES_DB: pollos_ci
+          POSTGRES_DB: pollos_e2e
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
         options: >-
-          --health-cmd "pg_isready -U postgres -d pollos_ci"
+          --health-cmd "pg_isready -U postgres -d pollos_e2e"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
         ports:
           - 5432:5432
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_ci
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_e2e
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_e2e
+      E2E_DATABASE_DISPOSABLE: 'true'
       JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
       JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
       OPENSSL_CONF: /dev/null

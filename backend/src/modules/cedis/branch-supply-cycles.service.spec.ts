@@ -144,6 +144,29 @@ function createService() {
 }
 
 describe('BranchSupplyCyclesService', () => {
+  const originalAppTimezone = process.env.APP_TIMEZONE;
+
+  afterEach(() => {
+    if (originalAppTimezone === undefined) delete process.env.APP_TIMEZONE;
+    else process.env.APP_TIMEZONE = originalAppTimezone;
+  });
+
+  it('uses the DST-aware operational day for cycle shrinkage reconciliation', () => {
+    process.env.APP_TIMEZONE = 'America/New_York';
+    const { service } = createService();
+    const privateService = service as unknown as Record<
+      string,
+      (...args: unknown[]) => unknown
+    >;
+
+    expect(
+      privateService.operationalDay(new Date('2026-03-08T00:00:00.000Z')),
+    ).toEqual({
+      from: new Date('2026-03-08T05:00:00.000Z'),
+      to: new Date('2026-03-09T04:00:00.000Z'),
+    });
+  });
+
   it('opens one cycle and records an auditable event', async () => {
     const { prisma, service } = createService();
     const cycle = createCycle();

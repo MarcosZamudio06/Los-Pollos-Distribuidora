@@ -9,19 +9,40 @@ export type ApiErrorPayload = {
   success?: false;
 };
 
+export function parseRetryAfterHeader(
+  value: string | null,
+  now = Date.now(),
+): number | null {
+  const normalizedValue = value?.trim();
+  if (!normalizedValue) return null;
+
+  if (/^\d+$/.test(normalizedValue)) {
+    const seconds = Number(normalizedValue);
+    return Number.isSafeInteger(seconds) ? seconds : null;
+  }
+
+  const retryAt = Date.parse(normalizedValue);
+  if (Number.isNaN(retryAt)) return null;
+
+  return Math.max(Math.ceil((retryAt - now) / 1000), 0);
+}
+
 export class ApiClientError extends Error {
   readonly statusCode: number;
   readonly payload: ApiErrorPayload | string | null;
+  readonly retryAfterSeconds: number | null;
 
   constructor(
     message: string,
     statusCode: number,
     payload: ApiErrorPayload | string | null,
+    retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = "ApiClientError";
     this.statusCode = statusCode;
     this.payload = payload;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -134,7 +155,12 @@ export function createApiClient(baseUrl = getDefaultApiBaseUrl()) {
         );
       }
 
-      throw new ApiClientError(message, response.status, errorPayload);
+      throw new ApiClientError(
+        message,
+        response.status,
+        errorPayload,
+        parseRetryAfterHeader(response.headers.get("retry-after")),
+      );
     }
 
     return parseResponseBody<TResponse>(response);

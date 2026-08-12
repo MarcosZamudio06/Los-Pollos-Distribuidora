@@ -27,6 +27,7 @@ const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
 const DEFAULT_REFRESH_TOKEN_EXPIRES_IN = '7d';
 const DEFAULT_ABSOLUTE_TTL_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_IDLE_TTL_SECONDS = 24 * 60 * 60;
+const DEFAULT_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS = 5 * 60;
 
 type UserRecord = {
   id: string;
@@ -180,10 +181,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    await this.prisma.authSession.updateMany({
-      where: { id: session.id, revokedAt: null },
-      data: { lastUsedAt: now },
-    });
+    await this.touchSessionIfNeeded(session, now);
 
     return {
       ...this.toAuthenticatedUser(session.user),
@@ -302,15 +300,43 @@ export class AuthService {
     );
   }
 
-  private getSessionTtlSeconds(type: 'absolute' | 'idle'): number {
+  private async touchSessionIfNeeded(
+    session: SessionRecord,
+    now: Date,
+  ): Promise<void> {
+    const thresholdSeconds = this.getSessionTtlSeconds('lastUsedAtThreshold');
+    const thresholdAt = new Date(now.getTime() - thresholdSeconds * 1000);
+    if (session.lastUsedAt > thresholdAt) return;
+
+    const idleExpiresAt = new Date(
+      now.getTime() - this.getSessionTtlSeconds('idle') * 1000,
+    );
+    await this.prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        revokedAt: null,
+        absoluteExpiresAt: { gt: now },
+        lastUsedAt: { gt: idleExpiresAt, lte: thresholdAt },
+      },
+      data: { lastUsedAt: now },
+    });
+  }
+
+  private getSessionTtlSeconds(
+    type: 'absolute' | 'idle' | 'lastUsedAtThreshold',
+  ): number {
     const envKey =
       type === 'absolute'
         ? 'AUTH_SESSION_ABSOLUTE_TTL_SECONDS'
-        : 'AUTH_SESSION_IDLE_TTL_SECONDS';
+        : type === 'idle'
+          ? 'AUTH_SESSION_IDLE_TTL_SECONDS'
+          : 'AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS';
     const fallback =
       type === 'absolute'
         ? DEFAULT_ABSOLUTE_TTL_SECONDS
-        : DEFAULT_IDLE_TTL_SECONDS;
+        : type === 'idle'
+          ? DEFAULT_IDLE_TTL_SECONDS
+          : DEFAULT_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS;
     const configured = Number(process.env[envKey] ?? fallback);
 
     if (!Number.isInteger(configured) || configured <= 0) {

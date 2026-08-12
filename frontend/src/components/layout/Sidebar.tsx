@@ -1,6 +1,7 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import { LogOut } from "lucide-react";
+import { preloadRoute } from "../../app/routeLoaders";
 import { Avatar, AvatarFallback, Badge, ScrollArea, Separator } from "../ui";
 import { useAuth } from "../../features/auth";
 import { cn } from "../../lib/utils";
@@ -166,6 +167,9 @@ export function Sidebar({
               {group.items.map((item) => {
                 const isActive = item.key === activeKey;
                 const Icon = item.icon;
+                const handlePrefetch = () => {
+                  void preloadRoute(item.key).catch(() => undefined);
+                };
 
                 return (
                   <NavLink
@@ -179,6 +183,8 @@ export function Sidebar({
                     )}
                     key={item.key}
                     onClick={onNavigate}
+                    onFocus={handlePrefetch}
+                    onMouseEnter={handlePrefetch}
                     title={!expanded ? item.label : undefined}
                     to={item.to}
                   >

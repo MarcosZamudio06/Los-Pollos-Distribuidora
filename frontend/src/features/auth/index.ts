@@ -1,8 +1,4 @@
 export { AuthProvider } from "./AuthProvider";
-export { LoginPage } from "./pages/LoginPage";
-export { ChangePasswordPage } from "./pages/ChangePasswordPage";
-export { LogoutPage } from "./pages/LogoutPage";
-export { ForbiddenPage } from "./pages/ForbiddenPage";
 export { ProtectedRoute } from "./routes/ProtectedRoute";
 export { RoleRoute } from "./routes/RoleRoute";
 export { PermissionRoute } from "./routes/PermissionRoute";

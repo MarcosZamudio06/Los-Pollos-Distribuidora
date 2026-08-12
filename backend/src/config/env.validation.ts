@@ -125,6 +125,9 @@ export function validateEnvironment(env: EnvironmentVariables) {
   const idleSessionTtl = Number(
     env.AUTH_SESSION_IDLE_TTL_SECONDS?.trim() || 86400,
   );
+  const lastUsedAtUpdateThreshold = Number(
+    env.AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS?.trim() || 300,
+  );
   const corsOrigins = parseCorsOrigins(env.CORS_ORIGIN);
   const bodyLimit = parseBodyLimit(env.HTTP_BODY_LIMIT);
   const swaggerEnabled = parseBoolean(
@@ -163,6 +166,19 @@ export function validateEnvironment(env: EnvironmentVariables) {
   if (idleSessionTtl > absoluteSessionTtl) {
     throw new Error(
       'AUTH_SESSION_IDLE_TTL_SECONDS cannot exceed AUTH_SESSION_ABSOLUTE_TTL_SECONDS',
+    );
+  }
+  if (
+    !Number.isInteger(lastUsedAtUpdateThreshold) ||
+    lastUsedAtUpdateThreshold <= 0
+  ) {
+    throw new Error(
+      'AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS must be a positive integer',
+    );
+  }
+  if (lastUsedAtUpdateThreshold >= idleSessionTtl) {
+    throw new Error(
+      'AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS must be less than AUTH_SESSION_IDLE_TTL_SECONDS',
     );
   }
   if (nodeEnv === 'production' && swaggerEnabled) {
@@ -208,6 +224,8 @@ export function validateEnvironment(env: EnvironmentVariables) {
     APP_TIMEZONE: appTimezone,
     AUTH_SESSION_ABSOLUTE_TTL_SECONDS: absoluteSessionTtl,
     AUTH_SESSION_IDLE_TTL_SECONDS: idleSessionTtl,
+    AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS:
+      lastUsedAtUpdateThreshold,
     CORS_ORIGIN: corsOrigins.join(','),
     CORS_ORIGINS: corsOrigins,
     DATABASE_SSL: env.DATABASE_SSL === 'true',

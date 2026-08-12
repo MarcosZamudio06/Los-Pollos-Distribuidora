@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PERMISSIONS } from '../../common/authorization/permissions';
+import { getCivilDateRange } from '../../common/utils/civil-date-range';
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -2095,15 +2096,7 @@ export class BranchSupplyCyclesService {
   }
 
   private operationalDay(businessDate: Date) {
-    const from = new Date(
-      Date.UTC(
-        businessDate.getUTCFullYear(),
-        businessDate.getUTCMonth(),
-        businessDate.getUTCDate(),
-        6,
-      ),
-    );
-    return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000) };
+    return getCivilDateRange(businessDate);
   }
 
   private normalizeOptionalText(value?: string): string | null {

@@ -2,12 +2,19 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
+import {
+  BUNDLE_BUDGET_KB,
+  createBundleBudgetPlugin,
+} from "./src/app/bundleBudget.ts";
 
 const apiProxyTarget =
   process.env.VITE_DEV_API_PROXY_TARGET || "http://127.0.0.1:4000";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  build: {
+    chunkSizeWarningLimit: BUNDLE_BUDGET_KB.entry,
+  },
+  plugins: [react(), tailwindcss(), createBundleBudgetPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),

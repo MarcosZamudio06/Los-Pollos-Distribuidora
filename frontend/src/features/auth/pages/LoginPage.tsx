@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   AlertCircle,
   Eye,
@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, CardContent, Input } from "@/components/ui";
+import {
+  formatCooldownTimer,
+  getLoginErrorPresentation,
+} from "../loginError";
 import { useAuth } from "../useAuth";
 
 type LocationState = {
@@ -26,8 +30,33 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [rateLimitUntil, setRateLimitUntil] = useState<number | null>(null);
+  const [rateLimitRemainingSeconds, setRateLimitRemainingSeconds] =
+    useState(0);
   const state = location.state as LocationState | null;
   const nextPath = state?.from?.pathname ?? "/";
+  const isRateLimited = rateLimitUntil !== null;
+
+  useEffect(() => {
+    if (rateLimitUntil === null) return;
+
+    const updateRemainingTime = () => {
+      const remainingSeconds = Math.max(
+        Math.ceil((rateLimitUntil - Date.now()) / 1000),
+        0,
+      );
+      setRateLimitRemainingSeconds(remainingSeconds);
+
+      if (remainingSeconds === 0) {
+        setRateLimitUntil(null);
+        setFormError(null);
+      }
+    };
+
+    updateRemainingTime();
+    const timer = window.setInterval(updateRemainingTime, 1000);
+    return () => window.clearInterval(timer);
+  }, [rateLimitUntil]);
 
   if (isAuthenticated) {
     return <Navigate replace to={nextPath} />;
@@ -35,15 +64,22 @@ export function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting || isRateLimited) return;
+
     setFormError(null);
     setIsSubmitting(true);
 
     try {
       await login({ email, password });
+      setRateLimitUntil(null);
       navigate(nextPath, { replace: true });
-    } catch {
-      setFormError(
-        "Revisa tu correo y contraseña. Si el usuario está inactivo, pide reactivación a un ADMIN.",
+    } catch (caughtError) {
+      const errorPresentation = getLoginErrorPresentation(caughtError);
+      setFormError(errorPresentation.message);
+      setRateLimitUntil(
+        errorPresentation.kind === "rate-limited"
+          ? Date.now() + errorPresentation.cooldownSeconds * 1000
+          : null,
       );
     } finally {
       setIsSubmitting(false);
@@ -174,6 +210,7 @@ export function LoginPage() {
                     <Alert
                       className="mt-5 flex gap-3 text-sm font-semibold"
                       id="login-error"
+                      aria-atomic="true"
                       role="alert"
                       tone="error"
                     >
@@ -182,12 +219,32 @@ export function LoginPage() {
                     </Alert>
                   )}
 
+                  {isRateLimited && (
+                    <p
+                      aria-live="polite"
+                      className="sr-only"
+                      id="login-rate-limit-status"
+                      role="status"
+                    >
+                      Podrás volver a intentarlo en{" "}
+                      {formatCooldownTimer(rateLimitRemainingSeconds)}.
+                    </p>
+                  )}
+
                   <Button
+                    aria-busy={isSubmitting}
+                    aria-describedby={
+                      isRateLimited ? "login-rate-limit-status" : undefined
+                    }
                     className="mt-7 h-12 w-full rounded-2xl text-sm font-black uppercase tracking-[0.14em]"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isRateLimited}
                     type="submit"
                   >
-                    {isSubmitting ? "Validando acceso" : "Entrar al sistema"}
+                    {isSubmitting
+                      ? "Validando acceso"
+                      : isRateLimited
+                        ? `Reintentar en ${formatCooldownTimer(rateLimitRemainingSeconds)}`
+                        : "Entrar al sistema"}
                   </Button>
                 </form>
               </CardContent>

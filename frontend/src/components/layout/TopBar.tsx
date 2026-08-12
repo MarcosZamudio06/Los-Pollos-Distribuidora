@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Circle, Menu, Search } from "lucide-react";
+import { preloadRoute } from "../../app/routeLoaders";
 import { Badge } from "../ui";
 import { useAuth } from "../../features/auth";
 import {
@@ -57,6 +58,12 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
             <Link
               className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3 text-sm font-semibold text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-gold)] hover:text-[var(--erp-brand-red)]"
               key={item.key}
+              onFocus={() => {
+                void preloadRoute(item.key).catch(() => undefined);
+              }}
+              onMouseEnter={() => {
+                void preloadRoute(item.key).catch(() => undefined);
+              }}
               to={item.to}
             >
               <item.icon aria-hidden="true" className="h-4 w-4" />

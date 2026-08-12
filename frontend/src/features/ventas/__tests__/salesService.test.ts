@@ -125,6 +125,49 @@ describe("salesService TASK-055 contracts", () => {
     ).toBe("sale-attempt-key");
   });
 
+  it("envía una venta PIECE exitosa con precio y pago separados de la cantidad en kilos", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({ sale: { id: "piece-sale-1", total: "24.00" } }),
+    );
+
+    await salesService.createSale(
+      {
+        documentType: "INTERNAL_RECEIPT",
+        items: [
+          {
+            presentationType: "CUT",
+            productId: "piece-product-1",
+            quantityKg: 0,
+            quantityPieces: 2,
+            unit: "PIECE",
+          },
+        ],
+        locationId: "loc-1",
+        paymentType: "CASH_SALE",
+        payments: [
+          { amount: "24.00", paymentMethod: "CASH", cashTendered: "24.00" },
+        ],
+        requiresAdministrativeInvoice: false,
+        saleChannel: "COUNTER",
+      },
+      "piece-sale-key",
+      "access-token",
+    );
+
+    expect(JSON.parse(String(lastRequest().init?.body))).toMatchObject({
+      items: [
+        expect.objectContaining({
+          quantityKg: 0,
+          quantityPieces: 2,
+          unit: "PIECE",
+        }),
+      ],
+      payments: [
+        expect.objectContaining({ amount: "24.00", paymentMethod: "CASH" }),
+      ],
+    });
+  });
+
   it("consulta documentos internos desde GET /api/sales/:saleId/documents", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       okJson({ items: [{ id: "doc-1", documentType: "SIMPLE_NOTE" }] }),

@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AccountsReceivableAgingJob } from './../src/modules/accounts-receivable/accounts-receivable-aging.job';
+import { assertDisposableE2eEnvironment } from './e2e-environment';
 
 const routingEnvironment = {
   OSRM_URL: 'http://localhost:5000',
@@ -19,6 +20,7 @@ describe('AppModule bootstrap (e2e)', () => {
   let app: INestApplication<App> | undefined;
 
   beforeAll(async () => {
+    assertDisposableE2eEnvironment();
     Object.assign(process.env, routingEnvironment);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({

@@ -316,7 +316,7 @@ describe('AccountsReceivableService', () => {
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
-  it('rechaza registrar efectivo cuando el cierre POS ya fue revisado', async () => {
+  it('rechaza efectivo cuando el cierre POS de cobranza actual ya fue revisado', async () => {
     const { service, prisma } = createService();
     prisma.payment.findFirst.mockResolvedValue(null);
     prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());

@@ -2,7 +2,15 @@ import { BadRequestException } from '@nestjs/common';
 import {
   buildCivilDateRangeFilter,
   DEFAULT_APP_TIMEZONE,
+  getCivilDateRange,
 } from './civil-date-range';
+
+const originalAppTimezone = process.env.APP_TIMEZONE;
+
+afterEach(() => {
+  if (originalAppTimezone === undefined) delete process.env.APP_TIMEZONE;
+  else process.env.APP_TIMEZONE = originalAppTimezone;
+});
 
 describe('buildCivilDateRangeFilter', () => {
   it('covers the complete civil day for a same-day query in the configured timezone', () => {
@@ -88,4 +96,49 @@ describe('buildCivilDateRangeFilter', () => {
       lt: new Date('2026-03-09T04:00:00.000Z'),
     });
   });
+});
+
+describe('getCivilDateRange', () => {
+  it('uses the Mexico City default for a stored UTC business date', () => {
+    delete process.env.APP_TIMEZONE;
+
+    expect(getCivilDateRange(new Date('2026-06-30T00:00:00.000Z'))).toEqual({
+      from: new Date('2026-06-30T06:00:00.000Z'),
+      to: new Date('2026-07-01T06:00:00.000Z'),
+    });
+  });
+
+  it('accepts a YYYY-MM-DD business date and honors America/Cancun', () => {
+    process.env.APP_TIMEZONE = 'America/Cancun';
+
+    expect(getCivilDateRange('2026-06-30')).toEqual({
+      from: new Date('2026-06-30T05:00:00.000Z'),
+      to: new Date('2026-07-01T05:00:00.000Z'),
+    });
+  });
+
+  it.each([
+    [
+      'spring-forward',
+      '2026-03-08',
+      '2026-03-08T05:00:00.000Z',
+      '2026-03-09T04:00:00.000Z',
+    ],
+    [
+      'fall-back',
+      '2026-11-01',
+      '2026-11-01T04:00:00.000Z',
+      '2026-11-02T05:00:00.000Z',
+    ],
+  ])(
+    'returns the exact half-open boundaries across %s in America/New_York',
+    (_name, businessDate, from, to) => {
+      process.env.APP_TIMEZONE = 'America/New_York';
+
+      expect(getCivilDateRange(businessDate)).toEqual({
+        from: new Date(from),
+        to: new Date(to),
+      });
+    },
+  );
 });

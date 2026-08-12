@@ -38,11 +38,15 @@ type AuthSessionCreateArgs = {
 type AuthSessionUpdateArgs = {
   where: Partial<
     Pick<SessionRecord, 'id' | 'userId' | 'refreshTokenHash' | 'tokenVersion'>
-  > & { revokedAt?: Date | null };
+  > & {
+    revokedAt?: Date | null;
+    absoluteExpiresAt?: { gt: Date };
+    lastUsedAt?: { gt?: Date; lte?: Date };
+  };
   data: Partial<
     Pick<SessionRecord, 'refreshTokenHash' | 'lastUsedAt' | 'revokedAt'>
   > & {
-    tokenVersion?: { increment: number };
+    tokenVersion?: number | { increment: number };
   };
 };
 type UserUpdateArgs = {
@@ -68,7 +72,11 @@ function createUser(overrides: Partial<UserRecord> = {}): UserRecord {
 function createService(user = createUser()) {
   process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
-  const state: { session: SessionRecord | null; user: UserRecord } = {
+  const state: {
+    session: SessionRecord | null;
+    user: UserRecord;
+    beforeSessionUpdate?: () => void;
+  } = {
     session: null,
     user,
   };
@@ -88,6 +96,8 @@ function createService(user = createUser()) {
     }),
     findUnique: jest.fn(() => state.session),
     updateMany: jest.fn(({ where, data }: AuthSessionUpdateArgs) => {
+      state.beforeSessionUpdate?.();
+      state.beforeSessionUpdate = undefined;
       const session = state.session;
       if (
         !session ||
@@ -97,7 +107,11 @@ function createService(user = createUser()) {
         (where.refreshTokenHash &&
           where.refreshTokenHash !== session.refreshTokenHash) ||
         (where.tokenVersion !== undefined &&
-          where.tokenVersion !== session.tokenVersion)
+          where.tokenVersion !== session.tokenVersion) ||
+        (where.absoluteExpiresAt?.gt &&
+          session.absoluteExpiresAt <= where.absoluteExpiresAt.gt) ||
+        (where.lastUsedAt?.gt && session.lastUsedAt <= where.lastUsedAt.gt) ||
+        (where.lastUsedAt?.lte && session.lastUsedAt > where.lastUsedAt.lte)
       ) {
         return { count: 0 };
       }
@@ -158,6 +172,118 @@ function createService(user = createUser()) {
 }
 
 describe('AuthService persistent sessions', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    delete process.env.AUTH_SESSION_ABSOLUTE_TTL_SECONDS;
+    delete process.env.AUTH_SESSION_IDLE_TTL_SECONDS;
+    delete process.env.AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS;
+  });
+
+  it('amortizes lastUsedAt writes until the configured threshold elapses', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-21T10:00:00.000Z'));
+    process.env.AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS = '300';
+    const { authSession, service } = createService();
+    const login = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+    authSession.updateMany.mockClear();
+
+    await service.verifyAccessToken(login.accessToken);
+    expect(authSession.updateMany).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(300_000);
+    await service.verifyAccessToken(login.accessToken);
+
+    expect(authSession.updateMany).toHaveBeenCalledTimes(1);
+    expect(authSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: expect.any(String),
+        revokedAt: null,
+        absoluteExpiresAt: { gt: new Date('2026-06-21T10:05:00.000Z') },
+        lastUsedAt: {
+          gt: new Date('2026-06-20T10:05:00.000Z'),
+          lte: new Date('2026-06-21T10:00:00.000Z'),
+        },
+      },
+      data: { lastUsedAt: new Date('2026-06-21T10:05:00.000Z') },
+    });
+  });
+
+  it('does not write or accept a session at the idle TTL boundary', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-21T10:00:00.000Z'));
+    process.env.AUTH_SESSION_IDLE_TTL_SECONDS = '10';
+    process.env.AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS = '2';
+    const { authSession, service } = createService();
+    const login = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+    authSession.updateMany.mockClear();
+
+    jest.advanceTimersByTime(10_000);
+
+    await expect(
+      service.verifyAccessToken(login.accessToken),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(authSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not extend a session that expires between validation and the conditional touch', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-21T10:00:00.000Z'));
+    process.env.AUTH_SESSION_ABSOLUTE_TTL_SECONDS = '60';
+    process.env.AUTH_SESSION_IDLE_TTL_SECONDS = '30';
+    process.env.AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS = '1';
+    const { authSession, service, state } = createService();
+    const login = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+    const originalLastUsedAt = state.session?.lastUsedAt;
+    authSession.updateMany.mockClear();
+    jest.advanceTimersByTime(2_000);
+    state.beforeSessionUpdate = () => {
+      if (state.session) {
+        state.session.absoluteExpiresAt = new Date('2026-06-21T10:00:01.000Z');
+      }
+    };
+
+    await expect(service.verifyAccessToken(login.accessToken)).resolves.toEqual(
+      expect.objectContaining({ authSessionId: expect.any(String) }),
+    );
+
+    expect(authSession.updateMany).toHaveBeenCalledTimes(1);
+    expect(state.session?.lastUsedAt).toEqual(originalLastUsedAt);
+  });
+
+  it('keeps concurrent touches conditional so only one request advances lastUsedAt', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-21T10:00:00.000Z'));
+    process.env.AUTH_SESSION_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS = '1';
+    const { authSession, service, state } = createService();
+    const login = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+    authSession.updateMany.mockClear();
+    authSession.findUnique.mockImplementation(() =>
+      state.session ? { ...state.session, user: state.user } : null,
+    );
+    jest.advanceTimersByTime(2_000);
+
+    await Promise.all([
+      service.verifyAccessToken(login.accessToken),
+      service.verifyAccessToken(login.accessToken),
+    ]);
+
+    expect(authSession.updateMany).toHaveBeenCalledTimes(2);
+    expect(
+      authSession.updateMany.mock.results.map((result) => result.value.count),
+    ).toEqual([1, 0]);
+    expect(state.session?.lastUsedAt).toEqual(
+      new Date('2026-06-21T10:00:02.000Z'),
+    );
+  });
+
   it('creates a server session and stores only the refresh token hash', async () => {
     const { authSession, service } = createService();
 

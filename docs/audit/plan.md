@@ -332,6 +332,8 @@ COMPLETED
 
 ### AUD-011 — La ventana operativa ignora `APP_TIMEZONE`
 
+COMPLETED
+
 - **Severidad:** MEDIA
 - **Categoría:** tiempo, configuración, cierre
 - **Archivos afectados:** `point-of-sale-daily-close.service.ts:2432-2453`; `branch-supply-cycles.service.ts:2119-2128`; `backend/src/config/app.config.ts`.
@@ -351,6 +353,8 @@ COMPLETED
 - **Dependencias:** usar el mismo helper que AUD-009.
 
 ### AUD-012 — La suite no prueba el flujo crítico completo y codifica una regla errónea
+
+COMPLETED
 
 - **Severidad:** MEDIA
 - **Categoría:** tests, cobertura, confiabilidad
@@ -372,6 +376,8 @@ COMPLETED
 
 ### AUD-013 — Servicios transaccionales y POS concentran demasiadas responsabilidades
 
+HASTA EL FINAL
+
 - **Severidad:** MEDIA
 - **Categoría:** arquitectura, mantenibilidad
 - **Archivos afectados:** `sales.service.ts` (3,377 líneas); `point-of-sale-daily-close.service.ts` (2,474); `branch-supply-cycles.service.ts` (2,224); `inventory-transfers.service.ts` (2,134); `SalesPosPage.tsx` (1,829).
@@ -391,6 +397,8 @@ COMPLETED
 - **Dependencias:** posterior a AUD-012 y a correcciones funcionales.
 
 ### AUD-014 — Consultas y escrituras innecesarias en rutas calientes
+
+PROCESS
 
 - **Severidad:** MEDIA
 - **Categoría:** rendimiento, concurrencia
@@ -412,6 +420,8 @@ COMPLETED
 
 ### AUD-015 — Bundle frontend monolítico y sin carga diferida por ruta
 
+PROCESS
+
 - **Severidad:** MEDIA
 - **Categoría:** rendimiento frontend
 - **Archivos afectados:** `frontend/src/app/router.tsx:1-53`; barrels de features; `vite.config.ts`.
@@ -431,6 +441,8 @@ COMPLETED
 - **Dependencias:** independiente de la corrección financiera.
 
 ### AUD-016 — El comando backend `start` no encuentra el artefacto compilado
+
+PENDIENTE
 
 - **Severidad:** BAJA
 - **Categoría:** ejecutabilidad local, scripts
@@ -452,6 +464,8 @@ COMPLETED
 
 ### AUD-017 — Documentación y gestores de paquetes contradicen el proyecto actual
 
+PENDIENTE
+
 - **Severidad:** BAJA
 - **Categoría:** documentación, CI/CD, configuración
 - **Archivos afectados:** `README.md:1-66`; `docs/validation.md`; `.github/workflows/quality-gate.yml`; package/lockfiles; configuración Prisma en package.json.
@@ -471,6 +485,8 @@ COMPLETED
 - **Dependencias:** AUD-003, AUD-008 y AUD-016.
 
 ### AUD-018 — El frontend oculta la limitación por intentos de login
+
+IMPLEMENTANDO
 
 - **Severidad:** BAJA
 - **Categoría:** manejo de errores, seguridad UX
