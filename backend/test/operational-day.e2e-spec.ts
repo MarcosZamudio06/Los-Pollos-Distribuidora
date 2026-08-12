@@ -236,6 +236,20 @@ describe('Operational day journey (e2e)', () => {
     expect(supply.body.data.transfer.status).toBe('REQUESTED');
 
     await request(app.getHttpServer())
+      .post(`/api/inventory-transfers/${supplyTransferId}/confirm`)
+      .set(auth)
+      .set('Idempotency-Key', `${marker}:invalid-supply-confirm`)
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toBe('BRANCH_SUPPLY_RECEIPT_NOT_ALLOWED');
+      });
+    expect(
+      await prisma.inventoryMovement.count({
+        where: { transferId: supplyTransferId },
+      }),
+    ).toBe(0);
+
+    await request(app.getHttpServer())
       .post(`/api/cedis/branch-supply-cycles/${cycleId}/supplies`)
       .set(auth)
       .set('Idempotency-Key', `${marker}:stale-supply`)
@@ -256,12 +270,6 @@ describe('Operational day journey (e2e)', () => {
         where: { branchSupplyCycleId: cycleId },
       }),
     ).toBe(1);
-
-    await request(app.getHttpServer())
-      .post(`/api/inventory-transfers/${supplyTransferId}/confirm`)
-      .set(auth)
-      .set('Idempotency-Key', `${marker}:supply-confirm`)
-      .expect(201);
 
     const incoming = await request(app.getHttpServer())
       .get(`/api/cedis/incoming-supplies/${supplyTransferId}`)
@@ -375,13 +383,14 @@ describe('Operational day journey (e2e)', () => {
     const creditSaleId = creditSale.body.data.sale.id as string;
     const receivableId = creditSale.body.data.accountReceivable.id as string;
     expect(creditSale.body.data.sale.total).toBe('24.00');
+    expect(creditSale.body.data.accountReceivable.originalAmount).toBe('24.00');
     expect(creditSale.body.data.accountReceivable.outstandingAmount).toBe(
       '24.00',
     );
 
     const paymentPayload = {
       accountReceivableId: receivableId,
-      amount: '10.00',
+      amount: '15.00',
       paymentMethod: PaymentMethod.TRANSFER,
       bankName: 'E2E Bank',
       referenceNumber: `${marker}:transfer`,
@@ -405,7 +414,11 @@ describe('Operational day journey (e2e)', () => {
     );
     expect(
       collectionAttempts.map((response) => response.status).sort(),
-    ).toEqual([201, 409]);
+    ).toEqual([201, 400]);
+    expect(
+      collectionAttempts.find((response) => response.status === 400)?.body
+        .message,
+    ).toBe('Payment amount cannot exceed outstanding balance');
     const winningIndex = collectionAttempts.findIndex(
       (response) => response.status === 201,
     );
@@ -420,7 +433,7 @@ describe('Operational day journey (e2e)', () => {
     );
     expect(collection.body.data.payment.pointOfSaleDailyCloseId).toBeNull();
     expect(collection.body.data.accountReceivable.outstandingAmount).toBe(
-      '14.00',
+      '9.00',
     );
 
     const collectionRetry = await request(app.getHttpServer())
@@ -608,9 +621,10 @@ describe('Operational day journey (e2e)', () => {
       outstandingAmount: decimalToFixed(receivable?.outstandingAmount, 2),
       status: receivable?.status,
     }).toEqual({
-      outstandingAmount: '14.00',
+      outstandingAmount: '9.00',
       status: 'PARTIALLY_PAID',
     });
+    expect(persistedPayments).toHaveLength(2);
     expect(
       persistedPayments.map((payment) => ({
         ...payment,
@@ -624,7 +638,7 @@ describe('Operational day journey (e2e)', () => {
           pointOfSaleDailyCloseId: dailyCloseId,
         }),
         expect.objectContaining({
-          amount: '10.00',
+          amount: '15.00',
           paymentMethod: PaymentMethod.TRANSFER,
           pointOfSaleDailyCloseId: null,
         }),

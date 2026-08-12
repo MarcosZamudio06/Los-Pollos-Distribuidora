@@ -192,7 +192,7 @@ Validaciones:
 
 ## Comandos de inventario reutilizados
 
-- `POST /api/inventory-transfers/:id/confirm`: confirma recepción. Revalida ciclo mutable, ubicaciones/productos activos, dirección, alcance y stock; genera ambos movimientos en una transacción.
+- `POST /api/inventory-transfers/:id/confirm`: confirma devoluciones `RETURN` hacia CEDIS. Los suministros `SUPPLY` se confirman exclusivamente mediante `POST /api/cedis/incoming-supplies/:transferId/receive`, que registra la recepción y genera ambos movimientos en una transacción.
 - `POST /api/inventory-transfers/:id/cancel`: cancela `DRAFT`, `REQUESTED` o `IN_TRANSIT` con motivo. Nunca cancela `CONFIRMED`.
 - Confirmar o cancelar una transferencia vinculada requiere `Idempotency-Key`, aunque el comando genérico mantenga compatibilidad para transferencias no vinculadas.
 - Confirmar o cancelar una transferencia vinculada devuelve el ciclo a `OPEN`, incrementa su versión e invalida una validación vigente del cierre `DRAFT`.

@@ -181,7 +181,8 @@ describe('PurchasesService', () => {
         expect.objectContaining({
           id: 'purchase-1',
           supplierName: 'Proveedor Norte',
-          total: '1000',
+          subtotal: '1000.00',
+          total: '1000.00',
         }),
       ],
       total: 1,
@@ -189,6 +190,26 @@ describe('PurchasesService', () => {
       limit: 10,
       totalPages: 1,
     });
+  });
+
+  it('serializes purchase monetary fields with canonical two-decimal strings', async () => {
+    const { service, prisma } = createService();
+    prisma.purchase.findFirst.mockResolvedValue(createPurchase());
+
+    const result = await service.findOne('purchase-1', warehouseUser);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        subtotal: '1000.00',
+        total: '1000.00',
+        items: [
+          expect.objectContaining({
+            unitCost: '80.00',
+            subtotal: '1000.00',
+          }),
+        ],
+      }),
+    );
   });
 
   it('creates and confirms a purchase in one transaction, incrementing receiver stock and recording movements', async () => {

@@ -25,6 +25,7 @@ import {
   ListPurchasesQueryDto,
 } from './dto';
 import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
+import { toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -781,8 +782,8 @@ export class PurchasesService {
       supplierName: purchase.supplier?.name ?? null,
       userId: purchase.userId,
       locationId: purchase.locationId,
-      subtotal: this.decimalToString(purchase.subtotal),
-      total: this.decimalToString(purchase.total),
+      subtotal: this.moneyToString(purchase.subtotal),
+      total: this.moneyToString(purchase.total),
       status: purchase.status,
       createdAt: purchase.createdAt,
       updatedAt: purchase.updatedAt,
@@ -801,12 +802,12 @@ export class PurchasesService {
         quantity: this.decimalToString(item.quantity),
         quantityKg: this.decimalToString(item.quantityKg),
         quantityPieces: item.quantityPieces ?? 0,
-        unitCost: this.decimalToString(item.unitCost),
+        unitCost: this.moneyToString(item.unitCost),
         unitEquivalentId: item.unitEquivalentId ?? null,
         appliedEquivalentFactor: this.decimalToString(
           item.appliedEquivalentFactor,
         ),
-        subtotal: this.decimalToString(item.subtotal),
+        subtotal: this.moneyToString(item.subtotal),
       })),
       inventoryMovements: (purchase.inventoryMovements ?? []).map((movement) =>
         this.toMovementResponse(movement),
@@ -845,6 +846,10 @@ export class PurchasesService {
     return value instanceof Prisma.Decimal
       ? value.toString()
       : stringifyValue(value);
+  }
+
+  private moneyToString(value: DecimalLike): string {
+    return toMoneyString(value);
   }
 
   private toNumber(value: DecimalLike): number {

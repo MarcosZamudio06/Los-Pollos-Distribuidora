@@ -108,6 +108,7 @@ Validaciones:
 - La devolución de sobrante desde ruta se confirma con origen `ROUTE_STOCK`.
 - Reintentos con la misma `Idempotency-Key` no deben duplicar movimientos ni confirmar dos veces el mismo traspaso.
 - Si está vinculado a un ciclo CEDIS, el ciclo debe estar mutable, la dirección debe coincidir y ubicaciones y productos deben seguir activos.
+- Los suministros vinculados con rol `SUPPLY` no se confirman por este endpoint; deben recibirse mediante `POST /api/cedis/incoming-supplies/:transferId/receive`. Este endpoint confirma devoluciones `RETURN` y los demás traspasos permitidos.
 - Una transferencia hacia una sucursal que no esté vinculada a un ciclo CEDIS debe rechazarse.
 - Confirmar una transferencia vinculada devuelve el ciclo a `OPEN`, incrementa su versión e invalida una validación vigente del cierre `DRAFT`.
 

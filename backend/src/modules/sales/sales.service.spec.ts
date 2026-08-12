@@ -454,7 +454,9 @@ describe('SalesService', () => {
     'rejects invalid rounded quantities before the bulk product lookup',
     async ({ items, expectedMessage }) => {
       const { service, prisma } = createService();
-      prisma.product.findMany.mockRejectedValue(new Error('database unavailable'));
+      prisma.product.findMany.mockRejectedValue(
+        new Error('database unavailable'),
+      );
       const prepareItems = (
         service as unknown as {
           prepareItems: (tx: unknown, items: unknown[]) => Promise<unknown>;
@@ -2988,6 +2990,16 @@ describe('SalesService', () => {
       creditDays: 15,
       commercialPolicyId: 'policy-1',
     });
+    prisma.accountReceivable.create.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'ar-1',
+        createdAt: now,
+        updatedAt: now,
+        ...data,
+        originalAmount: decimal(data.originalAmount),
+        outstandingAmount: decimal(data.outstandingAmount),
+      }),
+    );
 
     const result = await service.create(
       validCashSale({
@@ -3024,7 +3036,10 @@ describe('SalesService', () => {
       }),
     );
     expect(result.accountReceivable).toEqual(
-      expect.objectContaining({ outstandingAmount: '200.00' }),
+      expect.objectContaining({
+        originalAmount: '200.00',
+        outstandingAmount: '200.00',
+      }),
     );
   });
 

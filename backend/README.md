@@ -28,33 +28,38 @@
 ## Project setup
 
 ```bash
-$ npm install
+$ pnpm --dir backend install
 ```
 
 ## Compile and run the project
 
+Run these commands from the repository root. The build emits the backend entrypoint at `backend/dist/backend/src/main.js`.
+
 ```bash
+# compile
+$ pnpm --dir backend run build
+
 # development
-$ npm run start
+$ pnpm --dir backend run start
 
 # watch mode
-$ npm run start:dev
+$ pnpm --dir backend run start:dev
 
 # production mode
-$ npm run start:prod
+$ pnpm --dir backend run start:prod
 ```
 
 ## Run tests
 
 ```bash
 # unit tests
-$ npm run test
+$ pnpm --dir backend run test
 
 # e2e tests
-$ npm run test:e2e
+$ pnpm --dir backend run test:e2e
 
 # test coverage
-$ npm run test:cov
+$ pnpm --dir backend run test:cov
 ```
 
 ## Deployment

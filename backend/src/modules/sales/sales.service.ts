@@ -3375,8 +3375,8 @@ export class SalesService {
   private toReceivableResponse(receivable: CreatedReceivable) {
     return {
       ...receivable,
-      originalAmount: this.decimalToString(receivable.originalAmount),
-      outstandingAmount: this.decimalToString(receivable.outstandingAmount),
+      originalAmount: this.moneyToString(receivable.originalAmount),
+      outstandingAmount: this.moneyToString(receivable.outstandingAmount),
     };
   }
 

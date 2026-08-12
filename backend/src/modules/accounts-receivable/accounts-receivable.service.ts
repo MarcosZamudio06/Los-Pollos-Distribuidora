@@ -149,158 +149,163 @@ export class AccountsReceivableService {
     );
 
     try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const existingPayment = await tx.payment.findFirst({
-            where: { idempotencyKey },
-          });
+      return await this.withSerializableRetry(() =>
+        this.prisma.$transaction(
+          async (tx) => {
+            const existingPayment = await tx.payment.findFirst({
+              where: { idempotencyKey },
+            });
 
-          if (existingPayment) {
-            return this.resolveExistingPaymentResponse(
-              tx,
-              existingPayment,
-              id,
-              payloadHash,
-            );
-          }
+            if (existingPayment) {
+              return this.resolveExistingPaymentResponse(
+                tx,
+                existingPayment,
+                id,
+                payloadHash,
+              );
+            }
 
-          let receivable = await tx.accountReceivable.findUnique({
-            where: { id },
-          });
-
-          if (!receivable) {
-            throw new NotFoundException('Account receivable not found');
-          }
-          this.assertReceivableCanReceivePayment(receivable);
-          let outstandingAmount = Money.from(receivable.outstandingAmount);
-          if (paymentAmount.compare(outstandingAmount) > 0) {
-            throw new BadRequestException(
-              'Payment amount cannot exceed outstanding balance',
-            );
-          }
-
-          // The sale close is historical context. Only the collection context
-          // may authorize and recalculate this payment.
-          let sale = await tx.sale.findUnique({
-            where: { id: receivable.saleId },
-            select: { locationId: true },
-          });
-          let cashShift = await this.resolveCashShift(
-            tx,
-            dto,
-            sale?.locationId ?? null,
-            currentUser,
-            { allowNonDraftClose: true },
-          );
-          let collectionDailyCloseId =
-            cashShift?.pointOfSaleDailyCloseId ?? null;
-
-          if (collectionDailyCloseId) {
-            await acquireDraftDailyCloseLifecycleLock(
-              tx,
-              collectionDailyCloseId,
-            );
-            receivable = await tx.accountReceivable.findUnique({
+            let receivable = await tx.accountReceivable.findUnique({
               where: { id },
             });
-            if (!receivable)
+
+            if (!receivable) {
               throw new NotFoundException('Account receivable not found');
+            }
             this.assertReceivableCanReceivePayment(receivable);
-            outstandingAmount = Money.from(receivable.outstandingAmount);
+            let outstandingAmount = Money.from(receivable.outstandingAmount);
             if (paymentAmount.compare(outstandingAmount) > 0) {
               throw new BadRequestException(
                 'Payment amount cannot exceed outstanding balance',
               );
             }
-            sale = await tx.sale.findUnique({
+
+            // The sale close is historical context. Only the collection context
+            // may authorize and recalculate this payment.
+            let sale = await tx.sale.findUnique({
               where: { id: receivable.saleId },
               select: { locationId: true },
             });
-            cashShift = await this.resolveCashShift(
+            let cashShift = await this.resolveCashShift(
               tx,
               dto,
               sale?.locationId ?? null,
               currentUser,
-              { expectedCollectionDailyCloseId: collectionDailyCloseId },
+              { allowNonDraftClose: true },
             );
-            collectionDailyCloseId = cashShift?.pointOfSaleDailyCloseId ?? null;
-          }
+            let collectionDailyCloseId =
+              cashShift?.pointOfSaleDailyCloseId ?? null;
 
-          const newOutstandingAmount =
-            outstandingAmount.subtract(paymentAmount);
-          const nextStatus = newOutstandingAmount.isZero()
-            ? CollectionStatus.PAID
-            : CollectionStatus.PARTIALLY_PAID;
-          const { daysOverdue, agingStatus } = calculateReceivableAging(
-            receivable.dueDate,
-            newOutstandingAmount,
-            paidAt,
-          );
+            if (collectionDailyCloseId) {
+              await acquireDraftDailyCloseLifecycleLock(
+                tx,
+                collectionDailyCloseId,
+              );
+              receivable = await tx.accountReceivable.findUnique({
+                where: { id },
+              });
+              if (!receivable)
+                throw new NotFoundException('Account receivable not found');
+              this.assertReceivableCanReceivePayment(receivable);
+              outstandingAmount = Money.from(receivable.outstandingAmount);
+              if (paymentAmount.compare(outstandingAmount) > 0) {
+                throw new BadRequestException(
+                  'Payment amount cannot exceed outstanding balance',
+                );
+              }
+              sale = await tx.sale.findUnique({
+                where: { id: receivable.saleId },
+                select: { locationId: true },
+              });
+              cashShift = await this.resolveCashShift(
+                tx,
+                dto,
+                sale?.locationId ?? null,
+                currentUser,
+                { expectedCollectionDailyCloseId: collectionDailyCloseId },
+              );
+              collectionDailyCloseId =
+                cashShift?.pointOfSaleDailyCloseId ?? null;
+            }
 
-          const payment = await tx.payment.create({
-            data: {
-              accountReceivableId: id,
-              customerId: receivable.customerId,
-              saleId: receivable.saleId,
-              userId: currentUser.id,
-              collectedByUserId: dto.collectedByUserId ?? currentUser.id,
-              collectionPass: dto.collectionPass ?? null,
-              amount: paymentAmount.toString(),
-              paymentMethod: dto.paymentMethod,
-              bankName: this.normalizeOptionalText(dto.bankName),
-              referenceNumber: this.normalizeOptionalText(dto.referenceNumber),
-              appliedDocumentId: this.normalizeOptionalText(
-                dto.appliedDocumentId,
-              ),
-              appliedDocumentType: this.normalizeOptionalText(
-                dto.appliedDocumentType,
-              ),
-              routeId: this.normalizeOptionalText(dto.routeId),
-              routeSettlementId: this.normalizeOptionalText(
-                dto.routeSettlementId,
-              ),
-              operationalLocationId: sale?.locationId ?? null,
-              pointOfSaleDailyCloseId: collectionDailyCloseId,
-              cashShiftId: cashShift?.id ?? null,
-              status: PaymentStatus.APPLIED,
+            const newOutstandingAmount =
+              outstandingAmount.subtract(paymentAmount);
+            const nextStatus = newOutstandingAmount.isZero()
+              ? CollectionStatus.PAID
+              : CollectionStatus.PARTIALLY_PAID;
+            const { daysOverdue, agingStatus } = calculateReceivableAging(
+              receivable.dueDate,
+              newOutstandingAmount,
               paidAt,
-              idempotencyKey,
-              idempotencyPayloadHash: payloadHash,
-            },
-          });
-
-          const updatedReceivable = await tx.accountReceivable.update({
-            where: { id },
-            data: {
-              outstandingAmount: newOutstandingAmount.toString(),
-              lastPaymentDate: paidAt,
-              daysOverdue,
-              agingStatus,
-              status: nextStatus,
-              paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
-            },
-          });
-
-          await tx.sale.update({
-            where: { id: receivable.saleId },
-            data: { collectionStatus: nextStatus },
-          });
-
-          if (collectionDailyCloseId)
-            await this.dailyCloseService.recalculateAfterDraftMutation(
-              collectionDailyCloseId,
-              tx,
             );
 
-          return {
-            payment: this.toPaymentResponse(payment),
-            accountReceivable: this.toListItem(updatedReceivable),
-          };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            const payment = await tx.payment.create({
+              data: {
+                accountReceivableId: id,
+                customerId: receivable.customerId,
+                saleId: receivable.saleId,
+                userId: currentUser.id,
+                collectedByUserId: dto.collectedByUserId ?? currentUser.id,
+                collectionPass: dto.collectionPass ?? null,
+                amount: paymentAmount.toString(),
+                paymentMethod: dto.paymentMethod,
+                bankName: this.normalizeOptionalText(dto.bankName),
+                referenceNumber: this.normalizeOptionalText(
+                  dto.referenceNumber,
+                ),
+                appliedDocumentId: this.normalizeOptionalText(
+                  dto.appliedDocumentId,
+                ),
+                appliedDocumentType: this.normalizeOptionalText(
+                  dto.appliedDocumentType,
+                ),
+                routeId: this.normalizeOptionalText(dto.routeId),
+                routeSettlementId: this.normalizeOptionalText(
+                  dto.routeSettlementId,
+                ),
+                operationalLocationId: sale?.locationId ?? null,
+                pointOfSaleDailyCloseId: collectionDailyCloseId,
+                cashShiftId: cashShift?.id ?? null,
+                status: PaymentStatus.APPLIED,
+                paidAt,
+                idempotencyKey,
+                idempotencyPayloadHash: payloadHash,
+              },
+            });
+
+            const updatedReceivable = await tx.accountReceivable.update({
+              where: { id },
+              data: {
+                outstandingAmount: newOutstandingAmount.toString(),
+                lastPaymentDate: paidAt,
+                daysOverdue,
+                agingStatus,
+                status: nextStatus,
+                paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
+              },
+            });
+
+            await tx.sale.update({
+              where: { id: receivable.saleId },
+              data: { collectionStatus: nextStatus },
+            });
+
+            if (collectionDailyCloseId)
+              await this.dailyCloseService.recalculateAfterDraftMutation(
+                collectionDailyCloseId,
+                tx,
+              );
+
+            return {
+              payment: this.toPaymentResponse(payment),
+              accountReceivable: this.toListItem(updatedReceivable),
+            };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
       );
     } catch (error) {
-      if (this.isIdempotencyRaceError(error)) {
+      if (this.isIdempotencyUniqueConflict(error)) {
         return this.resolveExistingPaymentByKey(
           idempotencyKey,
           id,
@@ -816,12 +821,45 @@ export class AccountsReceivableService {
     };
   }
 
-  private isIdempotencyRaceError(error: unknown): boolean {
+  private async withSerializableRetry<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isSerializableConflict(error)) throw error;
+        if (attempt === 3) {
+          throw new ConflictException({
+            code: 'COLLECTION_CONCURRENCY_CONFLICT',
+            message:
+              'The collection could not be completed after concurrent retries',
+          });
+        }
+      }
+    }
+
+    throw new ConflictException({
+      code: 'COLLECTION_CONCURRENCY_CONFLICT',
+      message: 'The collection could not be completed after concurrent retries',
+    });
+  }
+
+  private isSerializableConflict(error: unknown): boolean {
     return (
       typeof error === 'object' &&
       error !== null &&
       'code' in error &&
-      (error.code === 'P2002' || error.code === 'P2034')
+      error.code === 'P2034'
+    );
+  }
+
+  private isIdempotencyUniqueConflict(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
     );
   }
 

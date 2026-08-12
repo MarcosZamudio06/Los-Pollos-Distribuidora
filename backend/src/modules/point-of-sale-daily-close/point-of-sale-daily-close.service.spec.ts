@@ -475,9 +475,23 @@ describe('PointOfSaleDailyCloseService', () => {
       },
       data: { pointOfSaleDailyCloseId: 'close-1' },
     });
-    expect(tx.payment.updateMany).toHaveBeenCalledWith(
+    expect(tx.payment.updateMany).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
-        where: expect.objectContaining({ routeId: null }),
+        where: expect.objectContaining({
+          pointOfSaleDailyCloseId: 'close-1',
+          NOT: expect.objectContaining({ cashShiftId: { not: null } }),
+        }),
+      }),
+    );
+    expect(tx.payment.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          routeId: null,
+          cashShiftId: { not: null },
+          pointOfSaleDailyCloseId: null,
+        }),
       }),
     );
   });
@@ -1859,43 +1873,42 @@ describe('PointOfSaleDailyCloseService', () => {
     ).rejects.toThrow(new ConflictException('DAILY_CLOSE_HAS_OPEN_SHIFTS'));
   });
 
-  it.each([
-    'PENDING_JUSTIFICATION',
-    'PENDING_AUTHORIZATION',
-  ])('blocks closing a reviewed close with a %s difference', async (status) => {
-    const current = {
-      id: 'close-1',
-      operationalLocationId: 'loc-1',
-      status: 'REVIEWED',
-      version: 4,
-      validatedSourceVersion: 4,
-      differences: [
-        {
-          id: 'difference-1',
-          referenceKey: 'SCALE',
-          differenceValue: -5,
-          status,
-        },
-      ],
-    };
-    jest
-      .spyOn(privateService, 'requireCloseAccess')
-      .mockResolvedValue(current as never);
-    prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(current);
-    prisma.cashShift.count.mockResolvedValue(0);
+  it.each(['PENDING_JUSTIFICATION', 'PENDING_AUTHORIZATION'])(
+    'blocks closing a reviewed close with a %s difference',
+    async (status) => {
+      const current = {
+        id: 'close-1',
+        operationalLocationId: 'loc-1',
+        status: 'REVIEWED',
+        version: 4,
+        validatedSourceVersion: 4,
+        differences: [
+          {
+            id: 'difference-1',
+            referenceKey: 'SCALE',
+            differenceValue: -5,
+            status,
+          },
+        ],
+      };
+      jest
+        .spyOn(privateService, 'requireCloseAccess')
+        .mockResolvedValue(current as never);
+      prisma.pointOfSaleDailyClose.findUnique.mockResolvedValue(current);
+      prisma.cashShift.count.mockResolvedValue(0);
 
-    await expect(
-      service.close(
-        'close-1',
-        { version: 4 },
-        { id: 'admin-1', role: 'ADMIN' } as never,
-      ),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({
-        code: 'DAILY_CLOSE_DIFFERENCE_UNRESOLVED',
-      }),
-    });
-  });
+      await expect(
+        service.close('close-1', { version: 4 }, {
+          id: 'admin-1',
+          role: 'ADMIN',
+        } as never),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'DAILY_CLOSE_DIFFERENCE_UNRESOLVED',
+        }),
+      });
+    },
+  );
 
   it('acquires the daily-close lifecycle lock before checking shifts for close', async () => {
     const current = {

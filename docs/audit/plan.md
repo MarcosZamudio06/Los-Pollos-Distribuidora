@@ -398,7 +398,7 @@ HASTA EL FINAL
 
 ### AUD-014 — Consultas y escrituras innecesarias en rutas calientes
 
-PROCESS
+completed
 
 - **Severidad:** MEDIA
 - **Categoría:** rendimiento, concurrencia
@@ -420,7 +420,7 @@ PROCESS
 
 ### AUD-015 — Bundle frontend monolítico y sin carga diferida por ruta
 
-PROCESS
+completed
 
 - **Severidad:** MEDIA
 - **Categoría:** rendimiento frontend
@@ -442,7 +442,7 @@ PROCESS
 
 ### AUD-016 — El comando backend `start` no encuentra el artefacto compilado
 
-PENDIENTE
+completed
 
 - **Severidad:** BAJA
 - **Categoría:** ejecutabilidad local, scripts
@@ -486,7 +486,7 @@ PENDIENTE
 
 ### AUD-018 — El frontend oculta la limitación por intentos de login
 
-IMPLEMENTANDO
+completed
 
 - **Severidad:** BAJA
 - **Categoría:** manejo de errores, seguridad UX

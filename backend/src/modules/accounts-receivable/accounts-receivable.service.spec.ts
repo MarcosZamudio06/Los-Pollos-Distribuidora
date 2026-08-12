@@ -11,7 +11,6 @@ import {
   CreditStatus,
   PaymentMethod,
   PaymentStatus,
-  Prisma,
   SalePaymentType,
   SaleStatus,
 } from '@prisma/client';
@@ -1024,66 +1023,22 @@ describe('AccountsReceivableService', () => {
     expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
   });
 
-  it('does not apply a second concurrent payment after a serializable conflict', async () => {
+  it('retries a serializable conflict and revalidates the remaining balance', async () => {
     const { service, prisma } = createService();
+    prisma.$transaction
+      .mockRejectedValueOnce({ code: 'P2034' })
+      .mockImplementation((callback) => callback(prisma));
     prisma.payment.findFirst.mockResolvedValue(null);
-    let readers = 0;
-    let releaseReaders!: () => void;
-    const bothReadersStarted = new Promise<void>((resolve) => {
-      releaseReaders = resolve;
-    });
-    prisma.accountReceivable.findUnique.mockImplementation(async () => {
-      const invocation = ++readers;
-      if (invocation === 2) releaseReaders();
-      await bothReadersStarted;
-      if (invocation === 2) {
-        throw new Prisma.PrismaClientKnownRequestError(
-          'Serializable transaction conflict',
-          {
-            code: 'P2034',
-            clientVersion: '6.19.3',
-          },
-        );
-      }
-      return createReceivable({ outstandingAmount: money('100') });
-    });
-    prisma.payment.create.mockResolvedValue({
-      id: 'payment-concurrent-winner',
-      accountReceivableId: 'ar-1',
-      saleId: 'sale-1',
-      customerId: 'customer-1',
-      amount: money('40'),
-      paymentMethod: PaymentMethod.TRANSFER,
-      status: PaymentStatus.APPLIED,
-      paidAt: new Date('2026-06-20T10:00:00.000Z'),
-    });
-    prisma.accountReceivable.update.mockResolvedValue(
-      createReceivable({
-        outstandingAmount: money('60'),
-        status: CollectionStatus.PARTIALLY_PAID,
-      }),
+    prisma.accountReceivable.findUnique.mockResolvedValue(
+      createReceivable({ outstandingAmount: money('9') }),
     );
 
-    const results = await Promise.allSettled([
+    await expect(
       service.registerPayment(
         'ar-1',
         {
           accountReceivableId: 'ar-1',
-          amount: 40,
-          paymentMethod: PaymentMethod.TRANSFER,
-        },
-        {
-          id: 'collector-1',
-          role: 'COLLECTIONS',
-          permissions: [PERMISSIONS.COLLECTIONS_RECEIVE_CASH],
-        },
-        'idem-concurrent-winner',
-      ),
-      service.registerPayment(
-        'ar-1',
-        {
-          accountReceivableId: 'ar-1',
-          amount: 60,
+          amount: 15,
           paymentMethod: PaymentMethod.TRANSFER,
         },
         {
@@ -1093,20 +1048,11 @@ describe('AccountsReceivableService', () => {
         },
         'idem-concurrent-loser',
       ),
-    ]);
+    ).rejects.toThrow('Payment amount cannot exceed outstanding balance');
 
-    expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1);
-    expect(
-      results.some(
-        (result) =>
-          result.status === 'rejected' &&
-          result.reason instanceof ConflictException,
-      ),
-    ).toBe(true);
-    expect(prisma.payment.create).toHaveBeenCalledTimes(1);
-    expect(prisma.accountReceivable.update).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
   });
 
   it('persists Idempotency-Key metadata on new collection payments', async () => {

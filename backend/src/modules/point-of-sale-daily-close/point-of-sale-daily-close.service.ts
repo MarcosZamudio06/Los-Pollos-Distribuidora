@@ -34,9 +34,7 @@ import {
   calculateDailyCloseCost,
   calculateDailyCloseKilos,
 } from './daily-close-calculations';
-import {
-  getUnresolvedDailyCloseDifferenceBlockers,
-} from './daily-close-difference-policy';
+import { getUnresolvedDailyCloseDifferenceBlockers } from './daily-close-difference-policy';
 import {
   CreateDailyCloseInventoryCountDto,
   CreateExpenseDto,
@@ -1070,9 +1068,7 @@ export class PointOfSaleDailyCloseService {
       ...differenceBlockers.map((blocker) => ({
         code: blocker.code,
         message: `La diferencia ${blocker.referenceKey} debe justificarse y autorizarse antes de revisar el cierre.`,
-        ...(blocker.differenceId
-          ? { differenceId: blocker.differenceId }
-          : {}),
+        ...(blocker.differenceId ? { differenceId: blocker.differenceId } : {}),
         referenceKey: blocker.referenceKey,
         status: blocker.status,
       })),
@@ -1965,6 +1961,7 @@ export class PointOfSaleDailyCloseService {
           paidAt: { gte: from, lt: to },
           ...appliedPaymentWhere,
           routeId: null,
+          cashShiftId: { not: null },
         },
       },
       data: { pointOfSaleDailyCloseId: null },
@@ -1987,6 +1984,7 @@ export class PointOfSaleDailyCloseService {
         paidAt: { gte: from, lt: to },
         ...appliedPaymentWhere,
         routeId: null,
+        cashShiftId: { not: null },
         pointOfSaleDailyCloseId: null,
       },
       data: { pointOfSaleDailyCloseId: closeId },
