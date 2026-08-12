@@ -34,7 +34,10 @@ import {
   calculateDailyCloseCost,
   calculateDailyCloseKilos,
 } from './daily-close-calculations';
-import { getUnresolvedDailyCloseDifferenceBlockers } from './daily-close-difference-policy';
+import {
+  getUnresolvedDailyCloseDifferenceBlockers,
+  type DailyCloseDifferencePolicyInput,
+} from './daily-close-difference-policy';
 import {
   CreateDailyCloseInventoryCountDto,
   CreateExpenseDto,
@@ -143,6 +146,29 @@ type DifferenceDefinition = {
   recordedValue: number;
   differenceValue: number;
   productId?: string;
+};
+type StoredDifference = {
+  id?: string;
+  code: string;
+  scope: DailyCloseDifferenceScope;
+  unit: DailyCloseDifferenceUnit;
+  expectedValue: Prisma.Decimal;
+  recordedValue: Prisma.Decimal | null;
+  differenceValue: Prisma.Decimal;
+  differenceType: DailyCloseDifferenceType;
+  status: DailyCloseDifferenceStatus;
+  referenceKey: string;
+};
+type DifferenceSummary = {
+  id?: string;
+  code: string;
+  referenceKey: string;
+  value: number;
+  unit: string;
+  expectedValue?: number;
+  recordedValue?: number | null;
+  differenceType?: DailyCloseDifferenceType;
+  status?: DailyCloseDifferenceStatus | null;
 };
 
 @Injectable()
@@ -1003,25 +1029,10 @@ export class PointOfSaleDailyCloseService {
         message: 'Registra el efectivo contado antes de validar el cierre.',
       });
     }
-    const storedDifferences = (
-      (
-        updated as {
-          differences?: Array<{
-            id?: string;
-            code: string;
-            scope: DailyCloseDifferenceScope;
-            unit: DailyCloseDifferenceUnit;
-            expectedValue: Prisma.Decimal;
-            recordedValue: Prisma.Decimal | null;
-            differenceValue: Prisma.Decimal;
-            differenceType: DailyCloseDifferenceType;
-            status: DailyCloseDifferenceStatus;
-            referenceKey: string;
-          }>;
-        }
-      ).differences ?? []
+    const storedDifferences: StoredDifference[] = (
+      (updated as { differences?: StoredDifference[] }).differences ?? []
     ).filter((difference) => Number(difference.differenceValue) !== 0);
-    const differences =
+    const differences: DifferenceSummary[] =
       storedDifferences.length > 0
         ? storedDifferences.map((difference) => ({
             id: difference.id,
@@ -1056,8 +1067,16 @@ export class PointOfSaleDailyCloseService {
           ].filter((item) => item.value !== 0);
     const differenceBlockers = getUnresolvedDailyCloseDifferenceBlockers(
       storedDifferences.length > 0
-        ? storedDifferences
-        : differences.map((difference) => ({
+        ? storedDifferences.map<DailyCloseDifferencePolicyInput>(
+            (difference) => ({
+              id: difference.id,
+              code: difference.code,
+              referenceKey: difference.referenceKey,
+              differenceValue: difference.differenceValue,
+              status: difference.status,
+            }),
+          )
+        : differences.map<DailyCloseDifferencePolicyInput>((difference) => ({
             code: difference.code,
             referenceKey: difference.referenceKey,
             differenceValue: difference.value,
