@@ -1513,7 +1513,9 @@ export function CedisBranchDetailPage() {
     {
       isActive: "true",
       locationId: transferSourceLocationId,
-      requireInventoryBalance: true,
+      ...(transferMode === "RETURN"
+        ? {}
+        : { requireInventoryBalance: true }),
     },
     { enabled: Boolean(transferSourceLocationId && effectiveCycleId) },
   );

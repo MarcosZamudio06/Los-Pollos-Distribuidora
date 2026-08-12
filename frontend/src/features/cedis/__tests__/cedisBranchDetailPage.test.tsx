@@ -499,8 +499,8 @@ describe("CEDIS branch detail page", () => {
     expect(mockState.productFilters).toEqual({
       isActive: "true",
       locationId: "branch-1",
-      requireInventoryBalance: true,
     });
+    expect(mockState.productQueryEnabled).toBe(true);
 
     await act(async () => root.unmount());
     container.remove();
