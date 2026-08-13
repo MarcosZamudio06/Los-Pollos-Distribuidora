@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { ConfirmationDialog } from "../../components/shared/confirmation-dialog";
 import { PageContainer } from "../../components/layout/PageContainer";
 import {
   Badge,
@@ -40,6 +41,7 @@ import {
   useCloseCedisCycle,
   useCreateCedisReturn,
   useCreateCedisSupply,
+  useCompleteCedisReturn,
   useOpenCedisCycle,
   useOperationalLocation,
   useRefreshCedisCycle,
@@ -810,13 +812,46 @@ const movementTypeLabels: Record<string, string> = {
   ADJUSTMENT: "Ajuste",
 };
 
-function Transfers({ summary }: { summary: CedisCycleSummary }) {
+function Transfers({
+  summary,
+  canReceiveReturns,
+}: {
+  summary: CedisCycleSummary;
+  canReceiveReturns: boolean;
+}) {
+  const completeReturn = useCompleteCedisReturn();
+  const [returnToVerify, setReturnToVerify] = useState<
+    CedisCycleSummary["transfers"][number] | undefined
+  >();
+  const [verificationError, setVerificationError] = useState<string | null>(
+    null,
+  );
+
+  async function verifyReturn() {
+    if (!returnToVerify) return;
+
+    setVerificationError(null);
+    try {
+      await completeReturn.mutateAsync({
+        transferId: returnToVerify.transfer.id,
+      });
+      setReturnToVerify(undefined);
+      toast.success("Devolución verificada en CEDIS.");
+    } catch (error) {
+      setVerificationError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo verificar la devolución.",
+      );
+    }
+  }
+
   return (
     <Card className="overflow-hidden">
       <SectionHeader
         eyebrow="Trazabilidad de inventario"
         title="Suministros y devoluciones"
-        description="Cada operación conserva su folio y estado de transferencia; confirmar o cancelar el traspaso ocurre en el flujo de inventario."
+        description="Cada operación conserva su folio y estado. Las devoluciones pendientes se verifican directamente en esta sesión CEDIS."
       />
       <div className="overflow-x-auto">
         {summary.transfers.length ? (
@@ -828,7 +863,7 @@ function Transfers({ summary }: { summary: CedisCycleSummary }) {
                 <th className="px-4 py-3 font-black">Partidas</th>
                 <th className="px-4 py-3 font-black">Solicitado</th>
                 <th className="px-4 py-3 font-black">Confirmado</th>
-                <th className="px-4 py-3 font-black">Recepción</th>
+                <th className="px-4 py-3 font-black">Recepción / verificación</th>
               </tr>
             </thead>
             <tbody>
@@ -895,10 +930,37 @@ function Transfers({ summary }: { summary: CedisCycleSummary }) {
                     {dateTimeLabel(link.transfer.confirmedAt)}
                   </td>
                   <td className="max-w-64 px-4 py-3 text-xs">
-                    {link.role !== "SUPPLY" ? (
-                      <span className="text-[var(--erp-muted-foreground)]">
-                        No aplica
-                      </span>
+                    {link.role === "RETURN" ? (
+                      <div className="grid gap-2">
+                        {link.transfer.status === "CONFIRMED" ? (
+                          <Badge tone="green">Recepción verificada</Badge>
+                        ) : link.transfer.status === "CANCELLED" ? (
+                          <Badge tone="red">Devolución cancelada</Badge>
+                        ) : (
+                          <Badge tone="amber">Pendiente de verificación</Badge>
+                        )}
+                        {canReceiveReturns &&
+                          !["CONFIRMED", "CANCELLED"].includes(
+                            link.transfer.status,
+                          ) && (
+                            <Button
+                              disabled={completeReturn.isPending}
+                              onClick={() => {
+                                setVerificationError(null);
+                                setReturnToVerify(link);
+                              }}
+                              size="sm"
+                            >
+                              Verificar recepción
+                            </Button>
+                          )}
+                        {verificationError &&
+                          returnToVerify?.transfer.id === link.transfer.id && (
+                            <span className="font-semibold text-[var(--erp-danger)]">
+                              {verificationError}
+                            </span>
+                          )}
+                      </div>
                     ) : link.transfer.receipt ? (
                       <div className="grid gap-1">
                         <Badge tone="green">
@@ -936,6 +998,26 @@ function Transfers({ summary }: { summary: CedisCycleSummary }) {
           </div>
         )}
       </div>
+      <ConfirmationDialog
+        open={Boolean(returnToVerify)}
+        title="Verificar devolución"
+        description="Confirma que los productos regresaron físicamente al CEDIS. Esta acción actualiza la transferencia y el inventario de forma trazable."
+        confirmLabel="Verificar recepción"
+        isLoading={completeReturn.isPending}
+        onConfirm={verifyReturn}
+        onOpenChange={(open) => {
+          if (!open) setReturnToVerify(undefined);
+        }}
+      >
+        {returnToVerify && (
+          <p>
+            <strong>{returnToVerify.transfer.transferNumber}</strong> ·{" "}
+            {returnToVerify.transfer.items
+              .map((item) => item.productName)
+              .join(", ")}
+          </p>
+        )}
+      </ConfirmationDialog>
     </Card>
   );
 }
@@ -1914,13 +1996,6 @@ export function CedisBranchDetailPage() {
               <ClipboardCheck aria-hidden="true" className="h-4 w-4" />
               Revisar recepciones
             </Link>
-            <Link
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-4 text-sm font-semibold text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
-              to={`/cedis/returns?date=${encodeURIComponent(businessDate)}&status=PENDING`}
-            >
-              <RotateCcw aria-hidden="true" className="h-4 w-4" />
-              Cola de devoluciones
-            </Link>
             {!cycleId && canDispatch && (
               <Button
                 disabled={Boolean(status)}
@@ -2111,7 +2186,10 @@ export function CedisBranchDetailPage() {
                   canViewCosts={canViewCosts}
                   items={summary.items}
                 />
-                <Transfers summary={summary} />
+                <Transfers
+                  canReceiveReturns={canReceiveReturns}
+                  summary={summary}
+                />
                 <CashSummary
                   cashMovementSummary={summary.cashMovementSummary}
                   dailyClose={summary.dailyClose}

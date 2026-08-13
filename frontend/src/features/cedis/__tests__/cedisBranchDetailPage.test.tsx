@@ -98,6 +98,7 @@ vi.mock("../../inventario/hooks/useProducts", () => ({
 vi.mock("../hooks", () => ({
   useCedisBranchHistory: () => mockState.history,
   useCedisCycleSummary: () => mockState.summary,
+  useCompleteCedisReturn: () => mockState.mutations,
   useCancelCedisCycle: () => mockState.mutations,
   useCloseCedisCycle: () => mockState.mutations,
   useCreateCedisReturn: () => mockState.mutations,
@@ -424,6 +425,49 @@ describe("CEDIS branch detail page", () => {
       'href="/daily-close?closeId=daily-close-1&amp;locationId=branch-1&amp;date=2026-08-05"',
     );
     expect(html).toContain("Actualizar conciliación");
+  });
+
+  it("refleja la devolución de sucursal en la sesión CEDIS y permite verificarla", () => {
+    mockState.summary.data = {
+      ...summary,
+      transfers: [
+        ...summary.transfers,
+        {
+          id: "link-return-1",
+          role: "RETURN",
+          linkedAt: "2026-08-05T18:00:00.000Z",
+          transfer: {
+            id: "return-1",
+            transferNumber: "TR-RETURN-001",
+            status: "REQUESTED",
+            originLocationId: "branch-1",
+            destinationLocationId: "cedis-1",
+            requestedAt: "2026-08-05T18:00:00.000Z",
+            confirmedAt: null,
+            cancelledAt: null,
+            updatedAt: "2026-08-05T18:00:00.000Z",
+            items: [
+              {
+                id: "return-item-1",
+                productId: "product-1",
+                productName: "Pollo entero",
+                productSku: "POL-001",
+                unit: "KG",
+                quantityKg: "10.000",
+                quantityPieces: null,
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const html = renderPage();
+
+    expect(html).toContain("TR-RETURN-001");
+    expect(html).toContain("Pendiente de verificación");
+    expect(html).toContain("Verificar recepción");
+    expect(html).not.toContain("Cola de devoluciones");
   });
 
   it("muestra el monto potencial de todos los productos entregados", () => {

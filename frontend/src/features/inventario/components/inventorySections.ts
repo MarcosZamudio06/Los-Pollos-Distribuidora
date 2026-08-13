@@ -32,6 +32,7 @@ export const inventoryAdminSections: readonly InventorySection[] = [
 ];
 
 export const inventorySellerSections: readonly InventorySection[] = [
+  inventoryAdminSections[0],
   inventoryAdminSections[1],
 ];
 

@@ -128,13 +128,13 @@ describe("Filtros del inventario", () => {
     expect(html).toContain("Movimientos");
   });
 
-  it("deja Productos y stock como única sección primaria para SELLER", () => {
+  it("expone Devoluciones a CEDIS para SELLER sin habilitar administración de inventario", () => {
     mockState.auth = { user: { role: "SELLER" } };
     const html = renderToStaticMarkup(<ProductListPage />);
 
     expect(html).toContain("Productos y stock");
+    expect(html).toContain("Devoluciones a CEDIS");
     expect(html).toContain('aria-selected="true"');
-    expect(html).not.toContain("Devoluciones a CEDIS");
     expect(html).not.toContain("Resumen CEDIS");
     expect(html).not.toContain("Inventario por ubicación");
     expect(html).not.toContain("Traspasos");

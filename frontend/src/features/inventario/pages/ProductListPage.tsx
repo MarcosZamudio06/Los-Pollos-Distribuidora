@@ -98,6 +98,10 @@ const tableCellClass = "px-4 py-3 align-middle";
 export function ProductListPage() {
   const { user } = useAuth();
   const canManage = canManageInventory(user?.role);
+  const canViewReturns =
+    user?.role === "ADMIN" ||
+    user?.role === "WAREHOUSE" ||
+    user?.role === "SELLER";
   const defaultSection: InventorySectionKey = canManage
     ? "returns"
     : "products";
@@ -546,18 +550,21 @@ export function ProductListPage() {
           </AsyncState>
         </div>
 
+        {canViewReturns && (
+          <div
+            aria-labelledby={getInventorySectionTabId("returns")}
+            className="min-w-0"
+            hidden={selectedSection !== "returns"}
+            id={getInventorySectionPanelId("returns")}
+            role="tabpanel"
+            tabIndex={0}
+          >
+            <BranchReturnsView />
+          </div>
+        )}
+
         {canManage && (
           <>
-            <div
-              aria-labelledby={getInventorySectionTabId("returns")}
-              className="min-w-0"
-              hidden={selectedSection !== "returns"}
-              id={getInventorySectionPanelId("returns")}
-              role="tabpanel"
-              tabIndex={0}
-            >
-              <BranchReturnsView canManage={canManage} />
-            </div>
             <div
               aria-labelledby={getInventorySectionTabId("cedisSummary")}
               className="min-w-0"

@@ -8,154 +8,93 @@ import { BranchReturnsView } from "../components/BranchReturnsView";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const mockState = vi.hoisted(() => ({
-  confirm: vi.fn(),
-  locations: [
-    {
+const mockAuth = vi.hoisted(() => ({
+  user: null as {
+    role?: string;
+    operationalLocationId?: string;
+    permissions?: string[];
+  } | null,
+}));
+
+const mockCedis = vi.hoisted(() => ({
+  location: {
+    data: {
       id: "cedis-1",
       name: "CEDIS Norte",
+      code: "C01",
       type: "DISTRIBUTION_CENTER",
+      parentId: null as string | null,
     },
-    {
-      id: "branch-1",
-      name: "Sucursal Centro",
-      parentId: "cedis-1",
-      type: "BRANCH",
-    },
-    {
-      id: "cedis-2",
-      name: "CEDIS Sur",
-      type: "DISTRIBUTION_CENTER",
-    },
-    {
-      id: "branch-2",
-      name: "Sucursal Norte",
-      parentId: "cedis-1",
-      type: "BRANCH",
-    },
-  ],
-  transfers: [
-    {
-      id: "return-1",
-      transferNumber: "TRF-RETURN-1",
-      originLocationId: "branch-1",
-      destinationLocationId: "cedis-1",
-      status: "REQUESTED",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      requestedAt: "2026-08-09T10:00:00.000Z",
-      itemsCount: 1,
+    error: null,
+    isLoading: false,
+  },
+  history: {
+    data: {
       items: [
         {
-          productId: "product-1",
-          productName: "Pollo mixto",
-          unit: "KG",
-          quantityKg: 12.5,
-          quantityPieces: 3,
+          cycle: { id: "cycle-1", businessDate: "2026-08-12", version: 1 },
         },
       ],
     },
-    {
-      id: "supply-1",
-      transferNumber: "TRF-NOT-RETURN",
-      originLocationId: "cedis-1",
-      destinationLocationId: "branch-1",
-      status: "REQUESTED",
-      createdAt: "2026-08-09T10:00:00.000Z",
+    error: null,
+    isLoading: false,
+  },
+  summary: {
+    data: {
+      id: "cycle-1",
+      businessDate: "2026-08-12",
+      version: 1,
+      branch: { id: "branch-1", name: "Sucursal Centro", code: "S01" },
+      distributionCenter: {
+        id: "cedis-1",
+        name: "CEDIS Norte",
+        code: "C01",
+      },
       items: [],
+      totals: { expectedSales: "0" },
     },
-    {
-      id: "draft-return-1",
-      transferNumber: "TRF-DRAFT-RETURN",
-      originLocationId: "branch-1",
-      destinationLocationId: "cedis-1",
-      status: "DRAFT",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      items: [],
-    },
-    {
-      id: "in-transit-return-1",
-      transferNumber: "TRF-IN-TRANSIT-RETURN",
-      originLocationId: "branch-2",
-      destinationLocationId: "cedis-1",
-      status: "IN_TRANSIT",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      items: [],
-    },
-    {
-      id: "wrong-parent-1",
-      transferNumber: "TRF-WRONG-PARENT",
-      originLocationId: "branch-2",
-      destinationLocationId: "cedis-2",
-      status: "REQUESTED",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      items: [],
-    },
-    {
-      id: "confirmed-1",
-      transferNumber: "TRF-CONFIRMED",
-      originLocationId: "branch-1",
-      destinationLocationId: "cedis-1",
-      status: "CONFIRMED",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      items: [],
-    },
-    {
-      id: "cancelled-1",
-      transferNumber: "TRF-CANCELLED",
-      originLocationId: "branch-1",
-      destinationLocationId: "cedis-1",
-      status: "CANCELLED",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      items: [],
-    },
-    {
-      id: "unknown-status-1",
-      transferNumber: "TRF-UNKNOWN-STATUS",
-      originLocationId: "branch-1",
-      destinationLocationId: "cedis-1",
-      status: "UNKNOWN",
-      createdAt: "2026-08-09T10:00:00.000Z",
-      items: [],
-    },
-  ],
-}));
-
-const mockAuth = vi.hoisted(() => ({
-  user: { role: "ADMIN", permissions: [] as string[] },
+    error: null,
+    isLoading: false,
+  },
+  create: { mutateAsync: vi.fn() },
 }));
 
 vi.mock("../../auth", () => ({
-  PERMISSIONS: { cedisReceiveReturns: "cedis.receive_returns" },
-  hasPermission: (
-    user: { permissions?: string[] } | null | undefined,
-    permission: string,
-  ) => Boolean(user?.permissions?.includes(permission)),
   useAuth: () => mockAuth,
 }));
 
+vi.mock("../../cedis/hooks", () => ({
+  useOperationalLocation: () => mockCedis.location,
+  useCedisBranchHistory: () => mockCedis.history,
+  useCedisCycleSummary: () => mockCedis.summary,
+  useCreateCedisReturn: () => mockCedis.create,
+}));
+
+vi.mock("../../cedis/CedisTransferCommandPanel", () => ({
+  CedisTransferCommandPanel: () => <p>Formulario de devolución</p>,
+}));
+
 vi.mock("../hooks/useProducts", () => ({
-  useConfirmInventoryTransfer: () => ({
-    isPending: false,
-    mutateAsync: mockState.confirm,
-  }),
-  useInventoryLocations: () => ({
-    data: mockState.locations,
-    error: null,
-    isLoading: false,
-  }),
-  useInventoryTransfers: () => ({
-    data: mockState.transfers,
-    error: null,
-    isLoading: false,
-  }),
+  useProducts: () => ({ data: [], error: null, isLoading: false }),
 }));
 
 describe("BranchReturnsView", () => {
   let root: Root | undefined;
 
   beforeEach(() => {
-    mockAuth.user = { role: "ADMIN", permissions: [] };
-    mockState.confirm.mockReset().mockResolvedValue({ id: "return-1" });
+    mockAuth.user = {
+      role: "SELLER",
+      operationalLocationId: "branch-1",
+      permissions: ["cedis.view", "cedis.request_returns"],
+    };
+    mockCedis.location.data = {
+      id: "branch-1",
+      name: "Sucursal Centro",
+      code: "S01",
+      type: "BRANCH",
+      parentId: "cedis-1",
+    };
+    mockCedis.create.mutateAsync.mockReset().mockResolvedValue({});
   });
 
   afterEach(async () => {
@@ -164,67 +103,47 @@ describe("BranchReturnsView", () => {
     root = undefined;
   });
 
-  it("mantiene el historial y confirma únicamente devoluciones pendientes", async () => {
+  it("muestra únicamente el formulario de creación para la sucursal", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
-    await act(async () => root?.render(<BranchReturnsView canManage />));
+    await act(async () => root?.render(<BranchReturnsView />));
 
-    expect(container.textContent).toContain("TRF-RETURN-1");
-    expect(container.textContent).toContain("Sucursal Centro");
-    expect(container.textContent).toContain("CEDIS Norte");
-    expect(container.textContent).toContain("Pollo mixto");
-    expect(container.textContent).toContain("12.5 kg · 3 piezas");
-    expect(container.textContent).not.toContain("TRF-NOT-RETURN");
-    expect(container.textContent).not.toContain("TRF-WRONG-PARENT");
-    expect(container.textContent).toContain("TRF-CONFIRMED");
-    expect(container.textContent).toContain("TRF-CANCELLED");
-    expect(container.textContent).toContain("TRF-UNKNOWN-STATUS");
-    expect(
-      [...container.querySelectorAll("button")].filter(
-        (button) => button.textContent === "Confirmar devolución",
-      ),
-    ).toHaveLength(3);
+    expect(container.textContent).toContain("Productos no vendidos del ciclo");
+    expect(container.textContent).toContain("Registrar devolución");
+    expect(container.textContent).not.toContain("Cola");
+    expect(container.textContent).not.toContain("Confirmar devolución");
 
-    const confirm = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Confirmar devolución",
+    const registerButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Registrar devolución",
     );
-    await act(async () => confirm?.click());
-
-    expect(mockState.confirm).toHaveBeenCalledWith({
-      id: "return-1",
-      idempotencyKey: expect.stringMatching(/\S+/),
-    });
+    await act(async () => registerButton?.click());
+    expect(container.textContent).toContain("Formulario de devolución");
   });
 
-  it("mantiene la vista pero oculta la confirmación para WAREHOUSE sin permiso", async () => {
-    mockAuth.user = { role: "WAREHOUSE", permissions: [] };
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => root?.render(<BranchReturnsView canManage />));
-
-    expect(container.textContent).toContain("Solo lectura");
-    expect(container.querySelector("button")).toBeNull();
-  });
-
-  it("muestra la confirmación a WAREHOUSE con cedis.receive_returns", async () => {
+  it("no muestra una cola cuando la ubicación es CEDIS", async () => {
     mockAuth.user = {
-      role: "WAREHOUSE",
-      permissions: ["cedis.receive_returns"],
+      role: "ADMIN",
+      operationalLocationId: "cedis-1",
+      permissions: ["cedis.view", "cedis.receive_returns"],
+    };
+    mockCedis.location.data = {
+      id: "cedis-1",
+      name: "CEDIS Norte",
+      code: "C01",
+      type: "DISTRIBUTION_CENTER",
+      parentId: null,
     };
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
-    await act(async () => root?.render(<BranchReturnsView canManage />));
+    await act(async () => root?.render(<BranchReturnsView />));
 
-    expect(
-      [...container.querySelectorAll("button")].some(
-        (button) => button.textContent === "Confirmar devolución",
-      ),
-    ).toBe(true);
+    expect(container.textContent).toContain("Registro disponible en sucursal");
+    expect(container.textContent).not.toContain("Recepción operativa");
+    expect(container.textContent).not.toContain("No hay devoluciones");
+    expect(container.textContent).not.toContain("Confirmar devolución");
   });
 });
