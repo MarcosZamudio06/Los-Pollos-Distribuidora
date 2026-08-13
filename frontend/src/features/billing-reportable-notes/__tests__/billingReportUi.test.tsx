@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
-import { act } from "react";
+import {
+  act,
+  createElement,
+  forwardRef,
+  useEffect,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -13,6 +21,62 @@ import {
   normalizeBillingReportDetail,
 } from "../service";
 import type { BillingReportDetail, BillingReportList } from "../types";
+
+// Keep the presence contract deterministic; Motion's RAF scheduler is
+// timing-sensitive in parallel Vitest workers.
+vi.mock("motion/react", () => {
+  type MotionElementProps<T extends HTMLElement> = HTMLAttributes<T> & {
+    animate?: unknown;
+    exit?: unknown;
+    initial?: unknown;
+    transition?: unknown;
+  };
+
+  const stripMotionProps = <T extends HTMLElement>(
+    props: MotionElementProps<T>,
+  ) => {
+    const domProps = { ...props };
+    delete domProps.animate;
+    delete domProps.exit;
+    delete domProps.initial;
+    delete domProps.transition;
+    return domProps;
+  };
+
+  const createMotionElement = <T extends HTMLElement>(tag: "aside" | "div") =>
+    forwardRef<T, MotionElementProps<T>>((props, ref) =>
+      createElement(tag, { ...stripMotionProps(props), ref }),
+    );
+
+  function TestAnimatePresence({ children }: { children?: ReactNode }) {
+    const [presentChildren, setPresentChildren] = useState<ReactNode>(
+      children,
+    );
+
+    useEffect(() => {
+      if (children) {
+        setPresentChildren(children);
+        return;
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        setPresentChildren(undefined);
+      }, 240);
+      return () => window.clearTimeout(timeoutId);
+    }, [children]);
+
+    return presentChildren;
+  }
+
+  return {
+    AnimatePresence: TestAnimatePresence,
+    motion: {
+      aside: createMotionElement<HTMLElement>("aside"),
+      div: createMotionElement<HTMLDivElement>("div"),
+    },
+    useReducedMotion: () => false,
+  };
+});
 
 const mockState = vi.hoisted(() => ({
   auth: { user: { role: "ADMIN" } as { role: string } },
