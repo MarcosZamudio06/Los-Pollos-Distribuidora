@@ -1,7 +1,10 @@
-import { Reflector } from '@nestjs/core';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { REQUIRED_PERMISSIONS_KEY } from '../../common/decorators/require-permissions.decorator';
 import { VehicleController } from './vehicle.controller';
+
+function methodOf(target: object, key: string): object {
+  return Object.getOwnPropertyDescriptor(target, key)?.value as object;
+}
 
 describe('VehicleController permissions', () => {
   it('requires fleet.view for reads and fleet.manage for mutations', () => {
@@ -11,11 +14,11 @@ describe('VehicleController permissions', () => {
     );
     const createPermissions = Reflect.getMetadata(
       REQUIRED_PERMISSIONS_KEY,
-      VehicleController.prototype.create,
+      methodOf(VehicleController.prototype, 'create'),
     );
     const updatePermissions = Reflect.getMetadata(
       REQUIRED_PERMISSIONS_KEY,
-      VehicleController.prototype.update,
+      methodOf(VehicleController.prototype, 'update'),
     );
 
     expect(controllerPermissions).toEqual([PERMISSIONS.FLEET_VIEW]);

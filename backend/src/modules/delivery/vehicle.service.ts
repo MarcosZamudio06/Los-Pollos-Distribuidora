@@ -42,9 +42,7 @@ export class VehicleService {
     ]);
 
     return {
-      items: (items as VehicleRecord[]).map((vehicle) =>
-        this.toResponse(vehicle),
-      ),
+      items: items.map((vehicle) => this.toResponse(vehicle)),
       total,
       page,
       limit,
@@ -75,15 +73,15 @@ export class VehicleService {
         throw error;
       });
 
-    return this.toResponse(vehicle as VehicleRecord);
+    return this.toResponse(vehicle);
   }
 
   async update(id: string, dto: UpdateVehicleDto) {
     return this.prisma
       .$transaction(async (tx) => {
-        const current = (await tx.vehicle.findUnique({
+        const current = await tx.vehicle.findUnique({
           where: { id },
-        })) as VehicleRecord | null;
+        });
         if (!current) throw new NotFoundException('Vehicle not found');
 
         const code =
@@ -133,7 +131,7 @@ export class VehicleService {
           },
         });
 
-        return this.toResponse(vehicle as VehicleRecord);
+        return this.toResponse(vehicle);
       })
       .catch((error: unknown) => {
         this.throwUniqueConstraintConflict(error);
@@ -210,9 +208,16 @@ export class VehicleService {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      const target = Array.isArray(error.meta?.target)
-        ? error.meta.target.join(', ')
-        : String(error.meta?.target ?? 'field');
+      const rawTarget = error.meta?.target;
+      const target =
+        typeof rawTarget === 'string'
+          ? rawTarget
+          : Array.isArray(rawTarget) &&
+              rawTarget.every(
+                (value): value is string => typeof value === 'string',
+              )
+            ? rawTarget.join(', ')
+            : 'field';
       throw new ConflictException(`Vehicle ${target} is already in use`);
     }
   }

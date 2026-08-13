@@ -37,7 +37,7 @@ function createPrisma() {
   return prisma;
 }
 
-function uniqueError(target: string) {
+function uniqueError(target: unknown) {
   return new Prisma.PrismaClientKnownRequestError('Unique constraint', {
     code: 'P2002',
     clientVersion: '6.19.3',
@@ -133,6 +133,20 @@ describe('VehicleService', () => {
         displayName: 'Unidad 1',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('uses a safe fallback for unexpected duplicate target metadata', async () => {
+    const prisma = createPrisma();
+    prisma.vehicle.create.mockRejectedValue(uniqueError({ field: 'code' }));
+
+    await expect(
+      new VehicleService(prisma as unknown as PrismaService).create({
+        code: 'UNIDAD-01',
+        displayName: 'Unidad 1',
+      }),
+    ).rejects.toMatchObject({
+      message: 'Vehicle field is already in use',
+    });
   });
 
   it('updates mutable vehicle fields without a delete operation', async () => {
