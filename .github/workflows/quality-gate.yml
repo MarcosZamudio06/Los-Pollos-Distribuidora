@@ -25,46 +25,48 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
-      - name: Install workspace dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
 
       - name: Generate Prisma Client
-        run: pnpm --dir backend exec prisma generate --schema prisma/schema.prisma
+        run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
 
       - name: Reject focused or skipped tests
-        run: pnpm run test:guard
+        run: npm run test:guard
 
       - name: Lint backend without modifications
-        run: pnpm --dir backend run lint:check
+        run: npm --prefix backend run lint:check
 
       - name: Lint frontend without modifications
-        run: pnpm --dir frontend run lint
+        run: npm --prefix frontend run lint
 
       - name: Type-check backend
-        run: pnpm --dir backend run typecheck
+        run: npm --prefix backend run typecheck
 
       - name: Type-check frontend
-        run: pnpm --dir frontend run typecheck
+        run: npm --prefix frontend run typecheck
 
       - name: Test backend with coverage thresholds
         env:
           JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
           JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
           OPENSSL_CONF: /dev/null
-        run: pnpm --dir backend run test:cov
+        run: npm --prefix backend run test:cov
 
       - name: Test frontend with coverage thresholds
-        run: pnpm --dir frontend run test:cov
+        run: npm --prefix frontend run test:cov
 
   database:
     name: PostgreSQL and PostGIS integration
@@ -99,33 +101,30 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
-      - name: Install workspace dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
 
       - name: Validate Prisma schema
-        run: pnpm --dir backend exec prisma validate --schema prisma/schema.prisma
+        run: npm --prefix backend exec prisma validate -- --schema backend/prisma/schema.prisma
 
       - name: Generate Prisma Client
-        run: pnpm --dir backend exec prisma generate --schema prisma/schema.prisma
+        run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
 
       - name: Apply all migrations to a clean database
-        run: pnpm --dir backend exec prisma migrate deploy --schema prisma/schema.prisma
+        run: npm --prefix backend exec prisma migrate deploy -- --schema backend/prisma/schema.prisma
 
       - name: Verify migration status
-        run: pnpm --dir backend exec prisma migrate status --schema prisma/schema.prisma
+        run: npm --prefix backend exec prisma migrate status -- --schema backend/prisma/schema.prisma
 
       - name: Run integration tests
-        run: pnpm --dir backend run test:e2e --runInBand
+        run: npm --prefix backend run test:e2e -- --runInBand
 
   docker:
     name: Docker build
@@ -165,21 +164,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install pinned audit tool without lifecycle scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: npm ci --ignore-scripts
 
       - name: Audit production dependencies
-        run: pnpm run audit:dependencies
+        run: npm run audit:dependencies
 
       - name: Scan committed history for secrets
         uses: gitleaks/gitleaks-action@v3
