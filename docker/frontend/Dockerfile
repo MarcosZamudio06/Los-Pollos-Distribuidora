@@ -1,7 +1,10 @@
 FROM node:24.14.1-alpine AS build
 
 ARG VITE_API_URL=/api
+ARG VITE_MAP_STYLE_URL
+ARG REQUIRE_PUBLIC_MAP_STYLE=false
 ENV VITE_API_BASE_URL=${VITE_API_URL}
+ENV VITE_MAP_STYLE_URL=${VITE_MAP_STYLE_URL}
 
 WORKDIR /app/frontend
 
@@ -17,6 +20,10 @@ COPY frontend/public ./public
 COPY frontend/src ./src
 COPY shared /app/shared
 
+RUN if [ "${REQUIRE_PUBLIC_MAP_STYLE}" = "true" ] && [ -z "${VITE_MAP_STYLE_URL}" ]; then \
+      echo "VITE_MAP_STYLE_URL is required for production frontend images" >&2; \
+      exit 1; \
+    fi
 RUN npm run build
 
 FROM nginx:alpine
@@ -42,6 +49,17 @@ RUN printf '%s\n' \
   '  }' \
   '  location / {' \
   '    try_files $uri $uri/ /index.html;' \
+  '  }' \
+  '  location /api/socket.io {' \
+  '    proxy_pass http://backend:4000/api/socket.io;' \
+  '    proxy_http_version 1.1;' \
+  '    proxy_set_header Host $host;' \
+  '    proxy_set_header X-Real-IP $remote_addr;' \
+  '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_set_header Upgrade $http_upgrade;' \
+  '    proxy_set_header Connection "upgrade";' \
+  '    proxy_read_timeout 75s;' \
   '  }' \
   '}' > /etc/nginx/conf.d/default.conf
 

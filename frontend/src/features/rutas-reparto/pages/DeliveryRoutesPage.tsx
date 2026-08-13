@@ -299,6 +299,10 @@ export function DeliveryRoutesPage() {
                           {route.routeStockLocationName ??
                             shortId(route.routeStockLocationId)}
                         </span>
+                        <span className="flex items-center gap-2">
+                          <Truck className="h-4 w-4" />
+                          Unidad {route.vehicle?.displayName ?? "sin asignar"}
+                        </span>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[var(--erp-surface)] p-3 text-sm">
                         <span>
@@ -383,6 +387,9 @@ export function DeliveryRoutesPage() {
                           Origen
                         </th>
                         <th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">
+                          Unidad
+                        </th>
+                        <th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">
                           ROUTE_STOCK
                         </th>
                         <th className="border-b border-[color:var(--erp-border)] bg-[var(--erp-surface)] px-4 py-3">
@@ -420,6 +427,14 @@ export function DeliveryRoutesPage() {
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4">
                             {route.originLocationName ??
                               shortId(route.originLocationId)}
+                          </td>
+                          <td className="border-b border-[color:var(--erp-border)] px-4 py-4">
+                            {route.vehicle?.displayName ?? "Sin asignar"}
+                            {route.vehicle?.plateNumber && (
+                              <small className="block text-[var(--erp-muted-foreground)]">
+                                {route.vehicle.plateNumber}
+                              </small>
+                            )}
                           </td>
                           <td className="border-b border-[color:var(--erp-border)] px-4 py-4 font-bold text-[var(--erp-info)]">
                             {route.routeStockLocationName ??

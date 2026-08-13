@@ -3,7 +3,7 @@
 ## Resumen
 
 Extender el módulo existente de Reparto sin crear un flujo paralelo: cada parada corresponderá a una venta confirmada, conservará inventario/
-cobranza/evidencia/liquidación y será visible únicamente para el repartidor asignado.
+cobranza/evidencia/liquidación y será visible para ADMIN y para el repartidor asignado según permisos.
 
 Flujo objetivo:
 
@@ -14,7 +14,7 @@ Flujo objetivo:
 5. ADMIN revisa el resultado y crea la ruta.
 6. DRIVER visualiza el mismo mapa y secuencia desde /my-routes.
 
-Photon soporta búsqueda incremental, geocodificación inversa y respuestas GeoJSON; VROOM usa coordenadas [longitud, latitud]; OSRM puede
+Photon soporta geocodificación directa (forward), búsqueda incremental, geocodificación inversa y respuestas GeoJSON; VROOM usa coordenadas [longitud, latitud]; OSRM puede
 devolver el recorrido completo como GeoJSON. Photon (https://github.com/komoot/photon/blob/master/docs/api-v1.md), VROOM
 (https://github.com/VROOM-Project/vroom/blob/master/docs/API.md), OSRM (https://project-osrm.org/docs/v26.4.0/http).
 
@@ -25,7 +25,7 @@ devolver el recorrido completo como GeoJSON. Photon (https://github.com/komoot/p
 - Actualizar primero los specs de rutas, API y UI con coordenadas, secuencia optimizada, geometría, métricas y comportamiento ante fallos.
 - Documentar que solo participan ventas confirmadas no canceladas y todavía no asignadas.
 - Establecer que el objetivo inicial es minimizar tiempo de conducción para un solo repartidor, con salida y regreso al origen.
-- Dejar fuera del primer alcance GPS en vivo, navegación giro a giro, funcionamiento offline, capacidades, ventanas horarias y optimización
+- Mantener fuera del primer alcance la navegación giro a giro, el funcionamiento offline, capacidades, ventanas horarias, tráfico vivo y optimización
   simultánea de varios vehículos.
 
 - Gate: contratos revisados y sin contradicciones con ROUTE_STOCK, cobranza, evidencia o liquidación.
@@ -73,8 +73,8 @@ devolver el recorrido completo como GeoJSON. Photon (https://github.com/komoot/p
 ### Fase 4 — Planificador administrativo
 
 - Sustituir el modal actual de creación por una página dedicada /delivery-routes/new.
-- Instalar React Leaflet, Leaflet y sus tipos; utilizar GeoJSON directamente para evitar decodificadores adicionales. React Leaflet
-  (https://react-leaflet.js.org/docs/start-installation/).
+- Instalar MapLibre GL JS y utilizar GeoJSON directamente para evitar decodificadores adicionales. MapLibre GL JS solo renderiza; no geocodifica,
+  no ordena paradas, no calcula rutas ni provee tráfico. Una futura `TrafficLayer` requerirá una fuente externa autorizada.
 
 - Diseñar una “mesa de despacho” empresarial:
   - Panel lateral con nombre, fecha, origen, repartidor y ventas elegibles.
@@ -99,17 +99,38 @@ devolver el recorrido completo como GeoJSON. Photon (https://github.com/komoot/p
 - Mostrar secuencia operativa, dirección, cliente, estado, distancia y duración estimada.
 - Mantener las acciones existentes de entrega, evidencia, incidencia y cobranza.
 - El DRIVER solo podrá obtener geometría y pedidos de sus propias rutas; ADMIN conserva detalle completo.
-- No solicitar ubicación del dispositivo ni recalcular por desvíos en esta versión.
+- Solicitar GPS únicamente para la ruta `IN_PROGRESS` desde el navegador/dispositivo autenticado del DRIVER y publicar al backend; no solicitarlo fuera
+  de la ruta activa ni recalcular por desvíos en esta versión.
 - Gate: el repartidor ve exactamente la misma secuencia y trazado aprobados por ADMIN.
 
 ### Fase 6 — Observabilidad, compatibilidad y despliegue — COMPLETED
 
-- Registrar latencia, timeout y resultado por proveedor sin escribir direcciones completas en logs.
-- Exponer estado técnico agregado para PostGIS, Photon, VROOM, OSRM y antigüedad del dataset.
+- Registrar latencia, timeout y resultado por proveedor sin escribir direcciones completas ni coordenadas completas en logs de nivel info.
+- Exponer estado técnico agregado para PostGIS, Photon, VROOM, OSRM, `routingDataVersion`, persistencia Fleet y antigüedad agregada de la última posición.
+- Mantener el estilo MapLibre como configuración exclusivamente frontend (`VITE_MAP_STYLE_URL`); el backend nunca consulta ni expone el proveedor de estilo.
+- Mantener Socket.IO en `/api/socket.io` con namespace `/fleet`; el snapshot REST de Fleet es la fuente de recuperación después de una caída o reinicio.
 - Mantener fallback textual para rutas históricas; nunca inventar una línea recta cuando falta geometría.
 - Desplegar primero infraestructura y migración compatible, después backend y finalmente frontend.
 - Ejecutar un smoke test con datos reales controlados de Veracruz–Boca del Río–Alvarado antes de habilitar la página.
 - Versionar y renovar mensualmente los datos OSM; cada ruta conserva la versión utilizada.
+- Preparar el contrato interno `TrafficProvider` con `NullTrafficProvider` como implementación por defecto. El estado técnico debe mostrar `available=false` y `provider=null` mientras no exista una fuente de tráfico contratada y aprobada; no se deben fabricar segmentos ni presentar datos OSM estáticos como tráfico vivo.
+
+### Tráfico futuro (no operativo en GEO-015)
+
+El contrato queda desacoplado del flujo de planificación y de los adaptadores
+Photon/VROOM/OSRM. Cuando exista aprobación y una fuente real, son compatibles
+dos estrategias:
+
+1. **Adaptador de proveedor comercial:** implementar `TrafficProvider` para el
+   proveedor contratado, normalizar sus segmentos y publicar únicamente su
+   `observedAt`, nivel de congestión y `source`.
+2. **Pipeline de velocidades externas:** ingerir velocidades externas hacia una
+   extensión de OSRM y servir una capa cartográfica propia con segmentos
+   derivados y trazables.
+
+Ninguna estrategia se activa en esta tarea. La capa MapLibre `fleet-traffic` /
+`fleet-traffic-lines` permanece vacía y oculta cuando `available=false`; no se
+añade un control operativo de tráfico hasta contar con datos reales.
 
 ## Cambios públicos de API y datos
 
@@ -154,7 +175,8 @@ devolver el recorrido completo como GeoJSON. Photon (https://github.com/komoot/p
 - Cada parada corresponde a una venta confirmada.
 - La ruta siempre regresa a la ubicación operativa de origen.
 - La primera versión maneja un vehículo/repartidor por optimización.
-- El mapa del repartidor es planificado y estático, sin GPS en vivo.
+- El mapa del repartidor permite GPS solo durante una ruta `IN_PROGRESS`; no ofrece turn-by-turn ni rerouting automático.
+- No se afirma tráfico vivo; `TrafficLayer` es futura y dependerá de una fuente externa autorizada.
 - La URL de tiles será configurable. Los tiles públicos de OSM podrán usarse en desarrollo con atribución visible, pero producción deberá usar
   un proveedor OSM autorizado o infraestructura propia porque el servicio público no ofrece SLA ni permite uso intensivo. Política de tiles OSM
   (https://operations.osmfoundation.org/policies/tiles/).

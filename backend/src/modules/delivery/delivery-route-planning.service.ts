@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -84,9 +85,13 @@ export class DeliveryRoutePlanningService {
         'Delivery stops cannot contain duplicate sales',
       );
 
-    const [driver, origin, sales] = await Promise.all([
+    const [driver, vehicle, origin, sales] = await Promise.all([
       this.prisma.user.findFirst({
         where: { id: dto.driverId, isActive: true, role: { name: 'DRIVER' } },
+        select: { id: true },
+      }),
+      this.prisma.vehicle.findFirst({
+        where: { id: dto.vehicleId, isActive: true },
         select: { id: true },
       }),
       this.prisma.operationalLocation.findFirst({
@@ -105,6 +110,10 @@ export class DeliveryRoutePlanningService {
     if (!driver)
       throw new UnprocessableEntityException(
         'The selected driver is not active or does not have the DRIVER role',
+      );
+    if (!vehicle)
+      throw new UnprocessableEntityException(
+        'The selected vehicle is not active or does not exist',
       );
     if (!origin?.latitude || !origin.longitude)
       throw new UnprocessableEntityException(
@@ -133,6 +142,19 @@ export class DeliveryRoutePlanningService {
         );
     }
     if (dto.routeId) await this.assertReoptimizationRoute(dto, currentUser);
+
+    const vehicleInProgress = await this.prisma.deliveryRoute.findFirst({
+      where: {
+        vehicleId: dto.vehicleId,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+      },
+      select: { id: true },
+    });
+    if (vehicleInProgress) {
+      throw new ConflictException(
+        'The selected vehicle already has an in-progress route',
+      );
+    }
 
     const originCoordinate: [number, number] = [
       Number(origin.longitude),
@@ -166,6 +188,7 @@ export class DeliveryRoutePlanningService {
         createdByUserId: currentUser.id,
         sourceRouteId: dto.routeId ?? null,
         driverId: dto.driverId,
+        vehicleId: dto.vehicleId,
         scheduledDate: new Date(dto.scheduledDate),
         originLocationId: dto.originLocationId,
         orderedStops: orderedStops,
@@ -188,6 +211,7 @@ export class DeliveryRoutePlanningService {
       durationSeconds: route.durationSeconds,
       routingProfile: 'driving',
       routingDataVersion: process.env.MAP_DATA_VERSION ?? 'unknown',
+      vehicleId: dto.vehicleId,
     };
   }
 
@@ -207,6 +231,7 @@ export class DeliveryRoutePlanningService {
       throw new NotFoundException('Delivery route not found');
     if (
       route.driverId !== dto.driverId ||
+      (route.vehicleId && route.vehicleId !== dto.vehicleId) ||
       route.originLocationId !== dto.originLocationId ||
       route.scheduledDate.toISOString().slice(0, 10) !==
         dto.scheduledDate.slice(0, 10)

@@ -14,6 +14,7 @@ import { DeliveryEvidenceCapture } from "../components/DeliveryEvidenceCapture";
 import { DeliveryIncidentDialog } from "../components/DeliveryIncidentDialog";
 import { DeliveryOrderCard } from "../components/DeliveryOrderCard";
 import { DriverRouteMap } from "../components/DriverRouteMap";
+import { RouteLocationTrackingControl } from "../components/RouteLocationTrackingControl";
 import {
   RouteCollectionDialog,
   RouteSecondPassCollectionDialog,
@@ -28,6 +29,7 @@ import {
 } from "../components/RouteUi";
 import { UpdateDeliveryStatusDialog } from "../components/UpdateDeliveryStatusDialog";
 import { useDeliveryRoute, useDeliveryRoutes } from "../hooks";
+import { useRouteLocationTracking } from "../useRouteLocationTracking";
 import { date, money, shortId } from "../labels";
 import type {
   DeliveryOrder,
@@ -89,6 +91,7 @@ export function MyRoutesPage() {
   const activeRouteId = selectedRouteId ?? routeItems[0]?.id;
   const route = useDeliveryRoute(activeRouteId);
   const detail = route.data;
+  const tracking = useRouteLocationTracking({ route: detail });
   const orders = detail?.orders ?? [];
   const finalOrders = orders.filter((order) =>
     [
@@ -217,6 +220,7 @@ export function MyRoutesPage() {
                           Origen{" "}
                           {detail.originLocationName ??
                             shortId(detail.originLocationId)}{" "}
+                          · Unidad {detail.vehicle?.displayName ?? "sin asignar"}{" "}
                           · ROUTE_STOCK{" "}
                           {detail.routeStockLocationName ??
                             shortId(detail.routeStockLocationId)}
@@ -268,6 +272,8 @@ export function MyRoutesPage() {
                     </div>
                   </Card>
 
+                  <RouteLocationTrackingControl tracking={tracking} />
+
                   {detail.mapAvailable && detail.geometry ? (
                     <Card className="grid gap-4 p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -298,6 +304,7 @@ export function MyRoutesPage() {
                       </div>
                       <DriverRouteMap
                         geometry={detail.geometry}
+                        currentLocation={tracking.lastPublishedPosition}
                         orders={orders}
                         routeName={detail.name}
                       />

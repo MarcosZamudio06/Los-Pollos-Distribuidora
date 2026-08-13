@@ -1,6 +1,4 @@
-import { useMemo } from "react";
-import L from "leaflet";
-import { Marker } from "react-leaflet";
+import type { CSSProperties, KeyboardEvent } from "react";
 import type { RoutePlanStopInput } from "../types";
 import { formatRouteDistance, formatRouteDuration } from "./routeStopMetrics";
 
@@ -27,26 +25,44 @@ export type RouteStopInfoMarkerProps = {
   onMove?: (latitude: number, longitude: number) => void;
 };
 
-function escapeHtml(value: string) {
-  return value.replace(
-    /[&<>'"]/g,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
-        character
-      ] ?? character,
-  );
-}
-
 function markerLabel(index: number, isOrigin: boolean) {
   if (isOrigin) return "A";
   return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
 }
 
+function handleMarkerKeyDown(
+  event: KeyboardEvent<HTMLDivElement>,
+  onSelect?: () => void,
+  onMove?: (latitude: number, longitude: number) => void,
+  latitude?: number,
+  longitude?: number,
+) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    onSelect?.();
+    return;
+  }
+  if (
+    !onMove ||
+    latitude == null ||
+    longitude == null ||
+    !["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(event.key)
+  )
+    return;
+
+  event.preventDefault();
+  const delta = 0.0001;
+  const nextLatitude =
+    latitude + (event.key === "ArrowUp" ? delta : event.key === "ArrowDown" ? -delta : 0);
+  const nextLongitude =
+    longitude +
+    (event.key === "ArrowRight" ? delta : event.key === "ArrowLeft" ? -delta : 0);
+  onMove(nextLatitude, nextLongitude);
+}
+
 export function RouteStopInfoMarker({
   stop,
   index,
-  latitude,
-  longitude,
   durationSeconds,
   distanceMeters,
   cumulativeDurationSeconds,
@@ -58,6 +74,8 @@ export function RouteStopInfoMarker({
   visualOffset = { x: 0, y: 0 },
   onSelect,
   onMove,
+  latitude,
+  longitude,
 }: RouteStopInfoMarkerProps) {
   const duration = formatRouteDuration(durationSeconds);
   const distance = formatRouteDistance(distanceMeters);
@@ -67,69 +85,60 @@ export function RouteStopInfoMarker({
   const title = isOrigin
     ? "Origen"
     : `Parada ${index}: ${stop.customerName ?? stop.saleNumber ?? stop.deliveryAddress}`;
-
-  const icon = useMemo(() => {
-    const tone = isOrigin ? "#2563a8" : isSelected ? "#176b45" : "#238052";
-    const details = [
-      stop.customerName && `<strong>${escapeHtml(stop.customerName)}</strong>`,
-      stop.deliveryAddress &&
-        `<span>${escapeHtml(stop.deliveryAddress)}</span>`,
-      !isOrigin && `<span>Orden de visita: ${index}</span>`,
-      isDestination &&
-        cumulativeDuration &&
-        cumulativeDistance &&
-        `<span>Total: ${cumulativeDuration} · ${cumulativeDistance}</span>`,
-    ]
-      .filter(Boolean)
-      .join("");
-    const metrics =
-      duration && distance
-        ? `<span class="route-stop-card__duration">${duration}</span><span>${distance}</span>`
-        : !isOrigin
-          ? '<span class="route-stop-card__pending">Calculando…</span>'
-          : "";
-    return L.divIcon({
-      className: "route-stop-info-icon",
-      iconAnchor: [28 - visualOffset.x, 44 - visualOffset.y],
-      iconSize: [56, 88],
-      html: `<div class="route-stop-info ${isSelected ? "is-selected" : ""}" style="--route-stop-tone:${tone};transform:translate(${visualOffset.x}px,${visualOffset.y}px)">
-        ${showInfo && !isOrigin ? `<div class="route-stop-card" role="status" aria-label="${escapeHtml(`${duration ?? "Calculando"}, ${distance ?? "distancia pendiente"}`)}">${metrics}<i aria-hidden="true"></i><div class="route-stop-card__details">${details}</div></div>` : ""}
-        <span class="route-stop-dot" aria-hidden="true">${label}</span>
-      </div>`,
-    });
-  }, [
-    cumulativeDistance,
-    cumulativeDuration,
-    distance,
-    duration,
-    index,
-    isDestination,
-    isOrigin,
-    isSelected,
-    label,
-    showInfo,
-    stop.customerName,
-    stop.deliveryAddress,
-    visualOffset.x,
-    visualOffset.y,
-  ]);
+  const metricsLabel = `${duration ?? "Calculando"}, ${distance ?? "distancia pendiente"}`;
+  const tone = isOrigin ? "#2563a8" : isSelected ? "#176b45" : "#238052";
 
   return (
-    <Marker
-      draggable={!isOrigin && Boolean(onMove)}
-      eventHandlers={{
-        click: () => onSelect?.(),
-        dragend: (event) => {
-          const point = event.target.getLatLng();
-          onMove?.(point.lat, point.lng);
-        },
+    <div
+      aria-label={title}
+      className={`route-stop-info ${isSelected ? "is-selected" : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect?.();
       }}
-      icon={icon}
-      keyboard
-      position={[latitude, longitude]}
-      riseOnHover
+      onKeyDown={(event) =>
+        handleMarkerKeyDown(event, onSelect, onMove, latitude, longitude)
+      }
+      role={onSelect ? "button" : "img"}
+      style={
+        {
+          "--route-stop-tone": tone,
+          transform: `translate(${visualOffset.x}px, ${visualOffset.y}px)`,
+        } as CSSProperties
+      }
+      tabIndex={onSelect ? 0 : -1}
       title={title}
-      zIndexOffset={isSelected ? 800 : isOrigin ? 500 : 600}
-    />
+    >
+      {showInfo && !isOrigin && (
+        <div
+          aria-label={metricsLabel}
+          className="route-stop-card"
+          role="status"
+        >
+          {duration && distance ? (
+            <>
+              <span className="route-stop-card__duration">{duration}</span>
+              <span>{distance}</span>
+            </>
+          ) : (
+            <span className="route-stop-card__pending">Calculando...</span>
+          )}
+          <i aria-hidden="true" />
+          <div className="route-stop-card__details">
+            {stop.customerName && <strong>{stop.customerName}</strong>}
+            {stop.deliveryAddress && <span>{stop.deliveryAddress}</span>}
+            <span>Orden de visita: {index}</span>
+            {isDestination && cumulativeDuration && cumulativeDistance && (
+              <span>
+                Total: {cumulativeDuration} · {cumulativeDistance}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      <span aria-hidden="true" className="route-stop-dot">
+        {label}
+      </span>
+    </div>
   );
 }

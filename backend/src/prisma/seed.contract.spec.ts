@@ -25,6 +25,10 @@ const productionComposePath = resolve(
   __dirname,
   '../../../docker-compose.production.yml',
 );
+const qualityGateWorkflowPath = resolve(
+  __dirname,
+  '../../../.github/workflows/quality-gate.yml',
+);
 type UpsertMock<TArgs> = jest.MockedFunction<(args: TArgs) => Promise<unknown>>;
 type PrismaSeedMockClient = {
   role: {
@@ -412,5 +416,36 @@ describe('Prisma seed contract', () => {
     expect(productionCompose).toContain(
       'ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-10000}',
     );
+  });
+
+  it('provides every required production Compose variable to Docker CI validation', () => {
+    const productionCompose = readFileSync(productionComposePath, 'utf8');
+    const qualityGateWorkflow = readFileSync(qualityGateWorkflowPath, 'utf8');
+    const dockerConfigStepStart = qualityGateWorkflow.indexOf(
+      '      - name: Validate production Compose configuration\n',
+    );
+    const dockerConfigStepEnd = qualityGateWorkflow.indexOf(
+      '      - name: Build backend image',
+      dockerConfigStepStart,
+    );
+
+    expect(dockerConfigStepStart).toBeGreaterThanOrEqual(0);
+    expect(dockerConfigStepEnd).toBeGreaterThan(dockerConfigStepStart);
+
+    const dockerConfigStep = qualityGateWorkflow.slice(
+      dockerConfigStepStart,
+      dockerConfigStepEnd,
+    );
+    const requiredVariables = [
+      ...new Set(
+        [...productionCompose.matchAll(/\$\{([A-Z0-9_]+):\?/g)].map(
+          ([, variable]) => variable,
+        ),
+      ),
+    ];
+
+    for (const variable of requiredVariables) {
+      expect(dockerConfigStep).toContain(`          ${variable}:`);
+    }
   });
 });

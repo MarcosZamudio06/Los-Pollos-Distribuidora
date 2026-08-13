@@ -27,6 +27,10 @@ export class ListDeliveryRoutesQueryDto {
   driverId?: string;
 
   @IsOptional()
+  @IsString()
+  vehicleId?: string;
+
+  @IsOptional()
   @IsEnum(DeliveryRouteStatus)
   status?: DeliveryRouteStatus;
 

@@ -9,6 +9,7 @@ const KNOWN_INSECURE_SECRETS = new Set([
   'local_refresh_change_me',
 ]);
 const MAXIMUM_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+const MAXIMUM_ROUTING_TIMEOUT_MS = 120_000;
 
 function parseBoolean(
   env: EnvironmentVariables,
@@ -92,6 +93,28 @@ function parseBodyLimit(value: string | undefined): string {
   return bodyLimit;
 }
 
+function parseOptionalHttpUrl(
+  env: EnvironmentVariables,
+  key: string,
+): string | undefined {
+  const value = env[key]?.trim();
+  if (!value) return undefined;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${key} must be a valid URL`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error(`${key} must use HTTP or HTTPS`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`${key} must not include URL credentials`);
+  }
+  return value;
+}
+
 function requireProductionSecret(
   env: EnvironmentVariables,
   key: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET',
@@ -144,6 +167,32 @@ export function validateEnvironment(env: EnvironmentVariables) {
   );
   const rateLimitLoginIpMax = parseInteger(env, 'RATE_LIMIT_LOGIN_IP_MAX', 30);
   const rateLimitRefreshMax = parseInteger(env, 'RATE_LIMIT_REFRESH_MAX', 120);
+  const rateLimitFleetPositionMax = parseInteger(
+    env,
+    'RATE_LIMIT_FLEET_POSITION_MAX',
+    60,
+  );
+  const routingTimeoutMs = parseInteger(env, 'ROUTING_TIMEOUT_MS', 10_000);
+  const fleetPositionStaleSeconds = parseInteger(
+    env,
+    'FLEET_POSITION_STALE_SECONDS',
+    60,
+  );
+  const fleetPositionFutureToleranceSeconds = parseInteger(
+    env,
+    'FLEET_POSITION_FUTURE_TOLERANCE_SECONDS',
+    300,
+  );
+  const fleetAnalyticsMaxRangeDays = parseInteger(
+    env,
+    'FLEET_ANALYTICS_MAX_RANGE_DAYS',
+    31,
+  );
+  const mapDataVersion = env.MAP_DATA_VERSION?.trim() || 'unknown';
+  const mapDataPreparedAt = env.MAP_DATA_PREPARED_AT?.trim() || undefined;
+  const photonUrl = parseOptionalHttpUrl(env, 'PHOTON_URL');
+  const vroomUrl = parseOptionalHttpUrl(env, 'VROOM_URL');
+  const osrmUrl = parseOptionalHttpUrl(env, 'OSRM_URL');
 
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
@@ -153,6 +202,14 @@ export function validateEnvironment(env: EnvironmentVariables) {
 
   if (Number.isNaN(parsedPort) || parsedPort <= 0) {
     throw new Error(`Invalid PORT value: ${portValue}`);
+  }
+  if (routingTimeoutMs > MAXIMUM_ROUTING_TIMEOUT_MS) {
+    throw new Error(
+      `ROUTING_TIMEOUT_MS cannot exceed ${MAXIMUM_ROUTING_TIMEOUT_MS} milliseconds`,
+    );
+  }
+  if (mapDataPreparedAt && Number.isNaN(Date.parse(mapDataPreparedAt))) {
+    throw new Error('MAP_DATA_PREPARED_AT must be a valid ISO date');
   }
 
   if (!Number.isInteger(absoluteSessionTtl) || absoluteSessionTtl <= 0) {
@@ -239,6 +296,17 @@ export function validateEnvironment(env: EnvironmentVariables) {
     RATE_LIMIT_LOGIN_ACCOUNT_MAX: rateLimitLoginAccountMax,
     RATE_LIMIT_LOGIN_IP_MAX: rateLimitLoginIpMax,
     RATE_LIMIT_REFRESH_MAX: rateLimitRefreshMax,
+    RATE_LIMIT_FLEET_POSITION_MAX: rateLimitFleetPositionMax,
+    ROUTING_TIMEOUT_MS: routingTimeoutMs,
+    MAP_DATA_VERSION: mapDataVersion,
+    MAP_DATA_PREPARED_AT: mapDataPreparedAt,
+    PHOTON_URL: photonUrl,
+    VROOM_URL: vroomUrl,
+    OSRM_URL: osrmUrl,
+    FLEET_POSITION_STALE_SECONDS: fleetPositionStaleSeconds,
+    FLEET_POSITION_FUTURE_TOLERANCE_SECONDS:
+      fleetPositionFutureToleranceSeconds,
+    FLEET_ANALYTICS_MAX_RANGE_DAYS: fleetAnalyticsMaxRangeDays,
     SWAGGER_ENABLED: swaggerEnabled,
     SWAGGER_PATH: env.SWAGGER_PATH?.trim() || 'docs',
     TRUST_PROXY_HOPS: trustProxyHops,

@@ -3,6 +3,7 @@ import type { Plugin } from "vite";
 export const BUNDLE_BUDGET_KB = {
   async: 750,
   entry: 500,
+  maplibre: 1_000,
 } as const;
 
 export type BundleMetric = {
@@ -23,7 +24,10 @@ export function getBundleBudgetViolations(
   return metrics.flatMap((metric) => {
     const limitKb = metric.isEntry
       ? BUNDLE_BUDGET_KB.entry
-      : BUNDLE_BUDGET_KB.async;
+      : metric.fileName.includes("/maplibre-gl-") ||
+          metric.fileName.startsWith("maplibre-gl")
+        ? BUNDLE_BUDGET_KB.maplibre
+        : BUNDLE_BUDGET_KB.async;
     const sizeKb = Math.round((metric.sizeBytes / 1024) * 100) / 100;
 
     if (metric.sizeBytes <= limitKb * 1024) {

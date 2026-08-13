@@ -17,6 +17,7 @@ type AddressSearchPayload = {
 
 const mockState = vi.hoisted(() => ({
   catalogCalls: [] as Array<{ search: string; originLocationId: string }>,
+  createPlan: vi.fn(),
   reverseAddress: vi.fn(
     async ({
       latitude,
@@ -77,6 +78,27 @@ vi.mock("../hooks", () => ({
         ],
         error: null,
       },
+      vehicles: {
+        data: {
+          items: [
+            {
+              id: "vehicle-1",
+              code: "UNIDAD-01",
+              displayName: "Unidad 1",
+              plateNumber: "ABC-123",
+              isActive: true,
+            },
+            {
+              id: "vehicle-2",
+              code: "UNIDAD-02",
+              displayName: "Unidad 2",
+              plateNumber: null,
+              isActive: true,
+            },
+          ],
+        },
+        error: null,
+      },
       sales: {
         data: { items: originLocationId ? saleItems : [] },
         error: null,
@@ -89,7 +111,10 @@ vi.mock("../hooks", () => ({
     mutateAsync: mockState.addressSearch,
   }),
   useReverseAddress: () => ({ mutateAsync: mockState.reverseAddress }),
-  useCreateRoutePlan: () => ({ isPending: false, mutateAsync: vi.fn() }),
+  useCreateRoutePlan: () => ({
+    isPending: false,
+    mutateAsync: mockState.createPlan,
+  }),
   useCreateOptimizedRoute: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useAssignDeliveryRouteOrders: () => ({
     isPending: false,
@@ -201,6 +226,18 @@ async function selectOrigin(container: HTMLElement) {
   });
 }
 
+async function selectValue(
+  container: HTMLElement,
+  labelText: string,
+  value: string,
+) {
+  const select = selectByLabel(container, labelText);
+  await act(async () => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
 describe("route planner delivery points", () => {
   beforeEach(() => {
     mockState.catalogCalls.length = 0;
@@ -218,6 +255,18 @@ describe("route planner delivery points", () => {
         }),
       );
     mockState.addressSearch.mockReset().mockResolvedValue({ items: [] });
+    mockState.createPlan.mockReset();
+    mockState.createPlan.mockResolvedValue({
+      id: "plan-1",
+      vehicleId: "vehicle-1",
+      expiresAt: "2099-07-15T10:30:00.000Z",
+      orderedStops: [],
+      geometry: { type: "LineString", coordinates: [] },
+      distanceMeters: 1000,
+      durationSeconds: 300,
+      routingProfile: "driving",
+      routingDataVersion: "mx-2026-07",
+    });
   });
 
   it("hides eligible sales until an origin branch is selected and filters the catalog by it", async () => {
@@ -487,6 +536,68 @@ describe("route planner delivery points", () => {
       await act(async () => {
         root.unmount();
       });
+      container.remove();
+    }
+  });
+
+  it("requires an active vehicle before enabling route planning", async () => {
+    const { container, root } = await renderPage();
+    try {
+      await selectOrigin(container);
+      await selectValue(container, "Repartidor", "driver-1");
+      await act(async () => {
+        setInputValue(
+          inputByPlaceholder(container, "Ruta Centro matutina"),
+          "Ruta Centro",
+        );
+      });
+      await act(async () => {
+        button(container, "V-2001").click();
+      });
+      await act(async () => {
+        button(container, "Seleccionar punto de entrega").click();
+      });
+
+      expect(button(container, "Calcular ruta").disabled).toBe(true);
+      await selectValue(container, "Unidad", "vehicle-1");
+      expect(button(container, "Calcular ruta").disabled).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("sends vehicleId to the plan and invalidates the preview when it changes", async () => {
+    const { container, root } = await renderPage();
+    try {
+      await selectOrigin(container);
+      await selectValue(container, "Repartidor", "driver-1");
+      await selectValue(container, "Unidad", "vehicle-1");
+      await act(async () => {
+        setInputValue(
+          inputByPlaceholder(container, "Ruta Centro matutina"),
+          "Ruta Centro",
+        );
+      });
+      await act(async () => {
+        button(container, "V-2001").click();
+      });
+      await act(async () => {
+        button(container, "Seleccionar punto de entrega").click();
+      });
+      await act(async () => {
+        button(container, "Calcular ruta").click();
+      });
+
+      expect(mockState.createPlan).toHaveBeenCalledWith(
+        expect.objectContaining({ vehicleId: "vehicle-1" }),
+      );
+      expect(container.textContent).toContain("1.0 km");
+
+      await selectValue(container, "Unidad", "vehicle-2");
+      expect(container.textContent).not.toContain("1.0 km");
+    } finally {
+      await act(async () => root.unmount());
       container.remove();
     }
   });

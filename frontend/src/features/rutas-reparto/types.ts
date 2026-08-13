@@ -21,6 +21,7 @@ export type DeliveryRoutesFilters = {
   page?: number;
   limit?: number;
   driverId?: string;
+  vehicleId?: string;
   status?: DeliveryRouteStatus | "";
   scheduledDate?: string;
   originLocationId?: string;
@@ -31,6 +32,9 @@ export type DeliveryRouteListItem = {
   name: string;
   driverId?: string | null;
   driverName?: string | null;
+  vehicleId?: string | null;
+  vehicleCode?: string | null;
+  vehicle?: VehicleSummary | null;
   status: DeliveryRouteStatus;
   scheduledDate?: string | null;
   originLocationId?: string | null;
@@ -102,6 +106,33 @@ export type DeliveryRouteDetail = DeliveryRouteListItem & {
   collectionsSummary?: CollectionSummary;
 };
 
+export type RouteLocationPosition = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  speedKph: number | null;
+  headingDegrees: number | null;
+  recordedAt: string;
+};
+
+export type PublishFleetPositionPayload = {
+  clientEventId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  speedKph?: number;
+  headingDegrees?: number;
+  recordedAt: string;
+};
+
+export type FleetPositionPublication = {
+  id: string;
+  vehicleId: string;
+  routeId: string;
+  recordedAt: string;
+  receivedAt: string;
+};
+
 export type CreateDeliveryRouteOrderPayload = {
   saleId: string;
   accountReceivableId?: string;
@@ -111,6 +142,7 @@ export type CreateDeliveryRouteOrderPayload = {
 export type CreateDeliveryRoutePayload = {
   name: string;
   driverId: string;
+  vehicleId?: string;
   scheduledDate: string;
   originLocationId?: string;
   routeStockLocationId?: string;
@@ -129,6 +161,18 @@ export type PlannerDriver = {
   isActive: boolean;
   role?: { name?: string };
 };
+export type PlannerVehicle = {
+  id: string;
+  code: string;
+  displayName: string;
+  plateNumber?: string | null;
+  homeLocationId?: string | null;
+  isActive: boolean;
+};
+export type VehicleSummary = Pick<
+  PlannerVehicle,
+  "id" | "code" | "displayName" | "plateNumber"
+>;
 export type PlannerLocation = {
   id: string;
   name: string;
@@ -173,6 +217,7 @@ export type GeoJsonLineString = {
 };
 export type DeliveryRoutePlan = {
   id: string;
+  vehicleId: string;
   expiresAt: string;
   orderedStops: RoutePlanStop[];
   geometry: GeoJsonLineString;
@@ -184,6 +229,7 @@ export type DeliveryRoutePlan = {
 export type RoutingTechnicalStatus = {
   status: "operational" | "degraded";
   checkedAt: string;
+  routingDataVersion: string;
   dataset: {
     version: string;
     preparedAt?: string | null;
@@ -193,12 +239,21 @@ export type RoutingTechnicalStatus = {
   services: Array<{
     name: "PostGIS" | "Photon" | "VROOM" | "OSRM";
     status: "up" | "down";
-    latencyMs: number;
+      latencyMs: number;
   }>;
+  fleetPersistence: {
+    status: "up" | "down";
+  };
+  latestVehiclePositionAgeSeconds: number | null;
+  traffic: {
+    available: boolean;
+    provider: string | null;
+  };
 };
 export type CreateDeliveryRoutePlanPayload = {
   routeId?: string;
   driverId: string;
+  vehicleId: string;
   scheduledDate: string;
   originLocationId: string;
   stops: RoutePlanStopInput[];

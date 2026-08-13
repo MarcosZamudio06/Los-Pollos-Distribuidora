@@ -167,6 +167,27 @@ enum DeliveryRouteStatus {
   CANCELLED
 }
 
+enum GeofenceEventType {
+  ENTER
+  EXIT
+}
+
+enum DeliveryIncidentType {
+  DELIVERY_DELAY
+  DELIVERY_FAILURE
+  VEHICLE_BREAKDOWN
+  SAFETY
+  GEOFENCE_EXCEPTION
+  OTHER
+}
+
+enum DeliveryIncidentStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CANCELLED
+}
+
 enum RouteOptimizationStatus {
   NOT_OPTIMIZED
   OPTIMIZED
@@ -410,10 +431,16 @@ model User {
   createdOperationalConfigs       OperationalConfig[]          @relation("OperationalConfigCreatedBy")
   updatedOperationalConfigs       OperationalConfig[]          @relation("OperationalConfigUpdatedBy")
   deliveryRoutes                  DeliveryRoute[]              @relation("DeliveryRouteDriver")
+  vehiclePositions                VehiclePosition[]            @relation("VehiclePositionDriver")
+  deliveryIncidentsAsDriver       DeliveryIncident[]            @relation("DeliveryIncidentDriver")
+  reportedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentReportedBy")
+  resolvedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentResolvedBy")
   createdRoutePlans               DeliveryRoutePlanDraft[]     @relation("RoutePlanCreatedBy")
   plannedRouteAssignments         DeliveryRoutePlanDraft[]     @relation("RoutePlanDriver")
   deliveredOrders                 DeliveryOrder[]              @relation("DeliveryOrderDeliveredBy")
   collectedOrders                 DeliveryOrder[]              @relation("DeliveryOrderCollectedBy")
+  createdDeliveryZones            DeliveryZone[]               @relation("DeliveryZoneCreatedBy")
+  updatedDeliveryZones            DeliveryZone[]               @relation("DeliveryZoneUpdatedBy")
   requestedBillingRequests        BillingRequest[]             @relation("BillingRequestRequestedBy")
   reviewedBillingRequests         BillingRequest[]             @relation("BillingRequestReviewedBy")
   billingRequestChanges           BillingRequestHistory[]      @relation("BillingRequestHistoryChangedBy")
@@ -509,6 +536,8 @@ model OperationalLocation {
   originRoutes                   DeliveryRoute[]                       @relation("RouteOriginLocation")
   routePlans                     DeliveryRoutePlanDraft[]              @relation("RoutePlanOriginLocation")
   routeStockFor                  DeliveryRoute?                        @relation("RouteStockLocation")
+  vehicles                       Vehicle[]                             @relation("VehicleHomeLocation")
+  deliveryZones                  DeliveryZone[]                        @relation("DeliveryZoneOriginLocation")
   payments                       Payment[]
   saleDocuments                  SaleDocument[]
   dailyCloses                    PointOfSaleDailyClose[]
@@ -1164,10 +1193,58 @@ model OperationalConfig {
   @@index([key, scope, locationId, isActive])
 }
 
+model Vehicle {
+  id              String                   @id @default(cuid())
+  code            String                   @unique
+  displayName     String
+  plateNumber     String?                  @unique
+  homeLocationId  String?
+  isActive        Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  homeLocation    OperationalLocation?     @relation("VehicleHomeLocation", fields: [homeLocationId], references: [id])
+  routes          DeliveryRoute[]
+  routePlanDrafts DeliveryRoutePlanDraft[]
+  positions       VehiclePosition[]        @relation("VehiclePositionVehicle")
+  geofenceEvents  GeofenceEvent[]
+  geofenceStates  VehicleGeofenceState[]
+  deliveryIncidents DeliveryIncident[]
+
+  @@index([homeLocationId, isActive])
+  @@index([isActive, displayName])
+}
+
+model VehiclePosition {
+  id             String                               @id @default(cuid())
+  clientEventId  String                               @unique
+  vehicleId      String
+  routeId        String
+  driverId       String
+  latitude       Decimal                              @db.Decimal(9, 6)
+  longitude      Decimal                              @db.Decimal(9, 6)
+  positionPoint  Unsupported("geometry(Point, 4326)")
+  accuracyMeters Decimal?                             @db.Decimal(8, 2)
+  speedKph       Decimal?                             @db.Decimal(8, 2)
+  headingDegrees Decimal?                             @db.Decimal(6, 3)
+  recordedAt     DateTime
+  receivedAt     DateTime                             @default(now())
+  vehicle        Vehicle                              @relation("VehiclePositionVehicle", fields: [vehicleId], references: [id])
+  route          DeliveryRoute                        @relation("VehiclePositionRoute", fields: [routeId], references: [id])
+  driver         User                                 @relation("VehiclePositionDriver", fields: [driverId], references: [id])
+  geofenceEvents GeofenceEvent[]                      @relation("GeofenceEventPosition")
+  geofenceStates VehicleGeofenceState[]               @relation("GeofenceStateLastPosition")
+  deliveryIncidents DeliveryIncident[]                @relation("DeliveryIncidentPosition")
+
+  @@index([vehicleId, recordedAt(sort: Desc)])
+  @@index([routeId, recordedAt])
+  @@index([driverId, recordedAt])
+}
+
 model DeliveryRoute {
   id                     String                                     @id @default(cuid())
   name                   String
   driverId               String
+  vehicleId              String?
   status                 DeliveryRouteStatus                        @default(PENDING)
   scheduledDate          DateTime
   originLocationId       String?
@@ -1187,6 +1264,7 @@ model DeliveryRoute {
   createdAt              DateTime                                   @default(now())
   updatedAt              DateTime                                   @updatedAt
   driver                 User                                       @relation("DeliveryRouteDriver", fields: [driverId], references: [id])
+  vehicle                Vehicle?                                   @relation(fields: [vehicleId], references: [id])
   originLocation         OperationalLocation?                       @relation("RouteOriginLocation", fields: [originLocationId], references: [id])
   routeStockLocation     OperationalLocation                        @relation("RouteStockLocation", fields: [routeStockLocationId], references: [id])
   assignedCustomers      Customer[]
@@ -1197,8 +1275,111 @@ model DeliveryRoute {
   settlement             RouteSettlement?
   sourcePlans            DeliveryRoutePlanDraft[]                   @relation("RoutePlanSourceRoute")
   consumedPlans          DeliveryRoutePlanDraft[]                   @relation("RoutePlanConsumedRoute")
+  positions              VehiclePosition[]                          @relation("VehiclePositionRoute")
+  geofenceEvents         GeofenceEvent[]
+  deliveryIncidents      DeliveryIncident[]
 
   @@index([driverId, scheduledDate, status])
+  @@index([vehicleId, status, scheduledDate])
+}
+
+model DeliveryZone {
+  id               String                                 @id @default(cuid())
+  name             String
+  originLocationId String
+  geometry         Json
+  zoneGeometry     Unsupported("geometry(Polygon, 4326)")
+  isActive         Boolean                                @default(true)
+  createdByUserId  String
+  updatedByUserId  String
+  createdAt        DateTime                               @default(now())
+  updatedAt        DateTime                               @updatedAt
+  originLocation   OperationalLocation                    @relation("DeliveryZoneOriginLocation", fields: [originLocationId], references: [id], onDelete: Restrict)
+  createdBy        User                                   @relation("DeliveryZoneCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy        User                                   @relation("DeliveryZoneUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  geofenceEvents   GeofenceEvent[]
+  vehicleStates    VehicleGeofenceState[]
+  deliveryIncidents DeliveryIncident[]
+
+  @@index([originLocationId, isActive])
+}
+
+model GeofenceEvent {
+  id         String            @id @default(cuid())
+  zoneId     String
+  vehicleId  String
+  routeId    String
+  positionId String
+  type       GeofenceEventType
+  occurredAt DateTime
+  createdAt  DateTime          @default(now())
+  zone       DeliveryZone      @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  vehicle    Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  route      DeliveryRoute     @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  position   VehiclePosition   @relation("GeofenceEventPosition", fields: [positionId], references: [id], onDelete: Restrict)
+
+  @@unique([zoneId, positionId, type])
+  @@index([occurredAt])
+  @@index([vehicleId, occurredAt])
+  @@index([zoneId, occurredAt])
+  @@index([routeId, occurredAt])
+  @@index([positionId])
+}
+
+model VehicleGeofenceState {
+  vehicleId      String
+  zoneId         String
+  isInside       Boolean
+  lastPositionId String?
+  updatedAt      DateTime         @updatedAt
+  vehicle        Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  zone           DeliveryZone     @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  lastPosition   VehiclePosition? @relation("GeofenceStateLastPosition", fields: [lastPositionId], references: [id], onDelete: Restrict)
+
+  @@id([vehicleId, zoneId])
+  @@index([zoneId, isInside])
+}
+
+model DeliveryIncident {
+  id                String                 @id @default(cuid())
+  type              DeliveryIncidentType
+  status            DeliveryIncidentStatus @default(OPEN)
+  reason            String
+  details           String?
+  routeId           String?
+  deliveryOrderId   String?
+  vehicleId         String?
+  driverId          String?
+  positionId        String?
+  statusSnapshot    DeliveryOrderStatus
+  latitude          Decimal?               @db.Decimal(9, 6)
+  longitude         Decimal?               @db.Decimal(9, 6)
+  zoneId            String?
+  returnedItems     Json                   @default("[]")
+  evidence          Json                   @default("[]")
+  resolution        String?
+  occurredAt        DateTime
+  reportedAt        DateTime               @default(now())
+  reportedByUserId  String
+  resolvedAt        DateTime?
+  resolvedByUserId  String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  route             DeliveryRoute?         @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  deliveryOrder     DeliveryOrder?        @relation(fields: [deliveryOrderId], references: [id], onDelete: Restrict)
+  vehicle           Vehicle?              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver            User?                 @relation("DeliveryIncidentDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  position          VehiclePosition?      @relation("DeliveryIncidentPosition", fields: [positionId], references: [id], onDelete: Restrict)
+  zone              DeliveryZone?         @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  reportedBy        User                  @relation("DeliveryIncidentReportedBy", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  resolvedBy        User?                 @relation("DeliveryIncidentResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([routeId, occurredAt])
+  @@index([deliveryOrderId, occurredAt])
+  @@index([vehicleId, occurredAt])
+  @@index([driverId, occurredAt])
+  @@index([status, occurredAt])
+  @@index([occurredAt, routeId, vehicleId])
 }
 
 model DeliveryRoutePlanDraft {
@@ -1207,6 +1388,7 @@ model DeliveryRoutePlanDraft {
   sourceRouteId      String?
   consumedByRouteId  String?
   driverId           String
+  vehicleId          String
   scheduledDate      DateTime            @db.Date
   originLocationId   String
   orderedStops       Json
@@ -1221,6 +1403,7 @@ model DeliveryRoutePlanDraft {
   createdAt          DateTime            @default(now())
   createdBy          User                @relation("RoutePlanCreatedBy", fields: [createdByUserId], references: [id])
   driver             User                @relation("RoutePlanDriver", fields: [driverId], references: [id])
+  vehicle            Vehicle             @relation(fields: [vehicleId], references: [id])
   sourceRoute        DeliveryRoute?      @relation("RoutePlanSourceRoute", fields: [sourceRouteId], references: [id])
   consumedByRoute    DeliveryRoute?      @relation("RoutePlanConsumedRoute", fields: [consumedByRouteId], references: [id])
   originLocation     OperationalLocation @relation("RoutePlanOriginLocation", fields: [originLocationId], references: [id])
@@ -1229,6 +1412,7 @@ model DeliveryRoutePlanDraft {
   @@index([sourceRouteId])
   @@index([consumedByRouteId])
   @@index([driverId, scheduledDate])
+  @@index([vehicleId, scheduledDate])
 }
 
 model DeliveryOrder {
@@ -1259,8 +1443,10 @@ model DeliveryOrder {
   collectedBy         User?                                 @relation("DeliveryOrderCollectedBy", fields: [collectedByUserId], references: [id])
   deliveredBy         User?                                 @relation("DeliveryOrderDeliveredBy", fields: [deliveredByUserId], references: [id])
   evidence            DeliveryEvidence[]
+  incidents           DeliveryIncident[]
 
   @@unique([routeId, stopSequence])
+  @@index([status, deliveredAt, routeId])
 }
 
 model DeliveryEvidence {

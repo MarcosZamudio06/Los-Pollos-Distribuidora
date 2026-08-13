@@ -19,6 +19,10 @@ export const PERMISSIONS = {
   DAILY_CLOSES_DIFFERENCES_AUTHORIZE: 'daily_closes.differences.authorize',
   DAILY_CLOSES_REOPEN: 'daily_closes.reopen',
   FISCAL_INFORMATION_EXPORT: 'fiscal_information.export',
+  FLEET_VIEW: 'fleet.view',
+  FLEET_MANAGE: 'fleet.manage',
+  FLEET_POSITION_PUBLISH: 'fleet.position.publish',
+  FLEET_ZONES_MANAGE: 'fleet.zones.manage',
   PAYMENTS_CANCEL: 'payments.cancel',
   ROLES_READ: 'roles.read',
   USERS_MANAGE: 'users.manage',
@@ -38,7 +42,13 @@ export const CANONICAL_ROLE_NAMES = [
 
 export type PermissionRisk = 'standard' | 'sensitive' | 'critical';
 export type PermissionGroup =
-  'Access' | 'Cash' | 'CEDIS' | 'Finance' | 'Information' | 'Security';
+  | 'Access'
+  | 'Cash'
+  | 'CEDIS'
+  | 'Finance'
+  | 'Fleet'
+  | 'Information'
+  | 'Security';
 
 export const PERMISSION_DEFINITIONS = [
   {
@@ -123,6 +133,22 @@ export const PERMISSION_DEFINITIONS = [
     description: 'Export fiscal information.',
   },
   {
+    key: PERMISSIONS.FLEET_VIEW,
+    description: 'View fleet units and their operational assignments.',
+  },
+  {
+    key: PERMISSIONS.FLEET_MANAGE,
+    description: 'Create and manage fleet units.',
+  },
+  {
+    key: PERMISSIONS.FLEET_POSITION_PUBLISH,
+    description: 'Publish the authenticated driver position.',
+  },
+  {
+    key: PERMISSIONS.FLEET_ZONES_MANAGE,
+    description: 'Manage fleet geofence zones.',
+  },
+  {
     key: PERMISSIONS.PAYMENTS_CANCEL,
     description: 'Cancel registered payments.',
   },
@@ -173,6 +199,10 @@ export const PERMISSION_METADATA: Record<
     group: 'Information',
     risk: 'sensitive',
   },
+  [PERMISSIONS.FLEET_VIEW]: { group: 'Fleet', risk: 'standard' },
+  [PERMISSIONS.FLEET_MANAGE]: { group: 'Fleet', risk: 'critical' },
+  [PERMISSIONS.FLEET_POSITION_PUBLISH]: { group: 'Fleet', risk: 'sensitive' },
+  [PERMISSIONS.FLEET_ZONES_MANAGE]: { group: 'Fleet', risk: 'critical' },
   [PERMISSIONS.PAYMENTS_CANCEL]: { group: 'Finance', risk: 'critical' },
   [PERMISSIONS.ROLES_READ]: { group: 'Security', risk: 'standard' },
   [PERMISSIONS.USERS_MANAGE]: { group: 'Access', risk: 'critical' },
@@ -187,7 +217,7 @@ export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
     PERMISSIONS.CASH_SHIFT_OPEN_OWN,
     PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
   ],
-  DRIVER: [],
+  DRIVER: [PERMISSIONS.FLEET_POSITION_PUBLISH],
   SELLER: [
     PERMISSIONS.CEDIS_VIEW,
     PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,

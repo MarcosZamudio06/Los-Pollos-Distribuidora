@@ -160,4 +160,25 @@ describe("route detail optimized map", () => {
       container.remove();
     }
   });
+
+  it("shows the persisted vehicle for an existing route", async () => {
+    mockState.route.data = {
+      ...baseRoute,
+      vehicleId: "vehicle-1",
+      vehicle: {
+        id: "vehicle-1",
+        code: "UNIDAD-01",
+        displayName: "Unidad 1",
+        plateNumber: "ABC-123",
+      },
+    };
+    const { container, root } = await renderPage();
+    try {
+      expect(container.textContent).toContain("Unidad 1");
+      expect(container.textContent).toContain("UNIDAD-01 · ABC-123");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
 });

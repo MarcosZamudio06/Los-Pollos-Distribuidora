@@ -7,5 +7,6 @@ export { CreateRouteModal } from "./components/CreateRouteModal";
 export { AssignOrdersModal } from "./components/AssignOrdersModal";
 export { deliveryService } from "./deliveryService";
 export * from "./hooks";
+export * from "./useRouteLocationTracking";
 export * from "./types";
 export { MyRoutesPage } from "./pages/MyRoutesPage";

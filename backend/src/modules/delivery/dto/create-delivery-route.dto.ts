@@ -31,6 +31,10 @@ export class CreateDeliveryRouteDto {
   @IsNotEmpty()
   driverId!: string;
 
+  @IsOptional()
+  @IsString()
+  vehicleId?: string;
+
   @IsDateString()
   scheduledDate!: string;
 

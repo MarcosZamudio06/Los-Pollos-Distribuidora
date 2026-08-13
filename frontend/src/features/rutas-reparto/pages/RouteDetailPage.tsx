@@ -130,6 +130,23 @@ export function RouteDetailPage() {
                   </div>
                   <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                      <Truck className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
+                      Unidad
+                    </dt>
+                    <dd className="mt-2 font-black">
+                      {detail.vehicle?.displayName ?? "Sin unidad asignada"}
+                    </dd>
+                    {detail.vehicle && (
+                      <span className="mt-1 block text-xs text-[var(--erp-muted-foreground)]">
+                        {detail.vehicle.code}
+                        {detail.vehicle.plateNumber
+                          ? ` · ${detail.vehicle.plateNumber}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                    <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <MapPin className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
                       Origen
                     </dt>

@@ -17,9 +17,12 @@ import type {
   CreateDeliveryRoutePlanPayload,
   DeliveryRoutePlan,
   EligibleDeliverySale,
+  FleetPositionPublication,
   GeocodingResult,
   PlannerDriver,
   PlannerLocation,
+  PlannerVehicle,
+  PublishFleetPositionPayload,
   RoutingTechnicalStatus,
 } from "./types";
 
@@ -137,8 +140,9 @@ export const deliveryService = {
     return unwrapItem(response);
   },
   async createOptimizedRoute(
-    payload: Omit<CreateDeliveryRoutePayload, "orders"> & {
+    payload: Omit<CreateDeliveryRoutePayload, "orders" | "vehicleId"> & {
       routePlanId: string;
+      vehicleId: string;
     },
     idempotencyKey: string,
     accessToken?: string | null,
@@ -170,6 +174,13 @@ export const deliveryService = {
         location.isActive !== false && location.type !== "ROUTE_STOCK",
     );
   },
+  async listVehicles(accessToken?: string | null) {
+    const response = await apiClient.get<ListEnvelope<PlannerVehicle>>(
+      withParams("/vehicles", { active: true, limit: 100 }),
+      { headers: authHeaders(accessToken) },
+    );
+    return unwrapList(response);
+  },
   async listRoutes(
     filters: DeliveryRoutesFilters,
     accessToken?: string | null,
@@ -189,6 +200,19 @@ export const deliveryService = {
         headers: authHeaders(accessToken),
       },
     );
+    return unwrapItem(response);
+  },
+  async publishFleetPosition(
+    payload: PublishFleetPositionPayload,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<FleetPositionPublication>,
+      PublishFleetPositionPayload
+    >("/fleet/positions", {
+      body: payload,
+      headers: authHeaders(accessToken),
+    });
     return unwrapItem(response);
   },
   async createRoute(
