@@ -85,6 +85,10 @@ los límites se excede.
 - AND no crea una reserva parcial
 - AND la confirmación conserva una revalidación atómica para impedir saldo negativo
 
+### Cola y recepción CEDIS de devoluciones
+
+Una devolución `RETURN` solicitada queda `PENDING` mientras el `InventoryTransfer` esté `REQUESTED` o `IN_TRANSIT`; queda `COMPLETED` únicamente al confirmar y `CANCELLED` si se cancela. La cola de CEDIS conserva ciclo, sucursal, CEDIS, folio, productos, cantidades, notas, solicitante y timestamps. Solo `ADMIN` o `WAREHOUSE` con `cedis.receive_returns` y alcance del CEDIS pueden marcarla recibida. La acción reutiliza la confirmación atómica e idempotente de `InventoryTransfer`; no crea otra entidad ni movimientos alternos.
+
 ### Confirmación y cancelación
 
 Los comandos existentes de inventario MUST seguir siendo la única vía para confirmar o cancelar transferencias. Confirmar MUST aplicar `TRANSFER_OUT` y `TRANSFER_IN` atómicamente; cancelar MUST limitarse a transferencias no confirmadas.

@@ -85,8 +85,8 @@ export class BranchSupplyCyclesController {
   }
 
   @Post(':id/returns')
-  @Roles('ADMIN', 'WAREHOUSE')
-  @RequirePermissions(PERMISSIONS.CEDIS_RECEIVE_RETURNS)
+  @Roles('ADMIN', 'WAREHOUSE', 'SELLER')
+  @RequirePermissions(PERMISSIONS.CEDIS_REQUEST_RETURNS)
   async return(
     @Param('id') id: string,
     @Body() body: BranchSupplyCycleCommandDto,

@@ -2,6 +2,7 @@ import type {
   CedisBranchHistoryFilters,
   CedisDashboardFilters,
   CedisIncomingSuppliesFilters,
+  CedisReturnsFilters,
 } from "./types";
 
 export const cedisQueryKeys = {
@@ -16,6 +17,8 @@ export const cedisQueryKeys = {
     ["cedis", "branch-supply-cycles", cycleId, "summary"] as const,
   incomingSupplies: (filters: CedisIncomingSuppliesFilters) =>
     ["cedis", "incoming-supplies", filters] as const,
+  returns: (filters: CedisReturnsFilters) =>
+    ["cedis", "returns", filters] as const,
   mutations: (
     operation:
       | "open"
@@ -25,6 +28,7 @@ export const cedisQueryKeys = {
       | "close"
       | "reopen"
       | "cancel"
-      | "receive-supply",
+      | "receive-supply"
+      | "complete-return",
   ) => ["cedis", "mutations", operation] as const,
 };

@@ -162,6 +162,7 @@ const card: CedisDashboardCard = {
   },
   financial: {
     expectedSales: "9350.00",
+    potentialSales: "10200.00",
     actualSales: "9180.00",
     creditSales: "4500.00",
   },
@@ -199,6 +200,7 @@ const summary: CedisCycleSummary = {
     actualSoldKg: "108.000",
     actualSoldPieces: "0.000",
     expectedSales: "9350.00",
+    potentialSales: "10200.00",
     actualSales: "9180.00",
     creditSales: "4500.00",
     expectedCash: "5000.00",
@@ -422,6 +424,17 @@ describe("CEDIS branch detail page", () => {
       'href="/daily-close?closeId=daily-close-1&amp;locationId=branch-1&amp;date=2026-08-05"',
     );
     expect(html).toContain("Actualizar conciliación");
+  });
+
+  it("muestra el monto potencial de todos los productos entregados", () => {
+    const html = renderPage();
+    const summaryStart = html.indexOf("Resumen operativo");
+    const productBreakdownStart = html.indexOf("Desglose por producto");
+    const summaryHtml = html.slice(summaryStart, productBreakdownStart);
+
+    expect(summaryHtml).toContain("Monto esperado");
+    expect(summaryHtml).toContain("$10,200.00");
+    expect(summaryHtml).not.toContain("$9,350.00");
   });
 
   it("requests active products with a registered balance at the transfer source", () => {

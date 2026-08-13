@@ -19,21 +19,31 @@ const admin = {
   id: 'admin-1',
   role: 'ADMIN',
   operationalLocationId: undefined,
-  permissions: ['cedis.view', 'cedis.dispatch', 'cedis.receive_returns'],
+  permissions: [
+    'cedis.view',
+    'cedis.dispatch',
+    'cedis.receive_returns',
+    'cedis.request_returns',
+  ],
 };
 
 const warehouse = {
   id: 'warehouse-1',
   role: 'WAREHOUSE',
   operationalLocationId: 'cedis-1',
-  permissions: ['cedis.view', 'cedis.dispatch', 'cedis.receive_returns'],
+  permissions: [
+    'cedis.view',
+    'cedis.dispatch',
+    'cedis.receive_returns',
+    'cedis.request_returns',
+  ],
 };
 
 const seller = {
   id: 'seller-1',
   role: 'SELLER',
   operationalLocationId: 'branch-1',
-  permissions: ['cedis.view'],
+  permissions: ['cedis.view', 'cedis.request_returns'],
 };
 
 function createCycle(overrides: Record<string, unknown> = {}) {
@@ -787,6 +797,59 @@ describe('BranchSupplyCyclesService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(prisma.branchSupplyCycleTransfer.create).not.toHaveBeenCalled();
+  });
+
+  it('allows a seller assigned to the cycle branch to request a return', async () => {
+    const { prisma, inventoryTransfers, service } = createService();
+    const sellerCycle = createCycle({
+      transfers: [
+        {
+          role: BranchSupplyTransferRole.SUPPLY,
+          inventoryTransfer: {
+            status: InventoryTransferStatus.CONFIRMED,
+            items: [
+              { productId: 'product-1', quantityKg: 0, quantityPieces: 1 },
+            ],
+          },
+        },
+      ],
+    });
+    prisma.branchSupplyCycle.findUnique
+      .mockResolvedValueOnce(sellerCycle)
+      .mockResolvedValue(createCycle());
+    inventoryTransfers.create.mockResolvedValue({
+      id: 'transfer-return-seller',
+      status: InventoryTransferStatus.REQUESTED,
+    });
+    prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.createReturn(
+        'cycle-1',
+        {
+          expectedVersion: 1,
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.PIECE,
+              quantityPieces: 1,
+            },
+          ],
+        },
+        seller,
+        'seller-return-key',
+      ),
+    ).resolves.toEqual(expect.objectContaining({ created: true }));
+
+    expect(inventoryTransfers.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        originLocationId: 'branch-1',
+        destinationLocationId: 'cedis-1',
+      }),
+      seller.id,
+      expect.stringContaining('seller-return-key'),
+      expect.objectContaining({ actor: seller }),
+    );
   });
 
   it('creates a return transfer from the branch back to the CEDIS', async () => {

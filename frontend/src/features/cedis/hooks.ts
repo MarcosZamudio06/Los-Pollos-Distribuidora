@@ -15,6 +15,7 @@ import type {
   CedisDashboardFilters,
   CedisIncomingSuppliesFilters,
   CedisReceiveSupplyCommand,
+  CedisReturnsFilters,
   CedisMutationInput,
   CedisOpenCycleCommand,
   CedisReopenCycleCommand,
@@ -115,6 +116,37 @@ export function useCedisIncomingSupplies(
       return cedisService.listIncomingSupplies(filters, accessToken);
     },
     refetchInterval: CEDIS_REFRESH_INTERVAL_MS,
+  });
+}
+
+export function useCedisReturns(filters: CedisReturnsFilters | null) {
+  const { accessToken } = useAuth();
+
+  return useQuery({
+    enabled: Boolean(accessToken && filters?.businessDate),
+    placeholderData: keepPreviousData,
+    queryKey: cedisQueryKeys.returns(filters ?? { businessDate: '' }),
+    queryFn: () => {
+      if (!filters) throw new Error('CEDIS return filters are required');
+      return cedisService.listReturns(filters, accessToken);
+    },
+    refetchInterval: CEDIS_REFRESH_INTERVAL_MS,
+  });
+}
+
+export function useCompleteCedisReturn() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations('complete-return'),
+    mutationFn: (input: { transferId: string; idempotencyKey?: string }) =>
+      cedisService.completeReturn(
+        input.transferId,
+        accessToken,
+        input.idempotencyKey ?? idempotencyKey(),
+      ),
+    onSuccess: () => invalidateCedisDependencies(queryClient),
   });
 }
 

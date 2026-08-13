@@ -11,6 +11,7 @@ export const PERMISSIONS = {
   CEDIS_MANAGE: 'cedis.manage',
   CEDIS_RECEIVE_SUPPLIES: 'cedis.receive_supplies',
   CEDIS_RECEIVE_RETURNS: 'cedis.receive_returns',
+  CEDIS_REQUEST_RETURNS: 'cedis.request_returns',
   CEDIS_RECONCILE: 'cedis.reconcile',
   CEDIS_VIEW: 'cedis.view',
   CEDIS_VIEW_COSTS: 'cedis.view_costs',
@@ -94,6 +95,10 @@ export const PERMISSION_DEFINITIONS = [
     description: 'Reconcile CEDIS operational cycles.',
   },
   {
+    key: PERMISSIONS.CEDIS_REQUEST_RETURNS,
+    description: 'Request authorized branch returns to a CEDIS.',
+  },
+  {
     key: PERMISSIONS.CEDIS_VIEW,
     description: 'View authorized CEDIS hierarchy and operations.',
   },
@@ -154,6 +159,7 @@ export const PERMISSION_METADATA: Record<
   [PERMISSIONS.CEDIS_MANAGE]: { group: 'CEDIS', risk: 'critical' },
   [PERMISSIONS.CEDIS_RECEIVE_SUPPLIES]: { group: 'CEDIS', risk: 'sensitive' },
   [PERMISSIONS.CEDIS_RECEIVE_RETURNS]: { group: 'CEDIS', risk: 'sensitive' },
+  [PERMISSIONS.CEDIS_REQUEST_RETURNS]: { group: 'CEDIS', risk: 'sensitive' },
   [PERMISSIONS.CEDIS_RECONCILE]: { group: 'CEDIS', risk: 'critical' },
   [PERMISSIONS.CEDIS_VIEW]: { group: 'CEDIS', risk: 'standard' },
   [PERMISSIONS.CEDIS_VIEW_COSTS]: { group: 'CEDIS', risk: 'sensitive' },
@@ -185,6 +191,7 @@ export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
   SELLER: [
     PERMISSIONS.CEDIS_VIEW,
     PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
+    PERMISSIONS.CEDIS_REQUEST_RETURNS,
     PERMISSIONS.CASH_SHIFT_OPEN_OWN,
     PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
   ],
@@ -194,5 +201,6 @@ export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
     PERMISSIONS.CEDIS_DISPATCH,
     PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
     PERMISSIONS.CEDIS_RECEIVE_RETURNS,
+    PERMISSIONS.CEDIS_REQUEST_RETURNS,
   ],
 };

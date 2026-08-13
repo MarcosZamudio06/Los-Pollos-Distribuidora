@@ -48,7 +48,7 @@ atómica.
 
 ## POST /api/cedis/branch-supply-cycles/:id/returns
 
-Requiere `cedis.receive_returns`. Crea y vincula un `InventoryTransfer` `REQUESTED` con dirección sucursal → CEDIS.
+Requiere `cedis.request_returns`. Crea y vincula un `InventoryTransfer` `REQUESTED` con dirección sucursal → CEDIS. `SELLER` y `WAREHOUSE` de la sucursal del ciclo pueden solicitar; `ADMIN` y `WAREHOUSE` del CEDIS conservan la operación desde el detalle. Ningún actor puede solicitar para otra sucursal.
 
 Body común:
 
@@ -189,6 +189,18 @@ Validaciones:
 - Repetir la misma clave y payload devuelve el resultado original; cambiar el
   payload responde `IDEMPOTENCY_CONFLICT`.
 - Una versión obsoleta responde `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`.
+
+## GET /api/cedis/returns
+
+Lista devoluciones `RETURN` del día operativo con `businessDate`, `status` (`PENDING`, `COMPLETED`, `CANCELLED` o `ALL`), `branchLocationId`, `page` y `limit`. La respuesta incluye ciclo, sucursal, CEDIS, folio, estado derivado del `InventoryTransfer`, notas, fechas, partidas y usuario solicitante. `SELLER` solo ve su sucursal; `WAREHOUSE` ve ciclos cuyo CEDIS o sucursal coincide con su ubicación; `ADMIN` ve todos.
+
+## GET /api/cedis/returns/:transferId
+
+Devuelve el detalle de una devolución `RETURN` con el mismo alcance de lectura de la cola.
+
+## POST /api/cedis/returns/:transferId/complete
+
+Requiere `ADMIN` o `WAREHOUSE`, `cedis.receive_returns`, alcance del CEDIS destino e `Idempotency-Key`. Delega en `InventoryTransfersService.confirm`: confirma exactamente una vez la transferencia enlazada, consume la reserva, aplica `TRANSFER_OUT` y `TRANSFER_IN`, actualiza versión/estado del ciclo y conserva folio, timestamps, estado y partidas. `SELLER` nunca puede completar desde esta ruta.
 
 ## Comandos de inventario reutilizados
 

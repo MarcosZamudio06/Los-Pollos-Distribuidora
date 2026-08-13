@@ -949,7 +949,7 @@ export class BranchSupplyCyclesService {
       this.prisma.$transaction(
         async (tx) => {
           const cycle = await this.findCycle(tx, cycleId);
-          this.assertCycleMutationScope(cycle, actor);
+          this.assertCycleTransferScope(cycle, actor, role);
           const payloadHash = this.hashPayload({
             cycleId,
             dto,
@@ -1649,7 +1649,8 @@ export class BranchSupplyCyclesService {
     if (actor.role === 'ADMIN') return;
     const allowed =
       (actor.role === 'WAREHOUSE' &&
-        actor.operationalLocationId === cycle.distributionCenterLocationId) ||
+        (actor.operationalLocationId === cycle.distributionCenterLocationId ||
+          actor.operationalLocationId === cycle.branchLocationId)) ||
       (actor.role === 'SELLER' &&
         actor.operationalLocationId === cycle.branchLocationId);
     if (!allowed) {
@@ -1660,20 +1661,24 @@ export class BranchSupplyCyclesService {
     }
   }
 
-  private assertCycleMutationScope(
+  private assertCycleTransferScope(
     cycle: CycleRecord,
     actor: CycleActor,
+    role: BranchSupplyTransferRole,
   ): void {
-    if (actor.role !== 'ADMIN') {
-      if (
-        actor.role !== 'WAREHOUSE' ||
-        actor.operationalLocationId !== cycle.distributionCenterLocationId
-      ) {
-        throw new ForbiddenException({
-          code: 'LOCATION_NOT_AUTHORIZED',
-          message: 'The actor is outside the CEDIS scope',
-        });
-      }
+    if (actor.role === 'ADMIN') return;
+    const isCedisWarehouse =
+      actor.role === 'WAREHOUSE' &&
+      actor.operationalLocationId === cycle.distributionCenterLocationId;
+    const isBranchReturnActor =
+      role === BranchSupplyTransferRole.RETURN &&
+      (actor.role === 'SELLER' || actor.role === 'WAREHOUSE') &&
+      actor.operationalLocationId === cycle.branchLocationId;
+    if (!isCedisWarehouse && !isBranchReturnActor) {
+      throw new ForbiddenException({
+        code: 'LOCATION_NOT_AUTHORIZED',
+        message: 'The actor is outside the permitted cycle scope',
+      });
     }
   }
 
@@ -1684,7 +1689,7 @@ export class BranchSupplyCyclesService {
     const permission =
       role === BranchSupplyTransferRole.SUPPLY
         ? PERMISSIONS.CEDIS_DISPATCH
-        : PERMISSIONS.CEDIS_RECEIVE_RETURNS;
+        : PERMISSIONS.CEDIS_REQUEST_RETURNS;
     if (!actor.permissions?.includes(permission)) {
       throw new ForbiddenException('Insufficient permissions');
     }

@@ -112,3 +112,37 @@ describe("CEDIS protected route", () => {
     expect(renderIncomingRoute()).toContain("Recepción autorizada");
   });
 });
+
+function renderReturnsRoute() {
+  return renderToStaticMarkup(
+    <MemoryRouter initialEntries={["/cedis/returns"]}>
+      <Routes>
+        <Route element={<p>Forbidden</p>} path="/403" />
+        <Route
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.cedisReturns}>
+              <PermissionRoute permission={PERMISSIONS.cedisView}>
+                <p>Devoluciones autorizadas</p>
+              </PermissionRoute>
+            </RoleRoute>
+          }
+          path="/cedis/returns"
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe("CEDIS returns protected route", () => {
+  it("permite al SELLER con cedis.view acceder a la pantalla de devoluciones", () => {
+    mockAuth.user = {
+      email: "seller@pollos.local",
+      id: "seller-1",
+      name: "Ventas",
+      permissions: [PERMISSIONS.cedisView, PERMISSIONS.cedisRequestReturns],
+      role: "SELLER",
+    };
+
+    expect(renderReturnsRoute()).toContain("Devoluciones autorizadas");
+  });
+});

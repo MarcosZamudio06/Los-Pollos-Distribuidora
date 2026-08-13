@@ -6,6 +6,8 @@ import { BranchSupplyCyclesController } from './branch-supply-cycles.controller'
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
 import { BranchSupplyReceiptsController } from './branch-supply-receipts.controller';
+import { BranchReturnsController } from './branch-returns.controller';
+import { BranchReturnsService } from './branch-returns.service';
 import { BranchSupplyReceiptsService } from './branch-supply-receipts.service';
 import { CedisDashboardController } from './cedis-dashboard.controller';
 import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
@@ -16,12 +18,14 @@ import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.que
   controllers: [
     BranchSupplyCyclesController,
     BranchSupplyReceiptsController,
+    BranchReturnsController,
     CedisDashboardController,
   ],
   providers: [
     BranchSupplyCycleReconciliationService,
     BranchSupplyCyclesService,
     BranchSupplyReceiptsService,
+    BranchReturnsService,
     CedisDashboardQueryService,
     CedisInventorySummaryQueryService,
   ],

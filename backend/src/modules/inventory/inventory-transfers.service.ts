@@ -1125,17 +1125,24 @@ export class InventoryTransfersService {
     if (cedisCycleTransfer) {
       const requiredPermission = isSupply
         ? PERMISSIONS.CEDIS_DISPATCH
-        : PERMISSIONS.CEDIS_RECEIVE_RETURNS;
+        : PERMISSIONS.CEDIS_REQUEST_RETURNS;
       if (!actor?.permissions?.includes(requiredPermission)) {
         throw new ForbiddenException('Insufficient permissions');
       }
     }
 
     if (actor?.role === 'WAREHOUSE') {
-      const scopedLocationId = isReturn ? destination.id : origin.id;
-      if (actor.operationalLocationId !== scopedLocationId) {
-        throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
-      }
+      const inScope = isReturn
+        ? actor.operationalLocationId === origin.id ||
+          actor.operationalLocationId === destination.id
+        : actor.operationalLocationId === origin.id;
+      if (!inScope) throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
+    }
+    if (
+      actor?.role === 'SELLER' &&
+      (!isReturn || actor.operationalLocationId !== origin.id)
+    ) {
+      throw new ForbiddenException('LOCATION_NOT_AUTHORIZED');
     }
   }
 

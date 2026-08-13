@@ -183,22 +183,22 @@ Archivos frontend relacionados:
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Nueva sucursal                                               │
-│ Crea una ubicación que será abastecida desde un CEDIS         │
+│ Crea una ubicación que será abastecida desde un CEDIS        │
 ├──────────────────────────────┬───────────────────────────────┤
-│ Identidad                    │ Abastecimiento                 │
-│ Nombre                       │ CEDIS padre                    │
-│ Código opcional              │ CEDIS seleccionado             │
-│                              │ Estado: lista para operar      │
+│ Identidad                    │ Abastecimiento                │
+│ Nombre                       │ CEDIS padre                   │
+│ Código opcional              │ CEDIS seleccionado            │
+│                              │ Estado: lista para operar     │
 ├──────────────────────────────┴───────────────────────────────┤
-│ Ubicación                                                     │
+│ Ubicación                                                    │
 │ Dirección / Buscar dirección                                 │
 │                                                              │
-│                         MAPA                                  │
+│                         MAPA                                 │
 │                  marcador arrastrable                        │
 │                                                              │
-│ Latitud                              Longitud                 │
+│ Latitud                              Longitud                │
 ├──────────────────────────────────────────────────────────────┤
-│ Cancelar                                      Crear sucursal  │
+│ Cancelar                                      Crear sucursal │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -551,35 +551,6 @@ Gate: no implementar el renderer productivo mientras los specs mantengan una
 dependencia obligatoria de React Leaflet o mientras no exista un proveedor de
 style/tiles aprobado.
 
-### Fase 1: normalización del gestor de paquetes
-
-El repositorio contiene `package-lock.json` y scripts Docker/CI basados en npm,
-pero `AGENTS.md` exige pnpm. MapLibre no debe introducir una tercera variante
-de instalación.
-
-Archivos probables:
-
-- `package.json` raíz.
-- `frontend/package.json`.
-- `backend/package.json`.
-- `pnpm-workspace.yaml`.
-- `pnpm-lock.yaml`.
-- `docker/frontend/Dockerfile`.
-- `docker/backend/Dockerfile`.
-- `.github/workflows/quality-gate.yml`.
-- `README.md` y documentación de validación.
-
-Actividades:
-
-1. Fijar la versión de pnpm mediante `packageManager`.
-2. Migrar scripts raíz a `pnpm --dir`.
-3. Generar lockfile reproducible.
-4. Actualizar Docker y CI para usar pnpm.
-5. Eliminar lockfiles npm solo después de verificar paridad.
-
-AUD-016, relativo a `backend start`, queda fuera de este cambio. Debe
-corregirse en una tarea separada junto con AUD-017 y su smoke `build + start +
-/health/ready`.
 
 ### Fase 2: puertos y adaptadores backend
 

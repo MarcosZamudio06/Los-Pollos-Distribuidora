@@ -12,6 +12,7 @@ describe('CEDIS permission contract', () => {
     PERMISSIONS.CEDIS_MANAGE,
     PERMISSIONS.CEDIS_DISPATCH,
     PERMISSIONS.CEDIS_RECEIVE_RETURNS,
+    PERMISSIONS.CEDIS_REQUEST_RETURNS,
     PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
     PERMISSIONS.CEDIS_RECONCILE,
     PERMISSIONS.CEDIS_CLOSE,
@@ -24,6 +25,7 @@ describe('CEDIS permission contract', () => {
       'cedis.manage',
       'cedis.dispatch',
       'cedis.receive_returns',
+      'cedis.request_returns',
       'cedis.receive_supplies',
       'cedis.reconcile',
       'cedis.close',
@@ -54,12 +56,17 @@ describe('CEDIS permission contract', () => {
       PERMISSIONS.CEDIS_DISPATCH,
       PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
       PERMISSIONS.CEDIS_RECEIVE_RETURNS,
+      PERMISSIONS.CEDIS_REQUEST_RETURNS,
     ]);
     expect(
       ROLE_PERMISSION_KEYS.SELLER.filter((permission) =>
         cedisPermissions.includes(permission),
       ),
-    ).toEqual([PERMISSIONS.CEDIS_VIEW, PERMISSIONS.CEDIS_RECEIVE_SUPPLIES]);
+    ).toEqual([
+      PERMISSIONS.CEDIS_VIEW,
+      PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
+      PERMISSIONS.CEDIS_REQUEST_RETURNS,
+    ]);
     expect(ROLE_PERMISSION_KEYS.SELLER).not.toContain(PERMISSIONS.COSTS_READ);
   });
 });
@@ -100,6 +107,7 @@ describe('cash collection permission contract', () => {
     expect(ROLE_PERMISSION_KEYS.SELLER).toEqual([
       PERMISSIONS.CEDIS_VIEW,
       PERMISSIONS.CEDIS_RECEIVE_SUPPLIES,
+      PERMISSIONS.CEDIS_REQUEST_RETURNS,
       PERMISSIONS.CASH_SHIFT_OPEN_OWN,
       PERMISSIONS.CASH_SHIFT_CLOSE_OWN,
     ]);

@@ -517,8 +517,18 @@ export class CedisDashboardQueryService {
       ...(query.status ? { status: query.status } : {}),
       ...(actor.role === 'WAREHOUSE'
         ? {
-            distributionCenterLocationId:
-              actor.operationalLocationId ?? '__warehouse_without_location__',
+            OR: [
+              {
+                distributionCenterLocationId:
+                  actor.operationalLocationId ??
+                  '__warehouse_without_location__',
+              },
+              {
+                branchLocationId:
+                  actor.operationalLocationId ??
+                  '__warehouse_without_location__',
+              },
+            ],
           }
         : {}),
     };
@@ -879,6 +889,7 @@ export class CedisDashboardQueryService {
     const expectedFinancials = this.expectedFinancials(cycle);
     const financial: Record<string, string> = {
       expectedSales: expectedFinancials.expectedSales,
+      potentialSales: expectedFinancials.potentialSales,
       actualSales: this.money(cycle.actualSalesTotal),
       creditSales: this.creditSales(cycle.pointOfSaleDailyClose?.sales),
     };
@@ -953,6 +964,7 @@ export class CedisDashboardQueryService {
       actualSoldKg: this.quantity(cycle.totalActualSoldKg),
       actualSoldPieces: this.quantity(cycle.totalActualSoldPieces),
       expectedSales: expectedFinancials.expectedSales,
+      potentialSales: expectedFinancials.potentialSales,
       actualSales: this.money(cycle.actualSalesTotal),
       creditSales: this.creditSales(cycle.pointOfSaleDailyClose?.sales),
       expectedCash: this.money(cycle.expectedCashTotal),
@@ -1262,6 +1274,7 @@ export class CedisDashboardQueryService {
     const projection = this.projectExpectedFinancials(cycle);
     const expectedSales =
       projection?.sales ?? Money.from(cycle.expectedSalesTotal);
+    const potentialSales = projection?.potentialSales ?? expectedSales;
     const expectedCost =
       projection?.cost ?? Money.from(cycle.expectedCostTotal);
     const expectedProfit = projection?.cost
@@ -1270,6 +1283,7 @@ export class CedisDashboardQueryService {
 
     return {
       expectedSales: expectedSales.toString(),
+      potentialSales: potentialSales.toString(),
       expectedCost: expectedCost.toString(),
       expectedProfit: expectedProfit.toString(),
     };
@@ -1278,6 +1292,7 @@ export class CedisDashboardQueryService {
   // Confirmed transfers can update physical projections before refresh persists financial totals.
   private projectExpectedFinancials(cycle: DashboardCycleRecord): {
     sales: Money;
+    potentialSales: Money;
     cost: Money | null;
   } | null {
     const snapshots = new Map(
@@ -1287,6 +1302,7 @@ export class CedisDashboardQueryService {
       ]),
     );
     let sales = Money.zero();
+    let potentialSales = Money.zero();
     let cost: Money | null = Money.zero();
     let hasTransferItems = false;
 
@@ -1332,8 +1348,12 @@ export class CedisDashboardQueryService {
         }
 
         const value = Money.from(unitPrice).multiply(quantity);
-        sales =
-          link.role === 'SUPPLY' ? sales.add(value) : sales.subtract(value);
+        if (link.role === 'SUPPLY') {
+          sales = sales.add(value);
+          potentialSales = potentialSales.add(value);
+        } else {
+          sales = sales.subtract(value);
+        }
 
         if (link.role === 'SUPPLY' && cost !== null) {
           const unitCost = snapshot?.unitCostSnapshot;
@@ -1346,7 +1366,7 @@ export class CedisDashboardQueryService {
       }
     }
 
-    return hasTransferItems ? { sales, cost } : null;
+    return hasTransferItems ? { sales, potentialSales, cost } : null;
   }
 
   private valuationQuantity(
@@ -1856,7 +1876,8 @@ export class CedisDashboardQueryService {
     if (actor.role === 'ADMIN') return;
     const allowed =
       (actor.role === 'WAREHOUSE' &&
-        actor.operationalLocationId === cycle.distributionCenterLocationId) ||
+        (actor.operationalLocationId === cycle.distributionCenterLocationId ||
+          actor.operationalLocationId === cycle.branchLocationId)) ||
       (actor.role === 'SELLER' &&
         actor.operationalLocationId === cycle.branchLocationId);
     if (!allowed) throw this.locationForbidden();

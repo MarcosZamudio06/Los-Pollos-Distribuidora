@@ -9,6 +9,9 @@ import type {
   CedisDashboardFilters,
   CedisDashboardResponse,
   CedisIncomingSupply,
+  CedisBranchReturn,
+  CedisReturnsFilters,
+  CedisReturnsResponse,
   CedisIncomingSuppliesFilters,
   CedisIncomingSuppliesResponse,
   CedisReceiveSupplyCommand,
@@ -147,6 +150,37 @@ export const cedisService = {
       },
     );
 
+    return unwrap(response);
+  },
+
+  async listReturns(
+    filters: CedisReturnsFilters,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.get<ApiEnvelope<CedisReturnsResponse>>(
+      withParams('/cedis/returns', filters),
+      { headers: authHeaders(accessToken) },
+    );
+    return unwrap(response);
+  },
+
+  async getReturn(transferId: string, accessToken?: string | null) {
+    const response = await apiClient.get<ApiEnvelope<CedisBranchReturn>>(
+      `/cedis/returns/${transferId}`,
+      { headers: authHeaders(accessToken) },
+    );
+    return unwrap(response);
+  },
+
+  async completeReturn(
+    transferId: string,
+    accessToken: string | null,
+    idempotencyKey: string,
+  ) {
+    const response = await apiClient.post<ApiEnvelope<CedisBranchReturn>, Record<string, never>>(
+      `/cedis/returns/${transferId}/complete`,
+      { body: {}, headers: authHeaders(accessToken, idempotencyKey) },
+    );
     return unwrap(response);
   },
 

@@ -1,6 +1,7 @@
 export { CedisDashboardPage } from "./CedisDashboardPage";
 export { CedisBranchDetailPage } from "./CedisBranchDetailPage";
 export { CedisIncomingSuppliesPage } from "./CedisIncomingSuppliesPage";
+export { CedisBranchReturnsPage } from "./CedisBranchReturnsPage";
 export { CedisBranchCard } from "./CedisBranchCard";
 export { CedisFilters } from "./CedisFilters";
 export * from "./cedisPresentation";

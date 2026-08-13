@@ -153,7 +153,13 @@ export function CedisBranchCard({
           <Metric
             icon={CircleDollarSign}
             label="Venta esperada"
-            value={financial ? formatMoney(financial.expectedSales) : "—"}
+            value={
+              financial
+                ? formatMoney(
+                    financial.potentialSales ?? financial.expectedSales,
+                  )
+                : "—"
+            }
           />
           <Metric
             icon={CircleDollarSign}

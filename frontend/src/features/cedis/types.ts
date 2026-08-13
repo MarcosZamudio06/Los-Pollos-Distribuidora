@@ -49,6 +49,7 @@ export type CedisDashboardCard = {
   } | null;
   financial: {
     expectedSales: string;
+    potentialSales?: string;
     actualSales: string;
     creditSales?: string;
     expectedCost?: string;
@@ -115,6 +116,7 @@ export type CedisCycleSummary = {
     actualSoldKg: string;
     actualSoldPieces: string;
     expectedSales: string;
+    potentialSales?: string;
     actualSales: string;
     creditSales: string;
     expectedCash: string;
@@ -388,4 +390,49 @@ export type CedisCancelCycleCommand = {
 export type CedisMutationInput<T> = {
   payload: T;
   idempotencyKey: string;
+};
+
+export type CedisBranchReturnStatus = "PENDING" | "COMPLETED" | "CANCELLED";
+
+export type CedisBranchReturn = {
+  id: string;
+  transferNumber: string;
+  cycle: {
+    id: string;
+    version: number;
+    businessDate: string;
+    branch: { id: string; name: string; code: string | null };
+    distributionCenter: { id: string; name: string; code: string | null };
+  };
+  status: CedisBranchReturnStatus;
+  notes: string | null;
+  requestedAt: string | null;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  requestedBy: { id: string; name: string };
+  items: Array<{
+    transferItemId: string;
+    productId: string;
+    productName: string;
+    unit: "KG" | "PIECE" | "KG_AND_PIECE" | string;
+    quantityKg: number;
+    quantityPieces: number;
+  }>;
+};
+
+export type CedisReturnsResponse = {
+  items: CedisBranchReturn[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type CedisReturnsFilters = {
+  businessDate: string;
+  status?: CedisBranchReturnStatus | "ALL";
+  branchLocationId?: string;
+  page?: number;
+  limit?: number;
 };

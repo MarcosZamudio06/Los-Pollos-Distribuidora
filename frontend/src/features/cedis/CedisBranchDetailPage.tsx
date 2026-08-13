@@ -496,6 +496,8 @@ function SummaryGrid({
 }) {
   const physical = summary ? summary.totals : card?.physical;
   const financial = summary ? summary.totals : card?.financial;
+  const potentialSales =
+    financial?.potentialSales ?? financial?.expectedSales;
   const cash = summary
     ? {
         expected: summary.totals.expectedCash,
@@ -592,7 +594,8 @@ function SummaryGrid({
         />
         <SummaryMetric
           label="Monto esperado"
-          value={financial ? money(financial.expectedSales) : "—"}
+          value={financial ? money(potentialSales) : "—"}
+          detail="Valor total de los productos entregados"
         />
         <SummaryMetric
           label="Ventas reales"
@@ -1591,6 +1594,7 @@ export function CedisBranchDetailPage() {
           },
           financial: {
             expectedSales: summary.totals.expectedSales,
+            potentialSales: summary.totals.potentialSales,
             actualSales: summary.totals.actualSales,
           },
           cash: {
@@ -1909,6 +1913,13 @@ export function CedisBranchDetailPage() {
             >
               <ClipboardCheck aria-hidden="true" className="h-4 w-4" />
               Revisar recepciones
+            </Link>
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-4 text-sm font-semibold text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)]"
+              to={`/cedis/returns?date=${encodeURIComponent(businessDate)}&status=PENDING`}
+            >
+              <RotateCcw aria-hidden="true" className="h-4 w-4" />
+              Cola de devoluciones
             </Link>
             {!cycleId && canDispatch && (
               <Button

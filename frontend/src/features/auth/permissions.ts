@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   cedisManage: "cedis.manage",
   cedisReceiveSupplies: "cedis.receive_supplies",
   cedisReceiveReturns: "cedis.receive_returns",
+  cedisRequestReturns: "cedis.request_returns",
   cedisReconcile: "cedis.reconcile",
   cedisView: "cedis.view",
   cedisViewCosts: "cedis.view_costs",

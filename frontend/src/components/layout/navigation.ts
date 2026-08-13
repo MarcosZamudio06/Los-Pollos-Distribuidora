@@ -3,6 +3,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   ClipboardCheck,
+  RotateCcw,
   FileCheck2,
   ListChecks,
   History,
@@ -28,6 +29,7 @@ export type NavigationItemKey =
   | "home"
   | "cedis"
   | "cedis-incoming"
+  | "cedis-returns"
   | "sales"
   | "sales-history"
   | "orders"
@@ -104,6 +106,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Recepción CEDIS",
     section: "operations",
     to: "/cedis/incoming",
+  },
+  {
+    activePaths: ["/cedis/returns"],
+    allowedRoles: ROUTE_ACCESS_ROLES.cedisReturns,
+    routeAccessKey: "cedisReturns",
+    description: "Solicitudes y recepción de devoluciones a CEDIS",
+    icon: RotateCcw,
+    key: "cedis-returns",
+    label: "Devoluciones CEDIS",
+    section: "operations",
+    to: "/cedis/returns",
   },
   {
     activePaths: ["/sales/history", "/sales/"],

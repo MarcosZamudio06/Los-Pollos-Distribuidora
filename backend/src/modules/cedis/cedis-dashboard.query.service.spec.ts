@@ -96,6 +96,12 @@ const seller = {
   permissions: [PERMISSIONS.CEDIS_VIEW],
 };
 
+const branchWarehouse = {
+  role: 'WAREHOUSE',
+  operationalLocationId: 'branch-1',
+  permissions: [PERMISSIONS.CEDIS_VIEW],
+};
+
 const adminWithCosts = {
   role: 'ADMIN',
   permissions: [PERMISSIONS.CEDIS_VIEW, PERMISSIONS.CEDIS_VIEW_COSTS],
@@ -196,6 +202,7 @@ describe('CedisDashboardQueryService', () => {
     expect(select).not.toHaveProperty('actualProfitTotal');
     expect(result.items[0].financial).toEqual({
       expectedSales: '1000.00',
+      potentialSales: '1000.00',
       actualSales: '900.00',
       creditSales: '0.00',
     });
@@ -359,6 +366,7 @@ describe('CedisDashboardQueryService', () => {
     expect(result.items[0]?.financial).toEqual(
       expect.objectContaining({
         expectedSales: '1421.00',
+        potentialSales: '1479.00',
         expectedCost: '1071.00',
         expectedProfit: '350.00',
       }),
@@ -450,6 +458,39 @@ describe('CedisDashboardQueryService', () => {
     expect(result.totalPages).toBe(3);
   });
 
+  it('limits a branch warehouse history to cycles belonging to its CEDIS or branch', async () => {
+    const { prisma, service } = createService();
+    prisma.branchSupplyCycle.findMany.mockResolvedValue([
+      { ...cycle(), branchLocation: branch },
+    ]);
+    prisma.branchSupplyCycle.count.mockResolvedValue(1);
+
+    await service.getBranchHistory(
+      'branch-1',
+      { dateFrom: '2026-08-01', dateTo: '2026-08-31', page: 1, limit: 25 },
+      branchWarehouse,
+    );
+
+    const expectedWhere = {
+      branchLocationId: 'branch-1',
+      businessDate: {
+        gte: new Date('2026-08-01T00:00:00.000Z'),
+        lte: new Date('2026-08-31T00:00:00.000Z'),
+      },
+      OR: [
+        { distributionCenterLocationId: 'branch-1' },
+        { branchLocationId: 'branch-1' },
+      ],
+    };
+
+    expect(prisma.branchSupplyCycle.findMany.mock.calls[0][0].where).toEqual(
+      expectedWhere,
+    );
+    expect(prisma.branchSupplyCycle.count.mock.calls[0][0]).toEqual({
+      where: expectedWhere,
+    });
+  });
+
   it('does not allow a seller to query another branch history', async () => {
     const { prisma, service } = createService();
 
@@ -474,6 +515,26 @@ describe('CedisDashboardQueryService', () => {
     );
     const select = prisma.branchSupplyCycle.findUnique.mock.calls[0][0].select;
     expect(select).not.toHaveProperty('expectedCostTotal');
+  });
+
+  it('allows a branch warehouse to scope its CEDIS cycle but rejects other cycles', () => {
+    const { service } = createService();
+    const assertCycleScope = (
+      service as unknown as {
+        assertCycleScope: (
+          cycle: Pick<
+            ReturnType<typeof cycle>,
+            'distributionCenterLocationId' | 'branchLocationId'
+          >,
+          actor: typeof branchWarehouse,
+        ) => void;
+      }
+    ).assertCycleScope.bind(service);
+
+    expect(() => assertCycleScope(cycle(), branchWarehouse)).not.toThrow();
+    expect(() =>
+      assertCycleScope(cycle({ branchLocationId: 'branch-2' }), branchWarehouse),
+    ).toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
   });
 
   it('returns the latest article version, transfers, daily close, and cash summary', async () => {

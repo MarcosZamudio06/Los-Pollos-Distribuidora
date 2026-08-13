@@ -138,3 +138,25 @@ describe("CEDIS service", () => {
     );
   });
 });
+
+describe("CEDIS returns service", () => {
+  beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it("lists the return queue and completes with an idempotency key", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(okJson({ items: [], total: 0, page: 1, limit: 25, totalPages: 0 }))
+      .mockResolvedValueOnce(okJson({ id: "transfer-1", status: "COMPLETED" }));
+
+    await cedisService.listReturns(
+      { businessDate: "2026-08-05", status: "PENDING", branchLocationId: "branch-1", page: 1, limit: 25 },
+      "access-token",
+    );
+    expect(lastRequest().url).toBe("/api/cedis/returns?businessDate=2026-08-05&status=PENDING&branchLocationId=branch-1&page=1&limit=25");
+
+    await cedisService.completeReturn("transfer-1", "access-token", "idem-return-complete");
+    const request = lastRequest();
+    expect(request.url).toBe("/api/cedis/returns/transfer-1/complete");
+    expect(new Headers(request.init?.headers).get("idempotency-key")).toBe("idem-return-complete");
+  });
+});

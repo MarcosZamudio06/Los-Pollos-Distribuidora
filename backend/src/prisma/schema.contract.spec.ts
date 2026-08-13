@@ -70,6 +70,10 @@ const cedisReceiptPermissionMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260805170000_add_cedis_receive_supplies_permission/migration.sql',
 );
+const cedisRequestReturnsPermissionMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260812130000_add_cedis_request_returns_permission/migration.sql',
+);
 const userCedisAssignmentMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260810100000_add_user_cedis_assignment/migration.sql',
@@ -414,6 +418,19 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain("'cedis.manage'");
     expect(migrationSql).toContain("'cedis.dispatch'");
     expect(migrationSql).toContain("'cedis.receive_returns'");
+    const requestReturnsPermissionMigration = readFileSync(
+      cedisRequestReturnsPermissionMigrationSqlPath,
+      'utf8',
+    );
+    expect(requestReturnsPermissionMigration).toContain(
+      "'cedis.request_returns'",
+    );
+    expect(requestReturnsPermissionMigration).toMatch(
+      /role\."name" IN \('ADMIN', 'WAREHOUSE', 'SELLER'\)/,
+    );
+    expect(requestReturnsPermissionMigration).toContain(
+      'ON CONFLICT DO NOTHING',
+    );
     expect(migrationSql).toContain("'cedis.reconcile'");
     expect(migrationSql).toContain("'cedis.close'");
     expect(migrationSql).toContain("'cedis.view_costs'");

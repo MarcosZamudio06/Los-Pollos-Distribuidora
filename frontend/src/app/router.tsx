@@ -17,6 +17,7 @@ import {
   CedisBranchDetailPage,
   CedisDashboardPage,
   CedisIncomingSuppliesPage,
+  CedisBranchReturnsPage,
   ChangePasswordPage,
   CustomersPage,
   DailyClosePage,
@@ -249,6 +250,16 @@ export function AppRouter() {
                 <RoleRoute roles={ROUTE_ACCESS_ROLES.cedisIncoming}>
                   <PermissionRoute permission={PERMISSIONS.cedisReceiveSupplies}>
                     <CedisIncomingSuppliesPage />
+                  </PermissionRoute>
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/cedis/returns"
+              element={
+                <RoleRoute roles={ROUTE_ACCESS_ROLES.cedisReturns}>
+                  <PermissionRoute permission={PERMISSIONS.cedisView}>
+                    <CedisBranchReturnsPage />
                   </PermissionRoute>
                 </RoleRoute>
               }
