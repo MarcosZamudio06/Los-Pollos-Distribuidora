@@ -108,3 +108,35 @@ describe('cash collection permission contract', () => {
     );
   });
 });
+
+describe('fleet permission contract', () => {
+  it('defines fleet permissions and keeps DRIVER position-only', () => {
+    const fleetPermissions: Permission[] = [
+      PERMISSIONS.FLEET_VIEW,
+      PERMISSIONS.FLEET_MANAGE,
+      PERMISSIONS.FLEET_POSITION_PUBLISH,
+      PERMISSIONS.FLEET_ZONES_MANAGE,
+    ];
+
+    expect(fleetPermissions).toEqual([
+      'fleet.view',
+      'fleet.manage',
+      'fleet.position.publish',
+      'fleet.zones.manage',
+    ]);
+    for (const permission of fleetPermissions) {
+      expect(PERMISSION_DEFINITIONS.map(({ key }) => key)).toContain(
+        permission,
+      );
+      expect(PERMISSION_METADATA[permission]).toEqual(
+        expect.objectContaining({ group: 'Fleet' }),
+      );
+      expect(ROLE_PERMISSION_KEYS.ADMIN).toContain(permission);
+    }
+    expect(ROLE_PERMISSION_KEYS.DRIVER).toEqual([
+      PERMISSIONS.FLEET_POSITION_PUBLISH,
+    ]);
+    expect(ROLE_PERMISSION_KEYS.DRIVER).not.toContain(PERMISSIONS.FLEET_VIEW);
+    expect(ROLE_PERMISSION_KEYS.DRIVER).not.toContain(PERMISSIONS.FLEET_MANAGE);
+  });
+});

@@ -57,6 +57,7 @@ export class CreateDeliveryRoutePlanStopDto {
 export class CreateDeliveryRoutePlanDto {
   @IsOptional() @IsString() routeId?: string;
   @IsString() @IsNotEmpty() driverId!: string;
+  @IsString() @IsNotEmpty() vehicleId!: string;
   @IsDateString() scheduledDate!: string;
   @IsString() @IsNotEmpty() originLocationId!: string;
   @IsArray()

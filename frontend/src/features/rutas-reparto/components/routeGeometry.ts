@@ -1,4 +1,5 @@
 import type { GeoJsonLineString } from "../types";
+import type { Map as MapLibreMap } from "maplibre-gl";
 
 export type DirectionMarker = {
   latitude: number;
@@ -98,30 +99,34 @@ export function routeGeometryRevision(geometry: GeoJsonLineString) {
   return `${geometry.coordinates.length}-${(hash >>> 0).toString(36)}`;
 }
 
-export function animateRoutePath(path: SVGPathElement, reducedMotion: boolean) {
-  if (reducedMotion) {
-    path.style.strokeDasharray = "none";
-    path.style.strokeDashoffset = "0";
+export function animateRouteLine(
+  map: MapLibreMap,
+  reducedMotion: boolean,
+  hasRoute: boolean,
+) {
+  if (!hasRoute) {
+    map.setPaintProperty("route-plan-line", "line-opacity", 0);
     return undefined;
   }
 
-  const length = path.getTotalLength();
-  path.style.strokeDasharray = `${length}`;
-  path.style.strokeDashoffset = `${length}`;
-  if (typeof path.animate !== "function") {
-    path.style.strokeDashoffset = "0";
+  map.setPaintProperty("route-plan-line", "line-opacity-transition", {
+    delay: 0,
+    duration: reducedMotion ? 0 : 1100,
+  });
+
+  if (reducedMotion || typeof window === "undefined") {
+    map.setPaintProperty("route-plan-line", "line-opacity", 0.88);
     return undefined;
   }
-  return path.animate(
-    [{ strokeDashoffset: `${length}` }, { strokeDashoffset: "0" }],
-    {
-      duration: 1100,
-      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-      fill: "forwards",
-    },
-  );
-}
 
-export function cancelRouteAnimations(animations: Animation[]) {
-  animations.forEach((animation) => animation.cancel());
+  map.setPaintProperty("route-plan-line", "line-opacity", 0);
+  let frame = 0;
+  const reveal = () => {
+    map.setPaintProperty("route-plan-line", "line-opacity", 0.88);
+  };
+  frame = window.requestAnimationFrame(reveal);
+
+  return () => {
+    window.cancelAnimationFrame(frame);
+  };
 }

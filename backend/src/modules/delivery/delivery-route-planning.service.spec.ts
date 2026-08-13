@@ -1,4 +1,7 @@
-import { UnprocessableEntityException } from '@nestjs/common';
+import {
+  ConflictException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { DeliveryRoutePlanningService } from './delivery-route-planning.service';
 import { RoutingProvidersService } from './routing-providers.service';
@@ -7,9 +10,11 @@ describe('DeliveryRoutePlanningService', () => {
   const admin = { id: 'admin-1', role: 'ADMIN' };
   const prisma = {
     user: { findFirst: jest.fn() },
+    vehicle: { findFirst: jest.fn() },
     operationalLocation: { findFirst: jest.fn() },
     sale: { findMany: jest.fn(), count: jest.fn() },
     deliveryRoutePlanDraft: { create: jest.fn() },
+    deliveryRoute: { findFirst: jest.fn() },
   };
   const providers = {
     optimizeStops: jest.fn(),
@@ -24,6 +29,11 @@ describe('DeliveryRoutePlanningService', () => {
       isActive: true,
       role: { name: 'DRIVER' },
     });
+    prisma.vehicle.findFirst.mockResolvedValue({
+      id: 'vehicle-1',
+      isActive: true,
+    });
+    prisma.deliveryRoute.findFirst.mockResolvedValue(null);
     prisma.operationalLocation.findFirst.mockResolvedValue({
       id: 'origin-1',
       latitude: '19.1802',
@@ -70,6 +80,7 @@ describe('DeliveryRoutePlanningService', () => {
     const result = await service.createPlan(
       {
         driverId: 'driver-1',
+        vehicleId: 'vehicle-1',
         scheduledDate: '2026-06-19',
         originLocationId: 'origin-1',
         stops: [
@@ -88,6 +99,7 @@ describe('DeliveryRoutePlanningService', () => {
     expect(result).toEqual(
       expect.objectContaining({
         id: 'plan-1',
+        vehicleId: 'vehicle-1',
         distanceMeters: 8600,
         durationSeconds: 1440,
         routingProfile: 'driving',
@@ -104,6 +116,7 @@ describe('DeliveryRoutePlanningService', () => {
     expect(prisma.deliveryRoutePlanDraft.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         createdByUserId: 'admin-1',
+        vehicleId: 'vehicle-1',
         consumedAt: null,
       }),
     });
@@ -115,6 +128,11 @@ describe('DeliveryRoutePlanningService', () => {
       isActive: true,
       role: { name: 'DRIVER' },
     });
+    prisma.vehicle.findFirst.mockResolvedValue({
+      id: 'vehicle-1',
+      isActive: true,
+    });
+    prisma.deliveryRoute.findFirst.mockResolvedValue(null);
     prisma.operationalLocation.findFirst.mockResolvedValue({
       id: 'origin-1',
       latitude: '19.1802',
@@ -131,6 +149,7 @@ describe('DeliveryRoutePlanningService', () => {
       service.createPlan(
         {
           driverId: 'driver-1',
+          vehicleId: 'vehicle-1',
           scheduledDate: '2026-06-19',
           originLocationId: 'origin-1',
           stops: [
@@ -145,6 +164,92 @@ describe('DeliveryRoutePlanningService', () => {
         admin,
       ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(prisma.deliveryRoutePlanDraft.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an inactive vehicle before calling routing providers', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'driver-1',
+      isActive: true,
+      role: { name: 'DRIVER' },
+    });
+    prisma.vehicle.findFirst.mockResolvedValue(null);
+
+    const service = new DeliveryRoutePlanningService(
+      prisma as unknown as PrismaService,
+      providers as unknown as RoutingProvidersService,
+    );
+
+    await expect(
+      service.createPlan(
+        {
+          driverId: 'driver-1',
+          vehicleId: 'vehicle-inactive',
+          scheduledDate: '2026-06-19',
+          originLocationId: 'origin-1',
+          stops: [
+            {
+              saleId: 'sale-1',
+              deliveryAddress: 'Av Centro 123',
+              latitude: 19.1738,
+              longitude: -96.1342,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(providers.optimizeStops).not.toHaveBeenCalled();
+  });
+
+  it('rejects planning while the selected vehicle is already in progress', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'driver-1',
+      isActive: true,
+      role: { name: 'DRIVER' },
+    });
+    prisma.vehicle.findFirst.mockResolvedValue({ id: 'vehicle-1' });
+    prisma.deliveryRoute.findFirst.mockResolvedValue({ id: 'route-1' });
+    prisma.operationalLocation.findFirst.mockResolvedValue({
+      id: 'origin-1',
+      latitude: '19.1802',
+      longitude: '-96.1421',
+      isActive: true,
+    });
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-1',
+        status: 'CONFIRMED',
+        cancelledAt: null,
+        routeId: null,
+        accountReceivable: { id: 'ar-1' },
+      },
+    ]);
+
+    const service = new DeliveryRoutePlanningService(
+      prisma as unknown as PrismaService,
+      providers as unknown as RoutingProvidersService,
+    );
+
+    await expect(
+      service.createPlan(
+        {
+          driverId: 'driver-1',
+          vehicleId: 'vehicle-1',
+          scheduledDate: '2026-06-19',
+          originLocationId: 'origin-1',
+          stops: [
+            {
+              saleId: 'sale-1',
+              deliveryAddress: 'Av Centro 123',
+              latitude: 19.1738,
+              longitude: -96.1342,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.deliveryRoutePlanDraft.create).not.toHaveBeenCalled();
   });
 });

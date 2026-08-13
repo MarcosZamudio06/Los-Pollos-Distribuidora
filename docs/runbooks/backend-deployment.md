@@ -141,6 +141,31 @@ Validate the complete environment before a release:
 docker compose -f docker-compose.production.yml config >/dev/null
 ```
 
+## Fleet geospatial runtime configuration
+
+The backend owns the private Photon, VROOM, and OSRM URLs. They are never
+copied into a `VITE_*` variable or returned by the browser-facing API. The
+frontend receives only the public MapLibre style URL through
+`VITE_MAP_STYLE_URL`; production image builds fail when it is missing.
+
+Set and validate these bounded values before a release:
+
+| Variable | Default | Contract |
+| --- | ---: | --- |
+| `FLEET_POSITION_STALE_SECONDS` | `60` | Positive seconds used by the backend to mark a live position stale. |
+| `FLEET_POSITION_FUTURE_TOLERANCE_SECONDS` | `300` | Positive seconds accepted for device clock skew. |
+| `FLEET_ANALYTICS_MAX_RANGE_DAYS` | `31` | Maximum historical heatmap range. |
+| `RATE_LIMIT_FLEET_POSITION_MAX` | `60` | Per-driver position publications per minute; normal 10-second tracking remains below this limit. |
+| `ROUTING_TIMEOUT_MS` | `10000` | Positive provider timeout, capped at 120000 ms. |
+| `MAP_DATA_VERSION` | — | Required production routing dataset version. |
+| `MAP_DATA_PREPARED_AT` | — | Optional ISO timestamp; omit only when freshness is intentionally unknown. |
+
+The Socket.IO namespace is `/fleet` on the existing `/api/socket.io` path.
+The frontend proxy must preserve `Upgrade` and `Connection: upgrade`; no
+additional WebSocket port is deployed. A disconnected socket is not a source
+of truth: the frontend keeps its last REST snapshot and performs one
+`GET /api/fleet/live` reconciliation after reconnecting.
+
 ## Release sequence
 
 1. Build and publish the backend image once. Set `BACKEND_IMAGE` to its

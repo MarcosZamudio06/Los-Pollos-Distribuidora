@@ -4,10 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
   CollectionStatus,
+  DeliveryIncidentStatus,
+  DeliveryIncidentType,
   DeliveryEvidenceType,
   DeliveryOrderStatus,
   DeliveryRouteStatus,
@@ -23,6 +26,8 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { InventoryBalanceService } from '../inventory/inventory-balance.service';
+import { FleetGateway } from '../fleet/fleet.gateway';
+import type { FleetIncidentCreatedPayload } from '../fleet/fleet-realtime.types';
 import {
   CreateDeliveryRouteDto,
   AssignDeliveryRouteOrdersDto,
@@ -72,6 +77,40 @@ type DeliveryEvidenceRecord = {
   type: DeliveryEvidenceType;
   value: string;
   capturedAt: Date;
+};
+
+type IncidentPositionRecord = {
+  id: string;
+  latitude: DecimalLike;
+  longitude: DecimalLike;
+  recordedAt: Date;
+};
+
+type DeliveryIncidentRecord = Record<string, unknown> & {
+  id: string;
+  type: DeliveryIncidentType;
+  status: DeliveryIncidentStatus;
+  reason: string;
+  details?: string | null;
+  routeId?: string | null;
+  deliveryOrderId?: string | null;
+  vehicleId?: string | null;
+  driverId?: string | null;
+  positionId?: string | null;
+  statusSnapshot: DeliveryOrderStatus;
+  latitude?: DecimalLike;
+  longitude?: DecimalLike;
+  zoneId?: string | null;
+  returnedItems?: Prisma.JsonValue | null;
+  evidence?: Prisma.JsonValue | null;
+  resolution?: string | null;
+  occurredAt: Date;
+  reportedAt: Date;
+  reportedByUserId: string;
+  resolvedAt?: Date | null;
+  resolvedByUserId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type RouteCollectionReceivable = {
@@ -127,6 +166,13 @@ type RouteSettlementRecord = {
   updatedAt?: Date;
 };
 
+type VehicleSummary = {
+  id: string;
+  code: string;
+  displayName: string;
+  plateNumber: string | null;
+};
+
 type AssignableSaleRecord = {
   id: string;
   status: SaleStatus;
@@ -146,6 +192,8 @@ type DeliveryRouteRecord = Record<string, unknown> & {
   name: string;
   driverId: string;
   driver?: { id: string; name: string } | null;
+  vehicleId?: string | null;
+  vehicle?: VehicleSummary | null;
   status: DeliveryRouteStatus;
   scheduledDate: Date;
   originLocationId?: string | null;
@@ -193,11 +241,14 @@ const INCIDENT_STATUS_REQUIRING_NOTES = new Set<DeliveryOrderStatus>([
   DeliveryOrderStatus.RETURNED,
 ]);
 
+const INCIDENT_POSITION_MAX_AGE_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class DeliveryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
+    @Optional() private readonly fleetGateway?: FleetGateway,
   ) {}
 
   async findRoutes(query: ListDeliveryRoutesQueryDto = {}, currentUser: Actor) {
@@ -230,6 +281,7 @@ export class DeliveryService {
       where: this.buildRouteAccessWhere(id, currentUser),
       include: {
         driver: { select: { id: true, name: true } },
+        vehicle: { select: this.routeVehicleSelect() },
         settlement: { select: { id: true } },
         payments: { where: { status: PaymentStatus.APPLIED } },
         deliveryOrders: {
@@ -280,6 +332,7 @@ export class DeliveryService {
 
     return this.prisma.$transaction(async (tx) => {
       await this.assertDriver(tx, dto.driverId);
+      if (dto.vehicleId) await this.assertActiveVehicle(tx, dto.vehicleId);
       await this.assertAssignableSales(tx, dto.orders);
 
       const routeStockLocationId = dto.routeStockLocationId
@@ -293,6 +346,7 @@ export class DeliveryService {
         data: {
           name: dto.name.trim(),
           driverId: dto.driverId,
+          ...(dto.vehicleId ? { vehicleId: dto.vehicleId } : {}),
           scheduledDate: new Date(dto.scheduledDate),
           originLocationId: dto.originLocationId ?? null,
           routeStockLocationId,
@@ -306,6 +360,7 @@ export class DeliveryService {
         },
         include: {
           driver: { select: { id: true, name: true } },
+          vehicle: { select: this.routeVehicleSelect() },
           settlement: { select: { id: true } },
           payments: { where: { status: PaymentStatus.APPLIED } },
           deliveryOrders: {
@@ -371,7 +426,24 @@ export class DeliveryService {
           'Delivery route plan does not match the route context',
         );
       }
+      if (!plan.vehicleId) {
+        throw new ConflictException(
+          'Delivery route plan is missing its required vehicle',
+        );
+      }
+      if (!dto.vehicleId) {
+        throw new BadRequestException(
+          'vehicleId is required for optimized route creation',
+        );
+      }
+      if (dto.vehicleId !== plan.vehicleId) {
+        throw new ConflictException(
+          'vehicleId must match the delivery route plan vehicle',
+        );
+      }
       await this.assertDriver(tx, dto.driverId);
+      await this.assertActiveVehicle(tx, plan.vehicleId);
+      await this.assertVehicleAvailable(tx, plan.vehicleId);
       const origin = await tx.operationalLocation.findFirst({
         where: {
           id: dto.originLocationId,
@@ -405,6 +477,7 @@ export class DeliveryService {
         data: {
           name: dto.name.trim(),
           driverId: dto.driverId,
+          vehicleId: plan.vehicleId,
           scheduledDate: new Date(dto.scheduledDate),
           originLocationId: dto.originLocationId,
           routeStockLocationId,
@@ -469,6 +542,7 @@ export class DeliveryService {
       const route = (await tx.deliveryRoute.findFirst({
         where: this.buildRouteAccessWhere(id, currentUser),
         include: {
+          vehicle: { select: this.routeVehicleSelect() },
           settlement: { select: { id: true } },
           deliveryOrders: true,
         },
@@ -512,6 +586,7 @@ export class DeliveryService {
         },
         include: {
           driver: { select: { id: true, name: true } },
+          vehicle: { select: this.routeVehicleSelect() },
           settlement: { select: { id: true } },
           payments: { where: { status: PaymentStatus.APPLIED } },
           deliveryOrders: {
@@ -544,7 +619,11 @@ export class DeliveryService {
     return this.prisma.$transaction(async (tx) => {
       const route = (await tx.deliveryRoute.findFirst({
         where: this.buildRouteAccessWhere(id, currentUser),
-        include: { settlement: { select: { id: true } }, deliveryOrders: true },
+        include: {
+          vehicle: { select: this.routeVehicleSelect() },
+          settlement: { select: { id: true } },
+          deliveryOrders: true,
+        },
       })) as DeliveryRouteRecord | null;
       if (!route) throw new NotFoundException('Delivery route not found');
       if (route.optimizationStatus !== RouteOptimizationStatus.OPTIMIZED)
@@ -575,6 +654,18 @@ export class DeliveryService {
         throw new ConflictException(
           'Delivery route plan does not match the route context',
         );
+      if (!plan.vehicleId) {
+        throw new ConflictException(
+          'Delivery route plan is missing its required vehicle',
+        );
+      }
+      if (route.vehicleId && route.vehicleId !== plan.vehicleId) {
+        throw new ConflictException(
+          'Delivery route plan vehicle does not match the route vehicle',
+        );
+      }
+      await this.assertActiveVehicle(tx, plan.vehicleId);
+      await this.assertVehicleAvailable(tx, plan.vehicleId);
       const stops = plan.orderedStops as unknown as PlannedStop[];
       const existingBySale = new Map(
         (route.deliveryOrders ?? []).map((order) => [order.saleId, order]),
@@ -623,6 +714,7 @@ export class DeliveryService {
       const updated = (await tx.deliveryRoute.update({
         where: { id: route.id },
         data: {
+          ...(route.vehicleId ? {} : { vehicleId: plan.vehicleId }),
           geometry: plan.geometry,
           distanceMeters: plan.distanceMeters,
           durationSeconds: plan.durationSeconds,
@@ -694,19 +786,51 @@ export class DeliveryService {
     }
 
     const now = new Date();
-    const updated = (await this.prisma.deliveryRoute.update({
-      where: { id: route.id },
-      data: {
-        status: dto.status,
-        ...(dto.status === DeliveryRouteStatus.IN_PROGRESS && !route.startedAt
-          ? { startedAt: now }
-          : {}),
-        ...(dto.status === DeliveryRouteStatus.COMPLETED && !route.completedAt
-          ? { completedAt: now }
-          : {}),
-      },
-      include: this.routeListInclude(),
-    })) as DeliveryRouteRecord;
+    const updateData = {
+      status: dto.status,
+      ...(dto.status === DeliveryRouteStatus.IN_PROGRESS && !route.startedAt
+        ? { startedAt: now }
+        : {}),
+      ...(dto.status === DeliveryRouteStatus.COMPLETED && !route.completedAt
+        ? { completedAt: now }
+        : {}),
+    };
+
+    let updated: DeliveryRouteRecord;
+    if (dto.status === DeliveryRouteStatus.IN_PROGRESS && route.vehicleId) {
+      updated = await this.prisma
+        .$transaction(async (tx) => {
+          await this.assertActiveVehicle(tx, route.vehicleId as string);
+          const conflict = await tx.deliveryRoute.findFirst({
+            where: {
+              vehicleId: route.vehicleId as string,
+              status: DeliveryRouteStatus.IN_PROGRESS,
+              id: { not: route.id },
+            },
+            select: { id: true },
+          });
+          if (conflict) {
+            throw new ConflictException(
+              'The vehicle already has another in-progress route',
+            );
+          }
+          return tx.deliveryRoute.update({
+            where: { id: route.id },
+            data: updateData,
+            include: this.routeListInclude(),
+          });
+        })
+        .catch((error: unknown) => {
+          this.throwVehicleInProgressConflict(error);
+          throw error;
+        });
+    } else {
+      updated = await this.prisma.deliveryRoute.update({
+        where: { id: route.id },
+        data: updateData,
+        include: this.routeListInclude(),
+      });
+    }
 
     return this.toRouteListItem(updated);
   }
@@ -908,7 +1032,7 @@ export class DeliveryService {
       throw new BadRequestException('reason is required');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const transactionResult = await this.prisma.$transaction(async (tx) => {
       const order = await this.findAccessibleOrder(id, currentUser, tx);
       if (!order.route?.routeStockLocationId) {
         throw new BadRequestException(
@@ -948,13 +1072,156 @@ export class DeliveryService {
         inventoryMovements.push(movement);
       }
 
+      const occurredAt = new Date();
+      const position = await this.findRecentIncidentPosition(
+        tx,
+        order,
+        occurredAt,
+      );
+      const incident = (await tx.deliveryIncident.create({
+        data: {
+          type: this.incidentTypeForStatus(dto.status),
+          status: DeliveryIncidentStatus.OPEN,
+          reason: dto.reason.trim(),
+          routeId: order.routeId,
+          deliveryOrderId: order.id,
+          vehicleId: order.route.vehicleId ?? null,
+          driverId: order.route.driverId ?? null,
+          positionId: position?.id ?? null,
+          statusSnapshot: updatedOrder.status,
+          latitude: position?.latitude ?? null,
+          longitude: position?.longitude ?? null,
+          returnedItems: (dto.returnedItems ??
+            []) as unknown as Prisma.InputJsonValue,
+          evidence: [],
+          occurredAt,
+          reportedByUserId: currentUser.id,
+        },
+      })) as DeliveryIncidentRecord;
+
+      const incidentResponse = this.toIncidentResponse(incident, order);
+
       return {
         deliveryOrder: this.toOrderResponse(updatedOrder),
         inventoryMovements: inventoryMovements.map((movement) =>
           this.toInventoryMovementResponse(movement),
         ),
+        incident: incidentResponse,
+        event: this.toIncidentEventPayload(incident, order),
+        originLocationId: order.route.originLocationId ?? null,
       };
     });
+
+    this.publishIncidentCreated(
+      transactionResult.event,
+      transactionResult.originLocationId,
+    );
+
+    return {
+      deliveryOrder: transactionResult.deliveryOrder,
+      inventoryMovements: transactionResult.inventoryMovements,
+      incident: transactionResult.incident,
+    };
+  }
+
+  private async findRecentIncidentPosition(
+    tx: Prisma.TransactionClient,
+    order: DeliveryOrderRecord,
+    occurredAt: Date,
+  ): Promise<IncidentPositionRecord | null> {
+    const vehicleId = order.route?.vehicleId;
+    if (!vehicleId) return null;
+
+    return await tx.vehiclePosition.findFirst({
+      where: {
+        routeId: order.routeId,
+        vehicleId,
+        driverId: order.route?.driverId,
+        recordedAt: {
+          gte: new Date(occurredAt.getTime() - INCIDENT_POSITION_MAX_AGE_MS),
+          lte: occurredAt,
+        },
+      },
+      orderBy: [{ recordedAt: 'desc' }, { receivedAt: 'desc' }],
+      select: { id: true, latitude: true, longitude: true, recordedAt: true },
+    });
+  }
+
+  private incidentTypeForStatus(
+    status: DeliveryOrderStatus,
+  ): DeliveryIncidentType {
+    switch (status) {
+      case DeliveryOrderStatus.NOT_DELIVERED:
+      case DeliveryOrderStatus.PARTIALLY_REJECTED:
+      case DeliveryOrderStatus.RETURNED:
+        return DeliveryIncidentType.DELIVERY_FAILURE;
+      default:
+        return DeliveryIncidentType.OTHER;
+    }
+  }
+
+  private toIncidentResponse(
+    incident: DeliveryIncidentRecord,
+    order: DeliveryOrderRecord,
+  ) {
+    return {
+      id: incident.id,
+      type: incident.type,
+      status: incident.status,
+      reason: incident.reason,
+      details: incident.details ?? null,
+      routeId: incident.routeId ?? order.routeId,
+      deliveryOrderId: incident.deliveryOrderId ?? order.id,
+      vehicleId: incident.vehicleId ?? order.route?.vehicleId ?? null,
+      driverId: incident.driverId ?? order.route?.driverId ?? null,
+      positionId: incident.positionId ?? null,
+      statusSnapshot: incident.statusSnapshot,
+      latitude: this.toNumberOrNull(incident.latitude),
+      longitude: this.toNumberOrNull(incident.longitude),
+      zoneId: incident.zoneId ?? null,
+      returnedItems: incident.returnedItems ?? [],
+      evidence: incident.evidence ?? [],
+      resolution: incident.resolution ?? null,
+      occurredAt: incident.occurredAt.toISOString(),
+      reportedAt: incident.reportedAt.toISOString(),
+      reportedByUserId: incident.reportedByUserId,
+      resolvedAt: incident.resolvedAt?.toISOString() ?? null,
+      resolvedByUserId: incident.resolvedByUserId ?? null,
+      createdAt: incident.createdAt.toISOString(),
+      updatedAt: incident.updatedAt.toISOString(),
+      position: this.coordinatePair(incident.latitude, incident.longitude),
+      stop: this.coordinatePair(order.latitude, order.longitude),
+    };
+  }
+
+  private toIncidentEventPayload(
+    incident: DeliveryIncidentRecord,
+    order: DeliveryOrderRecord,
+  ): FleetIncidentCreatedPayload {
+    return {
+      incidentId: incident.id,
+      deliveryOrderId: order.id,
+      routeId: order.routeId,
+      vehicleId: order.route?.vehicleId ?? null,
+      driverId: order.route?.driverId ?? '',
+      status: incident.status,
+      reason: incident.reason,
+      occurredAt: incident.occurredAt.toISOString(),
+      position: this.coordinatePair(incident.latitude, incident.longitude),
+      stop: this.coordinatePair(order.latitude, order.longitude),
+    };
+  }
+
+  private publishIncidentCreated(
+    payload: FleetIncidentCreatedPayload,
+    originLocationId: string | null,
+  ): void {
+    if (!this.fleetGateway) return;
+    try {
+      this.fleetGateway.emitIncidentCreated(payload, originLocationId);
+    } catch {
+      // The committed incident remains authoritative when realtime delivery is unavailable.
+    }
   }
 
   async openSettlement(routeId: string, currentUser: Actor) {
@@ -1157,6 +1424,7 @@ export class DeliveryService {
       ...(query.originLocationId
         ? { originLocationId: query.originLocationId }
         : {}),
+      ...(query.vehicleId ? { vehicleId: query.vehicleId } : {}),
       ...(query.scheduledDate
         ? { scheduledDate: this.buildDateFilter(query.scheduledDate) }
         : {}),
@@ -1230,6 +1498,7 @@ export class DeliveryService {
   private routeListInclude() {
     return {
       driver: { select: { id: true, name: true } },
+      vehicle: { select: this.routeVehicleSelect() },
       settlement: { select: { id: true } },
       deliveryOrders: true,
     };
@@ -1238,6 +1507,7 @@ export class DeliveryService {
   private routeDetailInclude() {
     return {
       driver: { select: { id: true, name: true } },
+      vehicle: { select: this.routeVehicleSelect() },
       settlement: { select: { id: true } },
       payments: { where: { status: PaymentStatus.APPLIED } },
       deliveryOrders: {
@@ -1257,6 +1527,15 @@ export class DeliveryService {
           evidence: { select: { type: true } },
         },
       },
+    };
+  }
+
+  private routeVehicleSelect() {
+    return {
+      id: true,
+      code: true,
+      displayName: true,
+      plateNumber: true,
     };
   }
 
@@ -1308,6 +1587,50 @@ export class DeliveryService {
     if (!driver) {
       throw new BadRequestException(
         'Assigned driver must be an active DRIVER user',
+      );
+    }
+  }
+
+  private async assertActiveVehicle(
+    tx: Prisma.TransactionClient,
+    vehicleId: string,
+  ) {
+    const vehicle = await tx.vehicle.findFirst({
+      where: { id: vehicleId, isActive: true },
+      select: { id: true },
+    });
+    if (!vehicle) {
+      throw new BadRequestException(
+        'Assigned vehicle must be an active fleet vehicle',
+      );
+    }
+  }
+
+  private async assertVehicleAvailable(
+    tx: Prisma.TransactionClient,
+    vehicleId: string,
+  ) {
+    const activeRoute = await tx.deliveryRoute.findFirst({
+      where: {
+        vehicleId,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+      },
+      select: { id: true },
+    });
+    if (activeRoute) {
+      throw new ConflictException(
+        'The selected vehicle already has an in-progress route',
+      );
+    }
+  }
+
+  private throwVehicleInProgressConflict(error: unknown): void {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'The vehicle already has another in-progress route',
       );
     }
   }
@@ -1413,6 +1736,16 @@ export class DeliveryService {
       name: route.name,
       driverId: route.driverId,
       driverName: route.driver?.name ?? null,
+      vehicleId: route.vehicle?.id ?? route.vehicleId ?? null,
+      vehicleCode: route.vehicle?.code ?? null,
+      vehicle: route.vehicle
+        ? {
+            id: route.vehicle.id,
+            code: route.vehicle.code,
+            displayName: route.vehicle.displayName,
+            plateNumber: route.vehicle.plateNumber,
+          }
+        : null,
       status: route.status,
       scheduledDate: route.scheduledDate.toISOString(),
       originLocationId: route.originLocationId ?? null,
@@ -1814,6 +2147,23 @@ export class DeliveryService {
   private toNumber(value: DecimalLike): number {
     if (value === null || value === undefined) return 0;
     return Number(value.toString());
+  }
+
+  private toNumberOrNull(value: DecimalLike): number | null {
+    if (value === null || value === undefined) return null;
+    const parsed = this.toNumber(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private coordinatePair(
+    latitude: DecimalLike,
+    longitude: DecimalLike,
+  ): { latitude: number; longitude: number } | null {
+    const parsedLatitude = this.toNumberOrNull(latitude);
+    const parsedLongitude = this.toNumberOrNull(longitude);
+    return parsedLatitude === null || parsedLongitude === null
+      ? null
+      : { latitude: parsedLatitude, longitude: parsedLongitude };
   }
 
   private roundMoney(value: number): number {

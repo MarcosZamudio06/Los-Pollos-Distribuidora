@@ -75,6 +75,7 @@ export function RoutePlannerPage() {
     scheduledDate: new Date().toISOString().slice(0, 10),
     originLocationId: "",
     driverId: "",
+    vehicleId: "",
   });
   const [salesSearch, setSalesSearch] = useState("");
   const [stops, setStops] = useState<DraftStop[]>([]);
@@ -121,6 +122,7 @@ export function RoutePlannerPage() {
   const canCalculate = Boolean(
     (isReoptimization || form.name.trim()) &&
     form.driverId &&
+    form.vehicleId &&
     form.scheduledDate &&
     origin?.latitude != null &&
     origin?.longitude != null &&
@@ -172,6 +174,7 @@ export function RoutePlannerPage() {
     setForm({
       name: route.name,
       driverId: route.driverId ?? "",
+      vehicleId: route.vehicleId ?? "",
       originLocationId: route.originLocationId ?? "",
       scheduledDate:
         route.scheduledDate?.slice(0, 10) ??
@@ -309,6 +312,7 @@ export function RoutePlannerPage() {
       const result = await createPlan.mutateAsync({
         routeId,
         driverId: form.driverId,
+        vehicleId: form.vehicleId,
         scheduledDate: form.scheduledDate,
         originLocationId: form.originLocationId,
         stops: locatedStops.map((stop) => ({
@@ -346,6 +350,7 @@ export function RoutePlannerPage() {
           payload: {
             name: form.name.trim(),
             driverId: form.driverId,
+            vehicleId: form.vehicleId,
             scheduledDate: form.scheduledDate,
             originLocationId: form.originLocationId,
             routePlanId: plan.id,
@@ -484,8 +489,29 @@ export function RoutePlannerPage() {
                     ))}
                   </SelectInput>
                 </Field>
+                <Field label="Unidad">
+                  <SelectInput
+                    disabled={
+                      isReoptimization &&
+                      existingRoute.data?.vehicleId != null
+                    }
+                    value={form.vehicleId}
+                    onChange={(e) => changeForm("vehicleId", e.target.value)}
+                  >
+                    <option value="">Selecciona unidad</option>
+                    {(catalog.vehicles?.data?.items ?? [])
+                      .filter((vehicle) => vehicle.isActive)
+                      .map((vehicle) => (
+                        <option key={vehicle.id} value={vehicle.id}>
+                          {vehicle.displayName} · {vehicle.code}
+                        </option>
+                      ))}
+                  </SelectInput>
+                </Field>
               </div>
-              {(catalog.drivers.error || catalog.locations.error) && (
+              {(catalog.drivers.error ||
+                catalog.locations.error ||
+                catalog.vehicles?.error) && (
                 <div className="mt-4">
                   <StatusMessage tone="error">
                     No se pudo cargar el catálogo operativo.
@@ -811,6 +837,12 @@ export function RoutePlannerPage() {
             <strong>Repartidor:</strong>{" "}
             {catalog.drivers.data?.find((driver) => driver.id === form.driverId)
               ?.name ?? existingRoute.data?.driverName}
+          </p>
+          <p>
+            <strong>Unidad:</strong>{" "}
+            {catalog.vehicles?.data?.items.find(
+              (vehicle) => vehicle.id === form.vehicleId,
+            )?.displayName ?? "Sin unidad seleccionada"}
           </p>
           <p>
             <strong>Recorrido:</strong> {stops.length} paradas ·{" "}

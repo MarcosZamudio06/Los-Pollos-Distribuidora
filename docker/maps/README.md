@@ -69,10 +69,14 @@ Run during a maintenance window:
 
 The refresh stages and validates replacement data before activation, recreates only the map services and backend, then executes health and controlled-route smoke checks. Persist the printed `MAP_DATA_VERSION` and `MAP_DATA_PREPARED_AT` values in the deployment configuration. Existing routes keep their original `routingDataVersion`; they are never rewritten during a dataset refresh.
 
-The ADMIN route control page reads `GET /api/delivery-routing/technical-status`. It reports PostGIS, Photon, VROOM, OSRM, dataset version, and dataset age without exposing internal service URLs.
+The ADMIN route control page reads `GET /api/delivery-routing/technical-status`. It reports PostGIS, Photon, VROOM, OSRM, `routingDataVersion`, Fleet persistence, and the aggregate age of the newest persisted vehicle position without exposing internal service URLs or personal data. MapLibre style configuration remains frontend-only through `VITE_MAP_STYLE_URL`.
 
 ## Boundaries
 
 - Dataset preparation is explicit and never runs during normal application startup.
 - Map services have no host ports; the NestJS backend will be their only application consumer.
-- PostGIS schema migrations and backend provider adapters belong to later implementation phases.
+- PostGIS schema migrations are applied by the explicit migration job; backend
+  provider adapters remain the only application consumers of the private map
+  services.
+- GPS snapshots and Socket.IO deltas are recoverable from PostgreSQL; Socket.IO
+  memory is never the source of truth.

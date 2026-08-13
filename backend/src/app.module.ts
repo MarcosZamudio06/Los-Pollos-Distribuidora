@@ -29,6 +29,7 @@ import { SalesModule } from './modules/sales/sales.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
+import { FleetModule } from './modules/fleet/fleet.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { BillingRequestsModule } from './modules/billing-requests/billing-requests.module';
 import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close/point-of-sale-daily-close.module';
@@ -70,6 +71,7 @@ import { HealthModule } from './modules/health/health.module';
     SuppliersModule,
     PurchasesModule,
     DeliveryModule,
+    FleetModule,
     ReportsModule,
     BillingRequestsModule,
     PointOfSaleDailyCloseModule,

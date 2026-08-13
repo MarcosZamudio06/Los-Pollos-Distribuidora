@@ -74,6 +74,26 @@ const userCedisAssignmentMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260810100000_add_user_cedis_assignment/migration.sql',
 );
+const vehicleMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260812120000_add_vehicle_to_delivery_routes/migration.sql',
+);
+const vehiclePositionsMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260812130000_add_vehicle_positions/migration.sql',
+);
+const deliveryZonesMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260812140000_add_delivery_zones_geofences/migration.sql',
+);
+const deliveryIncidentsMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260812150000_add_delivery_incidents/migration.sql',
+);
+const fleetHeatmapIndexesMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260812160000_add_fleet_heatmap_indexes/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -130,6 +150,12 @@ describe('Prisma schema contract', () => {
       'DiscountAuthorization',
       'BillingPolicy',
       'OperationalConfig',
+      'Vehicle',
+      'VehiclePosition',
+      'DeliveryZone',
+      'GeofenceEvent',
+      'VehicleGeofenceState',
+      'DeliveryIncident',
       'DeliveryRoute',
       'DeliveryRoutePlanDraft',
       'DeliveryOrder',
@@ -168,13 +194,131 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(62);
+    expect(modelNames).toHaveLength(68);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
     expect(getModelBlock('Product')).not.toMatch(/\bstock\b/);
     expect(getModelBlock('Role')).toMatch(/version\s+Int\s+@default\(1\)/);
     expect(getModelBlock('AccessControlAuditLog')).toMatch(/reason\s+String/);
+  });
+
+  it('associates fleet units without requiring a vehicle on historical routes', () => {
+    const vehicle = getModelBlock('Vehicle');
+    const route = getModelBlock('DeliveryRoute');
+    const plan = getModelBlock('DeliveryRoutePlanDraft');
+    const migrationSql = readFileSync(vehicleMigrationSqlPath, 'utf8');
+
+    expect(vehicle).toMatch(/code\s+String\s+@unique/);
+    expect(vehicle).toMatch(/plateNumber\s+String\?\s+@unique/);
+    expect(vehicle).toMatch(/homeLocationId\s+String\?/);
+    expect(vehicle).toMatch(/isActive\s+Boolean\s+@default\(true\)/);
+    expect(route).toMatch(/vehicleId\s+String\?/);
+    expect(plan).toMatch(/vehicleId\s+String/);
+    expect(migrationSql).toMatch(/CREATE TABLE "Vehicle"/);
+    expect(migrationSql).toMatch(
+      /CREATE UNIQUE INDEX "DeliveryRoute_vehicleId_in_progress_key"/,
+    );
+    expect(migrationSql).toMatch(
+      /ALTER TABLE "DeliveryRoute"\s+\n?\s*ADD COLUMN "vehicleId" TEXT/,
+    );
+  });
+
+  it('keeps persisted heatmap sources indexed for bounded analytics queries', () => {
+    const deliveryOrder = getModelBlock('DeliveryOrder');
+    const deliveryIncident = getModelBlock('DeliveryIncident');
+    const migrationSql = readFileSync(
+      fleetHeatmapIndexesMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(deliveryOrder).toMatch(
+      /@@index\(\[status, deliveredAt, routeId\]\)/,
+    );
+    expect(deliveryIncident).toMatch(
+      /@@index\(\[occurredAt, routeId, vehicleId\]\)/,
+    );
+    expect(migrationSql).toMatch(
+      /CREATE INDEX "DeliveryOrder_status_deliveredAt_routeId_idx"/,
+    );
+    expect(migrationSql).toMatch(
+      /CREATE INDEX "DeliveryIncident_occurredAt_routeId_vehicleId_idx"/,
+    );
+  });
+
+  it('persists vehicle positions in PostGIS with route, vehicle, and driver indexes', () => {
+    const position = getModelBlock('VehiclePosition');
+    const migrationSql = readFileSync(vehiclePositionsMigrationSqlPath, 'utf8');
+
+    expect(position).toMatch(/clientEventId\s+String\s+@unique/);
+    expect(position).toMatch(/latitude\s+Decimal\s+@db\.Decimal\(9, 6\)/);
+    expect(position).toMatch(/longitude\s+Decimal\s+@db\.Decimal\(9, 6\)/);
+    expect(position).toMatch(
+      /positionPoint\s+Unsupported\("geometry\(Point, 4326\)"\)/,
+    );
+    expect(position).toMatch(
+      /@@index\(\[vehicleId, recordedAt\(sort: Desc\)\]\)/,
+    );
+    expect(position).toMatch(/@@index\(\[routeId, recordedAt\]\)/);
+    expect(position).toMatch(/@@index\(\[driverId, recordedAt\]\)/);
+    expect(migrationSql).toContain('CREATE TABLE "VehiclePosition"');
+    expect(migrationSql).toMatch(
+      /GENERATED ALWAYS AS[\s\S]*ST_MakePoint\([\s\S]*"longitude"[\s\S]*"latitude"/,
+    );
+    expect(migrationSql).toContain('USING GIST ("positionPoint")');
+    expect(migrationSql).toContain('VehiclePosition_vehicleId_recordedAt_idx');
+    expect(migrationSql).toContain('VehiclePosition_routeId_recordedAt_idx');
+    expect(migrationSql).toContain('VehiclePosition_driverId_recordedAt_idx');
+    expect(migrationSql).not.toMatch(/"positionPoint"\s+JSON/i);
+  });
+
+  it('persists delivery zones and geofence transitions with spatial constraints', () => {
+    const zone = getModelBlock('DeliveryZone');
+    const event = getModelBlock('GeofenceEvent');
+    const state = getModelBlock('VehicleGeofenceState');
+    const eventType = getEnumBlock('GeofenceEventType');
+    const migrationSql = readFileSync(deliveryZonesMigrationSqlPath, 'utf8');
+
+    expect(eventType).toMatch(/ENTER/);
+    expect(eventType).toMatch(/EXIT/);
+    expect(zone).toMatch(/geometry\s+Json/);
+    expect(zone).toMatch(
+      /zoneGeometry\s+Unsupported\("geometry\(Polygon, 4326\)"\)/,
+    );
+    expect(zone).toMatch(/originLocationId\s+String/);
+    expect(event).toMatch(/positionId\s+String/);
+    expect(event).toMatch(/type\s+GeofenceEventType/);
+    expect(event).toMatch(/@@unique\(\[zoneId, positionId, type\]\)/);
+    expect(state).toMatch(/@@id\(\[vehicleId, zoneId\]\)/);
+    expect(migrationSql).toContain('CREATE TYPE "GeofenceEventType"');
+    expect(migrationSql).toContain('geometry(Polygon, 4326) NOT NULL');
+    expect(migrationSql).toContain('USING GIST ("zoneGeometry")');
+    expect(migrationSql).toContain('GeofenceEvent_zoneId_positionId_type_key');
+    expect(migrationSql).toContain('VehicleGeofenceState_pkey');
+  });
+
+  it('persists delivery incidents with route/order traceability and optional GPS', () => {
+    const incident = getModelBlock('DeliveryIncident');
+    const incidentType = getEnumBlock('DeliveryIncidentType');
+    const incidentStatus = getEnumBlock('DeliveryIncidentStatus');
+    const migrationSql = readFileSync(
+      deliveryIncidentsMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(incidentType).toMatch(/DELIVERY_FAILURE/);
+    expect(incidentStatus).toMatch(/OPEN/);
+    expect(incident).toMatch(/routeId\s+String\?/);
+    expect(incident).toMatch(/deliveryOrderId\s+String\?/);
+    expect(incident).toMatch(/reportedByUserId\s+String/);
+    expect(incident).toMatch(/statusSnapshot\s+DeliveryOrderStatus/);
+    expect(incident).toMatch(/latitude\s+Decimal\?/);
+    expect(incident).toMatch(/longitude\s+Decimal\?/);
+    expect(incident).toMatch(/returnedItems\s+Json/);
+    expect(migrationSql).toContain('CREATE TABLE "DeliveryIncident"');
+    expect(migrationSql).toContain('DeliveryIncident_context_check');
+    expect(migrationSql).toContain('DeliveryIncident_coordinates_check');
+    expect(migrationSql).toContain('DeliveryIncident_routeId_occurredAt_idx');
   });
 
   it('defines the branch supply cycle enums and snapshot models', () => {

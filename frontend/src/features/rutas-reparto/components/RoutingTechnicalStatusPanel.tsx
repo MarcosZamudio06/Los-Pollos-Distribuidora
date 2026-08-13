@@ -104,6 +104,38 @@ export function RoutingTechnicalStatusPanel({ data, error, isLoading }: Props) {
                   : "Dataset dentro de vigencia"}
               </p>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+                  Persistencia Fleet
+                </p>
+                <p className="mt-2 font-black">
+                  {data.fleetPersistence.status === "up"
+                    ? "Disponible"
+                    : "No disponible"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+                  Última posición GPS
+                </p>
+                <p className="mt-2 font-black tabular-nums">
+                  {data.latestVehiclePositionAgeSeconds == null
+                    ? "Sin posiciones"
+                    : `${data.latestVehiclePositionAgeSeconds} s atrás`}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+                  Tráfico externo
+                </p>
+                <p className="mt-2 font-black">
+                  {data.traffic.available
+                    ? data.traffic.provider ?? "Disponible"
+                    : "No disponible"}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

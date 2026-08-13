@@ -37,8 +37,14 @@ describe('validateEnvironment', () => {
         CORS_ORIGINS: ['https://erp.example.com', 'https://pos.example.com'],
         HTTP_BODY_LIMIT: '1mb',
         RATE_LIMIT_GLOBAL_MAX: 600,
+        RATE_LIMIT_FLEET_POSITION_MAX: 60,
+        ROUTING_TIMEOUT_MS: 10000,
+        MAP_DATA_VERSION: 'unknown',
         SWAGGER_ENABLED: true,
         TRUST_PROXY_HOPS: 0,
+        FLEET_POSITION_STALE_SECONDS: 60,
+        FLEET_POSITION_FUTURE_TOLERANCE_SECONDS: 300,
+        FLEET_ANALYTICS_MAX_RANGE_DAYS: 31,
       }),
     );
   });
@@ -59,6 +65,24 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ RATE_LIMIT_GLOBAL_MAX: '0' })).toThrow(
       'RATE_LIMIT_GLOBAL_MAX must be a positive integer',
     );
+    expect(() =>
+      validateEnvironment({ FLEET_POSITION_STALE_SECONDS: '0' }),
+    ).toThrow('FLEET_POSITION_STALE_SECONDS must be a positive integer');
+    expect(() =>
+      validateEnvironment({ FLEET_ANALYTICS_MAX_RANGE_DAYS: '0' }),
+    ).toThrow('FLEET_ANALYTICS_MAX_RANGE_DAYS must be a positive integer');
+    expect(() => validateEnvironment({ ROUTING_TIMEOUT_MS: '120001' })).toThrow(
+      'ROUTING_TIMEOUT_MS cannot exceed 120000 milliseconds',
+    );
+    expect(() =>
+      validateEnvironment({ PHOTON_URL: 'ftp://photon.internal' }),
+    ).toThrow('PHOTON_URL must use HTTP or HTTPS');
+    expect(() =>
+      validateEnvironment({ VROOM_URL: 'https://user:pass@vroom.internal' }),
+    ).toThrow('VROOM_URL must not include URL credentials');
+    expect(() =>
+      validateEnvironment({ MAP_DATA_PREPARED_AT: 'not-a-date' }),
+    ).toThrow('MAP_DATA_PREPARED_AT must be a valid ISO date');
   });
 
   it('does not allow Swagger in production', () => {

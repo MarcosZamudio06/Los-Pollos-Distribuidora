@@ -23,6 +23,7 @@ import {
   DashboardPage,
   DeliveryRoutesPage,
   EmployeesPage,
+  FleetLivePage,
   ForbiddenPage,
   LoginPage,
   LogoutPage,
@@ -192,6 +193,16 @@ export function AppRouter() {
               element={
                 <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}>
                   <RoutePlannerPage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/delivery-routes/live"
+              element={
+                <RoleRoute roles={ROUTE_ACCESS_ROLES.fleetLive}>
+                  <PermissionRoute permission={PERMISSIONS.fleetView}>
+                    <FleetLivePage />
+                  </PermissionRoute>
                 </RoleRoute>
               }
             />

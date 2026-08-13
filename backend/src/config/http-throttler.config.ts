@@ -40,5 +40,19 @@ export function createHttpThrottlerOptions(
       limit: configService.get<number>('RATE_LIMIT_REFRESH_MAX', 120),
       skipIf: (context) => !hasRateLimitPolicy(context, 'refresh'),
     },
+    {
+      name: 'fleetPosition',
+      ttl: seconds(60),
+      limit: configService.get<number>('RATE_LIMIT_FLEET_POSITION_MAX', 60),
+      skipIf: (context) => !hasRateLimitPolicy(context, 'fleet-position'),
+      getTracker: (request) => {
+        const user = request.user as { id?: unknown } | undefined;
+        const identity =
+          typeof user?.id === 'string' && user.id.trim()
+            ? `user:${user.id}`
+            : `ip:${request.ip}`;
+        return Promise.resolve(identity);
+      },
+    },
   ];
 }

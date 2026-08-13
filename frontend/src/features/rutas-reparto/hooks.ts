@@ -23,6 +23,10 @@ export function useRoutePlannerCatalog(search = "", originLocationId = "") {
     queryKey: ["route-planner", "locations"],
     queryFn: () => deliveryService.listPlannerLocations(accessToken),
   });
+  const vehicles = useQuery({
+    queryKey: ["route-planner", "vehicles"],
+    queryFn: () => deliveryService.listVehicles(accessToken),
+  });
   const sales = useQuery({
     enabled: Boolean(originLocationId),
     queryKey: ["route-planner", "eligible-sales", originLocationId, search],
@@ -32,7 +36,7 @@ export function useRoutePlannerCatalog(search = "", originLocationId = "") {
         accessToken,
       ),
   });
-  return { drivers, locations, sales };
+  return { drivers, locations, vehicles, sales };
 }
 
 export function useAddressSearch() {
@@ -75,8 +79,9 @@ export function useCreateOptimizedRoute() {
       payload,
       idempotencyKey,
     }: {
-      payload: Omit<CreateDeliveryRoutePayload, "orders"> & {
+      payload: Omit<CreateDeliveryRoutePayload, "orders" | "vehicleId"> & {
         routePlanId: string;
+        vehicleId: string;
       };
       idempotencyKey: string;
     }) =>

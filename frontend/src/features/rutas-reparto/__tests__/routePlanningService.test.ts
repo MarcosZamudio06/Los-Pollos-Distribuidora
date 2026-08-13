@@ -85,9 +85,32 @@ describe("delivery route planning API contracts", () => {
     expect(requestAt().url).not.toContain("originLocationId");
   });
 
+  it("lists only active fleet vehicles for the planner", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        items: [
+          {
+            id: "vehicle-1",
+            code: "UNIDAD-01",
+            displayName: "Unidad 1",
+            isActive: true,
+          },
+        ],
+      }),
+    );
+
+    await deliveryService.listVehicles("token");
+
+    expect(requestAt().url).toBe("/api/vehicles?active=true&limit=100");
+    expect(new Headers(requestAt().init.headers).get("authorization")).toBe(
+      "Bearer token",
+    );
+  });
+
   it("creates a plan and consumes it with a stable idempotency key", async () => {
     const planPayload = {
       driverId: "driver-1",
+      vehicleId: "vehicle-1",
       scheduledDate: "2026-07-15",
       originLocationId: "origin-1",
       stops: [
@@ -116,6 +139,7 @@ describe("delivery route planning API contracts", () => {
       {
         name: "Ruta Centro",
         driverId: "driver-1",
+        vehicleId: "vehicle-1",
         scheduledDate: "2026-07-15",
         originLocationId: "origin-1",
         routePlanId: "plan-1",
@@ -179,12 +203,61 @@ describe("delivery route planning API contracts", () => {
     );
   });
 
+  it("publishes a GPS reading without client-controlled assignment identifiers", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        id: "position-1",
+        vehicleId: "vehicle-1",
+        routeId: "route-1",
+        recordedAt: "2026-08-12T16:00:00.000Z",
+        receivedAt: "2026-08-12T16:00:01.000Z",
+      }),
+    );
+
+    await deliveryService.publishFleetPosition(
+      {
+        accuracyMeters: 12.5,
+        clientEventId: "gps-event-1",
+        latitude: 19.1738,
+        longitude: -96.1342,
+        recordedAt: "2026-08-12T16:00:00.000Z",
+        speedKph: 32.2,
+      },
+      "driver-token",
+    );
+
+    expect(requestAt().url).toBe("/api/fleet/positions");
+    expect(requestAt().init.method).toBe("POST");
+    expect(JSON.parse(String(requestAt().init.body))).toEqual({
+      accuracyMeters: 12.5,
+      clientEventId: "gps-event-1",
+      latitude: 19.1738,
+      longitude: -96.1342,
+      recordedAt: "2026-08-12T16:00:00.000Z",
+      speedKph: 32.2,
+    });
+    expect(JSON.parse(String(requestAt().init.body))).not.toHaveProperty(
+      "routeId",
+    );
+    expect(JSON.parse(String(requestAt().init.body))).not.toHaveProperty(
+      "vehicleId",
+    );
+    expect(JSON.parse(String(requestAt().init.body))).not.toHaveProperty(
+      "driverId",
+    );
+  });
+
   it("retrieves the ADMIN routing technical status", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       okJson({
         status: "operational",
+        checkedAt: "2026-08-12T16:00:00.000Z",
+        routingDataVersion: "mx-2026-07",
         dataset: { version: "mx-2026-07", ageDays: 13 },
         services: [{ name: "PostGIS", status: "up", latencyMs: 4 }],
+        fleetPersistence: { status: "up" },
+        latestVehiclePositionAgeSeconds: null,
+        traffic: { available: false, provider: null },
       }),
     );
     await expect(

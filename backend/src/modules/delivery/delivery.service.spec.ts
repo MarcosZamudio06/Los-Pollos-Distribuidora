@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -28,11 +29,14 @@ type MockPrisma = {
     count: jest.Mock;
     update: jest.Mock;
   };
+  vehicle: { findFirst: jest.Mock };
   deliveryOrder: {
     findFirst: jest.Mock;
     update: jest.Mock;
     updateMany: jest.Mock;
   };
+  deliveryIncident: { create: jest.Mock };
+  vehiclePosition: { findFirst: jest.Mock };
   deliveryRoutePlanDraft: { findFirst: jest.Mock; updateMany: jest.Mock };
   deliveryEvidence: { create: jest.Mock };
   accountReceivable: { findUnique: jest.Mock; update: jest.Mock };
@@ -120,11 +124,36 @@ function createPrisma(): MockPrisma {
       count: jest.fn(),
       update: jest.fn(),
     },
+    vehicle: { findFirst: jest.fn().mockResolvedValue({ id: 'vehicle-1' }) },
     deliveryOrder: {
       findFirst: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
     },
+    deliveryIncident: {
+      create: jest.fn().mockResolvedValue({
+        id: 'incident-1',
+        type: 'DELIVERY_FAILURE',
+        status: 'OPEN',
+        reason: 'Cliente devolvió producto',
+        routeId: 'route-1',
+        deliveryOrderId: 'order-1',
+        vehicleId: null,
+        driverId: 'driver-1',
+        positionId: null,
+        statusSnapshot: DeliveryOrderStatus.RETURNED,
+        latitude: null,
+        longitude: null,
+        returnedItems: [],
+        evidence: [],
+        occurredAt: date('2026-06-19T12:15:00.000Z'),
+        reportedAt: date('2026-06-19T12:15:00.000Z'),
+        reportedByUserId: 'driver-1',
+        createdAt: date('2026-06-19T12:15:00.000Z'),
+        updatedAt: date('2026-06-19T12:15:00.000Z'),
+      }),
+    },
+    vehiclePosition: { findFirst: jest.fn().mockResolvedValue(null) },
     deliveryRoutePlanDraft: { findFirst: jest.fn(), updateMany: jest.fn() },
     deliveryEvidence: { create: jest.fn() },
     accountReceivable: { findUnique: jest.fn(), update: jest.fn() },
@@ -152,11 +181,15 @@ function createPrisma(): MockPrisma {
   return prisma;
 }
 
-function createService(prisma = createPrisma()) {
+function createService(
+  prisma = createPrisma(),
+  fleetGateway?: { emitIncidentCreated: jest.Mock },
+) {
   return {
     service: new DeliveryService(
       prisma as unknown as PrismaService,
       new InventoryBalanceService(),
+      fleetGateway as never,
     ),
     prisma,
   };
@@ -221,6 +254,13 @@ describe('DeliveryService', () => {
     };
     prisma.deliveryRoute.findFirst.mockResolvedValue(
       createRoute({
+        vehicleId: 'vehicle-1',
+        vehicle: {
+          id: 'vehicle-1',
+          code: 'UNIDAD-01',
+          displayName: 'Unidad 1',
+          plateNumber: 'ABC-123',
+        },
         optimizationStatus: 'OPTIMIZED',
         geometry,
         distanceMeters: 8600,
@@ -245,6 +285,12 @@ describe('DeliveryService', () => {
     await expect(service.findRoute('route-1', driver)).resolves.toEqual(
       expect.objectContaining({
         mapAvailable: true,
+        vehicleId: 'vehicle-1',
+        vehicleCode: 'UNIDAD-01',
+        vehicle: expect.objectContaining({
+          displayName: 'Unidad 1',
+          plateNumber: 'ABC-123',
+        }),
         geometry,
         distanceMeters: 8600,
         durationSeconds: 1440,
@@ -361,6 +407,7 @@ describe('DeliveryService', () => {
       createdByUserId: 'admin-1',
       sourceRouteId: null,
       consumedAt: null,
+      vehicleId: 'vehicle-1',
       driverId: 'driver-1',
       scheduledDate: date('2026-06-19T00:00:00.000Z'),
       originLocationId: 'origin-1',
@@ -421,6 +468,7 @@ describe('DeliveryService', () => {
       {
         name: 'Ruta Centro',
         driverId: 'driver-1',
+        vehicleId: 'vehicle-1',
         scheduledDate: '2026-06-19',
         originLocationId: 'origin-1',
         routePlanId: 'plan-1',
@@ -433,6 +481,7 @@ describe('DeliveryService', () => {
     expect(prisma.deliveryRoute.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
+          vehicleId: 'vehicle-1',
           optimizationStatus: 'OPTIMIZED',
           creationIdempotencyKey: 'key-1',
           deliveryOrders: {
@@ -453,6 +502,92 @@ describe('DeliveryService', () => {
         data: expect.objectContaining({ consumedAt: expect.any(Date) }),
       }),
     );
+  });
+
+  it('allows multiple PENDING routes for the same vehicle', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'driver-1',
+      role: { name: 'DRIVER' },
+    });
+    prisma.operationalLocation.findFirst.mockResolvedValue({
+      id: 'route-stock-1',
+      type: OperationalLocationType.ROUTE_STOCK,
+      isActive: true,
+    });
+    prisma.deliveryRoute.findFirst.mockResolvedValue(null);
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-1',
+        status: SaleStatus.CONFIRMED,
+        routeId: null,
+        accountReceivable: null,
+      },
+    ]);
+    prisma.deliveryRoute.create
+      .mockResolvedValueOnce(
+        createRoute({ id: 'route-1', vehicleId: 'vehicle-1' }),
+      )
+      .mockResolvedValueOnce(
+        createRoute({ id: 'route-2', vehicleId: 'vehicle-1' }),
+      );
+
+    const payload = {
+      name: 'Ruta Centro',
+      driverId: 'driver-1',
+      vehicleId: 'vehicle-1',
+      scheduledDate: '2026-06-19',
+      routeStockLocationId: 'route-stock-1',
+      orders: [
+        {
+          saleId: 'sale-1',
+          deliveryAddress: 'Av Centro 123',
+        },
+      ],
+    };
+
+    await service.createRoute(payload, admin);
+    await service.createRoute({ ...payload, name: 'Ruta Centro tarde' }, admin);
+
+    expect(prisma.deliveryRoute.create).toHaveBeenCalledTimes(2);
+    expect(prisma.deliveryRoute.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({ vehicleId: 'vehicle-1' }),
+      }),
+    );
+  });
+
+  it('rejects optimized route creation when the body vehicle differs from the plan', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoutePlanDraft.findFirst.mockResolvedValue({
+      id: 'plan-1',
+      createdByUserId: 'admin-1',
+      sourceRouteId: null,
+      consumedAt: null,
+      vehicleId: 'vehicle-1',
+      driverId: 'driver-1',
+      scheduledDate: date('2026-06-19T00:00:00.000Z'),
+      originLocationId: 'origin-1',
+      expiresAt: date('2099-06-19T10:30:00.000Z'),
+    });
+
+    await expect(
+      service.createRoute(
+        {
+          name: 'Ruta Centro',
+          driverId: 'driver-1',
+          vehicleId: 'vehicle-2',
+          scheduledDate: '2026-06-19',
+          originLocationId: 'origin-1',
+          routePlanId: 'plan-1',
+          orders: [],
+        },
+        admin,
+        'key-1',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.deliveryRoute.create).not.toHaveBeenCalled();
   });
 
   it('assigns confirmed orders to an existing route before settlement is opened', async () => {
@@ -529,18 +664,21 @@ describe('DeliveryService', () => {
 
   it('reoptimizes an optimized route when assigning a combined route plan', async () => {
     const { service, prisma } = createService();
-    prisma.deliveryRoute.findFirst.mockResolvedValue(
-      createRoute({
-        optimizationStatus: 'OPTIMIZED',
-        deliveryOrders: [createOrder({ saleId: 'sale-1', stopSequence: 1 })],
-        settlement: null,
-      }),
-    );
+    prisma.deliveryRoute.findFirst
+      .mockResolvedValueOnce(
+        createRoute({
+          optimizationStatus: 'OPTIMIZED',
+          deliveryOrders: [createOrder({ saleId: 'sale-1', stopSequence: 1 })],
+          settlement: null,
+        }),
+      )
+      .mockResolvedValueOnce(null);
     prisma.deliveryRoutePlanDraft.findFirst.mockResolvedValue({
       id: 'plan-2',
       sourceRouteId: 'route-1',
       createdByUserId: 'admin-1',
       consumedAt: null,
+      vehicleId: 'vehicle-1',
       expiresAt: date('2099-06-19T10:30:00.000Z'),
       driverId: 'driver-1',
       originLocationId: 'origin-1',
@@ -817,6 +955,59 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+  });
+
+  it('allows a vehicle route to start when no other route uses that vehicle', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst
+      .mockResolvedValueOnce(
+        createRoute({
+          vehicleId: 'vehicle-1',
+          status: DeliveryRouteStatus.PENDING,
+        }),
+      )
+      .mockResolvedValueOnce(null);
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({
+        vehicleId: 'vehicle-1',
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        startedAt: date('2026-06-19T09:00:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.IN_PROGRESS },
+        driver,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        vehicleId: 'vehicle-1',
+        status: DeliveryRouteStatus.IN_PROGRESS,
+      }),
+    );
+  });
+
+  it('rejects a second in-progress route for the same vehicle with conflict', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst
+      .mockResolvedValueOnce(
+        createRoute({
+          vehicleId: 'vehicle-1',
+          status: DeliveryRouteStatus.PENDING,
+        }),
+      )
+      .mockResolvedValueOnce({ id: 'route-in-progress' });
+
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.IN_PROGRESS },
+        driver,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
   });
 
   it('rejects DRIVER route transitions to CANCELLED or PENDING', async () => {
@@ -1210,6 +1401,199 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+    expect(prisma.deliveryIncident.create).toHaveBeenCalledTimes(1);
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists the incident context and publishes only after the transaction commits', async () => {
+    const fleetGateway = { emitIncidentCreated: jest.fn() };
+    const { service, prisma } = createService(undefined, fleetGateway);
+    const committed = { value: false };
+    fleetGateway.emitIncidentCreated.mockImplementation(() => {
+      expect(committed.value).toBe(true);
+    });
+    prisma.deliveryOrder.findFirst.mockResolvedValue(
+      createOrder({
+        latitude: money('19.1738'),
+        longitude: money('-96.1342'),
+        route: createRoute({
+          vehicleId: 'vehicle-1',
+          originLocationId: 'origin-1',
+        }),
+      }),
+    );
+    prisma.deliveryOrder.update.mockResolvedValue(
+      createOrder({
+        status: DeliveryOrderStatus.NOT_DELIVERED,
+        notes: 'Cliente no localizado',
+        latitude: money('19.1738'),
+        longitude: money('-96.1342'),
+        route: createRoute({
+          vehicleId: 'vehicle-1',
+          originLocationId: 'origin-1',
+        }),
+      }),
+    );
+    prisma.vehiclePosition.findFirst.mockResolvedValue({
+      id: 'position-1',
+      latitude: money('19.1737'),
+      longitude: money('-96.1341'),
+      recordedAt: date('2026-06-19T12:14:30.000Z'),
+    });
+    prisma.deliveryIncident.create.mockResolvedValue({
+      id: 'incident-1',
+      type: 'DELIVERY_FAILURE',
+      status: 'OPEN',
+      reason: 'Cliente no localizado',
+      routeId: 'route-1',
+      deliveryOrderId: 'order-1',
+      vehicleId: 'vehicle-1',
+      driverId: 'driver-1',
+      positionId: 'position-1',
+      statusSnapshot: DeliveryOrderStatus.NOT_DELIVERED,
+      latitude: money('19.1737'),
+      longitude: money('-96.1341'),
+      returnedItems: [],
+      evidence: [],
+      occurredAt: date('2026-06-19T12:15:00.000Z'),
+      reportedAt: date('2026-06-19T12:15:00.000Z'),
+      reportedByUserId: 'driver-1',
+      createdAt: date('2026-06-19T12:15:00.000Z'),
+      updatedAt: date('2026-06-19T12:15:00.000Z'),
+    });
+    prisma.$transaction.mockImplementation(async (callback) => {
+      const result = await callback(prisma);
+      committed.value = true;
+      return result;
+    });
+
+    const result = await service.registerIncident(
+      'order-1',
+      {
+        status: DeliveryOrderStatus.NOT_DELIVERED,
+        reason: 'Cliente no localizado',
+      },
+      driver,
+    );
+
+    expect(prisma.deliveryIncident.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          routeId: 'route-1',
+          deliveryOrderId: 'order-1',
+          vehicleId: 'vehicle-1',
+          driverId: 'driver-1',
+          positionId: 'position-1',
+          statusSnapshot: DeliveryOrderStatus.NOT_DELIVERED,
+          latitude: expect.anything(),
+          longitude: expect.anything(),
+        }),
+      }),
+    );
+    expect(result.incident).toEqual(
+      expect.objectContaining({
+        id: 'incident-1',
+        position: { latitude: 19.1737, longitude: -96.1341 },
+        stop: { latitude: 19.1738, longitude: -96.1342 },
+      }),
+    );
+    expect(fleetGateway.emitIncidentCreated).toHaveBeenCalledTimes(1);
+    expect(fleetGateway.emitIncidentCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        incidentId: 'incident-1',
+        deliveryOrderId: 'order-1',
+        routeId: 'route-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        position: { latitude: 19.1737, longitude: -96.1341 },
+        stop: { latitude: 19.1738, longitude: -96.1342 },
+      }),
+      'origin-1',
+    );
+  });
+
+  it('stores an incident without GPS when the route has no recent persisted position', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(
+      createOrder({
+        latitude: money('19.1738'),
+        longitude: money('-96.1342'),
+      }),
+    );
+    prisma.deliveryOrder.update.mockResolvedValue(
+      createOrder({ status: DeliveryOrderStatus.NOT_DELIVERED }),
+    );
+
+    const result = await service.registerIncident(
+      'order-1',
+      {
+        status: DeliveryOrderStatus.NOT_DELIVERED,
+        reason: 'Cliente no localizado',
+      },
+      driver,
+    );
+
+    expect(result.incident).toEqual(
+      expect.objectContaining({
+        position: null,
+        stop: { latitude: 19.1738, longitude: -96.1342 },
+      }),
+    );
+    expect(prisma.deliveryIncident.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          positionId: null,
+          latitude: null,
+          longitude: null,
+        }),
+      }),
+    );
+  });
+
+  it('does not publish an incident when the transaction cannot persist it', async () => {
+    const fleetGateway = { emitIncidentCreated: jest.fn() };
+    const { service, prisma } = createService(undefined, fleetGateway);
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.deliveryOrder.update.mockResolvedValue(
+      createOrder({ status: DeliveryOrderStatus.NOT_DELIVERED }),
+    );
+    prisma.deliveryIncident.create.mockRejectedValue(
+      new Error('incident write failed'),
+    );
+
+    await expect(
+      service.registerIncident(
+        'order-1',
+        {
+          status: DeliveryOrderStatus.NOT_DELIVERED,
+          reason: 'Cliente no localizado',
+        },
+        driver,
+      ),
+    ).rejects.toThrow('incident write failed');
+    expect(fleetGateway.emitIncidentCreated).not.toHaveBeenCalled();
+  });
+
+  it('keeps DRIVER incident registration scoped to the assigned order', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.registerIncident(
+        'order-foreign',
+        {
+          status: DeliveryOrderStatus.NOT_DELIVERED,
+          reason: 'Cliente no localizado',
+        },
+        driver,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.deliveryOrder.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'order-foreign', route: { driverId: 'driver-1' } },
+      }),
+    );
+    expect(prisma.deliveryIncident.create).not.toHaveBeenCalled();
   });
 
   it('opens a route settlement that derives collected totals from Payment and marks differences for review', async () => {

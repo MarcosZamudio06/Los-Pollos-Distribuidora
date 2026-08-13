@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import {
-  animateRoutePath,
-  cancelRouteAnimations,
+  animateRouteLine,
   routeGeometryRevision,
   sampleDirectionMarkers,
 } from "../components/routeGeometry";
@@ -47,43 +47,28 @@ describe("route geometry presentation", () => {
     expect(markers[0].longitude).toBeGreaterThan(0.02);
   });
 
-  it("reveals the final route immediately when reduced motion is preferred", () => {
-    const animate = vi.fn();
-    const path = {
-      getTotalLength: () => 320,
-      style: {},
-      animate,
-    } as unknown as SVGPathElement;
+  it("reveals a MapLibre route immediately when reduced motion is preferred", () => {
+    const map = { setPaintProperty: vi.fn() } as unknown as MapLibreMap;
 
-    animateRoutePath(path, true);
+    animateRouteLine(map, true, true);
 
-    expect(animate).not.toHaveBeenCalled();
-    expect(path.style.strokeDasharray).toBe("none");
-    expect(path.style.strokeDashoffset).toBe("0");
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      "route-plan-line",
+      "line-opacity",
+      0.88,
+    );
   });
 
-  it("animates a newly rendered route from hidden to fully drawn", () => {
-    const animation = { cancel: vi.fn() };
-    const animate = vi.fn(() => animation);
-    const path = {
-      getTotalLength: () => 320,
-      style: {},
-      animate,
-    } as unknown as SVGPathElement;
+  it("hides an absent route without touching SVG output", () => {
+    const map = { setPaintProperty: vi.fn() } as unknown as MapLibreMap;
 
-    const result = animateRoutePath(path, false);
+    animateRouteLine(map, false, false);
 
-    expect(animate).toHaveBeenCalledWith(
-      [{ strokeDashoffset: "320" }, { strokeDashoffset: "0" }],
-      {
-        duration: 1100,
-        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-        fill: "forwards",
-      },
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      "route-plan-line",
+      "line-opacity",
+      0,
     );
-    expect(result).toBe(animation);
-    cancelRouteAnimations(result ? [result] : []);
-    expect(animation.cancel).toHaveBeenCalledOnce();
   });
 
   it("changes the layer revision when geometry changes under the same plan", () => {

@@ -36,4 +36,28 @@ describe("frontend bundle budget", () => {
       },
     ]);
   });
+
+  it("gives the isolated MapLibre vendor chunk its explicit async budget", () => {
+    expect(BUNDLE_BUDGET_KB.maplibre).toBe(1_000);
+    expect(
+      getBundleBudgetViolations([
+        {
+          fileName: "maplibre-gl.js",
+          isEntry: false,
+          sizeBytes: 999 * 1024,
+        },
+        {
+          fileName: "maplibre-gl.js",
+          isEntry: false,
+          sizeBytes: 1_001 * 1024,
+        },
+      ]),
+    ).toEqual([
+      {
+        fileName: "maplibre-gl.js",
+        limitKb: 1_000,
+        sizeKb: 1_001,
+      },
+    ]);
+  });
 });

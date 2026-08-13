@@ -6,7 +6,7 @@ Administrar rutas, asignación de pedidos, experiencia móvil de repartidor, evi
 
 La experiencia móvil del chofer forma parte del MVP, pero no se asume operación offline hasta que exista decisión de negocio y arquitectura.
 
-La planeación geoespacial utiliza React Leaflet con datos de OpenStreetMap. Photon, VROOM y OSRM se consumen exclusivamente a través de la API NestJS; el navegador no conoce sus URLs internas.
+La planeación geoespacial y el fleet map utilizan MapLibre GL JS como renderer con datos cartográficos configurables y atribución correspondiente. MapLibre GL JS no geocodifica, no ordena paradas, no calcula rutas, geometría, distancia o duración y no aporta tráfico en vivo. Photon, VROOM y OSRM se consumen exclusivamente a través de la API NestJS; el navegador no conoce sus URLs internas. `TrafficLayer` queda como capacidad futura y requiere una fuente externa autorizada.
 
 ## Alcance TASK-071 — Administrador de rutas
 
@@ -36,10 +36,13 @@ Pantallas y componentes requeridos:
 
 Debe consumir `GET /api/delivery-routes`.
 
+La lista y el detalle deben exponer `vehicleId`/vehículo cuando exista; un valor ausente o `null` identifica una ruta histórica o legacy no geoespacial y no se reemplaza visualmente por el `driverId`.
+
 Tabla de rutas:
 
 - Nombre.
 - Repartidor.
+- Vehículo.
 - Fecha programada.
 - Ubicación operativa de origen.
 - Ubicación `ROUTE_STOCK`.
@@ -55,6 +58,7 @@ Filtros:
 - Estado.
 - Fecha programada.
 - Ubicación operativa de origen.
+- Vehículo.
 
 Acciones:
 
@@ -67,6 +71,21 @@ Acciones:
 - Cerrar liquidación mediante `POST /api/route-settlements/:id/close` desde la vista de liquidación cuando el rol y estado lo permitan.
 
 Las rutas optimizadas deben mostrar `mapAvailable`, distancia, duración y estado de optimización. Las rutas históricas sin mapa conservan las acciones y presentación textual existentes.
+
+## Fleet map administrativo
+
+La administración debe incluir un fleet map multi-vehículo/multi-ruta, separado del planificador de una sola optimización. Debe consumir `GET /api/fleet/live`, suscribirse al namespace Socket.IO `/fleet` con `path=/api/socket.io` y mostrar únicamente información autorizada por `fleet.view`:
+
+- Vehículos activos, conductor derivado, ruta `IN_PROGRESS`, última posición persistida y estado de antigüedad.
+- Geometría aprobada de cada ruta, sin recalcularla ni convertir el mapa en navegación.
+- Zonas/geocercas `Polygon` GeoJSON y eventos de entrada/salida generados por backend.
+- Incidencias trazables y heatmaps derivados de datos persistidos mediante `GET /api/fleet/analytics/heatmap`.
+
+La analítica histórica se activa mediante un toggle separado del estado realtime. Permite seleccionar `DELIVERIES` o `INCIDENTS`, definir un periodo acotado y ver la leyenda, carga, error, vacío y periodo analizado. El source `fleet-heatmap` usa una capa MapLibre de tipo `heatmap`, recibe `weight` agregado por celda y no se actualiza con `fleet.position.updated`.
+
+Los cinco eventos server->client soportados son `fleet.position.updated`, `fleet.route.updated`, `fleet.incident.created`, `fleet.geofence.entered` y `fleet.geofence.exited`. La UI debe tratar sus payloads como datos persistidos, no como autoridad para crear eventos o posiciones.
+
+La UI no debe mostrar una capa de tráfico vivo. Una futura `TrafficLayer` se mostrará solo cuando exista una fuente externa autorizada y documentada.
 
 ## Planificador geoespacial
 
@@ -81,14 +100,15 @@ Debe consumir:
 Estructura:
 
 - Página dedicada, no modal, por el tamaño y complejidad del mapa.
-- Panel de planeación con nombre, fecha, origen, repartidor y ventas elegibles.
+- Panel de planeación con nombre, fecha, origen, repartidor, vehículo y ventas elegibles.
+- Selección de vehículo activo separado del usuario `DRIVER`.
 - Mapa principal con origen, marcadores numerados y recorrido optimizado.
 - Lista ordenada sincronizada con los marcadores; la lista es la alternativa accesible y no depende del mapa.
 - Resumen de distancia total, duración estimada, número de paradas y regreso al origen.
 
 Flujo:
 
-1. Seleccionar nombre, fecha, ubicación operativa de origen y repartidor activo.
+1. Seleccionar nombre, fecha, ubicación operativa de origen, repartidor activo y vehículo activo; el vehículo no se deriva ni se sustituye por el usuario.
 2. Seleccionar una o varias ventas elegibles; no permitir paradas libres.
 3. Proponer la dirección de entrega del cliente sin modificarla en su registro fuente.
 4. Buscar cada dirección con Photon o colocar/mover manualmente el marcador.
@@ -124,6 +144,7 @@ Campos:
 
 - Nombre.
 - Repartidor.
+- Vehículo.
 - Fecha programada.
 - Ubicación operativa de origen opcional cuando la operación la defina.
 - Ubicación `ROUTE_STOCK` asociada o autogenerada.
@@ -134,6 +155,7 @@ Campos:
 Validaciones:
 
 - Repartidor requerido.
+- Vehículo requerido para una ruta geoespacial nueva.
 - Fecha requerida.
 - La ruta debe mostrar o crear una ubicación `ROUTE_STOCK` antes de operar inventario.
 - Solo ventas confirmadas.
@@ -168,7 +190,9 @@ Relación visible con liquidación:
 
 Debe mostrar solo rutas asignadas al usuario `DRIVER`.
 
-Cuando `mapAvailable=true`, debe mostrar el recorrido estático aprobado por ADMIN, el origen, el regreso al origen y las paradas según `stopSequence`. El mapa no solicita ubicación del dispositivo ni recalcula el trayecto.
+Cuando `mapAvailable=true`, debe mostrar el recorrido estático aprobado por ADMIN, el origen, el regreso al origen y las paradas según `stopSequence`. Fuera de una ruta `IN_PROGRESS`, el mapa no solicita ubicación del dispositivo ni recalcula el trayecto.
+
+Cuando la ruta está `IN_PROGRESS`, la experiencia puede solicitar al navegador/dispositivo autenticado del `DRIVER` la posición GPS inicial y publicar posiciones mediante `POST /api/fleet/positions`. El body no incluye `routeId`, `vehicleId` ni `driverId`; el backend los deriva del JWT y de la ruta activa. La captura se detiene al completar o cancelar la ruta y nunca ocurre fuera de una ruta activa. Esta capacidad no es navegación giro a giro ni rerouting.
 
 Cada pedido debe mostrar:
 
@@ -292,9 +316,18 @@ No sustituye reportes operativos casi en tiempo real ni corte contable.
 
 - `ADMIN`: crear rutas, asignar pedidos, revisar evidencias e incidencias, abrir/cerrar liquidaciones.
 - `DRIVER`: consultar y actualizar rutas propias, capturar evidencia, registrar incidencias y cobros permitidos.
+- `DRIVER`: además puede publicar posiciones únicamente con `fleet.position.publish`; nunca puede consultar el fleet map global ni usar `fleet.view`.
 - `COLLECTIONS`: consultar cobros, saldos y liquidaciones; conciliar conforme a permisos.
 - `WAREHOUSE`: consultar devoluciones o movimientos relacionados cuando afecten inventario.
 - `SELLER`: consulta de estado si se autoriza.
+
+Permisos de flota:
+
+- `fleet.view`: fleet map, live snapshot, posiciones históricas, eventos de geocerca y heatmaps persistidos.
+- `fleet.manage`: administración de vehículos.
+- `fleet.position.publish`: publicación GPS de la ruta activa derivada del usuario autenticado.
+- `fleet.zones.manage`: administración de zonas y geocercas.
+- `ADMIN` tiene todos; `DRIVER` solo `fleet.position.publish`.
 
 ## Estados de pantalla
 
@@ -310,10 +343,15 @@ Toda vista debe contemplar:
 - Unreachable stops.
 - Expired plan.
 - Legacy route without map.
+- Fleet unavailable.
+- GPS permission denied.
+- GPS outside active route rejected.
+- Unauthorized global fleet view.
 
 ## Validaciones
 
 - No crear ruta sin repartidor.
+- No crear una ruta geoespacial nueva sin vehículo.
 - No crear ruta sin fecha.
 - No optimizar sin ubicación operativa de origen geocodificada.
 - No optimizar sin al menos una venta confirmada.
@@ -321,6 +359,10 @@ Toda vista debe contemplar:
 - No crear desde un plan expirado, consumido o invalidado.
 - No mostrar una geometría distinta de la aprobada por ADMIN.
 - No permitir que `DRIVER` consulte el mapa de una ruta ajena.
+- No permitir que `DRIVER` consulte el fleet map global.
+- No aceptar ni mostrar como válida una posición GPS fuera de una ruta `IN_PROGRESS`.
+- No permitir que el cliente elija `vehicleId`, `driverId` o `routeId` para publicar GPS.
+- No mostrar tráfico vivo ni atribuir cálculo de rutas a MapLibre GL JS.
 - No asignar ventas canceladas.
 - No completar ruta con pedidos pendientes sin estado final.
 - No registrar cobro sin cuenta por cobrar en MVP.

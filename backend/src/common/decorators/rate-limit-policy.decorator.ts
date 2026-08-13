@@ -1,7 +1,7 @@
 import { SetMetadata } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 
-export type RateLimitPolicyName = 'login' | 'refresh';
+export type RateLimitPolicyName = 'login' | 'refresh' | 'fleet-position';
 const RATE_LIMIT_POLICY = 'http-rate-limit-policy';
 
 export const RateLimitPolicy = (policy: RateLimitPolicyName) =>

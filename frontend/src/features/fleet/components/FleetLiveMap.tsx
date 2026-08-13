@@ -1,0 +1,716 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  GeoJSONSource,
+  Map as MapLibreMap,
+} from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { resolveMapStyle } from "../../../lib/maps/mapConfig";
+import {
+  createFleetFeatureCollections,
+  getFleetFeatureBounds,
+  type FleetFeatureCollections,
+} from "../fleetLiveUtils";
+import type {
+  DeliveryZone,
+  FleetCoordinate,
+  FleetHeatmapFeatureCollection,
+  FleetLiveItem,
+  FleetTrafficFeatureCollection,
+} from "../types";
+
+type Props = {
+  items: FleetLiveItem[];
+  zones?: DeliveryZone[];
+  showZones?: boolean;
+  selectedVehicleId?: string | null;
+  selectedZoneId?: string | null;
+  highlightedVehicleId?: string | null;
+  highlightedZoneId?: string | null;
+  editorActive?: boolean;
+  editorPoints?: FleetCoordinate[];
+  heatmap?: FleetHeatmapFeatureCollection | null;
+  showHeatmap?: boolean;
+  traffic?: FleetTrafficFeatureCollection | null;
+  trafficAvailable?: boolean;
+  showTraffic?: boolean;
+  onSelectVehicle: (vehicleId: string) => void;
+  onSelectZone?: (zoneId: string) => void;
+  onMapPoint?: (point: FleetCoordinate) => void;
+};
+
+const sourceIds = {
+  deliveries: "fleet-deliveries",
+  incidents: "fleet-incidents",
+  routes: "fleet-routes",
+  vehicles: "fleet-vehicles",
+  zones: "delivery-zones",
+  heatmap: "fleet-heatmap",
+  traffic: "fleet-traffic",
+  editor: "delivery-zone-editor",
+} as const;
+
+const emptyData: FleetFeatureCollections = {
+  vehicles: { type: "FeatureCollection", features: [] },
+  routes: { type: "FeatureCollection", features: [] },
+  deliveries: { type: "FeatureCollection", features: [] },
+  incidents: { type: "FeatureCollection", features: [] },
+  zones: { type: "FeatureCollection", features: [] },
+};
+
+const emptyHeatmap: FleetHeatmapFeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
+
+const emptyTraffic: FleetTrafficFeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
+
+type UpdatableGeoJSONSource = GeoJSONSource & {
+  updateData?: (data: {
+    add?: unknown[];
+    remove?: string[];
+    update?: unknown[];
+  }) => void;
+};
+
+type EditorFeatureCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    id: string;
+    geometry:
+      | { type: "Polygon"; coordinates: FleetCoordinate[][] }
+      | { type: "Point"; coordinates: FleetCoordinate };
+    properties: { kind: "polygon" | "vertex"; index?: number };
+  }>;
+};
+
+function syncSource(
+  map: MapLibreMap,
+  sourceId: string,
+  previous: FleetFeatureCollections[keyof FleetFeatureCollections] | null,
+  next: FleetFeatureCollections[keyof FleetFeatureCollections],
+) {
+  const source = map.getSource(sourceId) as UpdatableGeoJSONSource | undefined;
+  if (!source) return;
+  if (!previous || !source.updateData) {
+    source.setData(next);
+    return;
+  }
+
+  const previousById = new Map(
+    previous.features.map((feature) => [feature.id, JSON.stringify(feature)]),
+  );
+  const nextById = new Map(
+    next.features.map((feature) => [feature.id, JSON.stringify(feature)]),
+  );
+  const add = next.features.filter((feature) => !previousById.has(feature.id));
+  const update = next.features.filter(
+    (feature) =>
+      previousById.has(feature.id) &&
+      previousById.get(feature.id) !== JSON.stringify(feature),
+  );
+  const remove = previous.features
+    .filter((feature) => !nextById.has(feature.id))
+    .map((feature) => feature.id);
+  if (add.length || update.length || remove.length) {
+    source.updateData({ add, update, remove });
+  }
+}
+
+function createEditorFeatureCollection(
+  points: FleetCoordinate[],
+): EditorFeatureCollection {
+  const features: EditorFeatureCollection["features"] = points.map(
+    (point, index) => ({
+      type: "Feature",
+      id: `editor-vertex-${index}`,
+      geometry: { type: "Point", coordinates: point },
+      properties: { kind: "vertex", index },
+    }),
+  );
+
+  if (points.length >= 3) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    const closed =
+      first[0] === last[0] && first[1] === last[1]
+        ? points
+        : [...points, first];
+    features.unshift({
+      type: "Feature",
+      id: "editor-polygon",
+      geometry: { type: "Polygon", coordinates: [closed] },
+      properties: { kind: "polygon" },
+    });
+  }
+
+  return { type: "FeatureCollection", features };
+}
+
+function fitMapToData(
+  map: MapLibreMap,
+  data: FleetFeatureCollections,
+  includeZones = true,
+) {
+  const bounds = getFleetFeatureBounds(data, includeZones);
+  if (!bounds) return;
+  const [minLongitude, minLatitude, maxLongitude, maxLatitude] = bounds;
+  if (minLongitude === maxLongitude && minLatitude === maxLatitude) {
+    map.setCenter([minLongitude, minLatitude]);
+    map.setZoom(14);
+    return;
+  }
+  map.fitBounds(
+    [
+      [minLongitude, minLatitude],
+      [maxLongitude, maxLatitude],
+    ],
+    { padding: 48, duration: 0 },
+  );
+}
+
+function addFleetLayers(map: MapLibreMap) {
+  map.addSource(sourceIds.vehicles, {
+    type: "geojson",
+    data: emptyData.vehicles,
+  });
+  map.addSource(sourceIds.routes, { type: "geojson", data: emptyData.routes });
+  map.addSource(sourceIds.deliveries, {
+    type: "geojson",
+    data: emptyData.deliveries,
+  });
+  map.addSource(sourceIds.incidents, {
+    type: "geojson",
+    data: emptyData.incidents,
+  });
+  map.addSource(sourceIds.zones, { type: "geojson", data: emptyData.zones });
+  map.addSource(sourceIds.heatmap, {
+    type: "geojson",
+    data: emptyHeatmap,
+  });
+  map.addSource(sourceIds.traffic, {
+    type: "geojson",
+    data: emptyTraffic,
+  });
+  map.addSource(sourceIds.editor, {
+    type: "geojson",
+    data: createEditorFeatureCollection([]),
+  });
+  map.addLayer({
+    id: "fleet-routes-lines",
+    source: sourceIds.routes,
+    type: "line",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        "#b62a22",
+        "#176b45",
+      ],
+      "line-opacity": 0.72,
+      "line-width": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        7,
+        4,
+      ],
+    },
+  });
+  map.addLayer({
+    id: "fleet-deliveries-pending",
+    source: sourceIds.deliveries,
+    type: "circle",
+    filter: [
+      "!in",
+      "status",
+      "DELIVERED",
+      "NOT_DELIVERED",
+      "CANCELLED",
+      "PARTIALLY_REJECTED",
+      "RETURNED",
+    ],
+    paint: {
+      "circle-color": "#d69b2d",
+      "circle-radius": 6,
+      "circle-stroke-color": "#fff7e1",
+      "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "fleet-deliveries-completed",
+    source: sourceIds.deliveries,
+    type: "circle",
+    filter: [
+      "in",
+      "status",
+      "DELIVERED",
+      "NOT_DELIVERED",
+      "CANCELLED",
+      "PARTIALLY_REJECTED",
+      "RETURNED",
+    ],
+    paint: {
+      "circle-color": "#3f7b41",
+      "circle-opacity": 0.78,
+      "circle-radius": 5,
+      "circle-stroke-color": "#f6fff6",
+      "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "fleet-incidents-symbol",
+    source: sourceIds.incidents,
+    type: "symbol",
+    layout: {
+      "text-allow-overlap": true,
+      "text-field": "!",
+      "text-size": 17,
+    },
+    paint: {
+      "text-color": "#b62a22",
+      "text-halo-color": "#fff7e1",
+      "text-halo-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "fleet-heatmap",
+    source: sourceIds.heatmap,
+    type: "heatmap",
+    layout: { visibility: "none" },
+    paint: {
+      "heatmap-weight": [
+        "interpolate",
+        ["linear"],
+        ["get", "weight"],
+        0,
+        0,
+        10,
+        1,
+      ],
+      "heatmap-intensity": 1.2,
+      "heatmap-radius": 28,
+      "heatmap-opacity": 0.72,
+      "heatmap-color": [
+        "interpolate",
+        ["linear"],
+        ["heatmap-density"],
+        0,
+        "rgba(47,111,115,0)",
+        0.25,
+        "#2f6f73",
+        0.55,
+        "#d69b2d",
+        0.85,
+        "#b62a22",
+      ],
+    },
+  });
+  map.addLayer({
+    id: "fleet-traffic-lines",
+    source: sourceIds.traffic,
+    type: "line",
+    layout: { visibility: "none" },
+    paint: {
+      "line-color": [
+        "match",
+        ["get", "congestionLevel"],
+        "LOW",
+        "#3f7b41",
+        "MODERATE",
+        "#d69b2d",
+        "HIGH",
+        "#b62a22",
+        "SEVERE",
+        "#7d1d18",
+        "#6f7b78",
+      ],
+      "line-opacity": 0.82,
+      "line-width": 4,
+    },
+  });
+  map.addLayer({
+    id: "delivery-zones-fill",
+    source: sourceIds.zones,
+    type: "fill",
+    paint: {
+      "fill-color": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        "#b62a22",
+        ["boolean", ["get", "isActive"], true],
+        "#2f6f73",
+        "#6f7b78",
+      ],
+      "fill-opacity": [
+        "case",
+        ["boolean", ["get", "isActive"], true],
+        0.18,
+        0.07,
+      ],
+    },
+  });
+  map.addLayer({
+    id: "delivery-zones-outline",
+    source: sourceIds.zones,
+    type: "line",
+    paint: {
+      "line-color": [
+        "case",
+        ["boolean", ["get", "isActive"], true],
+        "#2f6f73",
+        "#6f7b78",
+      ],
+      "line-dasharray": [
+        "case",
+        ["boolean", ["get", "isActive"], true],
+        ["literal", [1, 0]],
+        ["literal", [2, 2]],
+      ],
+      "line-width": 2,
+      "line-opacity": 0.82,
+    },
+  });
+  map.addLayer({
+    id: "delivery-zone-selected",
+    source: sourceIds.zones,
+    type: "line",
+    filter: [
+      "any",
+      ["==", ["get", "selected"], true],
+      ["==", ["get", "highlighted"], true],
+    ],
+    paint: {
+      "line-color": [
+        "case",
+        ["boolean", ["get", "highlighted"], false],
+        "#d69b2d",
+        "#b62a22",
+      ],
+      "line-width": 5,
+      "line-opacity": 0.95,
+    },
+  });
+  map.addLayer({
+    id: "fleet-vehicles-symbol",
+    source: sourceIds.vehicles,
+    type: "symbol",
+    layout: {
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+      "text-allow-overlap": true,
+      "text-field": ["get", "code"],
+      "text-offset": [0, 1.7],
+      "text-size": 11,
+    },
+    paint: {
+      "text-color": "#1d2420",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.5,
+    },
+  });
+  map.addLayer({
+    id: "fleet-vehicle-selected",
+    source: sourceIds.vehicles,
+    type: "circle",
+    filter: [
+      "any",
+      ["==", ["get", "selected"], true],
+      ["==", ["get", "highlighted"], true],
+    ],
+    paint: {
+      "circle-color": [
+        "case",
+        ["boolean", ["get", "highlighted"], false],
+        "#d69b2d",
+        "#b62a22",
+      ],
+      "circle-opacity": 0.2,
+      "circle-radius": 22,
+      "circle-stroke-color": [
+        "case",
+        ["boolean", ["get", "highlighted"], false],
+        "#d69b2d",
+        "#b62a22",
+      ],
+      "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "delivery-zone-editor-fill",
+    source: sourceIds.editor,
+    type: "fill",
+    filter: ["==", ["get", "kind"], "polygon"],
+    paint: {
+      "fill-color": "#d69b2d",
+      "fill-opacity": 0.2,
+    },
+  });
+  map.addLayer({
+    id: "delivery-zone-editor-outline",
+    source: sourceIds.editor,
+    type: "line",
+    filter: ["==", ["get", "kind"], "polygon"],
+    paint: { "line-color": "#d69b2d", "line-width": 3 },
+  });
+  map.addLayer({
+    id: "delivery-zone-editor-vertices",
+    source: sourceIds.editor,
+    type: "circle",
+    filter: ["==", ["get", "kind"], "vertex"],
+    paint: {
+      "circle-color": "#fff7e1",
+      "circle-radius": 5,
+      "circle-stroke-color": "#b62a22",
+      "circle-stroke-width": 2,
+    },
+  });
+}
+
+export function FleetLiveMap({
+  items,
+  zones = [],
+  showZones = true,
+  selectedVehicleId,
+  selectedZoneId,
+  highlightedVehicleId,
+  highlightedZoneId,
+  editorActive = false,
+  editorPoints = [],
+  heatmap = null,
+  showHeatmap = false,
+  traffic = null,
+  trafficAvailable = false,
+  showTraffic = false,
+  onSelectVehicle,
+  onSelectZone,
+  onMapPoint,
+}: Props) {
+  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const hasFittedRef = useRef(false);
+  const previousDataRef = useRef<FleetFeatureCollections | null>(null);
+  const onSelectVehicleRef = useRef(onSelectVehicle);
+  const onSelectZoneRef = useRef(onSelectZone);
+  const onMapPointRef = useRef(onMapPoint);
+  const editorActiveRef = useRef(editorActive);
+  const data = useMemo(
+    () =>
+      createFleetFeatureCollections(
+        items,
+        selectedVehicleId,
+        zones,
+        selectedZoneId,
+        highlightedVehicleId,
+        highlightedZoneId,
+      ),
+    [
+      highlightedVehicleId,
+      highlightedZoneId,
+      items,
+      selectedVehicleId,
+      selectedZoneId,
+      zones,
+    ],
+  );
+  const editorData = useMemo(
+    () => createEditorFeatureCollection(editorPoints),
+    [editorPoints],
+  );
+
+  useEffect(() => {
+    onSelectVehicleRef.current = onSelectVehicle;
+    onSelectZoneRef.current = onSelectZone;
+    onMapPointRef.current = onMapPoint;
+    editorActiveRef.current = editorActive;
+  }, [editorActive, onMapPoint, onSelectVehicle, onSelectZone]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function createMap() {
+      if (!containerRef.current || mapRef.current) return;
+      try {
+        const maplibre = await import("maplibre-gl");
+        if (cancelled || !containerRef.current) return;
+        const map = new maplibre.Map({
+          container: containerRef.current,
+          style: resolveMapStyle(),
+          center: [-96.1342, 19.1738],
+          zoom: 11,
+        });
+        mapRef.current = map;
+        map.on("load", () => {
+          addFleetLayers(map);
+          map.on("click", "fleet-vehicles-symbol", (event) => {
+            if (editorActiveRef.current) return;
+            const vehicleId = event.features?.[0]?.id;
+            if (vehicleId !== undefined && vehicleId !== null) {
+              onSelectVehicleRef.current(String(vehicleId));
+            }
+          });
+          map.on("click", "delivery-zones-fill", (event) => {
+            if (editorActiveRef.current) return;
+            const feature = event.features?.[0];
+            const zoneId = feature?.properties?.id ?? feature?.id;
+            if (zoneId !== undefined && zoneId !== null) {
+              onSelectZoneRef.current?.(String(zoneId));
+            }
+          });
+          map.on("click", (event) => {
+            if (!editorActiveRef.current || !onMapPointRef.current) return;
+            onMapPointRef.current([event.lngLat.lng, event.lngLat.lat]);
+          });
+          setMapReady(true);
+        });
+      } catch {
+        setMapError(true);
+      }
+    }
+    void createMap();
+
+    return () => {
+      cancelled = true;
+      mapRef.current?.remove();
+      mapRef.current = null;
+      hasFittedRef.current = false;
+      previousDataRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const previous = previousDataRef.current;
+    syncSource(map, sourceIds.vehicles, previous?.vehicles ?? null, data.vehicles);
+    syncSource(map, sourceIds.routes, previous?.routes ?? null, data.routes);
+    syncSource(
+      map,
+      sourceIds.deliveries,
+      previous?.deliveries ?? null,
+      data.deliveries,
+    );
+    syncSource(
+      map,
+      sourceIds.incidents,
+      previous?.incidents ?? null,
+      data.incidents,
+    );
+    syncSource(map, sourceIds.zones, previous?.zones ?? null, data.zones);
+    const heatmapSource = map.getSource(sourceIds.heatmap) as
+      | GeoJSONSource
+      | undefined;
+    heatmapSource?.setData(heatmap ?? emptyHeatmap);
+    const trafficSource = map.getSource(sourceIds.traffic) as
+      | GeoJSONSource
+      | undefined;
+    trafficSource?.setData(traffic ?? emptyTraffic);
+    const editorSource = map.getSource(sourceIds.editor) as
+      | UpdatableGeoJSONSource
+      | undefined;
+    editorSource?.setData(editorData);
+    previousDataRef.current = data;
+  }, [data, editorData, heatmap, mapReady, traffic]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const visibility = showZones ? "visible" : "none";
+    [
+      "delivery-zones-fill",
+      "delivery-zones-outline",
+      "delivery-zone-selected",
+    ].forEach((layerId) => map.setLayoutProperty(layerId, "visibility", visibility));
+  }, [mapReady, showZones]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    map.setLayoutProperty(
+      "fleet-heatmap",
+      "visibility",
+      showHeatmap ? "visible" : "none",
+    );
+  }, [mapReady, showHeatmap]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    map.setLayoutProperty(
+      "fleet-traffic-lines",
+      "visibility",
+      trafficAvailable && showTraffic ? "visible" : "none",
+    );
+  }, [mapReady, showTraffic, trafficAvailable]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (
+      !mapReady ||
+      !map ||
+      hasFittedRef.current ||
+      !getFleetFeatureBounds(data, showZones)
+    ) {
+      return;
+    }
+    fitMapToData(map, data, showZones);
+    hasFittedRef.current = true;
+  }, [data, mapReady, showZones]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || data.vehicles.features.length === 0) return;
+    if (selectedVehicleId) {
+      const selected = data.vehicles.features.find(
+        (feature) => feature.properties.id === selectedVehicleId,
+      );
+      if (selected) {
+        map.flyTo({ center: selected.geometry.coordinates, zoom: 14, duration: 0 });
+      }
+    }
+  }, [data.vehicles.features, mapReady, selectedVehicleId]);
+
+  const centerFleet = () => {
+    const map = mapRef.current;
+    if (map) fitMapToData(map, data, false);
+  };
+
+  return (
+    <div className="relative h-full min-h-[34rem] overflow-hidden rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[#dfe8df]">
+      <div
+        ref={containerRef}
+        aria-label="Mapa de monitoreo de flota"
+        className="absolute inset-0"
+      />
+      <div className="absolute left-4 top-4 z-10 flex flex-wrap items-center gap-2">
+        <button
+          className="rounded-xl border border-white/70 bg-white/95 px-3 py-2 text-xs font-black text-[var(--erp-foreground)] shadow-lg transition hover:bg-white"
+          onClick={centerFleet}
+          type="button"
+        >
+          Centrar en flota
+        </button>
+        <span className="rounded-xl border border-white/60 bg-white/90 px-3 py-2 text-xs font-bold text-[var(--erp-muted-foreground)] shadow-lg">
+          {items.length} unidad{items.length === 1 ? "" : "es"} visibles
+        </span>
+      </div>
+      {editorActive && (
+        <div className="absolute bottom-4 left-4 z-10 max-w-xs rounded-xl border border-white/70 bg-[var(--erp-charcoal)]/95 px-3 py-2 text-xs font-bold text-white shadow-lg">
+          Haz clic en el mapa para agregar vértices. Se requieren al menos 3 vértices distintos.
+          <span className="ml-1 text-[var(--erp-brand-gold-soft)]">{editorPoints.length} capturados</span>
+        </div>
+      )}
+      {mapError && (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-white/85 p-6 text-center">
+          <p className="max-w-sm text-sm font-bold text-[var(--erp-danger)]">
+            El mapa no está disponible. La lista de unidades sigue mostrando el snapshot autorizado.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

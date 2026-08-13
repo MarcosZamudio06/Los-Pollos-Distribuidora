@@ -8,6 +8,7 @@ import {
   History,
   Home,
   MapPinned,
+  RadioTower,
   Package,
   Route,
   Settings,
@@ -41,6 +42,7 @@ export type NavigationItemKey =
   | "purchase-suppliers"
   | "purchases-new"
   | "my-routes"
+  | "fleet-live"
   | "route-planner"
   | "delivery-routes"
   | "reports"
@@ -262,6 +264,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Reparto / Rutas",
     section: "operations",
     to: "/delivery-routes",
+  },
+  {
+    activePaths: ["/delivery-routes/live"],
+    allowedRoles: ROUTE_ACCESS_ROLES.fleetLive,
+    routeAccessKey: "fleetLive",
+    description: "Unidades y rutas activas en tiempo real",
+    icon: RadioTower,
+    key: "fleet-live",
+    label: "Monitoreo de flota",
+    section: "operations",
+    to: "/delivery-routes/live",
   },
   {
     activePaths: ["/daily-close"],

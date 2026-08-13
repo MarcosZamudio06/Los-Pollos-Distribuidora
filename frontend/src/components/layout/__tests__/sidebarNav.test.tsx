@@ -93,6 +93,7 @@ describe("role navigation", () => {
       "/purchases/new",
       "/delivery-routes/new",
       "/delivery-routes",
+      "/delivery-routes/live",
       "/daily-close",
       "/reports",
       "/admin/employees",
