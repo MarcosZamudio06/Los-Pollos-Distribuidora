@@ -164,7 +164,7 @@ export class BranchReturnsService {
     if (!link || link.role !== BranchSupplyTransferRole.RETURN) {
       throw new NotFoundException('BRANCH_RETURN_NOT_FOUND');
     }
-    return link as ReturnLink;
+    return link;
   }
 
   private buildCycleScope(

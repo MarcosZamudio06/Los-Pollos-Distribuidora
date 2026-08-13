@@ -88,18 +88,18 @@ describe('BranchReturnsController API', () => {
       .set('Authorization', 'Bearer token')
       .set('Idempotency-Key', 'complete-key')
       .expect(201);
-    expect(service.list).toHaveBeenCalledWith(
+    expect(service.list.mock.calls).toContainEqual([
       expect.objectContaining({
         businessDate: '2026-08-05',
         status: 'PENDING',
       }),
       admin,
-    );
-    expect(service.complete).toHaveBeenCalledWith(
+    ]);
+    expect(service.complete.mock.calls).toContainEqual([
       'return-1',
       admin,
       'complete-key',
-    );
+    ]);
   });
 
   it('does not allow a seller to complete a return even when they can view the queue', async () => {
@@ -108,6 +108,6 @@ describe('BranchReturnsController API', () => {
       .set('Authorization', 'Bearer seller')
       .set('Idempotency-Key', 'seller-key')
       .expect(403);
-    expect(service.complete).not.toHaveBeenCalled();
+    expect(service.complete.mock.calls).toHaveLength(0);
   });
 });
