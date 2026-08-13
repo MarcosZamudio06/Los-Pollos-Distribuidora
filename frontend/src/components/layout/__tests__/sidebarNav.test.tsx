@@ -80,7 +80,11 @@ describe("role navigation", () => {
       "/sales",
       "/cedis",
       "/cedis/incoming",
+<<<<<<< HEAD
       "/cedis/returns",
+=======
+      "/admin/locations/branches/new",
+>>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
       "/sales/history",
       "/orders",
       "/customers",
@@ -193,6 +197,9 @@ describe("role navigation", () => {
       "route-planner",
     );
     expect(getActiveSidebarItemKey("/cedis/branches/branch-1")).toBe("cedis");
+    expect(getActiveSidebarItemKey("/admin/locations/branches/new")).toBe(
+      "cedis-branch-create",
+    );
     expect(getActiveSidebarItemKey("/route-settlements/settlement-1")).toBe(
       "delivery-routes",
     );

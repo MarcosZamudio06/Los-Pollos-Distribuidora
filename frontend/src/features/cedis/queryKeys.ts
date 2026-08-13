@@ -7,8 +7,11 @@ import type {
 
 export const cedisQueryKeys = {
   all: ["cedis"] as const,
+  operationalLocations: ["locations"] as const,
   locations: (scope: string) => ["cedis", "locations", scope] as const,
   location: (locationId: string) => ["cedis", "location", locationId] as const,
+  branches: (cedisLocationId: string) =>
+    ["cedis", "branches", cedisLocationId] as const,
   dashboard: (filters: CedisDashboardFilters | null) =>
     ["cedis", "dashboard", filters] as const,
   branchHistory: (branchId: string, filters: CedisBranchHistoryFilters) =>
@@ -28,7 +31,12 @@ export const cedisQueryKeys = {
       | "close"
       | "reopen"
       | "cancel"
+<<<<<<< HEAD
       | "receive-supply"
       | "complete-return",
+=======
+      | "create-branch"
+      | "receive-supply",
+>>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
   ) => ["cedis", "mutations", operation] as const,
 };

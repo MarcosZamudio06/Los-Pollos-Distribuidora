@@ -551,6 +551,56 @@ Gate: no implementar el renderer productivo mientras los specs mantengan una
 dependencia obligatoria de React Leaflet o mientras no exista un proveedor de
 style/tiles aprobado.
 
+<<<<<<< HEAD
+=======
+### Fase 1: normalización del gestor de paquetes
+
+Estado: COMPLETED — el repositorio usa un workspace pnpm reproducible; AUD-016 y
+el trabajo restante de AUD-017 permanecen fuera de esta fase.
+
+El repositorio contenía `package-lock.json` y scripts Docker/CI basados en npm,
+pero `AGENTS.md` exige pnpm. Esta fase deja pnpm como gestor único para que
+MapLibre no introduzca una tercera variante de instalación.
+
+Archivos probables:
+
+- `package.json` raíz.
+- `frontend/package.json`.
+- `backend/package.json`.
+- `pnpm-workspace.yaml`.
+- `pnpm-lock.yaml`.
+- `docker/frontend/Dockerfile`.
+- `docker/backend/Dockerfile`.
+- `.github/workflows/quality-gate.yml`.
+- `README.md` y documentación de validación.
+
+Actividades:
+
+1. [x] Fijar la versión de pnpm mediante `packageManager`.
+2. [x] Migrar scripts raíz a `pnpm --dir`.
+3. [x] Generar lockfile reproducible.
+4. [x] Actualizar Docker y CI para usar pnpm.
+5. [x] Eliminar lockfiles npm después de verificar paridad de manifests,
+   resoluciones relevantes y overrides.
+
+Resultado verificado:
+
+- `packageManager` fija `pnpm@10.10.0` y `pnpm-workspace.yaml` incluye `frontend`
+  y `backend`.
+- El lockfile raíz conserva los tres importers y los overrides históricos del
+  backend se expresan como overrides parent-scoped, sin forzar `js-yaml@5` en
+  las dependencias del root.
+- Los Dockerfiles y el workflow de CI usan Corepack/action-setup y el lockfile
+  raíz con `--frozen-lockfile`.
+- Los lockfiles npm y los lockfiles pnpm secundarios fueron eliminados después
+  de validar instalación congelada y paridad de manifests.
+- La validación no cierra AUD-016 ni la migración completa de documentación y
+  Prisma de AUD-017; ambos requieren tareas posteriores independientes.
+
+AUD-016, relativo a `backend start`, queda fuera de este cambio. Debe
+corregirse en una tarea separada junto con AUD-017 y su smoke `build + start +
+/health/ready`.
+>>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
 
 ### Fase 2: puertos y adaptadores backend
 
@@ -800,9 +850,9 @@ Crear sucursal
 ### Comandos de validación
 
 ```bash
-OPENSSL_CONF=/dev/null pnpm --dir backend test -- --runInBand
+OPENSSL_CONF=/dev/null pnpm --dir backend test --runInBand
 OPENSSL_CONF=/dev/null pnpm --dir backend run build
-OPENSSL_CONF=/dev/null pnpm --dir backend exec tsc -- --noEmit
+OPENSSL_CONF=/dev/null pnpm --dir backend run typecheck
 pnpm --dir frontend test
 pnpm --dir frontend run typecheck
 pnpm --dir frontend run lint
@@ -837,7 +887,8 @@ Estimación preliminar:
 
 - Seleccionar servidor de estilos/tiles y confirmar cobertura de México.
 - Confirmar licencia y attribution del estilo, tiles, glyphs y sprites.
-- Resolver la migración de npm a pnpm antes de añadir dependencias nuevas.
+- Mantener `pnpm` como gestor único y no reintroducir lockfiles npm al añadir
+  dependencias nuevas.
 - Definir si `/api/maps/config` será autenticado o público con un manifiesto sin
   datos sensibles; la recomendación inicial es autenticado para mantener una
   superficie coherente con la aplicación.

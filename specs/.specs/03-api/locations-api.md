@@ -82,6 +82,30 @@ Validaciones:
 - `EXTERNAL_POINT_OF_SALE` representa una pollería externa a matriz y debe operar como ubicación de inventario, venta y cierre diario.
 - `ROUTE_STOCK` representa inventario cargado a una ruta y no debe reutilizarse entre rutas activas distintas.
 
+### Reglas específicas para `type=BRANCH`
+
+Estas reglas aplican únicamente cuando el body de `POST /api/locations` solicita
+una sucursal; el endpoint conserva sus demás tipos de ubicación autorizados.
+
+- La solicitud debe persistir exactamente una `OperationalLocation` de tipo
+  `BRANCH`.
+- `parentId` debe identificar directamente un `DISTRIBUTION_CENTER` activo.
+- El alta no requiere un renderer cartográfico, una búsqueda de geocodificación
+  ni coordenadas; la captura manual puede continuar sin mapa. Si se envían
+  coordenadas, latitud y longitud deben enviarse juntas y dentro de rango.
+- El alta no crea ni modifica `InventoryBalance`, `InventoryMovement`,
+  `InventoryTransfer`, `BranchSupplyCycle`, reservas ni saldos iniciales.
+- El alta tampoco crea operaciones de suministro; esos comandos pertenecen a
+  los contratos CEDIS posteriores y deben ejecutarse explícitamente.
+
+#### Scenario: crear sucursal sin efectos de inventario
+
+- GIVEN un CEDIS activo y una solicitud autorizada con `type=BRANCH`
+- WHEN `POST /api/locations` responde `201 Created`
+- THEN persiste una única `OperationalLocation` hija directa del CEDIS
+- AND no persiste balances, movimientos, transferencias ni ciclos como efecto
+  de la creación
+
 ## PATCH /api/locations/:id
 
 Propósito: actualizar datos administrativos de una ubicación.

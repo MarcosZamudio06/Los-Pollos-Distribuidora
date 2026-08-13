@@ -4,6 +4,9 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OsrmRoutingProvider } from '../geospatial/providers/osrm-routing.provider';
+import { PhotonGeocodingProvider } from '../geospatial/providers/photon-geocoding.provider';
+import { VroomRouteOptimizationProvider } from '../geospatial/providers/vroom-route-optimization.provider';
 import { RoutingProvidersService } from './routing-providers.service';
 
 describe('RoutingProvidersService', () => {
@@ -20,6 +23,13 @@ describe('RoutingProvidersService', () => {
   } as unknown as ConfigService;
 
   afterEach(() => jest.restoreAllMocks());
+
+  const createService = () =>
+    new RoutingProvidersService(
+      new PhotonGeocodingProvider(config),
+      new OsrmRoutingProvider(config),
+      new VroomRouteOptimizationProvider(config),
+    );
 
   it('normalizes Photon search results and limits the search to Mexico', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(
@@ -43,7 +53,7 @@ describe('RoutingProvidersService', () => {
       ),
     );
 
-    const service = new RoutingProvidersService(config);
+    const service = createService();
     await expect(
       service.searchAddress('Centro Veracruz', 5, 19.18, -96.14),
     ).resolves.toEqual([
@@ -84,7 +94,7 @@ describe('RoutingProvidersService', () => {
       ),
     );
 
-    const service = new RoutingProvidersService(config);
+    const service = createService();
     await service.reverseAddress(19.1738, -96.1342);
 
     const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
@@ -103,7 +113,7 @@ describe('RoutingProvidersService', () => {
       ),
     );
 
-    const service = new RoutingProvidersService(config);
+    const service = createService();
     await expect(
       service.optimizeStops(
         [-96.1421, 19.1802],
@@ -152,7 +162,7 @@ describe('RoutingProvidersService', () => {
       ),
     );
 
-    const service = new RoutingProvidersService(config);
+    const service = createService();
     await expect(
       service.buildRoute([
         [-96.14, 19.18],
@@ -169,7 +179,7 @@ describe('RoutingProvidersService', () => {
 
   it('translates provider failures into retryable 503 responses', async () => {
     jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
-    const service = new RoutingProvidersService(config);
+    const service = createService();
     await expect(
       service.searchAddress('Centro Veracruz', 5),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
@@ -182,7 +192,7 @@ describe('RoutingProvidersService', () => {
       .mockResolvedValue(
         new Response(JSON.stringify({ features: [] }), { status: 200 }),
       );
-    const service = new RoutingProvidersService(config);
+    const service = createService();
 
     await service.searchAddress('Calle privada 123, Veracruz', 5);
 

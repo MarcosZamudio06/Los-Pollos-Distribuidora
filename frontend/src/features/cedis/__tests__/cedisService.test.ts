@@ -73,6 +73,47 @@ describe("CEDIS service", () => {
     ).resolves.toEqual([{ id: "cedis-1", name: "CEDIS Centro" }]);
   });
 
+  it("crea una sucursal con el payload de ubicación y devuelve data", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            id: "branch-1",
+            name: "Sucursal Centro",
+            parentId: "cedis-1",
+            type: "BRANCH",
+          },
+        }),
+        { headers: jsonHeaders, status: 201 },
+      ),
+    );
+
+    const payload = {
+      name: "Sucursal Centro",
+      type: "BRANCH" as const,
+      parentId: "cedis-1",
+      latitude: 19.432608,
+      longitude: -96.1342,
+    };
+
+    await expect(
+      cedisService.createLocation(payload, "access-token"),
+    ).resolves.toEqual({
+      id: "branch-1",
+      name: "Sucursal Centro",
+      parentId: "cedis-1",
+      type: "BRANCH",
+    });
+
+    const request = lastRequest();
+    expect(request.url).toBe("/api/locations");
+    expect(new Headers(request.init?.headers).get("authorization")).toBe(
+      "Bearer access-token",
+    );
+    expect(request.init?.method).toBe("POST");
+    expect(JSON.parse(String(request.init?.body))).toEqual(payload);
+  });
+
   it("envía Idempotency-Key en operaciones de abastecimiento y conciliación", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(okJson({ id: "transfer-1" }))

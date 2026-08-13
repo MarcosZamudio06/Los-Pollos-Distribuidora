@@ -14,6 +14,7 @@ import {
   BillingRemediationsPage,
   BillingRequestDetailPage,
   BillingRequestsPage,
+  CedisBranchCreatePage,
   CedisBranchDetailPage,
   CedisDashboardPage,
   CedisIncomingSuppliesPage,
@@ -252,6 +253,16 @@ export function AppRouter() {
               element={
                 <RoleRoute roles={ROUTE_ACCESS_ROLES.dailyClose}>
                   <DailyClosePage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/admin/locations/branches/new"
+              element={
+                <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
+                  <PermissionRoute permission={PERMISSIONS.cedisManage}>
+                    <CedisBranchCreatePage />
+                  </PermissionRoute>
                 </RoleRoute>
               }
             />

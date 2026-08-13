@@ -16,7 +16,7 @@ testing:
   runner:
     available: true
     framework: Jest
-    command: npm --prefix backend test
+    command: pnpm --dir backend test
   layers:
     unit:
       available: true
@@ -29,22 +29,22 @@ testing:
       tool: Jest + Supertest
   coverage:
     available: true
-    command: npm --prefix backend run test:cov
+    command: pnpm --dir backend run test:cov
   quality:
     linter:
       available: true
-      command: npm --prefix frontend run lint && npm --prefix backend run lint
+      command: pnpm --dir frontend run lint && pnpm --dir backend run lint
     type_checker:
       available: true
-      command: npm --prefix frontend run build && npm --prefix backend run build
+      command: pnpm --dir frontend run build && pnpm --dir backend run build
     formatter:
       available: true
-      command: npm --prefix backend run format
+      command: pnpm --dir backend run format
   notes:
     - Strict TDD is explicitly enabled by `openspec/config.yaml` and reinforced by an available backend Jest runner.
     - Backend test files currently cover unit/contract and e2e paths; no dedicated integration suite is present yet.
-    - Frontend has no configured test runner yet, even though the approved stack expects future frontend testing.
-    - Root `npm test` delegates to backend Jest, but SDD verification should keep using explicit workspace commands.
+    - Frontend uses Vitest; SDD verification should keep frontend and backend commands explicit.
+    - Root `pnpm test` delegates to backend Jest, but SDD verification should keep using explicit workspace commands.
     - Prisma schema and SQL migrations already exist, so persistence planning should assume PostgreSQL + Prisma is real, not aspirational.
 
 workflow:
@@ -82,10 +82,10 @@ rules:
       - If a conflict is found, stop and report it.
       - Follow existing code patterns in each workspace.
     tdd: true
-    test_command: npm --prefix backend test
+    test_command: pnpm --dir backend test
   verify:
-    test_command: npm --prefix backend test && npm --prefix backend run test:e2e
-    build_command: npm --prefix frontend run build && npm --prefix backend run build
+    test_command: pnpm --dir backend test && pnpm --dir backend run test:e2e
+    build_command: pnpm --dir frontend run build && pnpm --dir backend run build
     coverage_threshold: 0
   archive:
     constraints:

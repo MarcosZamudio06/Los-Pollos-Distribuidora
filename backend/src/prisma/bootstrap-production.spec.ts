@@ -272,7 +272,7 @@ describe('Production bootstrap contract', () => {
 
     expect(compose).toContain('  bootstrap:');
     expect(compose).toContain('profiles: ["migration"]');
-    expect(compose).toContain('command: npm run bootstrap:production');
+    expect(compose).toContain('command: pnpm run bootstrap:production');
     expect(compose).toContain('SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}');
     expect(compose).not.toContain(
       'SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD is required for production bootstrap}',
@@ -282,7 +282,7 @@ describe('Production bootstrap contract', () => {
     );
     expect(compose).toContain('bootstrap:\n    profiles: ["migration"]');
     expect(compose).not.toContain(
-      'command: npm run bootstrap:production --rotate-admin-password',
+      'command: pnpm run bootstrap:production --rotate-admin-password',
     );
     expect(backendSection).not.toContain('SEED_ADMIN_PASSWORD');
   });

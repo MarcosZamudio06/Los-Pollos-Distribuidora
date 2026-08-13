@@ -11,7 +11,7 @@
     "start": "nest start --entryFile backend/src/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:docker": "npm run start:prod",
+    "start:docker": "pnpm run start:prod",
     "migrate:deploy": "prisma migrate deploy",
     "start:prod": "node dist/backend/src/main",
     "bootstrap:production": "ts-node prisma/bootstrap-production.ts",
@@ -71,7 +71,7 @@
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
-    "globals": "^17.0.0",
+    "globals": "17.6.0",
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
     "prisma": "^6.19.3",
@@ -82,7 +82,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "8.61.1"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -109,9 +109,5 @@
     },
     "testTimeout": 15000,
     "testEnvironment": "node"
-  },
-  "overrides": {
-    "js-yaml": "5.2.2",
-    "uuid": "11.1.1"
   }
 }

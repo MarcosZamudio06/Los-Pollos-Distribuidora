@@ -20,6 +20,7 @@ import type {
   CedisOpenCycleCommand,
   CedisReopenCycleCommand,
   CedisRefreshCommand,
+  CreateBranchLocationPayload,
 } from "./types";
 
 const CEDIS_REFRESH_INTERVAL_MS = 60_000;
@@ -41,6 +42,30 @@ export function useCedisLocations(enabled = true) {
         accessToken,
       ),
     staleTime: CEDIS_LOCATIONS_STALE_TIME_MS,
+  });
+}
+
+export function useCreateBranchLocation() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: cedisQueryKeys.mutations("create-branch"),
+    mutationFn: (payload: CreateBranchLocationPayload) =>
+      cedisService.createLocation(payload, accessToken),
+    onSuccess: async (_location, payload) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: cedisQueryKeys.operationalLocations,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: cedisQueryKeys.locations("distribution-centers"),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: cedisQueryKeys.branches(payload.parentId),
+        }),
+      ]);
+    },
   });
 }
 

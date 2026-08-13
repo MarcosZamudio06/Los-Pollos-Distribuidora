@@ -27,7 +27,7 @@ Debe:
 - Iniciar aplicación.
 
 No debe ejecutar migraciones al arrancar. El mismo artefacto de imagen se usa
-en un job único y explícito que ejecuta `npm run migrate:deploy` antes de
+en un job único y explícito que ejecuta `pnpm run migrate:deploy` antes de
 desplegar nuevas réplicas.
 
 ## Frontend Dockerfile

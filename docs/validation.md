@@ -46,11 +46,11 @@ incluidas en esa línea base siempre fallan.
 Usar:
 
 ```bash
-OPENSSL_CONF=/dev/null npm --prefix backend test -- --runInBand
-OPENSSL_CONF=/dev/null npm --prefix backend run build
-OPENSSL_CONF=/dev/null npm --prefix backend run typecheck
-npm --prefix backend run lint:check
-npm --prefix backend run test:cov
+OPENSSL_CONF=/dev/null pnpm --dir backend test --runInBand
+OPENSSL_CONF=/dev/null pnpm --dir backend run build
+OPENSSL_CONF=/dev/null pnpm --dir backend run typecheck
+pnpm --dir backend run lint:check
+pnpm --dir backend run test:cov
 ```
 
 ---
@@ -60,30 +60,30 @@ npm --prefix backend run test:cov
 Usar cuando la TASK toque frontend:
 
 ```bash
-npm --prefix frontend run build
-npm --prefix frontend run typecheck
-npm --prefix frontend run test
-npm --prefix frontend run test:cov
+pnpm --dir frontend run build
+pnpm --dir frontend run typecheck
+pnpm --dir frontend run test
+pnpm --dir frontend run test:cov
 ```
 
 Si existe lint configurado y la TASK lo requiere:
 
 ```bash
-npm --prefix frontend run lint
+pnpm --dir frontend run lint
 ```
 
 ## Validación local equivalente a CI
 
 ```bash
-npm ci --ignore-scripts
-npm run audit:dependencies
-npm run test:guard
-npm --prefix backend run lint:check
-OPENSSL_CONF=/dev/null npm --prefix backend run typecheck
-OPENSSL_CONF=/dev/null npm --prefix backend run test:cov
-npm --prefix frontend run lint
-npm --prefix frontend run typecheck
-npm --prefix frontend run test:cov
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run audit:dependencies
+pnpm run test:guard
+pnpm --dir backend run lint:check
+OPENSSL_CONF=/dev/null pnpm --dir backend run typecheck
+OPENSSL_CONF=/dev/null pnpm --dir backend run test:cov
+pnpm --dir frontend run lint
+pnpm --dir frontend run typecheck
+pnpm --dir frontend run test:cov
 docker build --file docker/backend/Dockerfile --tag pollos-backend:ci .
 docker build --file docker/frontend/Dockerfile --tag pollos-frontend:ci .
 ```
@@ -138,9 +138,9 @@ la politica de redondeo no este aprobada.
 Aplicar en este orden para evitar incompatibilidad entre columnas y Prisma Client:
 
 ```bash
-OPENSSL_CONF=/dev/null npm --prefix backend --script-shell=/bin/sh exec prisma -- migrate deploy --schema backend/prisma/schema.prisma
-OPENSSL_CONF=/dev/null npm --prefix backend --script-shell=/bin/sh exec prisma -- generate --schema backend/prisma/schema.prisma
-OPENSSL_CONF=/dev/null npm --prefix backend run build
+OPENSSL_CONF=/dev/null pnpm --dir backend exec prisma migrate deploy --schema prisma/schema.prisma
+OPENSSL_CONF=/dev/null pnpm --dir backend exec prisma generate --schema prisma/schema.prisma
+OPENSSL_CONF=/dev/null pnpm --dir backend run build
 ```
 
 Después de migrar, desplegar o recrear el backend. `APP_TIMEZONE` acepta una zona IANA y usa `America/Mexico_City` por defecto.
@@ -149,7 +149,8 @@ Después de migrar, desplegar o recrear el backend. `APP_TIMEZONE` acepta una zo
 
 ## Comandos que no deben usarse como validación SDD principal
 
-No usar `npm test` raíz si es placeholder.
+No usar `pnpm test` raíz como única verificación SDD; usar los comandos explícitos
+de cada workspace para identificar con precisión qué capa se validó.
 
 No ejecutar binarios directamente desde `node_modules`.
 
@@ -167,7 +168,7 @@ frontend/node_modules/.bin/vite
 
 ## Política de node_modules
 
-Está permitido que `npm` use `node_modules` internamente.
+Está permitido que `pnpm` use `node_modules` internamente.
 
 Está prohibido leer, abrir, listar, buscar o resumir archivos dentro de:
 

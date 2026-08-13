@@ -16,6 +16,7 @@ import type {
   CedisIncomingSuppliesResponse,
   CedisReceiveSupplyCommand,
   CedisLocation,
+  CreateBranchLocationPayload,
   CedisOpenCycleCommand,
   CedisReopenCycleCommand,
   CedisRefreshCommand,
@@ -85,6 +86,21 @@ export const cedisService = {
       `/locations/${locationId}`,
       { headers: authHeaders(accessToken) },
     );
+
+    return unwrap(response);
+  },
+
+  async createLocation(
+    payload: CreateBranchLocationPayload,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ApiEnvelope<CedisLocation>,
+      CreateBranchLocationPayload
+    >("/locations", {
+      body: payload,
+      headers: authHeaders(accessToken),
+    });
 
     return unwrap(response);
   },

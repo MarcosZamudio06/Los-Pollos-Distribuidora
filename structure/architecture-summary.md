@@ -286,8 +286,8 @@ Capas definidas:
 | Backend unit        | Jest                                              |
 | Backend integration | Nest testing + Supertest                          |
 | Backend E2E         | Jest + Supertest                                  |
-| Coverage            | `npm --prefix backend run test:cov`               |
-| Frontend tests      | Esperado por specs, runner no configurado aún     |
+| Coverage            | `pnpm --dir backend run test:cov`                 |
+| Frontend tests      | Vitest                                             |
 | E2E browser         | Esperado por specs, Playwright no configurado aún |
 
 Regresiones que no deben romperse:
@@ -480,12 +480,12 @@ Riesgos:
 Testing y calidad:
 
 ```bash
-npm --prefix backend test
-npm --prefix backend run test:e2e
-npm --prefix backend run test:cov
-npm --prefix frontend run lint && npm --prefix backend run lint
-npm --prefix frontend run build && npm --prefix backend run build
-npm --prefix backend run format
+pnpm --dir backend test
+pnpm --dir backend run test:e2e
+pnpm --dir backend run test:cov
+pnpm --dir frontend run lint && pnpm --dir backend run lint
+pnpm --dir frontend run build && pnpm --dir backend run build
+pnpm --dir backend run format
 ```
 
 Docker:
@@ -494,24 +494,25 @@ Docker:
 docker compose up -d
 docker compose down
 docker compose logs -f backend
-docker compose exec backend npx prisma migrate deploy
+docker compose exec backend pnpm exec prisma migrate deploy
 ```
 
 Comandos validados en `initial-monorepo-structure`:
 
 ```bash
-npm --prefix backend test
-npm --prefix backend run test:e2e
-npm --prefix frontend run lint
-npm --prefix frontend run build
-npm --prefix backend run lint
-npm --prefix backend run build
+pnpm --dir backend test
+pnpm --dir backend run test:e2e
+pnpm --dir frontend run lint
+pnpm --dir frontend run build
+pnpm --dir backend run lint
+pnpm --dir backend run build
 ```
 
 No usar para verificación SDD:
 
 ```bash
-npm test
+pnpm test
 ```
 
-El script raíz `npm test` es placeholder y no debe ser la fuente de verificación SDD.
+El script raíz `pnpm test` delega a Jest del backend, pero no debe ser la única
+fuente de verificación SDD; usar los comandos explícitos de cada workspace.

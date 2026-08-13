@@ -112,7 +112,7 @@ the operational change outside the secret value:
   read -r -s -p 'SEED_ADMIN_PASSWORD (minimum 10 characters): ' SEED_ADMIN_PASSWORD
   printf '\n'
   export SEED_ADMIN_PASSWORD
-  docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap npm run bootstrap:production:rotate-admin
+  docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap pnpm run bootstrap:production:rotate-admin
 )
 ```
 

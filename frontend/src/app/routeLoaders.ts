@@ -162,6 +162,10 @@ const cedisBranchDetailRoute = createLazyRoute(
   () => import("../features/cedis"),
   "CedisBranchDetailPage",
 );
+const cedisBranchCreateRoute = createLazyRoute(
+  () => import("../features/cedis"),
+  "CedisBranchCreatePage",
+);
 const cedisDashboardRoute = createLazyRoute(
   () => import("../features/cedis"),
   "CedisDashboardPage",
@@ -208,6 +212,7 @@ export const PedidosPage = ordersRoute.Component;
 export const PosTerminalsPage = posTerminalsRoute.Component;
 export const AccessProfilesPage = accessProfilesRoute.Component;
 export const CedisBranchDetailPage = cedisBranchDetailRoute.Component;
+export const CedisBranchCreatePage = cedisBranchCreateRoute.Component;
 export const CedisDashboardPage = cedisDashboardRoute.Component;
 export const CedisIncomingSuppliesPage = cedisIncomingSuppliesRoute.Component;
 export const CedisBranchReturnsPage = cedisReturnsRoute.Component;
@@ -218,6 +223,7 @@ const navigationPreloaders: Partial<
   home: dashboardRoute.preload,
   sales: salesPosRoute.preload,
   cedis: cedisDashboardRoute.preload,
+  "cedis-branch-create": cedisBranchCreateRoute.preload,
   "cedis-incoming": cedisIncomingSuppliesRoute.preload,
   "cedis-returns": cedisReturnsRoute.preload,
   "sales-history": salesHistoryRoute.preload,
