@@ -81,6 +81,9 @@ describe('validateEnvironment', () => {
       validateEnvironment({ VROOM_URL: 'https://user:pass@vroom.internal' }),
     ).toThrow('VROOM_URL must not include URL credentials');
     expect(() =>
+      validateEnvironment({ MAP_TILES_URL: 'https://user:pass@tiles.internal' }),
+    ).toThrow('MAP_TILES_URL must not include URL credentials');
+    expect(() =>
       validateEnvironment({ MAP_DATA_PREPARED_AT: 'not-a-date' }),
     ).toThrow('MAP_DATA_PREPARED_AT must be a valid ISO date');
   });

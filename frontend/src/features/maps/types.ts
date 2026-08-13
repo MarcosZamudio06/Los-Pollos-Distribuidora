@@ -1,31 +1,15 @@
+import type { MapClientConfig } from "../../lib/maps/mapClientConfig";
+
+export type { MapClientConfig } from "../../lib/maps/mapClientConfig";
+export type {
+  MapAttribution,
+  MapCapabilities,
+  MapViewport,
+} from "../../lib/maps/mapTypes";
+
 export type MapCoordinates = {
   latitude: number;
   longitude: number;
-};
-
-export type MapViewport = MapCoordinates & {
-  zoom: number;
-};
-
-export type MapAttribution = {
-  label: string;
-  url?: string;
-};
-
-export type MapCapabilities = {
-  geocoding: boolean;
-  routing: boolean;
-  optimization: boolean;
-};
-
-export type MapClientConfig = {
-  renderer: "maplibre";
-  available: boolean;
-  styleUrl: string;
-  revision: string;
-  attribution: MapAttribution[];
-  defaultViewport: MapViewport;
-  capabilities: MapCapabilities;
 };
 
 export type MapLibrePoint = [longitude: number, latitude: number];

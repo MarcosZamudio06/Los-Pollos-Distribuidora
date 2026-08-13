@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Card, CardContent } from "../../components/ui";
 import { PageContainer } from "../../components/layout/PageContainer";
+import { useAuth } from "../auth/useAuth";
+import { useMapClientConfig } from "../maps/hooks";
+import type { MapCoordinates } from "../maps/types";
 import { BranchLocationForm } from "./BranchLocationForm";
 import {
   buildCreateBranchLocationPayload,
@@ -14,10 +17,14 @@ import {
 import { useCedisLocations, useCreateBranchLocation } from "./hooks";
 import type { BranchLocationFormValues } from "./branchLocationValidation";
 
+const BranchLocationPicker = lazy(() => import("../maps/BranchLocationPicker"));
+
 export function CedisBranchCreatePage() {
   const navigate = useNavigate();
+  const { accessToken } = useAuth();
   const cedisLocationsQuery = useCedisLocations();
   const createBranchLocation = useCreateBranchLocation();
+  const mapConfig = useMapClientConfig().data;
   const [values, setValues] = useState<BranchLocationFormValues>(
     emptyBranchLocationFormValues,
   );
@@ -29,6 +36,15 @@ export function CedisBranchCreatePage() {
 
   function handleChange(field: keyof BranchLocationFormValues, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
+    setSubmitError(null);
+  }
+
+  function handleCoordinatesChange({ latitude, longitude }: MapCoordinates) {
+    setValues((current) => ({
+      ...current,
+      latitude: String(latitude),
+      longitude: String(longitude),
+    }));
     setSubmitError(null);
   }
 
@@ -87,8 +103,8 @@ export function CedisBranchCreatePage() {
               </p>
             </div>
             <p className="text-sm leading-6 text-[var(--erp-muted-foreground)] sm:col-span-2">
-              La dirección y las coordenadas son captura manual en esta fase.
-              El mapa será un asistente posterior, no la fuente de verdad.
+              La dirección y las coordenadas siguen bajo control manual; el
+              mapa es un asistente opcional dentro de la misma captura.
             </p>
           </CardContent>
         </Card>
@@ -100,6 +116,42 @@ export function CedisBranchCreatePage() {
           isCatalogLoading={cedisLocationsQuery.isLoading}
           isCatalogUnavailable={Boolean(cedisLocationsQuery.error)}
           isSubmitting={createBranchLocation.isPending}
+          locationAssistant={
+            <Suspense
+              fallback={
+                <div
+                  aria-live="polite"
+                  className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)] p-4 text-sm text-[var(--erp-muted-foreground)]"
+                  role="status"
+                >
+                  Cargando asistente cartográfico…
+                </div>
+              }
+            >
+              <BranchLocationPicker
+                accessToken={accessToken}
+                address={values.address}
+                config={mapConfig}
+                coordinates={(() => {
+                  const latitude = Number(values.latitude);
+                  const longitude = Number(values.longitude);
+                  return values.latitude.trim() &&
+                    values.longitude.trim() &&
+                    Number.isFinite(latitude) &&
+                    Number.isFinite(longitude)
+                    ? { latitude, longitude }
+                    : null;
+                })()}
+                disabled={
+                  createBranchLocation.isPending ||
+                  Boolean(cedisLocationsQuery.error)
+                }
+                onAddressChange={(address) => handleChange("address", address)}
+                onCoordinatesChange={handleCoordinatesChange}
+                showFields={false}
+              />
+            </Suspense>
+          }
           onCancel={() => navigate("/cedis")}
           onChange={handleChange}
           onRetryCatalog={() => void cedisLocationsQuery.refetch()}

@@ -47,6 +47,12 @@ describe("map configuration", () => {
     expect(resolveMapStyle({ mode: "production", styleUrl })).toBe(styleUrl);
   });
 
+  it("accepts a same-origin production style path", () => {
+    const styleUrl = "/maps/styles/operations/style.json";
+
+    expect(resolveMapStyle({ mode: "production", styleUrl })).toBe(styleUrl);
+  });
+
   it("does not require or expose a secret for map configuration", () => {
     const styleUrl = "https://maps.example.test/styles/public/style.json";
     const resolvedStyle = resolveMapStyle({ mode: "development", styleUrl });
@@ -69,5 +75,47 @@ describe("map configuration", () => {
         styleUrl: "https://maps.example.test/style.json?token=secret",
       }),
     ).toThrow("must not contain credentials");
+  });
+
+  it("rejects cross-origin protocol-relative and unsafe style URLs", () => {
+    expect(() =>
+      assertProductionMapConfig({
+        mode: "production",
+        styleUrl: "//evil.example/style.json",
+      }),
+    ).toThrow("same-origin");
+    expect(() =>
+      assertProductionMapConfig({
+        mode: "production",
+        styleUrl: "javascript:alert(1)",
+      }),
+    ).toThrow("HTTP, HTTPS, or a same-origin /maps path");
+    expect(() =>
+      assertProductionMapConfig({
+        mode: "production",
+        styleUrl: "data:application/json,{}",
+      }),
+    ).toThrow("HTTP, HTTPS, or a same-origin /maps path");
+  });
+
+  it("rejects internal routing provider style URLs", () => {
+    expect(() =>
+      assertProductionMapConfig({
+        mode: "production",
+        styleUrl: "http://osrm:5000/styles/operations/style.json",
+      }),
+    ).toThrow("routing provider");
+    expect(() =>
+      assertProductionMapConfig({
+        mode: "production",
+        styleUrl: "http://photon:2322/styles/operations/style.json",
+      }),
+    ).toThrow("routing provider");
+    expect(() =>
+      assertProductionMapConfig({
+        mode: "production",
+        styleUrl: "http://vroom:3000/styles/operations/style.json",
+      }),
+    ).toThrow("routing provider");
   });
 });

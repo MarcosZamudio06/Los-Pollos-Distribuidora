@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { ArrowRight, MapPin, Store } from "lucide-react";
 import { Button, Card, CardContent, Input, Select } from "../../components/ui";
 import type {
@@ -15,6 +15,7 @@ type BranchLocationFormProps = {
   isCatalogLoading?: boolean;
   isCatalogUnavailable?: boolean;
   isSubmitting?: boolean;
+  locationAssistant?: ReactNode;
   onCancel: () => void;
   onChange: (
     field: keyof BranchLocationFormValues,
@@ -55,6 +56,7 @@ export function BranchLocationForm({
   isCatalogLoading = false,
   isCatalogUnavailable = false,
   isSubmitting = false,
+  locationAssistant,
   onCancel,
   onChange,
   onRetryCatalog,
@@ -201,8 +203,8 @@ export function BranchLocationForm({
             Captura manual disponible
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
-            El mapa se integrará en una fase posterior. Puedes registrar ahora
-            la dirección y las coordenadas sin perder capacidad operativa.
+            La captura manual sigue siendo la fuente de verdad. El mapa y el
+            geocodificador son asistentes opcionales y no bloquean el alta.
           </p>
         </div>
         <CardContent className="grid gap-4 p-5">
@@ -285,6 +287,8 @@ export function BranchLocationForm({
               )}
             </div>
           )}
+
+          {locationAssistant}
         </CardContent>
       </Card>
 

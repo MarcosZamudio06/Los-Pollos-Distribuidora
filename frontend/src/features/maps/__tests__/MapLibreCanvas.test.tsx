@@ -90,7 +90,7 @@ vi.mock("maplibre-gl/dist/maplibre-gl.css", () => ({}));
 const config: MapClientConfig = {
   renderer: "maplibre",
   available: true,
-  styleUrl: "/maps/styles/operations/style.json",
+  style: "/maps/styles/operations/style.json",
   revision: "mexico-2026-08",
   attribution: [{ label: "OpenStreetMap" }],
   defaultViewport: { latitude: 19.1738, longitude: -96.1342, zoom: 11 },

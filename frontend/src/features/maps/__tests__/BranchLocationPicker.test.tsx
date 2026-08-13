@@ -47,7 +47,7 @@ vi.mock("../LazyMapCanvas", () => ({
 const config: MapClientConfig = {
   renderer: "maplibre",
   available: true,
-  styleUrl: "/maps/styles/operations/style.json",
+  style: "/maps/styles/operations/style.json",
   revision: "test-revision",
   attribution: [{ label: "OpenStreetMap", url: "https://www.openstreetmap.org/copyright" }],
   defaultViewport: { latitude: 19.1738, longitude: -96.1342, zoom: 11 },
@@ -313,5 +313,7 @@ describe("BranchLocationPicker", () => {
     expect(rendered.container.querySelector('[data-testid="branch-longitude"]')).not.toBeNull();
     expect(rendered.container.querySelector('[data-testid="map-attribution"]')).not.toBeNull();
     expect(rendered.container.textContent).toContain("Mapa no disponible");
+    expect(rendered.container.textContent).toContain("OpenMapTiles");
+    expect(rendered.container.textContent).toContain("OpenStreetMap contributors");
   });
 });

@@ -140,11 +140,11 @@ jobs:
           DATABASE_URL: postgresql://user:password@db:5432/app
           JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
           JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
-          MAP_DATA_VERSION: mexico-latest
+          MAP_DATA_VERSION: mexico-260812
           OSRM_URL: https://osrm.example.test
           PHOTON_URL: https://photon.example.test
           TRUST_PROXY_HOPS: 1
-          VITE_MAP_STYLE_URL: https://maps.example.test/styles/standard/style.json
+          VITE_MAP_STYLE_URL: /maps/styles/operations/style.json
           VROOM_URL: https://vroom.example.test
         run: docker compose -f docker-compose.production.yml config >/dev/null
 

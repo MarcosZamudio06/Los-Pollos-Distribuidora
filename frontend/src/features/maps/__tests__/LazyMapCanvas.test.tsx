@@ -7,7 +7,7 @@ import type { MapClientConfig } from "../types";
 const unavailableConfig: MapClientConfig = {
   renderer: "maplibre",
   available: false,
-  styleUrl: "/maps/styles/operations/style.json",
+  style: "/maps/styles/operations/style.json",
   revision: "mexico-2026-08",
   attribution: [],
   defaultViewport: { latitude: 19.1738, longitude: -96.1342, zoom: 11 },

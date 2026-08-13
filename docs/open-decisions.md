@@ -21,28 +21,34 @@ Mantener visibles hasta que el negocio confirme:
 
 ## Proveedor de estilos y tiles para mapas
 
-### Decisión: pendiente
+### Decisión: CERRADA / APROBADA
 
-No existe todavía un proveedor aprobado de style/tiles para el renderer
-productivo. Photon queda definido únicamente como proveedor inicial del puerto
-de geocodificación; no resuelve estilos ni tiles y no debe tratarse como tal.
+El renderer productivo aprobado es MapLibre GL JS con cartografía self-hosted:
 
-La decisión debe evaluarse antes de instalar infraestructura o habilitar un
-renderer productivo. El proveedor elegido MUST cumplir, como mínimo, con:
+- **Tile server:** TileServer GL `v5.6.0`, pinned y sin puerto publicado al host
+  en producción.
+- **Dataset:** snapshot de México de Geofabrik. La preparación registra URL de
+  origen, snapshot/versión, fecha y SHA-256 en `.map-data/rendering/manifest.json`.
+- **Generación:** Planetiler `v0.10.2`, pinned, con el perfil OpenMapTiles.
+- **Salida:** `mexico.pmtiles` (PMTiles es el formato operativo servido por
+  TileServer GL).
+- **Schema:** OpenMapTiles `v3.16`.
+- **Style:** OSM Bright en commit
+  `563b249f7ae71528b1f1e327cb9c019d0dda4c50`, con sprites y glyphs preparados
+  desde revisiones fijas.
+- **Fonts:** OpenMapTiles fonts `v2.0`, descargadas por el flujo explícito de
+  preparación y no durante el arranque de Docker.
+- **Same-origin:** el browser solicita `/maps/styles/operations/style.json` y
+  recursos derivados desde `/maps/**`; Nginx hace reverse proxy a la red
+  interna. Photon, OSRM, VROOM y `tileserver:8080` no llegan al browser.
+- **Atribución mínima visible:** `© OpenMapTiles © OpenStreetMap contributors`.
+- **Licencias:** se conservan notices y licencias de Geofabrik/OSM,
+  OpenMapTiles, OSM Bright, Planetiler, TileServer GL y fonts en
+  `docker/maps/licenses/` y en el manifest de despliegue.
+- **Fallback:** si el style, sprites, glyphs, tiles o WebGL fallan, no se usa
+  `tile.openstreetmap.org` en producción; la captura manual/textual permanece
+  disponible.
 
-- cobertura operativa de México;
-- compatibilidad con el renderer aprobado y un `style.json` completo;
-- sprites y glyphs disponibles y versionables;
-- atribución visible de OpenStreetMap y de las demás fuentes aplicables;
-- licencia compatible con uso empresarial y términos documentados;
-- versionado de datasets y estilos;
-- caché y rendimiento aceptables en dispositivos móviles;
-- endpoint público controlado o same-origin, sin exponer secretos;
-- healthcheck y smoke test para style, sprites, glyphs y tiles;
-- posibilidad de sustituirse sin modificar el dominio ni los contratos de rutas.
-
-No se debe elegir un proveedor por defecto ni instalar servidores, datasets,
-tiles o estilos hasta registrar la decisión, la licencia, la atribución, el
-modelo de operación y la política de fallback. Mientras la decisión siga
-pendiente, el gate de renderer productivo permanece bloqueado y la captura
-manual/lista textual es la alternativa válida.
+El backend solo mantiene los adaptadores privados de Photon, OSRM y VROOM y un
+estado agregado opcional de `MapTiles` (`up`/`down` y `latencyMs`). No existe una
+segunda configuración backend de style URL.

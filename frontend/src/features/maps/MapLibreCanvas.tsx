@@ -237,7 +237,7 @@ export function MapLibreCanvas({
           }),
           container,
           fadeDuration: prefersReducedMotion() ? 0 : 300,
-          style: config.styleUrl,
+          style: config.style,
           zoom: initialZoom,
         });
         mapRef.current = map;
@@ -321,7 +321,7 @@ export function MapLibreCanvas({
     config.defaultViewport.longitude,
     config.defaultViewport.zoom,
     config.revision,
-    config.styleUrl,
+    config.style,
     initialLatitude,
     initialLongitude,
     initialZoom,

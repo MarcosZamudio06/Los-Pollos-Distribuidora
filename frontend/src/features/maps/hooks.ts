@@ -1,21 +1,34 @@
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../auth";
-import { mapsService } from "./mapsService";
+import { useMemo } from "react";
+import {
+  resolveMapClientConfig,
+} from "../../lib/maps/mapClientConfig";
+import { runtimeMapConfig } from "../../lib/maps/mapConfig";
 
-export const mapsQueryKeys = {
-  all: ["maps"] as const,
-  config: () => ["maps", "config"] as const,
-};
+export function useMapClientConfig(enabled = true) {
+  return useMemo(() => {
+    if (!enabled) {
+      return {
+        data: null,
+        error: null,
+        isError: false,
+        isLoading: false,
+      } as const;
+    }
 
-const MAPS_CONFIG_STALE_TIME_MS = 5 * 60_000;
-
-export function useMapsConfig(enabled = true) {
-  const { accessToken } = useAuth();
-
-  return useQuery({
-    enabled: Boolean(accessToken && enabled),
-    queryKey: mapsQueryKeys.config(),
-    queryFn: ({ signal }) => mapsService.getConfig(accessToken, signal),
-    staleTime: MAPS_CONFIG_STALE_TIME_MS,
-  });
+    try {
+      return {
+        data: resolveMapClientConfig(runtimeMapConfig),
+        error: null,
+        isError: false,
+        isLoading: false,
+      } as const;
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Map configuration is invalid."),
+        isError: true,
+        isLoading: false,
+      } as const;
+    }
+  }, [enabled]);
 }

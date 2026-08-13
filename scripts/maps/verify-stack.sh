@@ -21,4 +21,6 @@ docker compose --profile maps exec -T osrm \
 docker compose --profile maps exec -T vroom \
   curl --fail --silent http://127.0.0.1:3000/health >/dev/null
 
-echo "PostGIS, Photon, OSRM, and VROOM checks passed."
+"${SCRIPT_DIR}/verify-rendering.sh"
+
+echo "PostGIS, Photon, OSRM, VROOM, and TileServer GL checks passed."

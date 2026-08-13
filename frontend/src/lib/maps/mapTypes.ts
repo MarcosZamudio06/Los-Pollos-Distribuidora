@@ -8,3 +8,23 @@ export type MapConfig = Readonly<{
 }>;
 
 export type ResolvedMapStyle = StyleSpecification | string;
+
+export type MapCoordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+export type MapViewport = MapCoordinates & {
+  zoom: number;
+};
+
+export type MapAttribution = {
+  label: string;
+  url?: string;
+};
+
+export type MapCapabilities = {
+  geocoding: boolean;
+  routing: boolean;
+  optimization: boolean;
+};

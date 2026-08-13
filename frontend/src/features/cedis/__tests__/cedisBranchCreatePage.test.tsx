@@ -39,6 +39,10 @@ vi.mock("../hooks", () => ({
   useCreateBranchLocation: () => hookMocks.mutation,
 }));
 
+vi.mock("../../auth/useAuth", () => ({
+  useAuth: () => ({ accessToken: "test-access-token" }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn() },
 }));

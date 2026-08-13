@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input } from "../../components/ui";
-import { ApiClientError } from "../../lib/api";
 import { LazyMapCanvas } from "./LazyMapCanvas";
-import { mapsService } from "./mapsService";
 import { MapUnavailableState } from "./MapUnavailableState";
 import type {
   MapClientConfig,
@@ -30,6 +28,7 @@ export type BranchLocationPickerProps = {
   accessToken?: string | null;
   disabled?: boolean;
   geocodingClient?: BranchLocationGeocodingClient;
+  showFields?: boolean;
   onAddressChange: (address: string) => void;
   onCoordinatesChange: (coordinates: MapCoordinates) => void;
 };
@@ -65,7 +64,6 @@ function isValidCoordinatePair(coordinates: CoordinateDrafts): MapCoordinates | 
 }
 
 function errorStatus(error: unknown) {
-  if (error instanceof ApiClientError) return error.statusCode;
   if (typeof error === "object" && error !== null) {
     const statusCode = (error as { statusCode?: unknown }).statusCode;
     return typeof statusCode === "number" ? statusCode : null;
@@ -91,7 +89,9 @@ export function BranchLocationPicker({
   geocodingClient,
   onAddressChange,
   onCoordinatesChange,
+  showFields = true,
 }: BranchLocationPickerProps) {
+  const geocodingAccessToken = accessToken ?? null;
   const [coordinateDrafts, setCoordinateDrafts] = useState(() =>
     toCoordinateDrafts(coordinates),
   );
@@ -112,12 +112,16 @@ export function BranchLocationPicker({
 
   const defaultGeocodingClient = useMemo<BranchLocationGeocodingClient>(
     () => ({
-      reverse: (point, options) =>
-        mapsService.reverseAddress(point, accessToken, options),
-      search: (query, options) =>
-        mapsService.searchAddresses(query, accessToken, options),
+      reverse: async (point, options) => {
+        const { mapsService } = await import("./mapsService");
+        return mapsService.reverseAddress(point, geocodingAccessToken, options);
+      },
+      search: async (query, options) => {
+        const { mapsService } = await import("./mapsService");
+        return mapsService.searchAddresses(query, geocodingAccessToken, options);
+      },
     }),
-    [accessToken],
+    [geocodingAccessToken],
   );
   const client = geocodingClient ?? defaultGeocodingClient;
   const geocodingEnabled = Boolean(config?.capabilities.geocoding) && !disabled;
@@ -261,20 +265,22 @@ export function BranchLocationPicker({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="grid content-start gap-4">
-          <label
-            className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
-            htmlFor="branch-picker-address"
-          >
-            Dirección operativa
-            <Input
-              autoComplete="street-address"
-              data-testid="branch-address"
-              disabled={disabled}
-              id="branch-picker-address"
-              onChange={(event) => onAddressChange(event.target.value)}
-              value={address}
-            />
-          </label>
+          {showFields ? (
+            <label
+              className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
+              htmlFor="branch-picker-address"
+            >
+              Dirección operativa
+              <Input
+                autoComplete="street-address"
+                data-testid="branch-address"
+                disabled={disabled}
+                id="branch-picker-address"
+                onChange={(event) => onAddressChange(event.target.value)}
+                value={address}
+              />
+            </label>
+          ) : null}
 
           <label
             className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
@@ -335,46 +341,48 @@ export function BranchLocationPicker({
             </ul>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label
-              className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
-              htmlFor="branch-picker-latitude"
-            >
-              Latitud
-              <Input
-                data-testid="branch-latitude"
-                disabled={disabled}
-                id="branch-picker-latitude"
-                inputMode="decimal"
-                onChange={(event) => handleManualCoordinateChange("latitude", event.target.value)}
-                type="number"
-                value={
-                  hasLocalCoordinateDraft
-                    ? coordinateDrafts.latitude
-                    : formatCoordinate(coordinates?.latitude)
-                }
-              />
-            </label>
-            <label
-              className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
-              htmlFor="branch-picker-longitude"
-            >
-              Longitud
-              <Input
-                data-testid="branch-longitude"
-                disabled={disabled}
-                id="branch-picker-longitude"
-                inputMode="decimal"
-                onChange={(event) => handleManualCoordinateChange("longitude", event.target.value)}
-                type="number"
-                value={
-                  hasLocalCoordinateDraft
-                    ? coordinateDrafts.longitude
-                    : formatCoordinate(coordinates?.longitude)
-                }
-              />
-            </label>
-          </div>
+          {showFields ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label
+                className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
+                htmlFor="branch-picker-latitude"
+              >
+                Latitud
+                <Input
+                  data-testid="branch-latitude"
+                  disabled={disabled}
+                  id="branch-picker-latitude"
+                  inputMode="decimal"
+                  onChange={(event) => handleManualCoordinateChange("latitude", event.target.value)}
+                  type="number"
+                  value={
+                    hasLocalCoordinateDraft
+                      ? coordinateDrafts.latitude
+                      : formatCoordinate(coordinates?.latitude)
+                  }
+                />
+              </label>
+              <label
+                className="grid gap-1.5 text-sm font-semibold text-[var(--erp-foreground)]"
+                htmlFor="branch-picker-longitude"
+              >
+                Longitud
+                <Input
+                  data-testid="branch-longitude"
+                  disabled={disabled}
+                  id="branch-picker-longitude"
+                  inputMode="decimal"
+                  onChange={(event) => handleManualCoordinateChange("longitude", event.target.value)}
+                  type="number"
+                  value={
+                    hasLocalCoordinateDraft
+                      ? coordinateDrafts.longitude
+                      : formatCoordinate(coordinates?.longitude)
+                  }
+                />
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid content-start gap-3">
@@ -420,7 +428,7 @@ export function BranchLocationPicker({
                 ))}
               </>
             ) : (
-              "Atribución cartográfica pendiente de configuración."
+              "Atribución: © OpenMapTiles · © OpenStreetMap contributors"
             )}
           </div>
 

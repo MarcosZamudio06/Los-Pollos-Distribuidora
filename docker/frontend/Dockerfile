@@ -30,12 +30,29 @@ FROM nginx:alpine
 
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 RUN printf '%s\n' \
+  'proxy_cache_path /var/cache/nginx/maps levels=1:2 keys_zone=maps_cache:10m max_size=256m inactive=1d use_temp_path=off;' \
   'server {' \
   '  listen 3000;' \
   '  server_name _;' \
   '  root /usr/share/nginx/html;' \
   '  index index.html;' \
   '  client_max_body_size 1m;' \
+  '  add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\''; style-src '\''self'\'' '\''unsafe-inline'\''; img-src '\''self'\'' data: blob:; font-src '\''self'\'' data:; connect-src '\''self'\''; worker-src '\''self'\'' blob:; object-src '\''none'\''; base-uri '\''self'\''; frame-ancestors '\''none'\'';" always;' \
+  '  add_header X-Content-Type-Options nosniff always;' \
+  '  add_header Referrer-Policy strict-origin-when-cross-origin always;' \
+  '  location /maps/ {' \
+  '    proxy_pass http://tileserver:8080/;' \
+  '    proxy_http_version 1.1;' \
+  '    proxy_set_header Host frontend;' \
+  '    proxy_set_header X-Real-IP $remote_addr;' \
+  '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_set_header X-Forwarded-Prefix /maps;' \
+  '    proxy_cache maps_cache;' \
+  '    proxy_cache_valid 200 1h;' \
+  '    proxy_cache_valid 404 1m;' \
+  '    add_header Cache-Control "public, max-age=3600" always;' \
+  '  }' \
   '  location /api/ {' \
   '    proxy_pass http://backend:4000/api/;' \
   '    proxy_http_version 1.1;' \

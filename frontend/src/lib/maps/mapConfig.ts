@@ -10,24 +10,65 @@ export const runtimeMapConfig: MapConfig = {
 };
 
 function assertPublicMapStyleUrl(styleUrl: string): void {
+  if (styleUrl.startsWith("//")) {
+    throw new Error(
+      "VITE_MAP_STYLE_URL must use a same-origin /maps path or an absolute public HTTP(S) URL.",
+    );
+  }
+
+  if (styleUrl.startsWith("/")) {
+    let parsed: URL;
+    try {
+      parsed = new URL(styleUrl, "https://same-origin.invalid");
+    } catch {
+      throw new Error(
+        "VITE_MAP_STYLE_URL must use a same-origin /maps path or an absolute public HTTP(S) URL.",
+      );
+    }
+
+    if (
+      !parsed.pathname.startsWith("/maps/") ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error(
+        "VITE_MAP_STYLE_URL must be a same-origin /maps path without query tokens or fragments.",
+      );
+    }
+    return;
+  }
+
   let parsed: URL;
   try {
     parsed = new URL(styleUrl);
   } catch {
-    throw new Error("VITE_MAP_STYLE_URL must be a valid HTTP(S) URL.");
+    throw new Error(
+      "VITE_MAP_STYLE_URL must use HTTP, HTTPS, or a same-origin /maps path.",
+    );
   }
 
   if (!(parsed.protocol === "http:" || parsed.protocol === "https:")) {
-    throw new Error("VITE_MAP_STYLE_URL must use HTTP or HTTPS.");
+    throw new Error(
+      "VITE_MAP_STYLE_URL must use HTTP, HTTPS, or a same-origin /maps path.",
+    );
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error(
       "VITE_MAP_STYLE_URL must not contain credentials, query tokens, or fragments.",
     );
   }
-  if (/^(photon|vroom|osrm)([.-]|$)/i.test(parsed.hostname)) {
+  const hostname = parsed.hostname.toLowerCase();
+  const internalHost =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname === "tileserver" ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".local");
+  if (internalHost || /^(photon|vroom|osrm)([.-]|$)/i.test(hostname)) {
     throw new Error(
-      "VITE_MAP_STYLE_URL must point to a public map style, not a routing provider.",
+      "VITE_MAP_STYLE_URL must point to a public map style, not an internal routing provider.",
     );
   }
 }

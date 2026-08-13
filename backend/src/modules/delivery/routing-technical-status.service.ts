@@ -7,7 +7,7 @@ import {
 } from '../fleet/traffic/traffic-provider';
 
 type ServiceStatus = {
-  name: 'PostGIS' | 'Photon' | 'VROOM' | 'OSRM';
+  name: 'PostGIS' | 'Photon' | 'VROOM' | 'OSRM' | 'MapTiles';
   status: 'up' | 'down';
   latencyMs: number;
 };
@@ -34,6 +34,7 @@ export class RoutingTechnicalStatusService {
   }
 
   async getStatus() {
+    const mapTilesUrl = this.config.get<string>('MAP_TILES_URL');
     const [services, fleetPersistence, traffic] = await Promise.all([
       Promise.all([
         this.checkPostgis(),
@@ -52,6 +53,14 @@ export class RoutingTechnicalStatusService {
             this.requiredUrl('OSRM_URL'),
           ),
         ),
+        ...(mapTilesUrl
+          ? [
+              this.checkHttp(
+                'MapTiles',
+                new URL('/health', this.requiredUrl('MAP_TILES_URL')),
+              ),
+            ]
+          : []),
       ]),
       this.checkFleetPersistence(),
       this.checkTrafficCapabilities(),

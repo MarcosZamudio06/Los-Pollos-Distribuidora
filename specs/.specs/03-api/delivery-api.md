@@ -18,12 +18,11 @@ cambiar los endpoints de rutas ni el modelo de negocio.
 | `GeocodingPort` | Búsqueda directa y geocodificación inversa | Etiqueta, coordenadas y metadatos de procedencia opcionales |
 | `RouteOptimizationPort` | Ordenar paradas para un vehículo | Secuencia de ventas/paradas y estado de asignación |
 | `RoutingPort` | Calcular recorrido vial para una secuencia aprobada | GeoJSON, distancia y duración |
-| `MapStyleConfigPort` | Entregar configuración segura para un renderer | Style URL controlada, atribución, revisión y capacidades |
 
-`MapStyleConfigPort` es una frontera de configuración, no un permiso para
-instalar infraestructura en esta fase. Su implementación y cualquier endpoint
-de configuración pública requieren que el proveedor de style/tiles esté
-aprobado conforme a `docs/open-decisions.md`.
+La configuración pública del style pertenece exclusivamente al frontend:
+`VITE_MAP_STYLE_URL` se resuelve mediante `runtimeMapConfig` y
+`resolveMapStyle()`. El backend no expone un puerto ni endpoint duplicado para
+el style; únicamente puede reportar un estado técnico agregado de `MapTiles`.
 
 Adaptadores iniciales, reemplazables por los puertos anteriores:
 
@@ -61,7 +60,7 @@ Propósito: exponer a ADMIN el estado técnico agregado de la arquitectura de ro
 
 Permisos: rol `ADMIN`.
 
-La respuesta `data` incluye `status`, `checkedAt`, `routingDataVersion`, `dataset` (`version`, `preparedAt`, `ageDays`, `renewalRecommended`), `services` para `PostGIS`, `Photon`, `VROOM` y `OSRM` con `status` y `latencyMs`, `fleetPersistence.status`, `latestVehiclePositionAgeSeconds` (`number` o `null`) y `traffic` (`available` y `provider`). El último valor de Fleet es un agregado de persistencia y no contiene identificadores, coordenadas ni datos personales. Mientras no exista una fuente contratada y autorizada, `traffic` debe ser `{ "available": false, "provider": null }`; el estado técnico no fabrica segmentos.
+La respuesta `data` incluye `status`, `checkedAt`, `routingDataVersion`, `dataset` (`version`, `preparedAt`, `ageDays`, `renewalRecommended`), `services` para `PostGIS`, `Photon`, `VROOM`, `OSRM` y, cuando está configurado, `MapTiles` con `status` y `latencyMs`, `fleetPersistence.status`, `latestVehiclePositionAgeSeconds` (`number` o `null`) y `traffic` (`available` y `provider`). El último valor de Fleet es un agregado de persistencia y no contiene identificadores, coordenadas ni datos personales. Mientras no exista una fuente contratada y autorizada, `traffic` debe ser `{ "available": false, "provider": null }`; el estado técnico no fabrica segmentos.
 
 El backend puede consultar Photon, VROOM y OSRM para este diagnóstico porque son proveedores internos de servidor; nunca devuelve sus URLs al navegador. La URL del estilo MapLibre (`VITE_MAP_STYLE_URL`) es una configuración exclusiva del frontend y no forma parte de este endpoint.
 

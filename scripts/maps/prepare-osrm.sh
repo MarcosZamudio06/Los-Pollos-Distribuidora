@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MAP_DATA_DIR="${MAP_DATA_DIR:-${REPO_ROOT}/.map-data}"
 MAP_DOCKER_PLATFORM="${MAP_DOCKER_PLATFORM:-linux/amd64}"
-OSM_PBF_URL="${OSM_PBF_URL:-https://download.geofabrik.de/north-america/mexico-latest.osm.pbf}"
+OSM_PBF_URL="${OSM_PBF_URL:-https://download.geofabrik.de/north-america/mexico-260812.osm.pbf}"
 OSRM_IMAGE="${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}"
 TARGET_DIR="${MAP_DATA_DIR}/osrm"
 
