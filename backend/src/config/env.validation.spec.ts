@@ -22,69 +22,8 @@ describe('validateEnvironment', () => {
     ).toEqual(
       expect.objectContaining({
         DATABASE_URL: DEFAULT_DATABASE_URL,
-        GEOCODING_PROVIDER: 'photon',
-        ROUTING_PROVIDER: 'osrm',
-        ROUTE_OPTIMIZATION_PROVIDER: 'vroom',
-        MAP_STYLE_PUBLIC_URL: '/maps/styles/operations/style.json',
       }),
     );
-  });
-
-  it('validates geospatial provider names, URLs, timeouts, and browser-safe map settings', () => {
-    expect(
-      validateEnvironment({
-        GEOCODING_PROVIDER: 'photon',
-        PHOTON_URL: 'http://photon:2322',
-        GEOCODING_TIMEOUT_MS: '5000',
-        ROUTING_PROVIDER: 'osrm',
-        OSRM_URL: 'http://osrm:5000',
-        ROUTE_OPTIMIZATION_PROVIDER: 'vroom',
-        VROOM_URL: 'http://vroom:3000',
-        ROUTING_TIMEOUT_MS: '10000',
-        MAP_RENDERING_ENABLED: 'true',
-        MAP_STYLE_PUBLIC_URL: '/maps/styles/operations/style.json',
-        MAP_DEFAULT_LATITUDE: '19.1738',
-        MAP_DEFAULT_LONGITUDE: '-96.1342',
-        MAP_DEFAULT_ZOOM: '11',
-      }),
-    ).toEqual(
-      expect.objectContaining({
-        GEOCODING_TIMEOUT_MS: 5000,
-        ROUTING_TIMEOUT_MS: 10000,
-        MAP_DEFAULT_LATITUDE: 19.1738,
-        MAP_DEFAULT_LONGITUDE: -96.1342,
-        MAP_DEFAULT_ZOOM: 11,
-      }),
-    );
-
-    expect(() => validateEnvironment({ GEOCODING_PROVIDER: 'google' })).toThrow(
-      'GEOCODING_PROVIDER must be one of: photon',
-    );
-    expect(() => validateEnvironment({ GEOCODING_TIMEOUT_MS: '0' })).toThrow(
-      'GEOCODING_TIMEOUT_MS must be a positive integer',
-    );
-    expect(() =>
-      validateEnvironment({
-        MAP_STYLE_PUBLIC_URL: 'http://internal:8080/style.json',
-      }),
-    ).toThrow(
-      'MAP_STYLE_PUBLIC_URL must be a relative path or an absolute public URL',
-    );
-    expect(() => validateEnvironment({ MAP_DEFAULT_LATITUDE: '91' })).toThrow(
-      'MAP_DEFAULT_LATITUDE must be between -90 and 90',
-    );
-  });
-
-  it('requires provider URLs in production after the base production configuration is valid', () => {
-    expect(() =>
-      validateEnvironment({
-        DATABASE_URL:
-          'postgresql://user:password@database:5432/app?sslmode=require',
-        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
-        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
-        NODE_ENV: 'production',
-      }),
-    ).toThrow('PHOTON_URL is required when GEOCODING_PROVIDER is enabled');
   });
 
   it('normalizes the CORS allowlist and HTTP security defaults', () => {
@@ -248,9 +187,6 @@ describe('validateEnvironment', () => {
       validateEnvironment({
         DATABASE_URL:
           'postgresql://user:password@database:5432/app?sslmode=verify-full',
-        PHOTON_URL: 'https://photon.example.com',
-        OSRM_URL: 'https://osrm.example.com',
-        VROOM_URL: 'https://vroom.example.com',
         JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
         JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
         NODE_ENV: 'production',

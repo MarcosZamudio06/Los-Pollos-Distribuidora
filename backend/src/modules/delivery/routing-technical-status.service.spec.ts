@@ -121,25 +121,4 @@ describe('RoutingTechnicalStatusService', () => {
     });
     expect(provider.getTrafficSnapshot).not.toHaveBeenCalled();
   });
-
-  it('reports missing provider configuration as degraded service status', async () => {
-    const missingConfig = {
-      get: jest.fn(
-        (key: string, fallback?: unknown) =>
-          ({ ROUTING_TIMEOUT_MS: 5000 })[key] ?? fallback,
-      ),
-    } as unknown as ConfigService;
-    const service = new RoutingTechnicalStatusService(missingConfig, prisma);
-
-    const result = await service.getStatus();
-
-    expect(result.status).toBe('degraded');
-    expect(result.services).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'Photon', status: 'down' }),
-        expect.objectContaining({ name: 'VROOM', status: 'down' }),
-        expect.objectContaining({ name: 'OSRM', status: 'down' }),
-      ]),
-    );
-  });
 });

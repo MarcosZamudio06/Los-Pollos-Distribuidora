@@ -107,7 +107,7 @@ Además:
 | Rendimiento | **FAIL** | Consultas de producto por partida dentro de transacción serializable, escritura de sesión por request y bundle frontend sin code splitting. |
 | Tests | **FAIL de suficiencia** | 856 backend y 325 frontend pasan, pero solo hay 3 casos E2E y falta el viaje inventario+dinero+traspaso+cierre. |
 | Docker y despliegue | **FAIL/PENDIENTE runtime** | Compose productivo omite variables obligatorias y no ejecuta bootstrap; runtime Docker no disponible localmente. |
-| CI/CD | **PARTIAL** | CI cubre calidad, PostGIS, Docker, dependencias y secretos; no prueba el compose productivo ni bootstrap. La Fase 1 normalizó CI y la operación local al workspace pnpm. |
+| CI/CD | **PARTIAL** | CI cubre calidad, PostGIS, Docker, dependencias y secretos; no prueba el compose productivo ni bootstrap y usa npm mientras la operación local indicada actualmente usa pnpm. |
 | Duplicación/código muerto/TODO | **PARTIAL** | Sin marcadores TODO; duplicación de lógica de ventana operativa y tamaño de servicios elevan riesgo. Ausencia total de dead code no demostrada. |
 | Documentación vs implementación | **FAIL** | README declara que solo existe el bootstrap y que no hay módulos, Prisma, endpoints ni UI, lo contrario al repositorio actual. |
 
@@ -398,7 +398,7 @@ HASTA EL FINAL
 
 ### AUD-014 — Consultas y escrituras innecesarias en rutas calientes
 
-PENDIENTE
+completed
 
 - **Severidad:** MEDIA
 - **Categoría:** rendimiento, concurrencia
@@ -442,7 +442,7 @@ completed
 
 ### AUD-016 — El comando backend `start` no encuentra el artefacto compilado
 
-PENDIENTE
+completed
 
 - **Severidad:** BAJA
 - **Categoría:** ejecutabilidad local, scripts
@@ -470,10 +470,10 @@ PENDIENTE
 - **Categoría:** documentación, CI/CD, configuración
 - **Archivos afectados:** `README.md:1-66`; `docs/validation.md`; `.github/workflows/quality-gate.yml`; package/lockfiles; configuración Prisma en package.json.
 - **Módulo:** gobierno del repositorio.
-- **Descripción exacta:** README todavía afirma que solo existe foundation y no hay módulos, endpoints, guards, Prisma ni UI. La Fase 1 ya alineó los comandos de README/docs/CI y los lockfiles al gestor pnpm; Prisma todavía advierte que `package.json#prisma` está deprecado.
+- **Descripción exacta:** README afirma que solo existe foundation y no hay módulos, endpoints, guards, Prisma ni UI. Comandos de README/docs/CI usan npm, mientras la regla operativa vigente exige pnpm. Prisma advierte que `package.json#prisma` está deprecado.
 - **Cómo se produce:** seguir onboarding o validación documentada.
 - **Cómo reproducirlo:** comparar README con 27 módulos, schema y UI; ejecutar Prisma validate para observar warning.
-- **Evidencia encontrada:** contradicción literal en README línea 18; el flujo de instalación y CI ya usa `pnpm-lock.yaml`, pero bootstrap/compose y la configuración Prisma permanecen pendientes de AUD-017.
+- **Evidencia encontrada:** contradicción literal en README línea 18; CI npm funciona con lockfiles propios, pero no reproduce exactamente el flujo local pnpm.
 - **Impacto:** operadores ejecutan rutas equivocadas, resultados locales/CI divergen y el bootstrap productivo queda invisible.
 - **Comportamiento actual:** fuentes auxiliares envejecidas.
 - **Comportamiento esperado:** runbook único, comandos soportados y descripción real de módulos/deploy.

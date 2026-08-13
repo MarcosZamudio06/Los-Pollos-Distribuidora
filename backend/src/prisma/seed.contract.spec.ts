@@ -380,7 +380,7 @@ describe('Prisma seed contract', () => {
     expect(packageJson.scripts?.['migrate:deploy']).toBe(
       'prisma migrate deploy',
     );
-    expect(packageJson.scripts?.['start:docker']).toBe('pnpm run start:prod');
+    expect(packageJson.scripts?.['start:docker']).toBe('npm run start:prod');
     expect(packageJson.scripts?.['start:docker']).not.toContain('migrate');
     expect(packageJson.scripts?.['start:docker']).not.toContain('seed');
   });
@@ -390,14 +390,14 @@ describe('Prisma seed contract', () => {
     const productionCompose = readFileSync(productionComposePath, 'utf8');
 
     expect(developmentCompose).toContain('  migrate:\n');
-    expect(developmentCompose).toContain('pnpm run migrate:deploy');
+    expect(developmentCompose).toContain('npm run migrate:deploy');
     expect(developmentCompose).toContain(
       'condition: service_completed_successfully',
     );
     expect(developmentCompose).not.toContain('command: npm run start:docker');
     expect(productionCompose).toContain('  migrate:\n');
     expect(productionCompose).toContain('profiles: ["migration"]');
-    expect(productionCompose).toContain('pnpm run migrate:deploy');
+    expect(productionCompose).toContain('npm run migrate:deploy');
     expect(productionCompose).not.toContain('command: npm run start:docker');
   });
 

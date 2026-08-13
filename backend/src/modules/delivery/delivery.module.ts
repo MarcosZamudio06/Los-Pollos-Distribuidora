@@ -1,11 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
-<<<<<<< HEAD
 import { FleetModule } from '../fleet/fleet.module';
-=======
 import { GeospatialModule } from '../geospatial/geospatial.module';
->>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
 import { InventoryModule } from '../inventory/inventory.module';
 import { DeliveryController } from './delivery.controller';
 import { DeliveryOrdersController } from './delivery-orders.controller';
@@ -21,11 +18,13 @@ import { VehicleController } from './vehicle.controller';
 import { VehicleService } from './vehicle.service';
 
 @Module({
-<<<<<<< HEAD
-  imports: [AuthModule, ConfigModule, FleetModule, InventoryModule],
-=======
-  imports: [AuthModule, ConfigModule, InventoryModule, GeospatialModule],
->>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
+  imports: [
+    AuthModule,
+    ConfigModule,
+    FleetModule,
+    GeospatialModule,
+    InventoryModule,
+  ],
   controllers: [
     DeliveryController,
     DeliveryOrdersController,

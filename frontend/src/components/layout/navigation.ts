@@ -29,9 +29,9 @@ import {
 export type NavigationItemKey =
   | "home"
   | "cedis"
-  | "cedis-branch-create"
   | "cedis-incoming"
   | "cedis-returns"
+  | "cedis-branch-create"
   | "sales"
   | "sales-history"
   | "orders"
@@ -111,7 +111,6 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     to: "/cedis/incoming",
   },
   {
-<<<<<<< HEAD
     activePaths: ["/cedis/returns"],
     allowedRoles: ROUTE_ACCESS_ROLES.cedisReturns,
     routeAccessKey: "cedisReturns",
@@ -121,7 +120,8 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Devoluciones CEDIS",
     section: "operations",
     to: "/cedis/returns",
-=======
+  },
+  {
     activePaths: ["/admin/locations/branches/new"],
     allowedRoles: ROUTE_ACCESS_ROLES.admin,
     routeAccessKey: "admin",
@@ -131,7 +131,6 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Nueva sucursal",
     section: "operations",
     to: "/admin/locations/branches/new",
->>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
   },
   {
     activePaths: ["/sales/history", "/sales/"],

@@ -31,12 +31,8 @@ export const cedisQueryKeys = {
       | "close"
       | "reopen"
       | "cancel"
-<<<<<<< HEAD
+      | "create-branch"
       | "receive-supply"
       | "complete-return",
-=======
-      | "create-branch"
-      | "receive-supply",
->>>>>>> 2bc79e07 (Blocker de fase 6 pendiente a revisión)
   ) => ["cedis", "mutations", operation] as const,
 };
