@@ -729,6 +729,29 @@ describe('ReportsService', () => {
     ]);
   });
 
+  it('limits the accounts-receivable report to the SELLER own sales', async () => {
+    const prisma = createPrismaMock();
+    prisma.accountReceivable.findMany.mockResolvedValue([]);
+    prisma.customer.count.mockResolvedValue(0);
+
+    const service = new ReportsService(prisma as never);
+    await service.getAccountsReceivable({}, seller);
+
+    expect(prisma.accountReceivable.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          sale: { userId: 'seller-1' },
+        }),
+      }),
+    );
+    expect(prisma.customer.count).toHaveBeenCalledWith({
+      where: {
+        creditStatus: { in: ['BLOCKED', 'SUSPENDED'] },
+        sales: { some: { userId: 'seller-1' } },
+      },
+    });
+  });
+
   it('builds delivery operations report and hides collection amounts from DRIVER', async () => {
     const prisma = createPrismaMock();
     prisma.deliveryOrder.count

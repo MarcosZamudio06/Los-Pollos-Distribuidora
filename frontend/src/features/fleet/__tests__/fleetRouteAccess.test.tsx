@@ -41,6 +41,28 @@ function renderFleetAccess() {
   );
 }
 
+function renderVehicleAccess() {
+  return renderToStaticMarkup(
+    <MemoryRouter initialEntries={["/fleet/vehicles"]}>
+      <Routes>
+        <Route element={<p>Forbidden</p>} path="/403" />
+        <Route
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.fleetVehicles}>
+              <PermissionRoute permission={PERMISSIONS.fleetView}>
+                <PermissionRoute permission={PERMISSIONS.fleetManage}>
+                  <p>Vehicle administration authorized</p>
+                </PermissionRoute>
+              </PermissionRoute>
+            </RoleRoute>
+          }
+          path="/fleet/vehicles"
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("fleet live route access", () => {
   beforeEach(() => {
     auth.user = {
@@ -64,5 +86,23 @@ describe("fleet live route access", () => {
       permissions: [PERMISSIONS.fleetView],
     };
     expect(renderFleetAccess()).not.toContain("Fleet autorizado");
+  });
+
+  it("requires ADMIN, fleet.view and fleet.manage for vehicle administration", () => {
+    auth.user = {
+      ...auth.user,
+      permissions: [PERMISSIONS.fleetView, PERMISSIONS.fleetManage],
+    };
+    expect(renderVehicleAccess()).toContain("Vehicle administration authorized");
+
+    auth.user = { ...auth.user, permissions: [PERMISSIONS.fleetView] };
+    expect(renderVehicleAccess()).not.toContain("Vehicle administration authorized");
+
+    auth.user = {
+      ...auth.user,
+      role: "DRIVER",
+      permissions: [PERMISSIONS.fleetView, PERMISSIONS.fleetManage],
+    };
+    expect(renderVehicleAccess()).not.toContain("Vehicle administration authorized");
   });
 });

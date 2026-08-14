@@ -4,6 +4,7 @@ import { useRegisterReceivablePayment } from "../hooks/useAccountsReceivable";
 import { useOpenCashSession } from "../../cierre-diario/hooks";
 import { Link } from "react-router-dom";
 import { formatMoney, toNumber } from "./formatters";
+import { paymentMethodLabel } from "../paymentMethodLabels";
 import type { AccountReceivable, PaymentMethod } from "../types";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { toast } from "sonner";
@@ -47,9 +48,8 @@ export function PaymentRegistrationDialog({
   const [amount, setAmount] = useState(String(outstandingAmount));
   const [bankName, setBankName] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
-  const [appliedDocumentId, setAppliedDocumentId] = useState("");
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
-  const [collectionPass, setCollectionPass] = useState("");
+  const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [pendingPayment, setPendingPayment] = useState<
     Parameters<typeof registerPayment.mutateAsync>[0] | null
   >(null);
@@ -70,11 +70,11 @@ export function PaymentRegistrationDialog({
       accountReceivableId: account.id,
       amount: numericAmount,
       paymentMethod,
-      bankName,
-      referenceNumber,
-      appliedDocumentId,
-      appliedDocumentType: appliedDocumentId ? "INTERNAL_DOCUMENT" : undefined,
-      collectionPass: collectionPass ? Number(collectionPass) : undefined,
+      bankName: paymentMethod === "CASH" ? undefined : bankName,
+      referenceNumber: paymentMethod === "CASH" ? undefined : referenceNumber,
+      nextPaymentDate: nextPaymentDate
+        ? new Date(`${nextPaymentDate}T00:00:00`).toISOString()
+        : undefined,
       cashShiftId:
         paymentMethod === "CASH" ? openCashSession.data?.id : undefined,
       deviceId: paymentMethod === "CASH" ? getPosDeviceId() : undefined,
@@ -173,35 +173,31 @@ export function PaymentRegistrationDialog({
                   .filter((method) => method !== "CASH" || canReceiveCash)
                   .map((method) => (
                     <option key={method} value={method}>
-                      {method}
+                      {paymentMethodLabel(method)}
                     </option>
                   ))}
               </select>
             </label>
-            <label className="grid gap-2 text-sm font-semibold">
-              Banco
-              <input
-                className={fieldClass}
-                value={bankName}
-                onChange={(event) => setBankName(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold">
-              Referencia
-              <input
-                className={fieldClass}
-                value={referenceNumber}
-                onChange={(event) => setReferenceNumber(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold">
-              Documento aplicado
-              <input
-                className={fieldClass}
-                value={appliedDocumentId}
-                onChange={(event) => setAppliedDocumentId(event.target.value)}
-              />
-            </label>
+            {paymentMethod !== "CASH" && (
+              <>
+                <label className="grid gap-2 text-sm font-semibold">
+                  Banco
+                  <input
+                    className={fieldClass}
+                    value={bankName}
+                    onChange={(event) => setBankName(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold">
+                  Referencia
+                  <input
+                    className={fieldClass}
+                    value={referenceNumber}
+                    onChange={(event) => setReferenceNumber(event.target.value)}
+                  />
+                </label>
+              </>
+            )}
             <label className="grid gap-2 text-sm font-semibold">
               Fecha de pago
               <input
@@ -212,13 +208,12 @@ export function PaymentRegistrationDialog({
               />
             </label>
             <label className="grid gap-2 text-sm font-semibold sm:col-span-2">
-              Vuelta de cobranza
+              Siguiente fecha de pago
               <input
                 className={fieldClass}
-                min="1"
-                type="number"
-                value={collectionPass}
-                onChange={(event) => setCollectionPass(event.target.value)}
+                type="date"
+                value={nextPaymentDate}
+                onChange={(event) => setNextPaymentDate(event.target.value)}
               />
             </label>
           </div>
@@ -282,7 +277,8 @@ export function PaymentRegistrationDialog({
           <strong>Monto:</strong> {formatMoney(pendingPayment?.amount ?? 0)}
         </p>
         <p>
-          <strong>Forma de pago:</strong> {pendingPayment?.paymentMethod}
+          <strong>Forma de pago:</strong>{" "}
+          {paymentMethodLabel(pendingPayment?.paymentMethod)}
         </p>
         {pendingPayment?.paymentMethod === "CASH" && (
           <>
@@ -301,6 +297,14 @@ export function PaymentRegistrationDialog({
           <strong>Fecha:</strong>{" "}
           {pendingPayment?.paidAt
             ? new Date(pendingPayment.paidAt).toLocaleDateString("es-MX")
+            : "—"}
+        </p>
+        <p>
+          <strong>Siguiente fecha de pago:</strong>{" "}
+          {pendingPayment?.nextPaymentDate
+            ? new Date(pendingPayment.nextPaymentDate).toLocaleDateString(
+                "es-MX",
+              )
             : "—"}
         </p>
         {registerPayment.error && (

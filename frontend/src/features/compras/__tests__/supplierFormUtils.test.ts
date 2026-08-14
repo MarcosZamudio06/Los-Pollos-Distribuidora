@@ -130,6 +130,26 @@ describe("supplier form utilities — validation", () => {
     const errors = validateSupplierForm({ ...validDraft, name: "", phone: "" });
     expect(Object.keys(errors).sort()).toEqual(["name", "phone"]);
   });
+
+  it("rejects phone numbers longer than 10 characters", () => {
+    const errors = validateSupplierForm({
+      ...validDraft,
+      phone: "22912345678",
+    });
+    expect(errors.phone).toBe(
+      "El teléfono del proveedor no puede superar 10 caracteres.",
+    );
+  });
+
+  it("rejects letters in the phone number", () => {
+    const errors = validateSupplierForm({
+      ...validDraft,
+      phone: "229ABC1234",
+    });
+    expect(errors.phone).toBe(
+      "El teléfono del proveedor solo puede contener números.",
+    );
+  });
 });
 
 describe("supplier form utilities — legacy null edit completion", () => {

@@ -1,9 +1,8 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import { Input, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { useCommercialPolicies, useSaveCustomer } from "../hooks/useCustomers";
-import { useDeliveryRoutes } from "../../rutas-reparto/hooks";
+import { useSaveCustomer } from "../hooks/useCustomers";
 import type { Customer, CustomerType, CreditStatus } from "../types";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { toast } from "sonner";
@@ -22,7 +21,6 @@ import {
   toCustomerFormValues,
   validateCustomerField,
   validateCustomerForm,
-  type CustomerFormCatalogs,
   type CustomerFormDraft,
   type CustomerFormErrors,
   type CustomerFormField,
@@ -96,16 +94,6 @@ function sanitizeText(value: string) {
   return collapseSpaces(value);
 }
 
-function validationCatalogs(
-  routes: Array<{ id: string }>,
-  policies: Array<{ id: string }>,
-): CustomerFormCatalogs {
-  return {
-    deliveryRouteIds: new Set(routes.map((route) => route.id)),
-    commercialPolicyIds: new Set(policies.map((policy) => policy.id)),
-  };
-}
-
 export function CustomerFormModal({
   canManageCommercialTerms,
   customer,
@@ -126,18 +114,6 @@ export function CustomerFormModal({
   > | null>(null);
 
   const saveCustomer = useSaveCustomer(customer?.id, canManageCommercialTerms);
-  const routes = useDeliveryRoutes({ limit: 100, page: 1 });
-  const commercialPolicies = useCommercialPolicies();
-
-  const routeOptions = useMemo(() => routes.data?.items ?? [], [routes.data]);
-  const policyOptions = useMemo(
-    () => commercialPolicies.data ?? [],
-    [commercialPolicies.data],
-  );
-  const catalogs = useMemo(
-    () => validationCatalogs(routeOptions, policyOptions),
-    [policyOptions, routeOptions],
-  );
   const activeError =
     submitError ??
     (hasCustomerFormErrors(errors)
@@ -162,7 +138,6 @@ export function CustomerFormModal({
       const nextError = validateCustomerField(
         field,
         nextDraft,
-        catalogs,
         canManageCommercialTerms,
       );
       setErrors((current) => ({ ...current, [field]: nextError ?? undefined }));
@@ -170,15 +145,34 @@ export function CustomerFormModal({
     setSubmitError(null);
   }
 
-  function markTouched(field: CustomerFormField) {
+  function markTouched(field: CustomerFormField, nextDraft = draft) {
     setTouched((current) => ({ ...current, [field]: true }));
     const nextError = validateCustomerField(
       field,
-      draft,
-      catalogs,
+      nextDraft,
       canManageCommercialTerms,
     );
     setErrors((current) => ({ ...current, [field]: nextError ?? undefined }));
+  }
+
+  function blurTextField(
+    field: Extract<
+      CustomerFormField,
+      | "name"
+      | "commercialName"
+      | "priceListId"
+      | "address"
+      | "deliveryAddress"
+      | "fiscalName"
+      | "fiscalAddress"
+    >,
+  ) {
+    const nextDraft = {
+      ...draft,
+      [field]: sanitizeText(draft[field]),
+    } as CustomerFormDraft;
+    setDraft(nextDraft);
+    markTouched(field, nextDraft);
   }
 
   function setMoneyField(rawValue: string) {
@@ -192,7 +186,6 @@ export function CustomerFormModal({
       const nextError = validateCustomerField(
         "creditLimit",
         nextDraft,
-        catalogs,
         canManageCommercialTerms,
       );
       setErrors((current) => ({
@@ -215,7 +208,6 @@ export function CustomerFormModal({
     const nextError = validateCustomerField(
       "creditLimit",
       nextDraft,
-      catalogs,
       canManageCommercialTerms,
     );
     setErrors((current) => ({
@@ -227,7 +219,6 @@ export function CustomerFormModal({
   function validateCurrentForm(nextDraft: CustomerFormDraft) {
     const nextErrors = validateCustomerForm(
       nextDraft,
-      catalogs,
       canManageCommercialTerms,
     );
     setErrors(nextErrors);
@@ -244,8 +235,6 @@ export function CustomerFormModal({
       creditDays: true,
       creditStatus: true,
       deliveryAddress: true,
-      assignedRouteId: true,
-      commercialPolicyId: true,
       fiscalName: true,
       taxId: true,
       fiscalAddress: true,
@@ -414,10 +403,8 @@ export function CustomerFormModal({
                   Boolean(touched.name && draft.name && !errors.name),
                 )}
                 id={getFieldId("name")}
-                onBlur={() => markTouched("name")}
-                onChange={(event) =>
-                  setDraftField("name", event.target.value, sanitizeText)
-                }
+                onBlur={() => blurTextField("name")}
+                onChange={(event) => setDraftField("name", event.target.value)}
                 placeholder="Pollería Los Hermanos"
                 required
                 value={draft.name}
@@ -456,13 +443,9 @@ export function CustomerFormModal({
                   ),
                 )}
                 id={getFieldId("commercialName")}
-                onBlur={() => markTouched("commercialName")}
+                onBlur={() => blurTextField("commercialName")}
                 onChange={(event) =>
-                  setDraftField(
-                    "commercialName",
-                    event.target.value,
-                    sanitizeText,
-                  )
+                  setDraftField("commercialName", event.target.value)
                 }
                 placeholder="Pollería Los Hermanos"
                 value={draft.commercialName}
@@ -646,7 +629,39 @@ export function CustomerFormModal({
             </label>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <label
+            className="grid gap-2 text-sm font-semibold"
+            htmlFor={getFieldId("address")}
+          >
+            Dirección
+            <textarea
+              aria-describedby={mergeDescribedBy(
+                "address",
+                Boolean(errors.address),
+                false,
+              )}
+              aria-invalid={Boolean(errors.address)}
+              className={textareaFieldClass(
+                Boolean(errors.address),
+                Boolean(touched.address && draft.address && !errors.address),
+              )}
+              id={getFieldId("address")}
+              onBlur={() => blurTextField("address")}
+              onChange={(event) => setDraftField("address", event.target.value)}
+              placeholder="Av. Independencia #245, Col. Centro, Veracruz, Ver."
+              value={draft.address}
+            />
+            {errors.address && (
+              <span
+                className="text-xs font-medium text-[var(--erp-danger)]"
+                id={getErrorId("address")}
+              >
+                {errors.address}
+              </span>
+            )}
+          </label>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label
               className="grid gap-2 text-sm font-semibold"
               htmlFor={getFieldId("priceListId")}
@@ -669,9 +684,9 @@ export function CustomerFormModal({
                   ),
                 )}
                 id={getFieldId("priceListId")}
-                onBlur={() => markTouched("priceListId")}
+                onBlur={() => blurTextField("priceListId")}
                 onChange={(event) =>
-                  setDraftField("priceListId", event.target.value, sanitizeText)
+                  setDraftField("priceListId", event.target.value)
                 }
                 placeholder="PL-MAYOREO-01"
                 value={draft.priceListId}
@@ -686,162 +701,6 @@ export function CustomerFormModal({
               )}
             </label>
 
-            <label
-              className="grid gap-2 text-sm font-semibold"
-              htmlFor={getFieldId("assignedRouteId")}
-            >
-              Ruta asignada
-              <Select
-                aria-describedby={mergeDescribedBy(
-                  "assignedRouteId",
-                  Boolean(errors.assignedRouteId),
-                  false,
-                )}
-                aria-invalid={Boolean(errors.assignedRouteId)}
-                className={inputClass(
-                  Boolean(errors.assignedRouteId),
-                  Boolean(
-                    touched.assignedRouteId &&
-                    draft.assignedRouteId &&
-                    !errors.assignedRouteId,
-                  ),
-                )}
-                disabled={routes.isLoading || Boolean(routes.error)}
-                id={getFieldId("assignedRouteId")}
-                onBlur={() => markTouched("assignedRouteId")}
-                onChange={(event) =>
-                  setDraftField(
-                    "assignedRouteId",
-                    event.target.value,
-                    sanitizeText,
-                  )
-                }
-                value={draft.assignedRouteId}
-              >
-                <option value="">
-                  {routes.isLoading
-                    ? "Cargando rutas..."
-                    : "Selecciona una ruta"}
-                </option>
-                {routeOptions.map((route) => (
-                  <option key={route.id} value={route.id}>
-                    {route.name}
-                  </option>
-                ))}
-              </Select>
-              {routes.error && (
-                <span className="text-xs font-medium text-[var(--erp-danger)]">
-                  No se pudieron cargar las rutas disponibles.
-                </span>
-              )}
-              {errors.assignedRouteId && (
-                <span
-                  className="text-xs font-medium text-[var(--erp-danger)]"
-                  id={getErrorId("assignedRouteId")}
-                >
-                  {errors.assignedRouteId}
-                </span>
-              )}
-            </label>
-
-            <label
-              className="grid gap-2 text-sm font-semibold"
-              htmlFor={getFieldId("commercialPolicyId")}
-            >
-              Política comercial
-              <Select
-                aria-describedby={mergeDescribedBy(
-                  "commercialPolicyId",
-                  Boolean(errors.commercialPolicyId),
-                  false,
-                )}
-                aria-invalid={Boolean(errors.commercialPolicyId)}
-                className={inputClass(
-                  Boolean(errors.commercialPolicyId),
-                  Boolean(
-                    touched.commercialPolicyId &&
-                    draft.commercialPolicyId &&
-                    !errors.commercialPolicyId,
-                  ),
-                )}
-                disabled={
-                  !canManageCommercialTerms ||
-                  commercialPolicies.isLoading ||
-                  Boolean(commercialPolicies.error)
-                }
-                id={getFieldId("commercialPolicyId")}
-                onBlur={() => markTouched("commercialPolicyId")}
-                onChange={(event) =>
-                  setDraftField(
-                    "commercialPolicyId",
-                    event.target.value,
-                    sanitizeText,
-                  )
-                }
-                value={draft.commercialPolicyId}
-              >
-                <option value="">
-                  {commercialPolicies.isLoading
-                    ? "Cargando políticas..."
-                    : "Selecciona una política"}
-                </option>
-                {policyOptions.map((policy) => (
-                  <option key={policy.id} value={policy.id}>
-                    {policy.name}
-                  </option>
-                ))}
-              </Select>
-              {commercialPolicies.error && (
-                <span className="text-xs font-medium text-[var(--erp-danger)]">
-                  No se pudieron cargar las políticas comerciales.
-                </span>
-              )}
-              {errors.commercialPolicyId && (
-                <span
-                  className="text-xs font-medium text-[var(--erp-danger)]"
-                  id={getErrorId("commercialPolicyId")}
-                >
-                  {errors.commercialPolicyId}
-                </span>
-              )}
-            </label>
-          </div>
-
-          <label
-            className="grid gap-2 text-sm font-semibold"
-            htmlFor={getFieldId("address")}
-          >
-            Dirección
-            <textarea
-              aria-describedby={mergeDescribedBy(
-                "address",
-                Boolean(errors.address),
-                false,
-              )}
-              aria-invalid={Boolean(errors.address)}
-              className={textareaFieldClass(
-                Boolean(errors.address),
-                Boolean(touched.address && draft.address && !errors.address),
-              )}
-              id={getFieldId("address")}
-              onBlur={() => markTouched("address")}
-              onChange={(event) =>
-                setDraftField("address", event.target.value, sanitizeText)
-              }
-              placeholder="Av. Independencia #245, Col. Centro, Veracruz, Ver."
-              value={draft.address}
-            />
-            {errors.address && (
-              <span
-                className="text-xs font-medium text-[var(--erp-danger)]"
-                id={getErrorId("address")}
-              >
-                {errors.address}
-              </span>
-            )}
-          </label>
-
-          <div className="grid gap-4 md:grid-cols-3">
             <label
               className="grid gap-2 text-sm font-semibold"
               htmlFor={getFieldId("creditLimit")}
@@ -1014,13 +873,9 @@ export function CustomerFormModal({
                   ),
                 )}
                 id={getFieldId("deliveryAddress")}
-                onBlur={() => markTouched("deliveryAddress")}
+                onBlur={() => blurTextField("deliveryAddress")}
                 onChange={(event) =>
-                  setDraftField(
-                    "deliveryAddress",
-                    event.target.value,
-                    sanitizeText,
-                  )
+                  setDraftField("deliveryAddress", event.target.value)
                 }
                 placeholder="Av. Independencia #245, Col. Centro, Veracruz, Ver."
                 value={draft.deliveryAddress}
@@ -1057,9 +912,9 @@ export function CustomerFormModal({
                   ),
                 )}
                 id={getFieldId("fiscalName")}
-                onBlur={() => markTouched("fiscalName")}
+                onBlur={() => blurTextField("fiscalName")}
                 onChange={(event) =>
-                  setDraftField("fiscalName", event.target.value, sanitizeText)
+                  setDraftField("fiscalName", event.target.value)
                 }
                 placeholder="Comercializadora del Golfo S.A. de C.V."
                 value={draft.fiscalName}
@@ -1139,13 +994,9 @@ export function CustomerFormModal({
                   ),
                 )}
                 id={getFieldId("fiscalAddress")}
-                onBlur={() => markTouched("fiscalAddress")}
+                onBlur={() => blurTextField("fiscalAddress")}
                 onChange={(event) =>
-                  setDraftField(
-                    "fiscalAddress",
-                    event.target.value,
-                    sanitizeText,
-                  )
+                  setDraftField("fiscalAddress", event.target.value)
                 }
                 placeholder="Av. Independencia #245, Col. Centro, Veracruz, Ver."
                 value={draft.fiscalAddress}
@@ -1175,17 +1026,12 @@ export function CustomerFormModal({
 
         <div className="flex flex-col items-end gap-3 sm:flex-row sm:justify-between">
           <div className="text-xs text-[var(--erp-muted-foreground)]">
-            {routes.error || commercialPolicies.error
-              ? "Hay catálogos pendientes de carga; revisa la conexión antes de guardar."
-              : "Todos los campos relevantes se validan al escribir, al salir del campo y antes de guardar."}
+            Todos los campos relevantes se validan al escribir, al salir del
+            campo y antes de guardar.
           </div>
           <button
             className="justify-self-end rounded-xl bg-[var(--erp-charcoal)] px-5 py-3 font-black text-white transition hover:bg-[var(--erp-graphite)] disabled:opacity-60"
-            disabled={
-              saveCustomer.isPending ||
-              routes.isLoading ||
-              commercialPolicies.isLoading
-            }
+            disabled={saveCustomer.isPending}
             type="submit"
           >
             {saveCustomer.isPending ? "Guardando..." : "Guardar cliente"}

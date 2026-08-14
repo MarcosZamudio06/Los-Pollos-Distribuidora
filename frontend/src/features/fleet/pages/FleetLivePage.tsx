@@ -8,6 +8,7 @@ import {
   PageFrame,
   PageShell,
   RouteHero,
+  SecondaryLink,
   SelectInput,
   StatusMessage,
   TextInput,
@@ -138,6 +139,7 @@ export function FleetLivePage() {
   const snapshotItems = useMemo(() => live.data?.items ?? [], [live.data?.items]);
   const zones = zonesQuery.data ?? [];
   const canManageZones = hasPermission(user, PERMISSIONS.fleetZonesManage);
+  const canManageVehicles = hasPermission(user, PERMISSIONS.fleetManage);
   const filteredItems = useMemo(
     () => filterFleetItems(snapshotItems, filters),
     [filters, snapshotItems],
@@ -331,6 +333,11 @@ export function FleetLivePage() {
         <RouteHero
           action={
             <div className="grid gap-2 sm:flex sm:items-center">
+              {canManageVehicles && (
+                <SecondaryLink to="/fleet/vehicles">
+                  Administrar unidades
+                </SecondaryLink>
+              )}
               <FleetConnectionBadge state={live.connectionState} />
               <span className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-xs font-bold text-white/75">
                 <RadioTower aria-hidden="true" size={14} />

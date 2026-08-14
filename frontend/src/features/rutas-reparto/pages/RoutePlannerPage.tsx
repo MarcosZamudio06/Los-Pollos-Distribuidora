@@ -119,16 +119,25 @@ export function RoutePlannerPage() {
     (stop): stop is DraftStop & { latitude: number; longitude: number } =>
       Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude),
   );
-  const canCalculate = Boolean(
-    (isReoptimization || form.name.trim()) &&
-    form.driverId &&
-    form.vehicleId &&
-    form.scheduledDate &&
-    origin?.latitude != null &&
-    origin?.longitude != null &&
-    stops.length &&
-    locatedStops.length === stops.length,
-  );
+  const unlocatedStopCount = stops.length - locatedStops.length;
+  const calculationBlocker = !isReoptimization && !form.name.trim()
+    ? "Escribe el nombre de la ruta."
+    : !form.driverId
+      ? "Selecciona un repartidor activo."
+      : !form.vehicleId
+        ? "Selecciona una unidad activa."
+        : !form.scheduledDate
+          ? "Selecciona la fecha programada."
+          : !origin
+            ? "Selecciona el origen operativo."
+            : origin.latitude == null || origin.longitude == null
+              ? "El origen seleccionado no tiene coordenadas válidas."
+              : stops.length === 0
+                ? "Selecciona al menos una venta elegible."
+                : unlocatedStopCount > 0
+                  ? `Ubica las ${unlocatedStopCount} ${unlocatedStopCount === 1 ? "parada" : "paradas"} en el mapa o busca su dirección.`
+                  : undefined;
+  const canCalculate = !calculationBlocker;
   const orderedStops = useMemo(
     () =>
       plan
@@ -705,25 +714,35 @@ export function RoutePlannerPage() {
                     Secuencia accesible de entregas
                   </h2>
                 </div>
-                <div className="flex gap-2">
-                  <SecondaryButton
-                    disabled={!canCalculate || createPlan.isPending}
-                    onClick={() => void calculate()}
-                  >
-                    <Calculator className="h-4 w-4" />
-                    {createPlan.isPending
-                      ? "Calculando…"
-                      : plan
-                        ? "Recalcular"
-                        : "Calcular ruta"}
-                  </SecondaryButton>
-                  <PrimaryButton
-                    disabled={!plan || createRoute.isPending}
-                    onClick={() => setConfirming(true)}
-                  >
-                    <Truck className="h-4 w-4" />
-                    Crear y asignar
-                  </PrimaryButton>
+                <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                  {!canCalculate && calculationBlocker && (
+                    <p
+                      className="max-w-xs text-right text-xs font-bold leading-5 text-[var(--erp-muted-foreground)]"
+                      role="status"
+                    >
+                      {calculationBlocker}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <SecondaryButton
+                      disabled={!canCalculate || createPlan.isPending}
+                      onClick={() => void calculate()}
+                    >
+                      <Calculator className="h-4 w-4" />
+                      {createPlan.isPending
+                        ? "Calculando…"
+                        : plan
+                          ? "Recalcular"
+                          : "Calcular ruta"}
+                    </SecondaryButton>
+                    <PrimaryButton
+                      disabled={!plan || createRoute.isPending}
+                      onClick={() => setConfirming(true)}
+                    >
+                      <Truck className="h-4 w-4" />
+                      Crear y asignar
+                    </PrimaryButton>
+                  </div>
                 </div>
               </div>
               <ol className="grid gap-0">

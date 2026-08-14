@@ -145,9 +145,10 @@ describe("UI-004 role-aware executive dashboard", () => {
     expect(html).toContain("Ventas del día");
     expect(html).toContain("Clientes");
     expect(html).toContain("Inventario consultable");
+    expect(html).toContain("Cobranza próxima");
+    expect(html).toContain("/accounts-receivable");
     expect(html).not.toContain("Nueva compra");
     expect(html).not.toContain("/purchases");
-    expect(html).not.toContain("Cobranza próxima");
   });
 
   it("filtra dashboard de almacén sin ventas globales ni cobranza", () => {

@@ -71,7 +71,7 @@ Cada pago debe mostrar:
 - Referencia.
 - Documento aplicado.
 - Ruta y liquidación cuando aplique.
-- Vuelta de cobranza.
+- Siguiente fecha de pago.
 - Estado.
 - Fecha de pago.
 
@@ -83,10 +83,10 @@ Campos:
 
 - Cuenta por cobrar (`accountReceivableId`).
 - Monto.
-- Método de pago.
-- Banco opcional.
-- Referencia opcional.
-- Documento aplicado opcional.
+- Método de pago con etiquetas en español.
+- Banco opcional para métodos no monetarios; no se solicita con efectivo.
+- Referencia opcional para métodos no monetarios; no se solicita con efectivo.
+- Siguiente fecha de pago opcional.
 - Fecha de pago.
 
 Reglas UI:
@@ -121,7 +121,7 @@ Reglas UI:
 
 - `ADMIN`: consulta global y cancelación de pagos conforme a política.
 - `COLLECTIONS`: consulta de saldos y registro de pagos. El método `CASH` solo se muestra cuando la capacidad efectiva incluye `collections.receive_cash`; antes de registrar efectivo, la pantalla debe consultar el turno propio abierto del dispositivo y ofrecer acceso a apertura de turno cuando falte.
-- `SELLER`: consulta limitada conforme a política.
+- `SELLER`: consulta y registro de pagos limitados a las cuentas asociadas a sus ventas. El método `CASH` conserva los requisitos de permiso efectivo, turno propio abierto y dispositivo registrado.
 - `WAREHOUSE` y `DRIVER`: sin acceso directo, salvo cobros de ruta desde flujo de reparto para `DRIVER`.
 
 ## Estados de pantalla

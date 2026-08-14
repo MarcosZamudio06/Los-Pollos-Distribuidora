@@ -374,7 +374,7 @@ No se publican posiciones de rutas completadas o canceladas como eventos de trac
 
 Propósito: listar ventas candidatas para una ruta.
 
-Permisos: `ADMIN`.
+Permisos: `ADMIN`, `SELLER`.
 
 Query:
 
@@ -393,12 +393,24 @@ Validaciones:
 - Excluir ventas que ya pertenezcan a una ruta.
 - La respuesta es informativa; creación y consumo del plan vuelven a validar elegibilidad.
 
+## GET /api/delivery-route-planning/drivers
+
+Propósito: listar exclusivamente usuarios activos con rol `DRIVER` para el catálogo del planificador, sin conceder administración de usuarios.
+
+Permisos: `ADMIN`, `SELLER`.
+
+## GET /api/delivery-route-planning/vehicles
+
+Propósito: listar exclusivamente vehículos activos para el catálogo del planificador, sin conceder acceso al fleet map ni administración de flota.
+
+Permisos: `ADMIN`, `SELLER`.
+
 ## GET /api/geocoding/search
 
 Propósito: buscar una dirección mediante `GeocodingPort`. La implementación
 inicial utiliza el adaptador Photon self-hosted.
 
-Permisos: `ADMIN`.
+Permisos: `ADMIN`, `SELLER`.
 
 Query:
 
@@ -421,7 +433,7 @@ Propósito: obtener una etiqueta legible para un punto colocado o movido en el
 mapa mediante `GeocodingPort`. La implementación inicial utiliza el adaptador
 Photon self-hosted.
 
-Permisos: `ADMIN`.
+Permisos: `ADMIN`, `SELLER`.
 
 Query:
 
@@ -437,7 +449,7 @@ La etiqueta normalizada se conserva como dato de planeación; no sobrescribe aut
 
 Propósito: validar y calcular un borrador de ruta antes de crearla o agregar pedidos a una ruta mapeada.
 
-Permisos: `ADMIN`.
+Permisos: `ADMIN`, `SELLER` para crear una planeación nueva. La reoptimización de una ruta existente permanece limitada a `ADMIN`.
 
 Body importante:
 
@@ -563,7 +575,7 @@ Notas:
 
 Propósito: crear ruta y asignar ventas confirmadas. La creación geoespacial consume un borrador calculado por `POST /api/delivery-route-plans`.
 
-Permisos: `ADMIN`.
+Permisos: `ADMIN`; `SELLER` únicamente para creación geoespacial mediante un `routePlanId` propio, vigente y no consumido.
 
 Headers para creación geoespacial:
 
@@ -609,7 +621,7 @@ Validaciones:
 - `driverId` y `scheduledDate` requeridos.
 - Para una creación geoespacial con `routePlanId`, `vehicleId` es requerido y debe coincidir con el vehículo persistido en `DeliveryRoutePlanDraft`.
 - Debe enviarse exactamente uno entre `routePlanId` y `orders[]`; son mutuamente excluyentes.
-- Si se envía `routePlanId`, el plan debe pertenecer al ADMIN actual, no estar expirado ni consumido, y coincidir con repartidor, fecha y origen.
+- Si se envía `routePlanId`, el plan debe pertenecer al usuario planificador actual (`ADMIN` o `SELLER`), no estar expirado ni consumido, y coincidir con repartidor, fecha y origen.
 - Antes de consumir el plan, revalidar en la misma operación el repartidor, vehículo, origen, ventas, cuentas por cobrar y asignaciones concurrentes.
 - La creación geoespacial persiste atómicamente geometría, distancia, duración, secuencia y coordenadas exactamente del plan aprobado.
 - Reutilizar `Idempotency-Key` con el mismo payload devuelve la ruta creada; reutilizarla con otro payload responde `409 Conflict`.

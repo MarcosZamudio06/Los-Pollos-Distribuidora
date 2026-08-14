@@ -26,6 +26,7 @@ import {
   DeliveryRoutesPage,
   EmployeesPage,
   FleetLivePage,
+  FleetVehiclesPage,
   ForbiddenPage,
   LoginPage,
   LogoutPage,
@@ -209,9 +210,23 @@ export function AppRouter() {
               }
             />
             <Route
+              path="/fleet/vehicles"
+              element={
+                <RoleRoute roles={ROUTE_ACCESS_ROLES.fleetVehicles}>
+                  <PermissionRoute permission={PERMISSIONS.fleetView}>
+                    <PermissionRoute permission={PERMISSIONS.fleetManage}>
+                      <FleetVehiclesPage />
+                    </PermissionRoute>
+                  </PermissionRoute>
+                </RoleRoute>
+              }
+            />
+            <Route
               path="/delivery-routes/:routeId/reoptimize"
               element={
-                <RoleRoute roles={ROUTE_ACCESS_ROLES.deliveryRoutePlanner}>
+                <RoleRoute
+                  roles={ROUTE_ACCESS_ROLES.deliveryRouteReoptimization}
+                >
                   <RoutePlannerPage />
                 </RoleRoute>
               }

@@ -52,6 +52,7 @@ function createReceivable(overrides: Record<string, unknown> = {}) {
     sale: {
       id: 'sale-1',
       saleNumber: 'S-1001',
+      userId: 'seller-1',
       total: money('1000'),
       locationId: 'loc-1',
       documentType: 'SIMPLE_NOTE',
@@ -228,11 +229,7 @@ describe('AccountsReceivableService', () => {
           appliedDocumentId: 'N-1001',
           paidAt: '2026-06-19T10:00:00.000Z',
         },
-        {
-          id: 'collector-1',
-          role: 'COLLECTIONS',
-          permissions: [],
-        },
+        { id: 'seller-1', role: 'SELLER', permissions: [] },
         'idem-payment-1',
       ),
     ).resolves.toEqual({
@@ -255,13 +252,41 @@ describe('AccountsReceivableService', () => {
         data: expect.objectContaining({
           accountReceivableId: 'ar-1',
           customerId: 'customer-1',
-          userId: 'collector-1',
-          collectedByUserId: 'collector-1',
+          userId: 'seller-1',
+          collectedByUserId: 'seller-1',
           amount: '400.00',
           status: PaymentStatus.APPLIED,
         }),
       }),
     );
+  });
+
+  it('rejects a SELLER payment for an account receivable from another seller', async () => {
+    const { service, prisma } = createService();
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.accountReceivable.findUnique.mockResolvedValue(
+      createReceivable({
+        sale: {
+          ...createReceivable().sale,
+          userId: 'seller-2',
+        },
+      }),
+    );
+
+    await expect(
+      service.registerPayment(
+        'ar-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: '100.00',
+          paymentMethod: PaymentMethod.TRANSFER,
+        },
+        { id: 'seller-1', role: 'SELLER', permissions: [] },
+        'idem-seller-foreign-account',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
   it('rejects a cash collection payment when the cashier has no open shift', async () => {
@@ -626,6 +651,7 @@ describe('AccountsReceivableService', () => {
       pointOfSaleDailyCloseId: 'close-1',
       collectedByUserId: 'collector-1',
       collectionPass: null,
+      nextPaymentDate: new Date('2026-06-27T00:00:00.000Z'),
       status: PaymentStatus.APPLIED,
       paidAt: new Date('2026-06-20T10:00:00.000Z'),
     };
@@ -650,6 +676,7 @@ describe('AccountsReceivableService', () => {
           paymentMethod: PaymentMethod.CASH,
           cashShiftId: 'shift-1',
           deviceId: 'device-1',
+          nextPaymentDate: '2026-06-27T00:00:00.000Z',
         },
         {
           id: 'collector-1',
@@ -672,6 +699,7 @@ describe('AccountsReceivableService', () => {
         data: expect.objectContaining({
           pointOfSaleDailyCloseId: 'close-1',
           cashShiftId: 'shift-1',
+          nextPaymentDate: new Date('2026-06-27T00:00:00.000Z'),
         }),
       }),
     );
@@ -867,6 +895,7 @@ describe('AccountsReceivableService', () => {
         routeSettlementId: null,
         collectedByUserId: 'collector-1',
         collectionPass: null,
+        nextPaymentDate: null,
         paidAt: '2026-06-19T10:00:00.000Z',
         userId: 'collector-1',
       }),
@@ -966,6 +995,7 @@ describe('AccountsReceivableService', () => {
         routeSettlementId: null,
         collectedByUserId: 'collector-1',
         collectionPass: null,
+        nextPaymentDate: null,
         paidAt: '2026-06-19T10:00:00.000Z',
         userId: 'collector-1',
       }),
@@ -1104,20 +1134,39 @@ describe('AccountsReceivableService', () => {
     );
   });
 
-  it('denies SELLER list and detail access until an ownership policy exists', async () => {
+  it('limits SELLER list and detail access to sales created by that seller', async () => {
     const { service, prisma } = createService();
+    prisma.accountReceivable.findMany.mockResolvedValue([
+      createReceivable({
+        sale: { ...createReceivable().sale, userId: 'seller-1' },
+      }),
+    ]);
 
-    await expect(
-      service.findAll({}, { id: 'seller-1', role: 'SELLER' }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(
-      service.findAll(
-        { customerId: 'customer-1' },
-        { id: 'seller-1', role: 'SELLER' },
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(prisma.accountReceivable.findMany).not.toHaveBeenCalled();
+    const list = await service.findAll({}, { id: 'seller-1', role: 'SELLER' });
 
+    expect(list.items).toHaveLength(1);
+    expect(prisma.accountReceivable.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          sale: { userId: 'seller-1' },
+        }),
+      }),
+    );
+
+    prisma.accountReceivable.findUnique.mockResolvedValue(
+      createReceivable({
+        sale: { ...createReceivable().sale, userId: 'seller-1' },
+      }),
+    );
+    await expect(
+      service.findOne('ar-1', { id: 'seller-1', role: 'SELLER' }),
+    ).resolves.toEqual(expect.objectContaining({ id: 'ar-1' }));
+
+    prisma.accountReceivable.findUnique.mockResolvedValue(
+      createReceivable({
+        sale: { ...createReceivable().sale, userId: 'seller-2' },
+      }),
+    );
     await expect(
       service.findOne('ar-1', { id: 'seller-1', role: 'SELLER' }),
     ).rejects.toBeInstanceOf(ForbiddenException);

@@ -3,6 +3,7 @@ import { useAccountReceivableDetail } from "../hooks/useAccountsReceivable";
 import { BillingRequestBadge } from "./BillingRequestBadge";
 import { CreditBlockedCustomerBadge } from "./CreditBlockedCustomerBadge";
 import { formatDate, formatMoney } from "./formatters";
+import { paymentMethodLabel } from "../paymentMethodLabels";
 import type { AccountReceivable } from "../types";
 
 type CustomerBalanceViewProps = {
@@ -146,7 +147,8 @@ export function CustomerBalanceView({
                   key={payment.id}
                 >
                   <p className="font-semibold">
-                    {formatMoney(payment.amount)} · {payment.paymentMethod} ·{" "}
+                    {formatMoney(payment.amount)} ·{" "}
+                    {paymentMethodLabel(payment.paymentMethod)} ·{" "}
                     {payment.status}
                   </p>
                   <p className="text-[var(--erp-muted-foreground)]">
@@ -158,7 +160,8 @@ export function CustomerBalanceView({
                     Documento {payment.appliedDocumentId ?? "—"} · Ruta{" "}
                     {payment.routeId ?? "—"} · Liquidación{" "}
                     {payment.routeSettlementId ?? "—"} · Vuelta{" "}
-                    {payment.collectionPass ?? "—"}
+                    {payment.collectionPass ?? "—"} · Siguiente pago{" "}
+                    {formatDate(payment.nextPaymentDate)}
                   </p>
                   <p className="text-[var(--erp-muted-foreground)]">
                     Fecha {formatDate(payment.paidAt)}

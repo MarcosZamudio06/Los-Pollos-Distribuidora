@@ -65,16 +65,17 @@ function cleanText(value?: string) {
   return trimmed ? trimmed : undefined;
 }
 
-function toPaymentPayload(values: ReceivablePaymentFormValues) {
+export function toPaymentPayload(values: ReceivablePaymentFormValues) {
   return {
     accountReceivableId: values.accountReceivableId,
-    amount: values.amount,
+    amount: String(values.amount),
     paymentMethod: values.paymentMethod,
     bankName: cleanText(values.bankName),
     referenceNumber: cleanText(values.referenceNumber),
     appliedDocumentId: cleanText(values.appliedDocumentId),
     appliedDocumentType: cleanText(values.appliedDocumentType),
     collectionPass: values.collectionPass,
+    nextPaymentDate: cleanText(values.nextPaymentDate),
     cashShiftId: values.cashShiftId,
     deviceId: values.deviceId,
     paidAt: cleanText(values.paidAt),

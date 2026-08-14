@@ -74,6 +74,10 @@ vi.mock("../../cedis/CedisTransferCommandPanel", () => ({
   CedisTransferCommandPanel: () => <p>Formulario de devolución</p>,
 }));
 
+vi.mock("../../cedis/CedisReturnsReviewView", () => ({
+  CedisReturnsReviewView: () => <p>Recepción operativa CEDIS</p>,
+}));
+
 vi.mock("../hooks/useProducts", () => ({
   useProducts: () => ({ data: [], error: null, isLoading: false }),
 }));
@@ -122,7 +126,7 @@ describe("BranchReturnsView", () => {
     expect(container.textContent).toContain("Formulario de devolución");
   });
 
-  it("no muestra una cola cuando la ubicación es CEDIS", async () => {
+  it("muestra la recepción operativa cuando la ubicación es CEDIS", async () => {
     mockAuth.user = {
       role: "ADMIN",
       operationalLocationId: "cedis-1",
@@ -141,9 +145,12 @@ describe("BranchReturnsView", () => {
 
     await act(async () => root?.render(<BranchReturnsView />));
 
-    expect(container.textContent).toContain("Registro disponible en sucursal");
-    expect(container.textContent).not.toContain("Recepción operativa");
-    expect(container.textContent).not.toContain("No hay devoluciones");
-    expect(container.textContent).not.toContain("Confirmar devolución");
+    expect(container.textContent).toContain("Recepción operativa CEDIS");
+    expect(container.textContent).not.toContain(
+      "Registro disponible en sucursal",
+    );
+    expect(container.textContent).not.toContain(
+      "Productos no vendidos del ciclo",
+    );
   });
 });

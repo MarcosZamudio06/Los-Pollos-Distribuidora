@@ -16,6 +16,7 @@ import {
   ShoppingBasket,
   ShoppingCart,
   Store,
+  Truck,
   Users,
   Warehouse,
   type LucideIcon,
@@ -46,6 +47,7 @@ export type NavigationItemKey =
   | "purchases-new"
   | "my-routes"
   | "fleet-live"
+  | "fleet-vehicles"
   | "route-planner"
   | "delivery-routes"
   | "reports"
@@ -300,6 +302,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Monitoreo de flota",
     section: "operations",
     to: "/delivery-routes/live",
+  },
+  {
+    activePaths: ["/fleet/vehicles"],
+    allowedRoles: ROUTE_ACCESS_ROLES.fleetVehicles,
+    description: "Alta y mantenimiento de unidades de entrega",
+    icon: Truck,
+    key: "fleet-vehicles",
+    label: "Unidades de entrega",
+    routeAccessKey: "fleetVehicles",
+    section: "operations",
+    to: "/fleet/vehicles",
   },
   {
     activePaths: ["/daily-close"],

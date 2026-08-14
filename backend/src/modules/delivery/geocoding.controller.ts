@@ -13,7 +13,7 @@ import {
 
 @Controller('geocoding')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'SELLER')
 export class GeocodingController {
   constructor(
     @Inject(GEOCODING_PROVIDER)

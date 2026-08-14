@@ -49,6 +49,7 @@ describe("role navigation", () => {
     expect(ROUTE_ACCESS_ROLES.accountsReceivable).toEqual([
       "ADMIN",
       "COLLECTIONS",
+      "SELLER",
     ]);
     expect(ROUTE_ACCESS_ROLES.billingRequests).toEqual([
       "ADMIN",
@@ -69,6 +70,10 @@ describe("role navigation", () => {
       "ADMIN",
       "COLLECTIONS",
       "WAREHOUSE",
+    ]);
+    expect(ROUTE_ACCESS_ROLES.deliveryRoutePlanner).toEqual([
+      "ADMIN",
+      "SELLER",
     ]);
   });
 
@@ -96,6 +101,7 @@ describe("role navigation", () => {
       "/delivery-routes/new",
       "/delivery-routes",
       "/delivery-routes/live",
+      "/fleet/vehicles",
       "/daily-close",
       "/reports",
       "/admin/employees",
@@ -125,9 +131,11 @@ describe("role navigation", () => {
       "/sales/history",
       "/orders",
       "/customers",
+      "/accounts-receivable",
       "/billing-requests",
       "/billing/reportable-notes",
       "/inventory",
+      "/delivery-routes/new",
       "/daily-close",
       "/reports",
     ]);
@@ -193,6 +201,7 @@ describe("role navigation", () => {
     expect(getActiveSidebarItemKey("/delivery-routes/new")).toBe(
       "route-planner",
     );
+    expect(getActiveSidebarItemKey("/fleet/vehicles")).toBe("fleet-vehicles");
     expect(getActiveSidebarItemKey("/cedis/branches/branch-1")).toBe("cedis");
     expect(getActiveSidebarItemKey("/route-settlements/settlement-1")).toBe(
       "delivery-routes",

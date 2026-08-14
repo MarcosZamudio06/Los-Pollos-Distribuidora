@@ -47,19 +47,11 @@ describe("customer form utilities", () => {
   });
 
   it("acepta los campos válidos del formulario de cliente", () => {
-    const catalogs = {
-      commercialPolicyIds: new Set(["policy-1"]),
-      deliveryRouteIds: new Set(["route-1"]),
-    };
-    expect(validateCustomerField("taxId", draft, catalogs, true)).toBeNull();
-    expect(validateCustomerField("phone", draft, catalogs, true)).toBeNull();
-    expect(
-      validateCustomerField("assignedRouteId", draft, catalogs, true),
-    ).toBeNull();
-    expect(
-      validateCustomerField("commercialPolicyId", draft, catalogs, true),
-    ).toBeNull();
-    expect(validateCustomerForm(draft, catalogs, true)).toEqual({});
+    expect(validateCustomerField("taxId", draft, true)).toBeNull();
+    expect(validateCustomerField("phone", draft, true)).toBeNull();
+    expect(validateCustomerForm(draft, true)).toEqual({});
     expect(toCustomerFormValues(draft).creditLimit).toBe(25000);
+    expect(toCustomerFormValues(draft).assignedRouteId).toBe("route-1");
+    expect(toCustomerFormValues(draft).commercialPolicyId).toBe("policy-1");
   });
 });

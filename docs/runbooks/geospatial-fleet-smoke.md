@@ -28,6 +28,23 @@ If the datasets or Docker services are unavailable, record the smoke as
 `NOT_RUN` with the exact missing path or command error. Never convert that
 state into a pass.
 
+## Visual vehicle administration
+
+For day-to-day registration, use an authenticated `ADMIN` account with
+`fleet.view` and `fleet.manage`:
+
+1. Open **Unidades de entrega** from the operations sidebar (`/fleet/vehicles`).
+2. Select **Nueva unidad** and enter the required code and operational name.
+3. Optionally assign a plate and active operational base, then select
+   **Registrar unidad**. New units start active and become available in the
+   route planner catalog.
+4. Use **Editar** to update the code, operational name, plate, base, or status.
+   Deactivation requires explicit confirmation and is rejected by the backend
+   while the unit has an `IN_PROGRESS` route.
+5. Use the search and status filters to confirm the saved unit appears in the
+   directory. The page preserves the route-planner catalog by invalidating its
+   vehicle query after create or update.
+
 ## End-to-end flow
 
 Using an authenticated staging ADMIN/DRIVER pair and the CEDIS Veracruz

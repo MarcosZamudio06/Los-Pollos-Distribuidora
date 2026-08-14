@@ -98,6 +98,10 @@ const fleetLiveRoute = createLazyRoute(
   () => import("../features/fleet"),
   "FleetLivePage",
 );
+const fleetVehiclesRoute = createLazyRoute(
+  () => import("../features/fleet"),
+  "FleetVehiclesPage",
+);
 const routeDetailRoute = createLazyRoute(
   () => import("../features/rutas-reparto"),
   "RouteDetailPage",
@@ -196,6 +200,7 @@ export const EmployeesPage = employeesRoute.Component;
 export const DeliveryRoutesPage = deliveryRoutesRoute.Component;
 export const MyRoutesPage = myRoutesRoute.Component;
 export const FleetLivePage = fleetLiveRoute.Component;
+export const FleetVehiclesPage = fleetVehiclesRoute.Component;
 export const RouteDetailPage = routeDetailRoute.Component;
 export const RoutePlannerPage = routePlannerRoute.Component;
 export const RouteEvidenceReview = routeEvidenceReviewRoute.Component;
@@ -239,6 +244,7 @@ const navigationPreloaders: Partial<
   "purchases-new": purchaseFormRoute.preload,
   "my-routes": myRoutesRoute.preload,
   "fleet-live": fleetLiveRoute.preload,
+  "fleet-vehicles": fleetVehiclesRoute.preload,
   "route-planner": routePlannerRoute.preload,
   "delivery-routes": deliveryRoutesRoute.preload,
   "daily-close": dailyCloseRoute.preload,

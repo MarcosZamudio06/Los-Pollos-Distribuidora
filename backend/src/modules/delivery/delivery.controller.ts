@@ -55,7 +55,7 @@ export class DeliveryController {
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'SELLER')
   async create(
     @Body() body: CreateDeliveryRouteDto,
     @CurrentUser() currentUser: AuthenticatedUser,

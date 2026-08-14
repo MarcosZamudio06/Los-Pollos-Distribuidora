@@ -23,8 +23,6 @@ export type CustomerFormField =
   | "creditDays"
   | "creditStatus"
   | "deliveryAddress"
-  | "assignedRouteId"
-  | "commercialPolicyId"
   | "fiscalName"
   | "taxId"
   | "fiscalAddress"
@@ -32,11 +30,6 @@ export type CustomerFormField =
   | "requiresBilling";
 
 export type CustomerFormErrors = Partial<Record<CustomerFormField, string>>;
-
-export type CustomerFormCatalogs = {
-  deliveryRouteIds: ReadonlySet<string>;
-  commercialPolicyIds: ReadonlySet<string>;
-};
 
 const PHONE_DIGITS = 10;
 const CREDIT_DAYS_MAX = 365;
@@ -230,14 +223,9 @@ function isAllowedText(value: string) {
   return value === "" || isValidText(value);
 }
 
-function hasValidSelection(value: string, validIds: ReadonlySet<string>) {
-  return value !== "" && validIds.has(value);
-}
-
 export function validateCustomerField(
   field: CustomerFormField,
   draft: CustomerFormDraft,
-  catalogs: CustomerFormCatalogs,
   canManageCommercialTerms: boolean,
 ) {
   switch (field) {
@@ -312,21 +300,6 @@ export function validateCustomerField(
         ? null
         : "La dirección de entrega contiene caracteres no permitidos.";
     }
-    case "assignedRouteId":
-      return hasValidSelection(
-        collapseSpaces(draft.assignedRouteId),
-        catalogs.deliveryRouteIds,
-      )
-        ? null
-        : "Selecciona una ruta válida.";
-    case "commercialPolicyId":
-      if (!canManageCommercialTerms) return null;
-      return hasValidSelection(
-        collapseSpaces(draft.commercialPolicyId),
-        catalogs.commercialPolicyIds,
-      )
-        ? null
-        : "Selecciona una política comercial válida.";
     case "fiscalName": {
       const value = collapseSpaces(draft.fiscalName);
       if (!value) return null;
@@ -368,7 +341,6 @@ export function validateCustomerField(
 
 export function validateCustomerForm(
   draft: CustomerFormDraft,
-  catalogs: CustomerFormCatalogs,
   canManageCommercialTerms: boolean,
 ) {
   const fields: CustomerFormField[] = [
@@ -384,8 +356,6 @@ export function validateCustomerForm(
     "creditDays",
     "creditStatus",
     "deliveryAddress",
-    "assignedRouteId",
-    "commercialPolicyId",
     "fiscalName",
     "taxId",
     "fiscalAddress",
@@ -396,7 +366,6 @@ export function validateCustomerForm(
     const error = validateCustomerField(
       field,
       draft,
-      catalogs,
       canManageCommercialTerms,
     );
     if (error) accumulator[field] = error;

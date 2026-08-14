@@ -12,9 +12,23 @@ import { DeliveryRoutePlanningService } from './delivery-route-planning.service'
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'SELLER')
 export class DeliveryRoutePlanningController {
   constructor(private readonly planning: DeliveryRoutePlanningService) {}
+  @Get('delivery-route-planning/drivers') async drivers() {
+    return {
+      success: true,
+      message: 'Route planner drivers retrieved successfully',
+      data: { items: await this.planning.findActiveDrivers() },
+    };
+  }
+  @Get('delivery-route-planning/vehicles') async vehicles() {
+    return {
+      success: true,
+      message: 'Route planner vehicles retrieved successfully',
+      data: { items: await this.planning.findActiveVehicles() },
+    };
+  }
   @Get('delivery-route-planning/eligible-sales') async eligibleSales(
     @Query() query: EligibleSalesQueryDto,
   ) {

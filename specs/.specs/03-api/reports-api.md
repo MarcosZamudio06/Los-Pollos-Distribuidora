@@ -161,7 +161,7 @@ Validaciones:
 
 Propósito: reporte de cobranza, saldos vencidos, saldo final por cliente y pagos.
 
-Permisos: `ADMIN`, `COLLECTIONS`.
+Permisos: `ADMIN`, `COLLECTIONS`; `SELLER` consulta únicamente las cuentas asociadas a ventas creadas por su usuario.
 
 Query:
 

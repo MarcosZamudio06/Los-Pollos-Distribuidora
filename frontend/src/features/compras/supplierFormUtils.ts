@@ -17,6 +17,11 @@ export type SupplierFormErrors = Partial<Record<SupplierFormField, string>>;
 
 const MULTIPLE_SPACES = /\s+/g;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const SUPPLIER_PHONE_MAX_LENGTH = 10;
+
+export function normalizeSupplierPhoneInput(value: string): string {
+  return value.replace(/\D/g, "").slice(0, SUPPLIER_PHONE_MAX_LENGTH);
+}
 
 export function collapseSupplierSpaces(value: string): string {
   return value.replace(MULTIPLE_SPACES, " ").trim();
@@ -35,7 +40,7 @@ export function createSupplierFormDraft(
 ): SupplierFormDraft {
   return {
     name: collapseSupplierSpaces(supplier?.name ?? ""),
-    phone: collapseSupplierSpaces(
+    phone: normalizeSupplierPhoneInput(
       (supplier?.phone as string | null | undefined) ?? "",
     ),
     email: supplier?.email ? cleanSupplierEmail(supplier.email) : "",
@@ -52,7 +57,7 @@ export function toCreateSupplierPayload(
     address: collapseSupplierSpaces(draft.address),
     email: cleanSupplierEmail(draft.email),
     name: collapseSupplierSpaces(draft.name),
-    phone: collapseSupplierSpaces(draft.phone),
+    phone: normalizeSupplierPhoneInput(draft.phone),
   };
 }
 
@@ -91,8 +96,12 @@ export function validateSupplierField(
       return null;
     }
     case "phone": {
-      const value = collapseSupplierSpaces(draft.phone);
+      const value = draft.phone.trim();
       if (!value) return "El teléfono del proveedor es obligatorio.";
+      if (!/^\d+$/.test(value))
+        return "El teléfono del proveedor solo puede contener números.";
+      if (value.length > SUPPLIER_PHONE_MAX_LENGTH)
+        return "El teléfono del proveedor no puede superar 10 caracteres.";
       return null;
     }
     case "email": {

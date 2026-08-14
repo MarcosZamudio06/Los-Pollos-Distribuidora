@@ -13,7 +13,7 @@ export const ALL_ROLES = KNOWN_ROLES;
 export type KnownRole = (typeof KNOWN_ROLES)[number];
 
 export const ROUTE_ACCESS_ROLES = {
-  accountsReceivable: ["ADMIN", "COLLECTIONS"],
+  accountsReceivable: ["ADMIN", "COLLECTIONS", "SELLER"],
   billingRequests: ["ADMIN", "BILLING", "SELLER", "COLLECTIONS"],
   billingReportableNotes: ["ADMIN", "BILLING", "SELLER", "COLLECTIONS"],
   billingRemediations: ["ADMIN", "BILLING"],
@@ -26,9 +26,11 @@ export const ROUTE_ACCESS_ROLES = {
   deliveryRouteDetail: ["ADMIN", "COLLECTIONS", "DRIVER"],
   deliveryRouteEvidence: ["ADMIN", "COLLECTIONS", "DRIVER"],
   deliveryRoutes: ["ADMIN", "COLLECTIONS", "WAREHOUSE"],
-  deliveryRoutePlanner: ["ADMIN"],
+  deliveryRoutePlanner: ["ADMIN", "SELLER"],
+  deliveryRouteReoptimization: ["ADMIN"],
   myRoutes: ["DRIVER"],
   fleetLive: ["ADMIN"],
+  fleetVehicles: ["ADMIN"],
   purchaseDetail: ["ADMIN", "WAREHOUSE"],
   purchaseNew: ["ADMIN", "WAREHOUSE"],
   purchaseSuppliers: ["ADMIN", "WAREHOUSE"],

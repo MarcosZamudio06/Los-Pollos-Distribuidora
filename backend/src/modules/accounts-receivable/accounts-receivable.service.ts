@@ -45,6 +45,7 @@ type ReceivableRecord = AccountReceivable & {
   sale?: {
     id: string;
     saleNumber: string;
+    userId?: string;
     total: DecimalLike;
     locationId: string;
     documentType: string;
@@ -92,10 +93,8 @@ export class AccountsReceivableService {
     query: ListAccountsReceivableQueryDto = {},
     currentUser?: Actor,
   ) {
-    this.assertSellerListScope(query, currentUser);
-
     const receivables = (await this.prisma.accountReceivable.findMany({
-      where: this.buildListWhere(query),
+      where: this.buildListWhere(query, currentUser),
       include: { customer: true, sale: true, billingRequest: true },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
       ...this.buildPagination(query),
@@ -107,8 +106,6 @@ export class AccountsReceivableService {
   }
 
   async findOne(id: string, currentUser?: Actor) {
-    this.assertSellerDetailScope(currentUser);
-
     const receivable = (await this.prisma.accountReceivable.findUnique({
       where: { id },
       include: {
@@ -122,6 +119,8 @@ export class AccountsReceivableService {
     if (!receivable) {
       throw new NotFoundException('Account receivable not found');
     }
+
+    this.assertSellerCanView(receivable, currentUser);
 
     return this.toDetail(receivable);
   }
@@ -144,6 +143,9 @@ export class AccountsReceivableService {
     this.assertFixedCashCollectionPermission(dto, currentUser);
 
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+    const nextPaymentDate = dto.nextPaymentDate
+      ? new Date(dto.nextPaymentDate)
+      : null;
     const payloadHash = this.hashPayload(
       this.buildRegisterPaymentPayload(id, dto, currentUser.id),
     );
@@ -152,6 +154,18 @@ export class AccountsReceivableService {
       return await this.withSerializableRetry(() =>
         this.prisma.$transaction(
           async (tx) => {
+            let receivable: ReceivableRecord | null = null;
+            if (currentUser.role === 'SELLER') {
+              receivable = (await tx.accountReceivable.findUnique({
+                where: { id },
+                include: { sale: { select: { userId: true } } },
+              })) as ReceivableRecord | null;
+              if (!receivable) {
+                throw new NotFoundException('Account receivable not found');
+              }
+              this.assertSellerCanRegisterPayment(receivable, currentUser);
+            }
+
             const existingPayment = await tx.payment.findFirst({
               where: { idempotencyKey },
             });
@@ -165,13 +179,15 @@ export class AccountsReceivableService {
               );
             }
 
-            let receivable = await tx.accountReceivable.findUnique({
-              where: { id },
-            });
-
+            if (!receivable) {
+              receivable = await tx.accountReceivable.findUnique({
+                where: { id },
+              });
+            }
             if (!receivable) {
               throw new NotFoundException('Account receivable not found');
             }
+
             this.assertReceivableCanReceivePayment(receivable);
             let outstandingAmount = Money.from(receivable.outstandingAmount);
             if (paymentAmount.compare(outstandingAmount) > 0) {
@@ -247,12 +263,17 @@ export class AccountsReceivableService {
                 userId: currentUser.id,
                 collectedByUserId: dto.collectedByUserId ?? currentUser.id,
                 collectionPass: dto.collectionPass ?? null,
+                nextPaymentDate,
                 amount: paymentAmount.toString(),
                 paymentMethod: dto.paymentMethod,
-                bankName: this.normalizeOptionalText(dto.bankName),
-                referenceNumber: this.normalizeOptionalText(
-                  dto.referenceNumber,
-                ),
+                bankName:
+                  dto.paymentMethod === 'CASH'
+                    ? null
+                    : this.normalizeOptionalText(dto.bankName),
+                referenceNumber:
+                  dto.paymentMethod === 'CASH'
+                    ? null
+                    : this.normalizeOptionalText(dto.referenceNumber),
                 appliedDocumentId: this.normalizeOptionalText(
                   dto.appliedDocumentId,
                 ),
@@ -452,8 +473,12 @@ export class AccountsReceivableService {
 
   private buildListWhere(
     query: ListAccountsReceivableQueryDto,
+    currentUser?: Actor,
   ): Prisma.AccountReceivableWhereInput {
     return {
+      ...(currentUser?.role === 'SELLER'
+        ? { sale: { userId: currentUser.id } }
+        : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.saleId ? { saleId: query.saleId } : {}),
       ...(query.billingRequestId
@@ -499,21 +524,16 @@ export class AccountsReceivableService {
     };
   }
 
-  private assertSellerListScope(
-    _query: ListAccountsReceivableQueryDto,
+  private assertSellerCanView(
+    receivable: ReceivableRecord,
     currentUser?: Actor,
   ): void {
-    if (currentUser?.role === 'SELLER') {
+    if (
+      currentUser?.role === 'SELLER' &&
+      receivable.sale?.userId !== currentUser.id
+    ) {
       throw new ForbiddenException(
-        'SELLER accounts receivable list access requires an ownership policy',
-      );
-    }
-  }
-
-  private assertSellerDetailScope(currentUser?: Actor): void {
-    if (currentUser?.role === 'SELLER') {
-      throw new ForbiddenException(
-        'SELLER accounts receivable detail access requires an ownership policy',
+        'SELLER can only consult accounts receivable from their own sales',
       );
     }
   }
@@ -527,6 +547,20 @@ export class AccountsReceivableService {
     ) {
       throw new BadRequestException(
         'Cannot register payments on paid or cancelled accounts receivable',
+      );
+    }
+  }
+
+  private assertSellerCanRegisterPayment(
+    receivable: ReceivableRecord,
+    currentUser: Actor,
+  ): void {
+    if (
+      currentUser.role === 'SELLER' &&
+      receivable.sale?.userId !== currentUser.id
+    ) {
+      throw new ForbiddenException(
+        'SELLER can only register payments for accounts receivable from their own sales',
       );
     }
   }
@@ -736,6 +770,7 @@ export class AccountsReceivableService {
       pointOfSaleDailyCloseId: payment.pointOfSaleDailyCloseId,
       collectedByUserId: payment.collectedByUserId,
       collectionPass: payment.collectionPass,
+      nextPaymentDate: payment.nextPaymentDate,
       status: payment.status,
       paidAt: payment.paidAt,
     };
@@ -751,8 +786,14 @@ export class AccountsReceivableService {
       accountReceivableId,
       amount: dto.amount,
       paymentMethod: dto.paymentMethod,
-      bankName: this.normalizeOptionalText(dto.bankName),
-      referenceNumber: this.normalizeOptionalText(dto.referenceNumber),
+      bankName:
+        dto.paymentMethod === 'CASH'
+          ? null
+          : this.normalizeOptionalText(dto.bankName),
+      referenceNumber:
+        dto.paymentMethod === 'CASH'
+          ? null
+          : this.normalizeOptionalText(dto.referenceNumber),
       appliedDocumentId: this.normalizeOptionalText(dto.appliedDocumentId),
       appliedDocumentType: this.normalizeOptionalText(dto.appliedDocumentType),
       routeId: this.normalizeOptionalText(dto.routeId),
@@ -766,6 +807,7 @@ export class AccountsReceivableService {
         : {}),
       collectedByUserId: dto.collectedByUserId ?? userId,
       collectionPass: dto.collectionPass ?? null,
+      nextPaymentDate: dto.nextPaymentDate ?? null,
       paidAt: dto.paidAt ?? null,
       userId,
     };

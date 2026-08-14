@@ -62,6 +62,7 @@ export type ReceivablePayment = {
   pointOfSaleDailyCloseId?: string | null;
   collectedByUserId?: string | null;
   collectionPass?: number | null;
+  nextPaymentDate?: string | Date | null;
   status: string;
   paidAt: string | Date;
 };
@@ -96,6 +97,7 @@ export type ReceivablePaymentFormValues = {
   appliedDocumentId?: string;
   appliedDocumentType?: string;
   collectionPass?: number;
+  nextPaymentDate?: string;
   cashShiftId?: string;
   deviceId?: string;
   paidAt?: string;

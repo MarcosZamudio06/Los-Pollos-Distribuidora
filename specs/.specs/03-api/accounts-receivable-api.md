@@ -6,7 +6,7 @@ Define contratos para consultar cartera, saldos vencidos y registrar pagos parci
 
 Propósito: listar cuentas por cobrar para cobranza, ventas a crédito y reportes.
 
-Permisos: `ADMIN`, `COLLECTIONS`; `SELLER` solo consulta limitada conforme a política.
+Permisos: `ADMIN`, `COLLECTIONS`; `SELLER` solo consulta y registra pagos sobre las cuentas asociadas a ventas creadas por su usuario.
 
 Query:
 
@@ -34,7 +34,7 @@ Validaciones:
 
 Propósito: obtener detalle de una cuenta por cobrar y sus pagos.
 
-Permisos: `ADMIN`, `COLLECTIONS`; `SELLER` limitado.
+Permisos: `ADMIN`, `COLLECTIONS`; `SELLER` limitado a cuentas asociadas a ventas creadas por su usuario.
 
 Respuesta `data`:
 
@@ -42,13 +42,13 @@ Respuesta `data`:
 - `customer`: `id`, `name`, `customerType`, `creditStatus`, `customerNumber`, `commercialName`.
 - `sale`: `id`, `saleNumber`, `total`, `locationId`, `documentType`, `physicalFolio`.
 - `billingRequest` cuando exista.
-- `payments[]`: `id`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `appliedDocumentType`, `routeId`, `routeSettlementId`, `operationalLocationId`, `pointOfSaleDailyCloseId`, `collectedByUserId`, `collectionPass`, `status`, `paidAt`.
+- `payments[]`: `id`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `appliedDocumentType`, `routeId`, `routeSettlementId`, `operationalLocationId`, `pointOfSaleDailyCloseId`, `collectedByUserId`, `collectionPass`, `nextPaymentDate`, `status`, `paidAt`.
 
 ## POST /api/accounts-receivable/:id/payments
 
 Propósito: registrar pago parcial o total sobre una cuenta por cobrar.
 
-Permisos: `ADMIN`, `COLLECTIONS`.
+Permisos: `ADMIN`, `COLLECTIONS`; `SELLER` solo sobre cuentas asociadas a ventas creadas por su usuario.
 
 Body importante:
 
@@ -62,6 +62,7 @@ Body importante:
   "bankName": "Santander",
   "referenceNumber": "REF-1234",
   "appliedDocumentId": "string opcional",
+  "nextPaymentDate": "2026-06-27T00:00:00.000Z",
   "paidAt": "2026-06-19T10:00:00.000Z"
 }
 ```
@@ -72,7 +73,7 @@ Headers requeridos:
 
 Respuesta `data`:
 
-- `payment`: `id`, `accountReceivableId`, `customerId`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `routeId`, `routeSettlementId`, `operationalLocationId`, `pointOfSaleDailyCloseId`, `status`, `paidAt`.
+- `payment`: `id`, `accountReceivableId`, `customerId`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `routeId`, `routeSettlementId`, `operationalLocationId`, `pointOfSaleDailyCloseId`, `nextPaymentDate`, `status`, `paidAt`.
 - `accountReceivable`: `id`, `outstandingAmount`, `daysOverdue`, `lastPaymentDate`, `status` actualizado.
 
 La respuesta `payment.pointOfSaleDailyCloseId`, cuando exista, identifica el
@@ -86,8 +87,11 @@ Validaciones:
 - `amount > 0`.
 - `amount` debe ser un string monetario canónico con dos decimales.
 - `paymentMethod` requerido.
+- `nextPaymentDate`, cuando exista, debe ser una fecha ISO válida para trazar el siguiente pago.
+- Los pagos `CASH` no solicitan ni persisten `bankName` o `referenceNumber`.
 - No permitir pago mayor al saldo pendiente salvo regla futura explícita para anticipos o saldos a favor.
 - No registrar pagos sobre cuentas canceladas o pagadas.
+- `SELLER` no puede registrar pagos sobre cuentas asociadas a ventas creadas por otro usuario.
 - Actualizar saldo y estado de forma transaccional.
 - Permitir capturar `collectionPass` y `collectedByUserId` cuando la cobranza ocurra en segunda vuelta.
 - Si aplica documento, debe conservar relación con la nota o relación administrativa interna.
@@ -134,7 +138,7 @@ Query: `page`, `limit`, `dateFrom`, `dateTo`, `paymentMethod`, `bankName`, `stat
 
 Respuesta `data.items[]`:
 
-- `id`, `accountReceivableId`, `saleId`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `routeId`, `routeSettlementId`, `status`, `paidAt`.
+- `id`, `accountReceivableId`, `saleId`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `routeId`, `routeSettlementId`, `nextPaymentDate`, `status`, `paidAt`.
 
 Validaciones:
 

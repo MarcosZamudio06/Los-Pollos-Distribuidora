@@ -35,6 +35,9 @@ export default defineConfig({
     },
   },
   plugins: [react(), tailwindcss(), createBundleBudgetPlugin()],
+  optimizeDeps: {
+    exclude: ["maplibre-gl"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),

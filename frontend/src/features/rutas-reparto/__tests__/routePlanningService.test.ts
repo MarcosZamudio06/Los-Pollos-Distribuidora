@@ -85,24 +85,39 @@ describe("delivery route planning API contracts", () => {
     expect(requestAt().url).not.toContain("originLocationId");
   });
 
-  it("lists only active fleet vehicles for the planner", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      okJson({
-        items: [
-          {
-            id: "vehicle-1",
-            code: "UNIDAD-01",
-            displayName: "Unidad 1",
-            isActive: true,
-          },
-        ],
-      }),
-    );
+  it("loads dedicated driver and vehicle catalogs for the planner", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        okJson({
+          items: [
+            {
+              id: "driver-1",
+              name: "Repartidor Uno",
+              isActive: true,
+              role: { name: "DRIVER" },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          items: [
+            {
+              id: "vehicle-1",
+              code: "UNIDAD-01",
+              displayName: "Unidad 1",
+              isActive: true,
+            },
+          ],
+        }),
+      );
 
+    await deliveryService.listPlannerDrivers("token");
     await deliveryService.listVehicles("token");
 
-    expect(requestAt().url).toBe("/api/vehicles?active=true&limit=100");
-    expect(new Headers(requestAt().init.headers).get("authorization")).toBe(
+    expect(requestAt(0).url).toBe("/api/delivery-route-planning/drivers");
+    expect(requestAt(1).url).toBe("/api/delivery-route-planning/vehicles");
+    expect(new Headers(requestAt(1).init.headers).get("authorization")).toBe(
       "Bearer token",
     );
   });

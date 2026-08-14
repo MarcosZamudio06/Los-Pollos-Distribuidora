@@ -86,7 +86,7 @@ export class ReportsController {
   }
 
   @Get('accounts-receivable')
-  @Roles('ADMIN', 'COLLECTIONS')
+  @Roles('ADMIN', 'COLLECTIONS', 'SELLER')
   async getAccountsReceivable(
     @Query() query: AccountsReceivableReportQueryDto,
     @CurrentUser() user: AuthenticatedUser,

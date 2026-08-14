@@ -159,7 +159,9 @@ export const deliveryService = {
   async listPlannerDrivers(accessToken?: string | null) {
     const response = await apiClient.get<
       ApiEnvelope<{ items: PlannerDriver[] }>
-    >("/users?status=active&limit=100", { headers: authHeaders(accessToken) });
+    >("/delivery-route-planning/drivers", {
+      headers: authHeaders(accessToken),
+    });
     return (response.data?.items ?? []).filter(
       (user) => user.isActive && user.role?.name === "DRIVER",
     );
@@ -176,7 +178,7 @@ export const deliveryService = {
   },
   async listVehicles(accessToken?: string | null) {
     const response = await apiClient.get<ListEnvelope<PlannerVehicle>>(
-      withParams("/vehicles", { active: true, limit: 100 }),
+      "/delivery-route-planning/vehicles",
       { headers: authHeaders(accessToken) },
     );
     return unwrapList(response);

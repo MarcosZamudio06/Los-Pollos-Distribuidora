@@ -28,7 +28,7 @@ export class AccountsReceivableController {
   ) {}
 
   @Get()
-  @Roles('ADMIN', 'COLLECTIONS')
+  @Roles('ADMIN', 'COLLECTIONS', 'SELLER')
   async findAll(
     @Query() query: ListAccountsReceivableQueryDto,
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -41,7 +41,7 @@ export class AccountsReceivableController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'COLLECTIONS')
+  @Roles('ADMIN', 'COLLECTIONS', 'SELLER')
   async findOne(
     @Param('id') id: string,
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -54,7 +54,7 @@ export class AccountsReceivableController {
   }
 
   @Post(':id/payments')
-  @Roles('ADMIN', 'COLLECTIONS')
+  @Roles('ADMIN', 'COLLECTIONS', 'SELLER')
   async registerPayment(
     @Param('id') id: string,
     @Body() body: RegisterReceivablePaymentDto,

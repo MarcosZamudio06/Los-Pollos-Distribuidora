@@ -91,7 +91,11 @@ const reportTabs: Array<{ key: ReportKey; label: string; roles: string[] }> = [
     label: "Inventario por ubicación",
     roles: ["ADMIN", "WAREHOUSE", "SELLER"],
   },
-  { key: "receivables", label: "Cobranza", roles: ["ADMIN", "COLLECTIONS"] },
+  {
+    key: "receivables",
+    label: "Cobranza",
+    roles: ["ADMIN", "COLLECTIONS", "SELLER"],
+  },
   {
     key: "delivery",
     label: "Reparto",

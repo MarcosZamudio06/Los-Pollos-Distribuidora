@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsDecimal,
@@ -17,6 +17,9 @@ export class RegisterReceivablePaymentDto {
   accountReceivableId!: string;
 
   /** Strings are canonical at the API boundary; number remains only for legacy callers during migration. */
+  @Transform(({ value }) =>
+    typeof value === 'number' && Number.isFinite(value) ? String(value) : value,
+  )
   @IsDecimal({ decimal_digits: '0,2', force_decimal: false })
   amount!: string | number;
 
@@ -71,6 +74,10 @@ export class RegisterReceivablePaymentDto {
   @IsInt()
   @Min(1)
   collectionPass?: number;
+
+  @IsOptional()
+  @IsDateString()
+  nextPaymentDate?: string;
 
   @IsOptional()
   @IsDateString()

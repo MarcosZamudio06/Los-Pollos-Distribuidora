@@ -87,10 +87,33 @@ Los cinco eventos server->client soportados son `fleet.position.updated`, `fleet
 
 La UI no debe mostrar una capa de tráfico vivo. Una futura `TrafficLayer` se mostrará solo cuando exista una fuente externa autorizada y documentada.
 
+## Administración visual de unidades
+
+La ruta administrativa `/fleet/vehicles` requiere rol `ADMIN` y los permisos
+`fleet.view` y `fleet.manage`. Debe ofrecer una vista visual separada del
+monitoreo y del planificador con:
+
+- Directorio paginado de unidades con búsqueda por código, nombre operativo o
+  placa y filtro por estado.
+- Alta mediante `POST /api/vehicles` con código, nombre operativo, placa
+  opcional y base operativa opcional.
+- Edición mediante `PATCH /api/vehicles/:id` para datos operativos, base y
+  estado, sin borrar historial.
+- Confirmación explícita antes de desactivar una unidad y mensaje claro cuando
+  el backend rechace la transición por una ruta `IN_PROGRESS`.
+- Estados de carga, error, vacío, éxito y formulario protegido por permisos.
+
+Las unidades nuevas inician activas y deben invalidar el catálogo consumido por
+el planificador después de una alta o edición. La pantalla debe mostrar el
+nombre de la base operativa cuando el catálogo de ubicaciones esté disponible,
+pero permitir registrar una unidad sin base.
+
 ## Planificador geoespacial
 
 Debe consumir:
 
+- `GET /api/delivery-route-planning/drivers`.
+- `GET /api/delivery-route-planning/vehicles`.
 - `GET /api/delivery-route-planning/eligible-sales`.
 - `GET /api/geocoding/search`.
 - `GET /api/geocoding/reverse`.
@@ -319,7 +342,7 @@ No sustituye reportes operativos casi en tiempo real ni corte contable.
 - `DRIVER`: además puede publicar posiciones únicamente con `fleet.position.publish`; nunca puede consultar el fleet map global ni usar `fleet.view`.
 - `COLLECTIONS`: consultar cobros, saldos y liquidaciones; conciliar conforme a permisos.
 - `WAREHOUSE`: consultar devoluciones o movimientos relacionados cuando afecten inventario.
-- `SELLER`: consulta de estado si se autoriza.
+- `SELLER`: puede abrir el planificador, consultar sus catálogos dedicados, geocodificar, calcular un plan nuevo y crear una ruta geoespacial desde su propio `routePlanId`; no puede reoptimizar rutas existentes, administrar usuarios/vehículos, operar evidencias ni liquidaciones.
 
 Permisos de flota:
 

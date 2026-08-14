@@ -71,7 +71,7 @@ describe('ReportsController', () => {
         ROLES_KEY,
         methodOf(ReportsController.prototype, 'getAccountsReceivable'),
       ),
-    ).toEqual(['ADMIN', 'COLLECTIONS']);
+    ).toEqual(['ADMIN', 'COLLECTIONS', 'SELLER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,

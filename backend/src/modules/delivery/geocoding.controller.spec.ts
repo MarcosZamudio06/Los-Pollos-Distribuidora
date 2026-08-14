@@ -1,7 +1,14 @@
 import { GeocodingController } from './geocoding.controller';
 import type { GeocodingProvider } from '../geospatial/contracts/geocoding-provider';
+import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
 describe('GeocodingController', () => {
+  it('allows ADMIN and SELLER to geocode route stops', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, GeocodingController)).toEqual([
+      'ADMIN',
+      'SELLER',
+    ]);
+  });
   it('keeps the normalized search envelope while calling the geocoding port', async () => {
     const provider = {
       search: jest.fn().mockResolvedValue([

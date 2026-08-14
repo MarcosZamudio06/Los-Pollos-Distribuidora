@@ -1,0 +1,6 @@
+- generic [ref=f2e2]:
+  - main [ref=f2e3]:
+    - status [ref=f2e4]:
+      - paragraph [ref=f2e9]: Verificando sesión
+      - paragraph [ref=f2e10]: Confirmando acceso y estado activo antes de abrir el ERP.
+  - region "Notifications alt+T"

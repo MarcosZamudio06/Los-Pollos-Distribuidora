@@ -10,26 +10,11 @@ import { CustomerFormModal } from "../components/CustomerFormModal";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mockState = vi.hoisted(() => ({
-  policies: {
-    data: [{ id: "policy-1", name: "Crédito 7 días" }],
-    error: null,
-    isLoading: false,
-  },
-  routes: {
-    data: { items: [{ id: "route-1", name: "Ruta Centro" }] },
-    error: null,
-    isLoading: false,
-  },
   saveCustomer: { isPending: false, mutateAsync: vi.fn() },
 }));
 
 vi.mock("../hooks/useCustomers", () => ({
-  useCommercialPolicies: () => mockState.policies,
   useSaveCustomer: () => mockState.saveCustomer,
-}));
-
-vi.mock("../../rutas-reparto/hooks", () => ({
-  useDeliveryRoutes: () => mockState.routes,
 }));
 
 function getInput(container: HTMLElement, id: string) {
@@ -61,20 +46,10 @@ async function renderDom(
 
 describe("CustomerFormModal UX", () => {
   beforeEach(() => {
-    mockState.policies = {
-      data: [{ id: "policy-1", name: "Crédito 7 días" }],
-      error: null,
-      isLoading: false,
-    };
-    mockState.routes = {
-      data: { items: [{ id: "route-1", name: "Ruta Centro" }] },
-      error: null,
-      isLoading: false,
-    };
     mockState.saveCustomer = { isPending: false, mutateAsync: vi.fn() };
   });
 
-  it("renderiza placeholders, catálogos y ayudas para captura empresarial", () => {
+  it("renderiza placeholders y ayudas para captura empresarial", () => {
     const html = renderToStaticMarkup(
       <CustomerFormModal
         canManageCommercialTerms
@@ -91,9 +66,9 @@ describe("CustomerFormModal UX", () => {
       "Av. Independencia #245, Col. Centro, Veracruz, Ver.",
     );
     expect(html).toContain("25,000.00");
-    expect(html).toContain("Selecciona una ruta");
-    expect(html).toContain("Ruta Centro");
-    expect(html).toContain("Crédito 7 días");
+    expect(html).not.toContain("Ruta asignada");
+    expect(html).not.toContain("Selecciona una ruta");
+    expect(html).not.toContain("Política comercial");
     expect(html).toContain(
       "RFC SAT: 12 caracteres para persona moral y 13 para persona física.",
     );
@@ -123,6 +98,32 @@ describe("CustomerFormModal UX", () => {
         taxId.dispatchEvent(new Event("input", { bubbles: true }));
       });
       expect(taxId.value).toBe("ABC010203AB9");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("conserva los espacios mientras se captura el nombre", async () => {
+    const { container, root } = await renderDom(
+      <CustomerFormModal
+        canManageCommercialTerms
+        customer={null}
+        onClose={() => undefined}
+      />,
+    );
+
+    try {
+      const name = getInput(container, "customer-form-name");
+
+      await act(async () => {
+        setNativeValue(name, "Pollería ");
+        name.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+
+      expect(name.value).toBe("Pollería ");
     } finally {
       await act(async () => {
         root.unmount();

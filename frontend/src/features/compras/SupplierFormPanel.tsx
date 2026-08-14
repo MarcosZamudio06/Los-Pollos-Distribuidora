@@ -11,7 +11,9 @@ import {
 import {
   createSupplierFormDraft,
   hasSupplierFormErrors,
+  normalizeSupplierPhoneInput,
   normalizeSupplierTextInput,
+  SUPPLIER_PHONE_MAX_LENGTH,
   toCreateSupplierPayload,
   toUpdateSupplierPayload,
   validateSupplierForm,
@@ -33,6 +35,7 @@ type SupplierFormPanelProps = {
 
 const fieldClass =
   "grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]";
+type SupplierTextField = Exclude<SupplierFormField, "email">;
 
 export function SupplierFormPanel({
   isSaving = false,
@@ -52,7 +55,20 @@ export function SupplierFormPanel({
   function updateField(field: SupplierFormField, value: string) {
     const nextDraft = {
       ...draft,
-      [field]: field === "email" ? value : normalizeSupplierTextInput(value),
+      [field]:
+        field === "phone" ? normalizeSupplierPhoneInput(value) : value,
+    };
+    setDraft(nextDraft);
+    setErrors(validateSupplierForm(nextDraft));
+  }
+
+  function blurTextField(field: SupplierTextField) {
+    const nextDraft = {
+      ...draft,
+      [field]:
+        field === "phone"
+          ? normalizeSupplierPhoneInput(draft.phone)
+          : normalizeSupplierTextInput(draft[field]),
     };
     setDraft(nextDraft);
     setErrors(validateSupplierForm(nextDraft));
@@ -101,6 +117,7 @@ export function SupplierFormPanel({
               Nombre del proveedor
               <Input
                 value={draft.name}
+                onBlur={() => blurTextField("name")}
                 onChange={(event) => updateField("name", event.target.value)}
               />
               {errors.name && (
@@ -110,7 +127,11 @@ export function SupplierFormPanel({
             <label className={fieldClass}>
               Teléfono
               <Input
+                inputMode="numeric"
+                maxLength={SUPPLIER_PHONE_MAX_LENGTH}
+                pattern="[0-9]*"
                 value={draft.phone}
+                onBlur={() => blurTextField("phone")}
                 onChange={(event) => updateField("phone", event.target.value)}
               />
               {errors.phone && (
@@ -131,6 +152,7 @@ export function SupplierFormPanel({
               Dirección
               <Input
                 value={draft.address}
+                onBlur={() => blurTextField("address")}
                 onChange={(event) => updateField("address", event.target.value)}
               />
               {errors.address && (

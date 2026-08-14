@@ -322,6 +322,81 @@ describe("route planner delivery points", () => {
     }
   });
 
+  it("explains why calculation stays blocked until every stop has coordinates", async () => {
+    const { container, root } = await renderPage();
+    try {
+      await selectOrigin(container);
+      await selectValue(container, "Repartidor", "driver-1");
+      await selectValue(container, "Unidad", "vehicle-1");
+      await act(async () => {
+        setInputValue(
+          inputByPlaceholder(container, "Ruta Centro matutina"),
+          "Ruta Centro",
+        );
+      });
+      await act(async () => {
+        button(container, "V-2001").click();
+        button(container, "V-2002").click();
+      });
+
+      expect(button(container, "Calcular ruta").disabled).toBe(true);
+      expect(container.textContent).toContain(
+        "Ubica las 2 paradas en el mapa o busca su dirección",
+      );
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("calculates a route after both selected stops have independent points", async () => {
+    const { container, root } = await renderPage();
+    try {
+      await selectOrigin(container);
+      await selectValue(container, "Repartidor", "driver-1");
+      await selectValue(container, "Unidad", "vehicle-1");
+      await act(async () => {
+        setInputValue(
+          inputByPlaceholder(container, "Ruta Centro matutina"),
+          "Ruta Centro",
+        );
+      });
+      await act(async () => {
+        button(container, "V-2001").click();
+      });
+      await act(async () => {
+        button(container, "Seleccionar punto de entrega").click();
+      });
+      await act(async () => {
+        button(container, "V-2002").click();
+      });
+      await act(async () => {
+        button(container, "Seleccionar punto de entrega").click();
+      });
+
+      expect(button(container, "Calcular ruta").disabled).toBe(false);
+      await act(async () => {
+        button(container, "Calcular ruta").click();
+      });
+
+      expect(mockState.createPlan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stops: expect.arrayContaining([
+            expect.objectContaining({ saleId: "sale-ver" }),
+            expect.objectContaining({ saleId: "sale-alv" }),
+          ]),
+        }),
+      );
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("does not let a late reverse-geocode response for one sale overwrite the active sale query", async () => {
     const pending = new Map<number, (value: { label: string }) => void>();
     mockState.reverseAddress.mockImplementation(

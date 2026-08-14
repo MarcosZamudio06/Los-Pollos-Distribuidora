@@ -482,8 +482,7 @@ export class ReportsService {
     query: AccountsReceivableReportQueryDto,
     user: ReportUser,
   ) {
-    void user;
-    const receivables = await this.findDetailedReceivables(query);
+    const receivables = await this.findDetailedReceivables(query, user);
     const activePayments = receivables.flatMap((receivable) =>
       this.activeReceivablePayments(receivable),
     );
@@ -509,7 +508,12 @@ export class ReportsService {
           receivables.map((receivable) => receivable.outstandingAmount),
         ),
         customersBlockedForCredit: await this.prisma.customer.count({
-          where: { creditStatus: { in: ['BLOCKED', 'SUSPENDED'] } },
+          where: {
+            ...(user.role === 'SELLER'
+              ? { sales: { some: { userId: user.id } } }
+              : {}),
+            creditStatus: { in: ['BLOCKED', 'SUSPENDED'] },
+          },
         }),
       },
       byCustomer: this.groupReceivablesByCustomer(receivables),
@@ -627,9 +631,10 @@ export class ReportsService {
 
   private findDetailedReceivables(
     query: AccountsReceivableReportQueryDto,
+    user: ReportUser,
   ): Promise<ReceivableRecord[]> {
     return this.prisma.accountReceivable.findMany({
-      where: this.buildReceivableWhere(query),
+      where: this.buildReceivableWhere(query, user),
       include: {
         customer: { select: { id: true, name: true, creditStatus: true } },
         sale: { select: { id: true, saleNumber: true } },
@@ -642,7 +647,10 @@ export class ReportsService {
     });
   }
 
-  private buildReceivableWhere(query: AccountsReceivableReportQueryDto) {
+  private buildReceivableWhere(
+    query: AccountsReceivableReportQueryDto,
+    user: ReportUser,
+  ) {
     const dueDate = this.resolveDateRangeFilter(
       query.dueDateFrom,
       query.dueDateTo,
@@ -654,6 +662,9 @@ export class ReportsService {
         : query.agingStatus;
 
     return {
+      ...(user.role === 'SELLER'
+        ? { sale: { userId: user.id } }
+        : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(agingStatus ? { agingStatus } : {}),

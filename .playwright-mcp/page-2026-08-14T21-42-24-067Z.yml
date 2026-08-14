@@ -1,0 +1,135 @@
+- generic [ref=f10e2]:
+  - generic [ref=f10e14]:
+    - complementary "Navegación principal" [ref=f10e16]:
+      - link "Ir al inicio" [ref=f10e18] [cursor=pointer]:
+        - /url: /
+      - separator [ref=f10e21]
+      - navigation "Accesos por rol" [ref=f10e23]:
+        - generic [ref=f10e24]:
+          - link "Inicio" [ref=f10e25] [cursor=pointer]:
+            - /url: /
+          - link "Recepción CEDIS" [ref=f10e31] [cursor=pointer]:
+            - /url: /cedis/incoming
+          - link "Devoluciones CEDIS" [ref=f10e38] [cursor=pointer]:
+            - /url: /cedis/returns
+          - link "Pedidos" [ref=f10e44] [cursor=pointer]:
+            - /url: /orders
+          - link "Inventario" [ref=f10e50] [cursor=pointer]:
+            - /url: /inventory
+          - link "Planificar ruta" [ref=f10e57] [cursor=pointer]:
+            - /url: /delivery-routes/new
+        - generic [ref=f10e64]:
+          - link "Ventas POS" [ref=f10e65] [cursor=pointer]:
+            - /url: /sales
+          - link "Historial de ventas" [ref=f10e72] [cursor=pointer]:
+            - /url: /sales/history
+          - link "Clientes" [ref=f10e79] [cursor=pointer]:
+            - /url: /customers
+        - generic [ref=f10e87]:
+          - link "Cuentas por cobrar" [ref=f10e88] [cursor=pointer]:
+            - /url: /accounts-receivable
+          - link "Solicitudes de facturación" [ref=f10e94] [cursor=pointer]:
+            - /url: /billing-requests
+          - link "Notas facturables" [ref=f10e101] [cursor=pointer]:
+            - /url: /billing/reportable-notes
+          - link "Cierre diario" [ref=f10e108] [cursor=pointer]:
+            - /url: /daily-close
+          - link "Reportes" [ref=f10e115] [cursor=pointer]:
+            - /url: /reports
+      - link "Cerrar sesión" [ref=f10e121] [cursor=pointer]:
+        - /url: /logout
+    - generic [ref=f10e126]:
+      - banner [ref=f10e127]:
+        - generic [ref=f10e128]:
+          - button "Abrir menú lateral" [ref=f10e129]
+          - generic [ref=f10e131]:
+            - generic [ref=f10e132]:
+              - paragraph [ref=f10e133]: Optimización geoespacial
+              - generic [ref=f10e134]: Datos actualizados
+            - heading "Planificar ruta" [level=1] [ref=f10e137]
+          - generic [ref=f10e138]:
+            - link "Ventas POS" [ref=f10e139] [cursor=pointer]:
+              - /url: /sales
+            - link "Reportes" [ref=f10e144] [cursor=pointer]:
+              - /url: /reports
+          - button "Buscar en el ERP" [ref=f10e147]
+      - main [ref=f10e151]:
+        - main [ref=f10e152]:
+          - generic [ref=f10e153]:
+            - generic [ref=f10e155]:
+              - generic [ref=f10e156]:
+                - button "Volver a rutas" [ref=f10e157]
+                - paragraph [ref=f10e160]: Mesa de despacho · Planeación
+                - heading "Construye el recorrido antes de mover una unidad" [level=1] [ref=f10e161]
+                - paragraph [ref=f10e162]: Selecciona ventas confirmadas, valida cada punto y aprueba el trazado vial que verá el repartidor.
+              - generic [ref=f10e163]:
+                - generic [ref=f10e164]:
+                  - text: Paradas
+                  - paragraph [ref=f10e165]: "0"
+                - generic [ref=f10e166]:
+                  - text: Distancia
+                  - paragraph [ref=f10e167]: —
+                - generic [ref=f10e168]:
+                  - text: Tiempo
+                  - paragraph [ref=f10e169]: —
+            - generic [ref=f10e170]:
+              - complementary [ref=f10e171]:
+                - generic [ref=f10e172]:
+                  - paragraph [ref=f10e173]: 01 · Datos de salida
+                  - generic [ref=f10e174]:
+                    - generic [ref=f10e175]:
+                      - generic [ref=f10e176]: Nombre de la ruta
+                      - textbox "Nombre de la ruta" [ref=f10e177]:
+                        - /placeholder: Ruta Centro matutina
+                    - generic [ref=f10e178]:
+                      - generic [ref=f10e179]: Fecha programada
+                      - textbox "Fecha programada" [ref=f10e180]: 2026-08-14
+                    - generic [ref=f10e181]:
+                      - generic [ref=f10e182]: Origen
+                      - combobox "Origen" [ref=f10e183]:
+                        - option "Selecciona ubicación" [selected]
+                        - option "Veracruz"
+                    - generic [ref=f10e184]:
+                      - generic [ref=f10e185]: Repartidor
+                      - combobox "Repartidor" [ref=f10e186]:
+                        - option "Selecciona repartidor" [selected]
+                        - option "Development Driver"
+                        - option "Juan"
+                    - generic [ref=f10e187]:
+                      - generic [ref=f10e188]: Unidad
+                      - combobox "Unidad" [ref=f10e189]:
+                        - option "Selecciona unidad" [selected]
+                        - option "Unidad CEDIS · Unidad-01"
+                        - option "Unidad Costa de Oro · Unidad-02"
+                - generic [ref=f10e190]:
+                  - generic [ref=f10e192]:
+                    - paragraph [ref=f10e193]: 02 · Ventas elegibles
+                    - paragraph [ref=f10e194]: Solo confirmadas y sin ruta.
+                  - textbox "Folio o cliente" [ref=f10e204]
+                  - paragraph [ref=f10e206]: No hay ventas elegibles.
+              - generic [ref=f10e207]:
+                - generic [ref=f10e208]:
+                  - generic "Mapa para planificar la ruta" [ref=f10e209]:
+                    - button "Ocultar tiempos" [pressed] [ref=f10e210]
+                    - generic [ref=f10e211]:
+                      - region "Map" [ref=f10e212]
+                      - group [ref=f10e213]:
+                        - generic "Toggle attribution" [ref=f10e214] [cursor=pointer]
+                        - generic [ref=f10e215]:
+                          - text: © OpenStreetMap contributors |
+                          - link "MapLibre" [ref=f10e216] [cursor=pointer]:
+                            - /url: https://maplibre.org/
+                  - generic: Selecciona una venta para agregar su punto de entrega
+                - generic [ref=f10e217]:
+                  - generic [ref=f10e218]:
+                    - generic [ref=f10e219]:
+                      - paragraph [ref=f10e220]: 03 · Tira de recorrido
+                      - heading "Secuencia accesible de entregas" [level=2] [ref=f10e221]
+                    - generic [ref=f10e222]:
+                      - status [ref=f10e223]: Escribe el nombre de la ruta.
+                      - generic [ref=f10e224]:
+                        - button "Calcular ruta" [disabled] [ref=f10e225]
+                        - button "Crear y asignar" [disabled] [ref=f10e228]
+                  - list [ref=f10e234]:
+                    - listitem [ref=f10e235]: Selecciona ventas para construir la secuencia.
+  - region "Notifications alt+T"

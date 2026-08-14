@@ -37,7 +37,7 @@ describe('Delivery controllers', () => {
         ROLES_KEY,
         methodOf(DeliveryController.prototype, 'create'),
       ),
-    ).toEqual(['ADMIN']);
+    ).toEqual(['ADMIN', 'SELLER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,

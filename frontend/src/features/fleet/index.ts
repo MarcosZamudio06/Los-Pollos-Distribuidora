@@ -1,8 +1,13 @@
 export { FleetLivePage } from "./pages/FleetLivePage";
+export { FleetVehiclesPage } from "./pages/FleetVehiclesPage";
 export { FleetLiveMap } from "./components/FleetLiveMap";
 export { DeliveryZonesPanel } from "./components/DeliveryZonesPanel";
+export { VehicleFormPanel } from "./components/VehicleFormPanel";
 export * from "./deliveryZoneUtils";
 export { fleetService } from "./fleetService";
 export * from "./fleetLiveUtils";
 export * from "./hooks";
 export * from "./types";
+export * from "./vehicleHooks";
+export { vehicleService } from "./vehicleService";
+export * from "./vehicleTypes";

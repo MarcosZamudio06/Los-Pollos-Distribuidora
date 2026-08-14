@@ -315,8 +315,11 @@ export class DeliveryService {
     currentUser: Actor,
     idempotencyKey?: string,
   ) {
-    if (currentUser.role !== 'ADMIN') {
+    if (!['ADMIN', 'SELLER'].includes(currentUser.role)) {
       throw new NotFoundException('Delivery route not found');
+    }
+    if (currentUser.role === 'SELLER' && !dto.routePlanId) {
+      throw new NotFoundException('Delivery route plan not found');
     }
 
     if (dto.routePlanId) {

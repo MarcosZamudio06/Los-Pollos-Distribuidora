@@ -35,7 +35,7 @@ function canAccessReceivables(role?: string | null) {
   return role === "ADMIN" || role === "COLLECTIONS" || role === "SELLER";
 }
 function canRegisterPayment(role?: string | null) {
-  return role === "ADMIN" || role === "COLLECTIONS";
+  return role === "ADMIN" || role === "COLLECTIONS" || role === "SELLER";
 }
 
 const fieldClass =
@@ -45,6 +45,8 @@ const headerCell =
 const bodyCell = "px-4 py-4 text-sm text-[var(--erp-foreground)]";
 const actionClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[color:var(--erp-border)] bg-white px-3 text-xs font-semibold transition hover:border-[var(--erp-brand-gold)] hover:bg-[var(--erp-surface-muted)] disabled:cursor-not-allowed disabled:opacity-50";
+const paymentActionClass =
+  "group inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[rgba(47,111,115,0.30)] bg-[var(--erp-info)] px-3.5 text-xs font-black text-white shadow-[0_10px_24px_rgba(47,111,115,0.20)] transition duration-200 hover:-translate-y-0.5 hover:bg-[var(--erp-graphite)] hover:shadow-[0_14px_28px_rgba(47,111,115,0.25)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--erp-brand-gold)] focus-visible:ring-offset-2 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:hover:translate-y-0";
 
 function AsyncState({
   children,
@@ -241,12 +243,14 @@ function ReceivableTable({
                         <Eye className="h-4 w-4" /> Detalle
                       </button>
                       <button
-                        className={`${actionClass} bg-[var(--erp-charcoal)] text-white hover:bg-[var(--erp-graphite)]`}
+                        aria-label={`Registrar pago de ${account.customerName ?? account.customerId}`}
+                        className={paymentActionClass}
                         disabled={paymentDisabled}
                         onClick={() => onRegisterPayment(account)}
                         type="button"
                       >
-                        <CircleDollarSign className="h-4 w-4" /> Pago
+                        <CircleDollarSign className="h-4 w-4 transition-transform group-hover:scale-110 motion-reduce:transition-none" />
+                        Pagar
                       </button>
                     </div>
                   </td>

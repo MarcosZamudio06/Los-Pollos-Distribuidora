@@ -63,6 +63,7 @@ type MockPrisma = {
 };
 
 const admin = { id: 'admin-1', role: 'ADMIN' };
+const seller = { id: 'seller-1', role: 'SELLER' };
 const driver = { id: 'driver-1', role: 'DRIVER' };
 
 function date(value: string) {
@@ -395,6 +396,24 @@ describe('DeliveryService', () => {
     );
   });
 
+  it('requires SELLER route creation to consume an owned optimized plan', async () => {
+    const { service, prisma } = createService();
+
+    await expect(
+      service.createRoute(
+        {
+          name: 'Ruta manual no autorizada',
+          driverId: 'driver-1',
+          scheduledDate: '2026-06-19',
+          orders: [{ saleId: 'sale-1', deliveryAddress: 'Av Centro 123' }],
+        },
+        seller,
+      ),
+    ).rejects.toThrow('Delivery route plan not found');
+
+    expect(prisma.deliveryRoute.create).not.toHaveBeenCalled();
+  });
+
   it('atomically consumes an optimized route plan with idempotency', async () => {
     const { service, prisma } = createService();
     prisma.user.findFirst.mockResolvedValue({
@@ -404,7 +423,7 @@ describe('DeliveryService', () => {
     prisma.deliveryRoute.findFirst.mockResolvedValue(null);
     prisma.deliveryRoutePlanDraft.findFirst.mockResolvedValue({
       id: 'plan-1',
-      createdByUserId: 'admin-1',
+      createdByUserId: 'seller-1',
       sourceRouteId: null,
       consumedAt: null,
       vehicleId: 'vehicle-1',
@@ -474,7 +493,7 @@ describe('DeliveryService', () => {
         routePlanId: 'plan-1',
         orders: [],
       },
-      admin,
+      seller,
       'key-1',
     );
 

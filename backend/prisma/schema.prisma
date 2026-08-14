@@ -1028,6 +1028,7 @@ model Payment {
   paidAt                     DateTime               @default(now())
   cancelledAt                DateTime?
   cancelledByUserId          String?
+  nextPaymentDate            DateTime?
   cancellationReason         String?
   idempotencyKey             String?                @unique
   idempotencyPayloadHash     String?

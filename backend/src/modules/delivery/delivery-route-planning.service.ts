@@ -24,6 +24,34 @@ export class DeliveryRoutePlanningService {
     private readonly providers: RoutingProvidersService,
   ) {}
 
+  async findActiveDrivers() {
+    return this.prisma.user.findMany({
+      where: { isActive: true, role: { name: 'DRIVER' } },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        role: { select: { name: true } },
+      },
+    });
+  }
+
+  async findActiveVehicles() {
+    return this.prisma.vehicle.findMany({
+      where: { isActive: true },
+      orderBy: { code: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        displayName: true,
+        plateNumber: true,
+        homeLocationId: true,
+        isActive: true,
+      },
+    });
+  }
+
   async findEligibleSales(query: EligibleSalesQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -77,7 +105,7 @@ export class DeliveryRoutePlanningService {
   }
 
   async createPlan(dto: CreateDeliveryRoutePlanDto, currentUser: Actor) {
-    if (currentUser.role !== 'ADMIN')
+    if (!['ADMIN', 'SELLER'].includes(currentUser.role))
       throw new NotFoundException('Route planner not found');
     const saleIds = dto.stops.map((stop) => stop.saleId);
     if (new Set(saleIds).size !== saleIds.length)

@@ -8,9 +8,10 @@ import { RoutingProvidersService } from './routing-providers.service';
 
 describe('DeliveryRoutePlanningService', () => {
   const admin = { id: 'admin-1', role: 'ADMIN' };
+  const seller = { id: 'seller-1', role: 'SELLER' };
   const prisma = {
-    user: { findFirst: jest.fn() },
-    vehicle: { findFirst: jest.fn() },
+    user: { findFirst: jest.fn(), findMany: jest.fn() },
+    vehicle: { findFirst: jest.fn(), findMany: jest.fn() },
     operationalLocation: { findFirst: jest.fn() },
     sale: { findMany: jest.fn(), count: jest.fn() },
     deliveryRoutePlanDraft: { create: jest.fn() },
@@ -22,6 +23,30 @@ describe('DeliveryRoutePlanningService', () => {
   };
 
   beforeEach(() => jest.clearAllMocks());
+
+  it('returns dedicated active DRIVER and vehicle catalogs', async () => {
+    prisma.user.findMany.mockResolvedValue([{ id: 'driver-1' }]);
+    prisma.vehicle.findMany.mockResolvedValue([{ id: 'vehicle-1' }]);
+    const service = new DeliveryRoutePlanningService(
+      prisma as unknown as PrismaService,
+      providers as unknown as RoutingProvidersService,
+    );
+
+    await expect(service.findActiveDrivers()).resolves.toEqual([
+      { id: 'driver-1' },
+    ]);
+    await expect(service.findActiveVehicles()).resolves.toEqual([
+      { id: 'vehicle-1' },
+    ]);
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { isActive: true, role: { name: 'DRIVER' } },
+      }),
+    );
+    expect(prisma.vehicle.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { isActive: true } }),
+    );
+  });
 
   it('validates, optimizes and persists a 30-minute consumable plan', async () => {
     prisma.user.findFirst.mockResolvedValue({
@@ -93,7 +118,7 @@ describe('DeliveryRoutePlanningService', () => {
           },
         ],
       },
-      admin,
+      seller,
     );
 
     expect(result).toEqual(
@@ -115,7 +140,7 @@ describe('DeliveryRoutePlanningService', () => {
     );
     expect(prisma.deliveryRoutePlanDraft.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        createdByUserId: 'admin-1',
+        createdByUserId: 'seller-1',
         vehicleId: 'vehicle-1',
         consumedAt: null,
       }),

@@ -11,7 +11,7 @@ import {
 } from "../../../components/shared/table-pagination";
 
 const fieldClass =
-  "h-11 rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3 text-sm text-[var(--erp-foreground)] shadow-sm outline-none transition placeholder:text-[var(--erp-muted-foreground)] focus:border-[var(--erp-brand-gold)] focus:ring-4 focus:ring-[rgba(214,155,45,0.16)]";
+  "h-11 w-full min-w-0 max-w-full rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3 text-sm text-[var(--erp-foreground)] shadow-sm outline-none transition placeholder:text-[var(--erp-muted-foreground)] focus:border-[var(--erp-brand-gold)] focus:ring-4 focus:ring-[rgba(214,155,45,0.16)]";
 const cellClass = "px-4 py-3 align-middle";
 
 export function InventoryMovementsView() {
@@ -39,19 +39,21 @@ export function InventoryMovementsView() {
             setFilters({ ...filters, productId: event.target.value })
           }
         />
-        <CatalogSelect
-          className={fieldClass}
-          error={locations.error}
-          isLoading={locations.isLoading}
-          label="Ubicación"
-          onChange={(locationId) => setFilters({ ...filters, locationId })}
-          options={locations.data?.map((item) => ({
-            id: item.id,
-            label: item.name ?? item.id,
-          }))}
-          placeholder="Todas las ubicaciones"
-          value={filters.locationId}
-        />
+        <div className="min-w-0">
+          <CatalogSelect
+            className={fieldClass}
+            error={locations.error}
+            isLoading={locations.isLoading}
+            label="Ubicación"
+            onChange={(locationId) => setFilters({ ...filters, locationId })}
+            options={locations.data?.map((item) => ({
+              id: item.id,
+              label: item.name ?? item.id,
+            }))}
+            placeholder="Todas las ubicaciones"
+            value={filters.locationId}
+          />
+        </div>
         <select
           className={fieldClass}
           onChange={(event) =>

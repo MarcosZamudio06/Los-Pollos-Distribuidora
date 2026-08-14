@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { PackageX, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, CardDescription, CardTitle } from "../../../components/ui";
+import {
+  Button,
+  Card,
+  CardDescription,
+  CardTitle,
+} from "../../../components/ui";
 import { getOperationalDate } from "../../../lib/operationalDate";
 import { CedisTransferCommandPanel } from "../../cedis/CedisTransferCommandPanel";
+import { CedisReturnsReviewView } from "../../cedis/CedisReturnsReviewView";
 import {
   useCedisBranchHistory,
   useCedisCycleSummary,
@@ -22,9 +28,9 @@ export function BranchReturnsView() {
   const businessDate = getOperationalDate();
   const isBranchWorker = Boolean(
     operationalLocation.data?.type === "BRANCH" &&
-      (user?.role === "ADMIN" ||
-        user?.role === "WAREHOUSE" ||
-        user?.role === "SELLER"),
+    (user?.role === "ADMIN" ||
+      user?.role === "WAREHOUSE" ||
+      user?.role === "SELLER"),
   );
   const branchHistory = useCedisBranchHistory(
     isBranchWorker ? user?.operationalLocationId : undefined,
@@ -85,16 +91,29 @@ export function BranchReturnsView() {
   }
 
   if (!isBranchWorker) {
+    const canReviewReturns =
+      user?.role === "ADMIN" || user?.role === "WAREHOUSE";
+
+    if (canReviewReturns) {
+      return (
+        <CedisReturnsReviewView
+          canReceiveReturns={Boolean(
+            user?.permissions?.includes("cedis.receive_returns"),
+          )}
+        />
+      );
+    }
+
     return (
       <section className="grid gap-4 rounded-2xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] p-5 shadow-[0_18px_50px_rgba(16,24,32,0.06)]">
-        <header className="rounded-2xl bg-[var(--erp-brand-red)] p-5 text-white shadow-[0_14px_32px_rgba(157,45,36,0.16)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/75">
+        <header className="rounded-2xl border border-[var(--erp-border)] bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--erp-brand-red)]">
             Registro en sucursal
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">
+          <h2 className="mt-2 text-xl font-bold tracking-[-0.03em] text-[var(--erp-foreground)]">
             Devoluciones a CEDIS
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/80">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--erp-muted-foreground)]">
             Esta pantalla se utiliza desde una sucursal para crear la
             devolución. La verificación se realiza en la sesión CEDIS de la
             sucursal.

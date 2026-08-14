@@ -13,19 +13,25 @@ function methodOf(target: object, key: string): object {
 }
 
 describe('AccountsReceivableController', () => {
-  it('does not expose list or detail routes to SELLER at the controller role gate', () => {
+  it('exposes list, detail and payment registration routes to SELLER', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         methodOf(AccountsReceivableController.prototype, 'findAll'),
       ),
-    ).toEqual(['ADMIN', 'COLLECTIONS']);
+    ).toEqual(['ADMIN', 'COLLECTIONS', 'SELLER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         methodOf(AccountsReceivableController.prototype, 'findOne'),
       ),
-    ).toEqual(['ADMIN', 'COLLECTIONS']);
+    ).toEqual(['ADMIN', 'COLLECTIONS', 'SELLER']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(AccountsReceivableController.prototype, 'registerPayment'),
+      ),
+    ).toEqual(['ADMIN', 'COLLECTIONS', 'SELLER']);
   });
 
   it('passes the current user and Idempotency-Key to payment registration service', async () => {
