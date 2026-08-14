@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform, Type, type TransformFnParams } from 'class-transformer';
 import {
   IsDateString,
   IsDecimal,
@@ -17,9 +17,13 @@ export class RegisterReceivablePaymentDto {
   accountReceivableId!: string;
 
   /** Strings are canonical at the API boundary; number remains only for legacy callers during migration. */
-  @Transform(({ value }) =>
-    typeof value === 'number' && Number.isFinite(value) ? String(value) : value,
-  )
+  @Transform(({ value }: TransformFnParams) => {
+    const rawValue = value as unknown;
+
+    return typeof rawValue === 'number' && Number.isFinite(rawValue)
+      ? String(rawValue)
+      : rawValue;
+  })
   @IsDecimal({ decimal_digits: '0,2', force_decimal: false })
   amount!: string | number;
 
