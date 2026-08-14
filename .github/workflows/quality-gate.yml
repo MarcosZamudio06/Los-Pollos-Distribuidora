@@ -134,6 +134,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Verify self-hosted map rendering contract
+        env:
+          VITE_MAP_STYLE_URL: /maps/styles/operations/style.json
+        run: ./scripts/maps/verify-rendering-contract.sh
+
       - name: Validate production Compose configuration
         env:
           CORS_ORIGIN: https://erp.example.test

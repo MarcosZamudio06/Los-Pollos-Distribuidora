@@ -629,7 +629,9 @@ Actividades:
 Implementado en código: el proveedor está aprobado, el picker reutiliza la
 configuración canónica de `main`, conserva attribution y mantiene fallback
 manual cuando WebGL, style, tiles, glyphs, sprites o geocoding fallan. Falta
-ejecutar el smoke real contra TileServer GL para cerrar el gate operativo.
+ejecutar el smoke real contra TileServer GL a través del frontend Nginx para
+cerrar el gate operativo. El contrato estático y el smoke HTTP de alta se
+mantienen separados de esa evidencia runtime.
 
 ### Fase 6: infraestructura, seguridad y rollout — PARTIAL
 
@@ -656,6 +658,8 @@ Actividades:
 9. Desplegar infraestructura antes del frontend.
 10. Medir latencia, errores y disponibilidad por proveedor mediante estado
     técnico agregado y smoke rendering.
+11. Ejecutar el smoke de alta por HTTP solo en una instalación
+    disposable/dev/test, sin crear inventario.
 
 Orden de despliegue:
 
@@ -686,6 +690,9 @@ demostrada por una prueba fallida.
 - Usuario sin `cedis.manage` recibe `403`.
 - Alta válida devuelve `201`.
 - Alta válida no crea balances, movimientos, transferencias ni ciclos.
+- `backend/test/branch-location-registration.e2e-spec.ts` crea una sucursal
+  nueva, prueba el flujo posterior CEDIS -> sucursal y verifica el balance
+  recibido.
 - `VITE_MAP_STYLE_URL` solo acepta un style público HTTP(S) sin credenciales o
   `/maps/**` same-origin; no expone URLs internas ni secretos.
 - Photon, OSRM y VROOM fallan de forma independiente.
@@ -725,13 +732,15 @@ Crear sucursal
 ### Comandos de validación
 
 ```bash
-OPENSSL_CONF=/dev/null pnpm --dir backend test -- --runInBand
-OPENSSL_CONF=/dev/null pnpm --dir backend run build
-OPENSSL_CONF=/dev/null pnpm --dir backend exec tsc -- --noEmit
-pnpm --dir frontend test
-pnpm --dir frontend run typecheck
-pnpm --dir frontend run lint
-pnpm --dir frontend run build
+OPENSSL_CONF=/dev/null npm --prefix backend test -- --runInBand
+OPENSSL_CONF=/dev/null npm --prefix backend run build
+OPENSSL_CONF=/dev/null npm --prefix backend exec tsc -- --noEmit
+npm --prefix frontend test -- --run
+npm --prefix frontend run typecheck
+npm --prefix frontend run lint
+npm --prefix frontend run build
+VITE_MAP_STYLE_URL=/maps/styles/operations/style.json npm --prefix frontend run build
+VITE_MAP_STYLE_URL=/maps/styles/operations/style.json ./scripts/maps/verify-rendering-contract.sh
 ```
 
 ## Entregas recomendadas
@@ -760,14 +769,14 @@ Estimación preliminar:
 
 ## Riesgos y decisiones pendientes
 
-- Seleccionar servidor de estilos/tiles y confirmar cobertura de México.
-- Confirmar licencia y attribution del estilo, tiles, glyphs y sprites.
 - Verificar en cada despliegue que el snapshot de Geofabrik y su SHA-256
   correspondan al manifest publicado.
 - Mantener actualizados los avisos de licencia, sprites, glyphs y fonts cuando
   cambie el commit del style.
 - Validar la CSP y el proxy same-origin en el entorno productivo real.
-- Ejecutar el smoke rendering contra TileServer GL antes de habilitar el alta.
+- Ejecutar `verify-stack.sh`, `verify-rendering.sh` y el smoke de alta contra
+  un entorno disposable antes de habilitar el alta. Sin Docker, dataset o red,
+  la fase permanece `PARTIAL`; no se infiere `PASS` desde pruebas estáticas.
 - No acoplar el dominio a Photon, Google Maps, Mapbox, OSRM o VROOM.
 
 ## Referencias

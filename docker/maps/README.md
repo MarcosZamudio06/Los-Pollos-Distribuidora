@@ -11,17 +11,45 @@ TileServer GL without exposing private map services to the host network.
    ./scripts/maps/prepare-all.sh
    ```
 
-2. Start the services:
+2. Start the disposable/dev stack required by the browser-facing smoke:
 
    ```bash
-   docker compose --profile maps up -d postgres photon osrm vroom tileserver
+   docker compose --profile maps up -d \
+     postgres photon osrm vroom tileserver migrate backend frontend
+   docker compose --profile maps ps
    ```
 
-3. Verify the stack:
+   The command includes backend and frontend because the official rendering
+   path is frontend Nginx -> /maps/** -> TileServer GL. Starting only the map
+   profile services cannot prove that browser-facing path. The frontend also
+   waits for the backend health contract defined by Compose.
+
+3. Verify the stack through the frontend:
 
    ```bash
    ./scripts/maps/verify-stack.sh
    ```
+
+   verify-stack.sh must be able to reach
+   http://127.0.0.1:${FRONTEND_PORT:-3000}/maps/health; it never replaces
+   that request with a direct TileServer URL.
+
+4. Run the branch registration smoke only against a disposable/dev/test
+   installation:
+
+   ```bash
+   SMOKE_DISPOSABLE=true \
+   SMOKE_ENV=dev \
+   SMOKE_BASE_URL=http://127.0.0.1:${FRONTEND_PORT:-3000} \
+   SMOKE_ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL}" \
+   SMOKE_ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD}" \
+   ./scripts/maps/smoke-branch-create.sh
+   ```
+
+   The script authenticates through the frontend HTTP entry point, creates a
+   unique branch under an active CEDIS, verifies the catalog relationship and
+   location fields, prints only IDs and result status, and optionally
+   deactivates the disposable branch. It never creates inventory.
 
 ## Services
 
@@ -59,11 +87,13 @@ attribution. The committed style and sprite metadata live under
 
 Refresh datasets by rerunning the preparation scripts during a maintenance window and restarting the affected service. The scripts retain the active dataset until the replacement has downloaded, validated, and finished preprocessing.
 
-## Production rollout order
+## Rollout order
 
 Deploy in this order so historical textual routes remain available throughout the rollout:
 
-1. Prepare and start PostGIS, Photon, OSRM, VROOM, and TileServer GL.
+1. Prepare and start PostGIS, Photon, OSRM, VROOM, TileServer GL, backend, and
+   frontend. The frontend is required even when the goal is only a rendering
+   smoke because it owns the browser-facing /maps/ proxy.
 2. Run `./scripts/maps/verify-stack.sh`; it checks style version, vector source,
    attribution, derived sprite/glyph resources, TileJSON, and a representative
    Veracruz tile through the frontend same-origin proxy.
@@ -73,8 +103,10 @@ Deploy in this order so historical textual routes remain available throughout th
 5. Deploy the frontend with
    `VITE_MAP_STYLE_URL=/maps/styles/operations/style.json` only after backend
    and TileServer health checks are green.
-6. Run `./scripts/maps/smoke-route.sh` and the branch-create smoke before
-   gradual enablement.
+6. Run `./scripts/maps/smoke-route.sh` before gradual enablement. Run
+   `./scripts/maps/smoke-branch-create.sh` only in a separate disposable
+   dev/test environment; it requires `SMOKE_DISPOSABLE=true` and must not
+   target production.
 
 The smoke test uses a controlled closed route through Veracruz, Boca del Rio, and Alvarado. It checks that OSRM returns road geometry, distance, and duration. It does not create application records.
 
@@ -96,6 +128,9 @@ The ADMIN route control page reads `GET /api/delivery-routing/technical-status`.
 - Private map services have no host ports. NestJS is the only consumer of
   Photon, OSRM, and VROOM; the browser reaches TileServer GL only through
   Nginx `/maps/`.
+- The official smoke path is browser-facing: frontend Nginx, then /maps/**,
+  then TileServer GL. A direct request to tileserver:8080 is not rendering
+  evidence.
 - Production never falls back to `tile.openstreetmap.org`; an unavailable
   renderer leaves the manual/textual location workflow enabled.
 - PostGIS schema migrations are applied by the explicit migration job; backend
