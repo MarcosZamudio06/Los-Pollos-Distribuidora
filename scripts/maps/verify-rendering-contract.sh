@@ -45,8 +45,8 @@ if source.get("url") != "/maps/data/mexico.json":
 if source.get("attribution") != "© OpenMapTiles © OpenStreetMap contributors":
     fail("style attribution is missing or changed")
 
-if style.get("sprite") != "/maps/styles/operations/sprite":
-    fail("style sprite path must remain same-origin")
+if style.get("sprite") != "{styleJsonFolder}/sprite":
+    fail("style sprite must resolve beside its style.json through {styleJsonFolder}")
 if style.get("glyphs") != "/maps/fonts/{fontstack}/{range}.pbf":
     fail("style glyph path must remain same-origin")
 

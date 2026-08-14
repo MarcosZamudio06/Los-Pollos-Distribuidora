@@ -13,6 +13,29 @@ backend y el frontend. No genera datos durante el arranque normal de Docker.
 - `VITE_MAP_STYLE_URL=/maps/styles/operations/style.json` en la imagen de
   producción.
 
+## Seguridad durante refresh de datasets
+
+`prepare-all.sh` puede sustituir directorios bind-mounted por Photon y OSRM, y
+`prepare-rendering.sh` puede activar PMTiles, fonts o manifest consumidos por
+TileServer GL. **Nunca ejecutes la preparación mientras Photon, OSRM o
+TileServer GL estén consumiendo sus directorios activos.** El refresh requiere
+una ventana de mantenimiento.
+
+El orden obligatorio es:
+
+```bash
+docker compose --profile maps stop backend vroom photon osrm tileserver
+./scripts/maps/prepare-all.sh
+docker compose --profile maps up -d --force-recreate \
+  photon osrm vroom tileserver backend
+./scripts/maps/verify-stack.sh
+```
+
+El flujo no detiene PostgreSQL. Los scripts de preparación no controlan el
+ciclo de vida de los servicios y abortan si Docker confirma que un consumidor
+relevante sigue ejecutándose. No borres `node.lock` manualmente: pertenece a
+OpenSearch y debe ser administrado por Photon/OpenSearch.
+
 ## Preparar y verificar infraestructura
 
 ```bash

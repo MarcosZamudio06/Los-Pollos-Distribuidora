@@ -6,8 +6,7 @@
       "fonts": "fonts",
       "sprites": "styles",
       "styles": "styles",
-      "pmtiles": "rendering",
-      "files": "files"
+      "pmtiles": "rendering"
     },
     "allowedHosts": "frontend,localhost,127.0.0.1",
     "serveAllFonts": false,

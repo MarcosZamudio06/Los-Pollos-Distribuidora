@@ -17,7 +17,7 @@ fetch() {
   cat "${TMP_DIR}/headers" "${TMP_DIR}/body"
 }
 
-curl --fail --silent --show-error "${BASE_URL}/maps/health" >/dev/null
+curl --fail --silent --show-error --max-time 10 "${BASE_URL}/maps/health" >/dev/null
 fetch "/maps/styles/operations/style.json" > "${TMP_DIR}/style-response"
 
 python3 - "${TMP_DIR}" "${BASE_URL}" <<'PY'

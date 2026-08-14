@@ -3,9 +3,30 @@
 The `maps` Docker profile provides PostGIS, Photon, OSRM, VROOM, and a pinned
 TileServer GL without exposing private map services to the host network.
 
+## Dataset refresh safety
+
+Dataset preparation can replace directories that are bind-mounted into the
+runtime containers. **Never run `prepare-all.sh` while Photon, OSRM, or
+TileServer GL are consuming their active datasets.** Every refresh requires a
+maintenance window.
+
+Use this order for a refresh:
+
+```bash
+docker compose --profile maps stop backend vroom photon osrm tileserver
+./scripts/maps/prepare-all.sh
+docker compose --profile maps up -d --force-recreate \
+  photon osrm vroom tileserver backend
+./scripts/maps/verify-stack.sh
+```
+
+PostgreSQL is not stopped by this flow. Do not delete `node.lock` manually:
+it belongs to OpenSearch and must be managed by Photon/OpenSearch.
+
 ## Quick path
 
-1. Prepare the Mexico datasets:
+1. On initial provisioning, before the services start, prepare the Mexico
+   datasets:
 
    ```bash
    ./scripts/maps/prepare-all.sh
@@ -61,7 +82,10 @@ TileServer GL without exposing private map services to the host network.
 | TileServer GL | `http://tileserver:8080` | Mexico PMTiles and OSM Bright style |
 | PostGIS | PostgreSQL connection | `postgis/postgis:16-3.5-alpine`    |
 
-Datasets are stored under `.map-data/`, which is intentionally ignored by Git. Downloads are checksum-verified and prepared in a staging directory before replacing the active dataset.
+Datasets are stored under `.map-data/`, which is intentionally ignored by Git.
+Downloads are checksum-verified and prepared in a staging directory before
+replacing the active dataset. The preparation guards abort if Docker confirms
+that the corresponding runtime consumer is still running.
 
 ## Configuration
 
@@ -85,7 +109,11 @@ source/version/hash, generator, schema, style revision, renderer, and
 attribution. The committed style and sprite metadata live under
 `docker/maps/styles/operations/` and licenses under `docker/maps/licenses/`.
 
-Refresh datasets by rerunning the preparation scripts during a maintenance window and restarting the affected service. The scripts retain the active dataset until the replacement has downloaded, validated, and finished preprocessing.
+Refresh datasets only during a maintenance window. Stop all map consumers,
+prepare the replacement, recreate the affected services, and verify the stack
+before reopening traffic. The scripts retain the active dataset until the
+replacement has downloaded, validated, and finished preprocessing; they never
+manage service lifecycle automatically.
 
 ## Rollout order
 
@@ -118,7 +146,13 @@ Run during a maintenance window:
 ./scripts/maps/refresh-monthly.sh
 ```
 
-The refresh stages and validates replacement data before activation, recreates only the map services and backend, then executes health and controlled-route smoke checks. Persist the printed `MAP_DATA_VERSION` and `MAP_DATA_PREPARED_AT` values in the deployment configuration. Existing routes keep their original `routingDataVersion`; they are never rewritten during a dataset refresh.
+The refresh stops backend, VROOM, Photon, OSRM, and TileServer GL before
+preparing data, stages and validates replacement data before activation,
+recreates only the map services and backend, then executes health and
+controlled-route smoke checks. It does not stop PostgreSQL. Persist the printed
+`MAP_DATA_VERSION` and `MAP_DATA_PREPARED_AT` values in the deployment
+configuration. Existing routes keep their original `routingDataVersion`; they
+are never rewritten during a dataset refresh.
 
 The ADMIN route control page reads `GET /api/delivery-routing/technical-status`. It reports PostGIS, Photon, VROOM, OSRM, optional `MapTiles`, `routingDataVersion`, Fleet persistence, and the aggregate age of the newest persisted vehicle position without exposing internal service URLs or personal data. MapLibre style configuration remains frontend-only through `VITE_MAP_STYLE_URL`.
 

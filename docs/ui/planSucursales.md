@@ -672,6 +672,25 @@ Infraestructura de mapas
   -> habilitación gradual
 ```
 
+#### Refresh seguro de datasets cartográficos
+
+La preparación de Photon, OSRM y rendering no debe ejecutarse mientras Photon,
+OSRM o TileServer GL consuman sus directorios activos. El refresh requiere una
+ventana de mantenimiento y debe seguir este orden, sin detener PostgreSQL:
+
+```bash
+docker compose --profile maps stop backend vroom photon osrm tileserver
+./scripts/maps/prepare-all.sh
+docker compose --profile maps up -d --force-recreate \
+  photon osrm vroom tileserver backend
+./scripts/maps/verify-stack.sh
+```
+
+Los scripts abortan antes de activar un dataset si Docker confirma que el
+consumidor correspondiente sigue ejecutándose. No se debe borrar `node.lock`
+manualmente; pertenece a OpenSearch y debe ser administrado por
+Photon/OpenSearch.
+
 ### Fase 7: renderer de rutas — ABSORBIDA POR MAIN
 
 La migración de rutas de Leaflet a MapLibre ya forma parte de `main` mediante

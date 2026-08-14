@@ -54,7 +54,7 @@
       "attribution": "© OpenMapTiles © OpenStreetMap contributors"
     }
   },
-  "sprite": "/maps/styles/operations/sprite",
+  "sprite": "{styleJsonFolder}/sprite",
   "glyphs": "/maps/fonts/{fontstack}/{range}.pbf",
   "layers": [
     {

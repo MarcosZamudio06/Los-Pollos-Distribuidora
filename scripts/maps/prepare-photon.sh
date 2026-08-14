@@ -12,6 +12,21 @@ if [[ -z "${MAP_DATA_DIR}" || "${MAP_DATA_DIR}" == "/" ]]; then
   exit 1
 fi
 
+service_is_running() {
+  local service="$1"
+  local running_services
+
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if ! running_services="$(cd "${REPO_ROOT}" && docker compose --profile maps ps --status running --services 2>/dev/null)"; then
+    return 1
+  fi
+
+  grep -Fqx -- "${service}" <<<"${running_services}"
+}
+
 for command in curl tar; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     echo "${command} is required to prepare Photon data." >&2
@@ -64,6 +79,11 @@ printf '%s\n' \
   "source=${PHOTON_DATA_URL}" \
   "preparedAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   > "${STAGING_DIR}/DATA_VERSION"
+
+if service_is_running photon; then
+  echo "Photon is running. Stop the service before replacing its bind-mounted dataset." >&2
+  exit 1
+fi
 
 PREVIOUS_DIR="${TARGET_DIR}.previous"
 rm -rf "${PREVIOUS_DIR}"

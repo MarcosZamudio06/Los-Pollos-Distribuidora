@@ -7,6 +7,10 @@ PREPARED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 DATA_VERSION="${MAP_DATA_VERSION:-mexico-260812}"
 
 cd "${REPO_ROOT}"
+
+echo "Map dataset refresh requires a maintenance window; stopping map consumers before preparation." >&2
+docker compose --profile maps stop backend vroom photon osrm tileserver
+
 "${SCRIPT_DIR}/prepare-all.sh"
 
 MAP_DATA_VERSION="${DATA_VERSION}" MAP_DATA_PREPARED_AT="${PREPARED_AT}" \
