@@ -15,8 +15,11 @@ style_url = sys.argv[2]
 style_path = root / "docker/maps/styles/operations/style.json"
 config_path = root / "docker/maps/tileserver/config.json"
 notice_path = root / "docker/maps/licenses/NOTICE.md"
+development_compose = root / "docker-compose.yml"
 production_compose = root / "docker-compose.production.yml"
 frontend_dockerfile = root / "docker/frontend/Dockerfile"
+vite_config = root / "frontend/vite.config.ts"
+frontend_package = root / "frontend/package.json"
 
 def fail(message):
     raise SystemExit(f"map rendering contract: {message}")
@@ -30,6 +33,11 @@ try:
     tileserver = json.loads(config_path.read_text(encoding="utf-8"))
 except (OSError, json.JSONDecodeError) as error:
     fail(f"TileServer config.json is not parseable: {error}")
+
+try:
+    frontend_manifest = json.loads(frontend_package.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as error:
+    fail(f"frontend package.json is not parseable: {error}")
 
 if style.get("version") != 8:
     fail("style version must be 8")
@@ -85,10 +93,10 @@ if not style_url.startswith("/maps/"):
 if public_forbidden.search(style_url):
     fail("VITE_MAP_STYLE_URL contains a forbidden provider URL")
 
-compose_text = production_compose.read_text(encoding="utf-8")
+production_compose_text = production_compose.read_text(encoding="utf-8")
 tileserver_block = re.search(
     r"(?ms)^  tileserver:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)",
-    compose_text,
+    production_compose_text,
 )
 if not tileserver_block:
     fail("production Compose has no TileServer service")
@@ -96,8 +104,42 @@ if re.search(r"(?m)^\s+ports:", tileserver_block.group(0)):
     fail("production TileServer must not publish a host port")
 
 frontend_text = frontend_dockerfile.read_text(encoding="utf-8")
+vite_text = vite_config.read_text(encoding="utf-8")
 if "location /maps/" not in frontend_text or "proxy_pass http://tileserver:8080/;" not in frontend_text:
     fail("frontend Nginx must proxy /maps/** to the private TileServer")
+if 'proxy_cache_key "$scheme://$http_host$request_uri";' not in frontend_text:
+    fail("frontend Nginx map cache key must include the request host to avoid cross-origin style URLs")
+if 'map $uri $maps_browser_cache_control {' not in frontend_text:
+    fail("frontend Nginx must define browser cache policy for host-dependent map metadata")
+if '~^/maps/styles/[^/]+/style\\.json$ "no-store";' not in frontend_text:
+    fail("frontend Nginx must not browser-cache host-dependent style metadata")
+if '~^/maps/data/[^/]+\\.json$ "no-store";' not in frontend_text:
+    fail("frontend Nginx must not browser-cache host-dependent TileJSON metadata")
+if 'add_header Cache-Control $maps_browser_cache_control always;' not in frontend_text:
+    fail("frontend Nginx must apply the map metadata browser cache policy")
+if "ENV VITE_API_BASE_URL=/api" not in frontend_text or "ARG VITE_API_URL" in frontend_text:
+    fail("Docker frontend builds must pin the browser API to the same-origin /api proxy")
+vite_maps_proxy = re.search(
+    r'(?ms)"/maps":\s*\{(.*?)^\s*\},',
+    vite_text,
+)
+if not vite_maps_proxy or "target: mapProxyTarget" not in vite_maps_proxy.group(1):
+    fail("Vite development must proxy /maps/** to the browser-facing map gateway")
+if "changeOrigin: false" not in vite_maps_proxy.group(1):
+    fail("Vite /maps proxy must preserve the browser Host for same-origin TileServer URLs")
+if frontend_manifest.get("scripts", {}).get("dev") != "vite --force":
+    fail("frontend development must discard stale optimized dependencies before serving maps")
+
+for compose_path in (development_compose, production_compose):
+    compose_text = compose_path.read_text(encoding="utf-8")
+    frontend_block = re.search(
+        r"(?ms)^  frontend:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)",
+        compose_text,
+    )
+    if not frontend_block:
+        fail(f"{compose_path.name} has no frontend service")
+    if "VITE_API_URL:" in frontend_block.group(0):
+        fail(f"{compose_path.name} must not override the same-origin frontend API path")
 
 required_notices = (
     "OpenStreetMap",

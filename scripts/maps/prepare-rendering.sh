@@ -111,7 +111,7 @@ docker run --rm --platform "${MAP_DOCKER_PLATFORM}" \
   --download \
   --osm-path=/data/mexico.osm.pbf \
   --output=/data/mexico.pmtiles \
-  --forceƒ
+  --force
   test -s "${STAGING_DIR}/mexico.pmtiles"
   rm -f "${STAGING_DIR}/mexico.osm.pbf"
 fi

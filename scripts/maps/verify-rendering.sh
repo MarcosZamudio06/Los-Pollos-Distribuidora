@@ -25,14 +25,21 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 tmp = Path(sys.argv[1])
 base = sys.argv[2] + "/"
+base_origin = urlsplit(base)
 style = json.loads((tmp / "body").read_text(encoding="utf-8"))
 if style.get("version") != 8:
     raise SystemExit("rendering smoke: style version must be 8")
+
+style_headers = (tmp / "headers").read_text(encoding="utf-8").lower()
+if "cache-control: no-store" not in style_headers:
+    raise SystemExit(
+        "rendering smoke: host-dependent style metadata must not be stored by browsers"
+    )
 
 sources = style.get("sources", {})
 vector_sources = [source for source in sources.values() if source.get("type") == "vector"]
@@ -48,7 +55,15 @@ if forbidden.search(serialized_style):
     raise SystemExit("rendering smoke: style contains an internal or public OSM runtime URL")
 
 def get(path):
-    url = urljoin(base, path.lstrip("/"))
+    url = urljoin(base, path)
+    resource_origin = urlsplit(url)
+    if (resource_origin.scheme, resource_origin.netloc) != (
+        base_origin.scheme,
+        base_origin.netloc,
+    ):
+        raise SystemExit(
+            f"rendering smoke: resource URL is outside the public origin: {path}"
+        )
     request = Request(url, headers={"Accept": "application/json,application/x-protobuf,*/*"})
     with urlopen(request, timeout=15) as response:
         body = response.read()
@@ -88,9 +103,13 @@ for source in vector_sources:
         if not isinstance(tiles, list) or not tiles:
             raise SystemExit("rendering smoke: vector source has no TileJSON URL or tiles")
         continue
-    status, _, body = get(tilejson_path)
+    status, tilejson_headers, body = get(tilejson_path)
     if status != 200:
         raise SystemExit(f"rendering smoke: TileJSON failed: {tilejson_path}")
+    if "cache-control: no-store" not in tilejson_headers.lower():
+        raise SystemExit(
+            "rendering smoke: host-dependent TileJSON metadata must not be stored by browsers"
+        )
     tilejson = json.loads(body.decode("utf-8"))
     if forbidden.search(json.dumps(tilejson, ensure_ascii=False)):
         raise SystemExit("rendering smoke: TileJSON leaks an internal or public OSM URL")

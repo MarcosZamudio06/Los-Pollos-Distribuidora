@@ -1,9 +1,8 @@
 FROM node:24.14.1-alpine AS build
 
-ARG VITE_API_URL=/api
 ARG VITE_MAP_STYLE_URL
 ARG REQUIRE_PUBLIC_MAP_STYLE=false
-ENV VITE_API_BASE_URL=${VITE_API_URL}
+ENV VITE_API_BASE_URL=/api
 ENV VITE_MAP_STYLE_URL=${VITE_MAP_STYLE_URL}
 
 WORKDIR /app/frontend
@@ -31,6 +30,11 @@ FROM nginx:alpine
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 RUN printf '%s\n' \
   'proxy_cache_path /var/cache/nginx/maps levels=1:2 keys_zone=maps_cache:10m max_size=256m inactive=1d use_temp_path=off;' \
+  'map $uri $maps_browser_cache_control {' \
+  '  default "public, max-age=3600";' \
+  '  ~^/maps/styles/[^/]+/style\.json$ "no-store";' \
+  '  ~^/maps/data/[^/]+\.json$ "no-store";' \
+  '}' \
   'server {' \
   '  listen 3000;' \
   '  server_name _;' \
@@ -50,9 +54,10 @@ RUN printf '%s\n' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
   '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
   '    proxy_cache maps_cache;' \
+  '    proxy_cache_key "$scheme://$http_host$request_uri";' \
   '    proxy_cache_valid 200 1h;' \
   '    proxy_cache_valid 404 1m;' \
-  '    add_header Cache-Control "public, max-age=3600" always;' \
+  '    add_header Cache-Control $maps_browser_cache_control always;' \
   '  }' \
   '  location /api/ {' \
   '    proxy_pass http://backend:4000/api/;' \
