@@ -81,6 +81,7 @@ describe("role navigation", () => {
       "/cedis",
       "/cedis/incoming",
       "/cedis/returns",
+      "/admin/locations/branches/new",
       "/sales/history",
       "/orders",
       "/customers",

@@ -2,13 +2,17 @@
 
 ## Estado del documento
 
-- Estado: planificado, no implementado.
+- Estado: rebaselineado contra `main` y la implementación actual; cada fase
+  conserva un estado verificable (`COMPLETED`, `PARTIAL` o `PENDING`).
 - Alcance principal: registrar una nueva sucursal operativa y asociarla a un CEDIS.
 - Motor cartográfico frontend: MapLibre GL JS.
 - Geocodificación inicial: Photon self-hosted mediante el backend.
 - Ruteo inicial: OSRM mediante el backend.
 - Optimización inicial: VROOM mediante el backend.
-- Proveedor de estilos y tiles: pendiente de selección; se priorizará una opción abierta o self-hosted.
+- Proveedor de estilos y tiles: TileServer GL self-hosted con PMTiles de México.
+- Fuente y generación: snapshot de Geofabrik México procesado por Planetiler
+  con el perfil OpenMapTiles.
+- Style: OSM Bright versionado, servido same-origin por `/maps/`.
 
 ## Objetivo
 
@@ -36,8 +40,8 @@ transferencias ni movimientos de stock.
 - Validación frontend y backend de la jerarquía y las coordenadas.
 - Invalidación de catálogos CEDIS después del alta.
 - Navegación al detalle de la sucursal o al dashboard CEDIS.
-- Configuración reemplazable de renderer, estilos, tiles, geocodificación y rutas.
-- Migración posterior de los mapas de rutas actuales de Leaflet a MapLibre.
+- Configuración canónica del style mediante `VITE_MAP_STYLE_URL` en el frontend.
+- Adaptadores backend reemplazables para geocodificación, ruteo y optimización.
 
 ### Fuera de alcance
 
@@ -96,14 +100,16 @@ debe conocer sus URLs internas:
 - `specs/.specs/03-api/delivery-api.md:5-27,52-84`.
 - `specs/modules/routes-delivery/spec.md:49-70`.
 
-El frontend actualmente utiliza Leaflet y React Leaflet en:
+`main` ya utiliza MapLibre para los mapas de rutas y Fleet en:
 
 - `frontend/src/features/rutas-reparto/components/RoutePlannerMap.tsx`.
 - `frontend/src/features/rutas-reparto/components/DriverRouteMap.tsx`.
+- `frontend/src/features/fleet/components/FleetLiveMap.tsx`.
 
-Las URLs de tiles de OpenStreetMap están hardcodeadas en esos componentes.
-El cambio a MapLibre deberá retirar ese acoplamiento antes de declarar migrado
-el frontend cartográfico completo.
+La configuración pública canónica es
+`frontend/src/lib/maps/mapConfig.ts`: `VITE_MAP_STYLE_URL` se valida, se
+resuelve y se entrega a MapLibre. No se reinstala MapLibre, no se agrega
+Leaflet y no se crea una migración de renderer en esta rama.
 
 ### Infraestructura geoespacial
 
@@ -113,6 +119,7 @@ El perfil Docker de mapas ya contiene:
 - OSRM en `http://osrm:5000`.
 - VROOM en `http://vroom:3000`.
 - PostGIS para persistencia espacial.
+- TileServer GL privado para style, sprites, glyphs, TileJSON y PMTiles.
 
 Fuentes:
 
@@ -120,9 +127,9 @@ Fuentes:
 - `docker-compose.yml:58-72`.
 - `docker-compose.production.yml:56-67`.
 
-El stack actual no contiene un servidor de estilos o tiles para MapLibre. Esta
-es una dependencia real que debe resolverse antes de activar el mapa en
-producción.
+TileServer GL se accede únicamente mediante el proxy same-origin `/maps/` del
+frontend. Photon, OSRM y VROOM permanecen privados y solo son consumidos por
+NestJS.
 
 ## Flujo funcional de alta
 
@@ -373,7 +380,6 @@ flujo CEDIS.
 | OSRM adapter | Adaptar OSRM al port | Sí |
 | Optimization port | Ordenar paradas | No |
 | VROOM adapter | Adaptar VROOM al port | Sí |
-| Map style port | Entregar configuración browser-safe | No |
 | MapLibre renderer | Renderizar mapa y marcador | Solo MapLibre |
 
 MapLibre será el motor fijo de la primera implementación, pero no será el
@@ -385,54 +391,10 @@ licencia del proveedor seleccionado.
 
 ### Interfaces propuestas
 
-```ts
-export type Coordinates = {
-  latitude: number;
-  longitude: number;
-};
-
-export type GeocodingResult = Coordinates & {
-  label: string;
-  providerId?: string;
-  providerType?: string;
-};
-
-export interface GeocodingProvider {
-  search(input: {
-    query: string;
-    proximity?: Coordinates;
-    limit: number;
-  }): Promise<GeocodingResult[]>;
-
-  reverse(point: Coordinates): Promise<GeocodingResult>;
-}
-
-export interface RoutingProvider {
-  buildRoute(points: Coordinates[]): Promise<unknown>;
-}
-
-export interface RouteOptimizationProvider {
-  optimize(input: unknown): Promise<unknown>;
-}
-
-export type MapClientConfig = {
-  renderer: "maplibre";
-  available: boolean;
-  styleUrl: string;
-  revision: string;
-  attribution: Array<{ label: string; url?: string }>;
-  defaultViewport: Coordinates & { zoom: number };
-  capabilities: {
-    geocoding: boolean;
-    routing: boolean;
-    optimization: boolean;
-  };
-};
-
-export interface MapStyleConfigProvider {
-  getClientConfig(): Promise<MapClientConfig>;
-}
-```
+Los contratos de `GeocodingProvider`, `RoutingProvider` y
+`RouteOptimizationProvider` viven en
+`backend/src/modules/geospatial/contracts/`; la configuración cartográfica del
+navegador no es un puerto backend.
 
 Los tipos finales deben reutilizar los tipos de rutas existentes en lugar de
 introducir `unknown` en el código de aplicación. El bloque anterior expresa
@@ -440,23 +402,17 @@ los límites de los puertos, no el contrato definitivo de cada módulo.
 
 ### Configuración pública y secretos
 
-Se propone agregar:
+La única fuente pública del style es:
 
-```http
-GET /api/maps/config
-Authorization: Bearer <token>
+```text
+VITE_MAP_STYLE_URL=/maps/styles/operations/style.json
+        -> runtimeMapConfig
+        -> resolveMapStyle()
+        -> MapLibre
 ```
 
-La respuesta solo podrá contener datos seguros para el navegador:
-
-- Renderer.
-- URL pública o same-origin del style JSON.
-- Revisión del estilo.
-- Atribución.
-- Viewport por defecto.
-- Capacidades disponibles.
-
-Nunca deberá devolver:
+El backend no expone un endpoint de configuración de style ni una segunda URL
+de style. Nunca debe devolver al navegador:
 
 - `PHOTON_URL`.
 - `OSRM_URL`.
@@ -465,19 +421,10 @@ Nunca deberá devolver:
 - Tokens privados.
 - Credenciales de proveedores.
 
-Este endpoint es nuevo y solo se implementará si la configuración runtime es
-necesaria. No es necesario para la persistencia de sucursales.
-
-Variables propuestas:
+Variables operativas:
 
 ```text
-MAP_RENDERING_ENABLED=true
-MAP_STYLE_PROVIDER=self-hosted
-MAP_STYLE_PUBLIC_URL=/maps/styles/operations/style.json
-MAP_STYLE_REVISION=mexico-2026-08
-MAP_DEFAULT_LATITUDE=19.1738
-MAP_DEFAULT_LONGITUDE=-96.1342
-MAP_DEFAULT_ZOOM=11
+MAP_TILES_URL=http://tileserver:8080
 
 GEOCODING_PROVIDER=photon
 GEOCODING_TIMEOUT_MS=5000
@@ -495,38 +442,30 @@ ROUTING_TIMEOUT_MS=10000
 URLs obligatorias por capacidad y valores numéricos. Las variables internas no
 deben pasar al bundle Vite.
 
-## Proveedor inicial de estilos y tiles
+## Proveedor aprobado de estilos y tiles
 
-El stack existente no resuelve estilos ni tiles. Antes de construir el picker
-MapLibre se realizará un spike técnico con estas alternativas:
+La decisión ya está cerrada para esta implementación:
 
-- PMTiles servido desde almacenamiento estático o CDN.
-- Martin o Tegola para vector tiles.
-- TileServer GL para servir style JSON y recursos asociados.
-- Proveedor comercial compatible con MapLibre, si existe una decisión legal y
-  presupuestal posterior.
+- Renderer: MapLibre GL JS.
+- TileServer: `maptiler/tileserver-gl:v5.6.0`, sin puerto de host en producción.
+- Dataset: snapshot de México de Geofabrik, con URL, fecha y SHA-256 en el
+  manifest generado.
+- Generador: `ghcr.io/onthegomap/planetiler:v0.10.2` con perfil OpenMapTiles.
+- Salida: `mexico.pmtiles`.
+- Schema: OpenMapTiles v3.16.
+- Style: OSM Bright en el commit
+  `563b249f7ae71528b1f1e327cb9c019d0dda4c50`.
+- Fonts: OpenMapTiles fonts v2.0, preparados fuera del arranque normal.
+- Atribución visible: `© OpenMapTiles © OpenStreetMap contributors`.
 
-Criterios de selección:
-
-- Cobertura de México.
-- Style JSON completo con sprites y glyphs.
-- Compatibilidad con MapLibre.
-- Versionado de datasets y estilos.
-- Atribución visible de OpenStreetMap y otras fuentes.
-- Caché y rendimiento en móvil.
-- Healthcheck y smoke test.
-- Licencia compatible con uso empresarial.
-- Endpoint público controlado o same-origin.
-- Posibilidad de sustitución sin cambiar la UI.
-
-Producción no deberá depender directamente de `tile.openstreetmap.org`: el
-servicio público no ofrece SLA para este uso. Desarrollo puede utilizar una
-fuente temporal únicamente con atribución y sin convertirla en dependencia
-operativa.
+El browser consume exclusivamente `/maps/**` same-origin y `/api/**`. No se
+permite dependencia productiva de `tile.openstreetmap.org`, Photon, OSRM, VROOM
+ni `tileserver:8080`. Si style, glyphs, sprites o tiles fallan, la UI conserva
+la captura manual y muestra `MapUnavailableState`.
 
 ## Plan por fases
 
-### Fase 0: especificaciones y decisiones
+### Fase 0: especificaciones y decisiones — COMPLETED
 
 Archivos a actualizar o crear:
 
@@ -544,15 +483,16 @@ Actividades:
 2. Documentar que la sucursal queda vinculada a un CEDIS activo.
 3. Documentar que el mapa no es requisito para la captura manual.
 4. Documentar la ausencia de efectos de inventario durante el alta.
-5. Resolver la contradicción actual que fija React Leaflet en UI.
-6. Definir criterios de proveedor de estilos antes de instalar infraestructura.
+5. Reconciliar el renderer de rutas y Fleet ya consolidado en `main` como
+   MapLibre.
+6. Registrar la decisión aprobada de TileServer GL, Planetiler, OpenMapTiles,
+   OSM Bright y Geofabrik.
 
-Gate: no implementar el renderer productivo mientras los specs mantengan una
-dependencia obligatoria de React Leaflet o mientras no exista un proveedor de
-style/tiles aprobado.
+Gate superado: los specs son provider-neutral, MapLibre ya está en `main` y el
+proveedor productivo está aprobado.
 
 
-### Fase 2: puertos y adaptadores backend
+### Fase 2: puertos y adaptadores backend — COMPLETED
 
 Crear un módulo geoespacial o separar progresivamente el actual:
 
@@ -561,14 +501,11 @@ backend/src/modules/geospatial/
 ├── contracts/
 │   ├── geocoding-provider.ts
 │   ├── routing-provider.ts
-│   ├── route-optimization-provider.ts
-│   └── map-style-config-provider.ts
+│   └── route-optimization-provider.ts
 ├── providers/
 │   ├── photon-geocoding.provider.ts
 │   ├── osrm-routing.provider.ts
 │   └── vroom-route-optimization.provider.ts
-├── map-config.controller.ts
-├── map-config.service.ts
 └── geospatial.module.ts
 ```
 
@@ -590,14 +527,20 @@ Actividades:
 3. Mantener `/api/geocoding/search` y `/api/geocoding/reverse`.
 4. Mantener respuestas normalizadas y campos OSM opcionales.
 5. Separar fallas de geocodificación, ruteo y optimización.
-6. Agregar `/api/maps/config` solo con información browser-safe.
+6. Mantener la configuración del style fuera de NestJS; usar
+   `MAP_TILES_URL` únicamente para estado técnico interno.
 7. Cubrir timeouts, `503`, ausencia de resultados y errores de configuración.
 8. Registrar proveedor, operación, latencia y resultado sin direcciones completas.
 
-### Fase 3: fundación frontend de mapas
+El módulo y los adaptadores Photon/OSRM/VROOM ya existen y se conservan. La
+configuración backend duplicada de style fue retirada y el estado técnico
+agrega `MapTiles` sin devolver URLs internas.
 
-Agregar `maplibre-gl` mediante pnpm y conservar Leaflet temporalmente para no
-romper las rutas existentes.
+### Fase 3: fundación frontend de mapas — COMPLETED
+
+MapLibre GL JS ya es dependencia del frontend y `main` ya lo utiliza en rutas y
+Fleet. Esta fase no reinstala MapLibre, no agrega Leaflet y no migra desde cero
+los mapas existentes.
 
 Crear:
 
@@ -618,7 +561,7 @@ Responsabilidades:
 - Mantener el mapa fuera del bundle inicial cuando la ruta no lo necesita.
 - Importar el CSS de MapLibre dentro del chunk correspondiente.
 - Crear y destruir la instancia correctamente.
-- Configurar style URL y attribution desde runtime.
+- Configurar el style canónico y attribution desde runtime.
 - Exponer eventos en `{ latitude, longitude }`.
 - Convertir internamente a `[longitude, latitude]`.
 - Manejar error de WebGL, style, tiles, glyphs y sprites.
@@ -626,7 +569,7 @@ Responsabilidades:
 - No depender de un wrapper React adicional salvo que exista una necesidad
   comprobada.
 
-### Fase 4: alta manual de sucursal
+### Fase 4: alta manual de sucursal — COMPLETED
 
 Crear:
 
@@ -653,15 +596,16 @@ Actividades:
 3. Implementar validación espejo del DTO backend.
 4. Enviar siempre `type: "BRANCH"`.
 5. Mostrar la relación `CEDIS → sucursal` como contexto operativo.
-6. Implementar captura manual antes de integrar el mapa.
+6. Mantener captura manual como fuente de verdad e integrar el picker sin
+   hacer que el mapa sea requisito.
 7. Presentar errores `400`, `403`, `404` y `409`.
 8. Invalidar ubicaciones, CEDIS y ramas después de `201 Created`.
 9. No llamar ciclos, inventario ni transferencias.
 
-Gate: esta fase puede liberarse sin proveedor cartográfico, utilizando captura
-manual de dirección y coordenadas.
+Gate superado: el alta conserva captura manual y no crea ciclos, inventario ni
+transferencias.
 
-### Fase 5: picker MapLibre y geocodificación
+### Fase 5: picker MapLibre y geocodificación — PARTIAL
 
 Crear:
 
@@ -682,10 +626,14 @@ Actividades:
 10. Mostrar attribution visible en todo momento.
 11. Mantener la experiencia de campos completa sin WebGL.
 
-Gate: requiere proveedor de estilo/tiles aprobado, style JSON válido, recursos
-de glyphs/sprites disponibles y CSP definida.
+Implementado en código: el proveedor está aprobado, el picker reutiliza la
+configuración canónica de `main`, conserva attribution y mantiene fallback
+manual cuando WebGL, style, tiles, glyphs, sprites o geocoding fallan. Falta
+ejecutar el smoke real contra TileServer GL a través del frontend Nginx para
+cerrar el gate operativo. El contrato estático y el smoke HTTP de alta se
+mantienen separados de esa evidencia runtime.
 
-### Fase 6: infraestructura, seguridad y rollout
+### Fase 6: infraestructura, seguridad y rollout — PARTIAL
 
 Archivos probables:
 
@@ -699,7 +647,7 @@ Archivos probables:
 
 Actividades:
 
-1. Agregar el servicio de estilos/tiles self-hosted aprobado.
+1. Agregar TileServer GL self-hosted aprobado con `mexico.pmtiles`.
 2. Mantenerlo sin puertos públicos innecesarios.
 3. Versionar datasets y estilos.
 4. Configurar caché y healthchecks.
@@ -708,7 +656,10 @@ Actividades:
 7. Crear smoke test de style, sprite, glyph y tile.
 8. Exponer estado técnico agregado sin URLs internas.
 9. Desplegar infraestructura antes del frontend.
-10. Medir latencia, errores y disponibilidad por proveedor.
+10. Medir latencia, errores y disponibilidad por proveedor mediante estado
+    técnico agregado y smoke rendering.
+11. Ejecutar el smoke de alta por HTTP solo en una instalación
+    disposable/dev/test, sin crear inventario.
 
 Orden de despliegue:
 
@@ -721,35 +672,12 @@ Infraestructura de mapas
   -> habilitación gradual
 ```
 
-### Fase 7: migración de rutas de Leaflet
+### Fase 7: renderer de rutas — ABSORBIDA POR MAIN
 
-Esta fase es necesaria para que MapLibre sea el motor cartográfico definitivo
-del frontend, pero puede entregarse después de la alta de sucursales.
-
-Componentes a migrar:
-
-- `frontend/src/features/rutas-reparto/components/RoutePlannerMap.tsx`.
-- `frontend/src/features/rutas-reparto/components/DriverRouteMap.tsx`.
-- `frontend/src/features/rutas-reparto/components/RouteStopInfoMarker.tsx`.
-
-Paridad requerida:
-
-- GeoJSON de la ruta.
-- Marcador de origen.
-- Marcadores numerados.
-- Marcadores arrastrables donde aplique.
-- Segmento seleccionado.
-- Flechas de dirección.
-- Ajuste de viewport.
-- Accesibilidad de lista alternativa.
-- Fallback textual para rutas históricas sin geometría.
-
-Solo después de la paridad se eliminarán:
-
-- `leaflet`.
-- `react-leaflet`.
-- `@types/leaflet`.
-- CSS y URLs de tiles hardcodeadas de Leaflet.
+La migración de rutas de Leaflet a MapLibre ya forma parte de `main` mediante
+`RoutePlannerMap`, `DriverRouteMap` y el mapa de Fleet. No se reimplementa en
+esta rama. Cualquier trabajo futuro se limita a una regresión o paridad
+demostrada por una prueba fallida.
 
 ## Pruebas y criterios de aceptación
 
@@ -762,7 +690,11 @@ Solo después de la paridad se eliminarán:
 - Usuario sin `cedis.manage` recibe `403`.
 - Alta válida devuelve `201`.
 - Alta válida no crea balances, movimientos, transferencias ni ciclos.
-- `/maps/config` no expone URLs internas ni secretos.
+- `backend/test/branch-location-registration.e2e-spec.ts` crea una sucursal
+  nueva, prueba el flujo posterior CEDIS -> sucursal y verifica el balance
+  recibido.
+- `VITE_MAP_STYLE_URL` solo acepta un style público HTTP(S) sin credenciales o
+  `/maps/**` same-origin; no expone URLs internas ni secretos.
 - Photon, OSRM y VROOM fallan de forma independiente.
 - Los errores de proveedores son observables y no generan persistencia parcial.
 
@@ -800,13 +732,15 @@ Crear sucursal
 ### Comandos de validación
 
 ```bash
-OPENSSL_CONF=/dev/null pnpm --dir backend test -- --runInBand
-OPENSSL_CONF=/dev/null pnpm --dir backend run build
-OPENSSL_CONF=/dev/null pnpm --dir backend exec tsc -- --noEmit
-pnpm --dir frontend test
-pnpm --dir frontend run typecheck
-pnpm --dir frontend run lint
-pnpm --dir frontend run build
+OPENSSL_CONF=/dev/null npm --prefix backend test -- --runInBand
+OPENSSL_CONF=/dev/null npm --prefix backend run build
+OPENSSL_CONF=/dev/null npm --prefix backend exec tsc -- --noEmit
+npm --prefix frontend test -- --run
+npm --prefix frontend run typecheck
+npm --prefix frontend run lint
+npm --prefix frontend run build
+VITE_MAP_STYLE_URL=/maps/styles/operations/style.json npm --prefix frontend run build
+VITE_MAP_STYLE_URL=/maps/styles/operations/style.json ./scripts/maps/verify-rendering-contract.sh
 ```
 
 ## Entregas recomendadas
@@ -818,12 +752,12 @@ confirmarse antes de implementar.
 | Entrega | Resultado |
 |---|---|
 | PR 1 | Specs, decisiones y contrato de proveedores |
-| PR 2 | Estandarización de pnpm, Docker y CI |
+| PR 2 | Infraestructura de mapas, Docker y CSP |
 | PR 3 | Puertos/adaptadores backend y configuración pública |
 | PR 4 | Alta manual de sucursal y autorización |
 | PR 5 | Fundación MapLibre y picker geográfico |
 | PR 6 | Estilos/tiles, CSP, observabilidad y rollout |
-| PR 7 | Migración de mapas de rutas y retiro de Leaflet |
+| PR 7 | Absorbida por `main`; solo regresiones si existe evidencia |
 
 Estimación preliminar:
 
@@ -835,14 +769,14 @@ Estimación preliminar:
 
 ## Riesgos y decisiones pendientes
 
-- Seleccionar servidor de estilos/tiles y confirmar cobertura de México.
-- Confirmar licencia y attribution del estilo, tiles, glyphs y sprites.
-- Resolver la migración de npm a pnpm antes de añadir dependencias nuevas.
-- Definir si `/api/maps/config` será autenticado o público con un manifiesto sin
-  datos sensibles; la recomendación inicial es autenticado para mantener una
-  superficie coherente con la aplicación.
-- Definir CSP final según los dominios del proveedor elegido.
-- Mantener compatibilidad con rutas históricas mientras Leaflet coexiste.
+- Verificar en cada despliegue que el snapshot de Geofabrik y su SHA-256
+  correspondan al manifest publicado.
+- Mantener actualizados los avisos de licencia, sprites, glyphs y fonts cuando
+  cambie el commit del style.
+- Validar la CSP y el proxy same-origin en el entorno productivo real.
+- Ejecutar `verify-stack.sh`, `verify-rendering.sh` y el smoke de alta contra
+  un entorno disposable antes de habilitar el alta. Sin Docker, dataset o red,
+  la fase permanece `PARTIAL`; no se infiere `PASS` desde pruebas estáticas.
 - No acoplar el dominio a Photon, Google Maps, Mapbox, OSRM o VROOM.
 
 ## Referencias

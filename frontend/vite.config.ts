@@ -13,6 +13,24 @@ const apiProxyTarget =
 export default defineConfig({
   build: {
     chunkSizeWarningLimit: BUNDLE_BUDGET_KB.entry,
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes("/src/features/auth/AuthProvider.") ||
+            id.includes("/src/features/auth/authApi.") ||
+            id.includes("/src/features/auth/authContext.") ||
+            id.includes("/src/features/auth/useAuth.") ||
+            id.includes("/src/features/auth/permissions.") ||
+            id.includes("/src/features/auth/types.") ||
+            id.includes("/src/features/auth/routes/")
+          ) {
+            return "auth-runtime";
+          }
+          return undefined;
+        },
+      },
+    },
   },
   plugins: [react(), tailwindcss(), createBundleBudgetPlugin()],
   resolve: {

@@ -7,8 +7,11 @@ import type {
 
 export const cedisQueryKeys = {
   all: ["cedis"] as const,
+  operationalLocations: ["locations"] as const,
   locations: (scope: string) => ["cedis", "locations", scope] as const,
   location: (locationId: string) => ["cedis", "location", locationId] as const,
+  branches: (cedisLocationId: string) =>
+    ["cedis", "branches", cedisLocationId] as const,
   dashboard: (filters: CedisDashboardFilters | null) =>
     ["cedis", "dashboard", filters] as const,
   branchHistory: (branchId: string, filters: CedisBranchHistoryFilters) =>
@@ -28,6 +31,7 @@ export const cedisQueryKeys = {
       | "close"
       | "reopen"
       | "cancel"
+      | "create-branch"
       | "receive-supply"
       | "complete-return",
   ) => ["cedis", "mutations", operation] as const,

@@ -1,16 +1,36 @@
 export type CedisCycleStatus =
   "OPEN" | "READY_FOR_REVIEW" | "CLOSED" | "CANCELLED";
 
+export type OperationalLocationType =
+  | "BRANCH"
+  | "WAREHOUSE"
+  | "DISTRIBUTION_CENTER"
+  | "MIXED"
+  | "EXTERNAL_POINT_OF_SALE"
+  | "ROUTE_STOCK";
+
 export type CedisLocation = {
   id: string;
   name: string;
   code?: string | null;
-  type: string;
+  type: OperationalLocationType;
   parentId?: string | null;
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CreateBranchLocationPayload = {
+  name: string;
+  code?: string;
+  type: "BRANCH";
+  parentId: string;
+  address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type CedisDashboardFilters = {

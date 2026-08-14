@@ -6,12 +6,34 @@ Define contratos para rutas, pedidos de reparto, evidencia, incidencias, devoluc
 
 La primera versión geoespacial planea una ruta para un solo vehículo asignado a un solo repartidor y únicamente con ventas confirmadas. La ruta inicia y termina en la misma ubicación operativa de origen. `Vehicle` es una entidad operativa separada de `User` y del rol `DRIVER`.
 
-Proveedores internos:
+## Puertos geoespaciales y adaptadores iniciales
+
+El contrato de aplicación MUST depender de capacidades geoespaciales mediante
+puertos, no de SDKs, URLs o tipos propietarios de un proveedor. Los puertos
+normalizan entradas y salidas para que un adaptador pueda sustituirse sin
+cambiar los endpoints de rutas ni el modelo de negocio.
+
+| Puerto | Responsabilidad | Resultado normalizado |
+|---|---|---|
+| `GeocodingPort` | Búsqueda directa y geocodificación inversa | Etiqueta, coordenadas y metadatos de procedencia opcionales |
+| `RouteOptimizationPort` | Ordenar paradas para un vehículo | Secuencia de ventas/paradas y estado de asignación |
+| `RoutingPort` | Calcular recorrido vial para una secuencia aprobada | GeoJSON, distancia y duración |
+
+La configuración pública del style pertenece exclusivamente al frontend:
+`VITE_MAP_STYLE_URL` se resuelve mediante `runtimeMapConfig` y
+`resolveMapStyle()`. El backend no expone un puerto ni endpoint duplicado para
+el style; únicamente puede reportar un estado técnico agregado de `MapTiles`.
+
+Adaptadores iniciales, reemplazables por los puertos anteriores:
 
 - Photon self-hosted: geocodificación directa (forward), búsqueda y geocodificación inversa.
 - VROOM: orden óptimo de paradas para un vehículo, minimizando tiempo de conducción.
 - OSRM con perfil `driving`: geometría vial final, distancia y duración.
 - PostgreSQL con PostGIS: persistencia e indexación geoespacial.
+
+Photon es el proveedor inicial del `GeocodingPort`, no una dependencia del
+contrato de UI ni del dominio de rutas. La API expone respuestas normalizadas y
+mantiene las URLs de todos los adaptadores en la red interna del backend.
 
 Convenciones:
 
@@ -38,7 +60,7 @@ Propósito: exponer a ADMIN el estado técnico agregado de la arquitectura de ro
 
 Permisos: rol `ADMIN`.
 
-La respuesta `data` incluye `status`, `checkedAt`, `routingDataVersion`, `dataset` (`version`, `preparedAt`, `ageDays`, `renewalRecommended`), `services` para `PostGIS`, `Photon`, `VROOM` y `OSRM` con `status` y `latencyMs`, `fleetPersistence.status`, `latestVehiclePositionAgeSeconds` (`number` o `null`) y `traffic` (`available` y `provider`). El último valor de Fleet es un agregado de persistencia y no contiene identificadores, coordenadas ni datos personales. Mientras no exista una fuente contratada y autorizada, `traffic` debe ser `{ "available": false, "provider": null }`; el estado técnico no fabrica segmentos.
+La respuesta `data` incluye `status`, `checkedAt`, `routingDataVersion`, `dataset` (`version`, `preparedAt`, `ageDays`, `renewalRecommended`), `services` para `PostGIS`, `Photon`, `VROOM`, `OSRM` y, cuando está configurado, `MapTiles` con `status` y `latencyMs`, `fleetPersistence.status`, `latestVehiclePositionAgeSeconds` (`number` o `null`) y `traffic` (`available` y `provider`). El último valor de Fleet es un agregado de persistencia y no contiene identificadores, coordenadas ni datos personales. Mientras no exista una fuente contratada y autorizada, `traffic` debe ser `{ "available": false, "provider": null }`; el estado técnico no fabrica segmentos.
 
 El backend puede consultar Photon, VROOM y OSRM para este diagnóstico porque son proveedores internos de servidor; nunca devuelve sus URLs al navegador. La URL del estilo MapLibre (`VITE_MAP_STYLE_URL`) es una configuración exclusiva del frontend y no forma parte de este endpoint.
 
@@ -373,7 +395,8 @@ Validaciones:
 
 ## GET /api/geocoding/search
 
-Propósito: buscar una dirección con Photon self-hosted.
+Propósito: buscar una dirección mediante `GeocodingPort`. La implementación
+inicial utiliza el adaptador Photon self-hosted.
 
 Permisos: `ADMIN`.
 
@@ -386,13 +409,17 @@ Query:
 Reglas:
 
 - Buscar con idioma español y `countrycode=MX`.
-- Responder `data.items[]` con `label`, `latitude`, `longitude`, `osmType` y `osmId`.
+- Responder `data.items[]` con `label`, `latitude` y `longitude`; `osmType` y
+  `osmId` pueden incluirse como metadatos de procedencia opcionales.
 - No guardar ni reemplazar direcciones de cliente o venta desde este endpoint.
-- Photon no disponible o timeout: `503 Service Unavailable` con error identificable y reintentable.
+- El adaptador de geocodificación no está disponible o agota el tiempo: `503
+  Service Unavailable` con error identificable y reintentable.
 
 ## GET /api/geocoding/reverse
 
-Propósito: obtener una etiqueta legible para un punto colocado o movido en el mapa.
+Propósito: obtener una etiqueta legible para un punto colocado o movido en el
+mapa mediante `GeocodingPort`. La implementación inicial utiliza el adaptador
+Photon self-hosted.
 
 Permisos: `ADMIN`.
 
@@ -401,7 +428,8 @@ Query:
 - `latitude` entre `-90` y `90`.
 - `longitude` entre `-180` y `180`.
 
-Respuesta `data`: `label`, `latitude`, `longitude`, `osmType`, `osmId`.
+Respuesta `data`: `label`, `latitude`, `longitude` y, cuando estén disponibles,
+`osmType` y `osmId` como metadatos de procedencia opcionales.
 
 La etiqueta normalizada se conserva como dato de planeación; no sobrescribe automáticamente la dirección comercial.
 

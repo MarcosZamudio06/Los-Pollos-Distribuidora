@@ -61,6 +61,26 @@ function renderIncomingRoute() {
   );
 }
 
+function renderBranchCreateRoute() {
+  return renderToStaticMarkup(
+    <MemoryRouter initialEntries={["/admin/locations/branches/new"]}>
+      <Routes>
+        <Route element={<p>Forbidden</p>} path="/403" />
+        <Route
+          element={
+            <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
+              <PermissionRoute permission={PERMISSIONS.cedisManage}>
+                <p>Alta de sucursal autorizada</p>
+              </PermissionRoute>
+            </RoleRoute>
+          }
+          path="/admin/locations/branches/new"
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("CEDIS protected route", () => {
   beforeEach(() => {
     mockAuth.user = {
@@ -110,6 +130,33 @@ describe("CEDIS protected route", () => {
     };
 
     expect(renderIncomingRoute()).toContain("Recepción autorizada");
+  });
+
+  it("protege el alta manual con ADMIN y cedis.manage", () => {
+    mockAuth.user = {
+      email: "admin@pollos.local",
+      id: "admin-1",
+      name: "Admin",
+      permissions: [PERMISSIONS.cedisManage],
+      role: "ADMIN",
+    };
+    expect(renderBranchCreateRoute()).toContain("Alta de sucursal autorizada");
+
+    mockAuth.user.permissions = [];
+    expect(renderBranchCreateRoute()).not.toContain(
+      "Alta de sucursal autorizada",
+    );
+
+    mockAuth.user = {
+      email: "warehouse@pollos.local",
+      id: "warehouse-1",
+      name: "Almacén",
+      permissions: [PERMISSIONS.cedisManage],
+      role: "WAREHOUSE",
+    };
+    expect(renderBranchCreateRoute()).not.toContain(
+      "Alta de sucursal autorizada",
+    );
   });
 });
 

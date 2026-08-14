@@ -1,0 +1,32 @@
+{
+  "options": {
+    "frontPage": false,
+    "paths": {
+      "root": "/data",
+      "fonts": "fonts",
+      "sprites": "styles",
+      "styles": "styles",
+      "pmtiles": "rendering",
+      "files": "files"
+    },
+    "allowedHosts": "frontend,localhost,127.0.0.1",
+    "serveAllFonts": false,
+    "serveAllStyles": false,
+    "serveStaticMaps": false,
+    "allowRemoteMarkerIcons": false,
+    "allowInlineMarkerImages": false,
+    "staticAttributionText": "© OpenMapTiles © OpenStreetMap contributors"
+  },
+  "styles": {
+    "operations": {
+      "style": "operations/style.json",
+      "serve_rendered": false,
+      "serve_data": true
+    }
+  },
+  "data": {
+    "mexico": {
+      "pmtiles": "mexico.pmtiles"
+    }
+  }
+}

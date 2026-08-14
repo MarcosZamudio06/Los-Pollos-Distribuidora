@@ -193,6 +193,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
   const photonUrl = parseOptionalHttpUrl(env, 'PHOTON_URL');
   const vroomUrl = parseOptionalHttpUrl(env, 'VROOM_URL');
   const osrmUrl = parseOptionalHttpUrl(env, 'OSRM_URL');
+  const mapTilesUrl = parseOptionalHttpUrl(env, 'MAP_TILES_URL');
 
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
@@ -303,6 +304,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
     PHOTON_URL: photonUrl,
     VROOM_URL: vroomUrl,
     OSRM_URL: osrmUrl,
+    MAP_TILES_URL: mapTilesUrl,
     FLEET_POSITION_STALE_SECONDS: fleetPositionStaleSeconds,
     FLEET_POSITION_FUTURE_TOLERANCE_SECONDS:
       fleetPositionFutureToleranceSeconds,

@@ -55,8 +55,9 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
-      MAP_DATA_VERSION: ${MAP_DATA_VERSION:-mexico-latest}
+      MAP_DATA_VERSION: ${MAP_DATA_VERSION:-mexico-260812}
       MAP_DATA_PREPARED_AT: ${MAP_DATA_PREPARED_AT:-}
+      MAP_TILES_URL: ${MAP_TILES_URL:-}
       NODE_ENV: development
       OSRM_PROFILE: ${OSRM_PROFILE:-driving}
       OSRM_URL: ${OSRM_URL:-http://osrm:5000}
@@ -167,13 +168,40 @@ services:
     networks:
       - app_network
 
+  tileserver:
+    profiles: ["maps"]
+    build:
+      context: .
+      dockerfile: docker/maps/tileserver/Dockerfile
+    image: maptiler/tileserver-gl:v5.6.0
+    platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    command: ["--config", "/data/config.json", "--bind", "0.0.0.0", "--port", "8080", "--public_url", "/maps/", "--silent"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    volumes:
+      - ${MAP_DATA_DIR:-./.map-data}/rendering:/data/rendering:ro
+      - ${MAP_DATA_DIR:-./.map-data}/rendering/fonts:/data/fonts:ro
+      - ./docker/maps/tileserver/config.json:/data/config.json:ro
+      - ./docker/maps/styles:/data/styles:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app_network
+
   frontend:
     build:
       context: .
       dockerfile: docker/frontend/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
-        VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-}
+        VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-/maps/styles/operations/style.json}
         REQUIRE_PUBLIC_MAP_STYLE: "false"
     environment:
       VITE_DEV_API_PROXY_TARGET: http://backend:4000

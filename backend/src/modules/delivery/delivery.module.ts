@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { FleetModule } from '../fleet/fleet.module';
+import { GeospatialModule } from '../geospatial/geospatial.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { DeliveryController } from './delivery.controller';
 import { DeliveryOrdersController } from './delivery-orders.controller';
@@ -17,7 +18,13 @@ import { VehicleController } from './vehicle.controller';
 import { VehicleService } from './vehicle.service';
 
 @Module({
-  imports: [AuthModule, ConfigModule, FleetModule, InventoryModule],
+  imports: [
+    AuthModule,
+    ConfigModule,
+    FleetModule,
+    GeospatialModule,
+    InventoryModule,
+  ],
   controllers: [
     DeliveryController,
     DeliveryOrdersController,

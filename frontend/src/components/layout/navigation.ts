@@ -31,6 +31,7 @@ export type NavigationItemKey =
   | "cedis"
   | "cedis-incoming"
   | "cedis-returns"
+  | "cedis-branch-create"
   | "sales"
   | "sales-history"
   | "orders"
@@ -119,6 +120,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Devoluciones CEDIS",
     section: "operations",
     to: "/cedis/returns",
+  },
+  {
+    activePaths: ["/admin/locations/branches/new"],
+    allowedRoles: ROUTE_ACCESS_ROLES.admin,
+    routeAccessKey: "admin",
+    description: "Registrar una sucursal operativa",
+    icon: Store,
+    key: "cedis-branch-create",
+    label: "Nueva sucursal",
+    section: "operations",
+    to: "/admin/locations/branches/new",
   },
   {
     activePaths: ["/sales/history", "/sales/"],

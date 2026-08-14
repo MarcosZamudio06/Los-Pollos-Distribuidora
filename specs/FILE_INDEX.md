@@ -39,6 +39,7 @@
 .specs/04-ui/dashboard.md
 .specs/04-ui/inventory.md
 .specs/04-ui/layout.md
+.specs/04-ui/locations.md
 .specs/04-ui/point-of-sale-closing.md
 .specs/04-ui/purchases.md
 .specs/04-ui/reports.md

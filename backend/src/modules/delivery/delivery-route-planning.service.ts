@@ -192,7 +192,7 @@ export class DeliveryRoutePlanningService {
         scheduledDate: new Date(dto.scheduledDate),
         originLocationId: dto.originLocationId,
         orderedStops: orderedStops,
-        geometry: route.geometry,
+        geometry: route.geometry as Prisma.InputJsonValue,
         distanceMeters: route.distanceMeters,
         durationSeconds: route.durationSeconds,
         routingProfile: 'driving',
