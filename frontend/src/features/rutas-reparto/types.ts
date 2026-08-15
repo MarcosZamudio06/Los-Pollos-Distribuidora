@@ -63,6 +63,7 @@ export type DeliveryOrder = {
   saleNumber?: string | null;
   customerName?: string | null;
   accountReceivableId?: string | null;
+  accountReceivableVersion?: number | null;
   status: DeliveryOrderStatus;
   deliveryAddress?: string | null;
   deliveredAt?: string | null;
@@ -277,6 +278,7 @@ export type CreateDeliveryEvidencePayload = {
 
 export type CreateRouteCollectionPayload = {
   accountReceivableId: string;
+  expectedVersion: number;
   amount: number;
   paymentMethod: PaymentMethod;
   reference?: string;

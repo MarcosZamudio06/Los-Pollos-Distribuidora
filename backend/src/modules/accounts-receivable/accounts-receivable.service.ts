@@ -189,6 +189,7 @@ export class AccountsReceivableService {
             }
 
             this.assertReceivableCanReceivePayment(receivable);
+            this.assertExpectedVersion(receivable, dto.expectedVersion);
             let outstandingAmount = Money.from(receivable.outstandingAmount);
             if (paymentAmount.compare(outstandingAmount) > 0) {
               throw new BadRequestException(
@@ -223,6 +224,7 @@ export class AccountsReceivableService {
               if (!receivable)
                 throw new NotFoundException('Account receivable not found');
               this.assertReceivableCanReceivePayment(receivable);
+              this.assertExpectedVersion(receivable, dto.expectedVersion);
               outstandingAmount = Money.from(receivable.outstandingAmount);
               if (paymentAmount.compare(outstandingAmount) > 0) {
                 throw new BadRequestException(
@@ -294,17 +296,28 @@ export class AccountsReceivableService {
               },
             });
 
-            const updatedReceivable = await tx.accountReceivable.update({
-              where: { id },
-              data: {
-                outstandingAmount: newOutstandingAmount.toString(),
-                lastPaymentDate: paidAt,
-                daysOverdue,
-                agingStatus,
-                status: nextStatus,
-                paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
-              },
-            });
+            let updatedReceivable: AccountReceivable;
+            try {
+              updatedReceivable = await tx.accountReceivable.update({
+                where: { id, version: receivable.version },
+                data: {
+                  outstandingAmount: newOutstandingAmount.toString(),
+                  lastPaymentDate: paidAt,
+                  daysOverdue,
+                  agingStatus,
+                  status: nextStatus,
+                  paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
+                  version: { increment: 1 },
+                },
+              });
+            } catch (error) {
+              if (this.isStaleVersionError(error)) {
+                throw new ConflictException(
+                  'Account receivable version does not match expectedVersion',
+                );
+              }
+              throw error;
+            }
 
             await tx.sale.update({
               where: { id: receivable.saleId },
@@ -551,6 +564,21 @@ export class AccountsReceivableService {
     }
   }
 
+  private assertExpectedVersion(
+    receivable: AccountReceivable,
+    expectedVersion?: number,
+  ): void {
+    if (
+      expectedVersion !== undefined &&
+      expectedVersion !== null &&
+      receivable.version !== expectedVersion
+    ) {
+      throw new ConflictException(
+        'Account receivable version does not match expectedVersion',
+      );
+    }
+  }
+
   private assertSellerCanRegisterPayment(
     receivable: ReceivableRecord,
     currentUser: Actor,
@@ -747,6 +775,7 @@ export class AccountsReceivableService {
       collectorUserId: receivable.collectorUserId,
       status: receivable.status,
       agingStatus: receivable.agingStatus,
+      version: receivable.version,
       createdAt: receivable.createdAt,
       updatedAt: receivable.updatedAt,
     };
@@ -810,6 +839,9 @@ export class AccountsReceivableService {
       nextPaymentDate: dto.nextPaymentDate ?? null,
       paidAt: dto.paidAt ?? null,
       userId,
+      ...(dto.expectedVersion !== undefined
+        ? { expectedVersion: dto.expectedVersion }
+        : {}),
     };
   }
 
@@ -902,6 +934,15 @@ export class AccountsReceivableService {
       error !== null &&
       'code' in error &&
       error.code === 'P2002'
+    );
+  }
+
+  private isStaleVersionError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2025'
     );
   }
 

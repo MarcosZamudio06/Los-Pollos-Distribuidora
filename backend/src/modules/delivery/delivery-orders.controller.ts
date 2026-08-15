@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Headers,
   Param,
   Patch,
   Post,
@@ -58,7 +60,12 @@ export class DeliveryOrdersController {
     @Param('id') id: string,
     @Body() body: RegisterRouteCollectionDto,
     @CurrentUser() currentUser: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
+
     return {
       success: true,
       message: 'Route collection registered successfully',
@@ -66,6 +73,7 @@ export class DeliveryOrdersController {
         id,
         body,
         currentUser,
+        idempotencyKey.trim(),
       ),
     };
   }

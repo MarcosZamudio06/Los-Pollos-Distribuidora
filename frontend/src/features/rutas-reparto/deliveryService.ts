@@ -291,6 +291,7 @@ export const deliveryService = {
   async createOrderCollection(
     orderId: string,
     payload: CreateRouteCollectionPayload,
+    idempotencyKey: string,
     accessToken?: string | null,
   ) {
     const response = await apiClient.post<
@@ -298,7 +299,7 @@ export const deliveryService = {
       CreateRouteCollectionPayload
     >(`/delivery-orders/${orderId}/collections`, {
       body: payload,
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },

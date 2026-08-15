@@ -124,6 +124,9 @@ The canonical geospatial contracts are:
 - Driver mobile experience is part of the MVP; offline support remains pending and must not be assumed without a later spec.
 - If the order has collectible balance, the driver may register a route collection only when policy allows it.
 - In the MVP, every route collection recorded as `Payment` applies to exactly one receivable through required `Payment.accountReceivableId`.
+- A route collection requires an `Idempotency-Key` and the current `AccountReceivable.version` as `expectedVersion`.
+- Route collection payment creation and receivable balance mutation run in a `Serializable` transaction with bounded `P2034` retry; the receivable update is conditional on its version and increments it atomically.
+- Reusing an idempotency key with the same canonical payload returns the persisted payment; reusing it with a different payload is rejected without a second payment.
 - The driver route detail exposes each order's current outstanding receivable balance and the collected amount derived from `Payment` records for that receivable within the route.
 - Route collections may be associated to route and settlement.
 - Cash on delivery or pay-on-delivery counts as money received only when a `Payment` exists.

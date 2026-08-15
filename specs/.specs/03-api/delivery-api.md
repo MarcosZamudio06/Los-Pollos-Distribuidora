@@ -559,7 +559,7 @@ Permisos: `ADMIN`; `DRIVER` solo ruta propia; `COLLECTIONS` para cobros y saldos
 Respuesta `data`:
 
 - Encabezado de ruta, incluyendo `driverId`, `driverName`, `vehicleId` (nullable para rutas históricas o legacy no geoespaciales), `vehicleCode` cuando exista, `status`, `scheduledDate`, `originLocationId`, `startedAt` y `completedAt`.
-- `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`, `outstandingAmount` y `derivedCollectedAmount`.
+- `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `accountReceivableVersion`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`, `outstandingAmount` y `derivedCollectedAmount`.
 - `optimizationStatus`, `mapAvailable`, `geometry`, `distanceMeters`, `durationSeconds`, `optimizedAt`, `routingProfile`, `routingDataVersion`.
 - `evidenceSummary[]`: `deliveryOrderId`, `saleNumber`, `type`, `value` y `capturedAt` por evidencia; cuando `type=PHOTO`, `value` puede ser una referencia/URL persistida o un `data:image/*;base64,...` acotado generado por el cliente.
 - `collectionsSummary`: montos esperados y cobrados por método, primera vuelta y segunda vuelta.
@@ -801,6 +801,11 @@ Propósito: registrar cobro recibido en ruta para una cuenta por cobrar.
 
 Permisos: `DRIVER` limitado a pedido asignado; `ADMIN`; `COLLECTIONS` conforme a política.
 
+Headers requeridos:
+
+- `Idempotency-Key`: identificador único de la operación. Debe reutilizarse
+  cuando el cliente reintente la misma solicitud.
+
 Body importante:
 
 ```json
@@ -809,7 +814,8 @@ Body importante:
   "amount": 1200,
   "paymentMethod": "CASH",
   "reference": "Cobro en ruta",
-  "paidAt": "2026-06-19T12:10:00.000Z"
+  "paidAt": "2026-06-19T12:10:00.000Z",
+  "expectedVersion": 1
 }
 ```
 
@@ -822,8 +828,19 @@ Respuesta `data`:
 Validaciones:
 
 - `accountReceivableId` requerido.
+- `expectedVersion` requerido y debe coincidir con la versión actual de la cuenta por cobrar.
 - Solo registrar cobro si el pedido tiene saldo por cobrar y la política lo permite.
 - El pago no puede exceder el saldo pendiente.
+- La creación de `Payment`, la actualización del saldo y el incremento de versión
+  deben ejecutarse en una transacción `Serializable` con reintento acotado ante
+  conflictos de serialización (`P2034`).
+- El saldo se actualiza de forma condicional por `id` y `expectedVersion`; una
+  versión obsoleta responde `409 Conflict` sin registrar un pago parcial.
+- El `Payment` debe conservar `idempotencyKey` y un hash canónico del payload.
+  Repetir la misma clave y payload devuelve el resultado ya persistido; usarla
+  con otro payload responde `409 Conflict`.
+- Un conflicto de unicidad (`P2002`) durante la creación idempotente debe
+  resolverse leyendo el `Payment` persistido, no creando otro.
 - Asociar pago a la ruta siempre y a `routeSettlementId` cuando ya exista liquidación para esa ruta.
 - No aceptar `routeSettlementId` como sustituto de `accountReceivableId`; cada pago del MVP debe conservar `accountReceivableId` requerido.
 - La API debe permitir marcar si el cobro corresponde a primera o segunda vuelta de cobranza.

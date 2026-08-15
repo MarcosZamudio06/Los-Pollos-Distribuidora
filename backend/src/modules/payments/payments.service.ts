@@ -331,6 +331,7 @@ export class PaymentsService {
         ...aging,
         lastPaymentDate: lastPayment?.paidAt ?? null,
         paidAt: null,
+        version: { increment: 1 },
       },
     });
 

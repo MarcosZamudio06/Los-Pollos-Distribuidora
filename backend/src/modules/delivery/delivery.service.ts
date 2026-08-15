@@ -28,6 +28,8 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import { FleetGateway } from '../fleet/fleet.gateway';
 import type { FleetIncidentCreatedPayload } from '../fleet/fleet-realtime.types';
+import { calculateReceivableAging } from '../accounts-receivable/receivable-aging';
+import { Money } from '../../../../shared/money';
 import {
   CreateDeliveryRouteDto,
   AssignDeliveryRouteOrdersDto,
@@ -41,7 +43,7 @@ import {
   UpdateDeliveryRouteStatusDto,
 } from './dto';
 
-type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'permissions'>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
 type DeliveryOrderRecord = Record<string, unknown> & {
@@ -66,7 +68,11 @@ type DeliveryOrderRecord = Record<string, unknown> & {
     saleNumber: string;
     customer?: { name: string } | null;
   } | null;
-  accountReceivable?: { id: string; outstandingAmount?: DecimalLike } | null;
+  accountReceivable?: {
+    id: string;
+    outstandingAmount?: DecimalLike;
+    version?: number;
+  } | null;
   evidence?: Array<{
     type: string;
     value?: string | null;
@@ -123,7 +129,8 @@ type RouteCollectionReceivable = {
   saleId: string;
   outstandingAmount: DecimalLike;
   status: CollectionStatus;
-  dueDate?: Date;
+  dueDate: Date;
+  version: number;
 };
 
 type RoutePaymentRecord = {
@@ -136,9 +143,10 @@ type RoutePaymentRecord = {
   amount: DecimalLike;
   paymentMethod: PaymentMethod;
   status: PaymentStatus;
-  paidAt: Date;
+  paidAt: Date | string;
   collectedByUserId?: string | null;
   collectionPass?: number | null;
+  idempotencyPayloadHash?: string | null;
 };
 
 type InventoryMovementRecord = {
@@ -355,7 +363,7 @@ export class DeliveryService {
             include: {
               sale: { select: { id: true, saleNumber: true } },
               accountReceivable: {
-                select: { id: true, outstandingAmount: true },
+                select: { id: true, outstandingAmount: true, version: true },
               },
               evidence: {
                 select: { type: true, value: true, capturedAt: true },
@@ -585,7 +593,7 @@ export class DeliveryService {
             include: {
               sale: { select: { id: true, saleNumber: true } },
               accountReceivable: {
-                select: { id: true, outstandingAmount: true },
+                select: { id: true, outstandingAmount: true, version: true },
               },
               evidence: {
                 select: { type: true, value: true, capturedAt: true },
@@ -842,7 +850,9 @@ export class DeliveryService {
       include: {
         route: true,
         sale: { select: { id: true, saleNumber: true } },
-        accountReceivable: { select: { id: true, outstandingAmount: true } },
+        accountReceivable: {
+          select: { id: true, outstandingAmount: true, version: true },
+        },
         evidence: { select: { type: true } },
       },
     })) as DeliveryOrderRecord | null;
@@ -873,7 +883,9 @@ export class DeliveryService {
       include: {
         route: true,
         sale: { select: { id: true, saleNumber: true } },
-        accountReceivable: { select: { id: true, outstandingAmount: true } },
+        accountReceivable: {
+          select: { id: true, outstandingAmount: true, version: true },
+        },
         evidence: { select: { type: true } },
       },
     })) as DeliveryOrderRecord;
@@ -904,111 +916,207 @@ export class DeliveryService {
     id: string,
     dto: RegisterRouteCollectionDto,
     currentUser: Actor,
+    idempotencyKey?: string,
   ) {
-    if (dto.amount <= 0) {
+    const paymentAmount = Money.from(dto.amount);
+    if (!paymentAmount.isPositive()) {
       throw new BadRequestException('amount must be greater than 0');
     }
+    this.assertIdempotencyKey(idempotencyKey);
+    const normalizedIdempotencyKey = idempotencyKey.trim();
 
-    return this.prisma.$transaction(async (tx) => {
-      const order = await this.findAccessibleOrder(id, currentUser, tx);
-      if (
-        !order.accountReceivableId ||
-        order.accountReceivableId !== dto.accountReceivableId
-      ) {
-        throw new BadRequestException(
-          'Route collection must apply to the delivery order account receivable',
-        );
-      }
-
-      const receivable = (await tx.accountReceivable.findUnique({
-        where: { id: dto.accountReceivableId },
-      })) as RouteCollectionReceivable | null;
-
-      if (!receivable) {
-        throw new NotFoundException('Account receivable not found');
-      }
-
-      this.assertReceivableCanReceiveRoutePayment(receivable);
-      const outstandingAmount = this.toNumber(receivable.outstandingAmount);
-      if (dto.amount > outstandingAmount) {
-        throw new BadRequestException(
-          'Payment amount cannot exceed outstanding balance',
-        );
-      }
-
-      const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
-      const newOutstandingAmount = this.roundMoney(
-        outstandingAmount - dto.amount,
+    const order = await this.findAccessibleOrder(id, currentUser);
+    if (
+      !order.accountReceivableId ||
+      order.accountReceivableId !== dto.accountReceivableId
+    ) {
+      throw new BadRequestException(
+        'Route collection must apply to the delivery order account receivable',
       );
-      const nextStatus =
-        newOutstandingAmount === 0
-          ? CollectionStatus.PAID
-          : CollectionStatus.PARTIALLY_PAID;
+    }
 
-      const existingSettlementId = order.route?.settlement?.id ?? null;
-      const payment = (await tx.payment.create({
-        data: {
-          accountReceivableId: receivable.id,
-          customerId: receivable.customerId,
-          saleId: receivable.saleId,
-          userId: currentUser.id,
-          collectedByUserId: currentUser.id,
-          collectionPass: dto.collectionPass ?? null,
-          amount: dto.amount,
-          paymentMethod: dto.paymentMethod,
-          referenceNumber: dto.reference?.trim() || null,
-          routeId: order.routeId,
-          routeSettlementId: existingSettlementId,
-          status: PaymentStatus.APPLIED,
-          paidAt,
-        },
-      })) as RoutePaymentRecord;
-
-      await tx.accountReceivable.update({
-        where: { id: receivable.id },
-        data: {
-          outstandingAmount: newOutstandingAmount,
-          status: nextStatus,
-          lastPaymentDate: paidAt,
-          paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
-        },
-      });
-
-      await tx.sale.update({
-        where: { id: receivable.saleId },
-        data: { collectionStatus: nextStatus },
-      });
-
-      const updatedOrder = (await tx.deliveryOrder.update({
-        where: { id: order.id },
-        data: {
-          collectedByUserId: currentUser.id,
-          collectionPass: dto.collectionPass ?? order.collectionPass ?? null,
-        },
-        include: {
-          route: true,
-          sale: {
-            select: {
-              id: true,
-              saleNumber: true,
-              customer: { select: { name: true } },
-            },
-          },
-          accountReceivable: { select: { id: true, outstandingAmount: true } },
-          evidence: {
-            select: { type: true, value: true, capturedAt: true },
-          },
-        },
-      })) as DeliveryOrderRecord;
-
-      return {
-        payment: this.toPaymentResponse(payment),
-        deliveryOrder: {
-          ...this.toOrderResponse(updatedOrder),
-          derivedCollectedAmount: this.toNumber(payment.amount),
-        },
-      };
+    const routeSettlementId = order.route?.settlement?.id ?? null;
+    const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+    const payloadHash = this.hashPayload({
+      operation: 'REGISTER_ROUTE_COLLECTION',
+      deliveryOrderId: id,
+      accountReceivableId: dto.accountReceivableId,
+      amount: paymentAmount.toString(),
+      paymentMethod: dto.paymentMethod,
+      reference: dto.reference?.trim() || null,
+      paidAt: dto.paidAt ?? null,
+      collectionPass: dto.collectionPass ?? null,
+      expectedVersion: dto.expectedVersion,
+      routeId: order.routeId,
+      routeSettlementId,
+      userId: currentUser.id,
     });
+
+    try {
+      return await this.withSerializableRetry(() =>
+        this.prisma.$transaction(
+          async (tx) => {
+            const transactionOrder = await this.findAccessibleOrder(
+              id,
+              currentUser,
+              tx,
+            );
+            if (
+              !transactionOrder.accountReceivableId ||
+              transactionOrder.accountReceivableId !==
+                dto.accountReceivableId ||
+              transactionOrder.routeId !== order.routeId ||
+              (transactionOrder.route?.settlement?.id ?? null) !==
+                routeSettlementId
+            ) {
+              throw new ConflictException(
+                'Route collection context changed; refresh and retry',
+              );
+            }
+
+            const existingPayment = (await tx.payment.findFirst({
+              where: { idempotencyKey: normalizedIdempotencyKey },
+            })) as RoutePaymentRecord | null;
+            if (existingPayment) {
+              this.assertSameIdempotencyPayload(
+                existingPayment.idempotencyPayloadHash,
+                payloadHash,
+                'Idempotency-Key was already used for a different route collection payload',
+              );
+              return this.buildRouteCollectionResponse(
+                tx,
+                id,
+                currentUser,
+                existingPayment,
+              );
+            }
+
+            const receivable = (await tx.accountReceivable.findUnique({
+              where: { id: dto.accountReceivableId },
+            })) as RouteCollectionReceivable | null;
+
+            if (!receivable) {
+              throw new NotFoundException('Account receivable not found');
+            }
+
+            this.assertReceivableCanReceiveRoutePayment(receivable);
+            if (receivable.version !== dto.expectedVersion) {
+              throw new ConflictException(
+                'Account receivable version does not match expectedVersion',
+              );
+            }
+
+            const outstandingAmount = Money.from(receivable.outstandingAmount);
+            if (paymentAmount.compare(outstandingAmount) > 0) {
+              throw new BadRequestException(
+                'Payment amount cannot exceed outstanding balance',
+              );
+            }
+
+            const newOutstandingAmount =
+              outstandingAmount.subtract(paymentAmount);
+            const nextStatus = newOutstandingAmount.isZero()
+              ? CollectionStatus.PAID
+              : CollectionStatus.PARTIALLY_PAID;
+            const aging = calculateReceivableAging(
+              receivable.dueDate,
+              newOutstandingAmount,
+              paidAt,
+            );
+
+            const payment = (await tx.payment.create({
+              data: {
+                accountReceivableId: receivable.id,
+                customerId: receivable.customerId,
+                saleId: receivable.saleId,
+                userId: currentUser.id,
+                collectedByUserId: currentUser.id,
+                collectionPass: dto.collectionPass ?? null,
+                amount: paymentAmount.toString(),
+                paymentMethod: dto.paymentMethod,
+                referenceNumber: dto.reference?.trim() || null,
+                routeId: order.routeId,
+                routeSettlementId,
+                status: PaymentStatus.APPLIED,
+                paidAt,
+                idempotencyKey: normalizedIdempotencyKey,
+                idempotencyPayloadHash: payloadHash,
+              },
+            })) as RoutePaymentRecord;
+
+            try {
+              await tx.accountReceivable.update({
+                where: { id: receivable.id, version: receivable.version },
+                data: {
+                  outstandingAmount: newOutstandingAmount.toString(),
+                  status: nextStatus,
+                  lastPaymentDate: paidAt,
+                  paidAt: nextStatus === CollectionStatus.PAID ? paidAt : null,
+                  ...aging,
+                  version: { increment: 1 },
+                },
+              });
+            } catch (error) {
+              if (this.isStaleVersionError(error)) {
+                throw new ConflictException(
+                  'Account receivable version does not match expectedVersion',
+                );
+              }
+              throw error;
+            }
+
+            await tx.sale.update({
+              where: { id: receivable.saleId },
+              data: { collectionStatus: nextStatus },
+            });
+
+            const updatedOrder = (await tx.deliveryOrder.update({
+              where: { id: transactionOrder.id },
+              data: {
+                collectedByUserId: currentUser.id,
+                collectionPass:
+                  dto.collectionPass ?? transactionOrder.collectionPass ?? null,
+              },
+              include: {
+                route: true,
+                sale: {
+                  select: {
+                    id: true,
+                    saleNumber: true,
+                    customer: { select: { name: true } },
+                  },
+                },
+                accountReceivable: {
+                  select: { id: true, outstandingAmount: true, version: true },
+                },
+                evidence: {
+                  select: { type: true, value: true, capturedAt: true },
+                },
+              },
+            })) as DeliveryOrderRecord;
+
+            return {
+              payment: this.toPaymentResponse(payment),
+              deliveryOrder: {
+                ...this.toOrderResponse(updatedOrder),
+                derivedCollectedAmount: this.toNumber(payment.amount),
+              },
+            };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
+      );
+    } catch (error) {
+      if (this.isIdempotencyUniqueConflict(error)) {
+        return this.resolveExistingRouteCollectionByKey(
+          id,
+          currentUser,
+          normalizedIdempotencyKey,
+          payloadHash,
+        );
+      }
+      throw error;
+    }
   }
 
   async registerIncident(
@@ -1048,7 +1156,9 @@ export class DeliveryService {
               customer: { select: { name: true } },
             },
           },
-          accountReceivable: { select: { id: true, outstandingAmount: true } },
+          accountReceivable: {
+            select: { id: true, outstandingAmount: true, version: true },
+          },
           evidence: {
             select: { type: true, value: true, capturedAt: true },
           },
@@ -1228,7 +1338,7 @@ export class DeliveryService {
         deliveryOrders: {
           include: {
             accountReceivable: {
-              select: { id: true, outstandingAmount: true },
+              select: { id: true, outstandingAmount: true, version: true },
             },
           },
         },
@@ -1458,7 +1568,9 @@ export class DeliveryService {
       include: {
         route: { include: { settlement: { select: { id: true } } } },
         sale: { select: { id: true, saleNumber: true } },
-        accountReceivable: { select: { id: true, outstandingAmount: true } },
+        accountReceivable: {
+          select: { id: true, outstandingAmount: true, version: true },
+        },
         evidence: { select: { type: true } },
       },
     })) as DeliveryOrderRecord | null;
@@ -1518,7 +1630,9 @@ export class DeliveryService {
               customer: { select: { name: true } },
             },
           },
-          accountReceivable: { select: { id: true, outstandingAmount: true } },
+          accountReceivable: {
+            select: { id: true, outstandingAmount: true, version: true },
+          },
           evidence: {
             select: { type: true, value: true, capturedAt: true },
           },
@@ -1812,6 +1926,9 @@ export class DeliveryService {
       saleNumber: order.sale?.saleNumber ?? null,
       customerName: order.sale?.customer?.name ?? null,
       accountReceivableId,
+      accountReceivableVersion: accountReceivableId
+        ? (order.accountReceivable?.version ?? null)
+        : null,
       outstandingAmount: accountReceivableId
         ? this.toNumber(order.accountReceivable?.outstandingAmount)
         : null,
@@ -1852,6 +1969,52 @@ export class DeliveryService {
     );
   }
 
+  private async buildRouteCollectionResponse(
+    client: Prisma.TransactionClient | PrismaService,
+    orderId: string,
+    currentUser: Actor,
+    payment: RoutePaymentRecord,
+  ) {
+    const order = await this.findAccessibleOrder(orderId, currentUser, client);
+    return {
+      payment: this.toPaymentResponse(payment),
+      deliveryOrder: {
+        ...this.toOrderResponse(order),
+        derivedCollectedAmount: this.toNumber(payment.amount),
+      },
+    };
+  }
+
+  private async resolveExistingRouteCollectionByKey(
+    orderId: string,
+    currentUser: Actor,
+    idempotencyKey: string,
+    payloadHash: string,
+  ) {
+    const existingPayment = (await this.prisma.payment.findFirst({
+      where: { idempotencyKey },
+    })) as RoutePaymentRecord | null;
+
+    if (!existingPayment) {
+      throw new ConflictException(
+        'Concurrent route collection is still in progress; retry with the same Idempotency-Key',
+      );
+    }
+
+    this.assertSameIdempotencyPayload(
+      existingPayment.idempotencyPayloadHash,
+      payloadHash,
+      'Idempotency-Key was already used for a different route collection payload',
+    );
+
+    return this.buildRouteCollectionResponse(
+      this.prisma,
+      orderId,
+      currentUser,
+      existingPayment,
+    );
+  }
+
   private toEvidenceResponse(evidence: DeliveryEvidenceRecord) {
     return {
       id: evidence.id,
@@ -1873,7 +2036,10 @@ export class DeliveryService {
       amount: this.toNumber(payment.amount),
       paymentMethod: payment.paymentMethod,
       status: payment.status,
-      paidAt: payment.paidAt.toISOString(),
+      paidAt:
+        payment.paidAt instanceof Date
+          ? payment.paidAt.toISOString()
+          : payment.paidAt,
       collectedByUserId: payment.collectedByUserId ?? null,
       collectionPass: payment.collectionPass ?? null,
     };
@@ -2135,6 +2301,68 @@ export class DeliveryService {
   ): asserts idempotencyKey is string {
     if (!idempotencyKey?.trim()) {
       throw new BadRequestException('Idempotency-Key header is required');
+    }
+  }
+
+  private async withSerializableRetry<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isSerializableConflict(error)) throw error;
+        if (attempt === 3) {
+          throw new ConflictException({
+            code: 'COLLECTION_CONCURRENCY_CONFLICT',
+            message:
+              'The route collection could not be completed after concurrent retries',
+          });
+        }
+      }
+    }
+
+    throw new ConflictException({
+      code: 'COLLECTION_CONCURRENCY_CONFLICT',
+      message:
+        'The route collection could not be completed after concurrent retries',
+    });
+  }
+
+  private isSerializableConflict(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2034'
+    );
+  }
+
+  private isIdempotencyUniqueConflict(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
+  }
+
+  private isStaleVersionError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2025'
+    );
+  }
+
+  private assertSameIdempotencyPayload(
+    existingHash: string | null | undefined,
+    expectedHash: string,
+    message: string,
+  ): void {
+    if (existingHash !== expectedHash) {
+      throw new ConflictException(message);
     }
   }
 

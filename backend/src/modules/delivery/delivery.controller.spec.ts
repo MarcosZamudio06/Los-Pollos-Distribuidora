@@ -269,6 +269,7 @@ describe('Delivery controllers', () => {
       accountReceivableId: 'ar-1',
       amount: 100,
       paymentMethod: PaymentMethod.CASH,
+      expectedVersion: 1,
     };
     const incidentDto = {
       status: DeliveryOrderStatus.RETURNED,
@@ -283,7 +284,12 @@ describe('Delivery controllers', () => {
       data: { id: 'evidence-1' },
     });
     await expect(
-      orderController.registerCollection('order-1', collectionDto, user),
+      orderController.registerCollection(
+        'order-1',
+        collectionDto,
+        user,
+        'route-collection-key',
+      ),
     ).resolves.toEqual({
       success: true,
       message: 'Route collection registered successfully',
@@ -337,6 +343,7 @@ describe('Delivery controllers', () => {
       'order-1',
       collectionDto,
       user,
+      'route-collection-key',
     );
     expect(mockOf(service, 'registerIncident')).toHaveBeenCalledWith(
       'order-1',
@@ -359,5 +366,33 @@ describe('Delivery controllers', () => {
       user,
       'reopen-idem',
     );
+  });
+
+  it('requires Idempotency-Key for route collections', async () => {
+    const service = {
+      registerCollection: jest.fn(),
+    } as unknown as jest.Mocked<DeliveryService>;
+    const controller = new DeliveryOrdersController(service);
+    const user = {
+      id: 'driver-1',
+      email: 'd@example.com',
+      name: 'Driver',
+      role: 'DRIVER',
+      mustChangePassword: false,
+    };
+
+    await expect(
+      controller.registerCollection(
+        'order-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+          expectedVersion: 1,
+        },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockOf(service, 'registerCollection')).not.toHaveBeenCalled();
   });
 });

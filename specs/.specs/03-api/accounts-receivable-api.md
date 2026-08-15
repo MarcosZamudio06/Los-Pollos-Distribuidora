@@ -63,7 +63,8 @@ Body importante:
   "referenceNumber": "REF-1234",
   "appliedDocumentId": "string opcional",
   "nextPaymentDate": "2026-06-27T00:00:00.000Z",
-  "paidAt": "2026-06-19T10:00:00.000Z"
+  "paidAt": "2026-06-19T10:00:00.000Z",
+  "expectedVersion": 1
 }
 ```
 
@@ -74,7 +75,7 @@ Headers requeridos:
 Respuesta `data`:
 
 - `payment`: `id`, `accountReceivableId`, `customerId`, `amount`, `paymentMethod`, `bankName`, `referenceNumber`, `appliedDocumentId`, `routeId`, `routeSettlementId`, `operationalLocationId`, `pointOfSaleDailyCloseId`, `nextPaymentDate`, `status`, `paidAt`.
-- `accountReceivable`: `id`, `outstandingAmount`, `daysOverdue`, `lastPaymentDate`, `status` actualizado.
+- `accountReceivable`: `id`, `outstandingAmount`, `daysOverdue`, `lastPaymentDate`, `version`, `status` actualizado.
 
 La respuesta `payment.pointOfSaleDailyCloseId`, cuando exista, identifica el
 cierre de la cobranza, no el cierre histórico de la venta. La cuenta por cobrar
@@ -93,6 +94,9 @@ Validaciones:
 - No registrar pagos sobre cuentas canceladas o pagadas.
 - `SELLER` no puede registrar pagos sobre cuentas asociadas a ventas creadas por otro usuario.
 - Actualizar saldo y estado de forma transaccional.
+- Cuando se envía `expectedVersion`, debe coincidir con la versión actual de la
+  cuenta por cobrar; la mutación incrementa `version` y una versión obsoleta
+  responde `409 Conflict` sin escritura parcial.
 - Permitir capturar `collectionPass` y `collectedByUserId` cuando la cobranza ocurra en segunda vuelta.
 - Si aplica documento, debe conservar relación con la nota o relación administrativa interna.
 - `Payment` es la única fuente monetaria del cobro recibido.

@@ -1,4 +1,10 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useCreateRouteCollection } from "../hooks";
 import { money, paymentMethodLabel, shortId } from "../labels";
 import type {
@@ -64,11 +70,14 @@ function CollectionForm({
   const [paidAt, setPaidAt] = useState(nowForInput());
   const [collectionPass, setCollectionPass] =
     useState<CollectionPass>(initialPass);
+  const idempotencyKey = useRef(crypto.randomUUID());
   const createCollection = useCreateRouteCollection(routeId);
   const numericAmount = Number(amount);
   const hasAccountReceivable = Boolean(order.accountReceivableId);
+  const hasAccountReceivableVersion = order.accountReceivableVersion != null;
   const canSubmit = Boolean(
     hasAccountReceivable &&
+    hasAccountReceivableVersion &&
     numericAmount > 0 &&
     numericAmount <= outstandingAmount &&
     paidAt,
@@ -77,11 +86,18 @@ function CollectionForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!canSubmit || !order.accountReceivableId) return;
+    if (
+      !canSubmit ||
+      !order.accountReceivableId ||
+      order.accountReceivableVersion == null
+    )
+      return;
     const response = await createCollection.mutateAsync({
       orderId: order.id,
+      idempotencyKey: idempotencyKey.current,
       payload: {
         accountReceivableId: order.accountReceivableId,
+        expectedVersion: order.accountReceivableVersion,
         amount: numericAmount,
         collectionPass: forcedSecondPass ? "SECOND" : collectionPass,
         paidAt: toIsoDateTime(paidAt),
@@ -220,6 +236,14 @@ function CollectionForm({
             <StatusMessage tone="error">
               Este pedido no muestra cuenta por cobrar. En el MVP no se registra
               cobro sin accountReceivableId.
+            </StatusMessage>
+          </div>
+        )}
+        {hasAccountReceivable && !hasAccountReceivableVersion && (
+          <div className="mt-4">
+            <StatusMessage tone="error">
+              No se pudo confirmar la versión actual del saldo. Actualiza la
+              ruta antes de registrar el cobro.
             </StatusMessage>
           </div>
         )}

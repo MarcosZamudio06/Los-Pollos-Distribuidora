@@ -1749,6 +1749,7 @@ async function seedCreditCollections(
             agingStatus,
             status: nextStatus,
             paidAt: nextStatus === CollectionStatus.PAID ? payDate : null,
+            version: { increment: 1 },
           },
         });
 

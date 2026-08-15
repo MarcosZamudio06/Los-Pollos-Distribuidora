@@ -13,6 +13,7 @@ import {
   OperationalLocationType,
   PaymentMethod,
   PaymentStatus,
+  Prisma,
   RouteSettlementStatus,
   SaleStatus,
 } from '@prisma/client';
@@ -108,7 +109,11 @@ function createOrder(overrides: Record<string, unknown> = {}) {
     collectionPass: null,
     notes: null,
     sale: { id: 'sale-1', saleNumber: 'S-1001' },
-    accountReceivable: { id: 'ar-1', outstandingAmount: money('500') },
+    accountReceivable: {
+      id: 'ar-1',
+      outstandingAmount: money('500'),
+      version: 1,
+    },
     evidence: [],
     route: createRoute(),
     ...overrides,
@@ -1499,6 +1504,7 @@ describe('DeliveryService', () => {
       outstandingAmount: money('500'),
       status: CollectionStatus.UNPAID,
       dueDate: date('2026-06-01T00:00:00.000Z'),
+      version: 1,
     });
     prisma.payment.create.mockResolvedValue({
       id: 'payment-1',
@@ -1535,8 +1541,10 @@ describe('DeliveryService', () => {
           reference: 'Cobro en ruta',
           paidAt: '2026-06-19T12:10:00.000Z',
           collectionPass: 1,
+          expectedVersion: 1,
         },
         driver,
+        'route-collection-key',
       ),
     ).resolves.toEqual(
       expect.objectContaining({
@@ -1564,6 +1572,154 @@ describe('DeliveryService', () => {
     );
   });
 
+  it('requires idempotent serializable route collection writes', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.accountReceivable.findUnique.mockResolvedValue({
+      id: 'ar-1',
+      customerId: 'customer-1',
+      saleId: 'sale-1',
+      outstandingAmount: money('500'),
+      status: CollectionStatus.UNPAID,
+      dueDate: date('2026-06-01T00:00:00.000Z'),
+      version: 1,
+    });
+    prisma.payment.create.mockResolvedValue({
+      id: 'payment-serializable',
+      accountReceivableId: 'ar-1',
+      customerId: 'customer-1',
+      saleId: 'sale-1',
+      routeId: 'route-1',
+      routeSettlementId: null,
+      amount: money('200'),
+      paymentMethod: PaymentMethod.TRANSFER,
+      status: PaymentStatus.APPLIED,
+      paidAt: date('2026-06-19T12:10:00.000Z'),
+    });
+    prisma.accountReceivable.update.mockResolvedValue({
+      id: 'ar-1',
+      outstandingAmount: money('300'),
+      status: CollectionStatus.PARTIALLY_PAID,
+      version: 2,
+    });
+    prisma.deliveryOrder.update.mockResolvedValue(
+      createOrder({ collectedByUserId: 'driver-1', collectionPass: 1 }),
+    );
+    prisma.sale.update.mockResolvedValue({ id: 'sale-1' });
+
+    const registerCollection = service.registerCollection as unknown as (
+      id: string,
+      dto: Record<string, unknown>,
+      currentUser: typeof driver,
+      idempotencyKey: string,
+    ) => Promise<unknown>;
+
+    await registerCollection.call(
+      service,
+      'order-1',
+      {
+        accountReceivableId: 'ar-1',
+        amount: 200,
+        paymentMethod: PaymentMethod.TRANSFER,
+        expectedVersion: 1,
+        paidAt: '2026-06-19T12:10:00.000Z',
+      },
+      driver,
+      'route-collection-key',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          idempotencyKey: 'route-collection-key',
+          idempotencyPayloadHash: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it('replays the persisted route payment for the same idempotency key', async () => {
+    const { service, prisma } = createService();
+    const dto = {
+      accountReceivableId: 'ar-1',
+      amount: 200,
+      paymentMethod: PaymentMethod.CASH,
+      expectedVersion: 1,
+      paidAt: '2026-06-19T12:10:00.000Z',
+    };
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.accountReceivable.findUnique.mockResolvedValue({
+      id: 'ar-1',
+      customerId: 'customer-1',
+      saleId: 'sale-1',
+      outstandingAmount: money('500'),
+      status: CollectionStatus.UNPAID,
+      dueDate: date('2026-06-01T00:00:00.000Z'),
+      version: 1,
+    });
+    prisma.payment.create.mockImplementation(async ({ data }) => ({
+      id: 'payment-replayed',
+      ...data,
+    }));
+    prisma.accountReceivable.update.mockResolvedValue({
+      id: 'ar-1',
+      outstandingAmount: money('300'),
+      status: CollectionStatus.PARTIALLY_PAID,
+      version: 2,
+    });
+    prisma.deliveryOrder.update.mockResolvedValue(createOrder());
+    prisma.sale.update.mockResolvedValue({ id: 'sale-1' });
+
+    const first = await service.registerCollection(
+      'order-1',
+      dto,
+      driver,
+      'route-replay-key',
+    );
+    const persistedPayment = {
+      id: 'payment-replayed',
+      ...prisma.payment.create.mock.calls[0][0].data,
+    };
+    prisma.payment.findFirst.mockResolvedValue(persistedPayment);
+
+    await expect(
+      service.registerCollection('order-1', dto, driver, 'route-replay-key'),
+    ).resolves.toEqual(first);
+    expect(prisma.payment.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a stale route collection version before creating a payment', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.accountReceivable.findUnique.mockResolvedValue({
+      id: 'ar-1',
+      customerId: 'customer-1',
+      saleId: 'sale-1',
+      outstandingAmount: money('500'),
+      status: CollectionStatus.UNPAID,
+      dueDate: date('2026-06-01T00:00:00.000Z'),
+      version: 2,
+    });
+
+    await expect(
+      service.registerCollection(
+        'order-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 200,
+          paymentMethod: PaymentMethod.CASH,
+          expectedVersion: 1,
+        },
+        driver,
+        'route-stale-version-key',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
   it('rejects route collections without a matching collectible receivable or over the outstanding balance', async () => {
     const { service, prisma } = createService();
     prisma.deliveryOrder.findFirst.mockResolvedValue(
@@ -1577,8 +1733,10 @@ describe('DeliveryService', () => {
           accountReceivableId: 'ar-other',
           amount: 10,
           paymentMethod: PaymentMethod.CASH,
+          expectedVersion: 1,
         },
         driver,
+        'route-mismatch-key',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -1586,6 +1744,8 @@ describe('DeliveryService', () => {
       id: 'ar-1',
       outstandingAmount: money('50'),
       status: CollectionStatus.UNPAID,
+      dueDate: date('2026-06-01T00:00:00.000Z'),
+      version: 1,
     });
 
     await expect(
@@ -1595,8 +1755,10 @@ describe('DeliveryService', () => {
           accountReceivableId: 'ar-1',
           amount: 60,
           paymentMethod: PaymentMethod.CASH,
+          expectedVersion: 1,
         },
         driver,
+        'route-overbalance-key',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

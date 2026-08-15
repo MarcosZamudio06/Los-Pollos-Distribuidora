@@ -86,4 +86,10 @@ export class RegisterReceivablePaymentDto {
   @IsOptional()
   @IsDateString()
   paidAt?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
 }

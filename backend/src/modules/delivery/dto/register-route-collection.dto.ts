@@ -37,4 +37,9 @@ export class RegisterRouteCollectionDto {
   @IsInt()
   @Min(1)
   collectionPass?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }

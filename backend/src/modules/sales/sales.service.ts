@@ -1515,6 +1515,7 @@ export class SalesService {
                   lastPaymentDate: null,
                   daysOverdue: 0,
                   agingStatus: AgingStatus.CURRENT,
+                  version: { increment: 1 },
                 },
               })
             : null;
@@ -2190,6 +2191,7 @@ export class SalesService {
         cancelledAt: new Date(),
         paidAt: null,
         lastPaymentDate: null,
+        version: { increment: 1 },
       },
     });
   }

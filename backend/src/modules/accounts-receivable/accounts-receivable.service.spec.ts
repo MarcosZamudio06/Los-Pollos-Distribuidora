@@ -82,6 +82,7 @@ function createReceivable(overrides: Record<string, unknown> = {}) {
     collectorUserId: null,
     commercialPolicyId: 'policy-1',
     status: CollectionStatus.UNPAID,
+    version: 1,
     createdAt: new Date('2026-06-01T12:01:00.000Z'),
     updatedAt: new Date('2026-06-01T12:01:00.000Z'),
     payments: [],

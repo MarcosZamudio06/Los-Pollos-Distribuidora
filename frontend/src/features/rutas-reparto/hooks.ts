@@ -255,10 +255,18 @@ export function useCreateRouteCollection(routeId?: string) {
     mutationFn: ({
       orderId,
       payload,
+      idempotencyKey,
     }: {
       orderId: string;
       payload: CreateRouteCollectionPayload;
-    }) => deliveryService.createOrderCollection(orderId, payload, accessToken),
+      idempotencyKey: string;
+    }) =>
+      deliveryService.createOrderCollection(
+        orderId,
+        payload,
+        idempotencyKey,
+        accessToken,
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
       if (routeId)
