@@ -15,6 +15,7 @@ import { DeliveryIncidentDialog } from "../components/DeliveryIncidentDialog";
 import { DeliveryOrderCard } from "../components/DeliveryOrderCard";
 import { DriverRouteMap } from "../components/DriverRouteMap";
 import { RouteLocationTrackingControl } from "../components/RouteLocationTrackingControl";
+import { RouteStartControl } from "../components/RouteStartControl";
 import {
   RouteCollectionDialog,
   RouteSecondPassCollectionDialog,
@@ -28,7 +29,11 @@ import {
   StatusMessage,
 } from "../components/RouteUi";
 import { UpdateDeliveryStatusDialog } from "../components/UpdateDeliveryStatusDialog";
-import { useDeliveryRoute, useDeliveryRoutes } from "../hooks";
+import {
+  useDeliveryRoute,
+  useDeliveryRoutes,
+  useUpdateDeliveryRouteStatus,
+} from "../hooks";
 import { useRouteLocationTracking } from "../useRouteLocationTracking";
 import { date, money, shortId } from "../labels";
 import type {
@@ -46,6 +51,13 @@ function isUnauthorizedRemoteError(error: unknown) {
     error instanceof ApiClientError &&
     (error.statusCode === 401 || error.statusCode === 403)
   );
+}
+
+function routeStatusErrorMessage(error: unknown) {
+  if (error instanceof ApiClientError || error instanceof Error) {
+    return error.message;
+  }
+  return "No se pudo iniciar la ruta.";
 }
 
 function distanceLabel(meters?: number | null) {
@@ -87,9 +99,13 @@ export function MyRoutesPage() {
   );
   const [lastCollection, setLastCollection] =
     useState<RouteCollectionResponse | null>(null);
+  const [routeStatusError, setRouteStatusError] = useState<string | null>(
+    null,
+  );
 
   const activeRouteId = selectedRouteId ?? routeItems[0]?.id;
   const route = useDeliveryRoute(activeRouteId);
+  const updateRouteStatus = useUpdateDeliveryRouteStatus(activeRouteId);
   const detail = route.data;
   const tracking = useRouteLocationTracking({ route: detail });
   const orders = detail?.orders ?? [];
@@ -161,6 +177,7 @@ export function MyRoutesPage() {
                       onClick={() => {
                         setSelectedRouteId(item.id);
                         setLastCollection(null);
+                        setRouteStatusError(null);
                       }}
                       type="button"
                     >
@@ -271,6 +288,28 @@ export function MyRoutesPage() {
                       </div>
                     </div>
                   </Card>
+
+                  {detail.status === "PENDING" && (
+                    <RouteStartControl
+                      error={routeStatusError}
+                      hasVehicle={Boolean(detail.vehicleId)}
+                      isStarting={updateRouteStatus.isPending}
+                      onStart={async () => {
+                        setRouteStatusError(null);
+                        try {
+                          await updateRouteStatus.mutateAsync({
+                            status: "IN_PROGRESS",
+                          });
+                        } catch (error) {
+                          const message = routeStatusErrorMessage(error);
+                          setRouteStatusError(message);
+                          throw error;
+                        }
+                      }}
+                      routeName={detail.name}
+                      vehicleName={detail.vehicle?.displayName}
+                    />
+                  )}
 
                   <RouteLocationTrackingControl tracking={tracking} />
 

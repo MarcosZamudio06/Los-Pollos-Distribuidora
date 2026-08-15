@@ -81,6 +81,7 @@ const maplibre = vi.hoisted(() => {
     AttributionControl: MockAttributionControl,
     Map: MockMap,
     Marker: MockMarker,
+    setWorkerUrl: vi.fn(),
   };
 });
 

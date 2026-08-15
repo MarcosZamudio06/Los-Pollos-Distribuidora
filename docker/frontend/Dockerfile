@@ -35,6 +35,10 @@ RUN printf '%s\n' \
   '  ~^/maps/styles/[^/]+/style\.json$ "no-store";' \
   '  ~^/maps/data/[^/]+\.json$ "no-store";' \
   '}' \
+  'map $http_x_forwarded_proto $maps_forwarded_proto {' \
+  '  default $http_x_forwarded_proto;' \
+  '  "" $scheme;' \
+  '}' \
   'server {' \
   '  listen 3000;' \
   '  server_name _;' \
@@ -49,12 +53,12 @@ RUN printf '%s\n' \
   '    proxy_http_version 1.1;' \
   '    proxy_set_header Host $http_host;'\
   '    proxy_set_header X-Forwarded-Host $http_host;' \
-  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_set_header X-Forwarded-Proto $maps_forwarded_proto;' \
   '    proxy_set_header X-Forwarded-Prefix /maps;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
   '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
   '    proxy_cache maps_cache;' \
-  '    proxy_cache_key "$scheme://$http_host$request_uri";' \
+  '    proxy_cache_key "$maps_forwarded_proto://$http_host$request_uri";' \
   '    proxy_cache_valid 200 1h;' \
   '    proxy_cache_valid 404 1m;' \
   '    add_header Cache-Control $maps_browser_cache_control always;' \

@@ -3,8 +3,8 @@ import type {
   GeoJSONSource,
   Map as MapLibreMap,
 } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { resolveMapStyle } from "../../../lib/maps/mapConfig";
+import { loadMapLibre } from "../../../lib/maps/mapLibreRuntime";
 import {
   createFleetFeatureCollections,
   getFleetFeatureBounds,
@@ -470,6 +470,72 @@ function addFleetLayers(map: MapLibreMap) {
   });
 }
 
+function mapErrorText(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (typeof value === "string") return value;
+  if (typeof value !== "object" || value === null) return "";
+
+  const record = value as Record<string, unknown>;
+  const nestedError = record.error;
+  return [
+    record.message,
+    record.resourceType,
+    record.sourceDataType,
+    record.sourceId,
+    record.url,
+    nestedError instanceof Error
+      ? nestedError.message
+      : typeof nestedError === "string"
+        ? nestedError
+        : undefined,
+  ]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ");
+}
+
+function isFatalFleetMapError(value: unknown, mapLoaded: boolean): boolean {
+  const normalized = mapErrorText(value).toLowerCase();
+  const record =
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : null;
+  const resourceDescriptor = [
+    record?.resourceType,
+    record?.sourceDataType,
+    record?.sourceId,
+    record?.url,
+  ]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    /\b(tile|pbf|glyph|sprite)\b/.test(
+      resourceDescriptor + " " + normalized,
+    )
+  ) {
+    return false;
+  }
+  if (typeof record?.sourceId === "string" && record.sourceId.length > 0) {
+    return false;
+  }
+  if (/\b(style|stylesheet)\b/.test(resourceDescriptor)) return true;
+
+  const fatalSignal =
+    normalized.includes("worker") ||
+    normalized.includes("module script") ||
+    normalized.includes("mime type") ||
+    normalized.includes("webgl") ||
+    normalized.includes("context lost") ||
+    normalized.includes("canvas") ||
+    normalized.includes("stylesheet") ||
+    normalized.includes("failed to parse style") ||
+    normalized.includes("invalid style") ||
+    normalized.includes("failed to load style");
+
+  return fatalSignal || (!mapLoaded && resourceDescriptor.length === 0);
+}
+
 export function FleetLiveMap({
   items,
   zones = [],
@@ -493,6 +559,7 @@ export function FleetLiveMap({
   const [mapError, setMapError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const mapLoadedRef = useRef(false);
   const hasFittedRef = useRef(false);
   const previousDataRef = useRef<FleetFeatureCollections | null>(null);
   const onSelectVehicleRef = useRef(onSelectVehicle);
@@ -535,7 +602,7 @@ export function FleetLiveMap({
     async function createMap() {
       if (!containerRef.current || mapRef.current) return;
       try {
-        const maplibre = await import("maplibre-gl");
+        const maplibre = await loadMapLibre();
         if (cancelled || !containerRef.current) return;
         const map = new maplibre.Map({
           container: containerRef.current,
@@ -544,37 +611,52 @@ export function FleetLiveMap({
           zoom: 11,
         });
         mapRef.current = map;
-        map.on("load", () => {
-          addFleetLayers(map);
-          map.on("click", "fleet-vehicles-symbol", (event) => {
-            if (editorActiveRef.current) return;
-            const vehicleId = event.features?.[0]?.id;
-            if (vehicleId !== undefined && vehicleId !== null) {
-              onSelectVehicleRef.current(String(vehicleId));
-            }
-          });
-          map.on("click", "delivery-zones-fill", (event) => {
-            if (editorActiveRef.current) return;
-            const feature = event.features?.[0];
-            const zoneId = feature?.properties?.id ?? feature?.id;
-            if (zoneId !== undefined && zoneId !== null) {
-              onSelectZoneRef.current?.(String(zoneId));
-            }
-          });
-          map.on("click", (event) => {
-            if (!editorActiveRef.current || !onMapPointRef.current) return;
-            onMapPointRef.current([event.lngLat.lng, event.lngLat.lat]);
-          });
-          setMapReady(true);
+        mapLoadedRef.current = false;
+        map.on("error", (event) => {
+          console.error("[FleetLiveMap] MapLibre error:", event);
+          if (!cancelled && isFatalFleetMapError(event, mapLoadedRef.current)) {
+            setMapError(true);
+          }
         });
-      } catch {
-        setMapError(true);
+        map.on("load", () => {
+          try {
+            addFleetLayers(map);
+            map.on("click", "fleet-vehicles-symbol", (event) => {
+              if (editorActiveRef.current) return;
+              const vehicleId = event.features?.[0]?.id;
+              if (vehicleId !== undefined && vehicleId !== null) {
+                onSelectVehicleRef.current(String(vehicleId));
+              }
+            });
+            map.on("click", "delivery-zones-fill", (event) => {
+              if (editorActiveRef.current) return;
+              const feature = event.features?.[0];
+              const zoneId = feature?.properties?.id ?? feature?.id;
+              if (zoneId !== undefined && zoneId !== null) {
+                onSelectZoneRef.current?.(String(zoneId));
+              }
+            });
+            map.on("click", (event) => {
+              if (!editorActiveRef.current || !onMapPointRef.current) return;
+              onMapPointRef.current([event.lngLat.lng, event.lngLat.lat]);
+            });
+            mapLoadedRef.current = true;
+            setMapReady(true);
+          } catch (error) {
+            console.error("[FleetLiveMap] MapLibre error:", error);
+            if (!cancelled) setMapError(true);
+          }
+        });
+      } catch (error) {
+        console.error("[FleetLiveMap] MapLibre error:", error);
+        if (!cancelled) setMapError(true);
       }
     }
     void createMap();
 
     return () => {
       cancelled = true;
+      mapLoadedRef.current = false;
       mapRef.current?.remove();
       mapRef.current = null;
       hasFittedRef.current = false;

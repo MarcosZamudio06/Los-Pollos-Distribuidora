@@ -14,6 +14,7 @@ import type {
   RouteSettlementDetail,
   RouteSettlementListItem,
   UpdateDeliveryOrderStatusPayload,
+  UpdateDeliveryRouteStatusPayload,
   CreateDeliveryRoutePlanPayload,
   DeliveryRoutePlan,
   EligibleDeliverySale,
@@ -202,6 +203,20 @@ export const deliveryService = {
         headers: authHeaders(accessToken),
       },
     );
+    return unwrapItem(response);
+  },
+  async updateRouteStatus(
+    routeId: string,
+    payload: UpdateDeliveryRouteStatusPayload,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.patch<
+      ItemEnvelope<DeliveryRouteListItem>,
+      UpdateDeliveryRouteStatusPayload
+    >(`/delivery-routes/${routeId}/status`, {
+      body: payload,
+      headers: authHeaders(accessToken),
+    });
     return unwrapItem(response);
   },
   async publishFleetPosition(

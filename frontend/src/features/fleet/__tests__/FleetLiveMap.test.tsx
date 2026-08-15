@@ -17,6 +17,7 @@ type MockMap = {
   flyToCalls: unknown[];
   layoutChanges: unknown[];
   removed: boolean;
+  hasHandler: (event: string) => boolean;
   emit: (event: string, payload?: unknown) => void;
   emitLayer: (layer: string, payload?: unknown) => void;
 };
@@ -84,6 +85,10 @@ const mapMock = vi.hoisted(() => {
       this.handlers.get(event)?.forEach((handler) => handler(payload));
     }
 
+    hasHandler(event: string) {
+      return (this.handlers.get(event)?.size ?? 0) > 0;
+    }
+
     emitLayer(layer: string, payload?: unknown) {
       this.emit(`click:${layer}`, payload);
     }
@@ -131,7 +136,14 @@ const mapMock = vi.hoisted(() => {
   return { Map: MockMap, state };
 });
 
+const runtimeMock = vi.hoisted(() => ({
+  loadMapLibre: vi.fn(),
+}));
+
 vi.mock("maplibre-gl", () => mapMock);
+vi.mock("../../../lib/maps/mapLibreRuntime", () => runtimeMock);
+
+runtimeMock.loadMapLibre.mockResolvedValue(mapMock);
 
 import { FleetLiveMap } from "../components/FleetLiveMap";
 
@@ -190,6 +202,8 @@ async function renderMap(
 describe("FleetLiveMap", () => {
   beforeEach(() => {
     mapMock.state.instances.length = 0;
+    runtimeMock.loadMapLibre.mockClear();
+    runtimeMock.loadMapLibre.mockResolvedValue(mapMock);
   });
 
   afterEach(() => {
@@ -200,6 +214,8 @@ describe("FleetLiveMap", () => {
     const { map, root, container } = await renderMap();
 
     expect(mapMock.state.instances).toHaveLength(1);
+    expect(runtimeMock.loadMapLibre).toHaveBeenCalledTimes(1);
+    expect(map.hasHandler("error")).toBe(true);
     expect(map.layers).toEqual([
       "fleet-routes-lines",
       "fleet-deliveries-pending",
@@ -254,6 +270,39 @@ describe("FleetLiveMap", () => {
     await act(async () => root.unmount());
     expect(map.removed).toBe(true);
     container.remove();
+  });
+
+  it("logs asynchronous errors without treating recoverable tiles as fatal", async () => {
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { map, root, container } = await renderMap();
+
+    await act(async () => {
+      map.emit("error", {
+        error: new Error("tile request failed"),
+        sourceId: "openmaptiles",
+      });
+    });
+
+    expect(container.textContent).not.toContain("El mapa no está disponible");
+    expect(map.removed).toBe(false);
+
+    await act(async () => {
+      map.emit("error", {
+        error: new Error("Failed to load maplibre worker"),
+      });
+    });
+
+    expect(container.textContent).toContain("El mapa no está disponible");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[FleetLiveMap] MapLibre error:",
+      expect.anything(),
+    );
+
+    await act(async () => root.unmount());
+    container.remove();
+    errorSpy.mockRestore();
   });
 
   it("keeps traffic hidden when the provider is unavailable", async () => {

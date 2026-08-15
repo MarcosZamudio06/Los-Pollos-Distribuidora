@@ -1,0 +1,5 @@
+https://192.168.68.58 {
+    tls /Users/marcoszamudio/Documents/Dev/pollos-distribuidor/.local-certs/192.168.68.58+2.pem /Users/marcoszamudio/Documents/Dev/pollos-distribuidor/.local-certs/192.168.68.58+2-key.pem
+
+    reverse_proxy 127.0.0.1:3000
+}

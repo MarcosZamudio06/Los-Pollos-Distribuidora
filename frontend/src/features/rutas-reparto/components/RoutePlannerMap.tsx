@@ -7,7 +7,6 @@ import type {
   Marker as MapLibreMarker,
   MapMouseEvent,
 } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import type {
   DeliveryRoutePlan,
   GeoJsonLineString,
@@ -15,6 +14,7 @@ import type {
   RoutePlanStopInput,
 } from "../types";
 import { resolveMapStyle } from "@/lib/maps/mapConfig";
+import { loadMapLibre } from "@/lib/maps/mapLibreRuntime";
 import {
   animateRouteLine,
   routeGeometryRevision,
@@ -362,7 +362,7 @@ export function RoutePlannerMap({
     let handleClick: ((event: MapMouseEvent) => void) | undefined;
     const markers = markerRefs.current;
 
-    void import("maplibre-gl")
+    void loadMapLibre()
       .then((maplibre) => {
         if (disposed) return;
 

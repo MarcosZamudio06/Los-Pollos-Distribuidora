@@ -11,6 +11,7 @@ import type {
   CreateDeliveryRoutePlanPayload,
   DeliveryRoutesFilters,
   UpdateDeliveryOrderStatusPayload,
+  UpdateDeliveryRouteStatusPayload,
 } from "./types";
 
 export function useRoutePlannerCatalog(search = "", originLocationId = "") {
@@ -123,6 +124,25 @@ export function useDeliveryRoute(routeId?: string) {
     enabled: Boolean(routeId),
     queryKey: ["delivery-routes", routeId],
     queryFn: () => deliveryService.getRoute(routeId as string, accessToken),
+  });
+}
+
+export function useUpdateDeliveryRouteStatus(routeId?: string) {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateDeliveryRouteStatusPayload) => {
+      if (!routeId) throw new Error("Route id is required to update status.");
+      return deliveryService.updateRouteStatus(routeId, payload, accessToken);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
+      if (routeId) {
+        void queryClient.invalidateQueries({
+          queryKey: ["delivery-routes", routeId],
+        });
+      }
+    },
   });
 }
 

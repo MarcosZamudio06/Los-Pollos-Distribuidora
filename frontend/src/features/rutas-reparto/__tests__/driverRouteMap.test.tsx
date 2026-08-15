@@ -129,6 +129,7 @@ const mapMock = vi.hoisted(() => {
     AttributionControl: class {},
     Map: MockMap,
     Marker: MockMarker,
+    setWorkerUrl: vi.fn(),
     state,
   };
 });

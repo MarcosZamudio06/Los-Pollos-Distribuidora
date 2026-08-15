@@ -218,6 +218,30 @@ describe("delivery route planning API contracts", () => {
     );
   });
 
+  it("starts a route through the route status endpoint", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        id: "route-1",
+        status: "IN_PROGRESS",
+      }),
+    );
+
+    await deliveryService.updateRouteStatus(
+      "route-1",
+      { status: "IN_PROGRESS" },
+      "driver-token",
+    );
+
+    expect(requestAt().url).toBe("/api/delivery-routes/route-1/status");
+    expect(requestAt().init.method).toBe("PATCH");
+    expect(JSON.parse(String(requestAt().init.body))).toEqual({
+      status: "IN_PROGRESS",
+    });
+    expect(new Headers(requestAt().init.headers).get("authorization")).toBe(
+      "Bearer driver-token",
+    );
+  });
+
   it("publishes a GPS reading without client-controlled assignment identifiers", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       okJson({

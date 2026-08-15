@@ -107,8 +107,8 @@ frontend_text = frontend_dockerfile.read_text(encoding="utf-8")
 vite_text = vite_config.read_text(encoding="utf-8")
 if "location /maps/" not in frontend_text or "proxy_pass http://tileserver:8080/;" not in frontend_text:
     fail("frontend Nginx must proxy /maps/** to the private TileServer")
-if 'proxy_cache_key "$scheme://$http_host$request_uri";' not in frontend_text:
-    fail("frontend Nginx map cache key must include the request host to avoid cross-origin style URLs")
+if 'proxy_cache_key "$maps_forwarded_proto://$http_host$request_uri";' not in frontend_text:
+    fail("frontend Nginx map cache key must include the forwarded protocol and request host")
 if 'map $uri $maps_browser_cache_control {' not in frontend_text:
     fail("frontend Nginx must define browser cache policy for host-dependent map metadata")
 if '~^/maps/styles/[^/]+/style\\.json$ "no-store";' not in frontend_text:
@@ -117,6 +117,12 @@ if '~^/maps/data/[^/]+\\.json$ "no-store";' not in frontend_text:
     fail("frontend Nginx must not browser-cache host-dependent TileJSON metadata")
 if 'add_header Cache-Control $maps_browser_cache_control always;' not in frontend_text:
     fail("frontend Nginx must apply the map metadata browser cache policy")
+if 'map $http_x_forwarded_proto $maps_forwarded_proto {' not in frontend_text:
+    fail("frontend Nginx must define a forwarded-protocol fallback for map requests")
+if 'default $http_x_forwarded_proto;' not in frontend_text or '  "" $scheme;' not in frontend_text:
+    fail("frontend Nginx must preserve the reverse proxy protocol and fall back to its own scheme")
+if 'proxy_set_header X-Forwarded-Proto $maps_forwarded_proto;' not in frontend_text:
+    fail("frontend Nginx must forward the preserved protocol to TileServer")
 if "ENV VITE_API_BASE_URL=/api" not in frontend_text or "ARG VITE_API_URL" in frontend_text:
     fail("Docker frontend builds must pin the browser API to the same-origin /api proxy")
 vite_maps_proxy = re.search(

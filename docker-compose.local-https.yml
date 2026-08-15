@@ -1,0 +1,12 @@
+services:
+  tileserver:
+    command:
+      - --config
+      - /data/config.json
+      - --bind
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --public_url
+      - https://192.168.68.58/maps/
+      - --silent

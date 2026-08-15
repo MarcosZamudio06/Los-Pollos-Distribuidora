@@ -1,5 +1,9 @@
 export type DeliveryRouteStatus =
   "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | string;
+export type UpdateDeliveryRouteStatusPayload = {
+  status: DeliveryRouteStatus;
+  notes?: string;
+};
 export type DeliveryOrderStatus =
   | "PENDING"
   | "IN_ROUTE"

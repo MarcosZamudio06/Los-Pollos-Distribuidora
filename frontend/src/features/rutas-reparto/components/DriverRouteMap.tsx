@@ -4,8 +4,8 @@ import type {
   Map as MapLibreMap,
   Marker as MapLibreMarker,
 } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { resolveMapStyle } from "@/lib/maps/mapConfig";
+import { loadMapLibre } from "@/lib/maps/mapLibreRuntime";
 import type {
   DeliveryOrder,
   GeoJsonLineString,
@@ -278,7 +278,7 @@ export function DriverRouteMap({
     let map: MapLibreMap | null = null;
     let handleLoad: (() => void) | undefined;
 
-    void import("maplibre-gl")
+    void loadMapLibre()
       .then((maplibre) => {
         if (disposed) return;
 

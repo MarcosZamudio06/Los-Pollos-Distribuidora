@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import { MapUnavailableState } from "./MapUnavailableState";
+import { loadMapLibre } from "../../lib/maps/mapLibreRuntime";
 import {
   toMapLibrePoint,
   type MapCanvasError,
   type MapCanvasProps,
   type MapErrorKind,
 } from "./types";
-
 type MapInstance = MapLibreMap;
 type MarkerInstance = MapLibreMarker;
 type MapLibreModule = typeof import("maplibre-gl");
@@ -224,8 +224,7 @@ export function MapLibreCanvas({
           );
         }
 
-        const maplibre = await import("maplibre-gl");
-        await import("maplibre-gl/dist/maplibre-gl.css");
+        const maplibre = await loadMapLibre();
 
         if (disposed) return;
 
