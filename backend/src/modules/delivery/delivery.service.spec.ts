@@ -396,6 +396,53 @@ describe('DeliveryService', () => {
     );
   });
 
+  it('derives the sale account receivable when manual route creation omits it', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'driver-1',
+      role: { name: 'DRIVER' },
+    });
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-1',
+        status: SaleStatus.CONFIRMED,
+        accountReceivable: { id: 'ar-1' },
+      },
+    ]);
+    prisma.operationalLocation.create.mockResolvedValue({
+      id: 'route-stock-1',
+    });
+    prisma.deliveryRoute.create.mockResolvedValue(
+      createRoute({ deliveryOrders: [createOrder()] }),
+    );
+
+    await service.createRoute(
+      {
+        name: 'Ruta Centro',
+        driverId: 'driver-1',
+        scheduledDate: '2026-06-19',
+        originLocationId: 'origin-1',
+        orders: [{ saleId: 'sale-1', deliveryAddress: 'Av Centro 123' }],
+      },
+      admin,
+    );
+
+    expect(prisma.deliveryRoute.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          deliveryOrders: {
+            create: [
+              expect.objectContaining({
+                saleId: 'sale-1',
+                accountReceivableId: 'ar-1',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
   it('requires SELLER route creation to consume an owned optimized plan', async () => {
     const { service, prisma } = createService();
 
@@ -681,6 +728,60 @@ describe('DeliveryService', () => {
     });
   });
 
+  it('derives the sale account receivable when assigning to a route without it', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [createOrder({ id: 'order-1', saleId: 'sale-1' })],
+        settlement: null,
+      }),
+    );
+    prisma.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-2',
+        status: SaleStatus.CONFIRMED,
+        routeId: null,
+        accountReceivable: { id: 'ar-2' },
+      },
+    ]);
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [
+          createOrder({ id: 'order-1', saleId: 'sale-1' }),
+          createOrder({
+            id: 'order-2',
+            saleId: 'sale-2',
+            accountReceivableId: 'ar-2',
+            deliveryAddress: 'Av Norte 456',
+          }),
+        ],
+      }),
+    );
+
+    await service.assignOrdersToRoute(
+      'route-1',
+      {
+        orders: [{ saleId: 'sale-2', deliveryAddress: 'Av Norte 456' }],
+      },
+      admin,
+    );
+
+    expect(prisma.deliveryRoute.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          deliveryOrders: {
+            create: [
+              expect.objectContaining({
+                saleId: 'sale-2',
+                accountReceivableId: 'ar-2',
+              }),
+            ],
+          },
+        },
+      }),
+    );
+  });
+
   it('reoptimizes an optimized route when assigning a combined route plan', async () => {
     const { service, prisma } = createService();
     prisma.deliveryRoute.findFirst
@@ -945,6 +1046,54 @@ describe('DeliveryService', () => {
     expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
   });
 
+  it('allows a DRIVER to complete an own route after all orders reach final status', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        deliveryOrders: [
+          createOrder({ id: 'order-1', status: DeliveryOrderStatus.DELIVERED }),
+          createOrder({
+            id: 'order-2',
+            status: DeliveryOrderStatus.DELIVERED,
+          }),
+        ],
+      }),
+    );
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({
+        status: DeliveryRouteStatus.COMPLETED,
+        completedAt: date('2026-06-19T14:00:00.000Z'),
+        deliveryOrders: [
+          createOrder({ id: 'order-1', status: DeliveryOrderStatus.DELIVERED }),
+          createOrder({
+            id: 'order-2',
+            status: DeliveryOrderStatus.DELIVERED,
+          }),
+        ],
+      }),
+    );
+
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.COMPLETED },
+        driver,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: DeliveryRouteStatus.COMPLETED }),
+    );
+
+    expect(prisma.deliveryRoute.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'route-1' },
+        data: expect.objectContaining({
+          status: DeliveryRouteStatus.COMPLETED,
+        }),
+      }),
+    );
+  });
+
   it('allows a DRIVER to start an own route', async () => {
     const { service, prisma } = createService();
     prisma.deliveryRoute.findFirst.mockResolvedValue(
@@ -1085,6 +1234,121 @@ describe('DeliveryService', () => {
           totalCollectedAmount: 200,
         }),
       }),
+    );
+  });
+
+  it('returns the current balance and Payment-derived collection for each route order', async () => {
+    const { service, prisma } = createService();
+    const capturedAt = date('2026-06-19T12:05:00.000Z');
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [
+          createOrder({
+            id: 'order-1',
+            accountReceivable: { id: 'ar-1', outstandingAmount: money('300') },
+            evidence: [
+              {
+                type: DeliveryEvidenceType.PHOTO,
+                value: 'data:image/jpeg;base64,photo',
+                capturedAt,
+              },
+            ],
+          }),
+          createOrder({
+            id: 'order-2',
+            accountReceivableId: 'ar-2',
+            accountReceivable: {
+              id: 'ar-2',
+              outstandingAmount: money('75.50'),
+            },
+          }),
+        ],
+        payments: [
+          {
+            accountReceivableId: 'ar-1',
+            amount: money('200'),
+            paymentMethod: PaymentMethod.CASH,
+            collectionPass: 1,
+            status: PaymentStatus.APPLIED,
+          },
+          {
+            accountReceivableId: 'ar-2',
+            amount: money('25.50'),
+            paymentMethod: PaymentMethod.TRANSFER,
+            collectionPass: 2,
+            status: PaymentStatus.APPLIED,
+          },
+        ],
+      }),
+    );
+
+    const result = await service.findRoute('route-1', driver);
+
+    expect(result.orders).toEqual([
+      expect.objectContaining({
+        id: 'order-1',
+        outstandingAmount: 300,
+        derivedCollectedAmount: 200,
+      }),
+      expect.objectContaining({
+        id: 'order-2',
+        outstandingAmount: 75.5,
+        derivedCollectedAmount: 25.5,
+      }),
+    ]);
+    expect(result.evidenceSummary).toEqual([
+      expect.objectContaining({
+        deliveryOrderId: 'order-1',
+        type: DeliveryEvidenceType.PHOTO,
+        value: 'data:image/jpeg;base64,photo',
+        capturedAt: capturedAt.toISOString(),
+      }),
+    ]);
+    expect(result.collectionsSummary).toEqual(
+      expect.objectContaining({
+        derivedCollectedAmount: 225.5,
+        firstPassAmount: 200,
+        secondPassAmount: 25.5,
+      }),
+    );
+  });
+
+  it('uses the included receivable relation when the order foreign key is absent', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [
+          createOrder({
+            accountReceivableId: null,
+            accountReceivable: {
+              id: 'ar-1',
+              outstandingAmount: money('300'),
+            },
+          }),
+        ],
+        payments: [
+          {
+            accountReceivableId: 'ar-1',
+            amount: money('200'),
+            paymentMethod: PaymentMethod.CASH,
+            collectionPass: 1,
+            status: PaymentStatus.APPLIED,
+          },
+        ],
+      }),
+    );
+
+    const result = await service.findRoute('route-1', driver);
+
+    expect(result.orders).toEqual([
+      expect.objectContaining({
+        accountReceivableId: 'ar-1',
+        outstandingAmount: 300,
+        derivedCollectedAmount: 200,
+      }),
+    ]);
+    expect(result.collectionsSummary).toEqual(
+      expect.objectContaining({ expectedAmount: 300 }),
     );
   });
 

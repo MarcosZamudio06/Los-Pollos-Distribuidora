@@ -105,6 +105,7 @@ The canonical geospatial contracts are:
 - A mapped route must have a geocoded origin and every stop must have validated coordinates.
 - A search result, reverse-geocoded label, or moved marker must not overwrite the sale or customer address silently; the delivery order preserves the selected planning address separately.
 - Route creation from a geographic plan must revalidate the active driver, origin, sales, receivables, and concurrent assignments before persistence.
+- Route creation or assignment must derive the sale's `accountReceivableId` when the request omits it, while rejecting a provided receivable that belongs to another sale.
 - Route creation from a geographic plan must revalidate the active vehicle and require its `vehicleId`; the vehicle must be active and available for the scheduled route.
 - Starting a route with `IN_PROGRESS` is an atomic exclusivity check: one vehicle cannot have two `IN_PROGRESS` routes. A conflict rejects the transition without changing either route.
 - An optimization with unreachable or unassigned stops must not create a route.
@@ -123,6 +124,7 @@ The canonical geospatial contracts are:
 - Driver mobile experience is part of the MVP; offline support remains pending and must not be assumed without a later spec.
 - If the order has collectible balance, the driver may register a route collection only when policy allows it.
 - In the MVP, every route collection recorded as `Payment` applies to exactly one receivable through required `Payment.accountReceivableId`.
+- The driver route detail exposes each order's current outstanding receivable balance and the collected amount derived from `Payment` records for that receivable within the route.
 - Route collections may be associated to route and settlement.
 - Cash on delivery or pay-on-delivery counts as money received only when a `Payment` exists.
 - All physical route load and return operations must go through `InventoryTransfer` to or from `ROUTE_STOCK`.
@@ -194,6 +196,7 @@ The fleet map uses MapLibre GL JS only as a renderer. It does not expose Photon,
 - Mark order as delivered.
 - Store delivery timestamp.
 - Capture allowed evidence.
+- Capture PHOTO evidence from a supported device camera/file input and persist the bounded image value through the existing delivery-evidence contract.
 - Register route collection associated to one receivable.
 - Reject route collection without receivable in MVP.
 - Derive collected amounts from `Payment`, not from a duplicated persisted money field.

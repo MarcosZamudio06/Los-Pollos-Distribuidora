@@ -18,6 +18,7 @@ import {
 } from "../components/RouteUi";
 import { dateTime, evidenceTypeLabel, shortId } from "../labels";
 import { useDeliveryRoute } from "../hooks";
+import { isPhotoDataUrl } from "../components/deliveryEvidencePhoto";
 
 export function RouteEvidenceReview() {
   const { routeId } = useParams();
@@ -140,10 +141,23 @@ export function RouteEvidenceReview() {
                           {item.capturedByUserName ?? "Sin usuario"}
                         </p>
                       </div>
-                      {item.value && (
-                        <p className="border-t border-[color:var(--erp-border)] pt-3 text-sm text-[var(--erp-muted-foreground)] md:col-span-3">
-                          {item.value}
-                        </p>
+                      {item.value && isPhotoDataUrl(item.value) ? (
+                        <figure className="border-t border-[color:var(--erp-border)] pt-3 md:col-span-3">
+                          <img
+                            alt="Evidencia fotográfica de entrega"
+                            className="max-h-72 w-full rounded-xl border border-[color:var(--erp-border)] object-contain"
+                            src={item.value}
+                          />
+                          <figcaption className="mt-2 text-xs font-semibold text-[var(--erp-muted-foreground)]">
+                            Foto capturada en la entrega
+                          </figcaption>
+                        </figure>
+                      ) : (
+                        item.value && (
+                          <p className="border-t border-[color:var(--erp-border)] pt-3 text-sm text-[var(--erp-muted-foreground)] md:col-span-3">
+                            {item.value}
+                          </p>
+                        )
                       )}
                     </article>
                   ))}

@@ -67,7 +67,11 @@ type DeliveryOrderRecord = Record<string, unknown> & {
     customer?: { name: string } | null;
   } | null;
   accountReceivable?: { id: string; outstandingAmount?: DecimalLike } | null;
-  evidence?: Array<{ type: string }>;
+  evidence?: Array<{
+    type: string;
+    value?: string | null;
+    capturedAt?: Date | null;
+  }>;
   route?: DeliveryRouteRecord | null;
 };
 
@@ -181,6 +185,7 @@ type AssignableSaleRecord = {
 };
 
 type PaymentSummaryRecord = {
+  accountReceivableId?: string | null;
   amount: DecimalLike;
   paymentMethod: PaymentMethod;
   collectionPass?: number | null;
@@ -279,28 +284,7 @@ export class DeliveryService {
   async findRoute(id: string, currentUser: Actor) {
     const route = (await this.prisma.deliveryRoute.findFirst({
       where: this.buildRouteAccessWhere(id, currentUser),
-      include: {
-        driver: { select: { id: true, name: true } },
-        vehicle: { select: this.routeVehicleSelect() },
-        settlement: { select: { id: true } },
-        payments: { where: { status: PaymentStatus.APPLIED } },
-        deliveryOrders: {
-          orderBy: [{ stopSequence: 'asc' }, { createdAt: 'asc' }],
-          include: {
-            sale: {
-              select: {
-                id: true,
-                saleNumber: true,
-                customer: { select: { name: true } },
-              },
-            },
-            accountReceivable: {
-              select: { id: true, outstandingAmount: true },
-            },
-            evidence: { select: { type: true } },
-          },
-        },
-      },
+      include: this.routeDetailInclude(),
     })) as DeliveryRouteRecord | null;
 
     if (!route) {
@@ -336,7 +320,7 @@ export class DeliveryService {
     return this.prisma.$transaction(async (tx) => {
       await this.assertDriver(tx, dto.driverId);
       if (dto.vehicleId) await this.assertActiveVehicle(tx, dto.vehicleId);
-      await this.assertAssignableSales(tx, dto.orders);
+      const orders = await this.resolveAssignableSales(tx, dto.orders);
 
       const routeStockLocationId = dto.routeStockLocationId
         ? await this.resolveProvidedRouteStockLocation(
@@ -354,7 +338,7 @@ export class DeliveryService {
           originLocationId: dto.originLocationId ?? null,
           routeStockLocationId,
           deliveryOrders: {
-            create: dto.orders.map((order) => ({
+            create: orders.map((order) => ({
               saleId: order.saleId,
               accountReceivableId: order.accountReceivableId ?? null,
               deliveryAddress: order.deliveryAddress.trim(),
@@ -373,14 +357,16 @@ export class DeliveryService {
               accountReceivable: {
                 select: { id: true, outstandingAmount: true },
               },
-              evidence: { select: { type: true } },
+              evidence: {
+                select: { type: true, value: true, capturedAt: true },
+              },
             },
           },
         },
       })) as DeliveryRouteRecord;
 
       await tx.sale.updateMany({
-        where: { id: { in: dto.orders.map((order) => order.saleId) } },
+        where: { id: { in: orders.map((order) => order.saleId) } },
         data: { routeId: route.id },
       });
 
@@ -463,12 +449,7 @@ export class DeliveryService {
       const stops = plan.orderedStops as unknown as PlannedStop[];
       if (!Array.isArray(stops) || !stops.length)
         throw new ConflictException('Delivery route plan has no stops');
-      const orders = stops.map((stop) => ({
-        saleId: stop.saleId,
-        accountReceivableId: stop.accountReceivableId ?? undefined,
-        deliveryAddress: stop.deliveryAddress,
-      }));
-      await this.assertAssignableSales(tx, orders);
+      const resolvedStops = await this.resolveAssignableSales(tx, stops);
       const routeStockLocationId = dto.routeStockLocationId
         ? await this.resolveProvidedRouteStockLocation(
             tx,
@@ -494,7 +475,7 @@ export class DeliveryService {
           creationIdempotencyKey: idempotencyKey,
           creationPayloadHash: payloadHash,
           deliveryOrders: {
-            create: stops.map((stop) => ({
+            create: resolvedStops.map((stop) => ({
               saleId: stop.saleId,
               accountReceivableId: stop.accountReceivableId ?? null,
               deliveryAddress: stop.deliveryAddress.trim(),
@@ -511,7 +492,10 @@ export class DeliveryService {
         include: this.routeDetailInclude(),
       } as Prisma.DeliveryRouteCreateArgs)) as DeliveryRouteRecord;
       await tx.sale.updateMany({
-        where: { id: { in: stops.map((stop) => stop.saleId) }, routeId: null },
+        where: {
+          id: { in: resolvedStops.map((stop) => stop.saleId) },
+          routeId: null,
+        },
         data: { routeId: route.id },
       });
       const consumed = await tx.deliveryRoutePlanDraft.updateMany({
@@ -574,13 +558,17 @@ export class DeliveryService {
       }
 
       this.assertNoDuplicateRouteSales(route, dto.orders);
-      await this.assertAssignableSales(tx, dto.orders, route.id);
+      const orders = await this.resolveAssignableSales(
+        tx,
+        dto.orders,
+        route.id,
+      );
 
       const updated = (await tx.deliveryRoute.update({
         where: { id: route.id },
         data: {
           deliveryOrders: {
-            create: dto.orders.map((order) => ({
+            create: orders.map((order) => ({
               saleId: order.saleId,
               accountReceivableId: order.accountReceivableId ?? null,
               deliveryAddress: order.deliveryAddress.trim(),
@@ -599,14 +587,16 @@ export class DeliveryService {
               accountReceivable: {
                 select: { id: true, outstandingAmount: true },
               },
-              evidence: { select: { type: true } },
+              evidence: {
+                select: { type: true, value: true, capturedAt: true },
+              },
             },
           },
         },
       })) as DeliveryRouteRecord;
 
       await tx.sale.updateMany({
-        where: { id: { in: dto.orders.map((order) => order.saleId) } },
+        where: { id: { in: orders.map((order) => order.saleId) } },
         data: { routeId: route.id },
       });
 
@@ -681,13 +671,9 @@ export class DeliveryService {
         throw new ConflictException(
           'The reoptimization plan omits existing route stops',
         );
-      await this.assertAssignableSales(
+      const resolvedStops = await this.resolveAssignableSales(
         tx,
-        stops.map((stop) => ({
-          saleId: stop.saleId,
-          accountReceivableId: stop.accountReceivableId ?? undefined,
-          deliveryAddress: stop.deliveryAddress,
-        })),
+        stops,
         route.id,
       );
 
@@ -695,7 +681,7 @@ export class DeliveryService {
         where: { routeId: route.id },
         data: { stopSequence: null },
       });
-      for (const stop of stops.filter((candidate) =>
+      for (const stop of resolvedStops.filter((candidate) =>
         existingBySale.has(candidate.saleId),
       )) {
         await tx.deliveryOrder.update({
@@ -713,7 +699,9 @@ export class DeliveryService {
           },
         });
       }
-      const newStops = stops.filter((stop) => !existingBySale.has(stop.saleId));
+      const newStops = resolvedStops.filter(
+        (stop) => !existingBySale.has(stop.saleId),
+      );
       const updated = (await tx.deliveryRoute.update({
         where: { id: route.id },
         data: {
@@ -1007,7 +995,9 @@ export class DeliveryService {
             },
           },
           accountReceivable: { select: { id: true, outstandingAmount: true } },
-          evidence: { select: { type: true } },
+          evidence: {
+            select: { type: true, value: true, capturedAt: true },
+          },
         },
       })) as DeliveryOrderRecord;
 
@@ -1059,7 +1049,9 @@ export class DeliveryService {
             },
           },
           accountReceivable: { select: { id: true, outstandingAmount: true } },
-          evidence: { select: { type: true } },
+          evidence: {
+            select: { type: true, value: true, capturedAt: true },
+          },
         },
       })) as DeliveryOrderRecord;
 
@@ -1527,7 +1519,9 @@ export class DeliveryService {
             },
           },
           accountReceivable: { select: { id: true, outstandingAmount: true } },
-          evidence: { select: { type: true } },
+          evidence: {
+            select: { type: true, value: true, capturedAt: true },
+          },
         },
       },
     };
@@ -1638,11 +1632,9 @@ export class DeliveryService {
     }
   }
 
-  private async assertAssignableSales(
-    tx: Prisma.TransactionClient,
-    orders: CreateDeliveryRouteDto['orders'],
-    routeId?: string,
-  ) {
+  private async resolveAssignableSales<
+    T extends { saleId: string; accountReceivableId?: string | null },
+  >(tx: Prisma.TransactionClient, orders: T[], routeId?: string): Promise<T[]> {
     const saleIds = orders.map((order) => order.saleId);
     const uniqueSaleIds = [...new Set(saleIds)];
     if (uniqueSaleIds.length !== saleIds.length) {
@@ -1686,6 +1678,15 @@ export class DeliveryService {
         );
       }
     }
+
+    return orders.map((order) => {
+      const sale = salesById.get(order.saleId)!;
+      return {
+        ...order,
+        accountReceivableId:
+          order.accountReceivableId ?? sale.accountReceivable?.id ?? undefined,
+      };
+    });
   }
 
   private assertNoDuplicateRouteSales(
@@ -1775,16 +1776,20 @@ export class DeliveryService {
   }
 
   private toRouteDetail(route: DeliveryRouteRecord) {
+    const payments = route.payments ?? [];
     return {
       ...this.toRouteListItem(route),
       geometry: route.geometry ?? null,
       orders: (route.deliveryOrders ?? []).map((order) =>
-        this.toOrderResponse(order),
+        this.toOrderResponse(order, payments),
       ),
       evidenceSummary: (route.deliveryOrders ?? []).flatMap((order) =>
         (order.evidence ?? []).map((evidence) => ({
           deliveryOrderId: order.id,
+          saleNumber: order.sale?.saleNumber ?? null,
           type: evidence.type,
+          value: evidence.value ?? null,
+          capturedAt: evidence.capturedAt?.toISOString() ?? null,
         })),
       ),
       collectionsSummary: this.buildCollectionsSummary(
@@ -1794,13 +1799,23 @@ export class DeliveryService {
     };
   }
 
-  private toOrderResponse(order: DeliveryOrderRecord) {
+  private toOrderResponse(
+    order: DeliveryOrderRecord,
+    payments: PaymentSummaryRecord[] = [],
+  ) {
+    const accountReceivableId =
+      order.accountReceivableId ?? order.accountReceivable?.id ?? null;
+
     return {
       id: order.id,
       saleId: order.saleId,
       saleNumber: order.sale?.saleNumber ?? null,
       customerName: order.sale?.customer?.name ?? null,
-      accountReceivableId: order.accountReceivableId ?? null,
+      accountReceivableId,
+      outstandingAmount: accountReceivableId
+        ? this.toNumber(order.accountReceivable?.outstandingAmount)
+        : null,
+      derivedCollectedAmount: this.deriveOrderCollectedAmount(order, payments),
       status: order.status,
       deliveryAddress: order.deliveryAddress,
       latitude: order.latitude == null ? null : this.toNumber(order.latitude),
@@ -1815,6 +1830,26 @@ export class DeliveryService {
       collectionPass: order.collectionPass ?? null,
       notes: order.notes ?? null,
     };
+  }
+
+  private deriveOrderCollectedAmount(
+    order: DeliveryOrderRecord,
+    payments: PaymentSummaryRecord[],
+  ) {
+    const accountReceivableId =
+      order.accountReceivableId ?? order.accountReceivable?.id;
+    if (!accountReceivableId) return 0;
+
+    return this.roundMoney(
+      payments
+        .filter(
+          (payment) =>
+            payment.accountReceivableId === accountReceivableId &&
+            (payment.status === undefined ||
+              payment.status === PaymentStatus.APPLIED),
+        )
+        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
+    );
   }
 
   private toEvidenceResponse(evidence: DeliveryEvidenceRecord) {
@@ -1867,7 +1902,7 @@ export class DeliveryService {
       );
     }, 0);
 
-    return payments.reduce<{
+    const summary = payments.reduce<{
       expectedAmount: number;
       totalCollectedAmount: number;
       firstPassCollectedAmount: number;
@@ -1895,6 +1930,18 @@ export class DeliveryService {
         collectedByMethod: {},
       },
     );
+
+    return {
+      ...summary,
+      derivedCollectedAmount: summary.totalCollectedAmount,
+      firstPassAmount: summary.firstPassCollectedAmount,
+      secondPassAmount: summary.secondPassCollectedAmount,
+      derivedCollectedCashAmount:
+        summary.collectedByMethod[PaymentMethod.CASH] ?? 0,
+      derivedCollectedTransferAmount:
+        (summary.collectedByMethod[PaymentMethod.TRANSFER] ?? 0) +
+        (summary.collectedByMethod[PaymentMethod.DEPOSIT] ?? 0),
+    };
   }
 
   private assertReceivableCanReceiveRoutePayment(

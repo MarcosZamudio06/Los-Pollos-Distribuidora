@@ -49,6 +49,16 @@ export function orderStatusLabel(status: DeliveryOrderStatus) {
   return labels[status] ?? status;
 }
 
+export function isFinalOrderStatus(status: DeliveryOrderStatus) {
+  return [
+    "DELIVERED",
+    "NOT_DELIVERED",
+    "CANCELLED",
+    "PARTIALLY_REJECTED",
+    "RETURNED",
+  ].includes(status);
+}
+
 export function settlementStatusLabel(status: RouteSettlementStatus) {
   const labels: Record<string, string> = {
     CLOSED: "Cerrada",

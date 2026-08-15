@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
+  isFinalOrderStatus,
   orderStatusLabel,
   routeStatusLabel,
   settlementStatusLabel,
@@ -234,13 +235,7 @@ export function RouteStatusBadge({ status }: { status: DeliveryRouteStatus }) {
 }
 
 export function OrderStatusBadge({ status }: { status: DeliveryOrderStatus }) {
-  const finalState = [
-    "DELIVERED",
-    "NOT_DELIVERED",
-    "CANCELLED",
-    "PARTIALLY_REJECTED",
-    "RETURNED",
-  ].includes(status);
+  const finalState = isFinalOrderStatus(status);
   return (
     <span
       className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${finalState ? "border-[rgba(63,123,65,0.25)] bg-[rgba(63,123,65,0.10)] text-[var(--erp-success)]" : "border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]"}`}

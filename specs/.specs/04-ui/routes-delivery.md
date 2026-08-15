@@ -183,7 +183,7 @@ Validaciones:
 - La ruta debe mostrar o crear una ubicación `ROUTE_STOCK` antes de operar inventario.
 - Solo ventas confirmadas.
 - No asignar ventas canceladas.
-- Conservar `accountReceivableId` cuando exista saldo a crédito.
+- Conservar `accountReceivableId` cuando exista saldo a crédito; el backend lo deriva desde la venta si el formulario no lo envía.
 - Para asignación adicional, no permitir rutas completadas, canceladas o con liquidación abierta/cerrada.
 - No enviar ni editar `routeSettlementId` al asignar pedidos.
 - No permitir crear una ruta geoespacial sin previsualización vigente.
@@ -216,6 +216,8 @@ Debe mostrar solo rutas asignadas al usuario `DRIVER`.
 Cuando `mapAvailable=true`, debe mostrar el recorrido estático aprobado por ADMIN, el origen, el regreso al origen y las paradas según `stopSequence`. Fuera de una ruta `IN_PROGRESS`, el mapa no solicita ubicación del dispositivo ni recalcula el trayecto.
 
 Cuando la ruta está `IN_PROGRESS`, la experiencia puede solicitar al navegador/dispositivo autenticado del `DRIVER` la posición GPS inicial y publicar posiciones mediante `POST /api/fleet/positions`. El body no incluye `routeId`, `vehicleId` ni `driverId`; el backend los deriva del JWT y de la ruta activa. La captura se detiene al completar o cancelar la ruta y nunca ocurre fuera de una ruta activa. Esta capacidad no es navegación giro a giro ni rerouting.
+
+Mientras la ruta está `IN_PROGRESS`, debe mostrar la acción `Terminar ruta`. La acción solo se habilita cuando existe al menos un pedido y `pendingOrdersCount=0`, es decir, todos los pedidos están en estado final. Al confirmar, consume `PATCH /api/delivery-routes/:id/status` con `status=COMPLETED`, muestra el resultado y explica que el seguimiento GPS dejará de aceptar nuevas posiciones.
 
 Cada pedido debe mostrar:
 
@@ -338,7 +340,7 @@ No sustituye reportes operativos casi en tiempo real ni corte contable.
 ## Permisos
 
 - `ADMIN`: crear rutas, asignar pedidos, revisar evidencias e incidencias, abrir/cerrar liquidaciones.
-- `DRIVER`: consultar y actualizar rutas propias, capturar evidencia, registrar incidencias y cobros permitidos.
+- `DRIVER`: consultar y actualizar rutas propias, iniciar y terminar rutas propias según las transiciones permitidas, capturar evidencia, registrar incidencias y cobros permitidos.
 - `DRIVER`: además puede publicar posiciones únicamente con `fleet.position.publish`; nunca puede consultar el fleet map global ni usar `fleet.view`.
 - `COLLECTIONS`: consultar cobros, saldos y liquidaciones; conciliar conforme a permisos.
 - `WAREHOUSE`: consultar devoluciones o movimientos relacionados cuando afecten inventario.

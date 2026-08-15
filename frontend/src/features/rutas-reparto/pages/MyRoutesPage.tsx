@@ -14,6 +14,7 @@ import { DeliveryEvidenceCapture } from "../components/DeliveryEvidenceCapture";
 import { DeliveryIncidentDialog } from "../components/DeliveryIncidentDialog";
 import { DeliveryOrderCard } from "../components/DeliveryOrderCard";
 import { DriverRouteMap } from "../components/DriverRouteMap";
+import { RouteCompletionControl } from "../components/RouteCompletionControl";
 import { RouteLocationTrackingControl } from "../components/RouteLocationTrackingControl";
 import { RouteStartControl } from "../components/RouteStartControl";
 import {
@@ -35,7 +36,7 @@ import {
   useUpdateDeliveryRouteStatus,
 } from "../hooks";
 import { useRouteLocationTracking } from "../useRouteLocationTracking";
-import { date, money, shortId } from "../labels";
+import { date, isFinalOrderStatus, money, shortId } from "../labels";
 import type {
   DeliveryOrder,
   DeliveryRouteListItem,
@@ -53,11 +54,14 @@ function isUnauthorizedRemoteError(error: unknown) {
   );
 }
 
-function routeStatusErrorMessage(error: unknown) {
+function routeStatusErrorMessage(
+  error: unknown,
+  fallback = "No se pudo actualizar el estado de la ruta.",
+) {
   if (error instanceof ApiClientError || error instanceof Error) {
     return error.message;
   }
-  return "No se pudo iniciar la ruta.";
+  return fallback;
 }
 
 function distanceLabel(meters?: number | null) {
@@ -99,9 +103,7 @@ export function MyRoutesPage() {
   );
   const [lastCollection, setLastCollection] =
     useState<RouteCollectionResponse | null>(null);
-  const [routeStatusError, setRouteStatusError] = useState<string | null>(
-    null,
-  );
+  const [routeStatusError, setRouteStatusError] = useState<string | null>(null);
 
   const activeRouteId = selectedRouteId ?? routeItems[0]?.id;
   const route = useDeliveryRoute(activeRouteId);
@@ -110,13 +112,7 @@ export function MyRoutesPage() {
   const tracking = useRouteLocationTracking({ route: detail });
   const orders = detail?.orders ?? [];
   const finalOrders = orders.filter((order) =>
-    [
-      "DELIVERED",
-      "NOT_DELIVERED",
-      "CANCELLED",
-      "PARTIALLY_REJECTED",
-      "RETURNED",
-    ].includes(order.status),
+    isFinalOrderStatus(order.status),
   ).length;
   const routesUnauthorized = isUnauthorizedRemoteError(routes.error);
   const routeUnauthorized = isUnauthorizedRemoteError(route.error);
@@ -237,8 +233,9 @@ export function MyRoutesPage() {
                           Origen{" "}
                           {detail.originLocationName ??
                             shortId(detail.originLocationId)}{" "}
-                          · Unidad {detail.vehicle?.displayName ?? "sin asignar"}{" "}
-                          · ROUTE_STOCK{" "}
+                          · Unidad{" "}
+                          {detail.vehicle?.displayName ?? "sin asignar"} ·
+                          ROUTE_STOCK{" "}
                           {detail.routeStockLocationName ??
                             shortId(detail.routeStockLocationId)}
                         </p>
@@ -301,13 +298,41 @@ export function MyRoutesPage() {
                             status: "IN_PROGRESS",
                           });
                         } catch (error) {
-                          const message = routeStatusErrorMessage(error);
+                          const message = routeStatusErrorMessage(
+                            error,
+                            "No se pudo iniciar la ruta.",
+                          );
                           setRouteStatusError(message);
                           throw error;
                         }
                       }}
                       routeName={detail.name}
                       vehicleName={detail.vehicle?.displayName}
+                    />
+                  )}
+
+                  {detail.status === "IN_PROGRESS" && (
+                    <RouteCompletionControl
+                      completedOrders={finalOrders}
+                      error={routeStatusError}
+                      isCompleting={updateRouteStatus.isPending}
+                      onComplete={async () => {
+                        setRouteStatusError(null);
+                        try {
+                          await updateRouteStatus.mutateAsync({
+                            status: "COMPLETED",
+                          });
+                        } catch (error) {
+                          const message = routeStatusErrorMessage(
+                            error,
+                            "No se pudo terminar la ruta.",
+                          );
+                          setRouteStatusError(message);
+                          throw error;
+                        }
+                      }}
+                      routeName={detail.name}
+                      totalOrders={orders.length}
                     />
                   )}
 

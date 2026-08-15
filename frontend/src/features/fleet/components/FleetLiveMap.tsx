@@ -49,6 +49,8 @@ const sourceIds = {
   editor: "delivery-zone-editor",
 } as const;
 
+const vehicleIconImage = "car_11";
+
 const emptyData: FleetFeatureCollections = {
   vehicles: { type: "FeatureCollection", features: [] },
   routes: { type: "FeatureCollection", features: [] },
@@ -399,6 +401,8 @@ function addFleetLayers(map: MapLibreMap) {
     source: sourceIds.vehicles,
     type: "symbol",
     layout: {
+      "icon-image": vehicleIconImage,
+      "icon-size": 1.15,
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
       "text-allow-overlap": true,

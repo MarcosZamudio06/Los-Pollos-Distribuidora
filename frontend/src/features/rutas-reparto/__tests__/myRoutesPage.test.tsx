@@ -11,6 +11,8 @@ import { MyRoutesPage } from "../pages/MyRoutesPage";
 
 const mockState = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
+  routeStatus: "PENDING",
+  orders: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("../hooks", () => ({
@@ -18,7 +20,7 @@ vi.mock("../hooks", () => ({
     data: {
       id: "route-1",
       name: "Ruta Centro",
-      status: "PENDING",
+      status: mockState.routeStatus,
       scheduledDate: "2026-08-14",
       driverId: "driver-1",
       vehicleId: "vehicle-1",
@@ -31,7 +33,7 @@ vi.mock("../hooks", () => ({
       routeStockLocationId: "stock-1",
       mapAvailable: false,
       geometry: null,
-      orders: [],
+      orders: mockState.orders,
     },
     error: null,
     isLoading: false,
@@ -42,10 +44,19 @@ vi.mock("../hooks", () => ({
         {
           id: "route-1",
           name: "Ruta Centro",
-          status: "PENDING",
+          status: mockState.routeStatus,
           scheduledDate: "2026-08-14",
-          ordersCount: 0,
-          pendingOrdersCount: 0,
+          ordersCount: mockState.orders.length,
+          pendingOrdersCount: mockState.orders.filter(
+            (order) =>
+              ![
+                "DELIVERED",
+                "NOT_DELIVERED",
+                "CANCELLED",
+                "PARTIALLY_REJECTED",
+                "RETURNED",
+              ].includes(String(order.status)),
+          ).length,
         },
       ],
     },
@@ -80,6 +91,8 @@ afterEach(async () => {
   document.body.innerHTML = "";
   root = undefined;
   mockState.mutateAsync.mockReset();
+  mockState.routeStatus = "PENDING";
+  mockState.orders = [];
 });
 
 describe("MyRoutesPage route start", () => {
@@ -113,6 +126,44 @@ describe("MyRoutesPage route start", () => {
 
     expect(mockState.mutateAsync).toHaveBeenCalledWith({
       status: "IN_PROGRESS",
+    });
+  });
+
+  it("lets the assigned driver finish a route after all orders reach final status", async () => {
+    mockState.routeStatus = "IN_PROGRESS";
+    mockState.orders = [
+      { id: "order-1", saleNumber: "SALE-000001", status: "DELIVERED" },
+      { id: "order-2", saleNumber: "SALE-000002", status: "DELIVERED" },
+    ];
+    mockState.mutateAsync.mockResolvedValue({
+      id: "route-1",
+      status: "COMPLETED",
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes"]}>
+          <MyRoutesPage />
+        </MemoryRouter>,
+      );
+    });
+
+    const finishButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Terminar ruta",
+    );
+    expect(finishButton).toBeTruthy();
+
+    await act(async () => finishButton?.click());
+    const confirmButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Confirmar término",
+    );
+    await act(async () => confirmButton?.click());
+
+    expect(mockState.mutateAsync).toHaveBeenCalledWith({
+      status: "COMPLETED",
     });
   });
 });

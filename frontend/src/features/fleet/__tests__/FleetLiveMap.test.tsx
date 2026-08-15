@@ -13,6 +13,10 @@ type Source = {
 type MockMap = {
   sources: globalThis.Map<string, Source>;
   layers: string[];
+  layerDefinitions: globalThis.Map<
+    string,
+    { id: string; layout?: Record<string, unknown> }
+  >;
   fitBoundsCalls: unknown[];
   flyToCalls: unknown[];
   layoutChanges: unknown[];
@@ -95,6 +99,10 @@ const mapMock = vi.hoisted(() => {
   class MockMap {
     sources = new globalThis.Map<string, Source>();
     layers: string[] = [];
+    layerDefinitions = new globalThis.Map<
+      string,
+      { id: string; layout?: Record<string, unknown> }
+    >();
     fitBoundsCalls: unknown[] = [];
     flyToCalls: unknown[] = [];
     layoutChanges: unknown[] = [];
@@ -140,8 +148,9 @@ const mapMock = vi.hoisted(() => {
       return this.sources.get(id);
     }
 
-    addLayer(layer: { id: string }) {
+    addLayer(layer: { id: string; layout?: Record<string, unknown> }) {
       this.layers.push(layer.id);
+      this.layerDefinitions.set(layer.id, layer);
     }
 
     setCenter() {
@@ -263,6 +272,12 @@ describe("FleetLiveMap", () => {
     expect(mapMock.state.instances).toHaveLength(1);
     expect(runtimeMock.loadMapLibre).toHaveBeenCalledTimes(1);
     expect(map.hasHandler("error")).toBe(true);
+    expect(map.layerDefinitions.get("fleet-vehicles-symbol")?.layout).toEqual(
+      expect.objectContaining({
+        "icon-image": "car_11",
+        "icon-size": expect.any(Number),
+      }),
+    );
     const mapContainer = container.querySelector<HTMLElement>(
       '[aria-label="Mapa de monitoreo de flota"]',
     );

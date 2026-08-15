@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { dateTime, evidenceTypeLabel, money, shortId } from "../labels";
 import type { DeliveryOrder, EvidenceSummaryItem } from "../types";
+import { isPhotoDataUrl } from "./deliveryEvidencePhoto";
 import { Card, OrderStatusBadge, SecondaryButton } from "./RouteUi";
 
 type Props = {
@@ -145,12 +146,19 @@ export function DeliveryOrderCard({
           ) : (
             <div className="mt-2 flex flex-wrap gap-2">
               {evidenceForOrder.map((item, index) => (
-                <span
-                  className="rounded-full border border-[rgba(47,111,115,0.22)] bg-[rgba(47,111,115,0.10)] px-2.5 py-1 text-xs font-black text-[var(--erp-info)]"
+                <div
+                  className="inline-flex items-center gap-2 rounded-xl border border-[rgba(47,111,115,0.22)] bg-[rgba(47,111,115,0.10)] px-2 py-1 text-xs font-black text-[var(--erp-info)]"
                   key={`${item.type}-${item.capturedAt ?? index}`}
                 >
+                  {item.type === "PHOTO" && isPhotoDataUrl(item.value) && (
+                    <img
+                      alt="Evidencia fotográfica"
+                      className="h-10 w-10 rounded-lg object-cover"
+                      src={item.value ?? undefined}
+                    />
+                  )}
                   {evidenceTypeLabel(item.type)}
-                </span>
+                </div>
               ))}
             </div>
           )}

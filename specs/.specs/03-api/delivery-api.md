@@ -559,15 +559,17 @@ Permisos: `ADMIN`; `DRIVER` solo ruta propia; `COLLECTIONS` para cobros y saldos
 Respuesta `data`:
 
 - Encabezado de ruta, incluyendo `driverId`, `driverName`, `vehicleId` (nullable para rutas históricas o legacy no geoespaciales), `vehicleCode` cuando exista, `status`, `scheduledDate`, `originLocationId`, `startedAt` y `completedAt`.
-- `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`.
+- `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`, `outstandingAmount` y `derivedCollectedAmount`.
 - `optimizationStatus`, `mapAvailable`, `geometry`, `distanceMeters`, `durationSeconds`, `optimizedAt`, `routingProfile`, `routingDataVersion`.
-- `evidenceSummary[]`: tipos capturados por pedido.
+- `evidenceSummary[]`: `deliveryOrderId`, `saleNumber`, `type`, `value` y `capturedAt` por evidencia; cuando `type=PHOTO`, `value` puede ser una referencia/URL persistida o un `data:image/*;base64,...` acotado generado por el cliente.
 - `collectionsSummary`: montos esperados y cobrados por método, primera vuelta y segunda vuelta.
 - `routeSettlementId` si existe liquidación asociada a la ruta; `null` u omitido si la liquidación todavía no ha sido abierta o calculada.
 
 Notas:
 
 - Cualquier monto cobrado visible por pedido debe derivarse de `Payment`, no de un campo persistido en `DeliveryOrder`.
+- `orders[].outstandingAmount` representa el saldo actual de la cuenta por cobrar asociada y `orders[].derivedCollectedAmount` suma los `Payment` aplicados a esa cuenta dentro de la ruta.
+- `collectionsSummary.derivedCollectedAmount`, `firstPassAmount`, `secondPassAmount`, `derivedCollectedCashAmount` y `derivedCollectedTransferAmount` son aliases de lectura compatibles con la UI; todos se derivan de `Payment`.
 - Para rutas optimizadas, `orders[]` se devuelve por `stopSequence` ascendente.
 - Para rutas históricas sin geometría, `mapAvailable=false`, los campos geoespaciales pueden ser `null` u omitirse y el contrato textual permanece vigente.
 
@@ -628,7 +630,7 @@ Validaciones:
 - La ruta debe crear o asociar una `OperationalLocation` de tipo `ROUTE_STOCK`.
 - Solo ventas confirmadas pueden asignarse.
 - No asignar ventas canceladas.
-- Si la venta tiene saldo a crédito, el pedido debe poder relacionarse con `accountReceivableId`.
+- Si la venta tiene una CxC, el backend vincula automáticamente su `accountReceivableId` al pedido cuando el body lo omite; si se proporciona, debe pertenecer a la venta asignada.
 - `originLocationId` debe conservarse cuando la ruta salga de una ubicación operativa definida.
 - `orders[]` puede contener ventas pagadas al entregar, ventas a crédito y ventas con cobranza posterior.
 - Las ventas de canal `ROUTE` deben usar `routeStockLocationId` como ubicación operativa de descuento.
@@ -676,7 +678,7 @@ Validaciones:
 - No asignar ventas canceladas.
 - No asignar ventas duplicadas dentro de la misma ruta.
 - No asignar ventas que ya pertenezcan a otra ruta.
-- Si la venta tiene saldo a crédito, el pedido debe conservar `accountReceivableId`.
+- Si la venta tiene una CxC, el backend conserva o deriva automáticamente su `accountReceivableId`; un valor proporcionado que pertenezca a otra venta se rechaza.
 - `routeSettlementId` no se acepta en el body; la liquidación se abre/calcula mediante `route-settlements-api.md`.
 - Una ruta optimizada debe reemplazar secuencia, geometría y métricas en la misma transacción que agrega los pedidos; nunca puede quedar con un mapa obsoleto.
 
@@ -779,7 +781,7 @@ Body importante:
 ```json
 {
   "type": "PHOTO",
-  "value": "referencia-o-url-interna",
+  "value": "referencia-o-url-interna-o-data-url-de-imagen",
   "capturedAt": "2026-06-19T12:05:00.000Z"
 }
 ```
@@ -790,6 +792,7 @@ Validaciones:
 
 - `type` requerido: `PHOTO`, `SIGNATURE`, `GEOLOCATION`, `NOTE`.
 - `capturedAt` requerido.
+- Para evidencia `PHOTO`, el cliente puede capturar una imagen del dispositivo, comprimirla y enviar un `data:image/jpeg;base64,...` acotado dentro de `value`; el cliente debe mantenerlo por debajo del límite JSON del API.
 - La combinación obligatoria de evidencia queda pendiente de negocio; no inventar obligatoriedad final.
 
 ## POST /api/delivery-orders/:id/collections

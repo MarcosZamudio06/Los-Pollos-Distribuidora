@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
+import { preparePhotoEvidence, isPhotoDataUrl } from "./deliveryEvidencePhoto";
 import { useCreateDeliveryEvidence } from "../hooks";
 import { evidenceTypeLabel } from "../labels";
 import type { DeliveryOrder, EvidenceType } from "../types";
@@ -35,9 +36,40 @@ type Props = {
 export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
   const [type, setType] = useState<EvidenceType>("PHOTO");
   const [value, setValue] = useState("");
+  const [photoFileName, setPhotoFileName] = useState("");
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [capturedAt, setCapturedAt] = useState(nowForInput());
   const createEvidence = useCreateDeliveryEvidence(routeId);
   const canSubmit = Boolean(value.trim() && capturedAt);
+
+  function handleTypeChange(nextType: EvidenceType) {
+    setType(nextType);
+    setValue("");
+    setPhotoFileName("");
+    setPhotoError(null);
+  }
+
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setPhotoError(null);
+    setPhotoFileName(file?.name ?? "");
+    setValue("");
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      setValue(await preparePhotoEvidence(file));
+    } catch (error) {
+      setValue("");
+      setPhotoFileName("");
+      event.target.value = "";
+      setPhotoError(
+        error instanceof Error ? error.message : "No se pudo preparar la foto.",
+      );
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -87,7 +119,7 @@ export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <Field label="Tipo de evidencia">
             <SelectInput
-              onChange={(event) => setType(event.target.value)}
+              onChange={(event) => handleTypeChange(event.target.value)}
               value={type}
             >
               {evidenceTypes.map((item) => (
@@ -105,18 +137,53 @@ export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
               value={capturedAt}
             />
           </Field>
-          <Field
-            label="Referencia o valor"
-            hint="Puede ser una referencia interna, URL, firma textual, coordenada o nota según el tipo."
-          >
-            <TextInput
-              onChange={(event) => setValue(event.target.value)}
-              placeholder="Referencia de evidencia"
-              required
-              value={value}
-            />
-          </Field>
+          {type === "PHOTO" ? (
+            <Field
+              label="Foto de entrega"
+              hint="Selecciona una foto del dispositivo. Se comprime antes de enviarse para respetar el límite de la API."
+            >
+              <input
+                accept="image/*"
+                aria-label="Foto de entrega"
+                capture="environment"
+                className="h-10 w-full rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3.5 py-2 text-sm text-[var(--erp-foreground)] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--erp-info)] file:px-3 file:py-1 file:text-xs file:font-black file:text-white"
+                onChange={(event) => void handlePhotoChange(event)}
+                required
+                type="file"
+              />
+              {photoFileName && (
+                <span className="text-xs font-semibold normal-case tracking-normal text-[var(--erp-info)]">
+                  {photoFileName}
+                </span>
+              )}
+              {value && isPhotoDataUrl(value) && (
+                <img
+                  alt="Vista previa de la evidencia fotográfica"
+                  className="h-40 w-full rounded-xl border border-[color:var(--erp-border)] object-cover"
+                  src={value}
+                />
+              )}
+            </Field>
+          ) : (
+            <Field
+              label="Referencia o valor"
+              hint="Puede ser una referencia interna, URL, firma textual, coordenada o nota según el tipo."
+            >
+              <TextInput
+                onChange={(event) => setValue(event.target.value)}
+                placeholder="Referencia de evidencia"
+                required
+                value={value}
+              />
+            </Field>
+          )}
         </div>
+
+        {photoError && (
+          <div className="mt-4">
+            <StatusMessage tone="error">{photoError}</StatusMessage>
+          </div>
+        )}
 
         {createEvidence.error && (
           <div className="mt-4">
