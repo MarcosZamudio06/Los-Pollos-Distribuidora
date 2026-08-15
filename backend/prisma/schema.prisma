@@ -487,6 +487,7 @@ model User {
   issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
   grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
   authSessions                    AuthSession[]
+  capturedDeliveryEvidence         DeliveryEvidence[]           @relation("DeliveryEvidenceCapturedBy")
 
   @@index([deactivatedByUserId])
   @@index([operationalLocationId])
@@ -1452,14 +1453,25 @@ model DeliveryOrder {
 }
 
 model DeliveryEvidence {
-  id              String               @id @default(cuid())
-  deliveryOrderId String
-  type            DeliveryEvidenceType
-  value           String
-  capturedAt      DateTime
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  deliveryOrder   DeliveryOrder        @relation(fields: [deliveryOrderId], references: [id])
+  id               String               @id @default(cuid())
+  deliveryOrderId  String
+  type             DeliveryEvidenceType
+  value            String?
+  storageKey       String?              @unique
+  mimeType         String?
+  sha256           String?
+  sizeBytes        Int?
+  capturedAt       DateTime
+  receivedAt       DateTime?
+  capturedByUserId String?
+  metadata         Json?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  deliveryOrder    DeliveryOrder        @relation(fields: [deliveryOrderId], references: [id])
+  capturedBy       User?                @relation("DeliveryEvidenceCapturedBy", fields: [capturedByUserId], references: [id])
+
+  @@index([capturedByUserId, receivedAt])
+  @@index([sha256])
 }
 
 model RouteSettlement {

@@ -150,11 +150,12 @@ export function DeliveryOrderCard({
                   className="inline-flex items-center gap-2 rounded-xl border border-[rgba(47,111,115,0.22)] bg-[rgba(47,111,115,0.10)] px-2 py-1 text-xs font-black text-[var(--erp-info)]"
                   key={`${item.type}-${item.capturedAt ?? index}`}
                 >
-                  {item.type === "PHOTO" && isPhotoDataUrl(item.value) && (
+                  {item.type === "PHOTO" &&
+                    (item.contentUrl || isPhotoDataUrl(item.value)) && (
                     <img
                       alt="Evidencia fotográfica"
                       className="h-10 w-10 rounded-lg object-cover"
-                      src={item.value ?? undefined}
+                      src={item.contentUrl ?? item.value ?? undefined}
                     />
                   )}
                   {evidenceTypeLabel(item.type)}

@@ -108,9 +108,9 @@ export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
               Capturar evidencia
             </h2>
             <p className="mt-2 text-sm leading-6 text-[#6f786f]">
-              Venta {order.saleNumber ?? order.saleId ?? order.id}. La
-              combinación obligatoria queda pendiente de negocio; aquí se
-              registra una evidencia permitida.
+              Venta {order.saleNumber ?? order.saleId ?? order.id}. Para marcar
+              el pedido como entregado se requieren una foto y una
+              geolocalización; firma y nota son opcionales.
             </p>
           </div>
           <SecondaryButton onClick={onClose}>Cerrar</SecondaryButton>

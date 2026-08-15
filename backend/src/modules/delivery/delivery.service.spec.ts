@@ -63,9 +63,25 @@ type MockPrisma = {
   $transaction: jest.Mock;
 };
 
+type MockObjectStorage = {
+  isConfigured: jest.Mock;
+  putObject: jest.Mock;
+  deleteObject: jest.Mock;
+  getDownloadUrl: jest.Mock;
+};
+
 const admin = { id: 'admin-1', role: 'ADMIN' };
 const seller = { id: 'seller-1', role: 'SELLER' };
 const driver = { id: 'driver-1', role: 'DRIVER' };
+const ONE_BY_ONE_PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+function pngDataUrlWithDimensions(width: number, height: number) {
+  const bytes = Buffer.from(ONE_BY_ONE_PNG_DATA_URL.split(',')[1], 'base64');
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return `data:image/png;base64,${bytes.toString('base64')}`;
+}
 
 function date(value: string) {
   return new Date(value);
@@ -187,17 +203,31 @@ function createPrisma(): MockPrisma {
   return prisma;
 }
 
+function createObjectStorage(): MockObjectStorage {
+  return {
+    isConfigured: jest.fn().mockReturnValue(true),
+    putObject: jest.fn().mockResolvedValue(undefined),
+    deleteObject: jest.fn().mockResolvedValue(undefined),
+    getDownloadUrl: jest
+      .fn()
+      .mockImplementation((key: string) => `https://objects.test/${key}`),
+  };
+}
+
 function createService(
   prisma = createPrisma(),
   fleetGateway?: { emitIncidentCreated: jest.Mock },
+  objectStorage = createObjectStorage(),
 ) {
   return {
     service: new DeliveryService(
       prisma as unknown as PrismaService,
       new InventoryBalanceService(),
       fleetGateway as never,
+      objectStorage as never,
     ),
     prisma,
+    objectStorage,
   };
 }
 
@@ -1254,8 +1284,16 @@ describe('DeliveryService', () => {
             evidence: [
               {
                 type: DeliveryEvidenceType.PHOTO,
-                value: 'data:image/jpeg;base64,photo',
+                value: ONE_BY_ONE_PNG_DATA_URL,
                 capturedAt,
+                storageKey: null,
+                mimeType: 'image/png',
+                sha256:
+                  '431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460',
+                sizeBytes: 68,
+                receivedAt: date('2026-06-19T12:06:00.000Z'),
+                capturedByUserId: driver.id,
+                metadata: { source: 'data-url', width: 1, height: 1 },
               },
             ],
           }),
@@ -1305,8 +1343,16 @@ describe('DeliveryService', () => {
       expect.objectContaining({
         deliveryOrderId: 'order-1',
         type: DeliveryEvidenceType.PHOTO,
-        value: 'data:image/jpeg;base64,photo',
+        value: ONE_BY_ONE_PNG_DATA_URL,
         capturedAt: capturedAt.toISOString(),
+        storageKey: null,
+        mimeType: 'image/png',
+        sha256:
+          '431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460',
+        sizeBytes: 68,
+        receivedAt: '2026-06-19T12:06:00.000Z',
+        capturedByUserId: driver.id,
+        metadata: { source: 'data-url', width: 1, height: 1 },
       }),
     ]);
     expect(result.collectionsSummary).toEqual(
@@ -1357,9 +1403,54 @@ describe('DeliveryService', () => {
     );
   });
 
+  it('exposes a signed read URL for object-backed delivery photos', async () => {
+    const { service, prisma, objectStorage } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [
+          createOrder({
+            evidence: [
+              {
+                id: 'evidence-1',
+                type: DeliveryEvidenceType.PHOTO,
+                value: null,
+                storageKey: 'evidence/2026/08/15/order-1/evidence-1.jpg',
+                mimeType: 'image/jpeg',
+                sha256: 'a'.repeat(64),
+                sizeBytes: 64,
+                capturedAt: date('2026-08-15T12:00:00.000Z'),
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const result = await service.findRoute('route-1', driver);
+
+    expect(result.evidenceSummary).toEqual([
+      expect.objectContaining({
+        id: 'evidence-1',
+        value: null,
+        storageKey: 'evidence/2026/08/15/order-1/evidence-1.jpg',
+        contentUrl: expect.stringContaining('https://objects.test/evidence/'),
+      }),
+    ]);
+    expect(objectStorage.getDownloadUrl).toHaveBeenCalledWith(
+      'evidence/2026/08/15/order-1/evidence-1.jpg',
+    );
+  });
+
   it('lets a DRIVER deliver only an assigned order and stores deliveredAt and deliveredByUserId', async () => {
     const { service, prisma } = createService();
-    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.deliveryOrder.findFirst.mockResolvedValue(
+      createOrder({
+        evidence: [
+          { type: DeliveryEvidenceType.PHOTO },
+          { type: DeliveryEvidenceType.GEOLOCATION },
+        ],
+      }),
+    );
     prisma.deliveryOrder.update.mockResolvedValue(
       createOrder({
         status: DeliveryOrderStatus.DELIVERED,
@@ -1400,6 +1491,24 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+  });
+
+  it('rejects DELIVERED when required delivery evidence is missing', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+
+    await expect(
+      service.updateOrderStatus(
+        'order-1',
+        {
+          status: DeliveryOrderStatus.DELIVERED,
+          deliveredAt: '2026-06-19T12:00:00.000Z',
+        },
+        driver,
+      ),
+    ).rejects.toThrow('DELIVERED requires PHOTO and GEOLOCATION evidence');
+
+    expect(prisma.deliveryOrder.update).not.toHaveBeenCalled();
   });
 
   it('requires notes for return, partial rejection, or non-delivery incident statuses', async () => {
@@ -1450,24 +1559,25 @@ describe('DeliveryService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('captures optional delivery evidence without imposing a pending business-required combination', async () => {
-    const { service, prisma } = createService();
+  it('captures an allowed delivery evidence record', async () => {
+    const { service, prisma, objectStorage } = createService();
+    const capturedAt = new Date(Date.now() - 60_000);
     prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
-    prisma.deliveryEvidence.create.mockResolvedValue({
-      id: 'evidence-1',
-      deliveryOrderId: 'order-1',
-      type: DeliveryEvidenceType.PHOTO,
-      value: 'internal-photo-ref',
-      capturedAt: date('2026-06-19T12:05:00.000Z'),
-    });
+    prisma.deliveryEvidence.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({
+          id: 'evidence-1',
+          ...data,
+        }),
+    );
 
     await expect(
       service.captureEvidence(
         'order-1',
         {
           type: DeliveryEvidenceType.PHOTO,
-          value: 'internal-photo-ref',
-          capturedAt: '2026-06-19T12:05:00.000Z',
+          value: ONE_BY_ONE_PNG_DATA_URL,
+          capturedAt: capturedAt.toISOString(),
         },
         driver,
       ),
@@ -1475,8 +1585,19 @@ describe('DeliveryService', () => {
       id: 'evidence-1',
       deliveryOrderId: 'order-1',
       type: DeliveryEvidenceType.PHOTO,
-      value: 'internal-photo-ref',
-      capturedAt: '2026-06-19T12:05:00.000Z',
+      value: null,
+      mimeType: 'image/png',
+      sha256:
+        '431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460',
+      sizeBytes: 68,
+      storageKey: expect.stringMatching(
+        /^evidence\/\d{4}\/\d{2}\/\d{2}\/order-1\/.+\.png$/,
+      ),
+      contentUrl: expect.stringContaining('https://objects.test/evidence/'),
+      receivedAt: expect.any(String),
+      capturedByUserId: driver.id,
+      metadata: { source: 'data-url', width: 1, height: 1 },
+      capturedAt: capturedAt.toISOString(),
     });
 
     expect(prisma.deliveryOrder.findFirst).toHaveBeenCalledWith(
@@ -1488,10 +1609,217 @@ describe('DeliveryService', () => {
       data: {
         deliveryOrderId: 'order-1',
         type: DeliveryEvidenceType.PHOTO,
-        value: 'internal-photo-ref',
-        capturedAt: date('2026-06-19T12:05:00.000Z'),
+        value: null,
+        mimeType: 'image/png',
+        sha256:
+          '431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460',
+        sizeBytes: 68,
+        storageKey: expect.stringMatching(
+          /^evidence\/\d{4}\/\d{2}\/\d{2}\/order-1\/.+\.png$/,
+        ),
+        receivedAt: expect.any(Date),
+        capturedByUserId: driver.id,
+        metadata: { source: 'data-url', width: 1, height: 1 },
+        capturedAt,
       },
     });
+    expect(objectStorage.putObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: expect.stringMatching(
+          /^evidence\/\d{4}\/\d{2}\/\d{2}\/order-1\/.+\.png$/,
+        ),
+        body: Buffer.from(ONE_BY_ONE_PNG_DATA_URL.split(',')[1], 'base64'),
+        contentType: 'image/png',
+        checksumSha256: expect.any(String),
+      }),
+    );
+    expect(objectStorage.getDownloadUrl).toHaveBeenCalled();
+  });
+
+  it('rejects PHOTO evidence that is not a real image data URL', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.PHOTO,
+          value: 'esto-no-es-una-foto',
+          capturedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+        driver,
+      ),
+    ).rejects.toThrow('PHOTO evidence must be a valid image data URL');
+
+    expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when Object Storage is not configured for a PHOTO', async () => {
+    const objectStorage = createObjectStorage();
+    objectStorage.isConfigured.mockReturnValue(false);
+    const { service, prisma } = createService(
+      undefined,
+      undefined,
+      objectStorage,
+    );
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.PHOTO,
+          value: ONE_BY_ONE_PNG_DATA_URL,
+          capturedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+        driver,
+      ),
+    ).rejects.toThrow('Delivery evidence storage is not configured');
+
+    expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+    expect(objectStorage.putObject).not.toHaveBeenCalled();
+  });
+
+  it('cleans up the object when the evidence row cannot be created', async () => {
+    const { service, prisma, objectStorage } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.deliveryEvidence.create.mockRejectedValue(
+      new Error('database unavailable'),
+    );
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.PHOTO,
+          value: ONE_BY_ONE_PNG_DATA_URL,
+          capturedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+        driver,
+      ),
+    ).rejects.toThrow('database unavailable');
+
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^evidence\/\d{4}\/\d{2}\/\d{2}\/order-1\/.+\.png$/,
+      ),
+    );
+  });
+
+  it('captures non-photo evidence without photo integrity fields', async () => {
+    const { service, prisma } = createService();
+    const capturedAt = new Date(Date.now() - 60_000);
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.deliveryEvidence.create.mockResolvedValue({
+      id: 'evidence-note-1',
+      deliveryOrderId: 'order-1',
+      type: DeliveryEvidenceType.NOTE,
+      value: 'Cliente recibió el pedido',
+      mimeType: null,
+      sha256: null,
+      sizeBytes: null,
+      storageKey: null,
+      receivedAt: new Date(),
+      capturedByUserId: driver.id,
+      metadata: null,
+      capturedAt,
+    });
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.NOTE,
+          value: 'Cliente recibió el pedido',
+          capturedAt: capturedAt.toISOString(),
+        },
+        driver,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        type: DeliveryEvidenceType.NOTE,
+        mimeType: null,
+        sha256: null,
+        sizeBytes: null,
+        capturedByUserId: driver.id,
+      }),
+    );
+
+    expect(prisma.deliveryEvidence.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: DeliveryEvidenceType.NOTE,
+        value: 'Cliente recibió el pedido',
+        mimeType: null,
+        sha256: null,
+        sizeBytes: null,
+        storageKey: null,
+        capturedByUserId: driver.id,
+        metadata: Prisma.JsonNull,
+        capturedAt,
+      }),
+    });
+  });
+
+  it('rejects PHOTO evidence when the declared MIME differs from its bytes', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.PHOTO,
+          value: ONE_BY_ONE_PNG_DATA_URL.replace('image/png', 'image/jpeg'),
+          capturedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+        driver,
+      ),
+    ).rejects.toThrow(
+      'PHOTO evidence MIME type does not match its binary content',
+    );
+
+    expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects PHOTO evidence outside the server dimension limit', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.PHOTO,
+          value: pngDataUrlWithDimensions(4097, 1),
+          capturedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+        driver,
+      ),
+    ).rejects.toThrow(
+      'PHOTO evidence dimensions must be between 1 and 4096 pixels',
+    );
+
+    expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects evidence captured too far in the future', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+
+    await expect(
+      service.captureEvidence(
+        'order-1',
+        {
+          type: DeliveryEvidenceType.NOTE,
+          value: 'Cliente recibió el pedido',
+          capturedAt: new Date(Date.now() + 6 * 60_000).toISOString(),
+        },
+        driver,
+      ),
+    ).rejects.toThrow('capturedAt cannot be more than 5 minutes in the future');
+
+    expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
   });
 
   it('registers a route collection only against the order receivable and applies the payment to one account', async () => {

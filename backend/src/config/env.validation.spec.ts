@@ -81,7 +81,9 @@ describe('validateEnvironment', () => {
       validateEnvironment({ VROOM_URL: 'https://user:pass@vroom.internal' }),
     ).toThrow('VROOM_URL must not include URL credentials');
     expect(() =>
-      validateEnvironment({ MAP_TILES_URL: 'https://user:pass@tiles.internal' }),
+      validateEnvironment({
+        MAP_TILES_URL: 'https://user:pass@tiles.internal',
+      }),
     ).toThrow('MAP_TILES_URL must not include URL credentials');
     expect(() =>
       validateEnvironment({ MAP_DATA_PREPARED_AT: 'not-a-date' }),
@@ -194,6 +196,7 @@ describe('validateEnvironment', () => {
         JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
         NODE_ENV: 'production',
         PORT: '4000',
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
       }),
     ).toEqual(
       expect.objectContaining({
@@ -224,5 +227,43 @@ describe('validateEnvironment', () => {
         NODE_ENV: 'production',
       }),
     ).toThrow('DATABASE_URL must use the PostgreSQL protocol');
+  });
+
+  it('requires production object storage and validates its credentials as a pair', () => {
+    const productionEnvironment = {
+      DATABASE_URL:
+        'postgresql://user:password@database:5432/app?sslmode=verify-full',
+      JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+      JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+      NODE_ENV: 'production',
+    };
+
+    expect(() => validateEnvironment(productionEnvironment)).toThrow(
+      'OBJECT_STORAGE_BUCKET is required when NODE_ENV=production',
+    );
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment,
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+        OBJECT_STORAGE_ACCESS_KEY_ID: 'access-key',
+      }),
+    ).toThrow(
+      'OBJECT_STORAGE_ACCESS_KEY_ID and OBJECT_STORAGE_SECRET_ACCESS_KEY must be provided together',
+    );
+    expect(
+      validateEnvironment({
+        ...productionEnvironment,
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+        OBJECT_STORAGE_ENDPOINT: 'https://objects.example.com',
+        OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
+        OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS: '600',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+        OBJECT_STORAGE_FORCE_PATH_STYLE: true,
+        OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS: 600,
+      }),
+    );
   });
 });

@@ -177,7 +177,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Restringir `DRIVER` a rutas y pedidos propios.
 - Registrar `deliveredAt` al marcar entregado.
 - Requerir motivo para no entrega, devolución, rechazo parcial o incidencia.
-- Aceptar evidencia de tipos permitidos sin imponer combinación final no definida.
+- Aceptar evidencia de tipos permitidos y validar server-side la integridad de `PHOTO`, sin confiar en la compresión del frontend.
 - Registrar cobro en ruta solo con saldo por cobrar, política permitida y `accountReceivableId`.
 - Derivar montos cobrados por pedido y liquidación únicamente desde `Payment`.
 - Rechazar cobro en ruta mayor al saldo pendiente.
@@ -189,7 +189,9 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Verificar ausencia de doble decremento entre carga y venta.
 - Verificar idempotencia en creación, confirmación y cancelación de traspasos.
 - Verificar idempotencia en apertura/cálculo, cierre y reapertura de liquidación.
-- Pendiente/condicional: obligatoriedad de evidencia y tolerancias de merma/devolución quedan bloqueadas hasta decisión formal.
+- Verificar que el backend rechace `DELIVERED` si el pedido no tiene evidencia `PHOTO` y `GEOLOCATION`.
+- Verificar que el backend rechace una `PHOTO` inválida, un MIME/signature mismatch, una imagen fuera de tamaño/dimensiones y un `capturedAt` fuera de ventana.
+- Verificar que una `PHOTO` válida persista hash, MIME, tamaño, metadata, `receivedAt` y `capturedByUserId` del actor autenticado.
 
 ### Gobierno documental y concurrencia
 
@@ -268,7 +270,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - El contrato API correspondiente de rutas crea ruta solo con ventas confirmadas.
 - El contrato API correspondiente de rutas filtra rutas propias para `DRIVER`.
 - El contrato API correspondiente de estado de pedidos impide que un repartidor actualice pedido ajeno.
-- El contrato API correspondiente de evidencia registra evidencia permitida sin imponer combinación pendiente.
+- El contrato API correspondiente de evidencia registra tipos permitidos, valida la integridad de `PHOTO` en backend, sube el binario a Object Storage y devuelve su trazabilidad de recepción, captura y lectura firmada.
 - El contrato API correspondiente de cobros en ruta registra pago con `accountReceivableId` y ruta; asocia `routeSettlementId` solo si ya existe liquidación.
 - El contrato API correspondiente de liquidación calcula esperado, cobrado y diferencias.
 - El contrato API correspondiente de cierre de liquidación valida pedidos sin estado final, diferencias y permisos.
@@ -331,7 +333,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Administrador crea ruta solo con repartidor, fecha y pedidos válidos.
 - Repartidor solo visualiza rutas propias.
 - Actualizar pedido a entregado exige fecha/hora cuando aplique.
-- Evidencia permite tipo foto, firma, geolocalización o nota, sin imponer combinación final pendiente.
+- Evidencia permite tipo foto, firma, geolocalización o nota; `PHOTO` tiene validación server-side, persistencia en Object Storage y la revisión expone su actor, locator y metadatos de integridad.
 - Cobro en ruta exige cuenta por cobrar, monto, método y saldo suficiente.
 - Vista de liquidación muestra esperados, cobrados, diferencias, pagos con cuenta por cobrar y estado.
 - UI no solicita ni permite editar manualmente `routeSettlementId` en creación de ruta, evidencia, incidencias o cobros.
@@ -392,7 +394,6 @@ Las siguientes pruebas no deben inventar comportamiento final. Deben marcarse co
 - Política exacta de redondeo para kilos, piezas, equivalencias, precios, subtotales, saldos y pagos.
 - Responsable y flujo final de aprobación/modificación de equivalencias kilo-pieza.
 - Tolerancias de merma, diferencia de peso, devolución y rechazo parcial.
-- Combinación obligatoria de evidencia de entrega.
 - Alcance de autorizaciones comerciales para descuentos, crédito y excepciones administrativas.
 
 ## Criterios mínimos antes de producción

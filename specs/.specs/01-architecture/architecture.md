@@ -132,7 +132,6 @@ Estas decisiones no deben resolverse por implementación sin aprobación de nego
 - Política exacta de redondeo para kilos, piezas, equivalencias, precios, subtotales, saldos y pagos.
 - Tolerancias de merma, diferencia de peso, devolución, rechazo parcial e incidencias de reparto.
 - Requisito offline de la experiencia móvil de choferes y ventana máxima de operación sin sincronización.
-- Combinación obligatoria de evidencia de entrega: foto, firma, geolocalización, notas u otros elementos.
 - Profundidad de preparación para CFDI/SAT futuro sin emitir facturas fiscales en el MVP.
 
 Hasta cerrar estas decisiones, los módulos deben diseñarse con campos y relaciones que permitan trazabilidad, pero no deben inventar reglas finales de cálculo, obligatoriedad o autorización. La configuración de bancos y medios de pago puede vivir como catálogo administrable, pero su lista final sigue abierta.
@@ -293,6 +292,20 @@ Reglas estructurales:
 - No existe doble decremento entre carga a ruta y venta en ruta.
 - Toda devolución o rechazo con impacto físico debe conservar `locationId` y referencia de ruta.
 - `RouteSettlement` concilia diferencias; no reemplaza `InventoryTransfer` ni `InventoryMovement`.
+
+## 13.2 Integridad de evidencia de entrega
+
+`DeliveryEvidence` mantiene la evidencia operativa y su procedencia dentro del
+agregado de `DeliveryOrder`. Para `PHOTO`, la frontera de confianza es el
+backend: valida el data URL base64, la firma binaria y el MIME, limita tamaño y
+dimensiones, valida la ventana de `capturedAt` y deriva `sha256` y metadatos.
+
+Cada nueva captura registra `receivedAt` y `capturedByUserId` desde el actor
+autenticado. El backend decodifica la foto y la entrega a un adaptador S3-
+compatible de Object Storage; PostgreSQL conserva `storageKey`, `mimeType`,
+`sha256`, `sizeBytes` y `metadata`, pero no el Base64. `value` queda nullable
+para conservar compatibilidad temporal con filas históricas; esas filas deben
+ser migradas con `evidence:migrate-to-object-storage` antes de producción.
 
 ## 14. Módulo de cierre diario de punto de venta
 

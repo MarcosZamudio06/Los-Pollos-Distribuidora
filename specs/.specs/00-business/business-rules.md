@@ -138,7 +138,8 @@
 - El repartidor solo puede actualizar pedidos asignados a su usuario.
 - La entrega debe registrar fecha y hora.
 - La evidencia de entrega forma parte del alcance operativo del MVP para pedidos de reparto.
-- La evidencia puede incluir fotografía, firma, geolocalización, notas de incidencia o combinación de estos elementos; la obligatoriedad exacta queda pendiente de decisión de negocio.
+- Para marcar un pedido como entregado, la evidencia `PHOTO` y `GEOLOCATION` es obligatoria; `SIGNATURE` y `NOTE` son opcionales y no sustituyen esos requisitos.
+- La evidencia fotográfica se valida en backend y conserva hash, recepción y usuario capturador; la preparación del cliente no constituye prueba de integridad.
 - El chofer debe poder registrar entrega, no entrega, devolución, rechazo parcial o incidencia.
 - El chofer debe poder registrar cobros recibidos en ruta cuando el pedido tenga saldo por cobrar y la política del negocio lo permita.
 - La cobranza puede ocurrir en una segunda vuelta por el mismo u otro repartidor, y debe conservar esa trazabilidad.

@@ -32,7 +32,6 @@ Estas decisiones bloquean el esquema definitivo y deben permanecer visibles hast
 - Política exacta de redondeo para kilos, piezas, equivalencias, subtotales, saldos y pagos.
 - Tolerancias de merma, diferencia de peso, devolución y rechazo parcial.
 - Requisito offline de choferes y datos que podrían requerir sincronización local.
-- Combinación obligatoria de evidencia de entrega.
 - Profundidad de preparación de datos para CFDI/SAT futuro sin implementar emisión fiscal en MVP.
 
 ## Separación de modelo estructural y configuración administrativa
@@ -1161,8 +1160,16 @@ Campos:
 - deliveryOrderId
 - type
 - value
+- storageKey
+- mimeType
+- sha256
+- sizeBytes
 - capturedAt
+- receivedAt
+- capturedByUserId
+- metadata
 - createdAt
+- updatedAt
 
 Tipos sugeridos:
 
@@ -1173,7 +1180,10 @@ Tipos sugeridos:
 
 Notas:
 
-- La combinación obligatoria de evidencia queda pendiente de decisión de negocio.
+- Para marcar un pedido como `DELIVERED`, el backend debe encontrar al menos una evidencia `PHOTO` y una `GEOLOCATION` asociadas al pedido.
+- Para `PHOTO`, el backend valida el data URL, el MIME declarado contra la firma binaria, el tamaño, las dimensiones y calcula `sha256`; la compresión del frontend no es una frontera de seguridad.
+- `receivedAt`, `capturedByUserId` y los metadatos de integridad los determina el backend. Los campos pueden ser nulos en registros históricos cuyo origen no pueda reconstruirse; las nuevas capturas deben guardar el usuario autenticado.
+- Las nuevas fotos se almacenan en Object Storage y `storageKey` es la referencia canónica. `mimeType`, `sha256`, `sizeBytes` y `metadata` quedan en PostgreSQL; `value` es nullable y solo conserva temporalmente el data URL de filas históricas pendientes de migración.
 - Si se exige operación offline, puede requerirse identificador temporal de cliente móvil y metadatos de sincronización; no debe asumirse hasta cerrar la decisión.
 
 ### RouteSettlement

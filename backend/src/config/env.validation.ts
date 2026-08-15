@@ -194,6 +194,26 @@ export function validateEnvironment(env: EnvironmentVariables) {
   const vroomUrl = parseOptionalHttpUrl(env, 'VROOM_URL');
   const osrmUrl = parseOptionalHttpUrl(env, 'OSRM_URL');
   const mapTilesUrl = parseOptionalHttpUrl(env, 'MAP_TILES_URL');
+  const objectStorageBucket = env.OBJECT_STORAGE_BUCKET?.trim() || undefined;
+  const objectStorageRegion = env.OBJECT_STORAGE_REGION?.trim() || 'us-east-1';
+  const objectStorageEndpoint = parseOptionalHttpUrl(
+    env,
+    'OBJECT_STORAGE_ENDPOINT',
+  );
+  const objectStorageAccessKeyId =
+    env.OBJECT_STORAGE_ACCESS_KEY_ID?.trim() || undefined;
+  const objectStorageSecretAccessKey =
+    env.OBJECT_STORAGE_SECRET_ACCESS_KEY?.trim() || undefined;
+  const objectStorageForcePathStyle = parseBoolean(
+    env,
+    'OBJECT_STORAGE_FORCE_PATH_STYLE',
+    false,
+  );
+  const objectStorageSignedUrlTtlSeconds = parseInteger(
+    env,
+    'OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS',
+    300,
+  );
 
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
@@ -242,7 +262,6 @@ export function validateEnvironment(env: EnvironmentVariables) {
   if (nodeEnv === 'production' && swaggerEnabled) {
     throw new Error('SWAGGER_ENABLED cannot be true when NODE_ENV=production');
   }
-
   let jwtAccessSecret = env.JWT_ACCESS_SECRET?.trim();
   let jwtRefreshSecret = env.JWT_REFRESH_SECRET?.trim();
 
@@ -277,6 +296,20 @@ export function validateEnvironment(env: EnvironmentVariables) {
     }
   }
 
+  if (nodeEnv === 'production' && !objectStorageBucket) {
+    throw new Error(
+      'OBJECT_STORAGE_BUCKET is required when NODE_ENV=production',
+    );
+  }
+  if (
+    (objectStorageAccessKeyId && !objectStorageSecretAccessKey) ||
+    (!objectStorageAccessKeyId && objectStorageSecretAccessKey)
+  ) {
+    throw new Error(
+      'OBJECT_STORAGE_ACCESS_KEY_ID and OBJECT_STORAGE_SECRET_ACCESS_KEY must be provided together',
+    );
+  }
+
   return {
     API_PREFIX: env.API_PREFIX?.trim() || 'api',
     APP_TIMEZONE: appTimezone,
@@ -305,6 +338,13 @@ export function validateEnvironment(env: EnvironmentVariables) {
     VROOM_URL: vroomUrl,
     OSRM_URL: osrmUrl,
     MAP_TILES_URL: mapTilesUrl,
+    OBJECT_STORAGE_BUCKET: objectStorageBucket,
+    OBJECT_STORAGE_REGION: objectStorageRegion,
+    OBJECT_STORAGE_ENDPOINT: objectStorageEndpoint,
+    OBJECT_STORAGE_ACCESS_KEY_ID: objectStorageAccessKeyId,
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: objectStorageSecretAccessKey,
+    OBJECT_STORAGE_FORCE_PATH_STYLE: objectStorageForcePathStyle,
+    OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS: objectStorageSignedUrlTtlSeconds,
     FLEET_POSITION_STALE_SECONDS: fleetPositionStaleSeconds,
     FLEET_POSITION_FUTURE_TOLERANCE_SECONDS:
       fleetPositionFutureToleranceSeconds,

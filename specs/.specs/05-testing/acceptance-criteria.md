@@ -168,7 +168,10 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un pedido marcado como entregado, cuando se actualiza, entonces registra `deliveredAt`.
 - Dado una no entrega, devolución, rechazo parcial o incidencia, cuando se registra, entonces conserva motivo obligatorio.
 - Dado evidencia de entrega, cuando se captura, entonces acepta tipos permitidos: foto, firma, geolocalización o nota.
-- Pendiente/condicional: la obligatoriedad exacta de combinación de evidencia queda condicionada a decisión de negocio; las pruebas no deben imponer combinación final no definida.
+- Dado un pedido que cambia a `DELIVERED`, cuando no tiene `PHOTO` y `GEOLOCATION`, entonces el backend rechaza la transición.
+- Dada una captura `PHOTO` enviada directamente a la API, cuando el valor no es una imagen válida o su MIME no coincide con la firma binaria, entonces el backend responde `400` sin persistirla.
+- Dada una `PHOTO` válida, cuando se captura, entonces el backend persiste `sha256`, MIME, tamaño, dimensiones, `receivedAt` y `capturedByUserId` sin confiar en valores derivados por el cliente.
+- Dada una evidencia con `capturedAt` fuera de la ventana permitida, cuando se captura, entonces el backend responde `400` sin persistirla.
 - Dado un cobro en ruta, cuando se registra, entonces requiere `accountReceivableId`, saldo pendiente, método de pago y ruta asociada.
 - Dado un cobro en ruta, cuando ya existe liquidación asociada, entonces el pago puede mostrar `routeSettlementId`; si no existe, el cobro permanece asociado a la ruta sin exigir liquidación previa.
 - Dado un cobro en ruta mayor al saldo pendiente, cuando se intenta registrar, entonces se rechaza.

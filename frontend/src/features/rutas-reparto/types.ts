@@ -84,13 +84,22 @@ export type DeliveryOrder = {
 };
 
 export type EvidenceSummaryItem = {
+  id?: string | null;
   orderId?: string | null;
   deliveryOrderId?: string | null;
   saleNumber?: string | null;
   type: EvidenceType;
   value?: string | null;
+  storageKey?: string | null;
+  contentUrl?: string | null;
+  mimeType?: string | null;
+  sha256?: string | null;
+  sizeBytes?: number | null;
   capturedAt?: string | null;
+  receivedAt?: string | null;
+  capturedByUserId?: string | null;
   capturedByUserName?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type CollectionSummary = {

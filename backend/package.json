@@ -17,6 +17,7 @@
     "bootstrap:production": "ts-node prisma/bootstrap-production.ts",
     "bootstrap:production:rotate-admin": "ts-node prisma/bootstrap-production.ts --rotate-admin-password",
     "inventory:preflight": "ts-node prisma/scripts/cedis-inventory-preflight.ts",
+    "evidence:migrate-to-object-storage": "ts-node prisma/scripts/migrate-delivery-evidence-to-object-storage.ts",
     "seed:development": "prisma db seed",
     "seed:operational": "ts-node prisma/seed.operational.ts",
     "lint": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --fix",
@@ -35,6 +36,8 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1111.0",
+    "@aws-sdk/s3-request-presigner": "^3.1111.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",

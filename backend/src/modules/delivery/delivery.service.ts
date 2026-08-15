@@ -2,9 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
@@ -28,8 +31,17 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import { FleetGateway } from '../fleet/fleet.gateway';
 import type { FleetIncidentCreatedPayload } from '../fleet/fleet-realtime.types';
+import {
+  OBJECT_STORAGE,
+  type ObjectStoragePort,
+} from '../object-storage/object-storage.port';
 import { calculateReceivableAging } from '../accounts-receivable/receivable-aging';
 import { Money } from '../../../../shared/money';
+import {
+  validateDeliveryEvidence,
+  type ValidatedDeliveryEvidence,
+} from './delivery-evidence.validation';
+import { buildDeliveryEvidenceStorageKey } from './delivery-evidence-storage';
 import {
   CreateDeliveryRouteDto,
   AssignDeliveryRouteOrdersDto,
@@ -74,9 +86,17 @@ type DeliveryOrderRecord = Record<string, unknown> & {
     version?: number;
   } | null;
   evidence?: Array<{
+    id?: string;
     type: string;
     value?: string | null;
     capturedAt?: Date | null;
+    storageKey?: string | null;
+    mimeType?: string | null;
+    sha256?: string | null;
+    sizeBytes?: number | null;
+    receivedAt?: Date | null;
+    capturedByUserId?: string | null;
+    metadata?: Prisma.JsonValue | null;
   }>;
   route?: DeliveryRouteRecord | null;
 };
@@ -85,8 +105,15 @@ type DeliveryEvidenceRecord = {
   id: string;
   deliveryOrderId: string;
   type: DeliveryEvidenceType;
-  value: string;
+  value: string | null;
+  storageKey?: string | null;
+  mimeType?: string | null;
+  sha256?: string | null;
+  sizeBytes?: number | null;
   capturedAt: Date;
+  receivedAt?: Date | null;
+  capturedByUserId?: string | null;
+  metadata?: Prisma.JsonValue | null;
 };
 
 type IncidentPositionRecord = {
@@ -254,14 +281,24 @@ const INCIDENT_STATUS_REQUIRING_NOTES = new Set<DeliveryOrderStatus>([
   DeliveryOrderStatus.RETURNED,
 ]);
 
+const REQUIRED_DELIVERY_EVIDENCE_TYPES: DeliveryEvidenceType[] = [
+  DeliveryEvidenceType.PHOTO,
+  DeliveryEvidenceType.GEOLOCATION,
+];
+
 const INCIDENT_POSITION_MAX_AGE_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class DeliveryService {
+  private readonly logger = new Logger(DeliveryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
     @Optional() private readonly fleetGateway?: FleetGateway,
+    @Optional()
+    @Inject(OBJECT_STORAGE)
+    private readonly objectStorage?: ObjectStoragePort,
   ) {}
 
   async findRoutes(query: ListDeliveryRoutesQueryDto = {}, currentUser: Actor) {
@@ -325,7 +362,7 @@ export class DeliveryService {
       throw new BadRequestException('At least one delivery order is required');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const route = await this.prisma.$transaction(async (tx) => {
       await this.assertDriver(tx, dto.driverId);
       if (dto.vehicleId) await this.assertActiveVehicle(tx, dto.vehicleId);
       const orders = await this.resolveAssignableSales(tx, dto.orders);
@@ -366,7 +403,19 @@ export class DeliveryService {
                 select: { id: true, outstandingAmount: true, version: true },
               },
               evidence: {
-                select: { type: true, value: true, capturedAt: true },
+                select: {
+                  id: true,
+                  type: true,
+                  value: true,
+                  storageKey: true,
+                  mimeType: true,
+                  sha256: true,
+                  sizeBytes: true,
+                  capturedAt: true,
+                  receivedAt: true,
+                  capturedByUserId: true,
+                  metadata: true,
+                },
               },
             },
           },
@@ -378,8 +427,9 @@ export class DeliveryService {
         data: { routeId: route.id },
       });
 
-      return this.toRouteDetail(route);
+      return route;
     });
+    return this.toRouteDetail(route);
   }
 
   private async createOptimizedRoute(
@@ -388,7 +438,7 @@ export class DeliveryService {
     idempotencyKey: string,
   ) {
     const payloadHash = this.hashPayload({ ...dto, orders: undefined });
-    return this.prisma.$transaction(async (tx) => {
+    const route = await this.prisma.$transaction(async (tx) => {
       const existing = (await tx.deliveryRoute.findFirst({
         where: { creationIdempotencyKey: idempotencyKey },
         include: this.routeDetailInclude(),
@@ -398,7 +448,7 @@ export class DeliveryService {
           throw new ConflictException(
             'Idempotency-Key was already used with a different payload',
           );
-        return this.toRouteDetail(existing);
+        return existing;
       }
 
       const plan = await tx.deliveryRoutePlanDraft.findFirst({
@@ -514,8 +564,9 @@ export class DeliveryService {
         throw new ConflictException(
           'Delivery route plan was consumed concurrently',
         );
-      return this.toRouteDetail(route);
+      return route;
     });
+    return this.toRouteDetail(route);
   }
 
   async assignOrdersToRoute(
@@ -533,7 +584,7 @@ export class DeliveryService {
       throw new BadRequestException('At least one delivery order is required');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const route = (await tx.deliveryRoute.findFirst({
         where: this.buildRouteAccessWhere(id, currentUser),
         include: {
@@ -596,7 +647,19 @@ export class DeliveryService {
                 select: { id: true, outstandingAmount: true, version: true },
               },
               evidence: {
-                select: { type: true, value: true, capturedAt: true },
+                select: {
+                  id: true,
+                  type: true,
+                  value: true,
+                  storageKey: true,
+                  mimeType: true,
+                  sha256: true,
+                  sizeBytes: true,
+                  capturedAt: true,
+                  receivedAt: true,
+                  capturedByUserId: true,
+                  metadata: true,
+                },
               },
             },
           },
@@ -608,8 +671,9 @@ export class DeliveryService {
         data: { routeId: route.id },
       });
 
-      return this.toRouteDetail(updated);
+      return updated;
     });
+    return this.toRouteDetail(updated);
   }
 
   private async assignOptimizedPlanToRoute(
@@ -617,7 +681,7 @@ export class DeliveryService {
     routePlanId: string,
     currentUser: Actor,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const route = (await tx.deliveryRoute.findFirst({
         where: this.buildRouteAccessWhere(id, currentUser),
         include: {
@@ -753,8 +817,9 @@ export class DeliveryService {
         throw new ConflictException(
           'Delivery route plan was consumed concurrently',
         );
-      return this.toRouteDetail(updated);
+      return updated;
     });
+    return this.toRouteDetail(updated);
   }
 
   async updateRouteStatus(
@@ -867,6 +932,21 @@ export class DeliveryService {
       );
     }
 
+    if (dto.status === DeliveryOrderStatus.DELIVERED) {
+      const recordedEvidenceTypes = new Set(
+        order.evidence?.map((evidence) => evidence.type),
+      );
+      const missingEvidenceTypes = REQUIRED_DELIVERY_EVIDENCE_TYPES.filter(
+        (type) => !recordedEvidenceTypes.has(type),
+      );
+
+      if (missingEvidenceTypes.length > 0) {
+        throw new BadRequestException(
+          `DELIVERED requires ${missingEvidenceTypes.join(' and ')} evidence`,
+        );
+      }
+    }
+
     const deliveredAt =
       dto.status === DeliveryOrderStatus.DELIVERED
         ? new Date(dto.deliveredAt ?? Date.now())
@@ -899,15 +979,78 @@ export class DeliveryService {
     currentUser: Actor,
   ) {
     const order = await this.findAccessibleOrder(id, currentUser);
+    const receivedAt = new Date();
+    let validatedEvidence: ValidatedDeliveryEvidence;
+    try {
+      validatedEvidence = validateDeliveryEvidence(dto, receivedAt);
+    } catch (error: unknown) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid delivery evidence',
+      );
+    }
 
-    const evidence = (await this.prisma.deliveryEvidence.create({
-      data: {
-        deliveryOrderId: order.id,
-        type: dto.type,
-        value: dto.value.trim(),
-        capturedAt: new Date(dto.capturedAt),
-      },
-    })) as DeliveryEvidenceRecord;
+    const storageKey =
+      validatedEvidence.content && validatedEvidence.mimeType
+        ? buildDeliveryEvidenceStorageKey({
+            deliveryOrderId: order.id,
+            capturedAt: validatedEvidence.capturedAt,
+            mimeType: validatedEvidence.mimeType,
+          })
+        : null;
+    const storage = storageKey ? this.requireObjectStorage() : null;
+
+    if (
+      storageKey &&
+      storage &&
+      validatedEvidence.content &&
+      validatedEvidence.sha256
+    ) {
+      try {
+        await storage.putObject({
+          key: storageKey,
+          body: validatedEvidence.content,
+          contentType: validatedEvidence.mimeType ?? 'application/octet-stream',
+          checksumSha256: Buffer.from(validatedEvidence.sha256, 'hex').toString(
+            'base64',
+          ),
+        });
+      } catch {
+        throw new ServiceUnavailableException(
+          'Delivery evidence storage is unavailable',
+        );
+      }
+    }
+
+    let evidence: DeliveryEvidenceRecord;
+    try {
+      evidence = await this.prisma.deliveryEvidence.create({
+        data: {
+          deliveryOrderId: order.id,
+          type: dto.type,
+          value: storageKey ? null : validatedEvidence.value,
+          storageKey,
+          mimeType: validatedEvidence.mimeType,
+          sha256: validatedEvidence.sha256,
+          sizeBytes: validatedEvidence.sizeBytes,
+          capturedAt: validatedEvidence.capturedAt,
+          receivedAt,
+          capturedByUserId: currentUser.id,
+          metadata: validatedEvidence.metadata ?? Prisma.JsonNull,
+        },
+      });
+    } catch (error: unknown) {
+      if (storageKey && storage) {
+        try {
+          await storage.deleteObject(storageKey);
+        } catch (cleanupError: unknown) {
+          this.logger.error(
+            `Failed to clean up delivery evidence object ${storageKey}`,
+            cleanupError instanceof Error ? cleanupError.stack : cleanupError,
+          );
+        }
+      }
+      throw error;
+    }
 
     return this.toEvidenceResponse(evidence);
   }
@@ -1089,9 +1232,7 @@ export class DeliveryService {
                 accountReceivable: {
                   select: { id: true, outstandingAmount: true, version: true },
                 },
-                evidence: {
-                  select: { type: true, value: true, capturedAt: true },
-                },
+                evidence: { select: { type: true } },
               },
             })) as DeliveryOrderRecord;
 
@@ -1159,9 +1300,7 @@ export class DeliveryService {
           accountReceivable: {
             select: { id: true, outstandingAmount: true, version: true },
           },
-          evidence: {
-            select: { type: true, value: true, capturedAt: true },
-          },
+          evidence: { select: { type: true } },
         },
       })) as DeliveryOrderRecord;
 
@@ -1634,7 +1773,19 @@ export class DeliveryService {
             select: { id: true, outstandingAmount: true, version: true },
           },
           evidence: {
-            select: { type: true, value: true, capturedAt: true },
+            select: {
+              id: true,
+              type: true,
+              value: true,
+              storageKey: true,
+              mimeType: true,
+              sha256: true,
+              sizeBytes: true,
+              capturedAt: true,
+              receivedAt: true,
+              capturedByUserId: true,
+              metadata: true,
+            },
           },
         },
       },
@@ -1889,23 +2040,42 @@ export class DeliveryService {
     };
   }
 
-  private toRouteDetail(route: DeliveryRouteRecord) {
+  private async toRouteDetail(route: DeliveryRouteRecord) {
     const payments = route.payments ?? [];
+    const evidenceSummary = (
+      await Promise.all(
+        (route.deliveryOrders ?? []).map(async (order) =>
+          Promise.all(
+            (order.evidence ?? []).map(async (evidence) => ({
+              id: evidence.id ?? null,
+              deliveryOrderId: order.id,
+              saleNumber: order.sale?.saleNumber ?? null,
+              type: evidence.type,
+              value: evidence.value ?? null,
+              storageKey: evidence.storageKey ?? null,
+              contentUrl: await this.resolveEvidenceContentUrl(
+                evidence.storageKey,
+              ),
+              mimeType: evidence.mimeType ?? null,
+              sha256: evidence.sha256 ?? null,
+              sizeBytes: evidence.sizeBytes ?? null,
+              capturedAt: evidence.capturedAt?.toISOString() ?? null,
+              receivedAt: evidence.receivedAt?.toISOString() ?? null,
+              capturedByUserId: evidence.capturedByUserId ?? null,
+              metadata: evidence.metadata ?? null,
+            })),
+          ),
+        ),
+      )
+    ).flat();
+
     return {
       ...this.toRouteListItem(route),
       geometry: route.geometry ?? null,
       orders: (route.deliveryOrders ?? []).map((order) =>
         this.toOrderResponse(order, payments),
       ),
-      evidenceSummary: (route.deliveryOrders ?? []).flatMap((order) =>
-        (order.evidence ?? []).map((evidence) => ({
-          deliveryOrderId: order.id,
-          saleNumber: order.sale?.saleNumber ?? null,
-          type: evidence.type,
-          value: evidence.value ?? null,
-          capturedAt: evidence.capturedAt?.toISOString() ?? null,
-        })),
-      ),
+      evidenceSummary,
       collectionsSummary: this.buildCollectionsSummary(
         route.payments ?? [],
         route.deliveryOrders ?? [],
@@ -1985,6 +2155,19 @@ export class DeliveryService {
     };
   }
 
+  private async resolveEvidenceContentUrl(storageKey?: string | null) {
+    if (!storageKey) return null;
+    const storage = this.requireObjectStorage();
+
+    try {
+      return await storage.getDownloadUrl(storageKey);
+    } catch {
+      throw new ServiceUnavailableException(
+        'Delivery evidence storage is unavailable',
+      );
+    }
+  }
+
   private async resolveExistingRouteCollectionByKey(
     orderId: string,
     currentUser: Actor,
@@ -2015,14 +2198,31 @@ export class DeliveryService {
     );
   }
 
-  private toEvidenceResponse(evidence: DeliveryEvidenceRecord) {
+  private async toEvidenceResponse(evidence: DeliveryEvidenceRecord) {
     return {
       id: evidence.id,
       deliveryOrderId: evidence.deliveryOrderId,
       type: evidence.type,
       value: evidence.value,
+      storageKey: evidence.storageKey ?? null,
+      contentUrl: await this.resolveEvidenceContentUrl(evidence.storageKey),
+      mimeType: evidence.mimeType ?? null,
+      sha256: evidence.sha256 ?? null,
+      sizeBytes: evidence.sizeBytes ?? null,
       capturedAt: evidence.capturedAt.toISOString(),
+      receivedAt: evidence.receivedAt?.toISOString() ?? null,
+      capturedByUserId: evidence.capturedByUserId ?? null,
+      metadata: evidence.metadata ?? null,
     };
+  }
+
+  private requireObjectStorage() {
+    if (!this.objectStorage?.isConfigured()) {
+      throw new ServiceUnavailableException(
+        'Delivery evidence storage is not configured',
+      );
+    }
+    return this.objectStorage;
   }
 
   private toPaymentResponse(payment: RoutePaymentRecord) {

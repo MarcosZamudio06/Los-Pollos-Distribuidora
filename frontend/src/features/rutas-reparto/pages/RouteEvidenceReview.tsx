@@ -138,19 +138,37 @@ export function RouteEvidenceReview() {
                         </p>
                         <p className="mt-1 flex items-center gap-1 text-xs text-[var(--erp-muted-foreground)]">
                           <UserRound className="h-3.5 w-3.5" />
-                          {item.capturedByUserName ?? "Sin usuario"}
+                          {item.capturedByUserName ??
+                            (item.capturedByUserId
+                              ? shortId(item.capturedByUserId)
+                              : "Sin usuario")}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">
+                          Recibida: {dateTime(item.receivedAt)}
                         </p>
                       </div>
-                      {item.value && isPhotoDataUrl(item.value) ? (
+                      {(item.contentUrl ||
+                        (item.value && isPhotoDataUrl(item.value))) ? (
                         <figure className="border-t border-[color:var(--erp-border)] pt-3 md:col-span-3">
                           <img
                             alt="Evidencia fotográfica de entrega"
                             className="max-h-72 w-full rounded-xl border border-[color:var(--erp-border)] object-contain"
-                            src={item.value}
+                            src={item.contentUrl ?? item.value ?? undefined}
                           />
                           <figcaption className="mt-2 text-xs font-semibold text-[var(--erp-muted-foreground)]">
-                            Foto capturada en la entrega
+                            {item.contentUrl
+                              ? "Foto de entrega almacenada en Object Storage"
+                              : "Foto capturada en la entrega"}
                           </figcaption>
+                          <p className="mt-1 break-all text-xs text-[var(--erp-muted-foreground)]">
+                            {item.mimeType ?? "MIME no registrado"} ·{" "}
+                            {item.sizeBytes != null
+                              ? `${item.sizeBytes} bytes`
+                              : "tamaño no registrado"}
+                            {item.sha256
+                              ? ` · SHA-256 ${item.sha256}`
+                              : " · hash no registrado"}
+                          </p>
                         </figure>
                       ) : (
                         item.value && (

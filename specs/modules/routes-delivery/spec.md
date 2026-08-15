@@ -120,7 +120,9 @@ The canonical geospatial contracts are:
 - `ADMIN` has all four fleet permissions. No role receives global fleet visibility implicitly from being a driver.
 - Delivered orders must store `deliveredAt`.
 - Delivery evidence is part of the MVP.
-- Evidence may include photo, signature, geolocation, note, or a combination; the exact required combination remains a business decision.
+- A transition to `DELIVERED` requires at least one `PHOTO` and one `GEOLOCATION` evidence record for the order. `SIGNATURE` and `NOTE` remain optional.
+- The backend is authoritative for delivery-evidence integrity: a `PHOTO` must be a bounded base64 data URL whose MIME matches its binary signature and whose dimensions are valid; the backend derives `sha256`, `mimeType`, `sizeBytes`, `receivedAt`, and `metadata` before uploading the binary to S3-compatible Object Storage.
+- Every new evidence record stores `capturedByUserId` from the authenticated actor. New PHOTO rows keep `value` null and persist the private `storageKey` plus integrity metadata in PostgreSQL. Historical rows may keep `value` populated only until the idempotent `evidence:migrate-to-object-storage` backfill completes.
 - Driver mobile experience is part of the MVP; offline support remains pending and must not be assumed without a later spec.
 - If the order has collectible balance, the driver may register a route collection only when policy allows it.
 - In the MVP, every route collection recorded as `Payment` applies to exactly one receivable through required `Payment.accountReceivableId`.
@@ -198,8 +200,11 @@ The fleet map uses MapLibre GL JS only as a renderer. It does not expose Photon,
 - Driver only sees own routes.
 - Mark order as delivered.
 - Store delivery timestamp.
+- Reject `DELIVERED` without both `PHOTO` and `GEOLOCATION` evidence.
 - Capture allowed evidence.
-- Capture PHOTO evidence from a supported device camera/file input and persist the bounded image value through the existing delivery-evidence contract.
+- Capture PHOTO evidence from a supported device camera/file input, upload the validated binary to Object Storage, and persist only its storage locator and integrity metadata in PostgreSQL.
+- Reject non-image PHOTO values, MIME/signature mismatches, invalid base64, oversized images, invalid dimensions, and unreasonable capture timestamps.
+- Persist the server-derived photo hash and metadata together with `receivedAt` and the authenticated `capturedByUserId`.
 - Register route collection associated to one receivable.
 - Reject route collection without receivable in MVP.
 - Derive collected amounts from `Payment`, not from a duplicated persisted money field.

@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module';
 import { FleetModule } from '../fleet/fleet.module';
 import { GeospatialModule } from '../geospatial/geospatial.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { ObjectStorageModule } from '../object-storage/object-storage.module';
 import { DeliveryController } from './delivery.controller';
 import { DeliveryOrdersController } from './delivery-orders.controller';
 import { RouteSettlementsController } from './route-settlements.controller';
@@ -24,6 +25,7 @@ import { VehicleService } from './vehicle.service';
     FleetModule,
     GeospatialModule,
     InventoryModule,
+    ObjectStorageModule,
   ],
   controllers: [
     DeliveryController,

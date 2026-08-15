@@ -267,8 +267,10 @@ Tipos permitidos:
 
 Restricciones:
 
-- La combinación obligatoria de evidencia queda pendiente de negocio.
-- La UI no debe imponer una combinación final no definida.
+- Para marcar un pedido como entregado, la UI debe guiar la captura previa de evidencia `PHOTO` y `GEOLOCATION`; `SIGNATURE` y `NOTE` son opcionales.
+- El backend conserva la autoridad final y rechaza la transición si falta cualquiera de las dos evidencias obligatorias.
+- La compresión y validación preliminar de la UI solo mejora la experiencia; el backend vuelve a validar MIME, firma binaria, base64, tamaño, dimensiones y ventana temporal, sube el binario a Object Storage y la UI consume la URL firmada de lectura.
+- La revisión administrativa debe mostrar el actor `capturedByUserId` y los metadatos de integridad que la API entregue; no debe asumir que una imagen del cliente es auténtica por haber pasado la UI.
 - No asumir almacenamiento ni sincronización offline.
 
 ## Cobros en ruta

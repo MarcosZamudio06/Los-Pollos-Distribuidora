@@ -98,6 +98,14 @@ const fleetHeatmapIndexesMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260812160000_add_fleet_heatmap_indexes/migration.sql',
 );
+const deliveryEvidenceIntegrityMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260815100000_harden_delivery_evidence/migration.sql',
+);
+const deliveryEvidenceObjectStorageMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260815110000_move_delivery_evidence_to_object_storage/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -861,6 +869,62 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('ADD COLUMN "cedisLocationId" TEXT');
     expect(migrationSql).toContain('User_cedisLocationId_idx');
     expect(migrationSql).toContain('User_cedisLocationId_fkey');
+  });
+
+  it('persists delivery evidence integrity metadata and capture provenance', () => {
+    const evidence = getModelBlock('DeliveryEvidence');
+    const user = getModelBlock('User');
+    const migrationSql = readFileSync(
+      deliveryEvidenceIntegrityMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(evidence).toMatch(/storageKey\s+String\?/);
+    expect(evidence).toMatch(/mimeType\s+String\?/);
+    expect(evidence).toMatch(/sha256\s+String\?/);
+    expect(evidence).toMatch(/sizeBytes\s+Int\?/);
+    expect(evidence).toMatch(/receivedAt\s+DateTime/);
+    expect(evidence).toMatch(/capturedByUserId\s+String\?/);
+    expect(evidence).toMatch(/metadata\s+Json\?/);
+    expect(evidence).toMatch(
+      /capturedBy\s+User\?\s+@relation\("DeliveryEvidenceCapturedBy"/,
+    );
+    expect(user).toMatch(
+      /capturedDeliveryEvidence\s+DeliveryEvidence\[\]\s+@relation\("DeliveryEvidenceCapturedBy"\)/,
+    );
+    expect(evidence).toContain('@@index([capturedByUserId, receivedAt])');
+    expect(evidence).toContain('@@index([sha256])');
+    expect(migrationSql).toContain('ADD COLUMN "storageKey" TEXT');
+    expect(migrationSql).toContain('ADD COLUMN "mimeType" TEXT');
+    expect(migrationSql).toContain('ADD COLUMN "sha256" TEXT');
+    expect(migrationSql).toContain('ADD COLUMN "sizeBytes" INTEGER');
+    expect(migrationSql).toContain('ADD COLUMN "receivedAt" TIMESTAMP(3)');
+    expect(migrationSql).toContain('ADD COLUMN "capturedByUserId" TEXT');
+    expect(migrationSql).toContain('ADD COLUMN "metadata" JSONB');
+    expect(migrationSql).toContain(
+      'DeliveryEvidence_capturedByUserId_receivedAt_idx',
+    );
+    expect(migrationSql).toContain('DeliveryEvidence_sha256_idx');
+    expect(migrationSql).toContain('DeliveryEvidence_capturedByUserId_fkey');
+  });
+
+  it('keeps new photo rows out of PostgreSQL while retaining a legacy migration path', () => {
+    const evidence = getModelBlock('DeliveryEvidence');
+    const migrationSql = readFileSync(
+      deliveryEvidenceObjectStorageMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(evidence).toMatch(/value\s+String\?/);
+    expect(evidence).toMatch(/storageKey\s+String\?\s+@unique/);
+    expect(migrationSql).toContain('ALTER COLUMN "value" DROP NOT NULL');
+    expect(migrationSql).toContain('DeliveryEvidence_storageKey_key');
+    expect(migrationSql).toContain(
+      'DeliveryEvidence_value_or_storageKey_check',
+    );
+    expect(migrationSql).toContain(
+      '"value" IS NOT NULL OR "storageKey" IS NOT NULL',
+    );
   });
 
   it('binds closing associations to the same location', () => {

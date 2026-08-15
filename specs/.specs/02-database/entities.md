@@ -511,11 +511,14 @@ Validaciones:
 - `deliveryOrderId` requerido.
 - `type` requerido.
 - `capturedAt` requerido.
-- Debe permitir foto, firma, geolocalización o nota según política final.
+- Debe permitir foto, firma, geolocalización o nota.
+- Para `PHOTO`, debe conservar `mimeType`, `sha256`, `sizeBytes`, dimensiones/origen en `metadata` y el `receivedAt` asignado por el backend.
+- Toda captura nueva debe conservar `capturedByUserId`; los registros históricos pueden mantenerlo nulo cuando no exista actor confiable.
+- Para marcar un pedido como `DELIVERED`, debe existir al menos una evidencia `PHOTO` y una `GEOLOCATION`; `SIGNATURE` y `NOTE` son opcionales.
+- El cliente puede comprimir la imagen, pero la aceptación final de formato, MIME, tamaño, dimensiones y ventana temporal de `capturedAt` corresponde al backend.
 
 Nota:
 
-- La combinación obligatoria de evidencia sigue pendiente de decisión de negocio.
 - Si la experiencia móvil requiere offline, se deberá ampliar el modelo con campos de sincronización antes de implementar.
 
 ## RouteSettlement
@@ -549,7 +552,6 @@ Validaciones de datos:
 - Política exacta de redondeo.
 - Tolerancias de merma, diferencia de peso, devolución y rechazo parcial.
 - Requisito offline de choferes.
-- Combinación obligatoria de evidencia de entrega.
 - Profundidad de preparación fiscal CFDI/SAT futura.
 - Si las políticas comerciales se aplican por cliente, tipo de cliente, ubicación o combinación.
 - Alcance exacto de configuración operativa por ubicación, global o por rol.

@@ -561,7 +561,7 @@ Respuesta `data`:
 - Encabezado de ruta, incluyendo `driverId`, `driverName`, `vehicleId` (nullable para rutas históricas o legacy no geoespaciales), `vehicleCode` cuando exista, `status`, `scheduledDate`, `originLocationId`, `startedAt` y `completedAt`.
 - `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `accountReceivableVersion`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`, `outstandingAmount` y `derivedCollectedAmount`.
 - `optimizationStatus`, `mapAvailable`, `geometry`, `distanceMeters`, `durationSeconds`, `optimizedAt`, `routingProfile`, `routingDataVersion`.
-- `evidenceSummary[]`: `deliveryOrderId`, `saleNumber`, `type`, `value` y `capturedAt` por evidencia; cuando `type=PHOTO`, `value` puede ser una referencia/URL persistida o un `data:image/*;base64,...` acotado generado por el cliente.
+- `evidenceSummary[]`: `id`, `deliveryOrderId`, `saleNumber`, `type`, `value`, `storageKey`, `contentUrl` y `capturedAt` por evidencia. Para fotos nuevas, `value` es `null` y `contentUrl` es una URL firmada de lectura de Object Storage; las filas históricas pueden devolver temporalmente el data URL.
 - `collectionsSummary`: montos esperados y cobrados por método, primera vuelta y segunda vuelta.
 - `routeSettlementId` si existe liquidación asociada a la ruta; `null` u omitido si la liquidación todavía no ha sido abierta o calculada.
 
@@ -781,7 +781,7 @@ Body importante:
 ```json
 {
   "type": "PHOTO",
-  "value": "referencia-o-url-interna-o-data-url-de-imagen",
+  "value": "data:image/jpeg;base64,<contenido-validado>",
   "capturedAt": "2026-06-19T12:05:00.000Z"
 }
 ```
@@ -792,8 +792,13 @@ Validaciones:
 
 - `type` requerido: `PHOTO`, `SIGNATURE`, `GEOLOCATION`, `NOTE`.
 - `capturedAt` requerido.
-- Para evidencia `PHOTO`, el cliente puede capturar una imagen del dispositivo, comprimirla y enviar un `data:image/jpeg;base64,...` acotado dentro de `value`; el cliente debe mantenerlo por debajo del límite JSON del API.
-- La combinación obligatoria de evidencia queda pendiente de negocio; no inventar obligatoriedad final.
+- Para evidencia `PHOTO`, `value` debe ser un data URL base64 de JPEG, PNG o WebP. El backend valida la firma binaria contra el MIME declarado, base64 canónico, un máximo de 850000 caracteres, un máximo binario de 640000 bytes y dimensiones entre 1 y 4096 píxeles.
+- El backend calcula y persiste `sha256`, `mimeType`, `sizeBytes` y `metadata` de la imagen; el cliente no puede declarar esos valores como confiables. El binario se carga en Object Storage y nunca se persiste completo en PostgreSQL.
+- `capturedAt` no puede estar más de 5 minutos en el futuro ni tener más de 7 días de antigüedad. El backend asigna `receivedAt` y `capturedByUserId` desde la solicitud autenticada.
+- La respuesta incluye `storageKey`, `contentUrl`, `mimeType`, `sha256`, `sizeBytes`, `capturedAt`, `receivedAt`, `capturedByUserId` y `metadata`. Para una captura nueva, `value` es `null`, `storageKey` identifica el objeto privado y `contentUrl` expira; `value` solo permanece para compatibilidad temporal con evidencia histórica.
+- Para cambiar el pedido a `DELIVERED`, deben existir previamente al menos una evidencia `PHOTO` y una `GEOLOCATION`; `SIGNATURE` y `NOTE` son opcionales.
+- Si falta cualquiera de las evidencias obligatorias, responde `400 Bad Request` y no actualiza el pedido.
+- Una foto inválida, un MIME que no corresponda con sus bytes, un tamaño/dimensión fuera de rango o una fecha fuera de ventana responde `400 Bad Request` y no crea evidencia.
 
 ## POST /api/delivery-orders/:id/collections
 
