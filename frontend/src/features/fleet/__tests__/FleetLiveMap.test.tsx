@@ -16,11 +16,49 @@ type MockMap = {
   fitBoundsCalls: unknown[];
   flyToCalls: unknown[];
   layoutChanges: unknown[];
+  resizeCalls: number;
   removed: boolean;
   hasHandler: (event: string) => boolean;
   emit: (event: string, payload?: unknown) => void;
   emitLayer: (layer: string, payload?: unknown) => void;
 };
+
+type ResizeObserverInstance = {
+  observedElements: Element[];
+  disconnectCalls: number;
+  trigger: () => void;
+};
+
+const resizeObserverMock = vi.hoisted(() => {
+  const instances: ResizeObserverInstance[] = [];
+
+  class MockResizeObserver {
+    readonly observedElements: Element[] = [];
+    disconnectCalls = 0;
+    private readonly callback: () => void;
+
+    constructor(callback: () => void) {
+      this.callback = callback;
+      instances.push(this as unknown as ResizeObserverInstance);
+    }
+
+    observe(element: Element) {
+      this.observedElements.push(element);
+    }
+
+    unobserve() {}
+
+    disconnect() {
+      this.disconnectCalls += 1;
+    }
+
+    trigger() {
+      this.callback();
+    }
+  }
+
+  return { MockResizeObserver, state: { instances } };
+});
 
 const mapMock = vi.hoisted(() => {
   const state = { instances: [] as MockMap[] };
@@ -60,6 +98,7 @@ const mapMock = vi.hoisted(() => {
     fitBoundsCalls: unknown[] = [];
     flyToCalls: unknown[] = [];
     layoutChanges: unknown[] = [];
+    resizeCalls = 0;
     removed = false;
     handlers = new globalThis.Map<string, Set<(payload?: unknown) => void>>();
 
@@ -120,6 +159,11 @@ const mapMock = vi.hoisted(() => {
 
     flyTo(options: unknown) {
       this.flyToCalls.push(options);
+      return this;
+    }
+
+    resize() {
+      this.resizeCalls += 1;
       return this;
     }
 
@@ -204,10 +248,13 @@ describe("FleetLiveMap", () => {
     mapMock.state.instances.length = 0;
     runtimeMock.loadMapLibre.mockClear();
     runtimeMock.loadMapLibre.mockResolvedValue(mapMock);
+    resizeObserverMock.state.instances.length = 0;
+    vi.stubGlobal("ResizeObserver", resizeObserverMock.MockResizeObserver);
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
+    vi.unstubAllGlobals();
   });
 
   it("creates one MapLibre map with stable vehicle ids and the required sources/layers", async () => {
@@ -216,6 +263,18 @@ describe("FleetLiveMap", () => {
     expect(mapMock.state.instances).toHaveLength(1);
     expect(runtimeMock.loadMapLibre).toHaveBeenCalledTimes(1);
     expect(map.hasHandler("error")).toBe(true);
+    const mapContainer = container.querySelector<HTMLElement>(
+      '[aria-label="Mapa de monitoreo de flota"]',
+    );
+    expect(mapContainer).not.toBeNull();
+    expect(mapContainer?.className).toContain("h-full");
+    expect(mapContainer?.className).toContain("min-h-[34rem]");
+    expect(mapContainer?.className).toContain("w-full");
+    expect(resizeObserverMock.state.instances).toHaveLength(1);
+    expect(resizeObserverMock.state.instances[0].observedElements[0]).toBe(
+      mapContainer,
+    );
+    expect(map.resizeCalls).toBe(1);
     expect(map.layers).toEqual([
       "fleet-routes-lines",
       "fleet-deliveries-pending",
@@ -267,8 +326,15 @@ describe("FleetLiveMap", () => {
     );
     expect(map.fitBoundsCalls).toHaveLength(1);
 
+    const observer = resizeObserverMock.state.instances[0];
+    observer.trigger();
+    expect(map.resizeCalls).toBe(2);
+
     await act(async () => root.unmount());
+    expect(observer.disconnectCalls).toBe(1);
     expect(map.removed).toBe(true);
+    observer.trigger();
+    expect(map.resizeCalls).toBe(2);
     container.remove();
   });
 

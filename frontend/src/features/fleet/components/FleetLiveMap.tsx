@@ -599,19 +599,27 @@ export function FleetLiveMap({
 
   useEffect(() => {
     let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
     async function createMap() {
       if (!containerRef.current || mapRef.current) return;
       try {
         const maplibre = await loadMapLibre();
-        if (cancelled || !containerRef.current) return;
+        const container = containerRef.current;
+        if (cancelled || !container) return;
         const map = new maplibre.Map({
-          container: containerRef.current,
+          container,
           style: resolveMapStyle(),
           center: [-96.1342, 19.1738],
           zoom: 11,
         });
         mapRef.current = map;
         mapLoadedRef.current = false;
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(() => {
+            if (!cancelled) map.resize();
+          });
+          resizeObserver.observe(container);
+        }
         map.on("error", (event) => {
           console.error("[FleetLiveMap] MapLibre error:", event);
           if (!cancelled && isFatalFleetMapError(event, mapLoadedRef.current)) {
@@ -619,6 +627,7 @@ export function FleetLiveMap({
           }
         });
         map.on("load", () => {
+          if (cancelled) return;
           try {
             addFleetLayers(map);
             map.on("click", "fleet-vehicles-symbol", (event) => {
@@ -640,6 +649,7 @@ export function FleetLiveMap({
               if (!editorActiveRef.current || !onMapPointRef.current) return;
               onMapPointRef.current([event.lngLat.lng, event.lngLat.lat]);
             });
+            map.resize();
             mapLoadedRef.current = true;
             setMapReady(true);
           } catch (error) {
@@ -656,6 +666,8 @@ export function FleetLiveMap({
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
+      resizeObserver = null;
       mapLoadedRef.current = false;
       mapRef.current?.remove();
       mapRef.current = null;
@@ -762,11 +774,11 @@ export function FleetLiveMap({
   };
 
   return (
-    <div className="relative h-full min-h-[34rem] overflow-hidden rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[#dfe8df]">
+    <div className="relative min-h-[34rem] overflow-hidden rounded-[1.5rem] border border-[color:var(--erp-border)] bg-[#dfe8df]">
       <div
         ref={containerRef}
         aria-label="Mapa de monitoreo de flota"
-        className="absolute inset-0"
+        className="h-full min-h-[34rem] w-full"
       />
       <div className="absolute left-4 top-4 z-10 flex flex-wrap items-center gap-2">
         <button
