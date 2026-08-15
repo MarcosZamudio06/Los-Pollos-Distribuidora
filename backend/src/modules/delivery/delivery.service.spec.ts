@@ -1607,15 +1607,7 @@ describe('DeliveryService', () => {
     );
     prisma.sale.update.mockResolvedValue({ id: 'sale-1' });
 
-    const registerCollection = service.registerCollection as unknown as (
-      id: string,
-      dto: Record<string, unknown>,
-      currentUser: typeof driver,
-      idempotencyKey: string,
-    ) => Promise<unknown>;
-
-    await registerCollection.call(
-      service,
+    await service.registerCollection(
       'order-1',
       {
         accountReceivableId: 'ar-1',
@@ -1660,10 +1652,12 @@ describe('DeliveryService', () => {
       dueDate: date('2026-06-01T00:00:00.000Z'),
       version: 1,
     });
-    prisma.payment.create.mockImplementation(async ({ data }) => ({
-      id: 'payment-replayed',
-      ...data,
-    }));
+    prisma.payment.create.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'payment-replayed',
+        ...data,
+      }),
+    );
     prisma.accountReceivable.update.mockResolvedValue({
       id: 'ar-1',
       outstandingAmount: money('300'),
