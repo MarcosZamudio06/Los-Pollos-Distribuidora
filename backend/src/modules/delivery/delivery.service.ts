@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Optional,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
@@ -17,7 +18,9 @@ import {
   DeliveryEvidenceType,
   DeliveryOrderStatus,
   DeliveryRouteStatus,
+  DeliveryRouteType,
   InventoryMovementType,
+  InventoryTransferStatus,
   OperationalLocationType,
   PaymentMethod,
   PaymentStatus,
@@ -43,6 +46,7 @@ import {
 } from './delivery-evidence.validation';
 import { buildDeliveryEvidenceStorageKey } from './delivery-evidence-storage';
 import {
+  CompleteLogisticsStopDto,
   CreateDeliveryRouteDto,
   AssignDeliveryRouteOrdersDto,
   CaptureDeliveryEvidenceDto,
@@ -57,6 +61,41 @@ import {
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'permissions'>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
+type LogisticsRouteType = Extract<
+  DeliveryRouteType,
+  'BRANCH_RETURN' | 'CEDIS_SUPPLY'
+>;
+type LogisticsStopStatus = 'PENDING' | 'COMPLETED';
+
+type LogisticsTransferRecord = {
+  id: string;
+  transferNumber: string;
+  status: InventoryTransferStatus;
+  originLocationId: string;
+  destinationLocationId: string;
+  originLocation?: {
+    id: string;
+    name: string;
+    type: OperationalLocationType;
+    latitude?: DecimalLike;
+    longitude?: DecimalLike;
+  } | null;
+  destinationLocation?: {
+    id: string;
+    name: string;
+    type: OperationalLocationType;
+    latitude?: DecimalLike;
+    longitude?: DecimalLike;
+  } | null;
+  items?: Array<{
+    id: string;
+    productId: string;
+    unit: string;
+    quantityKg?: DecimalLike;
+    quantityPieces?: number | null;
+    product?: { id: string; name: string; unit: string } | null;
+  }>;
+};
 
 type DeliveryOrderRecord = Record<string, unknown> & {
   id: string;
@@ -200,7 +239,10 @@ type RouteSettlementRecord = {
   overdueAmount: DecimalLike;
   secondPassCollectionsAmount: DecimalLike;
   closedAt?: Date | null;
-  route?: { deliveryOrders?: DeliveryOrderRecord[] } | null;
+  route?: {
+    type?: DeliveryRouteType;
+    deliveryOrders?: DeliveryOrderRecord[];
+  } | null;
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -230,9 +272,11 @@ type PaymentSummaryRecord = {
 type DeliveryRouteRecord = Record<string, unknown> & {
   id: string;
   name: string;
+  type?: DeliveryRouteType;
   driverId: string;
   driver?: { id: string; name: string } | null;
   vehicleId?: string | null;
+  inventoryTransferId?: string | null;
   vehicle?: VehicleSummary | null;
   status: DeliveryRouteStatus;
   scheduledDate: Date;
@@ -240,8 +284,12 @@ type DeliveryRouteRecord = Record<string, unknown> & {
   routeStockLocationId: string;
   startedAt?: Date | null;
   completedAt?: Date | null;
+  logisticsStopCompletedAt?: Date | null;
+  logisticsStopCompletedByUserId?: string | null;
+  logisticsStopNotes?: string | null;
   createdAt: Date;
   deliveryOrders?: DeliveryOrderRecord[];
+  inventoryTransfer?: LogisticsTransferRecord | null;
   settlement?: { id: string } | null;
   payments?: PaymentSummaryRecord[];
   optimizationStatus?: RouteOptimizationStatus;
@@ -327,9 +375,21 @@ export class DeliveryService {
   }
 
   async findRoute(id: string, currentUser: Actor) {
+    const routeTypeRecord = (await this.prisma.deliveryRoute.findFirst({
+      where: this.buildRouteAccessWhere(id, currentUser),
+      select: { type: true },
+    })) as { type?: DeliveryRouteType } | null;
+
+    if (!routeTypeRecord) {
+      throw new NotFoundException('Delivery route not found');
+    }
+
+    const include = this.isLogisticsRouteType(routeTypeRecord.type)
+      ? this.logisticsRouteDetailInclude()
+      : this.routeDetailInclude();
     const route = (await this.prisma.deliveryRoute.findFirst({
       where: this.buildRouteAccessWhere(id, currentUser),
-      include: this.routeDetailInclude(),
+      include,
     })) as DeliveryRouteRecord | null;
 
     if (!route) {
@@ -430,6 +490,88 @@ export class DeliveryService {
       return route;
     });
     return this.toRouteDetail(route);
+  }
+
+  async createLogisticsRoute(
+    tx: Prisma.TransactionClient,
+    params: {
+      inventoryTransferId: string;
+      type: LogisticsRouteType;
+      driverId: string;
+      vehicleId: string;
+      scheduledDate: Date;
+    },
+  ) {
+    const transfer = await tx.inventoryTransfer.findUnique({
+      where: { id: params.inventoryTransferId },
+      select: {
+        id: true,
+        transferNumber: true,
+        originLocationId: true,
+        destinationLocationId: true,
+        originLocation: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            isActive: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
+        destinationLocation: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            isActive: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
+        deliveryRoute: { select: { id: true } },
+      },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException('Inventory transfer not found');
+    }
+    if (transfer.deliveryRoute) {
+      throw new ConflictException(
+        'Inventory transfer already has a logistics delivery route',
+      );
+    }
+
+    this.assertLogisticsDirection(
+      params.type,
+      transfer.originLocation.type,
+      transfer.destinationLocation.type,
+    );
+    this.assertLogisticsLocation(transfer.originLocation, 'origin');
+    this.assertLogisticsLocation(transfer.destinationLocation, 'destination');
+
+    await this.assertDriver(tx, params.driverId);
+    await this.assertActiveVehicle(tx, params.vehicleId);
+    await this.assertVehicleAvailable(tx, params.vehicleId);
+
+    const routeStockLocationId = await this.createRouteStockLocation(
+      tx,
+      `${params.type === DeliveryRouteType.BRANCH_RETURN ? 'Branch return' : 'CEDIS supply'} ${transfer.transferNumber}`,
+    );
+
+    return tx.deliveryRoute.create({
+      data: {
+        name: `${params.type} ${transfer.transferNumber}`,
+        type: params.type,
+        driverId: params.driverId,
+        vehicleId: params.vehicleId,
+        inventoryTransferId: transfer.id,
+        status: DeliveryRouteStatus.PENDING,
+        scheduledDate: params.scheduledDate,
+        originLocationId: transfer.originLocationId,
+        routeStockLocationId,
+      },
+    });
   }
 
   private async createOptimizedRoute(
@@ -597,6 +739,11 @@ export class DeliveryService {
       if (!route) {
         throw new NotFoundException('Delivery route not found');
       }
+      if (this.isLogisticsRoute(route)) {
+        throw new BadRequestException(
+          'Logistics routes cannot receive commercial delivery orders',
+        );
+      }
       if (
         route.status === DeliveryRouteStatus.COMPLETED ||
         route.status === DeliveryRouteStatus.CANCELLED
@@ -691,6 +838,10 @@ export class DeliveryService {
         },
       })) as DeliveryRouteRecord | null;
       if (!route) throw new NotFoundException('Delivery route not found');
+      if (this.isLogisticsRoute(route))
+        throw new BadRequestException(
+          'Logistics routes cannot receive commercial delivery orders',
+        );
       if (route.optimizationStatus !== RouteOptimizationStatus.OPTIMIZED)
         throw new BadRequestException(
           'Historical routes must use the legacy orders payload',
@@ -839,13 +990,21 @@ export class DeliveryService {
     this.assertRouteStatusTransition(route, dto.status, currentUser);
 
     if (dto.status === DeliveryRouteStatus.COMPLETED) {
-      const hasOpenOrders = (route.deliveryOrders ?? []).some(
-        (order) => !FINAL_ORDER_STATUSES.has(order.status),
-      );
-      if (hasOpenOrders) {
-        throw new BadRequestException(
-          'Cannot complete route with pending delivery orders',
+      if (this.isLogisticsRoute(route)) {
+        if (!route.logisticsStopCompletedAt) {
+          throw new BadRequestException(
+            'Cannot complete logistics route before completing its stop',
+          );
+        }
+      } else {
+        const hasOpenOrders = (route.deliveryOrders ?? []).some(
+          (order) => !FINAL_ORDER_STATUSES.has(order.status),
         );
+        if (hasOpenOrders) {
+          throw new BadRequestException(
+            'Cannot complete route with pending delivery orders',
+          );
+        }
       }
     }
 
@@ -899,6 +1058,58 @@ export class DeliveryService {
     return this.toRouteListItem(updated);
   }
 
+  async completeLogisticsStop(
+    id: string,
+    dto: CompleteLogisticsStopDto,
+    currentUser: Actor,
+  ) {
+    const route = (await this.prisma.deliveryRoute.findFirst({
+      where: this.buildRouteAccessWhere(id, currentUser),
+      include: {
+        inventoryTransfer: { select: { id: true, status: true } },
+      },
+    })) as DeliveryRouteRecord | null;
+
+    if (!route) {
+      throw new NotFoundException('Delivery route not found');
+    }
+    if (!this.isLogisticsRoute(route)) {
+      throw new BadRequestException(
+        'Logistics stop confirmation is only available for logistics routes',
+      );
+    }
+    if (!route.inventoryTransferId || !route.inventoryTransfer) {
+      throw new ConflictException(
+        'Logistics route is missing its inventory transfer',
+      );
+    }
+    if (route.inventoryTransfer.status === InventoryTransferStatus.CANCELLED) {
+      throw new ConflictException(
+        'Cancelled inventory transfers cannot complete a logistics stop',
+      );
+    }
+    if (route.logisticsStopCompletedAt) {
+      return this.findRoute(id, currentUser);
+    }
+    if (route.status !== DeliveryRouteStatus.IN_PROGRESS) {
+      throw new BadRequestException(
+        'Logistics stops can only be completed on an in-progress route',
+      );
+    }
+
+    const updated = (await this.prisma.deliveryRoute.update({
+      where: { id: route.id },
+      data: {
+        logisticsStopCompletedAt: new Date(),
+        logisticsStopCompletedByUserId: currentUser.id,
+        logisticsStopNotes: dto?.notes?.trim() || null,
+      },
+      include: this.logisticsRouteDetailInclude(),
+    })) as DeliveryRouteRecord;
+
+    return this.toRouteDetail(updated);
+  }
+
   async updateOrderStatus(
     id: string,
     dto: UpdateDeliveryOrderStatusDto,
@@ -925,6 +1136,8 @@ export class DeliveryService {
     if (!order) {
       throw new NotFoundException('Delivery order not found');
     }
+
+    this.assertCommercialDeliveryOrder(order);
 
     if (!order.route?.routeStockLocationId) {
       throw new BadRequestException(
@@ -979,6 +1192,7 @@ export class DeliveryService {
     currentUser: Actor,
   ) {
     const order = await this.findAccessibleOrder(id, currentUser);
+    this.assertCommercialDeliveryOrder(order);
     const receivedAt = new Date();
     let validatedEvidence: ValidatedDeliveryEvidence;
     try {
@@ -1069,6 +1283,11 @@ export class DeliveryService {
     const normalizedIdempotencyKey = idempotencyKey.trim();
 
     const order = await this.findAccessibleOrder(id, currentUser);
+    if (order.route && this.isLogisticsRoute(order.route)) {
+      throw new BadRequestException(
+        'Logistics routes do not support collections',
+      );
+    }
     if (
       !order.accountReceivableId ||
       order.accountReceivableId !== dto.accountReceivableId
@@ -1276,6 +1495,7 @@ export class DeliveryService {
 
     const transactionResult = await this.prisma.$transaction(async (tx) => {
       const order = await this.findAccessibleOrder(id, currentUser, tx);
+      this.assertCommercialDeliveryOrder(order);
       if (!order.route?.routeStockLocationId) {
         throw new BadRequestException(
           'Route stock location is required to register delivery incidents',
@@ -1469,6 +1689,20 @@ export class DeliveryService {
   }
 
   async openSettlement(routeId: string, currentUser: Actor) {
+    const routeTypeRecord = (await this.prisma.deliveryRoute.findFirst({
+      where: this.buildRouteAccessWhere(routeId, currentUser),
+      select: { type: true },
+    })) as { type?: DeliveryRouteType } | null;
+
+    if (!routeTypeRecord) {
+      throw new NotFoundException('Delivery route not found');
+    }
+    if (this.isLogisticsRouteType(routeTypeRecord.type)) {
+      throw new BadRequestException(
+        'Logistics routes do not support route settlements',
+      );
+    }
+
     const route = (await this.prisma.deliveryRoute.findFirst({
       where: this.buildRouteAccessWhere(routeId, currentUser),
       include: {
@@ -1543,11 +1777,16 @@ export class DeliveryService {
 
     const settlement = (await this.prisma.routeSettlement.findUnique({
       where: { id },
-      include: { route: { include: { deliveryOrders: true } } },
+      include: { route: { select: { type: true, deliveryOrders: true } } },
     })) as RouteSettlementRecord | null;
 
     if (!settlement) {
       throw new NotFoundException('Route settlement not found');
+    }
+    if (this.isLogisticsRouteType(settlement.route?.type)) {
+      throw new BadRequestException(
+        'Logistics routes do not support route settlements',
+      );
     }
     if (
       settlement.status === RouteSettlementStatus.CLOSED &&
@@ -1606,10 +1845,16 @@ export class DeliveryService {
 
     const settlement = (await this.prisma.routeSettlement.findUnique({
       where: { id },
+      include: { route: { select: { type: true } } },
     })) as RouteSettlementRecord | null;
 
     if (!settlement) {
       throw new NotFoundException('Route settlement not found');
+    }
+    if (this.isLogisticsRouteType(settlement.route?.type)) {
+      throw new BadRequestException(
+        'Logistics routes do not support route settlements',
+      );
     }
     if (
       settlement.status === RouteSettlementStatus.OPEN &&
@@ -1792,6 +2037,51 @@ export class DeliveryService {
     };
   }
 
+  private logisticsRouteDetailInclude() {
+    return {
+      driver: { select: { id: true, name: true } },
+      vehicle: { select: this.routeVehicleSelect() },
+      inventoryTransfer: {
+        select: {
+          id: true,
+          transferNumber: true,
+          status: true,
+          originLocationId: true,
+          destinationLocationId: true,
+          originLocation: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              latitude: true,
+              longitude: true,
+            },
+          },
+          destinationLocation: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              latitude: true,
+              longitude: true,
+            },
+          },
+          items: {
+            orderBy: { createdAt: 'asc' as const },
+            select: {
+              id: true,
+              productId: true,
+              unit: true,
+              quantityKg: true,
+              quantityPieces: true,
+              product: { select: { id: true, name: true, unit: true } },
+            },
+          },
+        },
+      },
+    };
+  }
+
   private routeVehicleSelect() {
     return {
       id: true,
@@ -1882,6 +2172,45 @@ export class DeliveryService {
     if (activeRoute) {
       throw new ConflictException(
         'The selected vehicle already has an in-progress route',
+      );
+    }
+  }
+
+  private assertLogisticsDirection(
+    type: LogisticsRouteType,
+    originType: OperationalLocationType,
+    destinationType: OperationalLocationType,
+  ) {
+    const validDirection =
+      type === DeliveryRouteType.BRANCH_RETURN
+        ? originType === OperationalLocationType.BRANCH &&
+          destinationType === OperationalLocationType.DISTRIBUTION_CENTER
+        : originType === OperationalLocationType.DISTRIBUTION_CENTER &&
+          destinationType === OperationalLocationType.BRANCH;
+
+    if (!validDirection) {
+      throw new ConflictException(
+        'Logistics route direction does not match its OperationalLocations',
+      );
+    }
+  }
+
+  private assertLogisticsLocation(
+    location: {
+      isActive: boolean;
+      latitude: Prisma.Decimal | null;
+      longitude: Prisma.Decimal | null;
+    },
+    role: 'origin' | 'destination',
+  ) {
+    if (!location.isActive) {
+      throw new ConflictException(
+        `Logistics route ${role} location is inactive`,
+      );
+    }
+    if (location.latitude === null || location.longitude === null) {
+      throw new UnprocessableEntityException(
+        `LOGISTICS_ROUTE_${role.toUpperCase()}_COORDINATES_REQUIRED`,
       );
     }
   }
@@ -1998,11 +2327,39 @@ export class DeliveryService {
     }
   }
 
+  private isLogisticsRouteType(
+    type?: DeliveryRouteType,
+  ): type is LogisticsRouteType {
+    return (
+      type === DeliveryRouteType.BRANCH_RETURN ||
+      type === DeliveryRouteType.CEDIS_SUPPLY
+    );
+  }
+
+  private isLogisticsRoute(route: Pick<DeliveryRouteRecord, 'type'>): boolean {
+    return this.isLogisticsRouteType(route.type);
+  }
+
+  private assertCommercialDeliveryOrder(order: DeliveryOrderRecord): void {
+    if (order.route && this.isLogisticsRoute(order.route)) {
+      throw new BadRequestException(
+        'Logistics routes use logistics stop confirmation',
+      );
+    }
+  }
+
   private toRouteListItem(route: DeliveryRouteRecord) {
     const orders = route.deliveryOrders ?? [];
+    const isLogistics = this.isLogisticsRoute(route);
+    const logisticsStopStatus: LogisticsStopStatus | null = isLogistics
+      ? route.logisticsStopCompletedAt
+        ? 'COMPLETED'
+        : 'PENDING'
+      : null;
     return {
       id: route.id,
       name: route.name,
+      type: route.type ?? DeliveryRouteType.SALE_DELIVERY,
       driverId: route.driverId,
       driverName: route.driver?.name ?? null,
       vehicleId: route.vehicle?.id ?? route.vehicleId ?? null,
@@ -2019,13 +2376,16 @@ export class DeliveryService {
       scheduledDate: route.scheduledDate.toISOString(),
       originLocationId: route.originLocationId ?? null,
       routeStockLocationId: route.routeStockLocationId,
+      inventoryTransferId: route.inventoryTransferId ?? null,
       startedAt: route.startedAt?.toISOString() ?? null,
       completedAt: route.completedAt?.toISOString() ?? null,
       ordersCount: orders.length,
       pendingOrdersCount: orders.filter(
         (order) => !FINAL_ORDER_STATUSES.has(order.status),
       ).length,
-      routeSettlementId: route.settlement?.id ?? null,
+      routeSettlementId: isLogistics ? null : (route.settlement?.id ?? null),
+      logisticsStopStatus,
+      pendingStopsCount: isLogistics && !route.logisticsStopCompletedAt ? 1 : 0,
       optimizationStatus:
         route.optimizationStatus ?? RouteOptimizationStatus.NOT_OPTIMIZED,
       mapAvailable:
@@ -2041,6 +2401,17 @@ export class DeliveryService {
   }
 
   private async toRouteDetail(route: DeliveryRouteRecord) {
+    if (this.isLogisticsRoute(route)) {
+      return {
+        ...this.toRouteListItem(route),
+        geometry: route.geometry ?? null,
+        orders: [],
+        evidenceSummary: [],
+        collectionsSummary: null,
+        logisticsStop: this.toLogisticsStopResponse(route),
+      };
+    }
+
     const payments = route.payments ?? [];
     const evidenceSummary = (
       await Promise.all(
@@ -2080,6 +2451,50 @@ export class DeliveryService {
         route.payments ?? [],
         route.deliveryOrders ?? [],
       ),
+    };
+  }
+
+  private toLogisticsStopResponse(route: DeliveryRouteRecord) {
+    const transfer = route.inventoryTransfer;
+    if (!transfer) {
+      throw new ConflictException(
+        'Logistics route is missing its inventory transfer',
+      );
+    }
+
+    return {
+      status: route.logisticsStopCompletedAt ? 'COMPLETED' : 'PENDING',
+      inventoryTransferId: transfer.id,
+      transferNumber: transfer.transferNumber,
+      transferStatus: transfer.status,
+      completedAt: route.logisticsStopCompletedAt?.toISOString() ?? null,
+      completedByUserId: route.logisticsStopCompletedByUserId ?? null,
+      notes: route.logisticsStopNotes ?? null,
+      origin: this.toLogisticsLocationResponse(transfer.originLocation),
+      destination: this.toLogisticsLocationResponse(
+        transfer.destinationLocation,
+      ),
+      items: (transfer.items ?? []).map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.product?.name ?? null,
+        unit: item.unit,
+        quantityKg: this.toNumber(item.quantityKg),
+        quantityPieces: item.quantityPieces ?? 0,
+      })),
+    };
+  }
+
+  private toLogisticsLocationResponse(
+    location: LogisticsTransferRecord['originLocation'],
+  ) {
+    if (!location) return null;
+    return {
+      id: location.id,
+      name: location.name,
+      type: location.type,
+      latitude: this.toNumber(location.latitude),
+      longitude: this.toNumber(location.longitude),
     };
   }
 

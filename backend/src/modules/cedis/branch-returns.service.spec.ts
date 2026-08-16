@@ -53,6 +53,23 @@ function link(status = 'REQUESTED') {
           product: { id: 'product-1', name: 'Pollo entero' },
         },
       ],
+      deliveryRoute: {
+        id: 'route-return-1',
+        type: 'BRANCH_RETURN',
+        status: 'PENDING',
+        driverId: 'driver-1',
+        vehicleId: 'vehicle-1',
+        inventoryTransferId: 'transfer-1',
+        originLocationId: 'branch-1',
+        scheduledDate: businessDate,
+        driver: { id: 'driver-1', name: 'Repartidor' },
+        vehicle: {
+          id: 'vehicle-1',
+          code: 'UNIT-01',
+          displayName: 'Unidad 1',
+          plateNumber: 'ABC-123',
+        },
+      },
     },
   };
 }
@@ -95,6 +112,11 @@ describe('BranchReturnsService', () => {
         status: 'PENDING',
         transferNumber: 'TRF-RET-001',
         requestedBy: { id: 'seller-1', name: 'Vendedor' },
+        route: expect.objectContaining({
+          id: 'route-return-1',
+          vehicleId: 'vehicle-1',
+          inventoryTransferId: 'transfer-1',
+        }),
       }),
     );
     expect(db.branchSupplyCycleTransfer.findMany).toHaveBeenCalledWith(

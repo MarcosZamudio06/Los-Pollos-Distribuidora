@@ -101,6 +101,14 @@ vi.mock("../hooks", () => ({
   useCompleteCedisReturn: () => mockState.mutations,
   useCancelCedisCycle: () => mockState.mutations,
   useCloseCedisCycle: () => mockState.mutations,
+  useCedisLogisticsResources: () => ({
+    drivers: { data: logisticsResources.drivers, error: null, isLoading: false },
+    vehicles: {
+      data: logisticsResources.vehicles,
+      error: null,
+      isLoading: false,
+    },
+  }),
   useCreateCedisReturn: () => mockState.mutations,
   useCreateCedisSupply: () => mockState.mutations,
   useOpenCedisCycle: () => mockState.mutations,
@@ -338,6 +346,38 @@ const summary: CedisCycleSummary = {
 };
 
 const transferContextKey = "2026-08-05|cycle-1|SUPPLY|cedis-1|initial";
+
+const logisticsResources = {
+  drivers: [
+    {
+      id: "driver-1",
+      name: "Conductor activo",
+      isActive: true,
+      role: { name: "DRIVER" },
+    },
+    {
+      id: "driver-inactive",
+      name: "Conductor inactivo",
+      isActive: false,
+      role: { name: "DRIVER" },
+    },
+  ],
+  vehicles: [
+    {
+      id: "vehicle-1",
+      code: "V-01",
+      displayName: "Unidad activa",
+      isActive: true,
+    },
+    {
+      id: "vehicle-inactive",
+      code: "V-02",
+      displayName: "Unidad inactiva",
+      isActive: false,
+    },
+  ],
+  isLoading: false,
+};
 
 function renderPage(
   entry = "/cedis/branches/branch-1?date=2026-08-05&cycle=cycle-1",
@@ -677,9 +717,21 @@ describe("CEDIS branch detail page", () => {
         ?.click();
     });
     await act(async () => {
-      const select = container.querySelector("select") as HTMLSelectElement;
-      select.value = "product-1";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const driverSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      );
+      const vehicleSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      );
+      const productSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Producto 1"]',
+      );
+      driverSelect!.value = "driver-1";
+      driverSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      vehicleSelect!.value = "vehicle-1";
+      vehicleSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      productSelect!.value = "product-1";
+      productSelect!.dispatchEvent(new Event("change", { bubbles: true }));
       const input = container.querySelector(
         'input[aria-label="Kilos 1"]',
       ) as HTMLInputElement;
@@ -716,6 +768,7 @@ describe("CEDIS branch detail page", () => {
         cedis={summary.distributionCenter}
         contextKey={transferContextKey}
         expectedVersion={summary.version}
+        logisticsResources={logisticsResources}
         mode="SUPPLY"
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
@@ -773,6 +826,7 @@ describe("CEDIS transfer command panel", () => {
           onSubmit={onSubmit}
           products={[product]}
           productsLoading={false}
+          logisticsResources={logisticsResources}
         />,
       );
     });
@@ -780,9 +834,21 @@ describe("CEDIS transfer command panel", () => {
 
   async function fillSupplyForm(submit = true) {
     await act(async () => {
-      const select = container.querySelector("select") as HTMLSelectElement;
-      select.value = "product-1";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const driverSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      );
+      const vehicleSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      );
+      const productSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Producto 1"]',
+      );
+      driverSelect!.value = "driver-1";
+      driverSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      vehicleSelect!.value = "vehicle-1";
+      vehicleSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      productSelect!.value = "product-1";
+      productSelect!.dispatchEvent(new Event("change", { bubbles: true }));
       const input = container.querySelector(
         'input[aria-label="Kilos 1"]',
       ) as HTMLInputElement;
@@ -824,6 +890,137 @@ describe("CEDIS transfer command panel", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("presenta puntos de partida y llegada con coordenadas según el sentido", () => {
+    const cedisWithCoordinates = {
+      ...summary.distributionCenter,
+      latitude: 19.5,
+      longitude: -96.5,
+    };
+    const supplyHtml = renderToStaticMarkup(
+      <CedisTransferCommandPanel
+        branch={card.branch}
+        cedis={cedisWithCoordinates}
+        contextKey={transferContextKey}
+        expectedVersion={summary.version}
+        logisticsResources={logisticsResources}
+        mode="SUPPLY"
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        products={[product]}
+        productsLoading={false}
+      />,
+    );
+    const returnHtml = renderToStaticMarkup(
+      <CedisTransferCommandPanel
+        branch={card.branch}
+        cedis={cedisWithCoordinates}
+        contextKey="2026-08-05|cycle-1|RETURN|branch-1|initial"
+        cycleItems={summary.items}
+        expectedSales={summary.totals.expectedSales}
+        expectedVersion={summary.version}
+        logisticsResources={logisticsResources}
+        mode="RETURN"
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        products={[product]}
+        productsLoading={false}
+        sourceLocationId="branch-1"
+      />,
+    );
+
+    expect(supplyHtml).toContain("Punto de partida");
+    expect(supplyHtml).toContain("CEDIS Centro");
+    expect(supplyHtml).toContain("Coordenadas: 19.500000, -96.500000");
+    expect(supplyHtml).toContain("Punto de llegada");
+    expect(supplyHtml).toContain("Sucursal Centro");
+    expect(supplyHtml).toContain("Coordenadas: 19.123456, -96.123456");
+    expect(returnHtml.indexOf("Sucursal Centro")).toBeLessThan(
+      returnHtml.indexOf("CEDIS Centro"),
+    );
+    expect(returnHtml).not.toContain("latitude");
+    expect(returnHtml).not.toContain("longitude");
+  });
+
+  it("exige transporte asignable y envía únicamente sus IDs", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderPanel(onSubmit);
+    await act(async () => {
+      const productSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Producto 1"]',
+      );
+      productSelect!.value = "product-1";
+      productSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      const quantity = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Kilos 1"]',
+      );
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(quantity, "5");
+      quantity?.dispatchEvent(new Event("input", { bubbles: true }));
+      quantity?.dispatchEvent(new Event("change", { bubbles: true }));
+      (
+        container.querySelector('button[type="submit"]') as HTMLButtonElement
+      ).click();
+    });
+
+    expect(container.textContent).toContain(
+      "Selecciona un conductor activo autorizado.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('option[value="driver-inactive"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('option[value="vehicle-inactive"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      )?.required,
+    ).toBe(true);
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      )?.required,
+    ).toBe(true);
+
+    await act(async () => {
+      const driverSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      );
+      const vehicleSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      );
+      driverSelect!.value = "driver-1";
+      driverSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      vehicleSelect!.value = "vehicle-1";
+      vehicleSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      (
+        container.querySelector('button[type="submit"]') as HTMLButtonElement
+      ).click();
+    });
+
+    expect(container.textContent).toContain("Confirmación requerida");
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Confirmar suministro"))
+        ?.click();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignedDriverId: "driver-1",
+        vehicleId: "vehicle-1",
+      }),
+      expect.any(String),
+    );
+    const payload = onSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("latitude");
+    expect(payload).not.toHaveProperty("longitude");
+  });
+
   it("invalidates a reviewed command when mode, date, cycle, source, or query context changes", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderPanel(onSubmit);
@@ -850,6 +1047,7 @@ describe("CEDIS transfer command panel", () => {
           cycleItems={summary.items}
           expectedSales={summary.totals.expectedSales}
           expectedVersion={4}
+          logisticsResources={logisticsResources}
           mode="RETURN"
           onClose={vi.fn()}
           onSubmit={onSubmit}
@@ -864,6 +1062,16 @@ describe("CEDIS transfer command panel", () => {
     expect(onSubmit).not.toHaveBeenCalled();
 
     await act(async () => {
+      const driverSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      );
+      const vehicleSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      );
+      driverSelect!.value = "driver-1";
+      driverSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      vehicleSelect!.value = "vehicle-1";
+      vehicleSelect!.dispatchEvent(new Event("change", { bubbles: true }));
       const input = container.querySelector(
         'input[aria-label="Kilos 1"]',
       ) as HTMLInputElement;
@@ -916,6 +1124,7 @@ describe("CEDIS transfer command panel", () => {
           cycleItems={summary.items}
           expectedSales={summary.totals.expectedSales}
           expectedVersion={summary.version}
+          logisticsResources={logisticsResources}
           mode="RETURN"
           onClose={vi.fn()}
           onSubmit={onSubmit}
@@ -926,9 +1135,21 @@ describe("CEDIS transfer command panel", () => {
     });
 
     await act(async () => {
-      const select = container.querySelector("select") as HTMLSelectElement;
-      select.value = "product-1";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const driverSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      );
+      const vehicleSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      );
+      const productSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Producto 1"]',
+      );
+      driverSelect!.value = "driver-1";
+      driverSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      vehicleSelect!.value = "vehicle-1";
+      vehicleSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      productSelect!.value = "product-1";
+      productSelect!.dispatchEvent(new Event("change", { bubbles: true }));
       const input = container.querySelector(
         'input[aria-label="Kilos 1"]',
       ) as HTMLInputElement;
@@ -982,6 +1203,7 @@ describe("CEDIS transfer command panel", () => {
           cedis={summary.distributionCenter}
           contextKey={transferContextKey}
           expectedVersion={summary.version}
+          logisticsResources={logisticsResources}
           mode="SUPPLY"
           onClose={vi.fn()}
           onSubmit={onSubmit}
@@ -1019,6 +1241,7 @@ describe("CEDIS transfer command panel", () => {
           cedis={summary.distributionCenter}
           contextKey={transferContextKey}
           expectedVersion={summary.version}
+          logisticsResources={logisticsResources}
           mode="SUPPLY"
           onClose={vi.fn()}
           onSubmit={vi.fn().mockResolvedValue(undefined)}
@@ -1050,6 +1273,7 @@ describe("CEDIS transfer command panel", () => {
           cedis={summary.distributionCenter}
           contextKey={transferContextKey}
           expectedVersion={summary.version}
+          logisticsResources={logisticsResources}
           mode="SUPPLY"
           onClose={vi.fn()}
           onSubmit={onSubmit}
@@ -1131,6 +1355,7 @@ describe("CEDIS transfer command panel", () => {
         cedis={summary.distributionCenter}
         contextKey={transferContextKey}
         expectedVersion={summary.version}
+        logisticsResources={logisticsResources}
         mode="SUPPLY"
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
@@ -1172,6 +1397,7 @@ describe("CEDIS transfer command panel", () => {
         cedis={summary.distributionCenter}
         contextKey={transferContextKey}
         expectedVersion={summary.version}
+        logisticsResources={logisticsResources}
         mode="SUPPLY"
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}

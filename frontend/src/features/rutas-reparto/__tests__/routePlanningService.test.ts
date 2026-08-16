@@ -242,6 +242,34 @@ describe("delivery route planning API contracts", () => {
     );
   });
 
+  it("confirms a logistics stop without sending payment or location data", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        id: "route-1",
+        type: "BRANCH_RETURN",
+        logisticsStop: { status: "COMPLETED" },
+      }),
+    );
+
+    await deliveryService.completeLogisticsStop(
+      "route-1",
+      {},
+      "driver-token",
+    );
+
+    expect(requestAt().url).toBe(
+      "/api/delivery-routes/route-1/logistics-stop/complete",
+    );
+    expect(requestAt().init.method).toBe("POST");
+    expect(JSON.parse(String(requestAt().init.body))).toEqual({});
+    expect(new Headers(requestAt().init.headers).get("authorization")).toBe(
+      "Bearer driver-token",
+    );
+    expect(new Headers(requestAt().init.headers).get("idempotency-key")).toBe(
+      null,
+    );
+  });
+
   it("publishes a GPS reading without client-controlled assignment identifiers", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       okJson({

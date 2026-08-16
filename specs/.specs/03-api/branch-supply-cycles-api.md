@@ -6,6 +6,7 @@
 - Todos los `POST` requieren `Idempotency-Key` normalizada; el backend calcula y conserva el hash canónico del payload.
 - Las respuestas siguen `api-conventions.md`.
 - Las ubicaciones de cada traspaso se derivan del ciclo; el body no puede reemplazarlas.
+- Los comandos de suministro y devolución requieren `assignedDriverId` y `vehicleId`; no aceptan `latitude` ni `longitude`.
 - `expectedVersion` aplica control optimista. Una versión obsoleta responde `BRANCH_SUPPLY_CYCLE_VERSION_CONFLICT`.
 
 ## GET /api/cedis/branch-supply-cycles
@@ -55,6 +56,8 @@ Body común:
 ```json
 {
   "expectedVersion": 1,
+  "assignedDriverId": "driver-id",
+  "vehicleId": "vehicle-id",
   "notes": "string opcional",
   "items": [
     {
@@ -68,6 +71,16 @@ Body común:
 }
 ```
 
+El servidor valida la asignación antes de persistir: el conductor debe existir,
+estar activo y tener rol `DRIVER`; la unidad debe existir, estar activa y no
+tener otra ruta `IN_PROGRESS`. La operación crea en la misma transacción el
+`InventoryTransfer` `REQUESTED`, el vínculo de ciclo y una `DeliveryRoute`
+`BRANCH_RETURN` o `CEDIS_SUPPLY` con `inventoryTransferId`, `driverId` y
+`vehicleId`. Origen, destino y coordenadas se leen exclusivamente desde las
+`OperationalLocation` del traslado. Si falta una coordenada, responde con un
+error de dominio `LOGISTICS_ROUTE_ORIGIN_COORDINATES_REQUIRED` o
+`LOGISTICS_ROUTE_DESTINATION_COORDINATES_REQUIRED` y no persiste cambios.
+
 Reglas:
 
 - Debe existir al menos una partida y todos los productos deben estar activos.
@@ -78,6 +91,8 @@ Reglas:
 - Por producto y dimensión, la devolución no puede superar la cantidad no vendida del ciclo (`entregado - vendidoReal - devueltoConfirmado`) ni la disponibilidad física actual de la sucursal.
 - Si se excede cualquiera de esos límites, responde `409 Conflict` con `code=RETURN_EXCEEDS_UNSOLD_QUANTITY` y no crea transferencia ni reserva.
 - Crear transferencia, vínculo, evento y nueva versión del ciclo es atómico.
+- Crear la ruta logística y su `ROUTE_STOCK` también es atómico con transferencia,
+  vínculo, reserva, evento y nueva versión del ciclo.
 - Crear un suministro o devolución `REQUESTED` reserva en el origen dentro de la misma transacción.
 - Si el ciclo estaba `READY_FOR_REVIEW`, una nueva operación permitida lo devuelve a `OPEN`.
 - `CLOSED` y `CANCELLED` rechazan mutaciones.
@@ -192,7 +207,7 @@ Validaciones:
 
 ## GET /api/cedis/returns
 
-Lista devoluciones `RETURN` del día operativo con `businessDate`, `status` (`PENDING`, `COMPLETED`, `CANCELLED` o `ALL`), `branchLocationId`, `page` y `limit`. La respuesta incluye ciclo, sucursal, CEDIS, folio, estado derivado del `InventoryTransfer`, notas, fechas, partidas y usuario solicitante. `SELLER` solo ve su sucursal; `WAREHOUSE` ve ciclos cuyo CEDIS o sucursal coincide con su ubicación; `ADMIN` ve todos.
+Lista devoluciones `RETURN` del día operativo con `businessDate`, `status` (`PENDING`, `COMPLETED`, `CANCELLED` o `ALL`), `branchLocationId`, `page` y `limit`. La respuesta incluye ciclo, sucursal, CEDIS, folio, estado derivado del `InventoryTransfer`, notas, fechas, partidas, usuario solicitante y, cuando existe, la `DeliveryRoute` logística con conductor, unidad, estado y vínculo al traspaso. `SELLER` solo ve su sucursal; `WAREHOUSE` ve ciclos cuyo CEDIS o sucursal coincide con su ubicación; `ADMIN` ve todos.
 
 ## GET /api/cedis/returns/:transferId
 

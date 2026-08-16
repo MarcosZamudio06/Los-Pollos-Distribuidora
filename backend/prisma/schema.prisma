@@ -167,6 +167,12 @@ enum DeliveryRouteStatus {
   CANCELLED
 }
 
+enum DeliveryRouteType {
+  SALE_DELIVERY
+  BRANCH_RETURN
+  CEDIS_SUPPLY
+}
+
 enum GeofenceEventType {
   ENTER
   EXIT
@@ -431,6 +437,7 @@ model User {
   createdOperationalConfigs       OperationalConfig[]          @relation("OperationalConfigCreatedBy")
   updatedOperationalConfigs       OperationalConfig[]          @relation("OperationalConfigUpdatedBy")
   deliveryRoutes                  DeliveryRoute[]              @relation("DeliveryRouteDriver")
+  completedLogisticsStops         DeliveryRoute[]              @relation("DeliveryRouteLogisticsStopCompletedBy")
   vehiclePositions                VehiclePosition[]            @relation("VehiclePositionDriver")
   deliveryIncidentsAsDriver       DeliveryIncident[]            @relation("DeliveryIncidentDriver")
   reportedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentReportedBy")
@@ -946,6 +953,7 @@ model InventoryTransfer {
   inventoryMovements        InventoryMovement[]
   branchSupplyCycleTransfer BranchSupplyCycleTransfer?
   branchSupplyReceipt       BranchSupplyReceipt?
+  deliveryRoute             DeliveryRoute?
 
   @@index([originLocationId, status])
   @@index([destinationLocationId, status])
@@ -1246,14 +1254,19 @@ model VehiclePosition {
 model DeliveryRoute {
   id                     String                                     @id @default(cuid())
   name                   String
+  type                   DeliveryRouteType                           @default(SALE_DELIVERY)
   driverId               String
   vehicleId              String?
+  inventoryTransferId    String?                                    @unique
   status                 DeliveryRouteStatus                        @default(PENDING)
   scheduledDate          DateTime
   originLocationId       String?
   routeStockLocationId   String                                     @unique
   startedAt              DateTime?
   completedAt            DateTime?
+  logisticsStopCompletedAt       DateTime?
+  logisticsStopCompletedByUserId String?
+  logisticsStopNotes             String?
   optimizationStatus     RouteOptimizationStatus                    @default(NOT_OPTIMIZED)
   geometry               Json?
   routeGeometry          Unsupported("geometry(LineString, 4326)")?
@@ -1267,7 +1280,9 @@ model DeliveryRoute {
   createdAt              DateTime                                   @default(now())
   updatedAt              DateTime                                   @updatedAt
   driver                 User                                       @relation("DeliveryRouteDriver", fields: [driverId], references: [id])
+  logisticsStopCompletedBy User?                                    @relation("DeliveryRouteLogisticsStopCompletedBy", fields: [logisticsStopCompletedByUserId], references: [id])
   vehicle                Vehicle?                                   @relation(fields: [vehicleId], references: [id])
+  inventoryTransfer      InventoryTransfer?                         @relation(fields: [inventoryTransferId], references: [id], onDelete: Restrict)
   originLocation         OperationalLocation?                       @relation("RouteOriginLocation", fields: [originLocationId], references: [id])
   routeStockLocation     OperationalLocation                        @relation("RouteStockLocation", fields: [routeStockLocationId], references: [id])
   assignedCustomers      Customer[]
@@ -1283,6 +1298,7 @@ model DeliveryRoute {
   deliveryIncidents      DeliveryIncident[]
 
   @@index([driverId, scheduledDate, status])
+  @@index([type, scheduledDate, status])
   @@index([vehicleId, status, scheduledDate])
 }
 

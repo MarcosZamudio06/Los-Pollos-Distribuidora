@@ -275,6 +275,42 @@ describe("DriverRouteMap", () => {
     await act(async () => root.unmount());
   });
 
+  it("renders logistics endpoints from canonical location coordinates without persisted geometry", async () => {
+    const { container, map, root } = await renderMap({
+      geometry: undefined,
+      originLocation: {
+        id: "branch-1",
+        name: "Sucursal Centro",
+        latitude: 19.2,
+        longitude: -96.2,
+      },
+      destinationLocation: {
+        id: "cedis-1",
+        name: "CEDIS Principal",
+        latitude: 19.1,
+        longitude: -96.1,
+      },
+    });
+
+    expect(map.layers).toEqual([]);
+    expect(map.fitBoundsCalls[0].bounds).toEqual([
+      [-96.2, 19.1],
+      [-96.1, 19.2],
+    ]);
+    expect(
+      container
+        .querySelector('[data-marker-kind="origin"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Partida: Sucursal Centro");
+    expect(
+      container
+        .querySelector('[data-marker-kind="destination"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Destino: CEDIS Principal");
+
+    await act(async () => root.unmount());
+  });
+
   it("does not create a map for empty geometry", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

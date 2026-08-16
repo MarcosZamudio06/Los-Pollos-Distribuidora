@@ -67,6 +67,10 @@ vi.mock("../../cedis/hooks", () => ({
   useOperationalLocation: () => mockCedis.location,
   useCedisBranchHistory: () => mockCedis.history,
   useCedisCycleSummary: () => mockCedis.summary,
+  useCedisLogisticsResources: () => ({
+    drivers: { data: [], error: null, isLoading: false },
+    vehicles: { data: [], error: null, isLoading: false },
+  }),
   useCreateCedisReturn: () => mockCedis.create,
 }));
 

@@ -9,6 +9,8 @@ import {
   DeliveryEvidenceType,
   DeliveryOrderStatus,
   DeliveryRouteStatus,
+  DeliveryRouteType,
+  InventoryTransferStatus,
   InventoryMovementType,
   OperationalLocationType,
   PaymentMethod,
@@ -31,6 +33,7 @@ type MockPrisma = {
     update: jest.Mock;
   };
   vehicle: { findFirst: jest.Mock };
+  inventoryTransfer: { findUnique: jest.Mock };
   deliveryOrder: {
     findFirst: jest.Mock;
     update: jest.Mock;
@@ -136,6 +139,45 @@ function createOrder(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createLogisticsTransfer(
+  type: DeliveryRouteType = DeliveryRouteType.BRANCH_RETURN,
+  overrides: Record<string, unknown> = {},
+) {
+  const isSupply = type === DeliveryRouteType.CEDIS_SUPPLY;
+  const originId = isSupply ? 'cedis-1' : 'branch-1';
+  const destinationId = isSupply ? 'branch-1' : 'cedis-1';
+  const originType = isSupply
+    ? OperationalLocationType.DISTRIBUTION_CENTER
+    : OperationalLocationType.BRANCH;
+  const destinationType = isSupply
+    ? OperationalLocationType.BRANCH
+    : OperationalLocationType.DISTRIBUTION_CENTER;
+  return {
+    id: 'transfer-1',
+    transferNumber: 'TRF-001',
+    originLocationId: originId,
+    destinationLocationId: destinationId,
+    originLocation: {
+      id: originId,
+      name: isSupply ? 'CEDIS Principal' : 'Sucursal Centro',
+      type: originType,
+      isActive: true,
+      latitude: new Prisma.Decimal('19.170000'),
+      longitude: new Prisma.Decimal('-96.130000'),
+    },
+    destinationLocation: {
+      id: destinationId,
+      name: isSupply ? 'Sucursal Centro' : 'CEDIS Principal',
+      type: destinationType,
+      isActive: true,
+      latitude: new Prisma.Decimal('19.180000'),
+      longitude: new Prisma.Decimal('-96.140000'),
+    },
+    deliveryRoute: null,
+    ...overrides,
+  };
+}
+
 function createPrisma(): MockPrisma {
   const prisma: MockPrisma = {
     user: { findFirst: jest.fn() },
@@ -147,6 +189,7 @@ function createPrisma(): MockPrisma {
       update: jest.fn(),
     },
     vehicle: { findFirst: jest.fn().mockResolvedValue({ id: 'vehicle-1' }) },
+    inventoryTransfer: { findUnique: jest.fn() },
     deliveryOrder: {
       findFirst: jest.fn(),
       update: jest.fn(),
@@ -277,6 +320,132 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+  });
+
+  it('includes assigned commercial and logistics routes in the same DRIVER listing', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.count.mockResolvedValue(2);
+    prisma.deliveryRoute.findMany.mockResolvedValue([
+      createRoute({ id: 'sale-route', type: DeliveryRouteType.SALE_DELIVERY }),
+      createRoute({
+        id: 'return-route',
+        type: DeliveryRouteType.BRANCH_RETURN,
+        vehicleId: 'vehicle-1',
+        inventoryTransferId: 'transfer-1',
+      }),
+    ]);
+
+    const result = await service.findRoutes({}, driver);
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'sale-route',
+        type: DeliveryRouteType.SALE_DELIVERY,
+      }),
+      expect.objectContaining({
+        id: 'return-route',
+        type: DeliveryRouteType.BRANCH_RETURN,
+        inventoryTransferId: 'transfer-1',
+      }),
+    ]);
+    expect(prisma.deliveryRoute.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { driverId: 'driver-1' },
+      }),
+    );
+  });
+
+  it('exposes the explicit logistics purpose and transfer link in route listings', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.count.mockResolvedValue(1);
+    prisma.deliveryRoute.findMany.mockResolvedValue([
+      createRoute({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        vehicleId: 'vehicle-1',
+        inventoryTransferId: 'transfer-1',
+      }),
+    ]);
+
+    await expect(service.findRoutes({}, admin)).resolves.toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            type: DeliveryRouteType.BRANCH_RETURN,
+            inventoryTransferId: 'transfer-1',
+            vehicleId: 'vehicle-1',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('returns a logistics stop without commercial orders, CxC, or collection data', async () => {
+    const { service, prisma } = createService();
+    const transfer = {
+      id: 'transfer-1',
+      transferNumber: 'TR-1001',
+      status: InventoryTransferStatus.REQUESTED,
+      originLocationId: 'branch-1',
+      destinationLocationId: 'cedis-1',
+      originLocation: {
+        id: 'branch-1',
+        name: 'Sucursal Centro',
+        type: 'BRANCH',
+        latitude: money('19.1700'),
+        longitude: money('-96.1300'),
+      },
+      destinationLocation: {
+        id: 'cedis-1',
+        name: 'CEDIS Principal',
+        type: 'DISTRIBUTION_CENTER',
+        latitude: money('19.1800'),
+        longitude: money('-96.1400'),
+      },
+      items: [
+        {
+          id: 'transfer-item-1',
+          productId: 'product-1',
+          unit: 'KG',
+          quantityKg: money('10.000'),
+          quantityPieces: 0,
+          product: { id: 'product-1', name: 'Pollo', unit: 'KG' },
+        },
+      ],
+    };
+    prisma.deliveryRoute.findFirst
+      .mockResolvedValueOnce({ type: DeliveryRouteType.BRANCH_RETURN })
+      .mockResolvedValueOnce(
+        createRoute({
+          type: DeliveryRouteType.BRANCH_RETURN,
+          inventoryTransferId: transfer.id,
+          inventoryTransfer: transfer,
+        }),
+      );
+
+    const result = await service.findRoute('route-1', driver);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        orders: [],
+        collectionsSummary: null,
+        logisticsStop: expect.objectContaining({
+          status: 'PENDING',
+          inventoryTransferId: transfer.id,
+          origin: expect.objectContaining({ id: 'branch-1' }),
+          destination: expect.objectContaining({ id: 'cedis-1' }),
+          items: [expect.objectContaining({ productId: 'product-1' })],
+        }),
+      }),
+    );
+
+    const detailCall = prisma.deliveryRoute.findFirst.mock.calls[1]?.[0] as {
+      include?: Record<string, unknown>;
+    };
+    expect(detailCall.include).not.toHaveProperty('payments');
+    expect(detailCall.include).not.toHaveProperty('deliveryOrders');
+    expect(prisma.accountReceivable.findUnique).not.toHaveBeenCalled();
+    expect(prisma.payment.findMany).not.toHaveBeenCalled();
   });
 
   it('returns the approved map, ordered stops, and customer to the assigned DRIVER', async () => {
@@ -428,6 +597,245 @@ describe('DeliveryService', () => {
     });
     expect(prisma.sale.updateMany.mock.calls[0][0].data).not.toHaveProperty(
       'locationId',
+    );
+  });
+
+  it.each([
+    {
+      type: DeliveryRouteType.CEDIS_SUPPLY,
+      originType: OperationalLocationType.DISTRIBUTION_CENTER,
+      destinationType: OperationalLocationType.BRANCH,
+      originId: 'cedis-1',
+      destinationId: 'branch-1',
+    },
+    {
+      type: DeliveryRouteType.BRANCH_RETURN,
+      originType: OperationalLocationType.BRANCH,
+      destinationType: OperationalLocationType.DISTRIBUTION_CENTER,
+      originId: 'branch-1',
+      destinationId: 'cedis-1',
+    },
+  ])(
+    'creates a $type route from the transfer locations with a validated driver and vehicle',
+    async ({ type, originType, destinationType, originId, destinationId }) => {
+      const { service, prisma } = createService();
+      prisma.user.findFirst.mockResolvedValue({ id: 'driver-1' });
+      prisma.vehicle.findFirst.mockResolvedValue({ id: 'vehicle-1' });
+      prisma.inventoryTransfer.findUnique.mockResolvedValue({
+        id: 'transfer-1',
+        transferNumber: 'TRF-001',
+        originLocationId: originId,
+        destinationLocationId: destinationId,
+        originLocation: {
+          id: originId,
+          name: 'Origen',
+          type: originType,
+          isActive: true,
+          latitude: new Prisma.Decimal('19.170000'),
+          longitude: new Prisma.Decimal('-96.130000'),
+        },
+        destinationLocation: {
+          id: destinationId,
+          name: 'Destino',
+          type: destinationType,
+          isActive: true,
+          latitude: new Prisma.Decimal('19.180000'),
+          longitude: new Prisma.Decimal('-96.140000'),
+        },
+        deliveryRoute: null,
+      });
+      prisma.operationalLocation.create.mockResolvedValue({
+        id: 'route-stock-1',
+      });
+      prisma.deliveryRoute.create.mockResolvedValue(
+        createRoute({
+          type,
+          inventoryTransferId: 'transfer-1',
+          vehicleId: 'vehicle-1',
+        }),
+      );
+
+      await service.createLogisticsRoute(
+        prisma as unknown as Prisma.TransactionClient,
+        {
+          inventoryTransferId: 'transfer-1',
+          type,
+          driverId: 'driver-1',
+          vehicleId: 'vehicle-1',
+          scheduledDate: date('2026-08-05T00:00:00.000Z'),
+        },
+      );
+
+      expect(prisma.deliveryRoute.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type,
+          inventoryTransferId: 'transfer-1',
+          driverId: 'driver-1',
+          vehicleId: 'vehicle-1',
+          originLocationId: originId,
+          routeStockLocationId: 'route-stock-1',
+        }),
+      });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'driver-1',
+          isActive: true,
+          role: { name: 'DRIVER' },
+        },
+        select: { id: true },
+      });
+      expect(prisma.vehicle.findFirst).toHaveBeenCalledWith({
+        where: { id: 'vehicle-1', isActive: true },
+        select: { id: true },
+      });
+      expect(prisma.deliveryRoute.findFirst).toHaveBeenCalledWith({
+        where: {
+          vehicleId: 'vehicle-1',
+          status: DeliveryRouteStatus.IN_PROGRESS,
+        },
+        select: { id: true },
+      });
+      expect(prisma.operationalLocation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: OperationalLocationType.ROUTE_STOCK,
+          }),
+        }),
+      );
+    },
+  );
+
+  it('rejects a logistics route assigned to a missing, inactive, or non-DRIVER user', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createLogisticsTransfer(),
+    );
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createLogisticsRoute(
+        prisma as unknown as Prisma.TransactionClient,
+        {
+          inventoryTransferId: 'transfer-1',
+          type: DeliveryRouteType.BRANCH_RETURN,
+          driverId: 'not-a-driver',
+          vehicleId: 'vehicle-1',
+          scheduledDate: date('2026-08-05T00:00:00.000Z'),
+        },
+      ),
+    ).rejects.toThrow('Assigned driver must be an active DRIVER user');
+
+    expect(prisma.vehicle.findFirst).not.toHaveBeenCalled();
+    expect(prisma.deliveryRoute.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a logistics route with an inactive or unknown vehicle', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createLogisticsTransfer(DeliveryRouteType.CEDIS_SUPPLY),
+    );
+    prisma.user.findFirst.mockResolvedValue({ id: 'driver-1' });
+    prisma.vehicle.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createLogisticsRoute(
+        prisma as unknown as Prisma.TransactionClient,
+        {
+          inventoryTransferId: 'transfer-1',
+          type: DeliveryRouteType.CEDIS_SUPPLY,
+          driverId: 'driver-1',
+          vehicleId: 'inactive-vehicle',
+          scheduledDate: date('2026-08-05T00:00:00.000Z'),
+        },
+      ),
+    ).rejects.toThrow('Assigned vehicle must be an active fleet vehicle');
+
+    expect(prisma.deliveryRoute.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a logistics route when the assigned vehicle is already in progress', async () => {
+    const { service, prisma } = createService();
+    prisma.inventoryTransfer.findUnique.mockResolvedValue(
+      createLogisticsTransfer(),
+    );
+    prisma.user.findFirst.mockResolvedValue({ id: 'driver-1' });
+    prisma.vehicle.findFirst.mockResolvedValue({ id: 'vehicle-1' });
+    prisma.deliveryRoute.findFirst.mockResolvedValue({ id: 'busy-route' });
+
+    await expect(
+      service.createLogisticsRoute(
+        prisma as unknown as Prisma.TransactionClient,
+        {
+          inventoryTransferId: 'transfer-1',
+          type: DeliveryRouteType.BRANCH_RETURN,
+          driverId: 'driver-1',
+          vehicleId: 'vehicle-1',
+          scheduledDate: date('2026-08-05T00:00:00.000Z'),
+        },
+      ),
+    ).rejects.toThrow('The selected vehicle already has an in-progress route');
+
+    expect(prisma.deliveryRoute.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['origin', DeliveryRouteType.BRANCH_RETURN],
+    ['destination', DeliveryRouteType.CEDIS_SUPPLY],
+  ] as const)(
+    'rejects a logistics route when the canonical %s location lacks coordinates',
+    async (location, type) => {
+      const { service, prisma } = createService();
+      const validTransfer = createLogisticsTransfer(type);
+      const transfer = {
+        ...validTransfer,
+        ...(location === 'origin'
+          ? {
+              originLocation: {
+                ...validTransfer.originLocation,
+                latitude: null,
+              },
+            }
+          : {
+              destinationLocation: {
+                ...validTransfer.destinationLocation,
+                longitude: null,
+              },
+            }),
+      };
+      prisma.inventoryTransfer.findUnique.mockResolvedValue({
+        ...transfer,
+      });
+
+      await expect(
+        service.createLogisticsRoute(
+          prisma as unknown as Prisma.TransactionClient,
+          {
+            inventoryTransferId: 'transfer-1',
+            type,
+            driverId: 'driver-1',
+            vehicleId: 'vehicle-1',
+            scheduledDate: date('2026-08-05T00:00:00.000Z'),
+          },
+        ),
+      ).rejects.toThrow(
+        `LOGISTICS_ROUTE_${location.toUpperCase()}_COORDINATES_REQUIRED`,
+      );
+      expect(prisma.deliveryRoute.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not expose a logistics route to another DRIVER', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.findRoute('route-1', { ...driver, id: 'driver-2' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.deliveryRoute.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'route-1', driverId: 'driver-2' },
+      }),
     );
   });
 
@@ -1127,6 +1535,200 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+  });
+
+  it('requires the logistics stop before completing a BRANCH_RETURN route', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: 'transfer-1',
+        deliveryOrders: [],
+        logisticsStopCompletedAt: null,
+      }),
+    );
+
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.COMPLETED },
+        driver,
+      ),
+    ).rejects.toThrow(
+      'Cannot complete logistics route before completing its stop',
+    );
+
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.findUnique).not.toHaveBeenCalled();
+    expect(prisma.payment.findMany).not.toHaveBeenCalled();
+  });
+
+  it('completes a logistics route after the transport stop without settlement or CxC checks', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.CEDIS_SUPPLY,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: 'transfer-1',
+        deliveryOrders: [],
+        logisticsStopCompletedAt: date('2026-06-19T12:00:00.000Z'),
+        logisticsStopCompletedByUserId: driver.id,
+      }),
+    );
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.CEDIS_SUPPLY,
+        status: DeliveryRouteStatus.COMPLETED,
+        inventoryTransferId: 'transfer-1',
+        deliveryOrders: [],
+        logisticsStopCompletedAt: date('2026-06-19T12:00:00.000Z'),
+        logisticsStopCompletedByUserId: driver.id,
+        completedAt: date('2026-06-19T13:00:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.COMPLETED },
+        driver,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        type: DeliveryRouteType.CEDIS_SUPPLY,
+        status: DeliveryRouteStatus.COMPLETED,
+        pendingStopsCount: 0,
+      }),
+    );
+
+    expect(prisma.deliveryRoute.update).toHaveBeenCalled();
+    expect(prisma.accountReceivable.findUnique).not.toHaveBeenCalled();
+    expect(prisma.payment.findMany).not.toHaveBeenCalled();
+  });
+
+  it('confirms a logistics transport stop through DeliveryRoute, not DeliveryOrder or inventory accounting', async () => {
+    const { service, prisma } = createService();
+    const transfer = {
+      id: 'transfer-1',
+      transferNumber: 'TR-1002',
+      status: InventoryTransferStatus.IN_TRANSIT,
+      originLocationId: 'cedis-1',
+      destinationLocationId: 'branch-1',
+      originLocation: {
+        id: 'cedis-1',
+        name: 'CEDIS Principal',
+        type: 'DISTRIBUTION_CENTER',
+        latitude: money('19.1800'),
+        longitude: money('-96.1400'),
+      },
+      destinationLocation: {
+        id: 'branch-1',
+        name: 'Sucursal Centro',
+        type: 'BRANCH',
+        latitude: money('19.1700'),
+        longitude: money('-96.1300'),
+      },
+      items: [],
+    };
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.CEDIS_SUPPLY,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: transfer.id,
+        inventoryTransfer: { id: transfer.id, status: transfer.status },
+        deliveryOrders: [],
+      }),
+    );
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.CEDIS_SUPPLY,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: transfer.id,
+        inventoryTransfer: transfer,
+        logisticsStopCompletedAt: date('2026-06-19T12:30:00.000Z'),
+        logisticsStopCompletedByUserId: driver.id,
+        logisticsStopNotes: 'Recibido por almacén de sucursal',
+        deliveryOrders: [],
+      }),
+    );
+
+    await expect(
+      service.completeLogisticsStop(
+        'route-1',
+        { notes: 'Recibido por almacén de sucursal' },
+        driver,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        logisticsStop: expect.objectContaining({
+          status: 'COMPLETED',
+          completedByUserId: driver.id,
+          notes: 'Recibido por almacén de sucursal',
+        }),
+      }),
+    );
+
+    expect(prisma.deliveryRoute.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'route-1' },
+        data: expect.objectContaining({
+          logisticsStopCompletedByUserId: driver.id,
+          logisticsStopNotes: 'Recibido por almacén de sucursal',
+        }),
+      }),
+    );
+    expect(prisma.deliveryOrder.update).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.findUnique).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects route collections on a logistics order context before touching Payment or CxC', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(
+      createOrder({
+        route: createRoute({ type: DeliveryRouteType.BRANCH_RETURN }),
+      }),
+    );
+
+    await expect(
+      service.registerCollection(
+        'order-1',
+        {
+          accountReceivableId: 'ar-1',
+          amount: 100,
+          paymentMethod: PaymentMethod.CASH,
+          expectedVersion: 1,
+        },
+        driver,
+        'logistics-collection-key',
+      ),
+    ).rejects.toThrow('Logistics routes do not support collections');
+
+    expect(prisma.accountReceivable.findUnique).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects commercial order status updates on a logistics route', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryOrder.findFirst.mockResolvedValue(
+      createOrder({
+        route: createRoute({ type: DeliveryRouteType.CEDIS_SUPPLY }),
+      }),
+    );
+
+    await expect(
+      service.updateOrderStatus(
+        'order-1',
+        { status: DeliveryOrderStatus.IN_ROUTE },
+        driver,
+      ),
+    ).rejects.toThrow('Logistics routes use logistics stop confirmation');
+
+    expect(prisma.deliveryOrder.update).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.update).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
   it('allows a DRIVER to start an own route', async () => {

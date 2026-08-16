@@ -106,6 +106,14 @@ const deliveryEvidenceObjectStorageMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260815110000_move_delivery_evidence_to_object_storage/migration.sql',
 );
+const deliveryRouteLogisticsMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260815120000_add_delivery_route_logistics_identity/migration.sql',
+);
+const logisticsRouteStopMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260815130000_add_logistics_route_stop_confirmation/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -233,6 +241,60 @@ describe('Prisma schema contract', () => {
     );
     expect(migrationSql).toMatch(
       /ALTER TABLE "DeliveryRoute"\s+\n?\s*ADD COLUMN "vehicleId" TEXT/,
+    );
+  });
+
+  it('distinguishes commercial and logistics routes with an explicit transfer link', () => {
+    const route = getModelBlock('DeliveryRoute');
+    const transfer = getModelBlock('InventoryTransfer');
+    const routeType = getEnumBlock('DeliveryRouteType');
+    const migrationSql = readFileSync(
+      deliveryRouteLogisticsMigrationSqlPath,
+      'utf8',
+    );
+    const stopMigrationSql = readFileSync(
+      logisticsRouteStopMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(routeType).toMatch(/SALE_DELIVERY/);
+    expect(routeType).toMatch(/BRANCH_RETURN/);
+    expect(routeType).toMatch(/CEDIS_SUPPLY/);
+    expect(route).toMatch(
+      /type\s+DeliveryRouteType\s+@default\(SALE_DELIVERY\)/,
+    );
+    expect(route).toMatch(/driverId\s+String/);
+    expect(route).toMatch(/vehicleId\s+String\?/);
+    expect(route).toMatch(/inventoryTransferId\s+String\?\s+@unique/);
+    expect(route).toMatch(/inventoryTransfer\s+InventoryTransfer\?/);
+    expect(route).toMatch(/logisticsStopCompletedAt\s+DateTime\?/);
+    expect(route).toMatch(/logisticsStopCompletedByUserId\s+String\?/);
+    expect(route).toMatch(/logisticsStopNotes\s+String\?/);
+    expect(transfer).toMatch(/deliveryRoute\s+DeliveryRoute\?/);
+    expect(migrationSql).toContain(
+      'CREATE TYPE "DeliveryRouteType" AS ENUM',
+    );
+    expect(migrationSql).toContain(
+      'ADD COLUMN "type" "DeliveryRouteType" NOT NULL DEFAULT \'SALE_DELIVERY\'',
+    );
+    expect(migrationSql).toContain(
+      'ADD COLUMN "inventoryTransferId" TEXT',
+    );
+    expect(migrationSql).toContain('DeliveryRoute_inventoryTransferId_key');
+    expect(migrationSql).toContain(
+      'DeliveryRoute_logistics_vehicle_required_check',
+    );
+    expect(migrationSql).toContain(
+      'DeliveryRoute_logistics_transfer_required_check',
+    );
+    expect(stopMigrationSql).toContain(
+      'ADD COLUMN "logisticsStopCompletedAt" TIMESTAMP(3)',
+    );
+    expect(stopMigrationSql).toContain(
+      'DeliveryRoute_logisticsStopCompletedByUserId_fkey',
+    );
+    expect(migrationSql).not.toContain(
+      'ALTER COLUMN "vehicleId" SET NOT NULL',
     );
   });
 

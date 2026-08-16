@@ -12,6 +12,7 @@ import { ReconciliationResult } from './branch-supply-cycle-reconciliation.servi
 import { BranchSupplyCyclesService } from './branch-supply-cycles.service';
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
 import type { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import type { DeliveryService } from '../delivery/delivery.service';
 
 const businessDate = new Date('2026-08-04T00:00:00.000Z');
 
@@ -44,6 +45,11 @@ const seller = {
   role: 'SELLER',
   operationalLocationId: 'branch-1',
   permissions: ['cedis.view', 'cedis.request_returns'],
+};
+
+const logisticsAssignment = {
+  assignedDriverId: 'driver-1',
+  vehicleId: 'vehicle-1',
 };
 
 function createCycle(overrides: Record<string, unknown> = {}) {
@@ -143,14 +149,18 @@ function createService() {
     closeWithinTransaction: jest.fn(),
     reopenWithinTransaction: jest.fn(),
   };
+  const deliveryService = {
+    createLogisticsRoute: jest.fn().mockResolvedValue({ id: 'route-1' }),
+  };
 
   const service = new BranchSupplyCyclesService(
     prisma as unknown as PrismaService,
     inventoryTransfers as unknown as InventoryTransfersService,
     cycleReconciliation,
     dailyCloseService as unknown as PointOfSaleDailyCloseService,
+    deliveryService as unknown as DeliveryService,
   );
-  return { prisma, inventoryTransfers, dailyCloseService, service };
+  return { prisma, inventoryTransfers, dailyCloseService, deliveryService, service };
 }
 
 describe('BranchSupplyCyclesService', () => {
@@ -315,7 +325,7 @@ describe('BranchSupplyCyclesService', () => {
   });
 
   it('creates a requested supply transfer in the same transaction without confirming it', async () => {
-    const { prisma, inventoryTransfers, service } = createService();
+    const { prisma, inventoryTransfers, deliveryService, service } = createService();
     const cycle = createCycle();
     const transfer = {
       id: 'transfer-1',
@@ -337,6 +347,7 @@ describe('BranchSupplyCyclesService', () => {
       'cycle-1',
       {
         expectedVersion: 1,
+        ...logisticsAssignment,
         items: [
           {
             productId: 'product-1',
@@ -360,6 +371,15 @@ describe('BranchSupplyCyclesService', () => {
       expect.objectContaining({ tx: expect.anything() }),
     );
     expect(inventoryTransfers).not.toHaveProperty('confirm');
+    expect(deliveryService.createLogisticsRoute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        inventoryTransferId: 'transfer-1',
+        type: 'CEDIS_SUPPLY',
+        driverId: 'driver-1',
+        vehicleId: 'vehicle-1',
+      }),
+    );
     expect(prisma.branchSupplyCycleTransfer.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -379,6 +399,7 @@ describe('BranchSupplyCyclesService', () => {
         'cycle-1',
         {
           expectedVersion: 1,
+          ...logisticsAssignment,
           items: [
             {
               productId: 'product-1',
@@ -411,6 +432,7 @@ describe('BranchSupplyCyclesService', () => {
         'cycle-1',
         {
           expectedVersion: 1,
+          ...logisticsAssignment,
           items: [
             {
               productId: 'product-1',
@@ -464,6 +486,7 @@ describe('BranchSupplyCyclesService', () => {
       'cycle-1',
       {
         expectedVersion: 1,
+        ...logisticsAssignment,
         items: [
           {
             productId: 'product-1',
@@ -751,6 +774,7 @@ describe('BranchSupplyCyclesService', () => {
           'cycle-1',
           {
             expectedVersion: 1,
+            ...logisticsAssignment,
             items: [
               {
                 productId: 'product-1',
@@ -783,6 +807,7 @@ describe('BranchSupplyCyclesService', () => {
         'cycle-1',
         {
           expectedVersion: 1,
+          ...logisticsAssignment,
           items: [
             {
               productId: 'product-1',
@@ -828,6 +853,7 @@ describe('BranchSupplyCyclesService', () => {
         'cycle-1',
         {
           expectedVersion: 1,
+          ...logisticsAssignment,
           items: [
             {
               productId: 'product-1',
@@ -853,7 +879,7 @@ describe('BranchSupplyCyclesService', () => {
   });
 
   it('creates a return transfer from the branch back to the CEDIS', async () => {
-    const { prisma, inventoryTransfers, service } = createService();
+    const { prisma, inventoryTransfers, deliveryService, service } = createService();
     prisma.branchSupplyCycle.findUnique
       .mockResolvedValueOnce(
         createCycle({
@@ -887,6 +913,7 @@ describe('BranchSupplyCyclesService', () => {
       'cycle-1',
       {
         expectedVersion: 1,
+        ...logisticsAssignment,
         items: [
           {
             productId: 'product-1',
@@ -907,6 +934,15 @@ describe('BranchSupplyCyclesService', () => {
       'warehouse-1',
       expect.stringContaining('return-direction-key'),
       expect.objectContaining({ tx: expect.anything() }),
+    );
+    expect(deliveryService.createLogisticsRoute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        inventoryTransferId: 'transfer-return-1',
+        type: 'BRANCH_RETURN',
+        driverId: 'driver-1',
+        vehicleId: 'vehicle-1',
+      }),
     );
   });
 
@@ -956,6 +992,7 @@ describe('BranchSupplyCyclesService', () => {
         'cycle-1',
         {
           expectedVersion: 1,
+          ...logisticsAssignment,
           items: [
             {
               productId: 'product-1',

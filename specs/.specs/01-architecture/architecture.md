@@ -279,6 +279,16 @@ El módulo de Ventas/POS debe soportar, sin mezclar responsabilidades:
 
 Las rutas operativas no consumen inventario directamente desde su almacén o sucursal de origen una vez cargadas. Cada `DeliveryRoute` debe asociarse 1:1 con una `OperationalLocation` de tipo `ROUTE_STOCK`, que actúa como ubicación operativa exclusiva de la mercancía en tránsito.
 
+`DeliveryRoute.type` distingue el reparto comercial (`SALE_DELIVERY`) de una
+devolución sucursal → CEDIS (`BRANCH_RETURN`) y un suministro CEDIS → sucursal
+(`CEDIS_SUPPLY`). Las dos operaciones logísticas conservan un vínculo único
+`inventoryTransferId` con el `InventoryTransfer` origen y requieren
+`vehicleId`, mientras que las rutas históricas pueden seguir sin unidad. El
+conductor continúa siendo el `driverId` existente; no se agrega una segunda
+identidad `assignedToId`. El traslado sigue siendo la fuente canónica de sus
+ubicaciones `originLocationId` y `destinationLocationId`, y esas ubicaciones
+conservan las coordenadas operativas.
+
 Flujo canónico:
 
 1. Preparación de ruta.

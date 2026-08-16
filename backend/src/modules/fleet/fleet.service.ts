@@ -8,7 +8,11 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DeliveryRouteStatus, Prisma } from '@prisma/client';
+import {
+  DeliveryRouteStatus,
+  DeliveryRouteType,
+  Prisma,
+} from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
@@ -78,6 +82,8 @@ type LiveRow = {
   driverId: string;
   routeId: string;
   routeName: string;
+  routeType?: DeliveryRouteType;
+  inventoryTransferId: string | null;
   routeStatus: DeliveryRouteStatus;
   scheduledDate: Date | string;
   originLocationId: string | null;
@@ -181,6 +187,8 @@ export class FleetService {
         d."name" AS "driverName",
         r."id" AS "routeId",
         r."name" AS "routeName",
+        r."type" AS "routeType",
+        r."inventoryTransferId",
         r."status" AS "routeStatus",
         r."scheduledDate",
         r."originLocationId",
@@ -324,6 +332,8 @@ export class FleetService {
           route: {
             id: row.routeId,
             name: row.routeName,
+            type: row.routeType ?? DeliveryRouteType.SALE_DELIVERY,
+            inventoryTransferId: row.inventoryTransferId ?? null,
             status: row.routeStatus,
             scheduledDate: this.toIso(row.scheduledDate),
             originLocationId: row.originLocationId,

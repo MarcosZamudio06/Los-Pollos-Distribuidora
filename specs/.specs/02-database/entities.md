@@ -480,14 +480,18 @@ Validaciones:
 
 Validaciones:
 
+- `type` distingue `SALE_DELIVERY`, `BRANCH_RETURN` y `CEDIS_SUPPLY`; las rutas históricas se interpretan como `SALE_DELIVERY` mediante el valor por defecto de persistencia.
 - `driverId` requerido.
 - `scheduledDate` requerido.
+- `vehicleId` puede ser nulo en rutas históricas comerciales, pero es requerido para `BRANCH_RETURN` y `CEDIS_SUPPLY`.
+- Las rutas `BRANCH_RETURN` y `CEDIS_SUPPLY` deben referenciar un único `InventoryTransfer` mediante `inventoryTransferId`; no se permite inferirlo desde notas o folios.
 - `routeStockLocationId` requerido para rutas con carga de inventario.
 - No completar ruta si existen pedidos pendientes.
 - Solo el chofer asignado debe poder actualizar sus pedidos desde la experiencia móvil.
 - La liquidación debe permitir comparar pedidos entregados, devoluciones, incidencias, cobros recibidos, transferencias/depositos y segunda vuelta de cobranza.
 - Si la ruta sale de una ubicación operativa específica, debe conservar `originLocationId`.
 - Debe existir relación 1:1 recomendada entre `DeliveryRoute` y `OperationalLocation(type=ROUTE_STOCK)`.
+- El origen y destino del traslado logístico son los `OperationalLocation` del `InventoryTransfer` asociado; la ruta no duplica coordenadas ni crea ubicaciones alternativas.
 
 ## DeliveryOrder
 

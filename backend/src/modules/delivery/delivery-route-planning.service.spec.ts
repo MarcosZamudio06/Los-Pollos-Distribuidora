@@ -3,6 +3,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import { DeliveryRoutePlanningService } from './delivery-route-planning.service';
 import { RoutingProvidersService } from './routing-providers.service';
 
@@ -46,6 +47,35 @@ describe('DeliveryRoutePlanningService', () => {
     expect(prisma.vehicle.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { isActive: true } }),
     );
+  });
+
+  it('requires a CEDIS dispatch or branch-return permission for warehouse catalog access', async () => {
+    const service = new DeliveryRoutePlanningService(
+      prisma as unknown as PrismaService,
+      providers as unknown as RoutingProvidersService,
+    );
+
+    await expect(
+      service.findActiveDrivers({
+        id: 'branch-warehouse-1',
+        role: 'WAREHOUSE',
+        permissions: [],
+      }),
+    ).rejects.toThrow('Insufficient permissions');
+    await expect(
+      service.findActiveVehicles({
+        id: 'cedis-warehouse-1',
+        role: 'WAREHOUSE',
+        permissions: [PERMISSIONS.CEDIS_DISPATCH],
+      }),
+    ).resolves.toEqual([{ id: 'vehicle-1' }]);
+    await expect(
+      service.findActiveDrivers({
+        id: 'branch-warehouse-1',
+        role: 'WAREHOUSE',
+        permissions: [PERMISSIONS.CEDIS_REQUEST_RETURNS],
+      }),
+    ).resolves.toEqual([{ id: 'driver-1' }]);
   });
 
   it('validates, optimizes and persists a 30-minute consumable plan', async () => {

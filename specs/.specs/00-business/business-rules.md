@@ -126,6 +126,10 @@
 
 ## 5. Rutas y reparto
 
+- `DeliveryRoute.type` distingue `SALE_DELIVERY`, `BRANCH_RETURN` y `CEDIS_SUPPLY`; las rutas comerciales existentes conservan `SALE_DELIVERY` por defecto.
+- Las rutas `BRANCH_RETURN` y `CEDIS_SUPPLY` reutilizan el conductor y la unidad de Fleet existentes y requieren `vehicleId`; `vehicleId` no se vuelve globalmente obligatorio para rutas históricas.
+- Una ruta logística conserva `inventoryTransferId` como relación explícita y única con el `InventoryTransfer` que la originó; nunca se infiere desde notas o folios.
+- El `InventoryTransfer` asociado conserva los `OperationalLocation` canónicos de origen y destino, incluidos sus datos geográficos.
 - Toda ruta operativa debe tener una `OperationalLocation` asociada de tipo `ROUTE_STOCK`.
 - La carga de producto a ruta se realiza mediante `InventoryTransfer` desde almacén/sucursal hacia `ROUTE_STOCK`.
 - La devolución de sobrante se realiza mediante `InventoryTransfer` desde `ROUTE_STOCK` hacia almacén/sucursal.

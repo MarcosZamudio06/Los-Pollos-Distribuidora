@@ -14,6 +14,8 @@ import type {
   CedisReturnsResponse,
   CedisIncomingSuppliesFilters,
   CedisIncomingSuppliesResponse,
+  CedisLogisticsDriver,
+  CedisLogisticsVehicle,
   CedisReceiveSupplyCommand,
   CedisLocation,
   CreateBranchLocationPayload,
@@ -167,6 +169,26 @@ export const cedisService = {
     );
 
     return unwrap(response);
+  },
+
+  async listLogisticsDrivers(accessToken?: string | null) {
+    const response = await apiClient.get<
+      ApiEnvelope<{ items: CedisLogisticsDriver[] }>
+    >('/delivery-route-planning/drivers', {
+      headers: authHeaders(accessToken),
+    });
+    return unwrap(response).items.filter(
+      (driver) => driver.isActive && driver.role.name === 'DRIVER',
+    );
+  },
+
+  async listLogisticsVehicles(accessToken?: string | null) {
+    const response = await apiClient.get<
+      ApiEnvelope<{ items: CedisLogisticsVehicle[] }>
+    >('/delivery-route-planning/vehicles', {
+      headers: authHeaders(accessToken),
+    });
+    return unwrap(response).items.filter((vehicle) => vehicle.isActive);
   },
 
   async listReturns(

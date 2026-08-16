@@ -115,6 +115,8 @@ describe('BranchSupplyCyclesController API', () => {
       .set('Idempotency-Key', 'supply-1')
       .send({
         expectedVersion: 1,
+        assignedDriverId: 'driver-1',
+        vehicleId: 'vehicle-1',
         items: [{ productId: 'product-1', unit: 'KG', quantityKg: 2 }],
       })
       .expect(201);
@@ -125,6 +127,8 @@ describe('BranchSupplyCyclesController API', () => {
       .set('Idempotency-Key', 'return-1')
       .send({
         expectedVersion: 2,
+        assignedDriverId: 'driver-1',
+        vehicleId: 'vehicle-1',
         items: [{ productId: 'product-1', unit: 'KG', quantityKg: 1 }],
       })
       .expect(201);
@@ -199,4 +203,50 @@ describe('BranchSupplyCyclesController API', () => {
       'cancel-1',
     ]);
   });
+
+  it.each([
+    ['driver', 'supplies', { vehicleId: 'vehicle-1' }],
+    ['vehicle', 'supplies', { assignedDriverId: 'driver-1' }],
+    ['driver', 'returns', { vehicleId: 'vehicle-1' }],
+    ['vehicle', 'returns', { assignedDriverId: 'driver-1' }],
+  ] as const)(
+    'requires an assigned %s for the %s command',
+    async (_label, path, assignment) => {
+      await request(app.getHttpServer())
+        .post(`/api/cedis/branch-supply-cycles/cycle-1/${path}`)
+        .set('Authorization', 'Bearer token')
+        .set('Idempotency-Key', 'missing-assignment')
+        .send({
+          expectedVersion: 1,
+          ...assignment,
+          items: [{ productId: 'product-1', unit: 'KG', quantityKg: 2 }],
+        })
+        .expect(400);
+
+      expect(service.createSupply.mock.calls).toHaveLength(0);
+      expect(service.createReturn.mock.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([['supplies'], ['returns']] as const)(
+    'rejects client-controlled coordinates for %s',
+    async (path) => {
+      await request(app.getHttpServer())
+        .post(`/api/cedis/branch-supply-cycles/cycle-1/${path}`)
+        .set('Authorization', 'Bearer token')
+        .set('Idempotency-Key', `manual-coordinates-${path}`)
+        .send({
+          expectedVersion: 1,
+          assignedDriverId: 'driver-1',
+          vehicleId: 'vehicle-1',
+          latitude: 19.18,
+          longitude: -96.14,
+          items: [{ productId: 'product-1', unit: 'KG', quantityKg: 2 }],
+        })
+        .expect(400);
+
+      expect(service.createSupply.mock.calls).toHaveLength(0);
+      expect(service.createReturn.mock.calls).toHaveLength(0);
+    },
+  );
 });

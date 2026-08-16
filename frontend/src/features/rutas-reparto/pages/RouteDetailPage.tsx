@@ -21,10 +21,10 @@ import {
   SecondaryLink,
   StatusMessage,
 } from "../components/RouteUi";
-import { date, dateTime, money, shortId } from "../labels";
+import { date, dateTime, money, routeTypeLabel, shortId } from "../labels";
 import { useDeliveryRoute, useOpenRouteSettlement } from "../hooks";
 import { DriverRouteMap } from "../components/DriverRouteMap";
-import type { GeoJsonLineString } from "../types";
+import type { GeoJsonLineString, LogisticsLocation } from "../types";
 
 function hasRenderableGeometry(
   geometry: GeoJsonLineString | null | undefined,
@@ -39,12 +39,22 @@ function hasRenderableGeometry(
   );
 }
 
+function hasRenderableLocation(location?: LogisticsLocation | null) {
+  return Boolean(
+    location &&
+      Number.isFinite(location.latitude) &&
+      Number.isFinite(location.longitude),
+  );
+}
+
 export function RouteDetailPage() {
   const { routeId } = useParams();
   const navigate = useNavigate();
   const route = useDeliveryRoute(routeId);
   const openSettlement = useOpenRouteSettlement();
   const detail = route.data;
+  const isLogisticsRoute =
+    detail?.type === "BRANCH_RETURN" || detail?.type === "CEDIS_SUPPLY";
   const collections = detail?.collectionsSummary;
   const orderedStops = useMemo(
     () =>
@@ -101,6 +111,9 @@ export function RouteDetailPage() {
                     <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
                       {detail.name}
                     </h2>
+                    <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-info)]">
+                      {routeTypeLabel(detail.type)}
+                    </p>
                     <p className="mt-2 flex items-center gap-2 text-sm text-[var(--erp-muted-foreground)]">
                       <CalendarDays className="h-4 w-4" />
                       Programada: {date(detail.scheduledDate)}
@@ -158,17 +171,68 @@ export function RouteDetailPage() {
                   <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <ClipboardList className="h-4 w-4 text-[var(--erp-danger)]" />
-                      Pedidos pendientes
+                      {isLogisticsRoute
+                        ? "Parada física"
+                        : "Pedidos pendientes"}
                     </dt>
                     <dd className="mt-2 font-black">
-                      {detail.pendingOrdersCount ?? 0} de{" "}
-                      {detail.ordersCount ?? detail.orders?.length ?? 0}
+                      {isLogisticsRoute
+                        ? detail.logisticsStop?.status === "COMPLETED"
+                          ? "Confirmada"
+                          : "Pendiente"
+                        : String(detail.pendingOrdersCount ?? 0) +
+                          " de " +
+                          String(
+                            detail.ordersCount ?? detail.orders?.length ?? 0,
+                          )}
                     </dd>
                   </div>
                 </dl>
               </Card>
 
-              <Card className="p-5">
+              {isLogisticsRoute ? (
+                <Card className="overflow-hidden bg-white p-0">
+                  <div className="bg-[var(--erp-info)] p-5 text-white">
+                    <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
+                      <Truck className="h-4 w-4" />
+                      Transporte interno
+                    </p>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] text-white">
+                      Confirmación física
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-white/75">
+                      Esta ruta solo registra transporte y confirmación física.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                        Traslado
+                      </p>
+                      <p className="mt-1 font-black">
+                        {detail.logisticsStop?.transferNumber ??
+                          shortId(detail.inventoryTransferId)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                        Destino
+                      </p>
+                      <p className="mt-1 font-black">
+                        {detail.logisticsStop?.destination?.name ??
+                          "Sin ubicación de destino"}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold text-[var(--erp-muted-foreground)]">
+                      Parada física:{" "}
+                      {detail.logisticsStop?.status === "COMPLETED"
+                        ? "confirmada"
+                        : "pendiente"}
+                    </p>
+                  </div>
+                </Card>
+              ) : (
+                <Card className="p-5">
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">
                   <Truck className="h-4 w-4" />
                   Liquidación
@@ -210,7 +274,8 @@ export function RouteDetailPage() {
                     </PrimaryButton>
                   </div>
                 )}
-              </Card>
+                </Card>
+              )}
             </section>
 
             <Card className="grid gap-4 p-5">
@@ -226,10 +291,21 @@ export function RouteDetailPage() {
                   Secuencia operativa completa asignada a esta ruta.
                 </p>
               </div>
-              {detail.mapAvailable && hasRenderableGeometry(detail.geometry) ? (
+              {detail.mapAvailable && hasRenderableGeometry(detail.geometry) ||
+              (isLogisticsRoute &&
+                hasRenderableLocation(detail.logisticsStop?.origin) &&
+                hasRenderableLocation(detail.logisticsStop?.destination)) ? (
                 <DriverRouteMap
                   compact
+                  destinationLocation={
+                    isLogisticsRoute
+                      ? detail.logisticsStop?.destination
+                      : undefined
+                  }
                   geometry={detail.geometry}
+                  originLocation={
+                    isLogisticsRoute ? detail.logisticsStop?.origin : undefined
+                  }
                   orders={orderedStops}
                   routeName={detail.name}
                 />
@@ -240,7 +316,8 @@ export function RouteDetailPage() {
               )}
             </Card>
 
-            <Card className="grid gap-4 p-5 md:grid-cols-4">
+            {!isLogisticsRoute && (
+              <Card className="grid gap-4 p-5 md:grid-cols-4">
               <div>
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                   <BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
@@ -275,9 +352,11 @@ export function RouteDetailPage() {
                   {money(collections?.secondPassAmount)}
                 </p>
               </div>
-            </Card>
+              </Card>
+            )}
 
-            <Card className="overflow-hidden p-0">
+            {!isLogisticsRoute && (
+              <Card className="overflow-hidden p-0">
               <div className="flex flex-col gap-3 border-b border-[color:var(--erp-border)] bg-white/70 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-xl font-black tracking-[-0.04em]">
                   Pedidos asignados
@@ -415,7 +494,61 @@ export function RouteDetailPage() {
                   </div>
                 </>
               )}
-            </Card>
+              </Card>
+            )}
+            {isLogisticsRoute && (
+              <Card className="overflow-hidden bg-white p-0">
+                <div className="bg-[var(--erp-info)] p-5 text-white">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
+                    <PackageCheck className="h-4 w-4" />
+                    Carga del traslado
+                  </p>
+                  <h2 className="mt-1 text-xl font-black tracking-[-0.04em] text-white">
+                    Productos programados
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-white/75">
+                    El control de inventario conserva la recepción, lotes y
+                    movimientos de stock; esta vista muestra únicamente la
+                    carga que debe transportar el DRIVER.
+                  </p>
+                </div>
+                {(detail.logisticsStop?.items ?? []).length === 0 ? (
+                  <div className="p-5">
+                    <StatusMessage tone="empty">
+                      El traslado no tiene productos informados.
+                    </StatusMessage>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 p-5">
+                    {detail.logisticsStop?.items.map((item) => (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
+                        key={item.id}
+                      >
+                        <div>
+                          <p className="font-black">
+                            {item.productName ?? shortId(item.productId)}
+                          </p>
+                          <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">
+                            Unidad: {item.unit}
+                          </p>
+                        </div>
+                        <p className="font-black">
+                          {item.quantityKg != null &&
+                          Number(item.quantityKg) > 0
+                            ? String(item.quantityKg) + " kg"
+                            : ""}
+                          {item.quantityPieces != null &&
+                          Number(item.quantityPieces) > 0
+                            ? " · " + String(item.quantityPieces) + " piezas"
+                            : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
           </>
         )}
       </PageFrame>

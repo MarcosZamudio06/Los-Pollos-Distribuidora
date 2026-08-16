@@ -29,6 +29,8 @@ export type FleetDeliveryStop = {
 export type FleetRoute = {
   id: string;
   name: string;
+  type?: "SALE_DELIVERY" | "BRANCH_RETURN" | "CEDIS_SUPPLY" | string;
+  inventoryTransferId?: string | null;
   status: string;
   scheduledDate: string;
   originLocationId: string | null;

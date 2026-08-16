@@ -53,6 +53,12 @@ describe('Delivery controllers', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
+        methodOf(DeliveryController.prototype, 'completeLogisticsStop'),
+      ),
+    ).toEqual(['ADMIN', 'DRIVER']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
         methodOf(DeliveryOrdersController.prototype, 'updateStatus'),
       ),
     ).toEqual(['ADMIN', 'DRIVER']);
@@ -99,6 +105,9 @@ describe('Delivery controllers', () => {
       updateRouteStatus: jest
         .fn()
         .mockResolvedValue({ id: 'route-1', status: 'IN_PROGRESS' }),
+      completeLogisticsStop: jest
+        .fn()
+        .mockResolvedValue({ id: 'route-1', logisticsStopStatus: 'COMPLETED' }),
       updateOrderStatus: jest
         .fn()
         .mockResolvedValue({ id: 'order-1', status: 'DELIVERED' }),
@@ -125,6 +134,17 @@ describe('Delivery controllers', () => {
       data: { id: 'route-1', status: 'IN_PROGRESS' },
     });
     await expect(
+      routeController.completeLogisticsStop(
+        'route-1',
+        { notes: 'Recibido en sucursal' },
+        user,
+      ),
+    ).resolves.toEqual({
+      success: true,
+      message: 'Logistics route stop completed successfully',
+      data: { id: 'route-1', logisticsStopStatus: 'COMPLETED' },
+    });
+    await expect(
       orderController.updateStatus(
         'order-1',
         { status: 'DELIVERED' as never },
@@ -139,6 +159,11 @@ describe('Delivery controllers', () => {
     expect(mockOf(service, 'updateRouteStatus')).toHaveBeenCalledWith(
       'route-1',
       { status: 'IN_PROGRESS' },
+      user,
+    );
+    expect(mockOf(service, 'completeLogisticsStop')).toHaveBeenCalledWith(
+      'route-1',
+      { notes: 'Recibido en sucursal' },
       user,
     );
     expect(mockOf(service, 'updateOrderStatus')).toHaveBeenCalledWith(

@@ -17,6 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   AssignDeliveryRouteOrdersDto,
+  CompleteLogisticsStopDto,
   CreateDeliveryRouteDto,
   ListDeliveryRoutesQueryDto,
   UpdateDeliveryRouteStatusDto,
@@ -118,6 +119,24 @@ export class DeliveryController {
       success: true,
       message: 'Delivery route status updated successfully',
       data: await this.deliveryService.updateRouteStatus(id, body, currentUser),
+    };
+  }
+
+  @Post(':id/logistics-stop/complete')
+  @Roles('ADMIN', 'DRIVER')
+  async completeLogisticsStop(
+    @Param('id') id: string,
+    @Body() body: CompleteLogisticsStopDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Logistics route stop completed successfully',
+      data: await this.deliveryService.completeLogisticsStop(
+        id,
+        body,
+        currentUser,
+      ),
     };
   }
 

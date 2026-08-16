@@ -9,6 +9,7 @@ import type {
   CreateDeliveryRoutePayload,
   CreateRouteCollectionPayload,
   CreateDeliveryRoutePlanPayload,
+  CompleteLogisticsStopPayload,
   DeliveryRoutesFilters,
   UpdateDeliveryOrderStatusPayload,
   UpdateDeliveryRouteStatusPayload,
@@ -134,6 +135,29 @@ export function useUpdateDeliveryRouteStatus(routeId?: string) {
     mutationFn: (payload: UpdateDeliveryRouteStatusPayload) => {
       if (!routeId) throw new Error("Route id is required to update status.");
       return deliveryService.updateRouteStatus(routeId, payload, accessToken);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
+      if (routeId) {
+        void queryClient.invalidateQueries({
+          queryKey: ["delivery-routes", routeId],
+        });
+      }
+    },
+  });
+}
+
+export function useCompleteLogisticsStop(routeId?: string) {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CompleteLogisticsStopPayload = {}) => {
+      if (!routeId) throw new Error("Route id is required to complete the stop.");
+      return deliveryService.completeLogisticsStop(
+        routeId,
+        payload,
+        accessToken,
+      );
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });

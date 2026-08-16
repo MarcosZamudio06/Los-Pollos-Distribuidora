@@ -15,18 +15,24 @@ import { DeliveryRoutePlanningService } from './delivery-route-planning.service'
 @Roles('ADMIN', 'SELLER')
 export class DeliveryRoutePlanningController {
   constructor(private readonly planning: DeliveryRoutePlanningService) {}
-  @Get('delivery-route-planning/drivers') async drivers() {
+  @Roles('ADMIN', 'SELLER', 'WAREHOUSE')
+  @Get('delivery-route-planning/drivers') async drivers(
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Route planner drivers retrieved successfully',
-      data: { items: await this.planning.findActiveDrivers() },
+      data: { items: await this.planning.findActiveDrivers(user) },
     };
   }
-  @Get('delivery-route-planning/vehicles') async vehicles() {
+  @Roles('ADMIN', 'SELLER', 'WAREHOUSE')
+  @Get('delivery-route-planning/vehicles') async vehicles(
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       success: true,
       message: 'Route planner vehicles retrieved successfully',
-      data: { items: await this.planning.findActiveVehicles() },
+      data: { items: await this.planning.findActiveVehicles(user) },
     };
   }
   @Get('delivery-route-planning/eligible-sales') async eligibleSales(

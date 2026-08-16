@@ -8,3 +8,4 @@ export * from './register-route-collection.dto';
 export * from './register-delivery-incident.dto';
 export * from './settlement-actions.dto';
 export * from './vehicle.dto';
+export * from './complete-logistics-stop.dto';

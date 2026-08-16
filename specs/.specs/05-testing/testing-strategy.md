@@ -84,6 +84,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Validar múltiples suministros CEDIS → sucursal y devoluciones sucursal → CEDIS dentro del mismo ciclo.
 - Verificar que crear/vincular transferencias no cambie balances ni genere movimientos.
 - Confirmar transferencias vinculadas únicamente por `InventoryTransfersService` y comprobar salida/entrada atómicas.
+- Verificar mediante contrato de esquema que `DeliveryRouteType`, `inventoryTransferId` y las restricciones condicionales de Fleet se mantengan sin volver obligatorio `vehicleId` para rutas históricas.
 - Cancelar `DRAFT`, `REQUESTED` e `IN_TRANSIT` con motivo; rechazar cancelación de `CONFIRMED`.
 - Rechazar productos o ubicaciones inactivas en creación y confirmación, conservando historia ya confirmada.
 - Validar refresh desde transferencias/movimientos, snapshots append-only, bloqueantes y transición a `READY_FOR_REVIEW`.

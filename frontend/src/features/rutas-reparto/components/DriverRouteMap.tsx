@@ -9,6 +9,7 @@ import { loadMapLibre } from "@/lib/maps/mapLibreRuntime";
 import type {
   DeliveryOrder,
   GeoJsonLineString,
+  LogisticsLocation,
   RouteLocationPosition,
 } from "../types";
 
@@ -29,7 +30,9 @@ type Props = {
   compact?: boolean;
   currentOrder?: RouteMapOrder;
   currentLocation?: RouteLocationPosition | null;
-  geometry: GeoJsonLineString;
+  destinationLocation?: LogisticsLocation | null;
+  geometry?: GeoJsonLineString | null;
+  originLocation?: LogisticsLocation | null;
   orders?: RouteMapOrder[];
   routeName: string;
 };
@@ -37,6 +40,7 @@ type Props = {
 type LngLat = [number, number];
 type MarkerDefinition = {
   current: boolean;
+  destination: boolean;
   key: string;
   label: string;
   location: boolean;
@@ -49,9 +53,11 @@ const fallbackCenter: LngLat = [-96.1342, 19.1738];
 const routeSourceId = "driver-route";
 const routeLayerId = "driver-route-line";
 
-function isRenderableGeometry(geometry: GeoJsonLineString) {
+function isRenderableGeometry(
+  geometry?: GeoJsonLineString | null,
+): geometry is GeoJsonLineString {
   return (
-    geometry.type === "LineString" &&
+    geometry?.type === "LineString" &&
     geometry.coordinates.length >= 2 &&
     geometry.coordinates.every(
       (coordinate) =>
@@ -79,6 +85,16 @@ function isLocatedPosition(
   );
 }
 
+function isLocatedLocation(
+  location?: LogisticsLocation | null,
+): location is LogisticsLocation & { latitude: number; longitude: number } {
+  return Boolean(
+    location &&
+      Number.isFinite(location.latitude) &&
+      Number.isFinite(location.longitude),
+  );
+}
+
 function isSameOrder(order: RouteMapOrder, currentOrder: RouteMapOrder) {
   if (order.id && currentOrder.id) return order.id === currentOrder.id;
   return (
@@ -88,8 +104,8 @@ function isSameOrder(order: RouteMapOrder, currentOrder: RouteMapOrder) {
   );
 }
 
-function geometryBounds(geometry: GeoJsonLineString): [LngLat, LngLat] {
-  const bounds = geometry.coordinates.reduce(
+function boundsForPoints(points: LngLat[]): [LngLat, LngLat] {
+  const bounds = points.reduce(
     ([minLongitude, minLatitude, maxLongitude, maxLatitude], [longitude, latitude]) => [
       Math.min(minLongitude, longitude),
       Math.min(minLatitude, latitude),
@@ -112,10 +128,11 @@ function geometryBounds(geometry: GeoJsonLineString): [LngLat, LngLat] {
 
 function fitMapToGeometry(
   map: MapLibreMap,
-  geometry: GeoJsonLineString,
+  points: LngLat[],
   compact: boolean,
 ) {
-  map.fitBounds(geometryBounds(geometry), {
+  if (points.length < 2) return;
+  map.fitBounds(boundsForPoints(points), {
     duration: 0,
     padding: compact ? 28 : 44,
   });
@@ -123,6 +140,7 @@ function fitMapToGeometry(
 
 function createMarkerElement({
   current,
+  destination,
   label,
   location,
   origin,
@@ -133,6 +151,8 @@ function createMarkerElement({
   element.dataset.marker = title;
   element.dataset.markerKind = location
     ? "location"
+    : destination
+      ? "destination"
     : origin
       ? "origin"
       : current
@@ -150,8 +170,8 @@ function createMarkerElement({
     `border:${current ? "4px solid #f0c56a" : "3px solid white"}`,
     "border-radius:50% 50% 50% 12%",
     "transform:rotate(-45deg)",
-    `background:${location ? "#2f6f73" : origin ? "#1d2420" : "#b62a22"}`,
-    `color:${location || origin ? "#f0c56a" : "#fff"}`,
+    `background:${location ? "#2f6f73" : destination ? "#d69b2d" : origin ? "#1d2420" : "#b62a22"}`,
+    `color:${location || origin ? "#f0c56a" : destination ? "#1d2420" : "#fff"}`,
     "box-shadow:0 8px 22px rgba(29,36,32,.28)",
   ].join(";");
 
@@ -172,7 +192,9 @@ export function DriverRouteMap({
   compact = false,
   currentLocation,
   currentOrder,
+  destinationLocation,
   geometry,
+  originLocation,
   orders = [],
   routeName,
 }: Props) {
@@ -183,9 +205,13 @@ export function DriverRouteMap({
   const geometryRef = useRef(geometry);
   const compactRef = useRef(compact);
   const initialCenterRef = useRef<LngLat>(
-    geometry.coordinates[0]
-      ? [geometry.coordinates[0][0], geometry.coordinates[0][1]]
-      : fallbackCenter,
+    isLocatedLocation(originLocation)
+      ? [originLocation.longitude, originLocation.latitude]
+      : isLocatedLocation(destinationLocation)
+        ? [destinationLocation.longitude, destinationLocation.latitude]
+        : geometry?.coordinates[0]
+          ? [geometry.coordinates[0][0], geometry.coordinates[0][1]]
+          : fallbackCenter,
   );
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState(false);
@@ -193,7 +219,7 @@ export function DriverRouteMap({
   useEffect(() => {
     geometryRef.current = geometry;
     compactRef.current = compact;
-  }, [compact, geometry]);
+  }, [compact, destinationLocation, geometry, originLocation]);
 
   const mappedCurrentOrder = useMemo(
     () => (currentOrder && isLocatedOrder(currentOrder) ? currentOrder : null),
@@ -209,25 +235,45 @@ export function DriverRouteMap({
     [mappedCurrentOrder, orders],
   );
   const markerDefinitions = useMemo<MarkerDefinition[]>(() => {
-    const origin = geometry.coordinates[0];
-    const definitions: MarkerDefinition[] = origin
+    const geometryOrigin = geometry?.coordinates[0];
+    const locatedOrigin = isLocatedLocation(originLocation)
+      ? [originLocation.longitude, originLocation.latitude] as LngLat
+      : null;
+    const definitions: MarkerDefinition[] = locatedOrigin || geometryOrigin
       ? [
           {
             current: false,
+            destination: false,
             key: "driver-route-origin",
             label: "O",
             location: false,
             origin: true,
-            position: [origin[0], origin[1]],
-            title: "Origen y regreso",
+            position: locatedOrigin ?? [geometryOrigin![0], geometryOrigin![1]],
+            title: locatedOrigin
+              ? `Partida: ${originLocation?.name ?? "Ubicación de origen"}`
+              : "Origen y regreso",
           },
         ]
       : [];
+
+    if (isLocatedLocation(destinationLocation)) {
+      definitions.push({
+        current: false,
+        destination: true,
+        key: "driver-route-destination",
+        label: "D",
+        location: false,
+        origin: false,
+        position: [destinationLocation.longitude, destinationLocation.latitude],
+        title: `Destino: ${destinationLocation.name}`,
+      });
+    }
 
     mappedOrders.forEach((order, index) => {
       const sequence = order.stopSequence ?? index + 1;
       definitions.push({
         current: false,
+        destination: false,
         key:
           order.id ??
           `${order.latitude}-${order.longitude}-${order.stopSequence ?? index}`,
@@ -243,6 +289,7 @@ export function DriverRouteMap({
       const sequence = mappedCurrentOrder.stopSequence ?? "asignada";
       definitions.push({
         current: true,
+        destination: false,
         key: `driver-route-current-${mappedCurrentOrder.id ?? `${mappedCurrentOrder.latitude}-${mappedCurrentOrder.longitude}-${mappedCurrentOrder.stopSequence ?? "current"}`}`,
         label: String(sequence),
         location: false,
@@ -258,6 +305,7 @@ export function DriverRouteMap({
     if (isLocatedPosition(currentLocation)) {
       definitions.push({
         current: false,
+        destination: false,
         key: "driver-route-current-location",
         label: "GPS",
         location: true,
@@ -268,7 +316,14 @@ export function DriverRouteMap({
     }
 
     return definitions;
-  }, [currentLocation, geometry.coordinates, mappedCurrentOrder, mappedOrders]);
+  }, [
+    currentLocation,
+    destinationLocation,
+    geometry?.coordinates,
+    mappedCurrentOrder,
+    mappedOrders,
+    originLocation,
+  ]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -294,24 +349,26 @@ export function DriverRouteMap({
         mapRef.current = map;
         handleLoad = () => {
           if (!map) return;
-          map.addSource(routeSourceId, {
-            data: geometryRef.current,
-            type: "geojson",
-          });
-          map.addLayer({
-            id: routeLayerId,
-            layout: {
-              "line-cap": "round",
-              "line-join": "round",
-            },
-            paint: {
-              "line-color": "#b62a22",
-              "line-opacity": 0.88,
-              "line-width": 6,
-            },
-            source: routeSourceId,
-            type: "line",
-          });
+          if (isRenderableGeometry(geometryRef.current)) {
+            map.addSource(routeSourceId, {
+              data: geometryRef.current,
+              type: "geojson",
+            });
+            map.addLayer({
+              id: routeLayerId,
+              layout: {
+                "line-cap": "round",
+                "line-join": "round",
+              },
+              paint: {
+                "line-color": "#b62a22",
+                "line-opacity": 0.88,
+                "line-width": 6,
+              },
+              source: routeSourceId,
+              type: "line",
+            });
+          }
           map.addControl(new maplibre.AttributionControl(), "bottom-right");
           setMapReady(true);
         };
@@ -345,9 +402,24 @@ export function DriverRouteMap({
     const source = map.getSource(routeSourceId) as
       | GeoJSONSource
       | undefined;
-    source?.setData(geometry);
-    fitMapToGeometry(map, geometry, compact);
-  }, [compact, geometry, mapReady]);
+    if (source && isRenderableGeometry(geometry)) source.setData(geometry);
+    const points = [
+      ...(isRenderableGeometry(geometry) ? geometry.coordinates : []),
+      ...(isLocatedLocation(originLocation)
+        ? [[originLocation.longitude, originLocation.latitude] as LngLat]
+        : []),
+      ...(isLocatedLocation(destinationLocation)
+        ? [[destinationLocation.longitude, destinationLocation.latitude] as LngLat]
+        : []),
+    ];
+    fitMapToGeometry(map, points, compact);
+  }, [
+    compact,
+    destinationLocation,
+    geometry,
+    mapReady,
+    originLocation,
+  ]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current || !maplibreRef.current) return;
@@ -370,7 +442,9 @@ export function DriverRouteMap({
     return () => clearMarkers(markers);
   }, [mapReady, markerDefinitions]);
 
-  if (!isRenderableGeometry(geometry)) return null;
+  const hasLocationPair =
+    isLocatedLocation(originLocation) && isLocatedLocation(destinationLocation);
+  if (!isRenderableGeometry(geometry) && !hasLocationPair) return null;
 
   return (
     <div

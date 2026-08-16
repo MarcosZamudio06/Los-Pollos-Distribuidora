@@ -34,6 +34,8 @@ function Harness({
   onReady(() =>
     mutation.mutateAsync({
       expectedVersion: 2,
+      assignedDriverId: "driver-1",
+      vehicleId: "vehicle-1",
       items: [{ productId: "product-1", quantityKg: 5, unit: "KG" }],
     }),
   );

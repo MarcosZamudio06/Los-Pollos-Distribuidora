@@ -123,6 +123,8 @@ describe("CEDIS service", () => {
       "cycle-1",
       {
         expectedVersion: 2,
+        assignedDriverId: "driver-1",
+        vehicleId: "vehicle-1",
         items: [{ productId: "product-1", unit: "KG", quantityKg: 5 }],
       },
       "access-token",
@@ -145,6 +147,79 @@ describe("CEDIS service", () => {
         "idempotency-key",
       ),
     ).toBe("idem-refresh");
+  });
+
+  it("consume los catálogos logísticos y descarta recursos no asignables", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        okJson({
+          items: [
+            {
+              id: "driver-1",
+              name: "Conductor activo",
+              isActive: true,
+              role: { name: "DRIVER" },
+            },
+            {
+              id: "driver-2",
+              name: "Usuario inactivo",
+              isActive: false,
+              role: { name: "DRIVER" },
+            },
+            {
+              id: "seller-1",
+              name: "Vendedor activo",
+              isActive: true,
+              role: { name: "SELLER" },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          items: [
+            {
+              id: "vehicle-1",
+              code: "V-01",
+              displayName: "Unidad activa",
+              isActive: true,
+            },
+            {
+              id: "vehicle-2",
+              code: "V-02",
+              displayName: "Unidad inactiva",
+              isActive: false,
+            },
+          ],
+        }),
+      );
+
+    await expect(
+      cedisService.listLogisticsDrivers("access-token"),
+    ).resolves.toEqual([
+      {
+        id: "driver-1",
+        name: "Conductor activo",
+        isActive: true,
+        role: { name: "DRIVER" },
+      },
+    ]);
+    expect(lastRequest().url).toBe("/api/delivery-route-planning/drivers");
+
+    await expect(
+      cedisService.listLogisticsVehicles("access-token"),
+    ).resolves.toEqual([
+      {
+        id: "vehicle-1",
+        code: "V-01",
+        displayName: "Unidad activa",
+        isActive: true,
+      },
+    ]);
+    expect(lastRequest().url).toBe("/api/delivery-route-planning/vehicles");
+    expect(new Headers(lastRequest().init?.headers).get("authorization")).toBe(
+      "Bearer access-token",
+    );
   });
 
   it("consulta envíos entrantes y conserva la clave de idempotencia al recibir", async () => {

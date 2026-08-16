@@ -11,6 +11,7 @@ import {
   BranchSupplyCycleSnapshotType,
   BranchSupplyCycleStatus,
   BranchSupplyTransferRole,
+  DeliveryRouteType,
   InventoryMovementType,
   InventoryTransferStatus,
   Prisma,
@@ -41,6 +42,7 @@ import {
 } from './dto';
 import { BranchSupplyCycleReconciliationService } from './branch-supply-cycle-reconciliation.service';
 import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { DeliveryService } from '../delivery/delivery.service';
 import { CedisGateway } from './cedis.gateway';
 import type { CedisSupplyCreatedPayload } from './cedis-realtime.types';
 import type {
@@ -232,6 +234,7 @@ export class BranchSupplyCyclesService {
     private readonly inventoryTransfers: InventoryTransfersService,
     private readonly cycleReconciliation: BranchSupplyCycleReconciliationService,
     private readonly dailyCloseService: PointOfSaleDailyCloseService,
+    private readonly deliveryService: DeliveryService,
     @Optional() private readonly cedisGateway?: CedisGateway,
   ) {}
 
@@ -942,6 +945,11 @@ export class BranchSupplyCyclesService {
   ) {
     const key = this.requireIdempotencyKey(idempotencyKey);
     this.assertCycleTransferPermission(actor, role);
+    const assignedDriverId = this.requireLogisticsAssignment(
+      dto.assignedDriverId,
+      'assignedDriverId',
+    );
+    const vehicleId = this.requireLogisticsAssignment(dto.vehicleId, 'vehicleId');
     const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey(role, cycleId, key);
 
@@ -1018,6 +1026,17 @@ export class BranchSupplyCyclesService {
             eventKey,
             transferOptions,
           );
+
+          await this.deliveryService.createLogisticsRoute(tx, {
+            inventoryTransferId: transfer.id,
+            type:
+              role === BranchSupplyTransferRole.SUPPLY
+                ? DeliveryRouteType.CEDIS_SUPPLY
+                : DeliveryRouteType.BRANCH_RETURN,
+            driverId: assignedDriverId,
+            vehicleId,
+            scheduledDate: cycle.businessDate,
+          });
 
           const updateResult = await tx.branchSupplyCycle.updateMany({
             where: {
@@ -1208,6 +1227,17 @@ export class BranchSupplyCyclesService {
         );
       }
     }
+  }
+
+  private requireLogisticsAssignment(
+    value: string | undefined,
+    field: 'assignedDriverId' | 'vehicleId',
+  ): string {
+    const normalized = value?.trim();
+    if (!normalized) {
+      throw new BadRequestException(`${field} is required`);
+    }
+    return normalized;
   }
 
   private async createInitialProductSnapshots(

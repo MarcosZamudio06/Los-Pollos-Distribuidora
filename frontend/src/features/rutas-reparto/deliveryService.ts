@@ -16,6 +16,7 @@ import type {
   UpdateDeliveryOrderStatusPayload,
   UpdateDeliveryRouteStatusPayload,
   CreateDeliveryRoutePlanPayload,
+  CompleteLogisticsStopPayload,
   DeliveryRoutePlan,
   EligibleDeliverySale,
   FleetPositionPublication,
@@ -214,6 +215,20 @@ export const deliveryService = {
       ItemEnvelope<DeliveryRouteListItem>,
       UpdateDeliveryRouteStatusPayload
     >(`/delivery-routes/${routeId}/status`, {
+      body: payload,
+      headers: authHeaders(accessToken),
+    });
+    return unwrapItem(response);
+  },
+  async completeLogisticsStop(
+    routeId: string,
+    payload: CompleteLogisticsStopPayload = {},
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<DeliveryRouteDetail>,
+      CompleteLogisticsStopPayload
+    >(`/delivery-routes/${routeId}/logistics-stop/complete`, {
       body: payload,
       headers: authHeaders(accessToken),
     });

@@ -39,6 +39,7 @@ import {
   useCedisCycleSummary,
   useCancelCedisCycle,
   useCloseCedisCycle,
+  useCedisLogisticsResources,
   useCreateCedisReturn,
   useCreateCedisSupply,
   useCompleteCedisReturn,
@@ -1590,6 +1591,17 @@ export function CedisBranchDetailPage() {
     : null;
   const effectiveCycleId = cycleRelationValid ? cycleId : undefined;
   const [transferMode, setTransferMode] = useState<TransferMode | null>(null);
+  const logisticsResourcesQuery = useCedisLogisticsResources(Boolean(transferMode));
+  const logisticsResources = {
+    drivers: logisticsResourcesQuery.drivers.data ?? [],
+    vehicles: logisticsResourcesQuery.vehicles.data ?? [],
+    isLoading:
+      logisticsResourcesQuery.drivers.isLoading ||
+      logisticsResourcesQuery.vehicles.isLoading,
+    error:
+      logisticsResourcesQuery.drivers.error ??
+      logisticsResourcesQuery.vehicles.error,
+  };
   const transferSourceLocationId =
     transferMode === "RETURN"
       ? (branchQuery.data?.id ?? branchId)
@@ -2119,6 +2131,7 @@ export function CedisBranchDetailPage() {
             sourceLocationId={transferSourceLocationId}
             cycleItems={summary.items}
             expectedSales={summary.totals.expectedSales}
+            logisticsResources={logisticsResources}
           />
         )}
         {action === "CANCEL" ? (

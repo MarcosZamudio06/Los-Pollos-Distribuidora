@@ -225,6 +225,8 @@ Respuesta `data`:
       "vehicleId": "vehicle-id",
       "driverId": "driver-id",
       "routeId": "route-id",
+      "type": "SALE_DELIVERY",
+      "inventoryTransferId": null,
       "routeStatus": "IN_PROGRESS",
       "positionPoint": {
         "type": "Point",
@@ -545,10 +547,10 @@ Query:
 
 Respuesta `data.items[]`:
 
-- `id`, `name`, `driverId`, `driverName`, `vehicleId`, `vehicleCode`, `status`, `scheduledDate`, `originLocationId`, `routeStockLocationId`.
-- `startedAt`, `completedAt`, `ordersCount`, `pendingOrdersCount`, `routeSettlementId`, `createdAt`.
+- `id`, `name`, `type`, `driverId`, `driverName`, `vehicleId`, `vehicleCode`, `status`, `scheduledDate`, `originLocationId`, `routeStockLocationId`, `inventoryTransferId`.
+- `startedAt`, `completedAt`, `ordersCount`, `pendingOrdersCount`, `logisticsStopStatus`, `pendingStopsCount`, `routeSettlementId`, `createdAt`.
 - `optimizationStatus`, `mapAvailable`, `distanceMeters`, `durationSeconds`, `optimizedAt`, `routingProfile`, `routingDataVersion`.
-- `routeSettlementId` es condicional: `null` u omitido si la ruta aún no tiene liquidación; presente si ya existe `RouteSettlement` para la ruta.
+- `routeSettlementId` es condicional: `null` u omitido si la ruta aún no tiene liquidación; presente si ya existe `RouteSettlement` para una ruta comercial. En rutas logísticas siempre es `null`.
 
 ## GET /api/delivery-routes/:id
 
@@ -558,11 +560,12 @@ Permisos: `ADMIN`; `DRIVER` solo ruta propia; `COLLECTIONS` para cobros y saldos
 
 Respuesta `data`:
 
-- Encabezado de ruta, incluyendo `driverId`, `driverName`, `vehicleId` (nullable para rutas históricas o legacy no geoespaciales), `vehicleCode` cuando exista, `status`, `scheduledDate`, `originLocationId`, `startedAt` y `completedAt`.
-- `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `accountReceivableVersion`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`, `outstandingAmount` y `derivedCollectedAmount`.
+- Encabezado de ruta, incluyendo `type`, `driverId`, `driverName`, `vehicleId` (nullable para rutas históricas o legacy no geoespaciales), `vehicleCode` cuando exista, `inventoryTransferId` cuando la ruta sea logística, `status`, `scheduledDate`, `originLocationId`, `startedAt` y `completedAt`.
+- En `SALE_DELIVERY`, `orders[]`: `id`, `saleId`, `saleNumber`, `accountReceivableId`, `accountReceivableVersion`, `status`, `deliveryAddress`, `latitude`, `longitude`, `stopSequence`, `legDistanceMeters`, `legDurationSeconds`, `deliveredAt`, `deliveredByUserId`, `collectedByUserId`, `collectionPass`, `notes`, `outstandingAmount` y `derivedCollectedAmount`.
+- En `BRANCH_RETURN` y `CEDIS_SUPPLY`, `orders[]` es vacío y no se consultan ni exponen `Payment`, `PaymentAllocation`, `AccountReceivable`, `outstandingAmount`, cobros o liquidación. `logisticsStop` contiene el estado de transporte, el `inventoryTransferId`, origen/destino canónicos de `OperationalLocation`, cantidades del traslado y la confirmación del DRIVER.
 - `optimizationStatus`, `mapAvailable`, `geometry`, `distanceMeters`, `durationSeconds`, `optimizedAt`, `routingProfile`, `routingDataVersion`.
 - `evidenceSummary[]`: `id`, `deliveryOrderId`, `saleNumber`, `type`, `value`, `storageKey`, `contentUrl` y `capturedAt` por evidencia. Para fotos nuevas, `value` es `null` y `contentUrl` es una URL firmada de lectura de Object Storage; las filas históricas pueden devolver temporalmente el data URL.
-- `collectionsSummary`: montos esperados y cobrados por método, primera vuelta y segunda vuelta.
+- `collectionsSummary`: montos esperados y cobrados por método, primera vuelta y segunda vuelta para `SALE_DELIVERY`; es `null` en rutas logísticas.
 - `routeSettlementId` si existe liquidación asociada a la ruta; `null` u omitido si la liquidación todavía no ha sido abierta o calculada.
 
 Notas:
@@ -742,6 +745,29 @@ Validaciones:
 - Estados esperados: `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`.
 - Al cambiar a `IN_PROGRESS`, `vehicleId` debe existir y el backend debe verificar atómicamente que el vehículo no tenga otra ruta `IN_PROGRESS`; un conflicto responde `409 Conflict` sin cambiar el estado.
 - Al cambiar a `COMPLETED` o `CANCELLED`, el backend detiene la aceptación de GPS para esa ruta y emite `fleet.route.updated`; no se aceptan posiciones posteriores ni se agrega otro evento Socket.IO.
+- En `BRANCH_RETURN` y `CEDIS_SUPPLY`, `COMPLETED` solo se acepta después de confirmar el stop logístico; la validación no depende de pedidos, CxC, `Payment` ni liquidación.
+
+## POST /api/delivery-routes/:id/logistics-stop/complete
+
+Propósito: confirmar la entrega o recepción física del traslado como handoff de transporte, sin confirmar el movimiento de inventario.
+
+Permisos: `ADMIN`; `DRIVER` limitado a su propia ruta.
+
+Body:
+
+```json
+{
+  "notes": "Recibido por almacén de sucursal"
+}
+```
+
+Validaciones:
+
+- La ruta debe ser `BRANCH_RETURN` o `CEDIS_SUPPLY`, estar asignada al DRIVER autenticado cuando corresponda y estar `IN_PROGRESS`.
+- El traslado vinculado debe existir y no estar `CANCELLED`.
+- El servidor registra `logisticsStopCompletedAt` y `logisticsStopCompletedByUserId`; el cliente no envía `latitude` ni `longitude`.
+- La operación no crea ni modifica `Payment`, `AccountReceivable`, `PaymentAllocation`, reservas, cantidades, lotes o movimientos de inventario. La recepción de inventario continúa por los comandos canónicos del módulo de inventario/CEDIS.
+- La respuesta devuelve el detalle logístico del traslado y `logisticsStop.status=COMPLETED`.
 
 ## PATCH /api/delivery-orders/:id/status
 

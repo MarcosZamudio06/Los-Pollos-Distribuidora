@@ -8,10 +8,12 @@ import {
   type Product,
   type OperationalUnit,
 } from "../inventario/types";
+import { formatCoordinates } from "./cedisPresentation";
 import type {
   CedisCycleCommand,
   CedisCycleItem,
   CedisDashboardLocation,
+  CedisLogisticsResources,
 } from "./types";
 
 type TransferMode = "SUPPLY" | "RETURN";
@@ -51,6 +53,7 @@ type CedisTransferCommandPanelProps = {
   sourceLocationId?: string;
   cycleItems?: CedisCycleItem[];
   expectedSales?: string;
+  logisticsResources: CedisLogisticsResources;
 };
 
 const unitLabels: Record<OperationalUnit, string> = {
@@ -381,26 +384,37 @@ function LocationPair({
 }: Pick<CedisTransferCommandPanelProps, "branch" | "cedis" | "mode">) {
   const origin = mode === "SUPPLY" ? cedis : branch;
   const destination = mode === "SUPPLY" ? branch : cedis;
+
+  function renderLocation(label: string, location: CedisDashboardLocation) {
+    const coordinates = formatCoordinates(
+      location.latitude,
+      location.longitude,
+    );
+
+    return (
+      <div
+        aria-label={`${label}: ${location.name}`}
+        aria-readonly="true"
+        className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3"
+      >
+        <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
+          {label}
+        </p>
+        <p className="mt-1 font-bold">{location.name}</p>
+        <p className="text-xs text-[var(--erp-muted-foreground)]">
+          {location.code ?? "Sin código"}
+        </p>
+        <p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">
+          {coordinates ? `Coordenadas: ${coordinates}` : "Coordenadas no disponibles"}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3">
-        <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
-          Origen
-        </p>
-        <p className="mt-1 font-bold">{origin.name}</p>
-        <p className="text-xs text-[var(--erp-muted-foreground)]">
-          {origin.code ?? "Sin código"}
-        </p>
-      </div>
-      <div className="rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3">
-        <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
-          Destino
-        </p>
-        <p className="mt-1 font-bold">{destination.name}</p>
-        <p className="text-xs text-[var(--erp-muted-foreground)]">
-          {destination.code ?? "Sin código"}
-        </p>
-      </div>
+      {renderLocation("Punto de partida", origin)}
+      {renderLocation("Punto de llegada", destination)}
     </div>
   );
 }
@@ -711,9 +725,12 @@ export function CedisTransferCommandPanel({
   sourceLocationId: sourceLocationIdProp,
   cycleItems = [],
   expectedSales,
+  logisticsResources,
 }: CedisTransferCommandPanelProps) {
   const [lines, setLines] = useState<TransferLineDraft[]>([emptyLine()]);
   const [notes, setNotes] = useState("");
+  const [assignedDriverId, setAssignedDriverId] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
   const [confirmation, setConfirmation] = useState<{
     payload: CedisCycleCommand;
     idempotencyKey: string;
@@ -741,6 +758,14 @@ export function CedisTransferCommandPanel({
     confirmation && confirmation.contextKey !== contextKey,
   );
   const visibleError = contextChanged ? null : error;
+  const logisticsLoading = logisticsResources.isLoading;
+  const logisticsError = Boolean(logisticsResources.error);
+  const availableDrivers = logisticsResources.drivers.filter(
+    (driver) => driver.isActive && driver.role.name === "DRIVER",
+  );
+  const availableVehicles = logisticsResources.vehicles.filter(
+    (vehicle) => vehicle.isActive,
+  );
 
   function cycleItemForProduct(productId: string) {
     return cycleItems.find((item) => item.productId === productId);
@@ -817,6 +842,14 @@ export function CedisTransferCommandPanel({
   }
 
   function validateLines() {
+    if (logisticsResources) {
+      if (logisticsLoading) return "Cargando conductores y unidades disponibles.";
+      if (logisticsError) return "No se pudo cargar el catálogo logístico.";
+      if (!availableDrivers.some((driver) => driver.id === assignedDriverId))
+        return "Selecciona un conductor activo autorizado.";
+      if (!availableVehicles.some((vehicle) => vehicle.id === vehicleId))
+        return "Selecciona una unidad activa.";
+    }
     if (lines.length === 0) return "Agrega al menos un producto.";
     const selectedProductIds = new Set<string>();
     for (const [index, line] of lines.entries()) {
@@ -868,6 +901,8 @@ export function CedisTransferCommandPanel({
   function toPayload() {
     return {
       expectedVersion,
+      assignedDriverId,
+      vehicleId,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       items: lines.map((line) => ({
         productId: line.productId,
@@ -1110,6 +1145,75 @@ export function CedisTransferCommandPanel({
       <div className="mt-5">
         <LocationPair branch={branch} cedis={cedis} mode={mode} />
       </div>
+      <section
+        aria-labelledby="cedis-transport-title"
+        className="mt-5 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
+      >
+        <div className="rounded-lg bg-[var(--erp-brand-red)] px-3 py-2 text-white">
+          <p
+            className="text-xs font-black uppercase tracking-[0.16em] text-white"
+            id="cedis-transport-title"
+          >
+            Transporte
+          </p>
+        </div>
+        <p className="mt-3 text-sm text-[var(--erp-muted-foreground)]">
+          Asigna el conductor y la unidad antes de despachar. Los puntos del
+          recorrido se toman de la ubicación operativa y no son editables.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+            <span>
+              Conductor asignado <span aria-hidden="true">*</span>
+            </span>
+            <Select
+              aria-label="Conductor asignado"
+              disabled={logisticsLoading || logisticsError}
+              onChange={(event) => setAssignedDriverId(event.target.value)}
+              required
+              value={assignedDriverId}
+            >
+              <option value="">
+                {logisticsLoading
+                  ? "Cargando conductores…"
+                  : availableDrivers.length === 0
+                    ? "No hay conductores disponibles"
+                    : "Selecciona conductor"}
+              </option>
+              {availableDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-[var(--erp-muted-foreground)]">
+            <span>
+              Unidad asignada <span aria-hidden="true">*</span>
+            </span>
+            <Select
+              aria-label="Unidad asignada"
+              disabled={logisticsLoading || logisticsError}
+              onChange={(event) => setVehicleId(event.target.value)}
+              required
+              value={vehicleId}
+            >
+              <option value="">
+                {logisticsLoading
+                  ? "Cargando unidades…"
+                  : availableVehicles.length === 0
+                    ? "No hay unidades disponibles"
+                    : "Selecciona unidad"}
+              </option>
+              {availableVehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {vehicle.code} · {vehicle.displayName}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+      </section>
       {!isSupply && (
         <ReturnFinancialPreview
           cycleItems={cycleItems}

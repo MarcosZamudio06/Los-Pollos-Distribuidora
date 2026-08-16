@@ -1,5 +1,10 @@
 export type DeliveryRouteStatus =
   "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | string;
+export type DeliveryRouteType =
+  | "SALE_DELIVERY"
+  | "BRANCH_RETURN"
+  | "CEDIS_SUPPLY"
+  | string;
 export type UpdateDeliveryRouteStatusPayload = {
   status: DeliveryRouteStatus;
   notes?: string;
@@ -20,6 +25,7 @@ export type RouteSettlementStatus =
   "OPEN" | "CLOSED" | "REVIEW_REQUIRED" | string;
 export type CollectionPass = "FIRST" | "SECOND" | string;
 export type ReturnedItemUnit = "KG" | "PIECE" | "KG_AND_PIECE" | string;
+export type LogisticsStopStatus = "PENDING" | "COMPLETED" | string;
 
 export type DeliveryRoutesFilters = {
   page?: number;
@@ -34,6 +40,7 @@ export type DeliveryRoutesFilters = {
 export type DeliveryRouteListItem = {
   id: string;
   name: string;
+  type?: DeliveryRouteType;
   driverId?: string | null;
   driverName?: string | null;
   vehicleId?: string | null;
@@ -45,10 +52,13 @@ export type DeliveryRouteListItem = {
   originLocationName?: string | null;
   routeStockLocationId?: string | null;
   routeStockLocationName?: string | null;
+  inventoryTransferId?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
   ordersCount?: number | string | null;
   pendingOrdersCount?: number | string | null;
+  logisticsStopStatus?: LogisticsStopStatus | null;
+  pendingStopsCount?: number | string | null;
   routeSettlementId?: string | null;
   createdAt?: string | null;
   optimizationStatus?: "NOT_OPTIMIZED" | "OPTIMIZED" | string;
@@ -113,11 +123,42 @@ export type CollectionSummary = {
   secondPassAmount?: number | string | null;
 };
 
+export type LogisticsLocation = {
+  id: string;
+  name: string;
+  type?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+export type LogisticsTransferItem = {
+  id: string;
+  productId: string;
+  productName?: string | null;
+  unit: ReturnedItemUnit;
+  quantityKg?: number | string | null;
+  quantityPieces?: number | string | null;
+};
+
+export type LogisticsStop = {
+  status: LogisticsStopStatus;
+  inventoryTransferId: string;
+  transferNumber: string;
+  transferStatus: string;
+  completedAt?: string | null;
+  completedByUserId?: string | null;
+  notes?: string | null;
+  origin: LogisticsLocation | null;
+  destination: LogisticsLocation | null;
+  items: LogisticsTransferItem[];
+};
+
 export type DeliveryRouteDetail = DeliveryRouteListItem & {
   geometry?: GeoJsonLineString | null;
   orders?: DeliveryOrder[];
   evidenceSummary?: EvidenceSummaryItem[];
-  collectionsSummary?: CollectionSummary;
+  collectionsSummary?: CollectionSummary | null;
+  logisticsStop?: LogisticsStop | null;
 };
 
 export type RouteLocationPosition = {
@@ -277,6 +318,10 @@ export type UpdateDeliveryOrderStatusPayload = {
   status: DeliveryOrderStatus;
   notes?: string;
   deliveredAt?: string;
+};
+
+export type CompleteLogisticsStopPayload = {
+  notes?: string;
 };
 
 export type CreateDeliveryEvidencePayload = {

@@ -24,6 +24,7 @@ Control route planning, geographic optimization, assignment, delivery, evidence,
 - Optimize one driver's stop sequence by travel time.
 - Persist the approved round trip, distance, duration, and ordered stops.
 - Update route status.
+- Confirm a logistics transport stop.
 - Update delivery-order status.
 - Register delivery.
 - Register non-delivery, return, partial rejection, or incident.
@@ -34,6 +35,33 @@ Control route planning, geographic optimization, assignment, delivery, evidence,
 - Track active route positions from the authenticated driver's browser or device.
 - Review live fleet state, persisted route positions, geofence events, and incident heatmaps.
 - Manage delivery zones and geofences as persisted operational polygons.
+
+## Route purpose and logistics identity
+
+`DeliveryRoute.type` is the explicit route-purpose discriminator:
+
+- `SALE_DELIVERY` for the existing commercial delivery flow.
+- `BRANCH_RETURN` for a branch-to-CEDIS return.
+- `CEDIS_SUPPLY` for a CEDIS-to-branch supply.
+
+The existing `driverId` assignment remains the canonical conductor reference in
+this repository, and `vehicleId` remains the Fleet unit reference. Historical
+commercial routes may keep `vehicleId=null`; a `BRANCH_RETURN` or `CEDIS_SUPPLY`
+route requires an active vehicle.
+
+When a route represents a logistics transfer, `inventoryTransferId` is the
+explicit unique link to `InventoryTransfer`. The linked transfer remains the
+source of truth for `originLocationId` and `destinationLocationId`; both are
+`OperationalLocation` records and therefore also remain the source of canonical
+coordinates. Notes, route names, and route numbers are never relationship keys.
+
+Logistics routes are transport-only from the DRIVER perspective. They do not
+create `DeliveryOrder` records and never enter the commercial collection or
+route-settlement flow. The linked `InventoryTransfer` remains responsible for
+approval, reservations, quantities, physical receipt, lots, and stock
+movements. The DRIVER's stop confirmation records only the transport handoff
+on `DeliveryRoute`; it must not confirm the inventory transfer or create an
+inventory movement.
 
 ## Entities
 
@@ -135,14 +163,16 @@ The canonical geospatial contracts are:
 - All physical route load and return operations must go through `InventoryTransfer` to or from `ROUTE_STOCK`.
 - Every `ROUTE` channel sale consumes inventory from `ROUTE_STOCK`.
 - Double decrement between route load and delivered route sale is forbidden.
-- Route completion requires orders closed, cancelled, or with final incident recorded.
+- `SALE_DELIVERY` route completion requires orders closed, cancelled, or with final incident recorded.
+- `BRANCH_RETURN` and `CEDIS_SUPPLY` route completion requires the explicit logistics stop confirmation. It does not inspect unrelated customer orders, `AccountReceivable`, `Payment`, collection status, second-pass collection, or route settlement.
+- A logistics stop confirmation is allowed only on the assigned route while it is `IN_PROGRESS`; it records the authenticated DRIVER and server timestamp. It accepts no latitude/longitude and does not replace the inventory module's physical receipt command.
 - Route settlement compares expected vs collected amounts by payment method and records differences.
 - Returns, partial rejections, or product differences must preserve operational traceability and, when they affect stock, create inventory movement with mandatory reason.
 
 ## Permissions
 
 - ADMIN: create and manage routes, review evidence, authorize incidents, and close or review settlements.
-- DRIVER: consult and update own routes, capture evidence, register incidents, allowed collections, and publish positions only with `fleet.position.publish`; DRIVER never receives global `fleet.view`.
+- DRIVER: consult and update own routes, confirm an `IN_PROGRESS` logistics stop, capture commercial evidence, register incidents, perform allowed commercial collections, and publish positions only with `fleet.position.publish`; DRIVER never receives global `fleet.view`.
 - COLLECTIONS: consult route collections, related balances, and settlements; register or reconcile payments according to permissions.
 - SELLER: may consult status when applicable.
 - WAREHOUSE: may consult returns or related movements when inventory is affected.
@@ -210,5 +240,7 @@ The fleet map uses MapLibre GL JS only as a renderer. It does not expose Photon,
 - Derive collected amounts from `Payment`, not from a duplicated persisted money field.
 - Register incident or return.
 - Settle route and calculate expected vs collected difference.
+- Confirm a logistics stop without creating a `Payment`, querying a customer CxC, or confirming inventory movements.
+- Complete a logistics route only after its transport stop is confirmed, even when unrelated customer CxC exists elsewhere.
 - Prepare route load with `ROUTE_STOCK`.
 - Reject delivery or return without operational route location.

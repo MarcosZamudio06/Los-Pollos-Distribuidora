@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  IsEmpty,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -36,6 +37,21 @@ export class BranchSupplyCycleCommandDto {
   @IsInt()
   @Min(1)
   expectedVersion!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  assignedDriverId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  vehicleId!: string;
+
+  /** Coordinates belong to the canonical OperationalLocation records. */
+  @IsEmpty({ message: 'latitude is server-controlled' })
+  latitude?: never;
+
+  @IsEmpty({ message: 'longitude is server-controlled' })
+  longitude?: never;
 
   @IsOptional()
   @IsString()

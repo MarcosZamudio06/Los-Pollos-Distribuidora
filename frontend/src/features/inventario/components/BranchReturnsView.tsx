@@ -13,6 +13,7 @@ import { CedisReturnsReviewView } from "../../cedis/CedisReturnsReviewView";
 import {
   useCedisBranchHistory,
   useCedisCycleSummary,
+  useCedisLogisticsResources,
   useCreateCedisReturn,
   useOperationalLocation,
 } from "../../cedis/hooks";
@@ -54,6 +55,17 @@ export function BranchReturnsView() {
   );
   const createReturn = useCreateCedisReturn(cycleId ?? "disabled");
   const [registrationOpen, setRegistrationOpen] = useState(false);
+  const logisticsResourcesQuery = useCedisLogisticsResources(registrationOpen);
+  const logisticsResources = {
+    drivers: logisticsResourcesQuery.drivers.data ?? [],
+    vehicles: logisticsResourcesQuery.vehicles.data ?? [],
+    isLoading:
+      logisticsResourcesQuery.drivers.isLoading ||
+      logisticsResourcesQuery.vehicles.isLoading,
+    error:
+      logisticsResourcesQuery.drivers.error ??
+      logisticsResourcesQuery.vehicles.error,
+  };
 
   async function handleRegisterReturn(
     payload: CedisCycleCommand,
@@ -207,6 +219,7 @@ export function BranchReturnsView() {
               sourceLocationId={user?.operationalLocationId}
               cycleItems={cycle.items}
               expectedSales={cycle.totals.expectedSales}
+              logisticsResources={logisticsResources}
             />
           )}
         </>

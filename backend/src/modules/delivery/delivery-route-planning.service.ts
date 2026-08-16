@@ -2,12 +2,14 @@ import { createHash } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { DeliveryRouteStatus, Prisma, SaleStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   CreateDeliveryRoutePlanDto,
@@ -15,7 +17,9 @@ import {
 } from './dto/delivery-route-planning.dto';
 import { RoutingProvidersService } from './routing-providers.service';
 
-type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
+type Actor = Pick<AuthenticatedUser, 'id' | 'role'> & {
+  permissions?: string[];
+};
 
 @Injectable()
 export class DeliveryRoutePlanningService {
@@ -24,7 +28,8 @@ export class DeliveryRoutePlanningService {
     private readonly providers: RoutingProvidersService,
   ) {}
 
-  async findActiveDrivers() {
+  async findActiveDrivers(currentUser?: Actor) {
+    this.assertCatalogAccess(currentUser);
     return this.prisma.user.findMany({
       where: { isActive: true, role: { name: 'DRIVER' } },
       orderBy: { name: 'asc' },
@@ -37,7 +42,8 @@ export class DeliveryRoutePlanningService {
     });
   }
 
-  async findActiveVehicles() {
+  async findActiveVehicles(currentUser?: Actor) {
+    this.assertCatalogAccess(currentUser);
     return this.prisma.vehicle.findMany({
       where: { isActive: true },
       orderBy: { code: 'asc' },
@@ -102,6 +108,18 @@ export class DeliveryRoutePlanningService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  private assertCatalogAccess(currentUser?: Actor) {
+    if (
+      currentUser?.role === 'WAREHOUSE' &&
+      !currentUser.permissions?.some((permission) =>
+        permission === PERMISSIONS.CEDIS_DISPATCH ||
+        permission === PERMISSIONS.CEDIS_REQUEST_RETURNS,
+      )
+    ) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
   }
 
   async createPlan(dto: CreateDeliveryRoutePlanDto, currentUser: Actor) {

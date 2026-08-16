@@ -14,6 +14,9 @@ import { DeliveryEvidenceCapture } from "../components/DeliveryEvidenceCapture";
 import { DeliveryIncidentDialog } from "../components/DeliveryIncidentDialog";
 import { DeliveryOrderCard } from "../components/DeliveryOrderCard";
 import { DriverRouteMap } from "../components/DriverRouteMap";
+import { LogisticsTransportProgress } from "../components/LogisticsTransportProgress";
+import { LogisticsRouteCompletionControl } from "../components/LogisticsRouteCompletionControl";
+import { LogisticsStopConfirmationControl } from "../components/LogisticsStopConfirmationControl";
 import { RouteCompletionControl } from "../components/RouteCompletionControl";
 import { RouteLocationTrackingControl } from "../components/RouteLocationTrackingControl";
 import { RouteStartControl } from "../components/RouteStartControl";
@@ -31,15 +34,23 @@ import {
 } from "../components/RouteUi";
 import { UpdateDeliveryStatusDialog } from "../components/UpdateDeliveryStatusDialog";
 import {
+  useCompleteLogisticsStop,
   useDeliveryRoute,
   useDeliveryRoutes,
   useUpdateDeliveryRouteStatus,
 } from "../hooks";
 import { useRouteLocationTracking } from "../useRouteLocationTracking";
-import { date, isFinalOrderStatus, money, shortId } from "../labels";
+import {
+  date,
+  isFinalOrderStatus,
+  money,
+  routeTypeLabel,
+  shortId,
+} from "../labels";
 import type {
   DeliveryOrder,
   DeliveryRouteListItem,
+  LogisticsLocation,
   RouteCollectionResponse,
 } from "../types";
 
@@ -79,6 +90,32 @@ function durationLabel(seconds?: number | null) {
     : `${minutes} min`;
 }
 
+function isLogisticsRouteType(type?: string | null) {
+  return type === "BRANCH_RETURN" || type === "CEDIS_SUPPLY";
+}
+
+function logisticsQuantityLabel(
+  quantityKg?: number | string | null,
+  quantityPieces?: number | string | null,
+) {
+  const parts: string[] = [];
+  if (quantityKg != null && Number(quantityKg) > 0) {
+    parts.push(String(quantityKg) + " kg");
+  }
+  if (quantityPieces != null && Number(quantityPieces) > 0) {
+    parts.push(String(quantityPieces) + " piezas");
+  }
+  return parts.join(" · ") || "Sin cantidad";
+}
+
+function hasMapCoordinates(location?: LogisticsLocation | null) {
+  return Boolean(
+    location &&
+      Number.isFinite(location.latitude) &&
+      Number.isFinite(location.longitude),
+  );
+}
+
 export function MyRoutesPage() {
   const routes = useDeliveryRoutes({ limit: 50 });
   const routeItems = useMemo(
@@ -107,8 +144,12 @@ export function MyRoutesPage() {
 
   const activeRouteId = selectedRouteId ?? routeItems[0]?.id;
   const route = useDeliveryRoute(activeRouteId);
+  const completeLogisticsStop = useCompleteLogisticsStop(activeRouteId);
   const updateRouteStatus = useUpdateDeliveryRouteStatus(activeRouteId);
   const detail = route.data;
+  const isLogisticsRoute = isLogisticsRouteType(detail?.type);
+  const logisticsStop = detail?.logisticsStop;
+  const logisticsStopCompleted = logisticsStop?.status === "COMPLETED";
   const tracking = useRouteLocationTracking({ route: detail });
   const orders = detail?.orders ?? [];
   const finalOrders = orders.filter((order) =>
@@ -183,23 +224,48 @@ export function MyRoutesPage() {
                           <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">
                             Programada: {date(item.scheduledDate)}
                           </p>
+                          {isLogisticsRouteType(item.type) && (
+                            <p className="mt-2 text-xs font-black uppercase tracking-[0.12em] text-[var(--erp-info)]">
+                              {routeTypeLabel(item.type)}
+                            </p>
+                          )}
                         </div>
                         <RouteStatusBadge status={item.status} />
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--erp-muted-foreground)]">
-                        <span>
-                          <strong className="text-[var(--erp-foreground)]">
-                            {item.ordersCount ?? 0}
-                          </strong>{" "}
-                          pedidos
-                        </span>
-                        <span>
-                          <strong className="text-[var(--erp-foreground)]">
-                            {item.pendingOrdersCount ?? 0}
-                          </strong>{" "}
-                          pendientes
-                        </span>
-                      </div>
+                      {isLogisticsRouteType(item.type) ? (
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--erp-muted-foreground)]">
+                          <span>
+                            <strong className="text-[var(--erp-foreground)]">
+                              1
+                            </strong>{" "}
+                            parada logística
+                          </span>
+                          <span>
+                            <strong className="text-[var(--erp-foreground)]">
+                              {item.pendingStopsCount ?? 0}
+                            </strong>{" "}
+                            pendientes
+                          </span>
+                          <span className="col-span-2">
+                            Unidad: {item.vehicle?.displayName ?? "Sin unidad"}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--erp-muted-foreground)]">
+                          <span>
+                            <strong className="text-[var(--erp-foreground)]">
+                              {item.ordersCount ?? 0}
+                            </strong>{" "}
+                            pedidos
+                          </span>
+                          <span>
+                            <strong className="text-[var(--erp-foreground)]">
+                              {item.pendingOrdersCount ?? 0}
+                            </strong>{" "}
+                            pendientes
+                          </span>
+                        </div>
+                      )}
                     </button>
                   );
                 })}
@@ -230,61 +296,103 @@ export function MyRoutesPage() {
                           {detail.name}
                         </h2>
                         <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">
-                          Origen{" "}
-                          {detail.originLocationName ??
-                            shortId(detail.originLocationId)}{" "}
-                          · Unidad{" "}
-                          {detail.vehicle?.displayName ?? "sin asignar"} ·
-                          ROUTE_STOCK{" "}
-                          {detail.routeStockLocationName ??
-                            shortId(detail.routeStockLocationId)}
+                          {isLogisticsRoute
+                            ? `${routeTypeLabel(detail.type)} · ${logisticsStop?.origin?.name ?? "Sin origen"} → ${logisticsStop?.destination?.name ?? "Sin destino"} · Unidad ${detail.vehicle?.displayName ?? "sin asignar"}`
+                            : `Origen ${detail.originLocationName ?? shortId(detail.originLocationId)} · Unidad ${detail.vehicle?.displayName ?? "sin asignar"} · ROUTE_STOCK ${detail.routeStockLocationName ?? shortId(detail.routeStockLocationId)}`}
                         </p>
                       </div>
                       <RouteStatusBadge status={detail.status} />
                     </div>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
-                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
-                          <CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />
-                          Pedidos cerrados
-                        </p>
-                        <p className="mt-2 text-xl font-black">
-                          {finalOrders}/{orders.length}
-                        </p>
+                    {isLogisticsRoute ? (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            <CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />
+                            Parada física
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {logisticsStopCompleted
+                              ? "Confirmada"
+                              : "Pendiente"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            Traslado
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {logisticsStop?.transferNumber ?? "Sin traslado"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            Origen
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {logisticsStop?.origin?.name ?? "Sin origen"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            Destino
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {logisticsStop?.destination?.name ?? "Sin destino"}
+                          </p>
+                        </div>
                       </div>
-                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
-                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
-                          <BadgeDollarSign className="h-4 w-4 text-[var(--erp-info)]" />
-                          Esperado
-                        </p>
-                        <p className="mt-2 text-xl font-black">
-                          {money(detail.collectionsSummary?.expectedAmount)}
-                        </p>
+                    ) : (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            <CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />
+                            Pedidos cerrados
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {finalOrders}/{orders.length}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            <BadgeDollarSign className="h-4 w-4 text-[var(--erp-info)]" />
+                            Esperado
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {money(detail.collectionsSummary?.expectedAmount)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            <BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
+                            Cobrado
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {money(
+                              detail.collectionsSummary?.derivedCollectedAmount,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
+                            <ClipboardList className="h-4 w-4 text-[var(--erp-danger)]" />
+                            Liquidación
+                          </p>
+                          <p className="mt-2 text-xl font-black">
+                            {detail.routeSettlementId
+                              ? shortId(detail.routeSettlementId)
+                              : "Sin asociar"}
+                          </p>
+                        </div>
                       </div>
-                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
-                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
-                          <BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
-                          Cobrado
-                        </p>
-                        <p className="mt-2 text-xl font-black">
-                          {money(
-                            detail.collectionsSummary?.derivedCollectedAmount,
-                          )}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
-                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
-                          <ClipboardList className="h-4 w-4 text-[var(--erp-danger)]" />
-                          Liquidación
-                        </p>
-                        <p className="mt-2 text-xl font-black">
-                          {detail.routeSettlementId
-                            ? shortId(detail.routeSettlementId)
-                            : "Sin asociar"}
-                        </p>
-                      </div>
-                    </div>
+                    )}
                   </Card>
+
+                  {isLogisticsRoute && logisticsStop && (
+                    <LogisticsTransportProgress
+                      routeStatus={detail.status}
+                      stopStatus={logisticsStop.status}
+                    />
+                  )}
 
                   {detail.status === "PENDING" && (
                     <RouteStartControl
@@ -311,7 +419,54 @@ export function MyRoutesPage() {
                     />
                   )}
 
-                  {detail.status === "IN_PROGRESS" && (
+                  {detail.status === "IN_PROGRESS" &&
+                    isLogisticsRoute &&
+                    logisticsStop && (
+                      <>
+                        <LogisticsStopConfirmationControl
+                          error={routeStatusError}
+                          isCompleting={completeLogisticsStop.isPending}
+                          onComplete={async () => {
+                            setRouteStatusError(null);
+                            try {
+                              await completeLogisticsStop.mutateAsync({});
+                            } catch (error) {
+                              const message = routeStatusErrorMessage(
+                                error,
+                                "No se pudo confirmar la recepción física.",
+                              );
+                              setRouteStatusError(message);
+                              throw error;
+                            }
+                          }}
+                          routeName={detail.name}
+                          stop={logisticsStop}
+                        />
+                        <LogisticsRouteCompletionControl
+                          error={routeStatusError}
+                          isCompleting={updateRouteStatus.isPending}
+                          onComplete={async () => {
+                            setRouteStatusError(null);
+                            try {
+                              await updateRouteStatus.mutateAsync({
+                                status: "COMPLETED",
+                              });
+                            } catch (error) {
+                              const message = routeStatusErrorMessage(
+                                error,
+                                "No se pudo terminar la ruta logística.",
+                              );
+                              setRouteStatusError(message);
+                              throw error;
+                            }
+                          }}
+                          routeName={detail.name}
+                          stopCompleted={logisticsStopCompleted}
+                        />
+                      </>
+                    )}
+
+                  {detail.status === "IN_PROGRESS" && !isLogisticsRoute && (
                     <RouteCompletionControl
                       completedOrders={finalOrders}
                       error={routeStatusError}
@@ -338,7 +493,10 @@ export function MyRoutesPage() {
 
                   <RouteLocationTrackingControl tracking={tracking} />
 
-                  {detail.mapAvailable && detail.geometry ? (
+                  {(detail.mapAvailable && detail.geometry) ||
+                  (isLogisticsRoute &&
+                    hasMapCoordinates(logisticsStop?.origin) &&
+                    hasMapCoordinates(logisticsStop?.destination)) ? (
                     <Card className="grid gap-4 p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -367,8 +525,16 @@ export function MyRoutesPage() {
                         </div>
                       </div>
                       <DriverRouteMap
+                        destinationLocation={
+                          isLogisticsRoute
+                            ? logisticsStop?.destination
+                            : undefined
+                        }
                         geometry={detail.geometry}
                         currentLocation={tracking.lastPublishedPosition}
+                        originLocation={
+                          isLogisticsRoute ? logisticsStop?.origin : undefined
+                        }
                         orders={orders}
                         routeName={detail.name}
                       />
@@ -380,7 +546,47 @@ export function MyRoutesPage() {
                     </StatusMessage>
                   )}
 
-                  {orders.length === 0 ? (
+                  {isLogisticsRoute && logisticsStop ? (
+                    <Card className="grid gap-4 p-5">
+                      <div className="rounded-2xl bg-[var(--erp-info)] p-4 text-white">
+                        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
+                          <ClipboardList className="h-4 w-4" />
+                          Carga del traslado
+                        </p>
+                        <h3 className="mt-1 text-xl font-black tracking-[-0.04em] text-white">
+                          Productos programados
+                        </h3>
+                        <p className="mt-1 text-sm text-white/75">
+                          El DRIVER confirma únicamente el transporte. La
+                          recepción, lotes y movimientos de stock se controlan
+                          en inventario.
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        {logisticsStop.items.map((item) => (
+                          <div
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
+                            key={item.id}
+                          >
+                            <div>
+                              <p className="font-black">
+                                {item.productName ?? shortId(item.productId)}
+                              </p>
+                              <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">
+                                Unidad: {item.unit}
+                              </p>
+                            </div>
+                            <p className="font-black">
+                              {logisticsQuantityLabel(
+                                item.quantityKg,
+                                item.quantityPieces,
+                              )}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  ) : orders.length === 0 ? (
                     <StatusMessage tone="empty">
                       Esta ruta no muestra pedidos asignados.
                     </StatusMessage>

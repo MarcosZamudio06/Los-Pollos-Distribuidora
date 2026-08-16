@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { DeliveryModule } from '../delivery/delivery.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { PointOfSaleDailyCloseModule } from '../point-of-sale-daily-close/point-of-sale-daily-close.module';
 import { BranchSupplyCyclesController } from './branch-supply-cycles.controller';
@@ -14,7 +15,7 @@ import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
 import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 @Module({
-  imports: [AuthModule, InventoryModule, PointOfSaleDailyCloseModule],
+  imports: [AuthModule, DeliveryModule, InventoryModule, PointOfSaleDailyCloseModule],
   controllers: [
     BranchSupplyCyclesController,
     BranchSupplyReceiptsController,

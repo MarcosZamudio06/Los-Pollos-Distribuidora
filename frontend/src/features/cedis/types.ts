@@ -378,8 +378,33 @@ export type CedisCycleCommandItem = {
 
 export type CedisCycleCommand = {
   expectedVersion: number;
+  assignedDriverId: string;
+  vehicleId: string;
   notes?: string;
   items: CedisCycleCommandItem[];
+};
+
+export type CedisLogisticsDriver = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  role: { name: string };
+};
+
+export type CedisLogisticsVehicle = {
+  id: string;
+  code: string;
+  displayName: string;
+  plateNumber?: string | null;
+  homeLocationId?: string | null;
+  isActive: boolean;
+};
+
+export type CedisLogisticsResources = {
+  drivers: CedisLogisticsDriver[];
+  vehicles: CedisLogisticsVehicle[];
+  isLoading: boolean;
+  error?: unknown;
 };
 
 export type CedisRefreshCommand = {
@@ -431,6 +456,23 @@ export type CedisBranchReturn = {
   cancelledAt: string | null;
   createdAt: string;
   requestedBy: { id: string; name: string };
+  route?: {
+    id: string;
+    type: "BRANCH_RETURN" | string;
+    status: string;
+    driverId: string;
+    driver: { id: string; name: string };
+    vehicleId: string;
+    vehicle: {
+      id: string;
+      code: string;
+      displayName: string;
+      plateNumber: string | null;
+    };
+    inventoryTransferId: string;
+    originLocationId: string | null;
+    scheduledDate: string;
+  } | null;
   items: Array<{
     transferItemId: string;
     productId: string;

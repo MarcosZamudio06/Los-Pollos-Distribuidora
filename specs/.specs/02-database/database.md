@@ -1093,11 +1093,14 @@ Campos:
 
 - id
 - name
+- type (`SALE_DELIVERY`, `BRANCH_RETURN` o `CEDIS_SUPPLY`)
 - driverId
+- vehicleId nullable para compatibilidad histórica
 - status
 - scheduledDate
 - originLocationId
 - routeStockLocationId
+- inventoryTransferId opcional y único
 - startedAt
 - completedAt
 - createdAt
@@ -1112,9 +1115,14 @@ Estados:
 
 Notas:
 
+- `SALE_DELIVERY` es el valor por defecto para conservar la semántica de las rutas comerciales existentes.
+- `driverId` es la asignación canónica del conductor vigente en este repositorio; no se crea un segundo campo `assignedToId`.
+- `vehicleId` permanece nullable para rutas históricas, pero es obligatorio por regla de negocio para `BRANCH_RETURN` y `CEDIS_SUPPLY`.
+- `BRANCH_RETURN` y `CEDIS_SUPPLY` deben conservar el `inventoryTransferId` que identifica el traslado logístico origen de la ruta.
 - `routeStockLocationId` es requerido para rutas con carga operativa.
 - La relación recomendada es `DeliveryRoute 1:1 OperationalLocation` de tipo `ROUTE_STOCK`.
 - Las ventas y devoluciones de ruta no deben operar sin `routeStockLocationId`.
+- El origen y destino logísticos se resuelven mediante `InventoryTransfer.originLocationId` y `InventoryTransfer.destinationLocationId`; ambas referencias apuntan a `OperationalLocation`, que conserva también las coordenadas canónicas.
 
 ### DeliveryOrder
 
@@ -1291,6 +1299,7 @@ Notas:
 - User 1:N DeliveryRoute como driver
 - DeliveryRoute 1:N DeliveryOrder
 - DeliveryRoute 1:1 OperationalLocation como `routeStockLocation`
+- DeliveryRoute 0..1:1 InventoryTransfer como traslado logístico asociado
 - Sale 1:1 DeliveryOrder opcional
 - AccountReceivable 1:N DeliveryOrder opcional
 - DeliveryOrder 1:N DeliveryEvidence

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DeliveryRouteStatus } from '@prisma/client';
+import { DeliveryRouteStatus, DeliveryRouteType } from '@prisma/client';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import { FleetService } from './fleet.service';
@@ -102,6 +102,7 @@ describe('FleetService', () => {
           driverName: 'Driver One',
           routeId: 'route-1',
           routeName: 'Ruta Centro',
+          routeType: DeliveryRouteType.CEDIS_SUPPLY,
           routeStatus: DeliveryRouteStatus.IN_PROGRESS,
           scheduledDate: new Date('2026-08-12T00:00:00.000Z'),
           originLocationId: 'origin-1',
@@ -128,6 +129,7 @@ describe('FleetService', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0].route.totalOrders).toBe(20);
+      expect(result.items[0].route.type).toBe(DeliveryRouteType.CEDIS_SUPPLY);
       expect(result.items[0].position).toBeNull();
       expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
       expect(prisma.deliveryRoute.findMany).not.toHaveBeenCalled();
@@ -361,6 +363,34 @@ describe('FleetService', () => {
       };
       expect(query.values).toEqual(expect.arrayContaining([-96.1342, 19.1738]));
     });
+
+    it.each([DeliveryRouteType.BRANCH_RETURN, DeliveryRouteType.CEDIS_SUPPLY])(
+      'publishes GPS for an in-progress %s route through the existing telemetry flow',
+      async (type) => {
+        const prisma = createPrisma();
+        prisma.deliveryRoute.findUnique.mockResolvedValue(
+          activeRoute({ type }),
+        );
+        prisma.$queryRaw.mockResolvedValue([positionRow()]);
+
+        await expect(
+          serviceWith(prisma).publishPosition(
+            {
+              clientEventId: `event-${type}`,
+              latitude: 19.1738,
+              longitude: -96.1342,
+              recordedAt: new Date().toISOString(),
+            },
+            driver(),
+          ),
+        ).resolves.toEqual(
+          expect.objectContaining({
+            routeId: 'route-1',
+            vehicleId: 'vehicle-1',
+          }),
+        );
+      },
+    );
 
     it('replays a duplicate clientEventId without inserting a second row', async () => {
       const prisma = createPrisma();

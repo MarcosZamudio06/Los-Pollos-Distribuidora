@@ -186,6 +186,23 @@ export function useCedisIncomingSupply(transferId: string | undefined) {
   });
 }
 
+export function useCedisLogisticsResources(enabled = true) {
+  const { accessToken } = useAuth();
+  const drivers = useQuery({
+    enabled: Boolean(accessToken && enabled),
+    queryKey: ['cedis', 'logistics', 'drivers'],
+    queryFn: () => cedisService.listLogisticsDrivers(accessToken),
+    staleTime: CEDIS_LOCATIONS_STALE_TIME_MS,
+  });
+  const vehicles = useQuery({
+    enabled: Boolean(accessToken && enabled),
+    queryKey: ['cedis', 'logistics', 'vehicles'],
+    queryFn: () => cedisService.listLogisticsVehicles(accessToken),
+    staleTime: CEDIS_LOCATIONS_STALE_TIME_MS,
+  });
+  return { drivers, vehicles };
+}
+
 export function useReceiveCedisSupply() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();

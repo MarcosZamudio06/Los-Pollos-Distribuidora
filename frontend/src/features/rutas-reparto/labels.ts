@@ -3,6 +3,7 @@ import type {
   DeliveryRouteStatus,
   EvidenceType,
   PaymentMethod,
+  DeliveryRouteType,
   RouteSettlementStatus,
 } from "./types";
 import { formatMoney } from "../../lib/money";
@@ -34,6 +35,15 @@ export function routeStatusLabel(status: DeliveryRouteStatus) {
     PENDING: "Pendiente",
   };
   return labels[status] ?? status;
+}
+
+export function routeTypeLabel(type: DeliveryRouteType | null | undefined) {
+  const labels: Record<string, string> = {
+    BRANCH_RETURN: "Devolución a CEDIS",
+    CEDIS_SUPPLY: "Suministro a sucursal",
+    SALE_DELIVERY: "Entrega comercial",
+  };
+  return labels[type ?? ""] ?? "Ruta operativa";
 }
 
 export function orderStatusLabel(status: DeliveryOrderStatus) {

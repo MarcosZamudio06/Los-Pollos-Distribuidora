@@ -56,6 +56,21 @@ dimensiones equivalentes.
 
 El sistema MUST admitir múltiples suministros CEDIS → sucursal y múltiples devoluciones sucursal → CEDIS. Cada operación MUST crear un `InventoryTransfer` `REQUESTED` y vincularlo una sola vez al ciclo.
 
+Cada suministro o devolución despachado por Fleet MUST recibir `assignedDriverId`
+y `vehicleId` en el comando. El backend MUST validar que el conductor exista,
+esté activo y tenga rol `DRIVER`, y que la unidad exista, esté activa y no tenga
+otra ruta `IN_PROGRESS`.
+
+Cuando una operación de suministro o devolución requiera despacho mediante
+Fleet, debe reutilizar `DeliveryRoute` con el propósito explícito
+`CEDIS_SUPPLY` o `BRANCH_RETURN`, respectivamente. La ruta debe conservar
+`inventoryTransferId` como vínculo único al traslado que la originó, reutilizar
+el conductor y la unidad existentes (`driverId` y `vehicleId`) y resolver origen,
+destino y coordenadas desde los `OperationalLocation` del `InventoryTransfer`.
+Si cualquiera de las ubicaciones carece de coordenadas, el despacho se rechaza
+antes de confirmar la operación. El body no acepta latitude ni longitude. No se
+crean agregados paralelos de conductores, vehículos o coordenadas.
+
 Una sucursal MUST NOT recibir inventario de proveedores externos ni mediante un traspaso genérico no vinculado. Todo suministro hacia una sucursal MUST originarse en su CEDIS padre y MUST pertenecer a un ciclo de suministro.
 
 Toda transferencia `REQUESTED` o `IN_TRANSIT` MUST reservar en su ubicación de
@@ -74,6 +89,7 @@ los límites se excede.
 - GIVEN un ciclo mutable y partidas válidas
 - WHEN se registra un suministro o devolución
 - THEN transferencia, vínculo, reserva y auditoría se crean atómicamente
+- AND la ruta logística con conductor, unidad y vínculo único al traslado se crea en la misma transacción
 - AND no cambia las cantidades físicas del balance ni se crea movimiento
 
 #### Scenario: Creación con stock insuficiente

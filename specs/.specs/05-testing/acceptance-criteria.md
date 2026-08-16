@@ -73,6 +73,12 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un ciclo mutable, cuando se registra un suministro, entonces crea y vincula un `InventoryTransfer` `REQUESTED` CEDIS → sucursal sin movimientos.
 - Dado un ciclo mutable, cuando se registra una devolución, entonces crea y vincula un `InventoryTransfer` `REQUESTED` sucursal → CEDIS sin movimientos.
 - Dado un ciclo con varios suministros y devoluciones, cuando se consulta, entonces cada transferencia aparece una sola vez con su estado real.
+- Dado un suministro o devolución despachado por Fleet, cuando se consulta su ruta, entonces `DeliveryRoute.type` es `CEDIS_SUPPLY` o `BRANCH_RETURN` y `inventoryTransferId` identifica exactamente el `InventoryTransfer` vinculado.
+- Dado una ruta histórica comercial sin unidad, cuando se ejecuta la migración logística, entonces conserva `type=SALE_DELIVERY` y `vehicleId=NULL` sin perder la relación con su conductor existente.
+- Dado una ruta logística, cuando se valida su modelo, entonces `vehicleId` es obligatorio y origen, destino y coordenadas se resuelven desde `OperationalLocation` a través del `InventoryTransfer`, sin tablas paralelas.
+- Dado un suministro o devolución, cuando se registra sin `assignedDriverId` o `vehicleId`, entonces el backend rechaza el comando antes de crear transferencia o ruta.
+- Dado un suministro o devolución con IDs arbitrarios, cuando se registra, entonces el backend rechaza el comando si el conductor no es un `DRIVER` activo o la unidad no está activa/disponible.
+- Dado un suministro CEDIS → sucursal o una devolución sucursal → CEDIS, cuando se registra con ubicaciones sin coordenadas, entonces no persiste transferencia, reserva, vínculo ni `DeliveryRoute` y devuelve un error de dominio de coordenadas.
 - Dado un producto inactivo, cuando se intenta crear o confirmar una transferencia del ciclo, entonces se rechaza sin cambios parciales.
 - Dado un producto histórico que se desactivó después de confirmar, cuando se consulta o refresca, entonces conserva su snapshot y cantidades históricas.
 - Dado stock insuficiente, cuando se confirma una transferencia vinculada, entonces no cambia ningún balance, movimiento, transferencia o snapshot.

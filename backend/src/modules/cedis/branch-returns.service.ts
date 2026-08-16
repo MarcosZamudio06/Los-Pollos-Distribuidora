@@ -34,6 +34,14 @@ const RETURN_INCLUDE = {
       destinationLocation: true,
       user: { select: { id: true, name: true } },
       items: { include: { product: true } },
+      deliveryRoute: {
+        include: {
+          driver: { select: { id: true, name: true } },
+          vehicle: {
+            select: { id: true, code: true, displayName: true, plateNumber: true },
+          },
+        },
+      },
     },
   },
 } as const;
@@ -59,6 +67,23 @@ export type BranchReturnResponse = {
   cancelledAt: string | null;
   createdAt: string;
   requestedBy: { id: string; name: string };
+  route: {
+    id: string;
+    type: 'BRANCH_RETURN';
+    status: string;
+    driverId: string;
+    driver: { id: string; name: string };
+    vehicleId: string;
+    vehicle: {
+      id: string;
+      code: string;
+      displayName: string;
+      plateNumber: string | null;
+    };
+    inventoryTransferId: string;
+    originLocationId: string | null;
+    scheduledDate: string;
+  } | null;
   items: Array<{
     transferItemId: string;
     productId: string;
@@ -268,6 +293,20 @@ export class BranchReturnsService {
       cancelledAt: transfer.cancelledAt?.toISOString() ?? null,
       createdAt: transfer.createdAt.toISOString(),
       requestedBy: transfer.user,
+      route: transfer.deliveryRoute
+        ? {
+            id: transfer.deliveryRoute.id,
+            type: 'BRANCH_RETURN',
+            status: transfer.deliveryRoute.status,
+            driverId: transfer.deliveryRoute.driverId,
+            driver: transfer.deliveryRoute.driver,
+            vehicleId: transfer.deliveryRoute.vehicleId as string,
+            vehicle: transfer.deliveryRoute.vehicle!,
+            inventoryTransferId: transfer.deliveryRoute.inventoryTransferId as string,
+            originLocationId: transfer.deliveryRoute.originLocationId,
+            scheduledDate: transfer.deliveryRoute.scheduledDate.toISOString(),
+          }
+        : null,
       items: transfer.items.map((item) => ({
         transferItemId: item.id,
         productId: item.productId,
