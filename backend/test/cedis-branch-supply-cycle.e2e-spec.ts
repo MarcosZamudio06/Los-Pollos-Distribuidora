@@ -31,6 +31,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
   let productId: string;
   let cedisLocationId: string;
   let branchLocationId: string;
+  let assignedDriverId: string;
+  let vehicleId: string;
   let cycleId: string;
   let supplyTransferId: string;
   let activeSupplyTransferId: string;
@@ -66,6 +68,22 @@ describe('CEDIS branch supply cycle (e2e)', () => {
     if (!cedis || !branch) throw new Error('Base CEDIS locations are missing');
     cedisLocationId = cedis.id;
     branchLocationId = branch.id;
+
+    const driver = await prisma.user.findUnique({
+      where: { controlNumber: 'EPDP-000004' },
+      select: { id: true },
+    });
+    if (!driver) throw new Error('Seed DRIVER is missing');
+    assignedDriverId = driver.id;
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        code: `${marker}-vehicle`,
+        displayName: `${marker} vehicle`,
+        homeLocationId: cedisLocationId,
+      },
+      select: { id: true },
+    });
+    vehicleId = vehicle.id;
 
     for (let day = 0; day < 366; day += 1) {
       const candidate = new Date(Date.UTC(2099, 0, day + 1));
@@ -151,6 +169,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set('Idempotency-Key', `${marker}:supply`)
       .send({
         expectedVersion: 1,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: 10 }],
       })
       .expect(201);
@@ -198,6 +218,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set('Idempotency-Key', `${marker}:supply`)
       .send({
         expectedVersion: 1,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: 10 }],
       })
       .expect(201);
@@ -232,6 +254,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set('Idempotency-Key', `${marker}:supply`)
       .send({
         expectedVersion: 1,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: 9 }],
       })
       .expect(409)
@@ -245,6 +269,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set('Idempotency-Key', `${marker}:insufficient`)
       .send({
         expectedVersion: 2,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: 1 }],
       })
       .expect(409)
@@ -347,6 +373,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set('Idempotency-Key', `${marker}:replacement-supply`)
       .send({
         expectedVersion: 3,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: 10 }],
       })
       .expect(201);
@@ -398,6 +426,8 @@ describe('CEDIS branch supply cycle (e2e)', () => {
       .set('Idempotency-Key', `${marker}:return`)
       .send({
         expectedVersion: 5,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: 3 }],
       })
       .expect(201);

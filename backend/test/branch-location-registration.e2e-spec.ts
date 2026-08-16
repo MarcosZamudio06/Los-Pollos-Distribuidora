@@ -24,6 +24,8 @@ describe('branch location registration and supply (e2e)', () => {
   let accessToken: string;
   let cedisLocationId: string;
   let branchLocationId: string;
+  let assignedDriverId: string;
+  let vehicleId: string;
   let productId: string;
   let cycleId: string;
   let supplyTransferId: string;
@@ -81,6 +83,13 @@ describe('branch location registration and supply (e2e)', () => {
     }
     cedisLocationId = cedis.id;
 
+    const driver = await prisma.user.findUnique({
+      where: { controlNumber: 'EPDP-000004' },
+      select: { id: true },
+    });
+    if (!driver) throw new Error('Seed DRIVER is missing');
+    assignedDriverId = driver.id;
+
     const created = await request(app.getHttpServer())
       .post('/api/locations')
       .set(auth())
@@ -96,6 +105,15 @@ describe('branch location registration and supply (e2e)', () => {
       .expect(201);
 
     branchLocationId = created.body.data.id as string;
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        code: `${marker}-vehicle`,
+        displayName: `${marker} vehicle`,
+        homeLocationId: cedisLocationId,
+      },
+      select: { id: true },
+    });
+    vehicleId = vehicle.id;
     expect(created.body.data).toEqual(
       expect.objectContaining({
         id: branchLocationId,
@@ -204,6 +222,8 @@ describe('branch location registration and supply (e2e)', () => {
       .set('Idempotency-Key', `${marker}:supply`)
       .send({
         expectedVersion: opened.body.data.version,
+        assignedDriverId,
+        vehicleId,
         items: [{ productId, unit: 'KG', quantityKg: supplyQuantityKg }],
       })
       .expect(201);

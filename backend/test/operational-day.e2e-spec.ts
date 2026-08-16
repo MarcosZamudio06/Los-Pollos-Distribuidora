@@ -59,6 +59,8 @@ describe('Operational day journey (e2e)', () => {
   let customerId: string;
   let cedisLocationId: string;
   let branchLocationId: string;
+  let assignedDriverId: string;
+  let vehicleId: string;
   let terminalId: string;
   let deviceId: string;
 
@@ -93,6 +95,22 @@ describe('Operational day journey (e2e)', () => {
       throw new Error('Base operational locations missing');
     cedisLocationId = cedis.id;
     branchLocationId = branch.id;
+
+    const driver = await prisma.user.findUnique({
+      where: { controlNumber: 'EPDP-000004' },
+      select: { id: true },
+    });
+    if (!driver) throw new Error('Seed DRIVER is missing');
+    assignedDriverId = driver.id;
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        code: `${marker}-vehicle`,
+        displayName: `${marker} vehicle`,
+        homeLocationId: cedisLocationId,
+      },
+      select: { id: true },
+    });
+    vehicleId = vehicle.id;
 
     const businessDateValue = new Date(`${businessDate}T00:00:00.000Z`);
     const existingClose = await prisma.pointOfSaleDailyClose.findFirst({
@@ -222,6 +240,8 @@ describe('Operational day journey (e2e)', () => {
       .set('Idempotency-Key', `${marker}:supply`)
       .send({
         expectedVersion: cycle.body.data.version,
+        assignedDriverId,
+        vehicleId,
         items: [
           {
             productId,
@@ -255,6 +275,8 @@ describe('Operational day journey (e2e)', () => {
       .set('Idempotency-Key', `${marker}:stale-supply`)
       .send({
         expectedVersion: cycle.body.data.version,
+        assignedDriverId,
+        vehicleId,
         items: [
           {
             productId,
@@ -456,6 +478,8 @@ describe('Operational day journey (e2e)', () => {
       .set('Idempotency-Key', `${marker}:return`)
       .send({
         expectedVersion: returnCycle.body.data.version,
+        assignedDriverId,
+        vehicleId,
         items: [
           {
             productId,
