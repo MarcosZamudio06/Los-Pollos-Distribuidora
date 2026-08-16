@@ -14,14 +14,18 @@ import type {
 
 export function PageShell({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen bg-[var(--erp-background)] px-4 py-6 text-[var(--erp-foreground)] sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[var(--erp-background)] px-3 py-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] text-[var(--erp-foreground)] sm:px-6 sm:py-6 lg:px-8">
       {children}
     </main>
   );
 }
 
 export function PageFrame({ children }: { children: ReactNode }) {
-  return <section className="mx-auto grid max-w-7xl gap-5">{children}</section>;
+  return (
+    <section className="mx-auto grid min-w-0 max-w-7xl gap-4 sm:gap-5">
+      {children}
+    </section>
+  );
 }
 
 export function RouteHero({
@@ -40,11 +44,11 @@ export function RouteHero({
   const isWhiteSurface = surface === "white";
   return (
     <header
-      className={`relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--erp-shadow-elevated)] sm:p-7 ${isWhiteSurface ? "border-[color:var(--erp-border)] bg-white text-[var(--erp-foreground)]" : "border-black/10 bg-[var(--erp-charcoal)] text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)]"}`}
+      className={`relative overflow-hidden rounded-[1.5rem] border p-4 shadow-[var(--erp-shadow-elevated)] sm:rounded-[2rem] sm:p-7 ${isWhiteSurface ? "border-[color:var(--erp-border)] bg-white text-[var(--erp-foreground)]" : "border-black/10 bg-[var(--erp-charcoal)] text-white shadow-[0_24px_80px_rgba(17,24,21,0.18)]"}`}
     >
       <div className="absolute right-0 top-0 h-36 w-36 rounded-bl-full bg-[rgba(214,155,45,0.16)]" />
       <div className="absolute bottom-0 left-0 h-24 w-56 rounded-tr-full bg-[rgba(47,111,115,0.18)]" />
-      <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+      <div className="relative grid min-w-0 gap-4 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-5">
         <div className="min-w-0">
           <div
             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.18em] ${isWhiteSurface ? "border-[rgba(214,155,45,0.28)] bg-[rgba(214,155,45,0.10)] text-[var(--erp-brand-gold-deep)]" : "border-white/10 bg-white/5 text-[var(--erp-brand-gold-soft)]"}`}
@@ -56,17 +60,17 @@ export function RouteHero({
             {eyebrow}
           </div>
           <h1
-            className={`mt-4 max-w-4xl text-3xl font-black tracking-[-0.06em] sm:text-4xl ${isWhiteSurface ? "text-[var(--erp-foreground)]" : "text-white"}`}
+            className={`mt-4 max-w-4xl break-words text-[clamp(1.75rem,8vw,2.25rem)] font-black tracking-[-0.06em] sm:text-4xl ${isWhiteSurface ? "text-[var(--erp-foreground)]" : "text-white"}`}
           >
             {title}
           </h1>
           <p
-            className={`mt-3 max-w-3xl text-sm leading-6 ${isWhiteSurface ? "text-[var(--erp-muted-foreground)]" : "text-white/72"}`}
+            className={`mt-3 max-w-3xl break-words text-sm leading-6 ${isWhiteSurface ? "text-[var(--erp-muted-foreground)]" : "text-white/72"}`}
           >
             {subtitle}
           </p>
         </div>
-        {action}
+        {action && <div className="w-full min-w-0 lg:w-auto">{action}</div>}
       </div>
     </header>
   );
@@ -81,7 +85,7 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-[1.4rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] text-[var(--erp-foreground)] shadow-[var(--erp-shadow)] ${className}`}
+      className={`min-w-0 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface-elevated)] text-[var(--erp-foreground)] shadow-[var(--erp-shadow)] sm:rounded-[1.4rem] ${className}`}
     >
       {children}
     </section>
@@ -89,11 +93,13 @@ export function Card({
 }
 
 export function PrimaryButton({
+  className = "",
   children,
   disabled,
   onClick,
   type = "button",
 }: {
+  className?: string;
   children: ReactNode;
   disabled?: boolean;
   onClick?: () => void;
@@ -101,7 +107,7 @@ export function PrimaryButton({
 }) {
   return (
     <button
-      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] px-5 text-sm font-black text-[var(--erp-on-brand)] shadow-[0_10px_28px_rgba(182,42,34,0.16)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] px-5 text-sm font-black text-[var(--erp-on-brand)] shadow-[0_10px_28px_rgba(182,42,34,0.16)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       disabled={disabled}
       onClick={onClick}
       type={type}
@@ -112,15 +118,17 @@ export function PrimaryButton({
 }
 
 export function SecondaryLink({
+  className = "",
   children,
   to,
 }: {
+  className?: string;
   children: ReactNode;
   to: string;
 }) {
   return (
     <Link
-      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-2 text-sm font-black text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)]"
+      className={`inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-2 text-sm font-black text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] ${className}`}
       to={to}
     >
       {children}
@@ -129,11 +137,13 @@ export function SecondaryLink({
 }
 
 export function SecondaryButton({
+  className = "",
   children,
   disabled,
   onClick,
   type = "button",
 }: {
+  className?: string;
   children: ReactNode;
   disabled?: boolean;
   onClick?: () => void;
@@ -141,7 +151,7 @@ export function SecondaryButton({
 }) {
   return (
     <button
-      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-2 text-sm font-black text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+      className={`inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--erp-border)] bg-white px-4 py-2 text-sm font-black text-[var(--erp-foreground)] transition hover:border-[var(--erp-brand-red)] hover:text-[var(--erp-brand-red)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       disabled={disabled}
       onClick={onClick}
       type={type}
@@ -227,7 +237,7 @@ export function RouteStatusBadge({ status }: { status: DeliveryRouteStatus }) {
           : "border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]";
   return (
     <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${tone}`}
+      className={`inline-flex shrink-0 whitespace-normal rounded-full border px-3 py-1 text-center text-xs font-black uppercase tracking-[0.12em] ${tone}`}
     >
       {routeStatusLabel(status)}
     </span>
@@ -238,7 +248,7 @@ export function OrderStatusBadge({ status }: { status: DeliveryOrderStatus }) {
   const finalState = isFinalOrderStatus(status);
   return (
     <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${finalState ? "border-[rgba(63,123,65,0.25)] bg-[rgba(63,123,65,0.10)] text-[var(--erp-success)]" : "border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]"}`}
+      className={`inline-flex shrink-0 whitespace-normal rounded-full border px-3 py-1 text-center text-xs font-black uppercase tracking-[0.12em] ${finalState ? "border-[rgba(63,123,65,0.25)] bg-[rgba(63,123,65,0.10)] text-[var(--erp-success)]" : "border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]"}`}
     >
       {orderStatusLabel(status)}
     </span>
@@ -258,7 +268,7 @@ export function SettlementStatusBadge({
         : "border-[rgba(47,111,115,0.25)] bg-[rgba(47,111,115,0.10)] text-[var(--erp-info)]";
   return (
     <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${tone}`}
+      className={`inline-flex shrink-0 whitespace-normal rounded-full border px-3 py-1 text-center text-xs font-black uppercase tracking-[0.12em] ${tone}`}
     >
       {settlementStatusLabel(status)}
     </span>

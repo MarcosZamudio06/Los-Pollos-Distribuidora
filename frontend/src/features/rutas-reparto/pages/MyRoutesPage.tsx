@@ -193,9 +193,9 @@ export function MyRoutesPage() {
         )}
 
         {routeItems.length > 0 && (
-          <section className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
+          <section className="grid min-w-0 gap-4 sm:gap-5 lg:grid-cols-[0.75fr_1.25fr]">
             <Card className="overflow-hidden p-0">
-              <div className="border-b border-[color:var(--erp-border)] bg-white/70 p-5">
+              <div className="border-b border-[color:var(--erp-border)] bg-white/70 p-4 sm:p-5">
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]">
                   <Route className="h-4 w-4" />
                   Rutas
@@ -203,13 +203,16 @@ export function MyRoutesPage() {
                 <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">
                   Trabajo del día
                 </h2>
+                <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)] lg:hidden">
+                  Desliza para cambiar de ruta
+                </p>
               </div>
-              <div className="grid gap-3 p-4">
+              <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto p-3 pb-4 lg:grid lg:gap-3 lg:overflow-visible lg:p-4">
                 {routeItems.map((item) => {
                   const selected = item.id === activeRouteId;
                   return (
                     <button
-                      className={`rounded-2xl border p-4 text-left transition focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] ${selected ? "border-[var(--erp-info)] bg-[rgba(47,111,115,0.08)] shadow-[var(--erp-shadow)]" : "border-[color:var(--erp-border)] bg-white hover:border-[rgba(47,111,115,0.40)]"}`}
+                      className={`min-w-[17rem] snap-start rounded-xl border p-3 text-left transition focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)] lg:min-w-0 lg:rounded-2xl lg:p-4 ${selected ? "border-[var(--erp-info)] bg-[rgba(47,111,115,0.08)] shadow-[var(--erp-shadow)]" : "border-[color:var(--erp-border)] bg-white hover:border-[rgba(47,111,115,0.40)]"}`}
                       key={item.id}
                       onClick={() => {
                         setSelectedRouteId(item.id);
@@ -219,8 +222,8 @@ export function MyRoutesPage() {
                       type="button"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-black">{item.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words font-black">{item.name}</p>
                           <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">
                             Programada: {date(item.scheduledDate)}
                           </p>
@@ -246,7 +249,7 @@ export function MyRoutesPage() {
                             </strong>{" "}
                             pendientes
                           </span>
-                          <span className="col-span-2">
+                          <span className="col-span-2 break-words">
                             Unidad: {item.vehicle?.displayName ?? "Sin unidad"}
                           </span>
                         </div>
@@ -285,17 +288,17 @@ export function MyRoutesPage() {
               )}
               {detail && (
                 <>
-                  <Card className="p-5">
+                  <Card className="p-4 sm:p-5">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">
                           <Truck className="h-4 w-4" />
                           Ruta seleccionada
                         </p>
-                        <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] sm:text-3xl">
+                        <h2 className="mt-1 break-words text-2xl font-black tracking-[-0.05em] sm:text-3xl">
                           {detail.name}
                         </h2>
-                        <p className="mt-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">
+                        <p className="mt-2 break-words text-sm leading-6 text-[var(--erp-muted-foreground)]">
                           {isLogisticsRoute
                             ? `${routeTypeLabel(detail.type)} · ${logisticsStop?.origin?.name ?? "Sin origen"} → ${logisticsStop?.destination?.name ?? "Sin destino"} · Unidad ${detail.vehicle?.displayName ?? "sin asignar"}`
                             : `Origen ${detail.originLocationName ?? shortId(detail.originLocationId)} · Unidad ${detail.vehicle?.displayName ?? "sin asignar"} · ROUTE_STOCK ${detail.routeStockLocationName ?? shortId(detail.routeStockLocationId)}`}
@@ -305,79 +308,79 @@ export function MyRoutesPage() {
                     </div>
                     {isLogisticsRoute ? (
                       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             <CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />
                             Parada física
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {logisticsStopCompleted
                               ? "Confirmada"
                               : "Pendiente"}
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             Traslado
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {logisticsStop?.transferNumber ?? "Sin traslado"}
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             Origen
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {logisticsStop?.origin?.name ?? "Sin origen"}
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             Destino
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {logisticsStop?.destination?.name ?? "Sin destino"}
                           </p>
                         </div>
                       </div>
                     ) : (
                       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             <CheckCircle2 className="h-4 w-4 text-[var(--erp-success)]" />
                             Pedidos cerrados
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {finalOrders}/{orders.length}
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             <BadgeDollarSign className="h-4 w-4 text-[var(--erp-info)]" />
                             Esperado
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {money(detail.collectionsSummary?.expectedAmount)}
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             <BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
                             Cobrado
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {money(
                               detail.collectionsSummary?.derivedCollectedAmount,
                             )}
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                        <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                             <ClipboardList className="h-4 w-4 text-[var(--erp-danger)]" />
                             Liquidación
                           </p>
-                          <p className="mt-2 text-xl font-black">
+                          <p className="mt-2 break-words text-base font-black sm:text-xl">
                             {detail.routeSettlementId
                               ? shortId(detail.routeSettlementId)
                               : "Sin asociar"}
@@ -497,7 +500,7 @@ export function MyRoutesPage() {
                   (isLogisticsRoute &&
                     hasMapCoordinates(logisticsStop?.origin) &&
                     hasMapCoordinates(logisticsStop?.destination)) ? (
-                    <Card className="grid gap-4 p-5">
+                    <Card className="grid gap-4 p-4 sm:p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]">
@@ -547,7 +550,7 @@ export function MyRoutesPage() {
                   )}
 
                   {isLogisticsRoute && logisticsStop ? (
-                    <Card className="grid gap-4 p-5">
+                    <Card className="grid gap-4 p-4 sm:p-5">
                       <div className="rounded-2xl bg-[var(--erp-info)] p-4 text-white">
                         <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
                           <ClipboardList className="h-4 w-4" />
@@ -565,18 +568,18 @@ export function MyRoutesPage() {
                       <div className="grid gap-2">
                         {logisticsStop.items.map((item) => (
                           <div
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
+                            className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4"
                             key={item.id}
                           >
-                            <div>
-                              <p className="font-black">
+                            <div className="min-w-0">
+                              <p className="break-words font-black">
                                 {item.productName ?? shortId(item.productId)}
                               </p>
                               <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">
                                 Unidad: {item.unit}
                               </p>
                             </div>
-                            <p className="font-black">
+                            <p className="max-w-full shrink-0 text-right font-black">
                               {logisticsQuantityLabel(
                                 item.quantityKg,
                                 item.quantityPieces,

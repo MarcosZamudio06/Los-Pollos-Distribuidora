@@ -43,7 +43,7 @@ export function DeliveryOrderCard({
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-start">
+      <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1fr_auto] lg:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <OrderStatusBadge status={order.status} />
@@ -52,10 +52,10 @@ export function DeliveryOrderCard({
               Venta {order.saleNumber ?? shortId(order.saleId)}
             </span>
           </div>
-          <h3 className="mt-3 text-2xl font-black tracking-[-0.05em]">
+          <h3 className="mt-3 break-words text-xl font-black tracking-[-0.05em] sm:text-2xl">
             {order.customerName ?? "Cliente no incluido"}
           </h3>
-          <p className="mt-2 flex items-start gap-2 text-sm leading-6 text-[var(--erp-muted-foreground)]">
+          <p className="mt-2 flex items-start gap-2 break-words text-sm leading-6 text-[var(--erp-muted-foreground)]">
             <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
             {order.deliveryAddress ?? "Sin dirección registrada"}
           </p>
@@ -67,7 +67,7 @@ export function DeliveryOrderCard({
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2 lg:min-w-72 lg:grid-cols-1">
-          <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+          <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
             <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
               <BadgeDollarSign className="h-4 w-4 text-[var(--erp-danger)]" />
               Saldo por cobrar
@@ -78,7 +78,7 @@ export function DeliveryOrderCard({
                 : "Sin CxC"}
             </p>
           </div>
-          <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+          <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
             <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
               <BadgeDollarSign className="h-4 w-4 text-[var(--erp-info)]" />
               Cobrado Payment
@@ -90,7 +90,7 @@ export function DeliveryOrderCard({
         </div>
       </div>
 
-      <dl className="grid gap-3 border-y border-[color:var(--erp-border)] bg-white/70 p-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="grid gap-3 border-y border-[color:var(--erp-border)] bg-white/70 p-4 text-sm sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
         <div>
           <dt className="flex items-center gap-2 font-black text-[var(--erp-foreground)]">
             <UserRound className="h-4 w-4 text-[var(--erp-info)]" />
@@ -133,7 +133,7 @@ export function DeliveryOrderCard({
         </div>
       </dl>
 
-      <div className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">
             <Camera className="h-4 w-4" />
@@ -170,27 +170,38 @@ export function DeliveryOrderCard({
               : "aún sin liquidación asociada"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <SecondaryButton onClick={() => onUpdateStatus(order)}>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <SecondaryButton
+            className="w-full sm:w-auto"
+            onClick={() => onUpdateStatus(order)}
+          >
             Estado
           </SecondaryButton>
-          <SecondaryButton onClick={() => onCaptureEvidence(order)}>
+          <SecondaryButton
+            className="w-full sm:w-auto"
+            onClick={() => onCaptureEvidence(order)}
+          >
             <Camera className="h-4 w-4" />
             Evidencia
           </SecondaryButton>
           <SecondaryButton
+            className="w-full sm:w-auto"
             disabled={!hasCollectibleBalance}
             onClick={() => onCollect(order)}
           >
             Cobro
           </SecondaryButton>
           <SecondaryButton
+            className="w-full sm:w-auto"
             disabled={!hasCollectibleBalance}
             onClick={() => onSecondPassCollect(order)}
           >
             2ª vuelta
           </SecondaryButton>
-          <SecondaryButton onClick={() => onIncident(order)}>
+          <SecondaryButton
+            className="w-full sm:w-auto"
+            onClick={() => onIncident(order)}
+          >
             <MessageSquareWarning className="h-4 w-4" />
             Incidencia
           </SecondaryButton>

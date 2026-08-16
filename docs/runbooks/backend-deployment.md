@@ -2,10 +2,13 @@
 
 ## Quick path: first production deployment
 
-Use the following order for a new or migrated production database. The
-bootstrap job is one-shot and runs only after migrations complete successfully.
+Use the following order for a new or migrated single-host production database.
+The production Compose provisions PostGIS and the private routing services on
+the same `app_network`. The bootstrap job is one-shot and runs only after
+migrations complete successfully.
 
-1. Set the regular required production environment. Do not set
+1. Set the regular required production environment, including
+   `POSTGRES_PASSWORD`. Do not set
    `SEED_ADMIN_PASSWORD` in an environment file used by the long-lived
    services. The bootstrap password is supplied only to its one-shot command,
    must be nonblank and at least 10 characters, and must not be printed,
@@ -33,8 +36,13 @@ bootstrap job is one-shot and runs only after migrations complete successfully.
    )
    ```
 
-5. Stop if either one-shot job fails. Only then deploy the long-lived backend
-   and frontend services.
+5. Stop if either one-shot job fails. Only then deploy the complete long-lived
+   stack:
+
+   ```bash
+   docker compose -f docker-compose.production.yml up -d \
+     postgres photon osrm vroom tileserver backend frontend
+   ```
 
 The bootstrap creates or reconciles the production roles, permissions,
 role-permission links, main CEDIS, main branch, and administrator. It does not
@@ -42,9 +50,16 @@ run the development Prisma seed.
 
 ## Verify postconditions safely
 
-Use read-only queries through the managed PostgreSQL console or an approved
+Use read-only queries through the local PostGIS container or an approved
 database client. Never select or display `passwordHash`, session tokens, or the
 bootstrap secret. Confirm the operational baseline with queries such as:
+
+```bash
+docker compose -f docker-compose.production.yml exec -T postgres \
+  psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-pollo_distribucion}"
+```
+
+Then run the following SQL through that connection:
 
 ```sql
 SELECT
@@ -126,16 +141,25 @@ postconditions above after it completes.
 
 ## Required routing providers
 
-Production requires backend-reachable managed endpoints for Photon, VROOM, and
-OSRM. Set `PHOTON_URL`, `VROOM_URL`, and `OSRM_URL` before rendering or starting
-the production Compose project. `ROUTING_TIMEOUT_MS` is optional and defaults to
-10 seconds.
+Production uses the Architecture A single-host contract. PostGIS, Photon,
+OSRM, VROOM, TileServer GL, backend, and frontend are services in
+`docker-compose.production.yml` and share `app_network`. The backend uses only
+the following Docker DNS names:
 
-The production Compose file rejects missing provider URLs during interpolation,
-before starting a backend that cannot finish NestJS bootstrap. Do not use
-`localhost` unless the provider runs inside the backend container itself.
+| Variable | Production value |
+| --- | --- |
+| `DATABASE_URL` | `postgresql://...@postgres:5432/...` |
+| `PHOTON_URL` | `http://photon:2322` |
+| `OSRM_URL` | `http://osrm:5000` |
+| `VROOM_URL` | `http://vroom:3000` |
+| `MAP_TILES_URL` | `http://tileserver:8080` |
 
-Validate the complete environment before a release:
+Do not set or override these provider/database URLs with managed endpoints,
+public APIs, or `localhost`. Compose owns the internal values so the backend,
+VROOM, and the migration job cannot accidentally leave `app_network`.
+
+`ROUTING_TIMEOUT_MS` is optional and defaults to 10 seconds. Validate the
+complete environment before a release:
 
 ```bash
 docker compose -f docker-compose.production.yml config >/dev/null
@@ -171,7 +195,7 @@ of truth: the frontend keeps its last REST snapshot and performs one
 
 1. Build and publish the backend image once. Set `BACKEND_IMAGE` to its
    immutable digest for both `migrate` and `backend`.
-2. Apply migrations as a separate deployment job:
+2. Apply migrations as a separate deployment job against local PostGIS:
 
 ```bash
 docker compose -f docker-compose.production.yml --profile migration run --rm migrate
@@ -179,9 +203,11 @@ docker compose -f docker-compose.production.yml --profile migration run --rm mig
 
 3. Run the bootstrap job from the quick path after a successful migration. Stop
    the release if either one-shot job exits unsuccessfully.
-4. Deploy backend replicas gradually and wait for `GET /api/health/ready` to
-   return HTTP 200 before routing traffic to each replica.
-5. Deploy frontend after the backend rollout is ready.
+4. Deploy the backend service and wait for `GET /api/health/ready` to return
+   HTTP 200. Compose already waits for PostGIS, Photon, OSRM, VROOM, and
+   TileServer GL healthchecks before creating the backend.
+5. Deploy the frontend after the backend rollout is ready. Only the frontend
+   binds a host port, and that port is fixed to `127.0.0.1` for Caddy.
 
 ## Health probes
 

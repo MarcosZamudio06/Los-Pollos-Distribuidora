@@ -1,7 +1,10 @@
 # Self-hosted map services
 
-The `maps` Docker profile provides PostGIS, Photon, OSRM, VROOM, and a pinned
-TileServer GL without exposing private map services to the host network.
+The development `maps` Docker profile and the production Compose contract
+provide PostGIS, Photon, OSRM, VROOM, and a pinned TileServer GL without
+exposing private map services to the host network. Production uses the same
+service contracts without a `maps` profile; only migration and bootstrap are
+one-shot profile services.
 
 ## Dataset refresh safety
 
@@ -18,6 +21,18 @@ docker compose --profile maps stop backend vroom photon osrm tileserver
 docker compose --profile maps up -d --force-recreate \
   photon osrm vroom tileserver backend
 ./scripts/maps/verify-stack.sh
+```
+
+For the single-host production Compose, set `COMPOSE_FILE` before using these
+scripts so their `docker compose` calls target the production file:
+
+```bash
+COMPOSE_FILE=docker-compose.production.yml docker compose stop \
+  backend vroom photon osrm tileserver
+COMPOSE_FILE=docker-compose.production.yml ./scripts/maps/prepare-all.sh
+COMPOSE_FILE=docker-compose.production.yml docker compose up -d --force-recreate \
+  photon osrm vroom tileserver backend
+COMPOSE_FILE=docker-compose.production.yml ./scripts/maps/verify-stack.sh
 ```
 
 PostgreSQL is not stopped by this flow. Do not delete `node.lock` manually:
@@ -72,6 +87,21 @@ it belongs to OpenSearch and must be managed by Photon/OpenSearch.
    location fields, prints only IDs and result status, and optionally
    deactivates the disposable branch. It never creates inventory.
 
+5. For a production single-host deployment, prepare the datasets first, run
+   the one-shot migration and bootstrap jobs, then start the complete local
+   stack:
+
+   ```bash
+   export COMPOSE_FILE=docker-compose.production.yml
+   docker compose config >/dev/null
+   docker compose --profile migration run --rm migrate
+   docker compose --profile migration run --rm bootstrap
+   docker compose up -d postgres photon osrm vroom tileserver backend frontend
+   docker compose ps
+   ./scripts/maps/verify-stack.sh
+   ./scripts/maps/smoke-route.sh
+   ```
+
 ## Services
 
 | Service | Internal URL          | Data source                        |
@@ -120,8 +150,9 @@ manage service lifecycle automatically.
 Deploy in this order so historical textual routes remain available throughout the rollout:
 
 1. Prepare and start PostGIS, Photon, OSRM, VROOM, TileServer GL, backend, and
-   frontend. The frontend is required even when the goal is only a rendering
-   smoke because it owns the browser-facing /maps/ proxy.
+   frontend from `docker-compose.production.yml`. The frontend is required
+   even when the goal is only a rendering smoke because it owns the
+   browser-facing /maps/ proxy.
 2. Run `./scripts/maps/verify-stack.sh`; it checks style version, vector source,
    attribution, derived sprite/glyph resources, TileJSON, and a representative
    Veracruz tile through the frontend same-origin proxy.
@@ -159,9 +190,11 @@ The ADMIN route control page reads `GET /api/delivery-routing/technical-status`.
 ## Boundaries
 
 - Dataset preparation is explicit and never runs during normal application startup.
-- Private map services have no host ports. NestJS is the only consumer of
-  Photon, OSRM, and VROOM; the browser reaches TileServer GL only through
-  Nginx `/maps/`.
+- In production, PostGIS, Photon, OSRM, VROOM, and TileServer GL have no host
+  ports. The frontend binds only to `127.0.0.1` for the host Caddy entry point;
+  its Nginx is the only browser-facing gateway for `/maps/`. NestJS is the only
+  application consumer of Photon, OSRM, and VROOM, and VROOM reaches OSRM via
+  the internal `osrm` DNS name.
 - The official smoke path is browser-facing: frontend Nginx, then /maps/**,
   then TileServer GL. A direct request to tileserver:8080 is not rendering
   evidence.

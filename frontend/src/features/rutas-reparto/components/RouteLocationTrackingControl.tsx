@@ -51,9 +51,9 @@ export function RouteLocationTrackingControl({
   const recordedAt = formatRecordedAt(tracking.lastPublishedAt);
 
   return (
-    <Card className="p-5">
+    <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">
             <Radio className="h-4 w-4" />
             Seguimiento GPS
@@ -70,11 +70,15 @@ export function RouteLocationTrackingControl({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {tracking.isTracking ? (
-            <SecondaryButton onClick={tracking.stop}>
+            <SecondaryButton className="w-full sm:w-auto" onClick={tracking.stop}>
               Detener seguimiento GPS
             </SecondaryButton>
           ) : (
-            <PrimaryButton disabled={!tracking.canStart} onClick={tracking.start}>
+            <PrimaryButton
+              className="w-full sm:w-auto"
+              disabled={!tracking.canStart}
+              onClick={tracking.start}
+            >
               <MapPin className="h-4 w-4" />
               Iniciar seguimiento GPS
             </PrimaryButton>

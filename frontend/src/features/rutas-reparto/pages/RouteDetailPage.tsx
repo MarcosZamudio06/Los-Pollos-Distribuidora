@@ -77,7 +77,9 @@ export function RouteDetailPage() {
       <PageFrame>
         <RouteHero
           action={
-            <SecondaryLink to="/delivery-routes">Volver a rutas</SecondaryLink>
+            <SecondaryLink className="w-full sm:w-auto" to="/delivery-routes">
+              Volver a rutas
+            </SecondaryLink>
           }
           eyebrow="Detalle de ruta"
           title={detail?.name ?? "Ruta de reparto"}
@@ -100,15 +102,15 @@ export function RouteDetailPage() {
 
         {detail && (
           <>
-            <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <Card className="p-5">
+            <section className="grid min-w-0 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <Card className="p-4 sm:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-danger)]">
                       <Route className="h-4 w-4" />
                       Encabezado
                     </p>
-                    <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                    <h2 className="mt-1 break-words text-2xl font-black tracking-[-0.05em]">
                       {detail.name}
                     </h2>
                     <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-info)]">
@@ -122,31 +124,31 @@ export function RouteDetailPage() {
                   <RouteStatusBadge status={detail.status} />
                 </div>
                 <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                  <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <UserRound className="h-4 w-4 text-[var(--erp-info)]" />
                       Repartidor
                     </dt>
-                    <dd className="mt-2 font-black">
+                    <dd className="mt-2 break-words font-black">
                       {detail.driverName ?? shortId(detail.driverId)}
                     </dd>
                   </div>
-                  <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                  <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <PackageCheck className="h-4 w-4 text-[var(--erp-info)]" />
                       ROUTE_STOCK
                     </dt>
-                    <dd className="mt-2 font-black">
+                    <dd className="mt-2 break-words font-black">
                       {detail.routeStockLocationName ??
                         shortId(detail.routeStockLocationId)}
                     </dd>
                   </div>
-                  <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                  <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <Truck className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
                       Unidad
                     </dt>
-                    <dd className="mt-2 font-black">
+                    <dd className="mt-2 break-words font-black">
                       {detail.vehicle?.displayName ?? "Sin unidad asignada"}
                     </dd>
                     {detail.vehicle && (
@@ -158,24 +160,24 @@ export function RouteDetailPage() {
                       </span>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                  <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <MapPin className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
                       Origen
                     </dt>
-                    <dd className="mt-2 font-black">
+                    <dd className="mt-2 break-words font-black">
                       {detail.originLocationName ??
                         shortId(detail.originLocationId)}
                     </dd>
                   </div>
-                  <div className="rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4">
+                  <div className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4">
                     <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                       <ClipboardList className="h-4 w-4 text-[var(--erp-danger)]" />
                       {isLogisticsRoute
                         ? "Parada física"
                         : "Pedidos pendientes"}
                     </dt>
-                    <dd className="mt-2 font-black">
+                    <dd className="mt-2 break-words font-black">
                       {isLogisticsRoute
                         ? detail.logisticsStop?.status === "COMPLETED"
                           ? "Confirmada"
@@ -197,19 +199,19 @@ export function RouteDetailPage() {
                       <Truck className="h-4 w-4" />
                       Transporte interno
                     </p>
-                    <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] text-white">
+                    <h2 className="mt-1 break-words text-2xl font-black tracking-[-0.05em] text-white">
                       Confirmación física
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-white/75">
                       Esta ruta solo registra transporte y confirmación física.
                     </p>
                   </div>
-                  <div className="grid gap-3 p-5">
+                  <div className="grid gap-3 p-4 sm:p-5">
                     <div>
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                         Traslado
                       </p>
-                      <p className="mt-1 font-black">
+                      <p className="mt-1 break-words font-black">
                         {detail.logisticsStop?.transferNumber ??
                           shortId(detail.inventoryTransferId)}
                       </p>
@@ -218,7 +220,7 @@ export function RouteDetailPage() {
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                         Destino
                       </p>
-                      <p className="mt-1 font-black">
+                      <p className="mt-1 break-words font-black">
                         {detail.logisticsStop?.destination?.name ??
                           "Sin ubicación de destino"}
                       </p>
@@ -232,14 +234,14 @@ export function RouteDetailPage() {
                   </div>
                 </Card>
               ) : (
-                <Card className="p-5">
+                <Card className="p-4 sm:p-5">
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">
                   <Truck className="h-4 w-4" />
                   Liquidación
                 </p>
                 {detail.routeSettlementId ? (
                   <div className="mt-3 grid gap-4">
-                    <h2 className="text-2xl font-black tracking-[-0.05em]">
+                    <h2 className="break-words text-2xl font-black tracking-[-0.05em]">
                       Liquidación asociada
                     </h2>
                     <p className="text-sm leading-6 text-[var(--erp-muted-foreground)]">
@@ -247,6 +249,7 @@ export function RouteDetailPage() {
                       manualmente desde esta vista.
                     </p>
                     <SecondaryLink
+                      className="w-full sm:w-auto"
                       to={`/route-settlements/${detail.routeSettlementId}`}
                     >
                       Consultar {shortId(detail.routeSettlementId)}
@@ -254,7 +257,7 @@ export function RouteDetailPage() {
                   </div>
                 ) : (
                   <div className="mt-3 grid gap-4">
-                    <h2 className="text-2xl font-black tracking-[-0.05em]">
+                    <h2 className="break-words text-2xl font-black tracking-[-0.05em]">
                       Sin liquidación asociada
                     </h2>
                     <p className="text-sm leading-6 text-[var(--erp-muted-foreground)]">
@@ -262,6 +265,7 @@ export function RouteDetailPage() {
                       pedidos sin estado final, diferencias y permisos.
                     </p>
                     <PrimaryButton
+                      className="w-full sm:w-auto"
                       disabled={
                         openSettlement.isPending ||
                         detail.status === "CANCELLED"
@@ -278,7 +282,7 @@ export function RouteDetailPage() {
               )}
             </section>
 
-            <Card className="grid gap-4 p-5">
+            <Card className="grid gap-4 p-4 sm:p-5">
               <div>
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-info)]">
                   <MapPin className="h-4 w-4" />
@@ -287,7 +291,7 @@ export function RouteDetailPage() {
                 <h2 className="mt-1 text-xl font-black tracking-[-0.04em]">
                   Ruta y paradas
                 </h2>
-                <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">
+                <p className="mt-1 break-words text-sm text-[var(--erp-muted-foreground)]">
                   Secuencia operativa completa asignada a esta ruta.
                 </p>
               </div>
@@ -317,7 +321,7 @@ export function RouteDetailPage() {
             </Card>
 
             {!isLogisticsRoute && (
-              <Card className="grid gap-4 p-5 md:grid-cols-4">
+              <Card className="grid gap-4 p-4 sm:p-5 sm:grid-cols-2 md:grid-cols-4">
               <div>
                 <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--erp-muted-foreground)]">
                   <BadgeDollarSign className="h-4 w-4 text-[var(--erp-brand-gold-deep)]" />
@@ -357,11 +361,14 @@ export function RouteDetailPage() {
 
             {!isLogisticsRoute && (
               <Card className="overflow-hidden p-0">
-              <div className="flex flex-col gap-3 border-b border-[color:var(--erp-border)] bg-white/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-b border-[color:var(--erp-border)] bg-white/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                 <h2 className="text-xl font-black tracking-[-0.04em]">
                   Pedidos asignados
                 </h2>
-                <SecondaryLink to={`/delivery-routes/${detail.id}/evidence`}>
+                <SecondaryLink
+                  className="w-full sm:w-auto"
+                  to={`/delivery-routes/${detail.id}/evidence`}
+                >
                   Revisar evidencias
                 </SecondaryLink>
               </div>
@@ -373,24 +380,24 @@ export function RouteDetailPage() {
                 </div>
               ) : (
                 <>
-                  <div className="grid gap-3 p-5 lg:hidden">
+                  <div className="grid gap-3 p-4 lg:hidden">
                     {(detail.orders ?? []).map((order) => (
                       <article
-                        className="rounded-2xl border border-[color:var(--erp-border)] bg-white p-4"
+                        className="min-w-0 rounded-xl border border-[color:var(--erp-border)] bg-white p-3 sm:rounded-2xl sm:p-4"
                         key={order.id}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-black">
+                          <div className="min-w-0">
+                            <p className="break-words font-black">
                               {order.saleNumber ?? shortId(order.saleId)}
                             </p>
-                            <p className="mt-1 text-sm text-[var(--erp-muted-foreground)]">
+                            <p className="mt-1 break-words text-sm text-[var(--erp-muted-foreground)]">
                               {order.customerName ?? "Cliente no incluido"}
                             </p>
                           </div>
                           <OrderStatusBadge status={order.status} />
                         </div>
-                        <p className="mt-3 text-sm text-[var(--erp-muted-foreground)]">
+                        <p className="mt-3 break-words text-sm text-[var(--erp-muted-foreground)]">
                           {order.deliveryAddress ?? "Sin dirección"}
                         </p>
                         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -412,7 +419,7 @@ export function RouteDetailPage() {
                       </article>
                     ))}
                   </div>
-                  <div className="hidden overflow-x-auto p-5 lg:block">
+                  <div className="hidden overflow-x-auto p-4 lg:block lg:p-5">
                     <div className="rounded-[1.2rem] border border-[color:var(--erp-border)]">
                       <table className="min-w-[1180px] border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-xs uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]">
@@ -498,12 +505,12 @@ export function RouteDetailPage() {
             )}
             {isLogisticsRoute && (
               <Card className="overflow-hidden bg-white p-0">
-                <div className="bg-[var(--erp-info)] p-5 text-white">
+                <div className="bg-[var(--erp-info)] p-4 text-white sm:p-5">
                   <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
                     <PackageCheck className="h-4 w-4" />
                     Carga del traslado
                   </p>
-                  <h2 className="mt-1 text-xl font-black tracking-[-0.04em] text-white">
+                  <h2 className="mt-1 break-words text-xl font-black tracking-[-0.04em] text-white">
                     Productos programados
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-white/75">
@@ -513,27 +520,27 @@ export function RouteDetailPage() {
                   </p>
                 </div>
                 {(detail.logisticsStop?.items ?? []).length === 0 ? (
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <StatusMessage tone="empty">
                       El traslado no tiene productos informados.
                     </StatusMessage>
                   </div>
                 ) : (
-                  <div className="grid gap-2 p-5">
+                  <div className="grid gap-2 p-4 sm:p-5">
                     {detail.logisticsStop?.items.map((item) => (
                       <div
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-4"
+                        className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-xl border border-[color:var(--erp-border)] bg-[var(--erp-surface)] p-3 sm:rounded-2xl sm:p-4"
                         key={item.id}
                       >
-                        <div>
-                          <p className="font-black">
+                        <div className="min-w-0">
+                          <p className="break-words font-black">
                             {item.productName ?? shortId(item.productId)}
                           </p>
                           <p className="mt-1 text-xs font-semibold text-[var(--erp-muted-foreground)]">
                             Unidad: {item.unit}
                           </p>
                         </div>
-                        <p className="font-black">
+                        <p className="max-w-full shrink-0 text-right font-black">
                           {item.quantityKg != null &&
                           Number(item.quantityKg) > 0
                             ? String(item.quantityKg) + " kg"

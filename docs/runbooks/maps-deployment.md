@@ -7,9 +7,12 @@ backend y el frontend. No genera datos durante el arranque normal de Docker.
 
 - Docker Compose disponible en el host de despliegue.
 - `MAP_DATA_DIR` dedicado, persistente y fuera del repositorio.
+- Volumen persistente de PostgreSQL administrado por el mismo host.
 - Snapshot Geofabrik `mexico-260812` o una revisión posterior aprobada con su
   SHA-256 registrado.
-- Variables privadas de Photon, OSRM y VROOM configuradas solo para NestJS.
+- `POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` y los demás
+  secretos productivos configurados; no se requieren URLs externas de Photon,
+  OSRM, VROOM ni PostgreSQL.
 - `VITE_MAP_STYLE_URL=/maps/styles/operations/style.json` en la imagen de
   producción.
 
@@ -31,12 +34,23 @@ docker compose --profile maps up -d --force-recreate \
 ./scripts/maps/verify-stack.sh
 ```
 
+Para producción, el mismo flujo debe apuntar explícitamente al contrato
+single-host:
+
+```bash
+export COMPOSE_FILE=docker-compose.production.yml
+docker compose stop backend vroom photon osrm tileserver
+./scripts/maps/prepare-all.sh
+docker compose up -d --force-recreate photon osrm vroom tileserver backend
+./scripts/maps/verify-stack.sh
+```
+
 El flujo no detiene PostgreSQL. Los scripts de preparación no controlan el
 ciclo de vida de los servicios y abortan si Docker confirma que un consumidor
 relevante sigue ejecutándose. No borres `node.lock` manualmente: pertenece a
 OpenSearch y debe ser administrado por Photon/OpenSearch.
 
-## Preparar y verificar infraestructura
+## Preparar y verificar infraestructura de desarrollo
 
 ```bash
 ./scripts/maps/prepare-all.sh
@@ -84,22 +98,61 @@ El script no imprime el token ni la contraseña, no crea inventario y puede
 desactivar lógicamente la sucursal creada con `SMOKE_CLEANUP=true` (valor por
 defecto). Nunca debe ejecutarse contra producción.
 
+## Despliegue single-host de producción
+
+`docker-compose.production.yml` es el contrato completo de Arquitectura A:
+PostGIS, Photon, OSRM, VROOM, TileServer GL, backend y frontend comparten
+`app_network`. Los cuatro proveedores y PostgreSQL se resuelven por DNS
+interno Docker (`postgres`, `photon`, `osrm`, `vroom`); no se aceptan URLs
+externas para completar el despliegue.
+
+Los servicios internos no publican puertos al host. El frontend es el único
+servicio publicado y queda ligado a `127.0.0.1` para que Caddy sea el punto de
+entrada externo.
+
+Ejecutar en este orden:
+
+```bash
+export COMPOSE_FILE=docker-compose.production.yml
+
+./scripts/maps/prepare-all.sh
+docker compose config >/dev/null
+
+# One-shot jobs. Stop the release if either command fails.
+docker compose --profile migration run --rm migrate
+docker compose --profile migration run --rm bootstrap
+
+docker compose up -d postgres photon osrm vroom tileserver backend frontend
+docker compose ps
+./scripts/maps/verify-stack.sh
+./scripts/maps/smoke-route.sh
+```
+
+`migrate` waits for the local PostGIS healthcheck and `bootstrap` waits for a
+successful migration. Neither job runs as part of the long-lived backend
+startup. Dataset preparation remains explicit and must finish before Photon,
+OSRM, or TileServer GL starts consuming the bind-mounted data.
+
 ## Orden productivo
 
-1. Preparar y health-checkear TileServer GL y los proveedores privados.
+1. Preparar y health-checkear PostGIS, Photon, OSRM, VROOM y TileServer GL
+   mediante el Compose single-host.
 2. Ejecutar `docker compose -f docker-compose.production.yml config` con las
-   variables productivas.
-3. Ejecutar migraciones y desplegar NestJS con `MAP_TILES_URL` interno.
-4. Confirmar `GET /api/delivery-routing/technical-status` sin URLs internas.
-5. Construir y desplegar Nginx con la URL same-origin del style.
+   variables productivas. El resultado debe contener solo DNS internos para
+   PostgreSQL y los proveedores.
+3. Ejecutar los jobs one-shot de migración y bootstrap.
+4. Desplegar backend y frontend; `MAP_TILES_URL` permanece en
+   `http://tileserver:8080` dentro de `app_network`.
+5. Confirmar `GET /api/delivery-routing/technical-status` sin URLs internas.
 6. Ejecutar el smoke cartográfico. El smoke de alta de sucursal se ejecuta
    únicamente en un entorno disposable/dev/test separado.
 7. Habilitar gradualmente la UI; la captura manual debe continuar disponible
    si falla WebGL, style, tiles, sprites, glyphs o geocoding.
 
-TileServer GL no publica puertos al host en producción. Nginx es el único punto
-de entrada browser-facing para `/maps/**`; Photon, OSRM y VROOM solo son
-consumidos por NestJS.
+En producción, PostGIS, Photon, OSRM, VROOM y TileServer GL no publican puertos
+al host. El frontend queda ligado únicamente a `127.0.0.1` para Caddy; Nginx
+es el único punto de entrada browser-facing para `/maps/**`. Photon, OSRM y
+VROOM solo son consumidos por NestJS.
 
 El estado técnico autenticado debe reportar `PostGIS`, `Photon`, `OSRM`,
 `VROOM` y `MapTiles` como `up`. La respuesta no debe incluir URLs internas

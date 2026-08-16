@@ -13,9 +13,30 @@ PostgreSQL solo puede publicar su puerto en la interfaz loopback del host.
 
 ## docker-compose.production.yml
 
-Debe levantar los servicios de aplicación sin crear una instancia PostgreSQL ni
-un volumen de datos. `DATABASE_URL` debe apuntar a PostgreSQL administrado o a un
-clúster externo con alta disponibilidad y debe exigir TLS.
+Debe implementar el contrato single-host de Arquitectura A y levantar en la
+misma red privada `app_network`:
+
+- PostgreSQL/PostGIS.
+- Photon.
+- OSRM con perfil `driving`.
+- VROOM conectado al DNS interno `osrm`.
+- TileServer GL.
+- Backend NestJS.
+- Frontend Nginx.
+
+`DATABASE_URL`, `PHOTON_URL`, `OSRM_URL`, `VROOM_URL` y `MAP_TILES_URL` deben
+resolverse mediante DNS interno Docker (`postgres`, `photon`, `osrm`, `vroom`
+y `tileserver`). El Compose productivo no debe depender de esos endpoints
+externos ni aceptar `localhost` como sustituto.
+
+La conexión del backend a este PostGIS privado usa `DATABASE_SSL=false`; TLS
+externo termina en el gateway del host y no convierte el servicio local en una
+dependencia administrada.
+
+PostgreSQL debe usar un volumen persistente. Photon, OSRM y TileServer GL deben
+usar el `MAP_DATA_DIR` persistente preparado explícitamente antes del arranque.
+Los servicios internos no publican puertos al host; únicamente el frontend se
+publica en `127.0.0.1` para Caddy.
 
 ## Backend Dockerfile
 
@@ -40,14 +61,14 @@ Debe:
 
 ## PostgreSQL
 
-En desarrollo debe usar volumen:
+En desarrollo y producción debe usar un volumen persistente:
 
 ```text
 postgres_data:/var/lib/postgresql/data
 ```
 
-El volumen local no es un respaldo y no puede utilizarse como estrategia de
-durabilidad productiva.
+El volumen local no es un respaldo; la operación productiva debe conservar el
+procedimiento de respaldo y restauración del host.
 
 ## Red
 
@@ -66,6 +87,9 @@ En producción el servicio `migrate` usa el perfil `migration` para evitar que
 un `up` normal vuelva a ejecutar una migración:
 
 ```bash
+docker compose -f docker-compose.production.yml config
 docker compose -f docker-compose.production.yml --profile migration run --rm migrate
-docker compose -f docker-compose.production.yml up -d backend frontend
+docker compose -f docker-compose.production.yml --profile migration run --rm bootstrap
+docker compose -f docker-compose.production.yml up -d \
+  postgres photon osrm vroom tileserver backend frontend
 ```

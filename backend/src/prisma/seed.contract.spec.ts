@@ -401,18 +401,63 @@ describe('Prisma seed contract', () => {
     expect(productionCompose).not.toContain('command: npm run start:docker');
   });
 
-  it('requires and propagates managed routing providers in production', () => {
+  it('provisions local routing providers and PostGIS on the production private network', () => {
     const productionCompose = readFileSync(productionComposePath, 'utf8');
 
+    for (const service of [
+      'postgres',
+      'photon',
+      'osrm',
+      'vroom',
+      'tileserver',
+      'backend',
+      'frontend',
+    ]) {
+      expect(productionCompose).toContain(`  ${service}:\n`);
+      expect(productionCompose).toContain(`  ${service}:`);
+    }
+
+    expect(productionCompose).toContain('image: postgis/postgis:16-3.5-alpine');
     expect(productionCompose).toContain(
-      'PHOTON_URL: ${PHOTON_URL:?Managed Photon PHOTON_URL is required}',
+      'postgres_data:/var/lib/postgresql/data',
     );
     expect(productionCompose).toContain(
-      'VROOM_URL: ${VROOM_URL:?Managed VROOM VROOM_URL is required}',
+      'DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}',
+    );
+    expect(productionCompose).toContain('OSRM_URL: http://osrm:5000');
+    expect(productionCompose).toContain('PHOTON_URL: http://photon:2322');
+    expect(productionCompose).toContain('VROOM_URL: http://vroom:3000');
+    expect(productionCompose).toContain(
+      'MAP_TILES_URL: http://tileserver:8080',
+    );
+    expect(productionCompose).not.toContain('${DATABASE_URL');
+    expect(productionCompose).not.toContain('${OSRM_URL');
+    expect(productionCompose).not.toContain('${PHOTON_URL');
+    expect(productionCompose).not.toContain('${VROOM_URL');
+    expect(productionCompose).not.toContain('Managed PostgreSQL');
+    expect(productionCompose).not.toContain('Managed Photon');
+    expect(productionCompose).not.toContain('Managed OSRM');
+    expect(productionCompose).not.toContain('Managed VROOM');
+    expect(productionCompose).toContain(
+      '    depends_on:\n      postgres:\n        condition: service_healthy',
     );
     expect(productionCompose).toContain(
-      'OSRM_URL: ${OSRM_URL:?Managed OSRM OSRM_URL is required}',
+      '      photon:\n        condition: service_healthy',
     );
+    expect(productionCompose).toContain(
+      '      osrm:\n        condition: service_healthy',
+    );
+    expect(productionCompose).toContain(
+      '      vroom:\n        condition: service_healthy',
+    );
+    expect(productionCompose).toContain(
+      '      tileserver:\n        condition: service_healthy',
+    );
+    expect(productionCompose).toContain(
+      '      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"',
+    );
+    expect(productionCompose).not.toContain('FRONTEND_BIND_ADDRESS');
+    expect(productionCompose.match(/^    ports:$/gm) ?? []).toHaveLength(1);
     expect(productionCompose).toContain(
       'ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-10000}',
     );

@@ -39,13 +39,28 @@ POSTGRES_DB=pollo_distribucion
 ```
 
 Estas variables son exclusivas de la instancia local de desarrollo. Producción
-debe proporcionar `DATABASE_URL` para el clúster externo e incluir
-`sslmode=require`, `sslmode=verify-ca` o `sslmode=verify-full`.
+usa las mismas credenciales en `docker-compose.production.yml` y construye
+`DATABASE_URL` con el DNS interno `postgres:5432`. No se debe proporcionar una
+URL administrada externa ni publicar el puerto de PostgreSQL al host.
+
+## Proveedores geoespaciales
+
+El Compose productivo fija los endpoints privados dentro de `app_network`:
+
+```env
+PHOTON_URL=http://photon:2322
+OSRM_URL=http://osrm:5000
+VROOM_URL=http://vroom:3000
+MAP_TILES_URL=http://tileserver:8080
+```
+
+Estas URLs no se copian a variables `VITE_*` ni se reemplazan por `localhost` o
+proveedores públicos.
 
 Los restore drills deben proporcionar temporalmente:
 
 ```env
-RESTORE_DATABASE_URL=postgresql://user:password@restore-host:5432/pollo_distribucion_restore_drill?sslmode=verify-full
+RESTORE_DATABASE_URL=postgresql://user:password@postgres:5432/pollo_distribucion_restore_drill
 ```
 
 ## Reglas

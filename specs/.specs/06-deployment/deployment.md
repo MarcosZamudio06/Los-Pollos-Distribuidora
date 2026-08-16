@@ -9,16 +9,24 @@ Permitir ejecución local y despliegue productivo mediante Docker.
 - frontend
 - backend
 - postgres
+- photon
+- osrm
+- vroom
+- tileserver
 - nginx
 
 ## Puertos sugeridos
 
 | Servicio   | Puerto interno | Puerto externo |
 | ---------- | -------------: | -------------: |
-| Frontend   |           3000 |           3000 |
-| Backend    |           4000 |           4000 |
-| PostgreSQL |           5432 |           5432 |
-| Nginx      |         80/443 |         80/443 |
+| Frontend   |           3000 | `127.0.0.1:3000` |
+| Backend    |           4000 | no host port |
+| PostgreSQL |           5432 | no host port |
+| Photon     |           2322 | no host port |
+| OSRM       |           5000 | no host port |
+| VROOM      |           3000 | no host port |
+| TileServer |           8080 | no host port |
+| Caddy/Nginx host gateway | 80/443 | 80/443 |
 
 ## Ambientes
 
@@ -37,27 +45,31 @@ Permitir ejecución local y despliegue productivo mediante Docker.
 - Si falla una migración, el rollout se bloquea y las réplicas ya saludables
   permanecen atendiendo tráfico. La corrección o resolución se ejecuta como una
   operación explícita antes de reintentar el despliegue.
-- `docker-compose.yml` y su PostgreSQL local son exclusivos de desarrollo.
-- Producción debe usar PostgreSQL administrado o un clúster externo; Compose no
-  debe administrar la base productiva.
-- La conexión productiva a PostgreSQL debe usar TLS.
+- `docker-compose.yml` mantiene el perfil local/dev; `docker-compose.production.yml`
+  implementa el contrato single-host de Arquitectura A.
+- Producción debe ejecutar PostgreSQL/PostGIS, Photon, OSRM, VROOM, TileServer,
+  backend y frontend en una misma red privada Docker. Las URLs de base de datos
+  y proveedores son DNS internos, no endpoints administrados externos.
+- El volumen productivo de PostgreSQL no sustituye los respaldos. La operación
+  debe demostrar restauración del volumen y documentar el riesgo de no tener
+  alta disponibilidad dentro del single-host.
 
 ## Durabilidad productiva
 
-Antes de liberar el ERP/POS, el servicio PostgreSQL debe demostrar:
+Antes de liberar el ERP/POS, la operación PostgreSQL del single-host debe
+demostrar:
 
-- réplica en una zona de fallo distinta y failover probado;
-- respaldos completos y archivado continuo de WAL para PITR;
-- respaldos cifrados fuera del servidor primario;
+- respaldos completos y archivado de WAL para PITR cuando el host lo soporte;
+- respaldos cifrados fuera del servidor;
 - retención mínima de 35 días, sujeta a la política legal aplicable;
-- alertas por fallo o antigüedad del respaldo y por replication lag;
+- alertas por fallo o antigüedad del respaldo, archivado WAL y espacio de disco;
 - restore drill trimestral en una base aislada;
 - RPO máximo de 5 minutos y RTO máximo de 60 minutos, aprobados por negocio.
 
-La ausencia de cualquiera de estas evidencias bloquea producción. El script
+La ausencia de evidencia de respaldo/restauración bloquea producción. El script
 `scripts/database/verify-restored-database.sh` valida la estructura y las tablas
-críticas después de que el proveedor restaure un respaldo o un punto temporal
-en una base cuyo nombre termine en `_restore_drill`.
+críticas después de restaurar un respaldo o un punto temporal en una base cuyo
+nombre termine en `_restore_drill`.
 
 La migración de terminales y turnos POS requiere ejecutar íntegramente
 `docs/runbooks/pos-terminal-cutover.md`, incluida la prueba en staging con copia

@@ -28,8 +28,8 @@ export function LogisticsRouteCompletionControl({
   return (
     <>
       <Card className="overflow-hidden border-[rgba(47,111,115,0.30)] bg-white p-0">
-        <div className="flex flex-col gap-4 bg-[var(--erp-info)] p-5 text-white sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 bg-[var(--erp-info)] p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0">
             <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
               <CheckCircle2 className="h-4 w-4" />
               Cierre de transporte
@@ -46,6 +46,7 @@ export function LogisticsRouteCompletionControl({
             </p>
           </div>
           <PrimaryButton
+            className="w-full sm:w-auto"
             disabled={!stopCompleted || isCompleting}
             onClick={() => setIsConfirmationOpen(true)}
           >
@@ -53,7 +54,7 @@ export function LogisticsRouteCompletionControl({
             {isCompleting ? "Terminando..." : "Terminar ruta"}
           </PrimaryButton>
         </div>
-        <div className="grid gap-3 p-5">
+        <div className="grid gap-3 p-4 sm:p-5">
           <p className="text-sm font-bold text-[var(--erp-muted-foreground)]">
             Parada física: {stopCompleted ? "confirmada" : "pendiente"}
           </p>

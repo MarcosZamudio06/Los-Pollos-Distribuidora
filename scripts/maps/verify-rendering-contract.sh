@@ -94,9 +94,77 @@ if public_forbidden.search(style_url):
     fail("VITE_MAP_STYLE_URL contains a forbidden provider URL")
 
 production_compose_text = production_compose.read_text(encoding="utf-8")
-tileserver_block = re.search(
-    r"(?ms)^  tileserver:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)",
+
+def service_block(compose_text, service):
+    return re.search(
+        rf"(?ms)^  {re.escape(service)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)",
+        compose_text,
+    )
+
+required_production_services = (
+    "postgres",
+    "migrate",
+    "bootstrap",
+    "backend",
+    "photon",
+    "osrm",
+    "vroom",
+    "tileserver",
+    "frontend",
+)
+production_blocks = {}
+for service in required_production_services:
+    block = service_block(production_compose_text, service)
+    if not block:
+        fail(f"production Compose has no {service} service")
+    production_blocks[service] = block.group(0)
+    if "app_network" not in block.group(1):
+        fail(f"production {service} must use app_network")
+
+for service in required_production_services:
+    if service != "frontend" and re.search(r"(?m)^\s+ports:", production_blocks[service]):
+        fail(f"production {service} must not publish a host port")
+
+for service in ("postgres", "photon", "osrm", "vroom", "tileserver", "backend"):
+    if "\n    healthcheck:\n" not in production_blocks[service]:
+        fail(f"production {service} must define a healthcheck")
+
+if len(re.findall(r"(?m)^    ports:\n", production_compose_text)) != 1:
+    fail("production Compose must publish exactly one service port")
+if '      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"' not in production_blocks["frontend"]:
+    fail("production frontend must bind only to 127.0.0.1")
+if "FRONTEND_BIND_ADDRESS" in production_compose_text:
+    fail("production frontend host binding must not be overrideable")
+
+if "image: postgis/postgis:16-3.5-alpine" not in production_blocks["postgres"]:
+    fail("production PostGIS image is missing")
+if "postgres_data:/var/lib/postgresql/data" not in production_blocks["postgres"]:
+    fail("production PostGIS volume is missing")
+if "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}" not in production_compose_text:
+    fail("production database URL must use the internal postgres DNS name")
+for provider_url in (
+    "OSRM_URL: http://osrm:5000",
+    "PHOTON_URL: http://photon:2322",
+    "VROOM_URL: http://vroom:3000",
+    "MAP_TILES_URL: http://tileserver:8080",
+):
+    if provider_url not in production_blocks["backend"]:
+        fail(f"production backend is missing {provider_url}")
+if re.search(r"\$\{(?:DATABASE_URL|OSRM_URL|PHOTON_URL|VROOM_URL)", production_compose_text):
+    fail("production Compose must not interpolate external database/provider URLs")
+if "Managed PostgreSQL" in production_compose_text or "Managed Photon" in production_compose_text or "Managed OSRM" in production_compose_text or "Managed VROOM" in production_compose_text:
+    fail("production Compose must not require managed provider services")
+for dependency in ("postgres", "photon", "osrm", "vroom", "tileserver"):
+    if f"      {dependency}:\n        condition: service_healthy" not in production_blocks["backend"]:
+        fail(f"production backend must wait for healthy {dependency}")
+if "      postgres:\n        condition: service_healthy" not in production_blocks["migrate"]:
+    fail("production migration job must wait for healthy PostGIS")
+if "      osrm:\n        condition: service_healthy" not in production_blocks["vroom"]:
+    fail("production VROOM must wait for healthy OSRM")
+
+tileserver_block = service_block(
     production_compose_text,
+    "tileserver",
 )
 if not tileserver_block:
     fail("production Compose has no TileServer service")

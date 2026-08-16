@@ -449,7 +449,7 @@ export function DriverRouteMap({
   return (
     <div
       aria-label={`Mapa de ${routeName}`}
-      className={`${compact ? "h-64 min-h-[256px]" : "h-[28rem] min-h-[360px]"} relative z-0 isolate overflow-hidden rounded-[1.4rem] border border-black/10 bg-[#dce5df] shadow-[0_20px_60px_rgba(29,36,32,.16)]`}
+      className={`${compact ? "h-64 min-h-[256px]" : "h-[24rem] min-h-[280px] sm:h-[28rem] sm:min-h-[360px]"} relative z-0 isolate overflow-hidden rounded-[1.2rem] border border-black/10 bg-[#dce5df] shadow-[0_20px_60px_rgba(29,36,32,.16)] sm:rounded-[1.4rem]`}
       data-scroll={String(!compact)}
       data-scroll-wheel-zoom={String(!compact)}
     >

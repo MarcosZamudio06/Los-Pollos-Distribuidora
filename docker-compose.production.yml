@@ -1,4 +1,23 @@
 services:
+  postgres:
+    image: postgis/postgis:16-3.5-alpine
+    platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pollo_distribucion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
   migrate:
     profiles: ["migration"]
     image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
@@ -6,9 +25,12 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:?Managed PostgreSQL DATABASE_URL is required}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
     command: npm run migrate:deploy
     restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - app_network
 
@@ -19,7 +41,7 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:?Managed PostgreSQL DATABASE_URL is required}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
       NODE_ENV: production
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     command: npm run bootstrap:production
@@ -46,8 +68,8 @@ services:
       BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-12}
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
       HTTP_BODY_LIMIT: ${HTTP_BODY_LIMIT:-1mb}
-      DATABASE_SSL: "true"
-      DATABASE_URL: ${DATABASE_URL:?Managed PostgreSQL DATABASE_URL is required}
+      DATABASE_SSL: "false"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
@@ -56,8 +78,8 @@ services:
       MAP_DATA_PREPARED_AT: ${MAP_DATA_PREPARED_AT:-}
       MAP_TILES_URL: http://tileserver:8080
       NODE_ENV: production
-      OSRM_URL: ${OSRM_URL:?Managed OSRM OSRM_URL is required}
-      PHOTON_URL: ${PHOTON_URL:?Managed Photon PHOTON_URL is required}
+      OSRM_URL: http://osrm:5000
+      PHOTON_URL: http://photon:2322
       PORT: ${PORT:-4000}
       RATE_LIMIT_GLOBAL_MAX: ${RATE_LIMIT_GLOBAL_MAX:-600}
       RATE_LIMIT_LOGIN_ACCOUNT_MAX: ${RATE_LIMIT_LOGIN_ACCOUNT_MAX:-5}
@@ -72,7 +94,18 @@ services:
       SWAGGER_ENABLED: "false"
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:?TRUST_PROXY_HOPS is required}
-      VROOM_URL: ${VROOM_URL:?Managed VROOM VROOM_URL is required}
+      VROOM_URL: http://vroom:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      photon:
+        condition: service_healthy
+      osrm:
+        condition: service_healthy
+      vroom:
+        condition: service_healthy
+      tileserver:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -86,6 +119,74 @@ services:
       timeout: 3s
       retries: 10
       start_period: 30s
+    networks:
+      - app_network
+
+  photon:
+    build:
+      context: .
+      dockerfile: docker/maps/photon/Dockerfile
+      args:
+        PHOTON_VERSION: ${PHOTON_VERSION:-1.2.1}
+    image: pollos-distribuidor/photon:${PHOTON_VERSION:-1.2.1}
+    platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    volumes:
+      - ${MAP_DATA_DIR:-./.map-data}/photon:/data
+    healthcheck:
+      test:
+        ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:2322/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - app_network
+
+  osrm:
+    build:
+      context: .
+      dockerfile: docker/maps/osrm/Dockerfile
+      args:
+        OSRM_VERSION: ${OSRM_VERSION:-v5.27.1}
+    image: pollos-distribuidor/osrm:${OSRM_VERSION:-v5.27.1}
+    platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    command: ["osrm-routed", "--algorithm", "mld", "/data/mexico-latest.osrm"]
+    restart: unless-stopped
+    volumes:
+      - ${MAP_DATA_DIR:-./.map-data}/osrm:/data:ro
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - http://127.0.0.1:5000/nearest/v1/driving/-96.1342,19.1738?number=1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app_network
+
+  vroom:
+    image: ghcr.io/vroom-project/vroom-docker:${VROOM_VERSION:-v1.15.0}
+    platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    environment:
+      VROOM_ROUTER: osrm
+    restart: unless-stopped
+    volumes:
+      - ./docker/maps/vroom/config.yml:/conf/config.yml:ro
+    depends_on:
+      osrm:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     networks:
       - app_network
 
@@ -129,9 +230,12 @@ services:
       tileserver:
         condition: service_healthy
     ports:
-      - "${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     networks:
       - app_network
+
+volumes:
+  postgres_data:
 
 networks:
   app_network:

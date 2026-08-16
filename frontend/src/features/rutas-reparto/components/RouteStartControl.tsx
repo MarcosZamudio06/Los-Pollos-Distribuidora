@@ -33,9 +33,9 @@ export function RouteStartControl({
 
   return (
     <>
-      <Card className="border-[rgba(214,155,45,0.34)] bg-[rgba(214,155,45,0.07)] p-5">
+      <Card className="border-[rgba(214,155,45,0.34)] bg-[rgba(214,155,45,0.07)] p-4 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-deep)]">
               <Play className="h-4 w-4" />
               Salida de ruta
@@ -50,6 +50,7 @@ export function RouteStartControl({
           </div>
           {hasVehicle ? (
             <PrimaryButton
+              className="w-full sm:w-auto"
               disabled={isStarting}
               onClick={() => setIsConfirmationOpen(true)}
             >

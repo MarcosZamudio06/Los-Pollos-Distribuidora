@@ -139,16 +139,16 @@ export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
       aria-labelledby="incident-title"
     >
       <form
-        className="max-h-[92vh] w-full max-w-4xl overflow-y-auto border border-[#1d2420]/15 bg-white p-6 shadow-[0_30px_90px_rgba(29,36,32,0.30)]"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-4xl overflow-y-auto border border-[#1d2420]/15 bg-white p-4 shadow-[0_30px_90px_rgba(29,36,32,0.30)] sm:max-h-[92vh] sm:p-6"
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[#1d2420]/10 pb-5">
-          <div>
+        <div className="flex items-start justify-between gap-3 border-b border-[#1d2420]/10 pb-5 sm:gap-4">
+          <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8b2f2a]">
               Incidencia
             </p>
             <h2
-              className="mt-1 text-3xl font-black tracking-[-0.05em]"
+              className="mt-1 break-words text-[clamp(1.75rem,8vw,2.25rem)] font-black tracking-[-0.05em] sm:text-3xl"
               id="incident-title"
             >
               Registrar incidencia o devolución
@@ -159,7 +159,9 @@ export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
               API y una nota clara.
             </p>
           </div>
-          <SecondaryButton onClick={onClose}>Cerrar</SecondaryButton>
+          <SecondaryButton className="w-auto shrink-0" onClick={onClose}>
+            Cerrar
+          </SecondaryButton>
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -220,6 +222,7 @@ export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
               </h3>
             </div>
             <SecondaryButton
+              className="w-full sm:w-auto"
               onClick={() =>
                 setReturnedItems((current) => [...current, blankReturnedItem()])
               }
@@ -303,6 +306,7 @@ export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
                   </Field>
                   <div className="flex items-end">
                     <SecondaryButton
+                      className="w-full sm:w-auto"
                       onClick={() =>
                         setReturnedItems((current) =>
                           current.filter(
@@ -338,8 +342,11 @@ export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
         )}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <SecondaryButton className="w-full sm:w-auto" onClick={onClose}>
+            Cancelar
+          </SecondaryButton>
           <PrimaryButton
+            className="w-full sm:w-auto"
             disabled={!canSubmit || createIncident.isPending}
             type="submit"
           >

@@ -66,7 +66,7 @@ export function LogisticsTransportProgress({
 
   return (
     <Card className="overflow-hidden p-0" data-testid="logistics-transport-progress">
-      <div className="bg-[var(--erp-info)] p-5 text-white">
+      <div className="bg-[var(--erp-info)] p-4 text-white sm:p-5">
         <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/75">
           <CircleDot className="h-4 w-4" />
           Progreso del traslado
@@ -94,10 +94,10 @@ export function LogisticsTransportProgress({
           />
         </div>
       </div>
-      <ol className="grid gap-3 p-5 sm:grid-cols-4">
+      <ol className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-5">
         {steps.map((step, index) => (
           <li
-            className="flex items-center gap-2 text-sm font-black"
+            className="flex min-w-0 items-center gap-2 text-sm font-black"
             data-step-state={step.state}
             key={step.label}
           >
@@ -109,11 +109,7 @@ export function LogisticsTransportProgress({
               <CheckCircle2 className="h-4 w-4 text-[var(--erp-info)]" />
             )}
             <span
-              className={
-                step.state === "pending"
-                  ? "text-[var(--erp-muted-foreground)]"
-                  : "text-[var(--erp-foreground)]"
-              }
+              className={`min-w-0 break-words ${step.state === "pending" ? "text-[var(--erp-muted-foreground)]" : "text-[var(--erp-foreground)]"}`}
             >
               {step.label}
             </span>

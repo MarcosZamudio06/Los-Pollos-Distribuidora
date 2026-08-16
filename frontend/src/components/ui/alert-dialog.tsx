@@ -42,7 +42,7 @@ export function AlertDialogContent({
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-[71] grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 rounded-[1.5rem] border border-[color:var(--erp-border)] bg-white p-6 text-[var(--erp-foreground)] shadow-2xl outline-none",
+          "fixed left-1/2 top-1/2 z-[71] grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto rounded-[1.5rem] border border-[color:var(--erp-border)] bg-white p-4 text-[var(--erp-foreground)] shadow-2xl outline-none sm:p-6",
           className,
         )}
         {...props}
