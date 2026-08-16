@@ -457,7 +457,7 @@ describe('Prisma seed contract', () => {
       '      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"',
     );
     expect(productionCompose).not.toContain('FRONTEND_BIND_ADDRESS');
-    expect(productionCompose.match(/^    ports:$/gm) ?? []).toHaveLength(1);
+    expect(productionCompose.match(/^ {4}ports:$/gm) ?? []).toHaveLength(1);
     expect(productionCompose).toContain(
       'ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-10000}',
     );
