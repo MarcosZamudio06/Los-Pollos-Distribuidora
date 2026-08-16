@@ -45,6 +45,7 @@ describe('validateEnvironment', () => {
         FLEET_POSITION_STALE_SECONDS: 60,
         FLEET_POSITION_FUTURE_TOLERANCE_SECONDS: 300,
         FLEET_ANALYTICS_MAX_RANGE_DAYS: 31,
+        FLEET_POSITION_RETENTION_DAYS: 365,
       }),
     );
   });
@@ -71,6 +72,9 @@ describe('validateEnvironment', () => {
     expect(() =>
       validateEnvironment({ FLEET_ANALYTICS_MAX_RANGE_DAYS: '0' }),
     ).toThrow('FLEET_ANALYTICS_MAX_RANGE_DAYS must be a positive integer');
+    expect(() =>
+      validateEnvironment({ FLEET_POSITION_RETENTION_DAYS: '0' }),
+    ).toThrow('FLEET_POSITION_RETENTION_DAYS must be a positive integer');
     expect(() => validateEnvironment({ ROUTING_TIMEOUT_MS: '120001' })).toThrow(
       'ROUTING_TIMEOUT_MS cannot exceed 120000 milliseconds',
     );

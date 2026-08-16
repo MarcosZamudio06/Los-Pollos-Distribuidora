@@ -6,6 +6,7 @@ import { FleetController } from './fleet.controller';
 import { DeliveryZoneController } from './delivery-zone.controller';
 import { FleetGateway } from './fleet.gateway';
 import { FleetService } from './fleet.service';
+import { FleetPositionRetentionJob } from './fleet-position-retention.job';
 import { GeofenceService } from './geofence.service';
 import { NullTrafficProvider } from './traffic/null-traffic.provider';
 import { TRAFFIC_PROVIDER } from './traffic/traffic-provider';
@@ -15,6 +16,7 @@ import { TRAFFIC_PROVIDER } from './traffic/traffic-provider';
   controllers: [FleetController, DeliveryZoneController],
   providers: [
     FleetService,
+    FleetPositionRetentionJob,
     FleetGateway,
     GeofenceService,
     { provide: TRAFFIC_PROVIDER, useClass: NullTrafficProvider },

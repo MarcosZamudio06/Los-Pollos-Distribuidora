@@ -1249,6 +1249,7 @@ model VehiclePosition {
   @@index([vehicleId, recordedAt(sort: Desc)])
   @@index([routeId, recordedAt])
   @@index([driverId, recordedAt])
+  @@index([recordedAt, id])
 }
 
 model DeliveryRoute {
@@ -1399,6 +1400,7 @@ model DeliveryIncident {
   @@index([driverId, occurredAt])
   @@index([status, occurredAt])
   @@index([occurredAt, routeId, vehicleId])
+  @@index([positionId])
 }
 
 model DeliveryRoutePlanDraft {

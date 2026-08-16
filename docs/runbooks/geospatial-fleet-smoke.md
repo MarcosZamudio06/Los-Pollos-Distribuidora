@@ -79,6 +79,15 @@ operational location:
    status change and the route, positions, geofence events, and incident
    history remain queryable.
 
+## Retention behavior
+
+The backend runs the Fleet position-retention job daily. It keeps positions
+online for `FLEET_POSITION_RETENTION_DAYS` (365 days by default), deletes old
+positions in bounded batches, and protects positions referenced by geofence
+events or delivery incidents. The mutable geofence-state pointer is cleared
+before an eligible position is deleted. No external archive is currently
+exposed by the Fleet history endpoint.
+
 ## Evidence to attach
 
 - Redacted technical status response (service names, statuses, routing data

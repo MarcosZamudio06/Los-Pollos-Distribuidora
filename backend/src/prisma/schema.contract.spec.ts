@@ -86,6 +86,10 @@ const vehiclePositionsMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260812130000_add_vehicle_positions/migration.sql',
 );
+const vehiclePositionRetentionMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260815140000_add_vehicle_position_retention_index/migration.sql',
+);
 const deliveryZonesMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260812140000_add_delivery_zones_geofences/migration.sql',
@@ -335,6 +339,7 @@ describe('Prisma schema contract', () => {
     );
     expect(position).toMatch(/@@index\(\[routeId, recordedAt\]\)/);
     expect(position).toMatch(/@@index\(\[driverId, recordedAt\]\)/);
+    expect(position).toMatch(/@@index\(\[recordedAt, id\]\)/);
     expect(migrationSql).toContain('CREATE TABLE "VehiclePosition"');
     expect(migrationSql).toMatch(
       /GENERATED ALWAYS AS[\s\S]*ST_MakePoint\([\s\S]*"longitude"[\s\S]*"latitude"/,
@@ -344,6 +349,18 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain('VehiclePosition_routeId_recordedAt_idx');
     expect(migrationSql).toContain('VehiclePosition_driverId_recordedAt_idx');
     expect(migrationSql).not.toMatch(/"positionPoint"\s+JSON/i);
+
+    const retentionMigrationSql = readFileSync(
+      vehiclePositionRetentionMigrationSqlPath,
+      'utf8',
+    );
+    expect(retentionMigrationSql).toContain(
+      'VehiclePosition_recordedAt_id_idx',
+    );
+    expect(getModelBlock('DeliveryIncident')).toMatch(
+      /@@index\(\[positionId\]\)/,
+    );
+    expect(retentionMigrationSql).toContain('DeliveryIncident_positionId_idx');
   });
 
   it('persists delivery zones and geofence transitions with spatial constraints', () => {

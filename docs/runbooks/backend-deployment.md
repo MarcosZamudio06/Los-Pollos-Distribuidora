@@ -155,6 +155,7 @@ Set and validate these bounded values before a release:
 | `FLEET_POSITION_STALE_SECONDS` | `60` | Positive seconds used by the backend to mark a live position stale. |
 | `FLEET_POSITION_FUTURE_TOLERANCE_SECONDS` | `300` | Positive seconds accepted for device clock skew. |
 | `FLEET_ANALYTICS_MAX_RANGE_DAYS` | `31` | Maximum historical heatmap range. |
+| `FLEET_POSITION_RETENTION_DAYS` | `365` | Positive days kept online; the daily Fleet job purges only unreferenced positions older than this window. |
 | `RATE_LIMIT_FLEET_POSITION_MAX` | `60` | Per-driver position publications per minute; normal 10-second tracking remains below this limit. |
 | `ROUTING_TIMEOUT_MS` | `10000` | Positive provider timeout, capped at 120000 ms. |
 | `MAP_DATA_VERSION` | — | Required production routing dataset version. |

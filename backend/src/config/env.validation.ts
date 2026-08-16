@@ -188,6 +188,11 @@ export function validateEnvironment(env: EnvironmentVariables) {
     'FLEET_ANALYTICS_MAX_RANGE_DAYS',
     31,
   );
+  const fleetPositionRetentionDays = parseInteger(
+    env,
+    'FLEET_POSITION_RETENTION_DAYS',
+    365,
+  );
   const mapDataVersion = env.MAP_DATA_VERSION?.trim() || 'unknown';
   const mapDataPreparedAt = env.MAP_DATA_PREPARED_AT?.trim() || undefined;
   const photonUrl = parseOptionalHttpUrl(env, 'PHOTON_URL');
@@ -349,6 +354,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
     FLEET_POSITION_FUTURE_TOLERANCE_SECONDS:
       fleetPositionFutureToleranceSeconds,
     FLEET_ANALYTICS_MAX_RANGE_DAYS: fleetAnalyticsMaxRangeDays,
+    FLEET_POSITION_RETENTION_DAYS: fleetPositionRetentionDays,
     SWAGGER_ENABLED: swaggerEnabled,
     SWAGGER_PATH: env.SWAGGER_PATH?.trim() || 'docs',
     TRUST_PROXY_HOPS: trustProxyHops,
