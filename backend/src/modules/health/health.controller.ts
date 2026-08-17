@@ -23,4 +23,13 @@ export class HealthController {
   getReadiness() {
     return this.healthService.getReadiness();
   }
+
+  @Get('dependencies')
+  async getDependencies() {
+    return {
+      success: true,
+      message: 'Dependency health retrieved successfully',
+      data: await this.healthService.getDependencies(),
+    };
+  }
 }

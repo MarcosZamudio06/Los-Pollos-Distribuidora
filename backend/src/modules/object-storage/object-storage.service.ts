@@ -20,6 +20,7 @@ export class ObjectStorageService implements ObjectStoragePort {
   private readonly bucket: string;
   private readonly signedUrlTtlSeconds: number;
   private readonly client: S3Client;
+  private readonly publicClient: S3Client;
 
   constructor(config: ConfigService) {
     this.bucket = config.get<string>('OBJECT_STORAGE_BUCKET')?.trim() ?? '';
@@ -31,6 +32,10 @@ export class ObjectStorageService implements ObjectStoragePort {
       config.get<string>('OBJECT_STORAGE_REGION')?.trim() ||
       DEFAULT_OBJECT_STORAGE_REGION;
     const endpoint = config.get<string>('OBJECT_STORAGE_ENDPOINT')?.trim();
+    const publicEndpoint = config
+      .get<string>('OBJECT_STORAGE_PUBLIC_ENDPOINT')
+      ?.trim();
+
     const accessKeyId = config
       .get<string>('OBJECT_STORAGE_ACCESS_KEY_ID')
       ?.trim();
@@ -40,13 +45,27 @@ export class ObjectStorageService implements ObjectStoragePort {
     const forcePathStyle =
       config.get<boolean>('OBJECT_STORAGE_FORCE_PATH_STYLE') ?? false;
 
+    const credentials =
+      accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {};
+
     this.client = new S3Client({
       region,
       ...(endpoint ? { endpoint } : {}),
       forcePathStyle,
-      ...(accessKeyId && secretAccessKey
-        ? { credentials: { accessKeyId, secretAccessKey } }
-        : {}),
+      ...credentials,
+    });
+
+    this.publicClient = new S3Client({
+      region,
+      ...(publicEndpoint
+        ? { endpoint: publicEndpoint }
+        : endpoint
+          ? { endpoint }
+          : {}),
+      forcePathStyle,
+      ...credentials,
     });
   }
 
@@ -82,7 +101,7 @@ export class ObjectStorageService implements ObjectStoragePort {
   ) {
     this.assertConfigured();
     return getSignedUrl(
-      this.client,
+      this.publicClient,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn: expiresInSeconds },
     );

@@ -1,14 +1,33 @@
 import { ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { HealthService } from './health.service';
 
 describe('HealthService', () => {
   const $queryRawUnsafe = jest.fn();
+  const config = {
+    get: jest.fn((key: string, fallback?: unknown) => {
+      if (key === 'HEALTH_DEPENDENCY_TIMEOUT_MS') return 10;
+      return (
+        (
+          {
+            PHOTON_URL: 'http://photon:2322',
+            OSRM_URL: 'http://osrm:5000',
+            VROOM_URL: 'http://vroom:3000',
+            MAP_TILES_URL: 'http://tileserver:8080',
+            OBJECT_STORAGE_ENDPOINT: 'http://object-storage:8333',
+          } as Record<string, string>
+        )[key] ?? fallback
+      );
+    }),
+  } as unknown as ConfigService;
   let service: HealthService;
 
   beforeEach(() => {
     $queryRawUnsafe.mockReset();
-    service = new HealthService({ $queryRawUnsafe } as never);
+    service = new HealthService({ $queryRawUnsafe } as never, config);
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   it('keeps liveness independent from database availability', () => {
     expect(service.getLiveness()).toEqual({
@@ -58,6 +77,79 @@ describe('HealthService', () => {
 
     await expect(service.getReadiness()).rejects.toBeInstanceOf(
       ServiceUnavailableException,
+    );
+  });
+
+  it('reports core and GIS dependency health without exposing internal URLs', async () => {
+    service.onApplicationBootstrap();
+    $queryRawUnsafe.mockResolvedValue([{ result: 1 }]);
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const result = await service.getDependencies();
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        dependencies: expect.objectContaining({
+          database: expect.objectContaining({ status: 'up' }),
+          photon: expect.objectContaining({ status: 'up' }),
+          osrm: expect.objectContaining({ status: 'up' }),
+          vroom: expect.objectContaining({ status: 'up' }),
+          tileserver: expect.objectContaining({ status: 'up' }),
+          objectStorage: expect.objectContaining({ status: 'up' }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain('http://');
+    expect(JSON.stringify(result)).not.toContain('object-storage');
+  });
+
+  it('keeps core readiness independent from a failed GIS dependency', async () => {
+    service.onApplicationBootstrap();
+    $queryRawUnsafe.mockResolvedValue([{ result: 1 }]);
+    jest.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      return Promise.resolve(
+        new Response('{}', { status: url.includes('photon') ? 503 : 200 }),
+      );
+    });
+
+    const result = await service.getDependencies();
+
+    expect(result.status).toBe('degraded');
+    expect(result.dependencies.photon.status).toBe('down');
+    await expect(service.getReadiness()).resolves.toEqual(
+      expect.objectContaining({ data: { status: 'ready' } }),
+    );
+  });
+
+  it('bounds a dependency probe that never returns', async () => {
+    service.onApplicationBootstrap();
+    $queryRawUnsafe.mockResolvedValue([{ result: 1 }]);
+    jest.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      if (url.includes('photon')) {
+        return new Promise<Response>(() => undefined);
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const result = await service.getDependencies();
+
+    expect(result.dependencies.photon).toEqual(
+      expect.objectContaining({ status: 'down', reason: 'timeout' }),
     );
   });
 });

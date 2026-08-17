@@ -25,6 +25,14 @@ SELECT current_database() AS restore_database,
 
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_extension
+    WHERE extname = 'postgis'
+  ) THEN
+    RAISE EXCEPTION 'Restored database is missing the PostGIS extension';
+  END IF;
+
   IF to_regclass('public."_prisma_migrations"') IS NULL THEN
     RAISE EXCEPTION 'Missing Prisma migration history';
   END IF;
@@ -44,6 +52,8 @@ BEGIN
     RAISE EXCEPTION 'Restored database is missing critical ERP/POS tables';
   END IF;
 END $$;
+
+SELECT postgis_full_version() AS postgis_version;
 
 SELECT 'Sale' AS relation, count(*) AS rows FROM "Sale"
 UNION ALL

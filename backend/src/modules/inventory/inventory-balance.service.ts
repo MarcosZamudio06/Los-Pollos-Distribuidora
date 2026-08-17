@@ -44,23 +44,23 @@ export type InventoryBalanceAvailability = Pick<
 export function toInventoryBalanceAvailability(
   balance: InventoryBalanceReadRecord,
 ): InventoryBalanceAvailability {
-  const quantityKg = toNumber(balance.quantityKg);
+  const quantityKg = toDecimal(balance.quantityKg);
   const quantityPieces = balance.quantityPieces ?? 0;
-  const reservedQuantityKg = toNumber(balance.reservedQuantityKg);
+  const reservedQuantityKg = toDecimal(balance.reservedQuantityKg);
   const reservedQuantityPieces = balance.reservedQuantityPieces ?? 0;
-  const availableQuantityKg = quantityKg - reservedQuantityKg;
+  const availableQuantityKg = quantityKg.sub(reservedQuantityKg);
   const availableQuantityPieces = quantityPieces - reservedQuantityPieces;
 
   if (
-    !Number.isFinite(quantityKg) ||
+    !quantityKg.isFinite() ||
     !Number.isFinite(quantityPieces) ||
-    !Number.isFinite(reservedQuantityKg) ||
+    !reservedQuantityKg.isFinite() ||
     !Number.isFinite(reservedQuantityPieces) ||
-    quantityKg < 0 ||
+    quantityKg.isNegative() ||
     quantityPieces < 0 ||
-    reservedQuantityKg < 0 ||
+    reservedQuantityKg.isNegative() ||
     reservedQuantityPieces < 0 ||
-    availableQuantityKg < 0 ||
+    availableQuantityKg.isNegative() ||
     availableQuantityPieces < 0
   ) {
     throw new ConflictException({
@@ -72,11 +72,11 @@ export function toInventoryBalanceAvailability(
   }
 
   return {
-    quantityKg,
+    quantityKg: quantityKg.toNumber(),
     quantityPieces,
-    reservedQuantityKg,
+    reservedQuantityKg: reservedQuantityKg.toNumber(),
     reservedQuantityPieces,
-    availableQuantityKg,
+    availableQuantityKg: availableQuantityKg.toNumber(),
     availableQuantityPieces,
   };
 }
@@ -99,6 +99,22 @@ type BalanceRecord = {
   quantityPieces: number;
   reservedQuantityKg: DecimalLike;
   reservedQuantityPieces: number;
+};
+
+type DecimalInventoryBalanceQuantity = Omit<
+  InventoryBalanceQuantity,
+  'quantityKg'
+> & {
+  quantityKg: Prisma.Decimal;
+};
+
+type DecimalBalanceSnapshot = Omit<
+  InventoryBalanceSnapshot,
+  'quantityKg' | 'reservedQuantityKg' | 'availableQuantityKg'
+> & {
+  quantityKg: Prisma.Decimal;
+  reservedQuantityKg: Prisma.Decimal;
+  availableQuantityKg: Prisma.Decimal;
 };
 
 @Injectable()
@@ -138,37 +154,38 @@ export class InventoryBalanceService {
       },
     })) as BalanceRecord[];
     const balancesByProduct = new Map(
-      balances.map((balance) => [balance.productId, this.toSnapshot(balance)]),
+      balances.map((balance) => [
+        balance.productId,
+        this.toDecimalSnapshot(balance),
+      ]),
     );
     const findings = [...requestedByProduct.values()]
       .map((requested) => {
         const balance = balancesByProduct.get(requested.productId);
-        const availableQuantityKg = balance?.availableQuantityKg ?? 0;
+        const availableQuantityKg =
+          balance?.availableQuantityKg ?? new Prisma.Decimal(0);
         const availableQuantityPieces = balance?.availableQuantityPieces ?? 0;
-        const shortageKg = Math.max(
-          requested.quantityKg - availableQuantityKg,
-          0,
-        );
+        const shortageKg = requested.quantityKg.sub(availableQuantityKg);
         const shortagePieces = Math.max(
           requested.quantityPieces - availableQuantityPieces,
           0,
         );
 
-        return shortageKg > 0 || shortagePieces > 0
+        return shortageKg.gt(0) || shortagePieces > 0
           ? {
               productId: requested.productId,
               locationId,
               unit:
                 requested.unit ??
                 this.resolveQuantityUnit(
-                  requested.quantityKg,
+                  requested.quantityKg.toNumber(),
                   requested.quantityPieces,
                 ),
-              requestedKg: requested.quantityKg,
-              onHandKg: balance?.quantityKg ?? 0,
-              reservedKg: balance?.reservedQuantityKg ?? 0,
-              availableKg: availableQuantityKg,
-              shortageKg,
+              requestedKg: requested.quantityKg.toNumber(),
+              onHandKg: balance?.quantityKg.toNumber() ?? 0,
+              reservedKg: balance?.reservedQuantityKg.toNumber() ?? 0,
+              availableKg: availableQuantityKg.toNumber(),
+              shortageKg: shortageKg.toNumber(),
               requestedPieces: requested.quantityPieces,
               onHandPieces: balance?.quantityPieces ?? 0,
               reservedPieces: balance?.reservedQuantityPieces ?? 0,
@@ -193,7 +210,11 @@ export class InventoryBalanceService {
     for (const requested of requestedByProduct.values()) {
       const balance = balancesByProduct.get(requested.productId);
       if (!balance) {
-        throw this.insufficientStockException(requested, locationId, null);
+        throw this.insufficientStockException(
+          this.toPublicQuantity(requested),
+          locationId,
+          null,
+        );
       }
 
       const updated = await tx.inventoryBalance.updateMany({
@@ -201,7 +222,7 @@ export class InventoryBalanceService {
           productId: requested.productId,
           locationId,
           quantityKg: {
-            gte: balance.reservedQuantityKg + requested.quantityKg,
+            gte: balance.reservedQuantityKg.add(requested.quantityKg),
           },
           quantityPieces: {
             gte: balance.reservedQuantityPieces + requested.quantityPieces,
@@ -216,7 +237,11 @@ export class InventoryBalanceService {
       });
 
       if (updated.count !== 1) {
-        throw this.insufficientStockException(requested, locationId, balance);
+        throw this.insufficientStockException(
+          this.toPublicQuantity(requested),
+          locationId,
+          this.toPublicSnapshot(balance),
+        );
       }
     }
   }
@@ -228,15 +253,16 @@ export class InventoryBalanceService {
     quantities: Omit<InventoryBalanceQuantity, 'productId'>,
   ): Promise<void> {
     this.assertValidQuantities(quantities);
+    const quantityKg = toDecimal(quantities.quantityKg);
     const updated = await tx.inventoryBalance.updateMany({
       where: {
         productId,
         locationId,
-        reservedQuantityKg: { gte: quantities.quantityKg },
+        reservedQuantityKg: { gte: quantityKg },
         reservedQuantityPieces: { gte: quantities.quantityPieces },
       },
       data: {
-        reservedQuantityKg: { decrement: quantities.quantityKg },
+        reservedQuantityKg: { decrement: quantityKg },
         reservedQuantityPieces: { decrement: quantities.quantityPieces },
       },
     });
@@ -273,20 +299,23 @@ export class InventoryBalanceService {
       },
     })) as BalanceRecord[];
     const balancesByProduct = new Map(
-      balances.map((balance) => [balance.productId, this.toSnapshot(balance)]),
+      balances.map((balance) => [
+        balance.productId,
+        this.toDecimalSnapshot(balance),
+      ]),
     );
 
     for (const requested of requestedByProduct.values()) {
       const balance = balancesByProduct.get(requested.productId);
       if (
         !balance ||
-        balance.reservedQuantityKg < requested.quantityKg ||
+        balance.reservedQuantityKg.lt(requested.quantityKg) ||
         balance.reservedQuantityPieces < requested.quantityPieces
       ) {
         throw this.reservationIntegrityException(
           requested.productId,
           locationId,
-          requested,
+          this.toPublicQuantities(requested),
         );
       }
     }
@@ -309,7 +338,7 @@ export class InventoryBalanceService {
         throw this.reservationIntegrityException(
           requested.productId,
           locationId,
-          requested,
+          this.toPublicQuantities(requested),
         );
       }
     }
@@ -322,7 +351,8 @@ export class InventoryBalanceService {
     quantities: Omit<InventoryBalanceQuantity, 'productId'>,
   ): Promise<InventoryBalanceChange> {
     this.assertValidQuantities(quantities);
-    const previous = await this.get(tx, productId, locationId);
+    const quantityKg = toDecimal(quantities.quantityKg);
+    const previous = await this.getDecimalSnapshot(tx, productId, locationId);
     if (!previous) {
       throw this.reservationIntegrityException(
         productId,
@@ -334,15 +364,15 @@ export class InventoryBalanceService {
       where: {
         productId,
         locationId,
-        quantityKg: { gte: quantities.quantityKg },
+        quantityKg: { gte: quantityKg },
         quantityPieces: { gte: quantities.quantityPieces },
-        reservedQuantityKg: { gte: quantities.quantityKg },
+        reservedQuantityKg: { gte: quantityKg },
         reservedQuantityPieces: { gte: quantities.quantityPieces },
       },
       data: {
-        quantityKg: { decrement: quantities.quantityKg },
+        quantityKg: { decrement: quantityKg },
         quantityPieces: { decrement: quantities.quantityPieces },
-        reservedQuantityKg: { decrement: quantities.quantityKg },
+        reservedQuantityKg: { decrement: quantityKg },
         reservedQuantityPieces: { decrement: quantities.quantityPieces },
       },
     });
@@ -355,7 +385,7 @@ export class InventoryBalanceService {
       );
     }
 
-    const current = await this.getRequired(tx, productId, locationId);
+    const current = await this.getDecimalRequired(tx, productId, locationId);
     return this.toChange(previous, current);
   }
 
@@ -366,18 +396,18 @@ export class InventoryBalanceService {
   ): Promise<Map<string, InventoryBalanceChange>> {
     if (requests.length === 0) return new Map();
 
-    const grouped = new Map<string, InventoryBalanceQuantity>();
+    const grouped = new Map<string, DecimalInventoryBalanceQuantity>();
     for (const request of requests) {
       this.assertValidQuantities(request);
       const current = grouped.get(request.productId) ?? {
         productId: request.productId,
         unit: request.unit,
-        quantityKg: 0,
+        quantityKg: new Prisma.Decimal(0),
         quantityPieces: 0,
       };
-      current.quantityKg = new Prisma.Decimal(current.quantityKg)
-        .add(request.quantityKg)
-        .toNumber();
+      current.quantityKg = current.quantityKg.add(
+        toDecimal(request.quantityKg),
+      );
       current.quantityPieces += request.quantityPieces;
       grouped.set(request.productId, current);
     }
@@ -397,22 +427,25 @@ export class InventoryBalanceService {
       },
     })) as BalanceRecord[];
     const snapshots = new Map(
-      balances.map((balance) => [balance.productId, this.toSnapshot(balance)]),
+      balances.map((balance) => [
+        balance.productId,
+        this.toDecimalSnapshot(balance),
+      ]),
     );
 
     for (const requested of grouped.values()) {
       const balance = snapshots.get(requested.productId);
       if (
         !balance ||
-        balance.quantityKg < requested.quantityKg ||
+        balance.quantityKg.lt(requested.quantityKg) ||
         balance.quantityPieces < requested.quantityPieces ||
-        balance.reservedQuantityKg < requested.quantityKg ||
+        balance.reservedQuantityKg.lt(requested.quantityKg) ||
         balance.reservedQuantityPieces < requested.quantityPieces
       ) {
         throw this.reservationIntegrityException(
           requested.productId,
           locationId,
-          requested,
+          this.toPublicQuantities(requested),
         );
       }
     }
@@ -429,23 +462,19 @@ export class InventoryBalanceService {
         );
       }
 
-      const nextQuantityKg = new Prisma.Decimal(previous.quantityKg)
-        .sub(request.quantityKg)
-        .toNumber();
+      const requestQuantityKg = toDecimal(request.quantityKg);
+      const nextQuantityKg = previous.quantityKg.sub(requestQuantityKg);
       const nextQuantityPieces =
         previous.quantityPieces - request.quantityPieces;
-      const nextReservedQuantityKg = new Prisma.Decimal(
-        previous.reservedQuantityKg,
-      )
-        .sub(request.quantityKg)
-        .toNumber();
+      const nextReservedQuantityKg =
+        previous.reservedQuantityKg.sub(requestQuantityKg);
       const nextReservedQuantityPieces =
         previous.reservedQuantityPieces - request.quantityPieces;
 
       changes.set(request.key, {
-        previousQuantityKg: previous.quantityKg,
+        previousQuantityKg: previous.quantityKg.toNumber(),
         previousQuantityPieces: previous.quantityPieces,
-        newQuantityKg: nextQuantityKg,
+        newQuantityKg: nextQuantityKg.toNumber(),
         newQuantityPieces: nextQuantityPieces,
       });
       working.set(request.productId, {
@@ -454,7 +483,7 @@ export class InventoryBalanceService {
         quantityPieces: nextQuantityPieces,
         reservedQuantityKg: nextReservedQuantityKg,
         reservedQuantityPieces: nextReservedQuantityPieces,
-        availableQuantityKg: nextQuantityKg - nextReservedQuantityKg,
+        availableQuantityKg: nextQuantityKg.sub(nextReservedQuantityKg),
         availableQuantityPieces:
           nextQuantityPieces - nextReservedQuantityPieces,
       });
@@ -482,7 +511,7 @@ export class InventoryBalanceService {
         throw this.reservationIntegrityException(
           requested.productId,
           locationId,
-          requested,
+          this.toPublicQuantities(requested),
         );
       }
     }
@@ -498,7 +527,8 @@ export class InventoryBalanceService {
     errorMessage = 'Inventory operation cannot leave negative available stock',
   ): Promise<InventoryBalanceChange> {
     this.assertValidQuantities(quantities);
-    const previous = await this.get(tx, productId, locationId);
+    const quantityKg = toDecimal(quantities.quantityKg);
+    const previous = await this.getDecimalSnapshot(tx, productId, locationId);
     if (!previous) {
       throw this.insufficientStockException(
         { productId, ...quantities },
@@ -512,7 +542,7 @@ export class InventoryBalanceService {
         productId,
         locationId,
         quantityKg: {
-          gte: previous.reservedQuantityKg + quantities.quantityKg,
+          gte: previous.reservedQuantityKg.add(quantityKg),
         },
         quantityPieces: {
           gte: previous.reservedQuantityPieces + quantities.quantityPieces,
@@ -521,20 +551,20 @@ export class InventoryBalanceService {
         reservedQuantityPieces: previous.reservedQuantityPieces,
       },
       data: {
-        quantityKg: { decrement: quantities.quantityKg },
+        quantityKg: { decrement: quantityKg },
         quantityPieces: { decrement: quantities.quantityPieces },
       },
     });
 
     if (updated.count !== 1) {
       const isInsufficient =
-        quantities.quantityKg > previous.availableQuantityKg ||
+        quantityKg.gt(previous.availableQuantityKg) ||
         quantities.quantityPieces > previous.availableQuantityPieces;
       if (isInsufficient) {
         throw this.insufficientStockException(
           { productId, ...quantities },
           locationId,
-          previous,
+          this.toPublicSnapshot(previous),
           errorMessage,
         );
       }
@@ -547,7 +577,7 @@ export class InventoryBalanceService {
       });
     }
 
-    const current = await this.getRequired(tx, productId, locationId);
+    const current = await this.getDecimalRequired(tx, productId, locationId);
     return this.toChange(previous, current);
   }
 
@@ -558,56 +588,71 @@ export class InventoryBalanceService {
     quantities: Omit<InventoryBalanceQuantity, 'productId'>,
   ): Promise<InventoryBalanceChange> {
     this.assertValidQuantities(quantities);
-    const previous = await this.get(tx, productId, locationId);
+    const quantityKg = toDecimal(quantities.quantityKg);
+    const previous = await this.getDecimalSnapshot(tx, productId, locationId);
     await tx.inventoryBalance.upsert({
       where: { productId_locationId: { productId, locationId } },
       create: {
         productId,
         locationId,
-        quantityKg: quantities.quantityKg,
+        quantityKg,
         quantityPieces: quantities.quantityPieces,
       },
       update: {
-        quantityKg: { increment: quantities.quantityKg },
+        quantityKg: { increment: quantityKg },
         quantityPieces: { increment: quantities.quantityPieces },
       },
     });
-    const current = await this.getRequired(tx, productId, locationId);
+    const current = await this.getDecimalRequired(tx, productId, locationId);
 
     return {
-      previousQuantityKg: previous?.quantityKg ?? 0,
+      previousQuantityKg: previous?.quantityKg.toNumber() ?? 0,
       previousQuantityPieces: previous?.quantityPieces ?? 0,
-      newQuantityKg: current.quantityKg,
+      newQuantityKg: current.quantityKg.toNumber(),
       newQuantityPieces: current.quantityPieces,
     };
   }
 
   private groupQuantities(
     quantities: InventoryBalanceQuantity[],
-  ): Map<string, InventoryBalanceQuantity> {
-    const grouped = new Map<string, InventoryBalanceQuantity>();
+  ): Map<string, DecimalInventoryBalanceQuantity> {
+    const grouped = new Map<string, DecimalInventoryBalanceQuantity>();
     for (const quantity of quantities) {
       this.assertValidQuantities(quantity);
       const current = grouped.get(quantity.productId) ?? {
         productId: quantity.productId,
         unit: quantity.unit,
-        quantityKg: 0,
+        quantityKg: new Prisma.Decimal(0),
         quantityPieces: 0,
       };
       current.unit = this.mergeUnits(current.unit, quantity.unit);
-      current.quantityKg += quantity.quantityKg;
+      current.quantityKg = current.quantityKg.add(
+        toDecimal(quantity.quantityKg),
+      );
       current.quantityPieces += quantity.quantityPieces;
       grouped.set(quantity.productId, current);
     }
     return grouped;
   }
 
-  private async getRequired(
+  private async getDecimalSnapshot(
     tx: Prisma.TransactionClient,
     productId: string,
     locationId: string,
-  ): Promise<InventoryBalanceSnapshot> {
-    const balance = await this.get(tx, productId, locationId);
+  ): Promise<DecimalBalanceSnapshot | null> {
+    const balance = (await tx.inventoryBalance.findUnique({
+      where: { productId_locationId: { productId, locationId } },
+    })) as BalanceRecord | null;
+
+    return balance ? this.toDecimalSnapshot(balance) : null;
+  }
+
+  private async getDecimalRequired(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    locationId: string,
+  ): Promise<DecimalBalanceSnapshot> {
+    const balance = await this.getDecimalSnapshot(tx, productId, locationId);
     if (!balance) {
       throw new BadRequestException('Inventory balance could not be updated');
     }
@@ -615,23 +660,91 @@ export class InventoryBalanceService {
   }
 
   private toSnapshot(balance: BalanceRecord): InventoryBalanceSnapshot {
-    const availability = toInventoryBalanceAvailability(balance);
+    return this.toPublicSnapshot(this.toDecimalSnapshot(balance));
+  }
+
+  private toDecimalSnapshot(balance: BalanceRecord): DecimalBalanceSnapshot {
+    const quantityKg = toDecimal(balance.quantityKg);
+    const reservedQuantityKg = toDecimal(balance.reservedQuantityKg);
+    const quantityPieces = balance.quantityPieces ?? 0;
+    const reservedQuantityPieces = balance.reservedQuantityPieces ?? 0;
+    const availableQuantityKg = quantityKg.sub(reservedQuantityKg);
+
+    if (
+      !quantityKg.isFinite() ||
+      !reservedQuantityKg.isFinite() ||
+      quantityKg.isNegative() ||
+      reservedQuantityKg.isNegative() ||
+      availableQuantityKg.isNegative() ||
+      !Number.isFinite(quantityPieces) ||
+      quantityPieces < 0 ||
+      !Number.isFinite(reservedQuantityPieces) ||
+      reservedQuantityPieces < 0 ||
+      quantityPieces - reservedQuantityPieces < 0
+    ) {
+      throw new ConflictException({
+        code: 'INVENTORY_RESERVATION_INTEGRITY_ERROR',
+        message: 'Inventory balance reservation integrity is invalid',
+        productId: balance.productId,
+        locationId: balance.locationId,
+      });
+    }
 
     return {
       productId: balance.productId,
       locationId: balance.locationId,
-      ...availability,
+      quantityKg,
+      quantityPieces,
+      reservedQuantityKg,
+      reservedQuantityPieces,
+      availableQuantityKg,
+      availableQuantityPieces: quantityPieces - reservedQuantityPieces,
+    };
+  }
+
+  private toPublicSnapshot(
+    balance: DecimalBalanceSnapshot,
+  ): InventoryBalanceSnapshot {
+    return {
+      productId: balance.productId,
+      locationId: balance.locationId,
+      quantityKg: balance.quantityKg.toNumber(),
+      quantityPieces: balance.quantityPieces,
+      reservedQuantityKg: balance.reservedQuantityKg.toNumber(),
+      reservedQuantityPieces: balance.reservedQuantityPieces,
+      availableQuantityKg: balance.availableQuantityKg.toNumber(),
+      availableQuantityPieces: balance.availableQuantityPieces,
+    };
+  }
+
+  private toPublicQuantity(
+    quantity: DecimalInventoryBalanceQuantity,
+  ): InventoryBalanceQuantity {
+    return {
+      ...quantity,
+      quantityKg: quantity.quantityKg.toNumber(),
+    };
+  }
+
+  private toPublicQuantities(
+    quantity:
+      | Omit<DecimalInventoryBalanceQuantity, 'productId'>
+      | DecimalInventoryBalanceQuantity,
+  ): Omit<InventoryBalanceQuantity, 'productId'> | InventoryBalanceQuantity {
+    return {
+      ...quantity,
+      quantityKg: quantity.quantityKg.toNumber(),
     };
   }
 
   private toChange(
-    previous: InventoryBalanceSnapshot,
-    current: InventoryBalanceSnapshot,
+    previous: DecimalBalanceSnapshot,
+    current: DecimalBalanceSnapshot,
   ): InventoryBalanceChange {
     return {
-      previousQuantityKg: previous.quantityKg,
+      previousQuantityKg: previous.quantityKg.toNumber(),
       previousQuantityPieces: previous.quantityPieces,
-      newQuantityKg: current.quantityKg,
+      newQuantityKg: current.quantityKg.toNumber(),
       newQuantityPieces: current.quantityPieces,
     };
   }
@@ -705,14 +818,6 @@ export class InventoryBalanceService {
     });
   }
 
-  private toNumber(value: DecimalLike): number {
-    if (value === null || value === undefined) return 0;
-    if (typeof value === 'object' && 'toNumber' in value) {
-      return value.toNumber();
-    }
-    return Number(value);
-  }
-
   private mergeUnits(
     left: ProductUnit | undefined,
     right: ProductUnit | undefined,
@@ -723,20 +828,19 @@ export class InventoryBalanceService {
   }
 
   private resolveQuantityUnit(
-    quantityKg: number,
+    quantityKg: number | Prisma.Decimal,
     quantityPieces: number,
   ): ProductUnit {
-    if (quantityKg > 0 && quantityPieces > 0) {
+    if (toDecimal(quantityKg).gt(0) && quantityPieces > 0) {
       return ProductUnit.KG_AND_PIECE;
     }
     return quantityPieces > 0 ? ProductUnit.PIECE : ProductUnit.KG;
   }
 }
 
-function toNumber(value: DecimalLike): number {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'object' && 'toNumber' in value) {
-    return value.toNumber();
-  }
-  return Number(value);
+function toDecimal(value: DecimalLike): Prisma.Decimal {
+  if (value === null || value === undefined) return new Prisma.Decimal(0);
+  return new Prisma.Decimal(
+    typeof value === 'object' ? value.toString() : value,
+  );
 }

@@ -77,13 +77,13 @@ describe('InventoryBalanceService', () => {
       where: {
         productId: 'product-1',
         locationId: 'cedis-1',
-        quantityKg: { gte: 7 },
+        quantityKg: { gte: decimal(7) },
         quantityPieces: { gte: 3 },
-        reservedQuantityKg: 2,
+        reservedQuantityKg: decimal(2),
         reservedQuantityPieces: 1,
       },
       data: {
-        reservedQuantityKg: { increment: 5 },
+        reservedQuantityKg: { increment: decimal(5) },
         reservedQuantityPieces: { increment: 2 },
       },
     });
@@ -170,16 +170,161 @@ describe('InventoryBalanceService', () => {
       where: {
         productId: 'product-1',
         locationId: 'cedis-1',
-        quantityKg: { gte: 3 },
+        quantityKg: { gte: decimal(3) },
         quantityPieces: { gte: 2 },
-        reservedQuantityKg: { gte: 3 },
+        reservedQuantityKg: { gte: decimal(3) },
         reservedQuantityPieces: { gte: 2 },
       },
       data: {
-        quantityKg: { decrement: 3 },
+        quantityKg: { decrement: decimal(3) },
         quantityPieces: { decrement: 2 },
-        reservedQuantityKg: { decrement: 3 },
+        reservedQuantityKg: { decrement: decimal(3) },
         reservedQuantityPieces: { decrement: 2 },
+      },
+    });
+  });
+
+  it('consumes a 9.999 kg reservation with Decimal database operands', async () => {
+    const tx = createTransaction();
+    const service = new InventoryBalanceService();
+    tx.inventoryBalance.findUnique
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: decimal('100.000'),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal('9.999'),
+        reservedQuantityPieces: 0,
+      })
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: decimal('90.001'),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal('0.000'),
+        reservedQuantityPieces: 0,
+      });
+    tx.inventoryBalance.updateMany.mockImplementation((args) => {
+      const decimalOperands = [
+        args.where.quantityKg.gte,
+        args.where.reservedQuantityKg.gte,
+        args.data.quantityKg.decrement,
+        args.data.reservedQuantityKg.decrement,
+      ];
+      return Promise.resolve({
+        count: decimalOperands.every(
+          (operand) => operand instanceof Prisma.Decimal,
+        )
+          ? 1
+          : 0,
+      });
+    });
+
+    await expect(
+      service.consumeReservation(tx as never, 'product-1', 'cedis-1', {
+        quantityKg: 9.999,
+        quantityPieces: 0,
+      }),
+    ).resolves.toEqual({
+      previousQuantityKg: 100,
+      previousQuantityPieces: 0,
+      newQuantityKg: 90.001,
+      newQuantityPieces: 0,
+    });
+
+    const updateArgs = tx.inventoryBalance.updateMany.mock.calls[0][0];
+    expect(updateArgs.where.quantityKg.gte.toString()).toBe('9.999');
+    expect(updateArgs.where.reservedQuantityKg.gte.toString()).toBe('9.999');
+    expect(updateArgs.data.quantityKg.decrement.toString()).toBe('9.999');
+    expect(updateArgs.data.reservedQuantityKg.decrement.toString()).toBe(
+      '9.999',
+    );
+  });
+
+  it('groups decimal reservation quantities without binary floating-point addition', async () => {
+    const tx = createTransaction();
+    const service = new InventoryBalanceService();
+    tx.inventoryBalance.findMany.mockResolvedValue([
+      {
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: decimal('1.000'),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal('0.300'),
+        reservedQuantityPieces: 0,
+      },
+    ]);
+    tx.inventoryBalance.updateMany.mockImplementation((args) => {
+      const decimalOperands = [
+        args.where.quantityKg.gte,
+        args.where.reservedQuantityKg,
+        args.data.reservedQuantityKg.increment,
+      ];
+      return Promise.resolve({
+        count: decimalOperands.every(
+          (operand) => operand instanceof Prisma.Decimal,
+        )
+          ? 1
+          : 0,
+      });
+    });
+
+    await expect(
+      service.reserve(tx as never, 'cedis-1', [
+        { productId: 'product-1', quantityKg: 0.1, quantityPieces: 0 },
+        { productId: 'product-1', quantityKg: 0.2, quantityPieces: 0 },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(tx.inventoryBalance.updateMany).toHaveBeenCalledWith({
+      where: {
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: { gte: decimal('0.600') },
+        quantityPieces: { gte: 0 },
+        reservedQuantityKg: decimal('0.300'),
+        reservedQuantityPieces: 0,
+      },
+      data: {
+        reservedQuantityKg: { increment: decimal('0.300') },
+        reservedQuantityPieces: { increment: 0 },
+      },
+    });
+  });
+
+  it('writes a 10.001 kg increase as a Decimal', async () => {
+    const tx = createTransaction();
+    const service = new InventoryBalanceService();
+    tx.inventoryBalance.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: decimal('10.001'),
+        quantityPieces: 0,
+        reservedQuantityKg: decimal('0.000'),
+        reservedQuantityPieces: 0,
+      });
+    tx.inventoryBalance.upsert.mockResolvedValue({});
+
+    await service.increase(tx as never, 'product-1', 'cedis-1', {
+      quantityKg: 10.001,
+      quantityPieces: 0,
+    });
+
+    expect(tx.inventoryBalance.upsert).toHaveBeenCalledWith({
+      where: {
+        productId_locationId: { productId: 'product-1', locationId: 'cedis-1' },
+      },
+      create: {
+        productId: 'product-1',
+        locationId: 'cedis-1',
+        quantityKg: decimal('10.001'),
+        quantityPieces: 0,
+      },
+      update: {
+        quantityKg: { increment: decimal('10.001') },
+        quantityPieces: { increment: 0 },
       },
     });
   });
@@ -222,13 +367,13 @@ describe('InventoryBalanceService', () => {
       where: {
         productId: 'product-1',
         locationId: 'route-stock-1',
-        quantityKg: { gte: 10 },
+        quantityKg: { gte: decimal(10) },
         quantityPieces: { gte: 8 },
-        reservedQuantityKg: 3,
+        reservedQuantityKg: decimal(3),
         reservedQuantityPieces: 2,
       },
       data: {
-        quantityKg: { decrement: 7 },
+        quantityKg: { decrement: decimal(7) },
         quantityPieces: { decrement: 6 },
       },
     });
@@ -361,11 +506,11 @@ describe('InventoryBalanceService', () => {
       where: {
         productId: 'product-1',
         locationId: 'cedis-1',
-        reservedQuantityKg: { gte: 3 },
+        reservedQuantityKg: { gte: decimal(3) },
         reservedQuantityPieces: { gte: 2 },
       },
       data: {
-        reservedQuantityKg: { decrement: 3 },
+        reservedQuantityKg: { decrement: decimal(3) },
         reservedQuantityPieces: { decrement: 2 },
       },
     });

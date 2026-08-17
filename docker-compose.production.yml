@@ -1,8 +1,31 @@
+x-production-logging: &production-logging
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+
+x-security-stateless: &security-stateless
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-security-stateful: &security-stateful
+  security_opt:
+    - no-new-privileges:true
+
 services:
   postgres:
-    image: postgis/postgis:16-3.5-alpine
+    image: postgis/postgis:16-3.5-alpine@sha256:becb8d49a20a2c1fcce1b154e853e1ea1a19cd5de99310852888b998694ec2ea
+    <<: *security-stateful
     platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
     restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${POSTGRES_MEM_LIMIT:-3.5g}"
+    cpus: "${POSTGRES_CPUS:-1.25}"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pollo_distribucion}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -18,14 +41,43 @@ services:
     networks:
       - app_network
 
+  object-storage:
+    image: chrislusf/seaweedfs:4.29@sha256:d47c7ee99fcb951351d7194915f4e3a5ea604a8e8871183d713907dec4fb9bf5
+    <<: *security-stateful
+    command: ["mini", "-dir=/data"]
+    restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${OBJECT_STORAGE_MEM_LIMIT:-768m}"
+    cpus: "${OBJECT_STORAGE_CPUS:-0.5}"
+    init: true
+    environment:
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?OBJECT_STORAGE_ACCESS_KEY_ID is required}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?OBJECT_STORAGE_SECRET_ACCESS_KEY is required}
+      S3_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
+    volumes:
+      - object_storage_data:/data
+    ports:
+      - "127.0.0.1:8333:8333"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:8333/healthz >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app_network
+
   migrate:
     profiles: ["migration"]
-    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required for production}
+    <<: *security-stateless
+    user: "node:node"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}?sslmode=disable
     command: npm run migrate:deploy
     restart: "no"
     depends_on:
@@ -36,12 +88,11 @@ services:
 
   bootstrap:
     profiles: ["migration"]
-    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required for production}
+    <<: *security-stateless
+    user: "node:node"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}?sslmode=disable
       NODE_ENV: production
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     command: npm run bootstrap:production
@@ -53,11 +104,13 @@ services:
       - app_network
 
   backend:
-    image: ${BACKEND_IMAGE:-pollos-distribuidor/backend:local}
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required for production}
+    <<: *security-stateless
+    user: "node:node"
     restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${BACKEND_MEM_LIMIT:-2g}"
+    cpus: "${BACKEND_CPUS:-1.25}"
     init: true
     stop_grace_period: 75s
     environment:
@@ -69,7 +122,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
       HTTP_BODY_LIMIT: ${HTTP_BODY_LIMIT:-1mb}
       DATABASE_SSL: "false"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}?sslmode=disable
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
@@ -77,7 +130,17 @@ services:
       MAP_DATA_VERSION: ${MAP_DATA_VERSION:?MAP_DATA_VERSION is required}
       MAP_DATA_PREPARED_AT: ${MAP_DATA_PREPARED_AT:-}
       MAP_TILES_URL: http://tileserver:8080
+      NODE_OPTIONS: "--max-old-space-size=${BACKEND_NODE_MAX_OLD_SPACE_MB:-1536}"
       NODE_ENV: production
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_ENDPOINT: http://object-storage:8333
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:?OBJECT_STORAGE_PUBLIC_ENDPOINT is required}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?OBJECT_STORAGE_ACCESS_KEY_ID is required}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?OBJECT_STORAGE_SECRET_ACCESS_KEY is required}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
+      OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS: ${OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS:-300}
+      HEALTH_DEPENDENCY_TIMEOUT_MS: ${HEALTH_DEPENDENCY_TIMEOUT_MS:-5000}
       OSRM_URL: http://osrm:5000
       PHOTON_URL: http://photon:2322
       PORT: ${PORT:-4000}
@@ -98,14 +161,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      photon:
-        condition: service_healthy
-      osrm:
-        condition: service_healthy
-      vroom:
-        condition: service_healthy
-      tileserver:
-        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -123,16 +178,17 @@ services:
       - app_network
 
   photon:
-    build:
-      context: .
-      dockerfile: docker/maps/photon/Dockerfile
-      args:
-        PHOTON_VERSION: ${PHOTON_VERSION:-1.2.1}
-    image: pollos-distribuidor/photon:${PHOTON_VERSION:-1.2.1}
+    image: ${PHOTON_IMAGE:?PHOTON_IMAGE is required for production}
+    <<: *security-stateless
     platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
     restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${PHOTON_MEM_LIMIT:-6g}"
+    cpus: "${PHOTON_CPUS:-1.5}"
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms${PHOTON_JAVA_XMS:-1g} -Xmx${PHOTON_JAVA_XMX:-4g}"
     volumes:
-      - ${MAP_DATA_DIR:-./.map-data}/photon:/data
+      - "${MAP_DATA_DIR:?MAP_DATA_DIR is required for production}/photon:/data"
     healthcheck:
       test:
         ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:2322/status"]
@@ -144,17 +200,17 @@ services:
       - app_network
 
   osrm:
-    build:
-      context: .
-      dockerfile: docker/maps/osrm/Dockerfile
-      args:
-        OSRM_VERSION: ${OSRM_VERSION:-v5.27.1}
-    image: pollos-distribuidor/osrm:${OSRM_VERSION:-v5.27.1}
+    image: ${OSRM_IMAGE:?OSRM_IMAGE is required for production}
+    <<: *security-stateless
     platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    user: "65534:65534"
     command: ["osrm-routed", "--algorithm", "mld", "/data/mexico-latest.osrm"]
     restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${OSRM_MEM_LIMIT:-5g}"
+    cpus: "${OSRM_CPUS:-1.5}"
     volumes:
-      - ${MAP_DATA_DIR:-./.map-data}/osrm:/data:ro
+      - "${MAP_DATA_DIR:?MAP_DATA_DIR is required for production}/osrm:/data:ro"
     healthcheck:
       test:
         - CMD
@@ -170,13 +226,25 @@ services:
       - app_network
 
   vroom:
-    image: ghcr.io/vroom-project/vroom-docker:${VROOM_VERSION:-v1.15.0}
+    image: ghcr.io/vroom-project/vroom-docker:v1.15.0@sha256:247d5683d6745c755d718a156d16b16aac80baccc276a003a68b986c13883b08
+    <<: *security-stateless
     platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
+    user: "node:node"
+    working_dir: /vroom-express
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /tmp/vroom && exec node /vroom-express/src/index.js
     environment:
       VROOM_ROUTER: osrm
+      VROOM_LOG: /tmp/vroom
     restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${VROOM_MEM_LIMIT:-1g}"
+    cpus: "${VROOM_CPUS:-0.5}"
     volumes:
       - ./docker/maps/vroom/config.yml:/conf/config.yml:ro
+      - ./docker/maps/vroom/config.yml:/vroom-express/config.yml:ro
     depends_on:
       osrm:
         condition: service_healthy
@@ -191,24 +259,39 @@ services:
       - app_network
 
   tileserver:
-    build:
-      context: .
-      dockerfile: docker/maps/tileserver/Dockerfile
-    image: maptiler/tileserver-gl:v5.6.0
+    image: ${TILESERVER_IMAGE:?TILESERVER_IMAGE is required for production}
+    <<: *security-stateless
     platform: ${MAP_DOCKER_PLATFORM:-linux/amd64}
-    command: ["--config", "/data/config.json", "--bind", "0.0.0.0", "--port", "8080", "--public_url", "/maps/", "--silent"]
+    user: "node:node"
+    command:
+      [
+        "--config",
+        "/data/config.json",
+        "--bind",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--public_url",
+        "/maps/",
+        "--silent",
+      ]
     restart: unless-stopped
-    read_only: true
-    tmpfs: ["/tmp"]
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    logging: *production-logging
+    mem_limit: "${TILESERVER_MEM_LIMIT:-1.5g}"
+    cpus: "${TILESERVER_CPUS:-0.5}"
     volumes:
-      - ${MAP_DATA_DIR:-./.map-data}/rendering:/data/rendering:ro
-      - ${MAP_DATA_DIR:-./.map-data}/rendering/fonts:/data/fonts:ro
+      - "${MAP_DATA_DIR:?MAP_DATA_DIR is required for production}/rendering:/data/rendering:ro"
+      - "${MAP_DATA_DIR:?MAP_DATA_DIR is required for production}/rendering/fonts:/data/fonts:ro"
       - ./docker/maps/tileserver/config.json:/data/config.json:ro
       - ./docker/maps/styles:/data/styles:ro
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -217,18 +300,28 @@ services:
       - app_network
 
   frontend:
-    build:
-      context: .
-      dockerfile: docker/frontend/Dockerfile
-      args:
-        VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:?VITE_MAP_STYLE_URL is required}
-        REQUIRE_PUBLIC_MAP_STYLE: "true"
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required for production}
+    <<: *security-stateless
     restart: unless-stopped
+    logging: *production-logging
+    mem_limit: "${FRONTEND_MEM_LIMIT:-512m}"
+    cpus: "${FRONTEND_CPUS:-0.5}"
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx:uid=101,gid=101,mode=0755
     depends_on:
       backend:
         condition: service_healthy
-      tileserver:
-        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --tries=1 --timeout=3 http://127.0.0.1:3000/ || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     networks:
@@ -236,6 +329,7 @@ services:
 
 volumes:
   postgres_data:
+  object_storage_data:
 
 networks:
   app_network:

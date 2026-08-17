@@ -28,6 +28,15 @@ Spaces u otro proveedor S3-compatible. Las credenciales pueden provenir de
 `OBJECT_STORAGE_ACCESS_KEY_ID` y `OBJECT_STORAGE_SECRET_ACCESS_KEY`, o de la
 cadena de credenciales/IAM del runtime. El bucket debe permanecer privado.
 
+En Arquitectura A, el backend usa el endpoint privado Docker
+`http://object-storage:8333`. `OBJECT_STORAGE_PUBLIC_ENDPOINT` debe ser la URL
+HTTPS completa que firma el backend, por ejemplo
+`https://objects.example.com`; `OBJECT_STORAGE_PUBLIC_ORIGIN` debe ser el mismo
+origen sin path y se inyecta únicamente en la CSP del frontend. El hostname
+público termina en Caddy y se reenvía a `127.0.0.1:8333` sin reescribir path ni
+query. Consulta `docs/runbooks/caddy-deployment.md` para DNS, TLS, firewall y
+la verificación de URLs firmadas.
+
 ## Despliegue
 
 1. Aplicar la migración Prisma `20260815110000_move_delivery_evidence_to_object_storage`.

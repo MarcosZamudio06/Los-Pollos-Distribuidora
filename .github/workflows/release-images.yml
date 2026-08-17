@@ -1,0 +1,145 @@
+name: Release Images
+
+on:
+  workflow_run:
+    workflows: [Quality Gate]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: release-images-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ghcr.io/marcoszamudio06/los-pollos-distribuidora
+  RELEASE_TAG: sha-${{ github.event.workflow_run.head_sha }}
+  RELEASE_ALIAS: main-${{ github.event.workflow_run.run_number }}
+
+jobs:
+  publish:
+    name: Build and publish immutable release images
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the validated commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR with the workflow token
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish backend
+        id: backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/backend:${{ env.RELEASE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/backend:${{ env.RELEASE_ALIAS }}
+
+      - name: Build and publish frontend
+        id: frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.com
+            REQUIRE_PUBLIC_MAP_STYLE=true
+            VITE_MAP_STYLE_URL=/maps/styles/operations/style.json
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/frontend:${{ env.RELEASE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/frontend:${{ env.RELEASE_ALIAS }}
+
+      - name: Build and publish Photon wrapper
+        id: photon
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/maps/photon/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: PHOTON_VERSION=1.2.1
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/photon:${{ env.RELEASE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/photon:${{ env.RELEASE_ALIAS }}
+
+      - name: Build and publish OSRM wrapper
+        id: osrm
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/maps/osrm/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/osrm:${{ env.RELEASE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/osrm:${{ env.RELEASE_ALIAS }}
+
+      - name: Build and publish TileServer wrapper
+        id: tileserver
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/maps/tileserver/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/tileserver:${{ env.RELEASE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/tileserver:${{ env.RELEASE_ALIAS }}
+
+      - name: Record image digests
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+          PHOTON_DIGEST: ${{ steps.photon.outputs.digest }}
+          OSRM_DIGEST: ${{ steps.osrm.outputs.digest }}
+          TILESERVER_DIGEST: ${{ steps.tileserver.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cat > release-digests.json <<EOF
+          {
+            "commit": "${COMMIT_SHA}",
+            "tag": "${RELEASE_TAG}",
+            "images": {
+              "backend": "${IMAGE_NAMESPACE}/backend@${BACKEND_DIGEST}",
+              "frontend": "${IMAGE_NAMESPACE}/frontend@${FRONTEND_DIGEST}",
+              "photon": "${IMAGE_NAMESPACE}/photon@${PHOTON_DIGEST}",
+              "osrm": "${IMAGE_NAMESPACE}/osrm@${OSRM_DIGEST}",
+              "tileserver": "${IMAGE_NAMESPACE}/tileserver@${TILESERVER_DIGEST}"
+            }
+          }
+          EOF
+          cat release-digests.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the release digest manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-digests-${{ github.event.workflow_run.head_sha }}
+          path: release-digests.json
+          if-no-files-found: error
+          retention-days: 90

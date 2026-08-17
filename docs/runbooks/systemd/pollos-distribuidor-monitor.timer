@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Pollos Distribuidor health monitor every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=pollos-distribuidor-monitor.service
+
+[Install]
+WantedBy=timers.target
+

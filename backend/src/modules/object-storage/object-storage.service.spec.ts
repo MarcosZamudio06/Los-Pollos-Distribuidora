@@ -7,6 +7,7 @@ function createConfig(overrides: Record<string, unknown> = {}) {
     OBJECT_STORAGE_BUCKET: 'delivery-evidence',
     OBJECT_STORAGE_REGION: 'us-east-1',
     OBJECT_STORAGE_ENDPOINT: 'https://objects.example.com',
+    OBJECT_STORAGE_PUBLIC_ENDPOINT: 'https://public-objects.example.com',
     OBJECT_STORAGE_ACCESS_KEY_ID: 'access-key',
     OBJECT_STORAGE_SECRET_ACCESS_KEY: 'secret-key',
     OBJECT_STORAGE_FORCE_PATH_STYLE: true,
@@ -69,6 +70,6 @@ describe('ObjectStorageService', () => {
 
     await expect(
       service.getDownloadUrl('evidence/order/photo.jpg'),
-    ).resolves.toContain('objects.example.com');
+    ).resolves.toContain('public-objects.example.com');
   });
 });

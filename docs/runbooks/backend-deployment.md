@@ -193,8 +193,14 @@ of truth: the frontend keeps its last REST snapshot and performs one
 
 ## Release sequence
 
-1. Build and publish the backend image once. Set `BACKEND_IMAGE` to its
-   immutable digest for both `migrate` and `backend`.
+The complete image and environment contract is in
+[`production-release.md`](./production-release.md). Run the separate Release
+Images workflow after CI Gate and copy its digest artifact into the production
+environment before following these database steps.
+
+1. Set `BACKEND_IMAGE` to the release's immutable digest. Compose uses that
+   exact reference for `migrate`, `bootstrap`, and `backend`; it never builds a
+   production application image on the VPS.
 2. Apply migrations as a separate deployment job against local PostGIS:
 
 ```bash
@@ -204,8 +210,9 @@ docker compose -f docker-compose.production.yml --profile migration run --rm mig
 3. Run the bootstrap job from the quick path after a successful migration. Stop
    the release if either one-shot job exits unsuccessfully.
 4. Deploy the backend service and wait for `GET /api/health/ready` to return
-   HTTP 200. Compose already waits for PostGIS, Photon, OSRM, VROOM, and
-   TileServer GL healthchecks before creating the backend.
+   HTTP 200. Compose gates backend startup only on PostGIS; GIS and Object
+   Storage are observed through `/api/health/dependencies` so a map outage does
+   not take core ERP traffic offline.
 5. Deploy the frontend after the backend rollout is ready. Only the frontend
    binds a host port, and that port is fixed to `127.0.0.1` for Caddy.
 
@@ -214,7 +221,11 @@ docker compose -f docker-compose.production.yml --profile migration run --rm mig
 - Liveness: `GET /api/health/live` proves only that the process responds.
 - Startup: `GET /api/health/startup` proves NestJS bootstrap completed.
 - Readiness: `GET /api/health/ready` proves the instance is bootstrapped,
-  connected to PostgreSQL, and not draining.
+  connected to PostgreSQL, and not draining. It intentionally does not require
+  Photon, OSRM, VROOM, TileServer GL, or Object Storage.
+- Dependency health: `GET /api/health/dependencies` reports bounded probes for
+  PostgreSQL, Photon, OSRM, VROOM, TileServer GL, and Object Storage without
+  returning internal URLs, credentials, buckets, or stack traces.
 
 Docker Compose maps its single healthcheck to readiness. An orchestrator with
 separate probes must map startup, liveness, and readiness to their matching
@@ -243,3 +254,20 @@ Use expand/contract: expand schema first, deploy dual-compatible code, run
 idempotent backfills outside startup, verify consumers, then contract in a
 later release. Do not combine destructive changes with the first release that
 uses a new schema shape.
+
+## PostgreSQL/PostGIS disaster recovery
+
+PostgreSQL is private to Docker and must be protected outside the VPS. The
+host systemd timer runs the custom-format dump and B2 upload flow documented in
+[`postgres-backup-b2.md`](./postgres-backup-b2.md). Run a restore drill before
+production cutover and after credential or schema changes; never use the drill
+target as a production restore target.
+
+## Docker log rotation and restart policy
+
+Production long-lived services use bounded `json-file` logs and
+`restart: unless-stopped`; the migration and bootstrap jobs remain
+`restart: "no"` one-shot commands. Configure `DOCKER_LOG_MAX_SIZE` and
+`DOCKER_LOG_MAX_FILE` in the runtime environment and follow the host daemon,
+frontend healthcheck, and recovery procedure in
+[`docker-operations.md`](./docker-operations.md).

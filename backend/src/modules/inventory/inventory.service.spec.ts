@@ -147,11 +147,11 @@ describe('InventoryService', () => {
       create: {
         productId: 'product-1',
         locationId: 'location-1',
-        quantityKg: 2.5,
+        quantityKg: decimal(2.5),
         quantityPieces: 0,
       },
       update: {
-        quantityKg: { increment: 2.5 },
+        quantityKg: { increment: decimal(2.5) },
         quantityPieces: { increment: 0 },
       },
     });
@@ -570,13 +570,13 @@ describe('InventoryService', () => {
       where: {
         productId: 'product-1',
         locationId: 'location-1',
-        quantityKg: { gte: 3 },
+        quantityKg: { gte: decimal(3) },
         quantityPieces: { gte: 0 },
-        reservedQuantityKg: 1,
+        reservedQuantityKg: decimal(1),
         reservedQuantityPieces: 0,
       },
       data: {
-        quantityKg: { decrement: 2 },
+        quantityKg: { decrement: decimal(2) },
         quantityPieces: { decrement: 0 },
       },
     });
@@ -638,13 +638,13 @@ describe('InventoryService', () => {
       where: {
         productId: 'product-1',
         locationId: 'location-1',
-        quantityKg: { gte: 2 },
+        quantityKg: { gte: decimal(2) },
         quantityPieces: { gte: 0 },
-        reservedQuantityKg: 0,
+        reservedQuantityKg: decimal(0),
         reservedQuantityPieces: 0,
       },
       data: {
-        quantityKg: { decrement: 2 },
+        quantityKg: { decrement: decimal(2) },
         quantityPieces: { decrement: 0 },
       },
     });
@@ -722,11 +722,11 @@ describe('InventoryService', () => {
       create: {
         productId: 'product-1',
         locationId: 'location-1',
-        quantityKg: 2.5,
+        quantityKg: decimal(2.5),
         quantityPieces: 0,
       },
       update: {
-        quantityKg: { increment: 2.5 },
+        quantityKg: { increment: decimal(2.5) },
         quantityPieces: { increment: 0 },
       },
     });
@@ -815,11 +815,11 @@ describe('InventoryService', () => {
       create: {
         productId: 'product-1',
         locationId: 'location-1',
-        quantityKg: 0,
+        quantityKg: decimal(0),
         quantityPieces: 4,
       },
       update: {
-        quantityKg: { increment: 0 },
+        quantityKg: { increment: decimal(0) },
         quantityPieces: { increment: 4 },
       },
     });

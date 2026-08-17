@@ -2082,13 +2082,13 @@ describe('SalesService', () => {
       where: {
         productId: 'product-1',
         locationId: 'loc-1',
-        quantityKg: { gte: 4.5 },
+        quantityKg: { gte: decimal(4.5) },
         quantityPieces: { gte: 0 },
-        reservedQuantityKg: 2,
+        reservedQuantityKg: decimal(2),
         reservedQuantityPieces: 0,
       },
       data: {
-        quantityKg: { decrement: 2.5 },
+        quantityKg: { decrement: decimal(2.5) },
         quantityPieces: { decrement: 0 },
       },
     });
@@ -2256,13 +2256,13 @@ describe('SalesService', () => {
       where: {
         productId: 'product-1',
         locationId: 'route-stock-1',
-        quantityKg: { gte: 4.5 },
+        quantityKg: { gte: decimal(4.5) },
         quantityPieces: { gte: 0 },
-        reservedQuantityKg: 2,
+        reservedQuantityKg: decimal(2),
         reservedQuantityPieces: 0,
       },
       data: {
-        quantityKg: { decrement: 2.5 },
+        quantityKg: { decrement: decimal(2.5) },
         quantityPieces: { decrement: 0 },
       },
     });
@@ -4383,11 +4383,11 @@ describe('SalesService', () => {
       create: {
         productId: 'product-1',
         locationId: 'loc-1',
-        quantityKg: 2.5,
+        quantityKg: decimal(2.5),
         quantityPieces: 0,
       },
       update: {
-        quantityKg: { increment: 2.5 },
+        quantityKg: { increment: decimal(2.5) },
         quantityPieces: { increment: 0 },
       },
     });

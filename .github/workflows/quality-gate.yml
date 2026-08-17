@@ -142,13 +142,30 @@ jobs:
       - name: Verify map live-mount safety contracts
         run: ./scripts/maps/test-live-mount-safety.sh
 
+      - name: Verify GIS provenance and disk safety contracts
+        run: ./scripts/maps/test-storage-provenance-disk-safety.sh
+
+      - name: Verify GIS zero-downtime refresh fixture
+        run: ./scripts/maps/test-zero-downtime-refresh.sh
+
       - name: Validate production Compose configuration
         env:
           CORS_ORIGIN: https://erp.example.test
+          BACKEND_IMAGE: ghcr.io/example/los-pollos-distribuidora/backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          FRONTEND_IMAGE: ghcr.io/example/los-pollos-distribuidora/frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
           JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
           JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+          MAP_DATA_DIR: /srv/pollos-distribuidor/maps
           MAP_DATA_VERSION: mexico-260812
+          OBJECT_STORAGE_ACCESS_KEY_ID: ci-object-storage-access-key
+          OBJECT_STORAGE_BUCKET: delivery-evidence
+          OBJECT_STORAGE_PUBLIC_ENDPOINT: https://objects.example.test
+          OBJECT_STORAGE_PUBLIC_ORIGIN: https://objects.example.test
+          OBJECT_STORAGE_SECRET_ACCESS_KEY: ci-object-storage-secret-key
+          PHOTON_IMAGE: ghcr.io/example/los-pollos-distribuidora/photon@sha256:0000000000000000000000000000000000000000000000000000000000000000
           POSTGRES_PASSWORD: ci-postgres-password
+          OSRM_IMAGE: ghcr.io/example/los-pollos-distribuidora/osrm@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          TILESERVER_IMAGE: ghcr.io/example/los-pollos-distribuidora/tileserver@sha256:0000000000000000000000000000000000000000000000000000000000000000
           TRUST_PROXY_HOPS: 1
           VITE_MAP_STYLE_URL: /maps/styles/operations/style.json
         run: docker compose -f docker-compose.production.yml config >/dev/null
@@ -157,7 +174,7 @@ jobs:
         run: docker build --file docker/backend/Dockerfile --tag pollos-backend:ci .
 
       - name: Build frontend image
-        run: docker build --file docker/frontend/Dockerfile --tag pollos-frontend:ci .
+        run: docker build --build-arg OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.test --file docker/frontend/Dockerfile --tag pollos-frontend:ci .
 
   security:
     name: Dependency and secret scan

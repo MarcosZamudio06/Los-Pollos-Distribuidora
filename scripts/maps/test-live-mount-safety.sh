@@ -265,13 +265,20 @@ cmp -s "${rendering_fixture}/manifest.before" "${rendering_active}/manifest.json
 
 refresh_script="${SCRIPT_DIR}/refresh-monthly.sh"
 assert_order "${refresh_script}" \
-  'docker compose --profile maps stop backend vroom photon osrm tileserver' \
-  '"${SCRIPT_DIR}/prepare-all.sh"'
-assert_order "${refresh_script}" \
   '"${SCRIPT_DIR}/prepare-all.sh"' \
-  'docker compose --profile maps up -d --force-recreate photon osrm vroom tileserver backend'
-stop_line="$(awk '/docker compose --profile maps stop backend vroom photon osrm tileserver/ { print; exit }' "${refresh_script}")"
-[[ "${stop_line}" != *postgres* ]] || fail "refresh-monthly must not stop PostgreSQL"
+  '"${SCRIPT_DIR}/validate-candidates.sh"'
+assert_order "${refresh_script}" \
+  '"${SCRIPT_DIR}/validate-candidates.sh"' \
+  'map_refresh_manifest_status "${MAP_REFRESH_MANIFEST}" PROMOTING'
+if grep -Eq 'docker compose[^\n]*(stop|down)' "${refresh_script}"; then
+  fail "refresh-monthly must not stop or tear down services during preparation"
+fi
+grep -Fq 'MAP_REFRESH_CANDIDATE_ONLY=1' "${refresh_script}" || \
+  fail "refresh-monthly must use candidate-only preparation"
+grep -Fq 'map_promote_component_transactional' "${refresh_script}" || \
+  fail "refresh-monthly must promote only after candidate validation"
+grep -Fq 'map_compose_restart_service' "${refresh_script}" || \
+  fail "refresh-monthly must restart services individually"
 
 assert_healthcheck_block 'exec -T photon' Photon
 assert_healthcheck_block 'exec -T osrm' OSRM

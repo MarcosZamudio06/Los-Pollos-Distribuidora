@@ -17,6 +17,7 @@ config_path = root / "docker/maps/tileserver/config.json"
 notice_path = root / "docker/maps/licenses/NOTICE.md"
 development_compose = root / "docker-compose.yml"
 production_compose = root / "docker-compose.production.yml"
+environment_example = root / ".env.example"
 frontend_dockerfile = root / "docker/frontend/Dockerfile"
 vite_config = root / "frontend/vite.config.ts"
 frontend_package = root / "frontend/package.json"
@@ -94,6 +95,11 @@ if public_forbidden.search(style_url):
     fail("VITE_MAP_STYLE_URL contains a forbidden provider URL")
 
 production_compose_text = production_compose.read_text(encoding="utf-8")
+environment_example_text = environment_example.read_text(encoding="utf-8")
+preprocessing_common_text = (root / "scripts/maps/map-preprocessing-common.sh").read_text(encoding="utf-8")
+prepare_rendering_text = (root / "scripts/maps/prepare-rendering.sh").read_text(encoding="utf-8")
+refresh_text = (root / "scripts/maps/refresh-monthly.sh").read_text(encoding="utf-8")
+candidate_validator_text = (root / "scripts/maps/validate-candidates.sh").read_text(encoding="utf-8")
 
 def service_block(compose_text, service):
     return re.search(
@@ -103,6 +109,7 @@ def service_block(compose_text, service):
 
 required_production_services = (
     "postgres",
+    "object-storage",
     "migrate",
     "bootstrap",
     "backend",
@@ -122,19 +129,69 @@ for service in required_production_services:
         fail(f"production {service} must use app_network")
 
 for service in required_production_services:
-    if service != "frontend" and re.search(r"(?m)^\s+ports:", production_blocks[service]):
+    if service not in ("frontend", "object-storage") and re.search(r"(?m)^\s+ports:", production_blocks[service]):
         fail(f"production {service} must not publish a host port")
 
-for service in ("postgres", "photon", "osrm", "vroom", "tileserver", "backend"):
+for service in ("postgres", "object-storage", "photon", "osrm", "vroom", "tileserver", "backend"):
     if "\n    healthcheck:\n" not in production_blocks[service]:
         fail(f"production {service} must define a healthcheck")
 
-if len(re.findall(r"(?m)^    ports:\n", production_compose_text)) != 1:
-    fail("production Compose must publish exactly one service port")
+if len(re.findall(r"(?m)^    ports:\n", production_compose_text)) != 2:
+    fail("production Compose must publish only the frontend and Object Storage loopback ports")
 if '      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"' not in production_blocks["frontend"]:
     fail("production frontend must bind only to 127.0.0.1")
+if '      - "127.0.0.1:8333:8333"' not in production_blocks["object-storage"]:
+    fail("production Object Storage must bind port 8333 only to 127.0.0.1")
 if "FRONTEND_BIND_ADDRESS" in production_compose_text:
     fail("production frontend host binding must not be overrideable")
+for service in ("photon", "osrm", "tileserver"):
+    if "${MAP_DATA_DIR:?MAP_DATA_DIR is required for production}" not in production_blocks[service]:
+        fail(f"production {service} must use the required persistent MAP_DATA_DIR")
+if "${MAP_DATA_DIR:-./.map-data}" in production_compose_text:
+    fail("production Compose must not fall back to checkout-local map data")
+for marker in (
+    "PHOTON_DATASET_VERSION=",
+    "PHOTON_DATA_SHA256=",
+    "OSRM_DATASET_VERSION=",
+    "OSRM_PBF_SHA256=",
+    "RENDERING_DATASET_VERSION=",
+    "RENDERING_PBF_SHA256=",
+    "FONT_DATASET_VERSION=",
+    "OPENMAPTILES_FONT_SHA256=",
+):
+    if marker not in environment_example_text:
+        fail(f".env.example is missing GIS provenance variable: {marker}")
+for marker in (
+    "map_plan_source",
+    "map_disk_preflight",
+    "map_promote_component",
+    "map_is_refresh_candidate_mode",
+    "manifest.json",
+):
+    if marker not in prepare_rendering_text:
+        fail(f"rendering preparation is missing provenance/disk guard: {marker}")
+for marker in (
+    "sources/${component}/${MAP_SOURCE_IDENTITY}",
+    "MAP_RESERVED_POSTGRES_GB",
+    "MAP_RESERVED_HOST_GB",
+    "map_cleanup_history",
+    "MAP_REFRESH_CANDIDATE_ROOT",
+    "map_rollback_component_transactional",
+):
+    if marker not in preprocessing_common_text:
+        fail(f"common GIS safety contract is missing: {marker}")
+for marker in (
+    "MAP_REFRESH_CANDIDATE_ONLY=1",
+    '"${SCRIPT_DIR}/validate-candidates.sh"',
+    "map_promote_component_transactional",
+    "map_backend_monitor_start",
+    "map_refresh_manifest_status",
+):
+    if marker not in refresh_text:
+        fail(f"refresh is missing zero-downtime transaction guard: {marker}")
+for marker in ("--network none", ":/data:ro", "Starting isolated Photon candidate smoke"):
+    if marker not in candidate_validator_text:
+        fail(f"candidate validation is missing isolated smoke guard: {marker}")
 
 if "image: postgis/postgis:16-3.5-alpine" not in production_blocks["postgres"]:
     fail("production PostGIS image is missing")
@@ -154,9 +211,11 @@ if re.search(r"\$\{(?:DATABASE_URL|OSRM_URL|PHOTON_URL|VROOM_URL)", production_c
     fail("production Compose must not interpolate external database/provider URLs")
 if "Managed PostgreSQL" in production_compose_text or "Managed Photon" in production_compose_text or "Managed OSRM" in production_compose_text or "Managed VROOM" in production_compose_text:
     fail("production Compose must not require managed provider services")
-for dependency in ("postgres", "photon", "osrm", "vroom", "tileserver"):
-    if f"      {dependency}:\n        condition: service_healthy" not in production_blocks["backend"]:
-        fail(f"production backend must wait for healthy {dependency}")
+if "      postgres:\n        condition: service_healthy" not in production_blocks["backend"]:
+    fail("production backend must wait for healthy PostGIS")
+for dependency in ("photon", "osrm", "vroom", "tileserver"):
+    if f"      {dependency}:\n        condition: service_healthy" in production_blocks["backend"]:
+        fail(f"production backend must not gate core readiness on optional {dependency}")
 if "      postgres:\n        condition: service_healthy" not in production_blocks["migrate"]:
     fail("production migration job must wait for healthy PostGIS")
 if "      osrm:\n        condition: service_healthy" not in production_blocks["vroom"]:

@@ -1,1 +1,1 @@
-FROM maptiler/tileserver-gl:v5.6.0
+FROM maptiler/tileserver-gl:v5.6.0@sha256:a4561a6d8a717909d5620bb43283e6dcfd76be1bfa8b9327847c516affe3d7fb

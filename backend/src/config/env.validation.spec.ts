@@ -39,6 +39,7 @@ describe('validateEnvironment', () => {
         RATE_LIMIT_GLOBAL_MAX: 600,
         RATE_LIMIT_FLEET_POSITION_MAX: 60,
         ROUTING_TIMEOUT_MS: 10000,
+        HEALTH_DEPENDENCY_TIMEOUT_MS: 5000,
         MAP_DATA_VERSION: 'unknown',
         SWAGGER_ENABLED: true,
         TRUST_PROXY_HOPS: 0,
@@ -78,6 +79,9 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ROUTING_TIMEOUT_MS: '120001' })).toThrow(
       'ROUTING_TIMEOUT_MS cannot exceed 120000 milliseconds',
     );
+    expect(() =>
+      validateEnvironment({ HEALTH_DEPENDENCY_TIMEOUT_MS: '5001' }),
+    ).toThrow('HEALTH_DEPENDENCY_TIMEOUT_MS cannot exceed 5000 milliseconds');
     expect(() =>
       validateEnvironment({ PHOTON_URL: 'ftp://photon.internal' }),
     ).toThrow('PHOTON_URL must use HTTP or HTTPS');
@@ -160,6 +164,7 @@ describe('validateEnvironment', () => {
 
   it('rejects missing, known, short, or repeated production JWT secrets', () => {
     const baseEnvironment = {
+      DATABASE_SSL: 'true',
       DATABASE_URL:
         'postgresql://user:password@database:5432/app?sslmode=require',
       NODE_ENV: 'production',
@@ -194,8 +199,9 @@ describe('validateEnvironment', () => {
   it('accepts independent production secrets with sufficient entropy space', () => {
     expect(
       validateEnvironment({
+        DATABASE_SSL: 'true',
         DATABASE_URL:
-          'postgresql://user:password@database:5432/app?sslmode=verify-full',
+          'postgresql://user:password@database:5432/app?sslmode=require',
         JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
         JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
         NODE_ENV: 'production',
@@ -211,15 +217,66 @@ describe('validateEnvironment', () => {
     );
   });
 
-  it('rejects an unencrypted production database connection', () => {
+  it('rejects an unencrypted external production database connection', () => {
     expect(() =>
       validateEnvironment({
+        DATABASE_SSL: 'true',
         DATABASE_URL: 'postgresql://user:password@database:5432/app',
         JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
         JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
         NODE_ENV: 'production',
       }),
-    ).toThrow('DATABASE_URL must require TLS when NODE_ENV=production');
+    ).toThrow(
+      'DATABASE_URL must use sslmode=require when DATABASE_SSL=true in production',
+    );
+  });
+
+  it('allows explicit non-TLS PostgreSQL only for the production Docker database', () => {
+    expect(
+      validateEnvironment({
+        DATABASE_SSL: 'false',
+        DATABASE_URL:
+          'postgresql://user:password@postgres:5432/app?sslmode=disable',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        DATABASE_SSL: false,
+        NODE_ENV: 'production',
+      }),
+    );
+  });
+
+  it('rejects DATABASE_SSL=false outside the private Docker PostgreSQL service', () => {
+    expect(() =>
+      validateEnvironment({
+        DATABASE_SSL: 'false',
+        DATABASE_URL:
+          'postgresql://user:password@database.example.com:5432/app?sslmode=disable',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(
+      'DATABASE_SSL=false is only allowed for the private Docker database at postgres:5432 in production',
+    );
+  });
+
+  it('requires explicit sslmode=disable for the private Docker PostgreSQL service', () => {
+    expect(() =>
+      validateEnvironment({
+        DATABASE_SSL: 'false',
+        DATABASE_URL: 'postgresql://user:password@postgres:5432/app',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(
+      'DATABASE_URL must use sslmode=disable for the private Docker database in production',
+    );
   });
 
   it('rejects a non-PostgreSQL production database URL', () => {
@@ -235,8 +292,9 @@ describe('validateEnvironment', () => {
 
   it('requires production object storage and validates its credentials as a pair', () => {
     const productionEnvironment = {
+      DATABASE_SSL: 'true',
       DATABASE_URL:
-        'postgresql://user:password@database:5432/app?sslmode=verify-full',
+        'postgresql://user:password@database:5432/app?sslmode=require',
       JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
       JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
       NODE_ENV: 'production',
@@ -267,6 +325,27 @@ describe('validateEnvironment', () => {
         OBJECT_STORAGE_BUCKET: 'delivery-evidence',
         OBJECT_STORAGE_FORCE_PATH_STYLE: true,
         OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS: 600,
+      }),
+    );
+  });
+
+  it('accepts a public endpoint for object storage signed URLs', () => {
+    expect(
+      validateEnvironment({
+        DATABASE_SSL: 'true',
+        DATABASE_URL:
+          'postgresql://user:password@database:5432/app?sslmode=require',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        NODE_ENV: 'production',
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+        OBJECT_STORAGE_ENDPOINT: 'http://object-storage:8333',
+        OBJECT_STORAGE_PUBLIC_ENDPOINT: 'https://objects.example.com',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        OBJECT_STORAGE_ENDPOINT: 'http://object-storage:8333',
+        OBJECT_STORAGE_PUBLIC_ENDPOINT: 'https://objects.example.com',
       }),
     );
   });

@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Pollos Distribuidor PostgreSQL/PostGIS backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=pollos-distribuidor-postgres-backup.service
+
+[Install]
+WantedBy=timers.target
+

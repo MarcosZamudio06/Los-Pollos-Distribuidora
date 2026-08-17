@@ -1,10 +1,11 @@
 # Self-hosted map services
 
-The development `maps` Docker profile and the production Compose contract
-provide PostGIS, Photon, OSRM, VROOM, and a pinned TileServer GL without
-exposing private map services to the host network. Production uses the same
-service contracts without a `maps` profile; only migration and bootstrap are
-one-shot profile services.
+The development `maps` Docker profile builds local Photon, OSRM, and TileServer
+wrappers. The production Compose contract pulls the release workflow's
+immutable GHCR wrapper images plus pinned PostGIS, VROOM, and SeaweedFS images,
+without exposing private map services to the host network. Production uses the
+same service contracts without a `maps` profile; only migration and bootstrap
+are one-shot profile services.
 
 ## Dataset refresh safety
 
@@ -94,6 +95,7 @@ it belongs to OpenSearch and must be managed by Photon/OpenSearch.
    ```bash
    export COMPOSE_FILE=docker-compose.production.yml
    docker compose config >/dev/null
+   docker compose pull
    docker compose --profile migration run --rm migrate
    docker compose --profile migration run --rm bootstrap
    docker compose up -d postgres photon osrm vroom tileserver backend frontend
@@ -112,24 +114,27 @@ it belongs to OpenSearch and must be managed by Photon/OpenSearch.
 | TileServer GL | `http://tileserver:8080` | Mexico PMTiles and OSM Bright style |
 | PostGIS | PostgreSQL connection | `postgis/postgis:16-3.5-alpine`    |
 
-Datasets are stored under `.map-data/`, which is intentionally ignored by Git.
-Downloads are checksum-verified and prepared in a staging directory before
-replacing the active dataset. The preparation guards abort if Docker confirms
-that the corresponding runtime consumer is still running.
+Development datasets are stored under `.map-data/`, which is intentionally
+ignored by Git. Production uses the absolute persistent `MAP_DATA_DIR` from
+`.env.production.example`. Downloads are checksum-verified and prepared in a
+staging directory before replacing the active dataset. The preparation guards
+abort if Docker confirms that the corresponding runtime consumer is still
+running.
 
 ## Configuration
 
 | Variable              | Default                    | Purpose                                                                     |
 | --------------------- | -------------------------- | --------------------------------------------------------------------------- |
 | `MAP_DATA_DIR`        | `./.map-data`              | Host directory for Photon and OSRM data                                     |
+| `MAP_ENVIRONMENT`     | `development`              | Production requires a persistent directory outside the checkout             |
 | `MAP_DOCKER_PLATFORM` | `linux/amd64`              | Deterministic GIS image platform, including Apple Silicon through emulation |
 | `PHOTON_DATA_URL`     | Mexico Photon 1.0 database | Override Photon dataset                                                     |
 | `OSM_PBF_URL`         | Geofabrik `mexico-260812.osm.pbf` | Override the pinned Mexico extract used for rendering and OSRM preparation |
 | `PHOTON_VERSION`      | `1.2.1`                    | Photon server version                                                       |
 | `OSRM_VERSION`        | `v5.27.1`                  | OSRM server version                                                         |
 | `VROOM_VERSION`       | `v1.15.0`                  | VROOM server version                                                        |
-| TileServer GL image   | `maptiler/tileserver-gl:v5.6.0` | Pinned runtime image; do not override with a floating tag                 |
-| `PLANETILER_IMAGE`   | `ghcr.io/onthegomap/planetiler:v0.10.2` | Pinned rendering generator |
+| TileServer GL image   | Release GHCR `tileserver@sha256:<digest>` | Immutable production wrapper image |
+| `PLANETILER_IMAGE`   | `ghcr.io/onthegomap/planetiler:0.10.2@sha256:<digest>` | Pinned rendering generator |
 | `OSM_PBF_SHA256`     | empty                    | Optional required SHA-256 for the Geofabrik extract                         |
 
 Rendering artifacts are prepared explicitly by

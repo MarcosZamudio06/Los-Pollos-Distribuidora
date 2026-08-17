@@ -1,0 +1,14 @@
+[Unit]
+Description=Pollos Distribuidor PostgreSQL/PostGIS backup to Backblaze B2
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/pollos-distribuidor
+EnvironmentFile=/etc/pollos-distribuidor/production.env
+EnvironmentFile=/etc/pollos-distribuidor/postgres-backup.env
+ExecStart=/opt/pollos-distribuidor/scripts/database/backup-postgres-to-b2.sh
+TimeoutStartSec=6h
+PrivateTmp=true

@@ -1,0 +1,15 @@
+[Unit]
+Description=Pollos Distribuidor single-host health and resource monitor
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/pollos-distribuidor
+EnvironmentFile=/etc/pollos-distribuidor/production.env
+EnvironmentFile=-/etc/pollos-distribuidor/monitoring.env
+ExecStart=/opt/pollos-distribuidor/scripts/monitoring/monitor-production.py
+TimeoutStartSec=2min
+PrivateTmp=true
+

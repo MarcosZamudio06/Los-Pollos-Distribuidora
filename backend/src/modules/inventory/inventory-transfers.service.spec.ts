@@ -243,13 +243,13 @@ describe('InventoryTransfersService', () => {
       where: {
         productId: 'product-1',
         locationId: 'origin-1',
-        quantityKg: { gte: 12.5 },
+        quantityKg: { gte: decimal(12.5) },
         quantityPieces: { gte: 3 },
-        reservedQuantityKg: 0,
+        reservedQuantityKg: decimal(0),
         reservedQuantityPieces: 0,
       },
       data: {
-        reservedQuantityKg: { increment: 12.5 },
+        reservedQuantityKg: { increment: decimal(12.5) },
         reservedQuantityPieces: { increment: 3 },
       },
     });
@@ -386,11 +386,11 @@ describe('InventoryTransfersService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           productId: 'product-1',
-          quantityKg: { gte: 3 },
+          quantityKg: { gte: decimal(3) },
           quantityPieces: { gte: 5 },
         }),
         data: {
-          reservedQuantityKg: { increment: 2 },
+          reservedQuantityKg: { increment: decimal(2) },
           reservedQuantityPieces: { increment: 4 },
         },
       }),
@@ -797,15 +797,15 @@ describe('InventoryTransfersService', () => {
       where: {
         productId: 'product-1',
         locationId: 'origin-1',
-        quantityKg: { gte: 12.5 },
+        quantityKg: { gte: decimal(12.5) },
         quantityPieces: { gte: 3 },
-        reservedQuantityKg: { gte: 12.5 },
+        reservedQuantityKg: { gte: decimal(12.5) },
         reservedQuantityPieces: { gte: 3 },
       },
       data: {
-        quantityKg: { decrement: 12.5 },
+        quantityKg: { decrement: decimal(12.5) },
         quantityPieces: { decrement: 3 },
-        reservedQuantityKg: { decrement: 12.5 },
+        reservedQuantityKg: { decrement: decimal(12.5) },
         reservedQuantityPieces: { decrement: 3 },
       },
     });
@@ -819,11 +819,11 @@ describe('InventoryTransfersService', () => {
       create: {
         productId: 'product-1',
         locationId: 'destination-1',
-        quantityKg: 12.5,
+        quantityKg: decimal(12.5),
         quantityPieces: 3,
       },
       update: {
-        quantityKg: { increment: 12.5 },
+        quantityKg: { increment: decimal(12.5) },
         quantityPieces: { increment: 3 },
       },
     });
@@ -1215,7 +1215,7 @@ describe('InventoryTransfersService', () => {
     expect(prisma.inventoryBalance.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: {
-          quantityKg: { increment: 15 },
+          quantityKg: { increment: decimal(15) },
           quantityPieces: { increment: 4 },
         },
       }),
@@ -1498,11 +1498,11 @@ describe('InventoryTransfersService', () => {
       where: {
         productId: 'product-1',
         locationId: 'origin-1',
-        reservedQuantityKg: { gte: 12.5 },
+        reservedQuantityKg: { gte: decimal(12.5) },
         reservedQuantityPieces: { gte: 3 },
       },
       data: {
-        reservedQuantityKg: { decrement: 12.5 },
+        reservedQuantityKg: { decrement: decimal(12.5) },
         reservedQuantityPieces: { decrement: 3 },
       },
     });

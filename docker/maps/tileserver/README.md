@@ -1,7 +1,8 @@
 # TileServer GL
 
-The production rendering service is pinned to `maptiler/tileserver-gl:v5.6.0`.
-It serves the committed OSM Bright style and generated Mexico PMTiles through
+The production rendering service consumes the release workflow's immutable
+GHCR `tileserver@sha256:<digest>` wrapper image. Its pinned TileServer GL base
+is `maptiler/tileserver-gl:v5.6.0`. It serves the committed OSM Bright style and generated Mexico PMTiles through
 the frontend Nginx `/maps/` reverse proxy. The service has no host port and
 must not download datasets during startup.
 

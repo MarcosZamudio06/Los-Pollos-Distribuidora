@@ -357,11 +357,11 @@ describe('PurchasesService', () => {
       create: {
         productId: 'product-1',
         locationId: 'loc-1',
-        quantityKg: 10.5,
+        quantityKg: decimal(10.5),
         quantityPieces: 4,
       },
       update: {
-        quantityKg: { increment: 10.5 },
+        quantityKg: { increment: decimal(10.5) },
         quantityPieces: { increment: 4 },
       },
     });
@@ -599,13 +599,13 @@ describe('PurchasesService', () => {
       where: {
         productId: 'product-1',
         locationId: 'loc-1',
-        quantityKg: { gte: 12.5 },
+        quantityKg: { gte: decimal(12.5) },
         quantityPieces: { gte: 5 },
-        reservedQuantityKg: 2,
+        reservedQuantityKg: decimal(2),
         reservedQuantityPieces: 1,
       },
       data: {
-        quantityKg: { decrement: 10.5 },
+        quantityKg: { decrement: decimal(10.5) },
         quantityPieces: { decrement: 4 },
       },
     });

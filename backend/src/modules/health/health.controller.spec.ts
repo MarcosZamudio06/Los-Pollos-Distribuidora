@@ -23,6 +23,10 @@ describe('HealthController', () => {
             getLiveness: () => ({ success: true, data: { status: 'live' } }),
             getStartup: () => ({ success: true, data: { status: 'started' } }),
             getReadiness: () => ({ success: true, data: { status: 'ready' } }),
+            getDependencies: () => ({
+              status: 'ok',
+              dependencies: {},
+            }),
           },
         },
         { provide: APP_GUARD, useClass: HttpThrottlerGuard },
@@ -53,5 +57,13 @@ describe('HealthController', () => {
       .get('/api/health/ready')
       .expect(200)
       .expect({ success: true, data: { status: 'ready' } });
+    await request(app.getHttpServer())
+      .get('/api/health/dependencies')
+      .expect(200)
+      .expect({
+        success: true,
+        message: 'Dependency health retrieved successfully',
+        data: { status: 'ok', dependencies: {} },
+      });
   });
 });

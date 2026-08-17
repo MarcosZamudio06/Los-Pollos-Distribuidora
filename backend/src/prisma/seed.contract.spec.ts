@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Prisma } from '@prisma/client';
@@ -25,9 +26,18 @@ const productionComposePath = resolve(
   __dirname,
   '../../../docker-compose.production.yml',
 );
+const frontendDockerfilePath = resolve(
+  __dirname,
+  '../../../docker/frontend/Dockerfile',
+);
+const environmentExamplePath = resolve(__dirname, '../../../.env.example');
 const qualityGateWorkflowPath = resolve(
   __dirname,
   '../../../.github/workflows/quality-gate.yml',
+);
+const releaseWorkflowPath = resolve(
+  __dirname,
+  '../../../.github/workflows/release-images.yml',
 );
 type UpsertMock<TArgs> = jest.MockedFunction<(args: TArgs) => Promise<unknown>>;
 type PrismaSeedMockClient = {
@@ -422,7 +432,7 @@ describe('Prisma seed contract', () => {
       'postgres_data:/var/lib/postgresql/data',
     );
     expect(productionCompose).toContain(
-      'DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}',
+      'DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}?sslmode=disable',
     );
     expect(productionCompose).toContain('OSRM_URL: http://osrm:5000');
     expect(productionCompose).toContain('PHOTON_URL: http://photon:2322');
@@ -441,26 +451,93 @@ describe('Prisma seed contract', () => {
     expect(productionCompose).toContain(
       '    depends_on:\n      postgres:\n        condition: service_healthy',
     );
-    expect(productionCompose).toContain(
-      '      photon:\n        condition: service_healthy',
-    );
-    expect(productionCompose).toContain(
-      '      osrm:\n        condition: service_healthy',
-    );
-    expect(productionCompose).toContain(
-      '      vroom:\n        condition: service_healthy',
-    );
-    expect(productionCompose).toContain(
-      '      tileserver:\n        condition: service_healthy',
-    );
+    const backendSection =
+      productionCompose.match(
+        /^ {2}backend:\n([\s\S]*?)(?=^ {2}photon:)/m,
+      )?.[0] ?? '';
+    for (const optionalDependency of [
+      'photon',
+      'osrm',
+      'vroom',
+      'tileserver',
+    ]) {
+      expect(backendSection).not.toContain(
+        `      ${optionalDependency}:\n        condition: service_healthy`,
+      );
+    }
     expect(productionCompose).toContain(
       '      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"',
     );
     expect(productionCompose).not.toContain('FRONTEND_BIND_ADDRESS');
-    expect(productionCompose.match(/^ {4}ports:$/gm) ?? []).toHaveLength(1);
+    expect(productionCompose).toContain('      - "127.0.0.1:8333:8333"');
+    expect(productionCompose.match(/^ {4}ports:$/gm) ?? []).toHaveLength(2);
     expect(productionCompose).toContain(
       'ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-10000}',
     );
+  });
+
+  it('builds the frontend CSP from one explicit Object Storage public origin', () => {
+    const developmentCompose = readFileSync(developmentComposePath, 'utf8');
+    const productionCompose = readFileSync(productionComposePath, 'utf8');
+    const frontendDockerfile = readFileSync(frontendDockerfilePath, 'utf8');
+    const environmentExample = readFileSync(environmentExamplePath, 'utf8');
+    const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8');
+
+    expect(
+      frontendDockerfile.match(/^ARG OBJECT_STORAGE_PUBLIC_ORIGIN$/gm),
+    ).toHaveLength(2);
+    expect(frontendDockerfile).toContain(
+      "img-src 'self' data: blob: ${OBJECT_STORAGE_PUBLIC_ORIGIN};",
+    );
+    expect(frontendDockerfile).not.toContain(
+      "img-src 'self' data: blob: http://127.0.0.1:8333;",
+    );
+    expect(frontendDockerfile).toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN must be an explicit HTTP(S) origin without wildcards',
+    );
+    expect(frontendDockerfile).toContain('origin.includes("*")');
+    expect(frontendDockerfile).toContain('url.origin !== origin');
+
+    const validator = frontendDockerfile.match(
+      /RUN node -e '([^'\n]+)' "\$\{OBJECT_STORAGE_PUBLIC_ORIGIN\}"/,
+    )?.[1];
+    expect(validator).toBeDefined();
+    const validateOrigin = (origin: string) =>
+      spawnSync(process.execPath, ['-e', validator!, origin], {
+        env: { ...process.env, OPENSSL_CONF: '/dev/null' },
+      }).status;
+
+    expect(validateOrigin('https://objects.example.test')).toBe(0);
+    expect(validateOrigin('http://127.0.0.1:8333')).toBe(0);
+    for (const forbiddenOrigin of [
+      'https:',
+      '*',
+      'https://*.example.test',
+      'https://objects.example.test/path',
+    ]) {
+      expect(validateOrigin(forbiddenOrigin)).not.toBe(0);
+    }
+
+    expect(developmentCompose).toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN: ${OBJECT_STORAGE_PUBLIC_ORIGIN:-http://127.0.0.1:8333}',
+    );
+    expect(productionCompose).toContain(
+      'image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required for production}',
+    );
+    expect(productionCompose).not.toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN: ${OBJECT_STORAGE_PUBLIC_ORIGIN:',
+    );
+    expect(releaseWorkflow).toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.com',
+    );
+    expect(productionCompose).toContain(
+      'OBJECT_STORAGE_ENDPOINT: http://object-storage:8333',
+    );
+    expect(productionCompose).toContain(
+      'OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:?OBJECT_STORAGE_PUBLIC_ENDPOINT is required}',
+    );
+    expect(environmentExample).toContain('OBJECT_STORAGE_PUBLIC_ENDPOINT=');
+    expect(environmentExample).toContain('OBJECT_STORAGE_PUBLIC_ORIGIN=');
   });
 
   it('provides every required production Compose variable to Docker CI validation', () => {

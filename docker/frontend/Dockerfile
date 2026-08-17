@@ -1,7 +1,8 @@
-FROM node:24.14.1-alpine AS build
+FROM node:24.14.1-alpine@sha256:8510330d3eb72c804231a834b1a8ebb55cb3796c3e4431297a24d246b8add4d5 AS build
 
 ARG VITE_MAP_STYLE_URL
 ARG REQUIRE_PUBLIC_MAP_STYLE=false
+ARG OBJECT_STORAGE_PUBLIC_ORIGIN
 ENV VITE_API_BASE_URL=/api
 ENV VITE_MAP_STYLE_URL=${VITE_MAP_STYLE_URL}
 
@@ -23,11 +24,17 @@ RUN if [ "${REQUIRE_PUBLIC_MAP_STYLE}" = "true" ] && [ -z "${VITE_MAP_STYLE_URL}
       echo "VITE_MAP_STYLE_URL is required for production frontend images" >&2; \
       exit 1; \
     fi
+RUN node -e 'const origin = process.argv[1]; let url; try { url = new URL(origin); } catch {} if (!url || !["http:", "https:"].includes(url.protocol) || url.origin !== origin || origin.includes("*")) { console.error("OBJECT_STORAGE_PUBLIC_ORIGIN must be an explicit HTTP(S) origin without wildcards"); process.exit(1); }' "${OBJECT_STORAGE_PUBLIC_ORIGIN}"
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752
+
+ARG OBJECT_STORAGE_PUBLIC_ORIGIN
 
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
+RUN sed -i 's#^pid .*#pid /tmp/nginx.pid;#' /etc/nginx/nginx.conf \
+  && mkdir -p /var/cache/nginx/maps \
+  && chown -R nginx:nginx /var/cache/nginx
 RUN printf '%s\n' \
   'proxy_cache_path /var/cache/nginx/maps levels=1:2 keys_zone=maps_cache:10m max_size=256m inactive=1d use_temp_path=off;' \
   'map $uri $maps_browser_cache_control {' \
@@ -44,8 +51,10 @@ RUN printf '%s\n' \
   '  server_name _;' \
   '  root /usr/share/nginx/html;' \
   '  index index.html;' \
+  '  access_log /dev/stdout;' \
+  '  error_log /dev/stderr warn;' \
   '  client_max_body_size 1m;' \
-  '  add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\''; style-src '\''self'\'' '\''unsafe-inline'\''; img-src '\''self'\'' data: blob:; font-src '\''self'\'' data:; connect-src '\''self'\''; worker-src '\''self'\'' blob:; object-src '\''none'\''; base-uri '\''self'\''; frame-ancestors '\''none'\'';" always;' \
+  "  add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${OBJECT_STORAGE_PUBLIC_ORIGIN}; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';\" always;" \
   '  add_header X-Content-Type-Options nosniff always;' \
   '  add_header Referrer-Policy strict-origin-when-cross-origin always;' \
   '  location /maps/ {' \
@@ -69,7 +78,7 @@ RUN printf '%s\n' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
   '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
-  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_set_header X-Forwarded-Proto $maps_forwarded_proto;' \
   '    proxy_set_header X-Request-ID $request_id;' \
   '    proxy_set_header Upgrade $http_upgrade;' \
   '    proxy_set_header Connection "upgrade";' \
@@ -83,12 +92,14 @@ RUN printf '%s\n' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
   '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
-  '    proxy_set_header X-Forwarded-Proto $scheme;' \
+  '    proxy_set_header X-Forwarded-Proto $maps_forwarded_proto;' \
   '    proxy_set_header Upgrade $http_upgrade;' \
   '    proxy_set_header Connection "upgrade";' \
   '    proxy_read_timeout 75s;' \
   '  }' \
   '}' > /etc/nginx/conf.d/default.conf
+
+USER nginx
 
 EXPOSE 3000
 

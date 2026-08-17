@@ -1,0 +1,36 @@
+# Production template for the single-host deployment.
+# Replace these example hostnames on the deployment host; do not commit real
+# domains, certificates, API tokens, or other Cloudflare credentials here.
+{
+	# Trust only the current Cloudflare edge ranges when they are the direct
+	# peer of the VPS. This lets Caddy preserve the original forwarded chain
+	# without trusting spoofed X-Forwarded-* headers from arbitrary clients.
+	# Keep this list synchronized with https://www.cloudflare.com/ips/.
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		trusted_proxies_strict
+	}
+}
+
+https://erp.example.com {
+	reverse_proxy 127.0.0.1:3000 {
+		# Preserve the public Host used by the browser and by the ERP origin.
+		header_up Host {http.request.host}
+		# reverse_proxy sets/augments X-Forwarded-For and X-Forwarded-Proto.
+		# The frontend Nginx proxy passes those values to the backend.
+	}
+}
+
+https://objects.example.com {
+	reverse_proxy 127.0.0.1:8333 {
+		# S3 signatures include the public Host. Do not replace it with the
+		# loopback upstream host.
+		header_up Host {http.request.host}
+		# Keep private evidence out of browser/CDN caches.
+		header_down Cache-Control "private, no-store, max-age=0"
+		header_down CDN-Cache-Control "no-store"
+		header_down Cloudflare-CDN-Cache-Control "no-store"
+		# No rewrite/uri/handle_path directive: path and query are preserved
+		# exactly for signed SeaweedFS requests.
+	}
+}

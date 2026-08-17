@@ -10,6 +10,7 @@ const KNOWN_INSECURE_SECRETS = new Set([
 ]);
 const MAXIMUM_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 const MAXIMUM_ROUTING_TIMEOUT_MS = 120_000;
+const MAXIMUM_HEALTH_DEPENDENCY_TIMEOUT_MS = 5_000;
 
 function parseBoolean(
   env: EnvironmentVariables,
@@ -158,6 +159,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
     'SWAGGER_ENABLED',
     nodeEnv !== 'production',
   );
+  const databaseSsl = parseBoolean(env, 'DATABASE_SSL', false);
   const trustProxyHops = parseInteger(env, 'TRUST_PROXY_HOPS', 0, true);
   const rateLimitGlobalMax = parseInteger(env, 'RATE_LIMIT_GLOBAL_MAX', 600);
   const rateLimitLoginAccountMax = parseInteger(
@@ -173,6 +175,11 @@ export function validateEnvironment(env: EnvironmentVariables) {
     60,
   );
   const routingTimeoutMs = parseInteger(env, 'ROUTING_TIMEOUT_MS', 10_000);
+  const healthDependencyTimeoutMs = parseInteger(
+    env,
+    'HEALTH_DEPENDENCY_TIMEOUT_MS',
+    5_000,
+  );
   const fleetPositionStaleSeconds = parseInteger(
     env,
     'FLEET_POSITION_STALE_SECONDS',
@@ -205,6 +212,11 @@ export function validateEnvironment(env: EnvironmentVariables) {
     env,
     'OBJECT_STORAGE_ENDPOINT',
   );
+
+  const objectStoragePublicEndpoint = parseOptionalHttpUrl(
+    env,
+    'OBJECT_STORAGE_PUBLIC_ENDPOINT',
+  );
   const objectStorageAccessKeyId =
     env.OBJECT_STORAGE_ACCESS_KEY_ID?.trim() || undefined;
   const objectStorageSecretAccessKey =
@@ -232,6 +244,11 @@ export function validateEnvironment(env: EnvironmentVariables) {
   if (routingTimeoutMs > MAXIMUM_ROUTING_TIMEOUT_MS) {
     throw new Error(
       `ROUTING_TIMEOUT_MS cannot exceed ${MAXIMUM_ROUTING_TIMEOUT_MS} milliseconds`,
+    );
+  }
+  if (healthDependencyTimeoutMs > MAXIMUM_HEALTH_DEPENDENCY_TIMEOUT_MS) {
+    throw new Error(
+      `HEALTH_DEPENDENCY_TIMEOUT_MS cannot exceed ${MAXIMUM_HEALTH_DEPENDENCY_TIMEOUT_MS} milliseconds`,
     );
   }
   if (mapDataPreparedAt && Number.isNaN(Date.parse(mapDataPreparedAt))) {
@@ -287,8 +304,27 @@ export function validateEnvironment(env: EnvironmentVariables) {
     }
 
     const sslMode = databaseUrl.searchParams.get('sslmode');
-    if (!['require', 'verify-ca', 'verify-full'].includes(sslMode ?? '')) {
-      throw new Error('DATABASE_URL must require TLS when NODE_ENV=production');
+    const isPrivateDockerPostgres =
+      databaseUrl.hostname === 'postgres' && databaseUrl.port === '5432';
+
+    if (databaseSsl) {
+      if (sslMode !== 'require') {
+        throw new Error(
+          'DATABASE_URL must use sslmode=require when DATABASE_SSL=true in production',
+        );
+      }
+    } else {
+      if (!isPrivateDockerPostgres) {
+        throw new Error(
+          'DATABASE_SSL=false is only allowed for the private Docker database at postgres:5432 in production',
+        );
+      }
+
+      if (sslMode !== 'disable') {
+        throw new Error(
+          'DATABASE_URL must use sslmode=disable for the private Docker database in production',
+        );
+      }
     }
 
     jwtAccessSecret = requireProductionSecret(env, 'JWT_ACCESS_SECRET');
@@ -324,7 +360,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
       lastUsedAtUpdateThreshold,
     CORS_ORIGIN: corsOrigins.join(','),
     CORS_ORIGINS: corsOrigins,
-    DATABASE_SSL: env.DATABASE_SSL === 'true',
+    DATABASE_SSL: databaseSsl,
     DATABASE_URL: env.DATABASE_URL?.trim() || DEFAULT_DATABASE_URL,
     JWT_ACCESS_SECRET: jwtAccessSecret,
     JWT_REFRESH_SECRET: jwtRefreshSecret,
@@ -337,6 +373,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
     RATE_LIMIT_REFRESH_MAX: rateLimitRefreshMax,
     RATE_LIMIT_FLEET_POSITION_MAX: rateLimitFleetPositionMax,
     ROUTING_TIMEOUT_MS: routingTimeoutMs,
+    HEALTH_DEPENDENCY_TIMEOUT_MS: healthDependencyTimeoutMs,
     MAP_DATA_VERSION: mapDataVersion,
     MAP_DATA_PREPARED_AT: mapDataPreparedAt,
     PHOTON_URL: photonUrl,
@@ -346,6 +383,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
     OBJECT_STORAGE_BUCKET: objectStorageBucket,
     OBJECT_STORAGE_REGION: objectStorageRegion,
     OBJECT_STORAGE_ENDPOINT: objectStorageEndpoint,
+    OBJECT_STORAGE_PUBLIC_ENDPOINT: objectStoragePublicEndpoint,
     OBJECT_STORAGE_ACCESS_KEY_ID: objectStorageAccessKeyId,
     OBJECT_STORAGE_SECRET_ACCESS_KEY: objectStorageSecretAccessKey,
     OBJECT_STORAGE_FORCE_PATH_STYLE: objectStorageForcePathStyle,
