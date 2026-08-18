@@ -6,3 +6,4 @@ allowBuilds:
   unrs-resolver: set this to true or false
 overrides:
   deepmerge-ts: 8.0.0
+  js-yaml: 5.2.2
