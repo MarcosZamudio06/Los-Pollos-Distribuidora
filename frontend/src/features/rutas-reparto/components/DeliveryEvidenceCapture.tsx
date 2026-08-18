@@ -2,6 +2,8 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { preparePhotoEvidence, isPhotoDataUrl } from "./deliveryEvidencePhoto";
 import { useCreateDeliveryEvidence } from "../hooks";
 import { evidenceTypeLabel } from "../labels";
+import { mutationErrorMessage } from "../errorMessages";
+import { toDateTimeLocalInput, toIsoDateTime } from "../dateTime";
 import type { DeliveryOrder, EvidenceType } from "../types";
 import {
   Field,
@@ -19,14 +21,6 @@ const evidenceTypes: EvidenceType[] = [
   "NOTE",
 ];
 
-function nowForInput() {
-  return new Date().toISOString().slice(0, 16);
-}
-
-function toIsoDateTime(value: string) {
-  return new Date(value).toISOString();
-}
-
 type Props = {
   onClose: () => void;
   order: DeliveryOrder;
@@ -38,7 +32,7 @@ export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
   const [value, setValue] = useState("");
   const [photoFileName, setPhotoFileName] = useState("");
   const [photoError, setPhotoError] = useState<string | null>(null);
-  const [capturedAt, setCapturedAt] = useState(nowForInput());
+  const [capturedAt, setCapturedAt] = useState(toDateTimeLocalInput());
   const createEvidence = useCreateDeliveryEvidence(routeId);
   const canSubmit = Boolean(value.trim() && capturedAt);
 
@@ -190,8 +184,10 @@ export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
         {createEvidence.error && (
           <div className="mt-4">
             <StatusMessage tone="error">
-              No se pudo guardar la evidencia. Revisa permisos, ruta asignada y
-              datos capturados.
+              {mutationErrorMessage(
+                createEvidence.error,
+                "No se pudo guardar la evidencia. Revisa permisos, ruta asignada y datos capturados.",
+              )}
             </StatusMessage>
           </div>
         )}

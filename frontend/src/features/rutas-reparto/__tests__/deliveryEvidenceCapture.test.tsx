@@ -10,11 +10,12 @@ import { DeliveryEvidenceCapture } from "../components/DeliveryEvidenceCapture";
 
 const mockState = vi.hoisted(() => ({
   createEvidence: vi.fn(),
+  error: null as Error | null,
 }));
 
 vi.mock("../hooks", () => ({
   useCreateDeliveryEvidence: () => ({
-    error: null,
+    error: mockState.error,
     isPending: false,
     mutateAsync: mockState.createEvidence,
   }),
@@ -34,6 +35,7 @@ afterEach(async () => {
   document.body.innerHTML = "";
   root = undefined;
   mockState.createEvidence.mockReset();
+  mockState.error = null;
 });
 
 describe("DeliveryEvidenceCapture", () => {
@@ -113,6 +115,29 @@ describe("DeliveryEvidenceCapture", () => {
           value: "data:image/jpeg;base64,photo",
         }),
       }),
+    );
+  });
+
+  it("shows the backend reason when evidence validation fails", async () => {
+    mockState.error = new Error(
+      "capturedAt cannot be more than 5 minutes in the future",
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <DeliveryEvidenceCapture
+          onClose={vi.fn()}
+          order={{ id: "order-1", status: "IN_ROUTE" }}
+          routeId="route-1"
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain(
+      "capturedAt cannot be more than 5 minutes in the future",
     );
   });
 });

@@ -64,12 +64,16 @@ const mockState = vi.hoisted(() => ({
     error: null as unknown,
     isLoading: false,
     isPending: false,
+    dataUpdatedAt: 1,
+    errorUpdatedAt: 0,
     refetch: vi.fn(),
   },
   products: {
     data: [] as Product[],
     error: null as unknown,
     isLoading: false,
+    dataUpdatedAt: 1,
+    errorUpdatedAt: 0,
     refetch: vi.fn(),
   },
   productFilters: {} as Record<string, unknown>,
@@ -421,6 +425,8 @@ describe("CEDIS branch detail page", () => {
       error: null,
       isLoading: false,
       isPending: false,
+      dataUpdatedAt: 1,
+      errorUpdatedAt: 0,
       refetch: vi.fn(),
     };
     mockState.products.data = [product];
@@ -598,6 +604,83 @@ describe("CEDIS branch detail page", () => {
       locationId: "branch-1",
     });
     expect(mockState.productQueryEnabled).toBe(true);
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it("preserves the transfer form when query freshness changes", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const renderPage = () =>
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            "/cedis/branches/branch-1?date=2026-08-05&cycle=cycle-1",
+          ]}
+        >
+          <CedisBranchDetailPage />
+        </MemoryRouter>,
+      );
+
+    await act(async () => renderPage());
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Enviar producto"))
+        ?.click();
+    });
+    await act(async () => {
+      const driverSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      );
+      const vehicleSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      );
+      const productSelect = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Producto 1"]',
+      );
+      driverSelect!.value = "driver-1";
+      driverSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      vehicleSelect!.value = "vehicle-1";
+      vehicleSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      productSelect!.value = "product-1";
+      productSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      const input = container.querySelector(
+        'input[aria-label="Kilos 1"]',
+      ) as HTMLInputElement;
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(input, "25.5");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    mockState.summary.dataUpdatedAt = 2;
+    mockState.products.dataUpdatedAt = 2;
+    await act(async () => renderPage());
+
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conductor asignado"]',
+      )?.value,
+    ).toBe("driver-1");
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Unidad asignada"]',
+      )?.value,
+    ).toBe("vehicle-1");
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Producto 1"]',
+      )?.value,
+    ).toBe("product-1");
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="Kilos 1"]')
+        ?.value,
+    ).toBe("25.5");
 
     await act(async () => root.unmount());
     container.remove();
