@@ -1628,6 +1628,12 @@ export function CedisBranchDetailPage() {
     productsQuery.dataUpdatedAt,
     productsQuery.errorUpdatedAt,
   ].join("|");
+  const transferFormKey = [
+    selectedBusinessDate,
+    effectiveCycleId ?? "",
+    transferMode ?? "",
+    transferSourceLocationId ?? "",
+  ].join("|");
   const createSupply = useCreateCedisSupply(effectiveCycleId ?? "disabled");
   const createReturn = useCreateCedisReturn(effectiveCycleId ?? "disabled");
   const refreshCycle = useRefreshCedisCycle(effectiveCycleId ?? "disabled");
@@ -2121,7 +2127,7 @@ export function CedisBranchDetailPage() {
             cedis={cedis}
             contextKey={transferContextKey}
             expectedVersion={summary.version}
-            key={transferContextKey}
+            key={transferFormKey}
             mode={transferMode}
             onClose={closeTransferPanel}
             onSubmit={submitTransfer}

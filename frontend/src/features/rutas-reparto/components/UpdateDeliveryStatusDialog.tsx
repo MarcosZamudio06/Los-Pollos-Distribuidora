@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useUpdateDeliveryOrderStatus } from "../hooks";
 import { orderStatusLabel } from "../labels";
+import { toDateTimeLocalInput, toIsoDateTime } from "../dateTime";
+import { mutationErrorMessage } from "../errorMessages";
 import type { DeliveryOrder, DeliveryOrderStatus } from "../types";
 import {
   Field,
@@ -26,14 +28,6 @@ const noteRequiredStatuses = new Set([
   "RETURNED",
 ]);
 
-function nowForInput() {
-  return new Date().toISOString().slice(0, 16);
-}
-
-function toIsoDateTime(value: string) {
-  return new Date(value).toISOString();
-}
-
 type Props = {
   onClose: () => void;
   order: DeliveryOrder;
@@ -45,7 +39,7 @@ export function UpdateDeliveryStatusDialog({ onClose, order, routeId }: Props) {
     order.status === "PENDING" ? "IN_ROUTE" : order.status,
   );
   const [notes, setNotes] = useState(order.notes ?? "");
-  const [deliveredAt, setDeliveredAt] = useState(nowForInput());
+  const [deliveredAt, setDeliveredAt] = useState(toDateTimeLocalInput());
   const updateStatus = useUpdateDeliveryOrderStatus(routeId);
   const requiresNote = noteRequiredStatuses.has(status);
   const canSubmit = Boolean(
@@ -144,8 +138,10 @@ export function UpdateDeliveryStatusDialog({ onClose, order, routeId }: Props) {
         {updateStatus.error && (
           <div className="mt-4">
             <StatusMessage tone="error">
-              No se pudo actualizar el pedido. Revisa transición, permisos y
-              motivo cuando aplique.
+              {mutationErrorMessage(
+                updateStatus.error,
+                "No se pudo actualizar el pedido. Revisa transición, permisos y motivo cuando aplique.",
+              )}
             </StatusMessage>
           </div>
         )}

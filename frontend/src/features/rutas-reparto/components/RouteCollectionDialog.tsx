@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useCreateRouteCollection } from "../hooks";
 import { money, paymentMethodLabel, shortId } from "../labels";
+import { toDateTimeLocalInput, toIsoDateTime } from "../dateTime";
 import type {
   CollectionPass,
   DeliveryOrder,
@@ -24,14 +25,6 @@ import {
 
 const paymentMethods: PaymentMethod[] = ["CASH", "TRANSFER", "CARD", "DEPOSIT"];
 const collectionPasses: CollectionPass[] = ["FIRST", "SECOND"];
-
-function nowForInput() {
-  return new Date().toISOString().slice(0, 16);
-}
-
-function toIsoDateTime(value: string) {
-  return new Date(value).toISOString();
-}
 
 type SharedCollectionProps = {
   collectionPassMode?: "editable" | "second-pass";
@@ -67,7 +60,7 @@ function CollectionForm({
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [reference, setReference] = useState("");
-  const [paidAt, setPaidAt] = useState(nowForInput());
+  const [paidAt, setPaidAt] = useState(toDateTimeLocalInput());
   const [collectionPass, setCollectionPass] =
     useState<CollectionPass>(initialPass);
   const idempotencyKey = useRef(crypto.randomUUID());
