@@ -23,8 +23,10 @@ RUN npm run build
 # CLIs after the application build; test/lint/tooling dependencies are pruned.
 RUN npm prune --omit=dev \
   && mkdir -p /tmp/production-tools \
-  && npm install --prefix /tmp/production-tools --omit=dev --no-save --package-lock=false \
-    prisma@6.19.3 ts-node@10.9.2 typescript@5.7.3 \
+  && printf '%s\n' \
+    '{"private":true,"dependencies":{"prisma":"6.19.3","ts-node":"10.9.2","typescript":"5.7.3"},"overrides":{"deepmerge-ts":"8.0.0"}}' \
+    > /tmp/production-tools/package.json \
+  && npm install --prefix /tmp/production-tools --omit=dev --no-audit --no-fund \
   && cp -a /tmp/production-tools/node_modules/. ./node_modules/ \
   && rm -rf /tmp/production-tools
 
