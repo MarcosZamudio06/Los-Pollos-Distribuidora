@@ -38,9 +38,13 @@ type MockMap = {
   >;
   fitBoundsCalls: unknown[];
   flyToCalls: unknown[];
+  easeToCalls: unknown[];
+  zoom: number;
   layoutChanges: unknown[];
   resizeCalls: number;
   removed: boolean;
+  setZoom: (zoom?: number) => unknown;
+  getZoom: () => number;
   hasHandler: (event: string) => boolean;
   emit: (event: string, payload?: unknown) => void;
   emitLayer: (layer: string, payload?: unknown) => void;
@@ -137,6 +141,8 @@ const mapMock = vi.hoisted(() => {
     >();
     fitBoundsCalls: unknown[] = [];
     flyToCalls: unknown[] = [];
+    easeToCalls: unknown[] = [];
+    zoom = 11;
     layoutChanges: unknown[] = [];
     resizeCalls = 0;
     removed = false;
@@ -189,8 +195,13 @@ const mapMock = vi.hoisted(() => {
       return this;
     }
 
-    setZoom() {
+    setZoom(zoom?: number) {
+      if (typeof zoom === "number") this.zoom = zoom;
       return this;
+    }
+
+    getZoom() {
+      return this.zoom;
     }
 
     fitBounds(bounds: unknown) {
@@ -200,6 +211,19 @@ const mapMock = vi.hoisted(() => {
 
     flyTo(options: unknown) {
       this.flyToCalls.push(options);
+      if (typeof options === "object" && options !== null) {
+        const camera = options as { zoom?: unknown };
+        if (typeof camera.zoom === "number") this.zoom = camera.zoom;
+      }
+      return this;
+    }
+
+    easeTo(options: unknown) {
+      this.easeToCalls.push(options);
+      if (typeof options === "object" && options !== null) {
+        const camera = options as { zoom?: unknown };
+        if (typeof camera.zoom === "number") this.zoom = camera.zoom;
+      }
       return this;
     }
 
@@ -263,8 +287,18 @@ const item = (latitude = 19.15): FleetLiveItem => ({
   nextStop: null,
 });
 
+const vehicleItem = (vehicleId: string, latitude = 19.15): FleetLiveItem => {
+  const base = item(latitude);
+  return {
+    ...base,
+    vehicle: { ...base.vehicle, id: vehicleId, code: vehicleId.toUpperCase() },
+    route: { ...base.route, id: `route-${vehicleId}` },
+  };
+};
+
 async function renderMap(
   items: FleetLiveItem[] = [item()],
+  selectedVehicleId: string | null = null,
 ): Promise<{ container: HTMLElement; root: Root; map: MockMap }> {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -274,7 +308,7 @@ async function renderMap(
       <FleetLiveMap
         items={items}
         onSelectVehicle={vi.fn()}
-        selectedVehicleId={null}
+        selectedVehicleId={selectedVehicleId}
       />,
     );
   });
@@ -424,6 +458,114 @@ describe("FleetLiveMap", () => {
     await act(async () => root.unmount());
     container.remove();
     errorSpy.mockRestore();
+  });
+
+  it("centers a newly selected vehicle without reducing the current zoom", async () => {
+    const { map, root } = await renderMap();
+
+    map.setZoom(17);
+    await act(async () => {
+      root.render(
+        <FleetLiveMap
+          items={[item()]}
+          onSelectVehicle={vi.fn()}
+          selectedVehicleId="vehicle-1"
+        />,
+      );
+    });
+
+    expect(map.flyToCalls).toEqual([
+      {
+        center: [-96.15, 19.15],
+        zoom: 17,
+        duration: 0,
+      },
+    ]);
+
+    await act(async () => root.unmount());
+  });
+
+  it("follows the selected vehicle position without changing its zoom", async () => {
+    const { map, root } = await renderMap([item()], "vehicle-1");
+
+    map.setZoom(17);
+    await act(async () => {
+      root.render(
+        <FleetLiveMap
+          items={[item(19.2)]}
+          onSelectVehicle={vi.fn()}
+          selectedVehicleId="vehicle-1"
+        />,
+      );
+    });
+
+    expect(map.flyToCalls).toHaveLength(1);
+    expect(map.flyToCalls[0]).toEqual(
+      expect.objectContaining({
+        center: [-96.15, 19.15],
+        zoom: 14,
+      }),
+    );
+    expect(map.easeToCalls).toEqual([{ center: [-96.15, 19.2] }]);
+    expect(map.easeToCalls[0]).not.toHaveProperty("zoom");
+    expect(map.getZoom()).toBe(17);
+
+    await act(async () => {
+      root.render(
+        <FleetLiveMap
+          items={[item(19.25)]}
+          onSelectVehicle={vi.fn()}
+          selectedVehicleId="vehicle-1"
+        />,
+      );
+    });
+
+    expect(map.flyToCalls).toHaveLength(1);
+    expect(map.easeToCalls).toHaveLength(2);
+    expect(map.getZoom()).toBe(17);
+
+    await act(async () => root.unmount());
+  });
+
+  it("does not move the camera when another vehicle changes", async () => {
+    const { map, root } = await renderMap(
+      [item(), vehicleItem("vehicle-2", 19.3)],
+      "vehicle-1",
+    );
+
+    await act(async () => {
+      root.render(
+        <FleetLiveMap
+          items={[item(), vehicleItem("vehicle-2", 19.4)]}
+          onSelectVehicle={vi.fn()}
+          selectedVehicleId="vehicle-1"
+        />,
+      );
+    });
+
+    expect(map.flyToCalls).toHaveLength(1);
+    expect(map.easeToCalls).toHaveLength(0);
+
+    await act(async () => root.unmount());
+  });
+
+  it("does not move the camera when no vehicle is selected", async () => {
+    const { map, root } = await renderMap();
+
+    await act(async () => {
+      root.render(
+        <FleetLiveMap
+          items={[item(19.2)]}
+          onSelectVehicle={vi.fn()}
+          selectedVehicleId={null}
+        />,
+      );
+    });
+
+    expect(map.flyToCalls).toHaveLength(0);
+    expect(map.easeToCalls).toHaveLength(0);
+
+    await act(async () => root.unmount());
   });
 
   it("keeps traffic hidden when the provider is unavailable", async () => {
