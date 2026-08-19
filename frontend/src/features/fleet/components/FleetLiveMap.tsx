@@ -69,13 +69,8 @@ const emptyTraffic: FleetTrafficFeatureCollection = {
   features: [],
 };
 
-type UpdatableGeoJSONSource = GeoJSONSource & {
-  updateData?: (data: {
-    add?: unknown[];
-    remove?: string[];
-    update?: unknown[];
-  }) => void;
-};
+type GeoJSONSourceDiff = Parameters<GeoJSONSource["updateData"]>[0];
+type GeoJSONFeatureUpdate = NonNullable<GeoJSONSourceDiff["update"]>[number];
 
 type EditorFeatureCollection = {
   type: "FeatureCollection";
@@ -95,25 +90,47 @@ function syncSource(
   previous: FleetFeatureCollections[keyof FleetFeatureCollections] | null,
   next: FleetFeatureCollections[keyof FleetFeatureCollections],
 ) {
-  const source = map.getSource(sourceId) as UpdatableGeoJSONSource | undefined;
+  const source = map.getSource(sourceId) as GeoJSONSource | undefined;
   if (!source) return;
-  if (!previous || !source.updateData) {
+  if (!previous) {
     source.setData(next);
     return;
   }
 
   const previousById = new Map(
-    previous.features.map((feature) => [feature.id, JSON.stringify(feature)]),
+    previous.features.map((feature) => [feature.id, feature]),
   );
-  const nextById = new Map(
-    next.features.map((feature) => [feature.id, JSON.stringify(feature)]),
-  );
+  const nextById = new Map(next.features.map((feature) => [feature.id, feature]));
   const add = next.features.filter((feature) => !previousById.has(feature.id));
-  const update = next.features.filter(
-    (feature) =>
-      previousById.has(feature.id) &&
-      previousById.get(feature.id) !== JSON.stringify(feature),
-  );
+  const update: GeoJSONFeatureUpdate[] = [];
+  next.features.forEach((feature) => {
+    const previousFeature = previousById.get(feature.id);
+    if (!previousFeature) return;
+
+    const previousProperties = previousFeature.properties as Record<
+      string,
+      unknown
+    >;
+    const nextProperties = feature.properties as Record<string, unknown>;
+    const addOrUpdateProperties = Object.entries(nextProperties)
+      .filter(([key, value]) => previousProperties[key] !== value)
+      .map(([key, value]) => ({ key, value }));
+    const removeProperties = Object.keys(previousProperties).filter(
+      (key) => !(key in nextProperties),
+    );
+    const geometryChanged =
+      JSON.stringify(previousFeature.geometry) !==
+      JSON.stringify(feature.geometry);
+
+    if (geometryChanged || addOrUpdateProperties.length || removeProperties.length) {
+      update.push({
+        id: feature.id,
+        ...(geometryChanged ? { newGeometry: feature.geometry } : {}),
+        ...(addOrUpdateProperties.length ? { addOrUpdateProperties } : {}),
+        ...(removeProperties.length ? { removeProperties } : {}),
+      });
+    }
+  });
   const remove = previous.features
     .filter((feature) => !nextById.has(feature.id))
     .map((feature) => feature.id);
@@ -708,7 +725,7 @@ export function FleetLiveMap({
       | undefined;
     trafficSource?.setData(traffic ?? emptyTraffic);
     const editorSource = map.getSource(sourceIds.editor) as
-      | UpdatableGeoJSONSource
+      | GeoJSONSource
       | undefined;
     editorSource?.setData(editorData);
     previousDataRef.current = data;
