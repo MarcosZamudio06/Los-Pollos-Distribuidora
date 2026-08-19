@@ -509,15 +509,12 @@ function addFleetLayers(map: MapLibreMap) {
     id: "fleet-vehicles-label",
     source: sourceIds.vehicles,
     type: "symbol",
+    minzoom: 13,
+    filter: ["==", ["get", "selected"], false],
     layout: {
-      "text-allow-overlap": false,
-      "text-field": [
-        "case",
-        ["boolean", ["get", "selected"], false],
-        ["get", "selectedLabel"],
-        ["get", "code"],
-      ],
-      "text-ignore-placement": false,
+      "text-allow-overlap": true,
+      "text-field": ["get", "code"],
+      "text-ignore-placement": true,
       "text-offset": [0, 1.8],
       "text-size": 11,
     },
@@ -525,12 +522,24 @@ function addFleetLayers(map: MapLibreMap) {
       "text-color": "#1d2420",
       "text-halo-color": "#fff7e1",
       "text-halo-width": 2,
-      "text-opacity": [
-        "case",
-        ["boolean", ["get", "selected"], false],
-        1,
-        ["step", ["zoom"], 0, 13, 1],
-      ],
+    },
+  });
+  map.addLayer({
+    id: "fleet-vehicles-label-selected",
+    source: sourceIds.vehicles,
+    type: "symbol",
+    filter: ["==", ["get", "selected"], true],
+    layout: {
+      "text-allow-overlap": true,
+      "text-field": ["get", "selectedLabel"],
+      "text-ignore-placement": true,
+      "text-offset": [0, 1.8],
+      "text-size": 11,
+    },
+    paint: {
+      "text-color": "#1d2420",
+      "text-halo-color": "#fff7e1",
+      "text-halo-width": 2,
     },
   });
   map.addLayer({
@@ -757,6 +766,12 @@ export function FleetLiveMap({
               map.getCanvas().style.cursor = "pointer";
             });
             map.on("mouseleave", "fleet-vehicles-label", () => {
+              map.getCanvas().style.cursor = "";
+            });
+            map.on("mouseenter", "fleet-vehicles-label-selected", () => {
+              map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", "fleet-vehicles-label-selected", () => {
               map.getCanvas().style.cursor = "";
             });
             map.on("click", "delivery-zones-fill", (event) => {
