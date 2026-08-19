@@ -510,14 +510,14 @@ function addFleetLayers(map: MapLibreMap) {
     source: sourceIds.vehicles,
     type: "symbol",
     layout: {
-      "text-allow-overlap": ["boolean", ["get", "selected"], false],
+      "text-allow-overlap": false,
       "text-field": [
         "case",
         ["boolean", ["get", "selected"], false],
         ["get", "selectedLabel"],
         ["get", "code"],
       ],
-      "text-ignore-placement": ["boolean", ["get", "selected"], false],
+      "text-ignore-placement": false,
       "text-offset": [0, 1.8],
       "text-size": 11,
     },
