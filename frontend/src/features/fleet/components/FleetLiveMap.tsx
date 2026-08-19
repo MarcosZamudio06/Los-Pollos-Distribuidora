@@ -583,6 +583,11 @@ export function FleetLiveMap({
   const mapLoadedRef = useRef(false);
   const hasFittedRef = useRef(false);
   const previousDataRef = useRef<FleetFeatureCollections | null>(null);
+  const cameraSelectionRef = useRef<string | null>(null);
+  const followedVehiclePositionRef = useRef<{
+    vehicleId: string;
+    coordinates: FleetCoordinate;
+  } | null>(null);
   const onSelectVehicleRef = useRef(onSelectVehicle);
   const onSelectZoneRef = useRef(onSelectZone);
   const onMapPointRef = useRef(onMapPoint);
@@ -610,6 +615,17 @@ export function FleetLiveMap({
     () => createEditorFeatureCollection(editorPoints),
     [editorPoints],
   );
+  const selectedVehicle = useMemo(
+    () =>
+      selectedVehicleId
+        ? data.vehicles.features.find(
+            (feature) => feature.properties.id === selectedVehicleId,
+          ) ?? null
+        : null,
+    [data.vehicles.features, selectedVehicleId],
+  );
+  const selectedVehicleLongitude = selectedVehicle?.geometry.coordinates[0] ?? null;
+  const selectedVehicleLatitude = selectedVehicle?.geometry.coordinates[1] ?? null;
 
   useEffect(() => {
     onSelectVehicleRef.current = onSelectVehicle;
@@ -778,16 +794,81 @@ export function FleetLiveMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!mapReady || !map || data.vehicles.features.length === 0) return;
-    if (selectedVehicleId) {
-      const selected = data.vehicles.features.find(
-        (feature) => feature.properties.id === selectedVehicleId,
-      );
-      if (selected) {
-        map.flyTo({ center: selected.geometry.coordinates, zoom: 14, duration: 0 });
-      }
+    if (!mapReady || !map) return;
+    if (
+      !selectedVehicleId ||
+      selectedVehicleLongitude === null ||
+      selectedVehicleLatitude === null
+    ) {
+      cameraSelectionRef.current = null;
+      followedVehiclePositionRef.current = null;
+      return;
     }
-  }, [data.vehicles.features, mapReady, selectedVehicleId]);
+    if (cameraSelectionRef.current === selectedVehicleId) return;
+
+    const coordinates: FleetCoordinate = [
+      selectedVehicleLongitude,
+      selectedVehicleLatitude,
+    ];
+    cameraSelectionRef.current = selectedVehicleId;
+    followedVehiclePositionRef.current = {
+      vehicleId: selectedVehicleId,
+      coordinates,
+    };
+    map.flyTo({
+      center: coordinates,
+      zoom: Math.max(map.getZoom(), 14),
+      duration: 0,
+    });
+  }, [
+    mapReady,
+    selectedVehicleId,
+    selectedVehicleLatitude,
+    selectedVehicleLongitude,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (
+      !mapReady ||
+      !map ||
+      !selectedVehicleId ||
+      selectedVehicleLongitude === null ||
+      selectedVehicleLatitude === null
+    ) {
+      return;
+    }
+
+    const coordinates: FleetCoordinate = [
+      selectedVehicleLongitude,
+      selectedVehicleLatitude,
+    ];
+    const previous = followedVehiclePositionRef.current;
+    if (!previous || previous.vehicleId !== selectedVehicleId) {
+      followedVehiclePositionRef.current = {
+        vehicleId: selectedVehicleId,
+        coordinates,
+      };
+      return;
+    }
+    if (
+      previous.coordinates[0] === coordinates[0] &&
+      previous.coordinates[1] === coordinates[1]
+    ) {
+      return;
+    }
+
+    map.easeTo({ center: coordinates });
+    followedVehiclePositionRef.current = {
+      vehicleId: selectedVehicleId,
+      coordinates,
+    };
+  }, [
+    mapReady,
+    selectedVehicleId,
+    selectedVehicleLatitude,
+    selectedVehicleLongitude,
+  ]);
 
   const centerFleet = () => {
     const map = mapRef.current;
