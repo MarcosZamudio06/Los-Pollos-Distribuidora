@@ -29,6 +29,7 @@ export type GeoJsonFeatureCollection<Geometry, Properties> = {
 export type VehicleFeatureProperties = {
   id: string;
   code: string;
+  selectedLabel: string;
   routeId: string;
   driverId: string;
   driverName: string;
@@ -37,6 +38,7 @@ export type VehicleFeatureProperties = {
   headingDegrees: number | null;
   speedKph: number | null;
   recordedAt: string | null;
+  hasActiveIncident: boolean;
   selected?: boolean;
   highlighted?: boolean;
 };
@@ -99,6 +101,31 @@ function finiteCoordinate(value: unknown): value is number {
 function asNumber(value: unknown): number | null {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function finiteMetric(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function validSpeed(value: unknown): number | null {
+  const number = finiteMetric(value);
+  return number !== null && number >= 0 ? number : null;
+}
+
+function hasActiveIncident(item: FleetLiveItem): boolean {
+  const itemIncidentCount = item.incidentCountActive ?? 0;
+  const routeIncidentCount = item.route.incidentCountActive ?? 0;
+  if (Math.max(itemIncidentCount, routeIncidentCount) > 0) return true;
+  return (item.incidents ?? []).some(
+    (incident) => incident.status === "OPEN" || incident.status === "IN_REVIEW",
+  );
+}
+
+function formatVehicleLabel(code: string, speedKph: number | null): string {
+  if (speedKph === null) return code;
+  return `${code} · ${Math.round(speedKph)} km/h`;
 }
 
 function isLineString(value: unknown): value is FleetLineString {
@@ -301,6 +328,8 @@ export function createFleetFeatureCollections(
     const selected = item.vehicle.id === selectedVehicleId;
     const highlighted = item.vehicle.id === highlightedVehicleId;
     if (item.position) {
+      const headingDegrees = finiteMetric(item.position.headingDegrees);
+      const speedKph = validSpeed(item.position.speedKph);
       vehicles.push({
         type: "Feature",
         id: item.vehicle.id,
@@ -311,14 +340,16 @@ export function createFleetFeatureCollections(
         properties: {
           id: item.vehicle.id,
           code: item.vehicle.code,
+          selectedLabel: formatVehicleLabel(item.vehicle.code, speedKph),
           routeId: item.route.id,
           driverId: item.driver.id,
           driverName: item.driver.name,
           status: item.route.status,
           stale: item.stale,
-          headingDegrees: item.position.headingDegrees,
-          speedKph: item.position.speedKph,
+          headingDegrees,
+          speedKph,
           recordedAt: item.position.recordedAt,
+          hasActiveIncident: hasActiveIncident(item),
           selected,
           highlighted,
         },

@@ -78,9 +78,6 @@ export function DeliveryZonesPanel({
           <h2 className="mt-2 text-xl font-black tracking-[-0.05em] text-[var(--erp-foreground)]">
             Zonas de reparto
           </h2>
-          <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[var(--erp-muted-foreground)]">
-            El mapa representa polígonos calculados por backend. Los eventos ENTER y EXIT nunca se calculan en el navegador.
-          </p>
         </div>
         {canManage && (
           <PrimaryButton onClick={onStartCreate}>

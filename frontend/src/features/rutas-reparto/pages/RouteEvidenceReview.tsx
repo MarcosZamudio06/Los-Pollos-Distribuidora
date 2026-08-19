@@ -157,7 +157,7 @@ export function RouteEvidenceReview() {
                           />
                           <figcaption className="mt-2 text-xs font-semibold text-[var(--erp-muted-foreground)]">
                             {item.contentUrl
-                              ? "Foto de entrega almacenada en Object Storage"
+                              ? "Foto de entrega almacenada"
                               : "Foto capturada en la entrega"}
                           </figcaption>
                           <p className="mt-1 break-all text-xs text-[var(--erp-muted-foreground)]">
