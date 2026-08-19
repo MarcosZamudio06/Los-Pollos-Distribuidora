@@ -38,6 +38,7 @@ type MockMap = {
       id: string;
       type?: string;
       source?: string;
+      minzoom?: number;
       filter?: unknown;
       layout?: Record<string, unknown>;
       paint?: Record<string, unknown>;
@@ -148,6 +149,7 @@ const mapMock = vi.hoisted(() => {
         id: string;
         type?: string;
         source?: string;
+        minzoom?: number;
         filter?: unknown;
         layout?: Record<string, unknown>;
         paint?: Record<string, unknown>;
@@ -204,6 +206,7 @@ const mapMock = vi.hoisted(() => {
       id: string;
       type?: string;
       source?: string;
+      minzoom?: number;
       filter?: unknown;
       layout?: Record<string, unknown>;
       paint?: Record<string, unknown>;
@@ -379,19 +382,47 @@ describe("FleetLiveMap", () => {
       expect.objectContaining({ type: "symbol" }),
     );
     expect(
+      map.layerDefinitions.get("fleet-vehicles-label")?.layout?.[
+        "text-allow-overlap"
+      ],
+    ).toBe(true);
+    expect(
+      map.layerDefinitions.get("fleet-vehicles-label")?.layout?.[
+        "text-ignore-placement"
+      ],
+    ).toBe(true);
+    expect(map.layerDefinitions.get("fleet-vehicles-label")).toEqual(
+      expect.objectContaining({
+        minzoom: 13,
+        filter: ["==", ["get", "selected"], false],
+        layout: expect.objectContaining({
+          "text-field": ["get", "code"],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        }),
+      }),
+    );
+    expect(map.layerDefinitions.get("fleet-vehicles-label")?.paint).toEqual(
+      expect.not.objectContaining({ "text-opacity": expect.anything() }),
+    );
+    expect(
+      map.layerDefinitions.get("fleet-vehicles-label-selected"),
+    ).toEqual(
+      expect.objectContaining({
+        filter: ["==", ["get", "selected"], true],
+        layout: expect.objectContaining({
+          "text-field": ["get", "selectedLabel"],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        }),
+      }),
+    );
+    expect(
       JSON.stringify(map.layerDefinitions.get("fleet-vehicle-selected")?.paint),
     ).toEqual(expect.stringContaining("#d69b2d"));
     expect(
       JSON.stringify(map.layerDefinitions.get("fleet-vehicle-selected")?.paint),
     ).not.toContain("#b62a22");
-    expect(
-      map.layerDefinitions.get("fleet-vehicles-label")?.paint?.["text-opacity"],
-    ).toEqual([
-      "case",
-      ["boolean", ["get", "selected"], false],
-      1,
-      ["step", ["zoom"], 0, 13, 1],
-    ]);
     const mapContainer = container.querySelector<HTMLElement>(
       '[aria-label="Mapa de monitoreo de flota"]',
     );
@@ -418,6 +449,7 @@ describe("FleetLiveMap", () => {
       "fleet-vehicle-base",
       "fleet-vehicles-symbol",
       "fleet-vehicles-label",
+      "fleet-vehicles-label-selected",
       "delivery-zone-editor-fill",
       "delivery-zone-editor-outline",
       "delivery-zone-editor-vertices",
