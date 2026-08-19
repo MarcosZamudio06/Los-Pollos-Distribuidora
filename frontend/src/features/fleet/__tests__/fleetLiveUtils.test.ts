@@ -111,6 +111,36 @@ describe("fleet live data flow", () => {
     ]);
   });
 
+  it("normalizes marker metrics and exposes warning and selected-label properties", () => {
+    const data = createFleetFeatureCollections(
+      [
+        baseItem({
+          incidentCountActive: 1,
+          position: {
+            ...baseItem().position!,
+            headingDegrees: Number.NaN,
+            speedKph: Number.NaN,
+          },
+        }),
+      ],
+      "vehicle-1",
+    );
+
+    expect(data.vehicles.features[0].properties).toEqual(
+      expect.objectContaining({
+        hasActiveIncident: true,
+        headingDegrees: null,
+        selected: true,
+        selectedLabel: "UNIDAD-01",
+        speedKph: null,
+      }),
+    );
+
+    const validSpeed = createFleetFeatureCollections([baseItem()], "vehicle-1")
+      .vehicles.features[0].properties;
+    expect(validSpeed.selectedLabel).toBe("UNIDAD-01 · 31 km/h");
+  });
+
   it("updates only the affected vehicle and rejects an old socket position", () => {
     const newer = {
       vehicleId: "vehicle-1",

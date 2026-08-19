@@ -414,26 +414,6 @@ function addFleetLayers(map: MapLibreMap) {
     },
   });
   map.addLayer({
-    id: "fleet-vehicles-symbol",
-    source: sourceIds.vehicles,
-    type: "symbol",
-    layout: {
-      "icon-image": vehicleIconImage,
-      "icon-size": 1.15,
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
-      "text-allow-overlap": true,
-      "text-field": ["get", "code"],
-      "text-offset": [0, 1.7],
-      "text-size": 11,
-    },
-    paint: {
-      "text-color": "#1d2420",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.5,
-    },
-  });
-  map.addLayer({
     id: "fleet-vehicle-selected",
     source: sourceIds.vehicles,
     type: "circle",
@@ -446,18 +426,111 @@ function addFleetLayers(map: MapLibreMap) {
       "circle-color": [
         "case",
         ["boolean", ["get", "highlighted"], false],
+        "#e1ad3f",
         "#d69b2d",
-        "#b62a22",
       ],
-      "circle-opacity": 0.2,
-      "circle-radius": 22,
+      "circle-opacity": [
+        "case",
+        ["boolean", ["get", "highlighted"], false],
+        0.16,
+        0.12,
+      ],
+      "circle-radius": [
+        "case",
+        ["boolean", ["get", "highlighted"], false],
+        25,
+        23,
+      ],
       "circle-stroke-color": [
         "case",
         ["boolean", ["get", "highlighted"], false],
+        "#e1ad3f",
         "#d69b2d",
-        "#b62a22",
       ],
+      "circle-stroke-opacity": 0.9,
       "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "fleet-vehicle-base",
+    source: sourceIds.vehicles,
+    type: "circle",
+    paint: {
+      "circle-color": "#fff7e1",
+      "circle-opacity": [
+        "case",
+        ["boolean", ["get", "stale"], false],
+        0.72,
+        1,
+      ],
+      "circle-radius": [
+        "case",
+        ["boolean", ["get", "stale"], false],
+        16,
+        17,
+      ],
+      "circle-stroke-color": [
+        "case",
+        ["boolean", ["get", "hasActiveIncident"], false],
+        "#b62a22",
+        ["boolean", ["get", "stale"], false],
+        "#6f7b78",
+        "#2f6f73",
+      ],
+      "circle-stroke-opacity": [
+        "case",
+        ["boolean", ["get", "stale"], false],
+        0.78,
+        1,
+      ],
+      "circle-stroke-width": [
+        "case",
+        ["boolean", ["get", "stale"], false],
+        2,
+        3,
+      ],
+    },
+  });
+  map.addLayer({
+    id: "fleet-vehicles-symbol",
+    source: sourceIds.vehicles,
+    type: "symbol",
+    layout: {
+      "icon-image": vehicleIconImage,
+      "icon-size": 1.15,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+      "icon-rotate": ["coalesce", ["get", "headingDegrees"], 0],
+      "icon-rotation-alignment": "map",
+      "icon-pitch-alignment": "map",
+    },
+  });
+  map.addLayer({
+    id: "fleet-vehicles-label",
+    source: sourceIds.vehicles,
+    type: "symbol",
+    layout: {
+      "text-allow-overlap": ["boolean", ["get", "selected"], false],
+      "text-field": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        ["get", "selectedLabel"],
+        ["get", "code"],
+      ],
+      "text-ignore-placement": ["boolean", ["get", "selected"], false],
+      "text-offset": [0, 1.8],
+      "text-size": 11,
+    },
+    paint: {
+      "text-color": "#1d2420",
+      "text-halo-color": "#fff7e1",
+      "text-halo-width": 2,
+      "text-opacity": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        1,
+        ["step", ["zoom"], 0, 13, 1],
+      ],
     },
   });
   map.addLayer({
@@ -673,6 +746,18 @@ export function FleetLiveMap({
               if (vehicleId !== undefined && vehicleId !== null) {
                 onSelectVehicleRef.current(String(vehicleId));
               }
+            });
+            map.on("mouseenter", "fleet-vehicles-symbol", () => {
+              map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", "fleet-vehicles-symbol", () => {
+              map.getCanvas().style.cursor = "";
+            });
+            map.on("mouseenter", "fleet-vehicles-label", () => {
+              map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", "fleet-vehicles-label", () => {
+              map.getCanvas().style.cursor = "";
             });
             map.on("click", "delivery-zones-fill", (event) => {
               if (editorActiveRef.current) return;

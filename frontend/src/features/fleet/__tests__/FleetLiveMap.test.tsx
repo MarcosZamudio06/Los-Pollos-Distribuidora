@@ -34,7 +34,14 @@ type MockMap = {
   layers: string[];
   layerDefinitions: globalThis.Map<
     string,
-    { id: string; layout?: Record<string, unknown> }
+    {
+      id: string;
+      type?: string;
+      source?: string;
+      filter?: unknown;
+      layout?: Record<string, unknown>;
+      paint?: Record<string, unknown>;
+    }
   >;
   fitBoundsCalls: unknown[];
   flyToCalls: unknown[];
@@ -137,7 +144,14 @@ const mapMock = vi.hoisted(() => {
     layers: string[] = [];
     layerDefinitions = new globalThis.Map<
       string,
-      { id: string; layout?: Record<string, unknown> }
+      {
+        id: string;
+        type?: string;
+        source?: string;
+        filter?: unknown;
+        layout?: Record<string, unknown>;
+        paint?: Record<string, unknown>;
+      }
     >();
     fitBoundsCalls: unknown[] = [];
     flyToCalls: unknown[] = [];
@@ -186,7 +200,14 @@ const mapMock = vi.hoisted(() => {
       return this.sources.get(id);
     }
 
-    addLayer(layer: { id: string; layout?: Record<string, unknown> }) {
+    addLayer(layer: {
+      id: string;
+      type?: string;
+      source?: string;
+      filter?: unknown;
+      layout?: Record<string, unknown>;
+      paint?: Record<string, unknown>;
+    }) {
       this.layers.push(layer.id);
       this.layerDefinitions.set(layer.id, layer);
     }
@@ -338,12 +359,39 @@ describe("FleetLiveMap", () => {
     expect(mapMock.state.instances).toHaveLength(1);
     expect(runtimeMock.loadMapLibre).toHaveBeenCalledTimes(1);
     expect(map.hasHandler("error")).toBe(true);
+    expect(map.hasHandler("mouseenter:fleet-vehicles-symbol")).toBe(true);
+    expect(map.hasHandler("mouseleave:fleet-vehicles-symbol")).toBe(true);
     expect(map.layerDefinitions.get("fleet-vehicles-symbol")?.layout).toEqual(
       expect.objectContaining({
         "icon-image": "car_11",
         "icon-size": expect.any(Number),
+        "icon-rotate": ["coalesce", ["get", "headingDegrees"], 0],
+        "icon-rotation-alignment": "map",
       }),
     );
+    expect(map.layerDefinitions.get("fleet-vehicle-selected")).toEqual(
+      expect.objectContaining({ type: "circle" }),
+    );
+    expect(map.layerDefinitions.get("fleet-vehicle-base")).toEqual(
+      expect.objectContaining({ type: "circle" }),
+    );
+    expect(map.layerDefinitions.get("fleet-vehicles-label")).toEqual(
+      expect.objectContaining({ type: "symbol" }),
+    );
+    expect(
+      JSON.stringify(map.layerDefinitions.get("fleet-vehicle-selected")?.paint),
+    ).toEqual(expect.stringContaining("#d69b2d"));
+    expect(
+      JSON.stringify(map.layerDefinitions.get("fleet-vehicle-selected")?.paint),
+    ).not.toContain("#b62a22");
+    expect(
+      map.layerDefinitions.get("fleet-vehicles-label")?.paint?.["text-opacity"],
+    ).toEqual([
+      "case",
+      ["boolean", ["get", "selected"], false],
+      1,
+      ["step", ["zoom"], 0, 13, 1],
+    ]);
     const mapContainer = container.querySelector<HTMLElement>(
       '[aria-label="Mapa de monitoreo de flota"]',
     );
@@ -366,8 +414,10 @@ describe("FleetLiveMap", () => {
       "delivery-zones-fill",
       "delivery-zones-outline",
       "delivery-zone-selected",
-      "fleet-vehicles-symbol",
       "fleet-vehicle-selected",
+      "fleet-vehicle-base",
+      "fleet-vehicles-symbol",
+      "fleet-vehicles-label",
       "delivery-zone-editor-fill",
       "delivery-zone-editor-outline",
       "delivery-zone-editor-vertices",
@@ -458,6 +508,84 @@ describe("FleetLiveMap", () => {
     await act(async () => root.unmount());
     container.remove();
     errorSpy.mockRestore();
+  });
+
+  it("keeps null headings safe and exposes stale, incident, and selected marker state", async () => {
+    const staleItem: FleetLiveItem = {
+      ...vehicleItem("vehicle-stale"),
+      stale: true,
+      position: {
+        ...vehicleItem("vehicle-stale").position!,
+        headingDegrees: null,
+      },
+    };
+    const incidentItem: FleetLiveItem = {
+      ...item(),
+      incidentCountActive: 1,
+      position: {
+        ...item().position!,
+        headingDegrees: null,
+        speedKph: null,
+      },
+    };
+    const { map, root } = await renderMap(
+      [staleItem, incidentItem],
+      "vehicle-1",
+    );
+
+    const vehicleFeatures = (
+      map.sources.get("fleet-vehicles")?.data as {
+        features: Array<{
+          id: string;
+          properties: Record<string, unknown>;
+        }>;
+      }
+    ).features;
+    expect(vehicleFeatures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "vehicle-stale",
+          properties: expect.objectContaining({ stale: true }),
+        }),
+        expect.objectContaining({
+          id: "vehicle-1",
+          properties: expect.objectContaining({
+            hasActiveIncident: true,
+            selected: true,
+            selectedLabel: "UNIDAD-01",
+            headingDegrees: null,
+          }),
+        }),
+      ]),
+    );
+
+    const basePaint = JSON.stringify(
+      map.layerDefinitions.get("fleet-vehicle-base")?.paint,
+    );
+    expect(basePaint).toContain("#6f7b78");
+    expect(basePaint).toContain("0.72");
+    expect(basePaint).toContain("#b62a22");
+
+    await act(async () => root.unmount());
+  });
+
+  it("keeps a selected unit label with a valid speed and no invalid speed text", async () => {
+    const selectedItem = item();
+    selectedItem.position = {
+      ...selectedItem.position!,
+      speedKph: 38.4,
+    };
+    const { map, root } = await renderMap([selectedItem], "vehicle-1");
+
+    const feature = (
+      map.sources.get("fleet-vehicles")?.data as {
+        features: Array<{ properties: Record<string, unknown> }>;
+      }
+    ).features[0];
+    expect(feature.properties.selectedLabel).toBe("UNIDAD-01 · 38 km/h");
+    expect(feature.properties.selectedLabel).not.toMatch(/null|undefined|NaN/);
+
+    await act(async () => root.unmount());
   });
 
   it("centers a newly selected vehicle without reducing the current zoom", async () => {
@@ -613,10 +741,16 @@ describe("FleetLiveMap", () => {
     await vi.waitFor(() => expect(mapMock.state.instances).toHaveLength(1));
     const map = mapMock.state.instances[0];
     await act(async () => map.emit("load"));
+    const movedItem = item(19.2);
+    movedItem.position = {
+      ...movedItem.position!,
+      headingDegrees: 135,
+      speedKph: 38,
+    };
     await act(async () => {
       root.render(
         <FleetLiveMap
-          items={[item(19.2)]}
+          items={[movedItem]}
           onSelectVehicle={onSelectVehicle}
           selectedVehicleId="vehicle-1"
         />,
@@ -640,6 +774,7 @@ describe("FleetLiveMap", () => {
             },
             addOrUpdateProperties: expect.arrayContaining([
               { key: "selected", value: true },
+              { key: "headingDegrees", value: 135 },
             ]),
           },
         ],
