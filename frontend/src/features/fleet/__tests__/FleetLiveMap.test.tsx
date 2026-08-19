@@ -4,11 +4,30 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FleetLiveItem } from "../types";
 
+type MockFeature = {
+  type: "Feature";
+  id: string | number;
+  geometry: { type: string; coordinates: unknown };
+  properties: Record<string, unknown>;
+};
+type MockFeatureUpdate = {
+  id: string | number;
+  newGeometry?: MockFeature["geometry"];
+  addOrUpdateProperties?: Array<{ key: string; value: unknown }>;
+  removeProperties?: string[];
+};
+type MockSourceDiff = {
+  add?: MockFeature[];
+  update?: MockFeatureUpdate[];
+  remove?: Array<string | number>;
+};
+
 type Source = {
   data: unknown;
-  updateDataCalls: unknown[];
+  setDataCalls: unknown[];
+  updateDataCalls: MockSourceDiff[];
   setData: (data: unknown) => void;
-  updateData: (data: { update?: unknown[]; remove?: string[] }) => void;
+  updateData: (data: MockSourceDiff) => void;
 };
 type MockMap = {
   sources: globalThis.Map<string, Source>;
@@ -69,28 +88,41 @@ const mapMock = vi.hoisted(() => {
 
   class MockSource implements Source {
     data: unknown;
-    updateDataCalls: unknown[] = [];
+    setDataCalls: unknown[] = [];
+    updateDataCalls: MockSourceDiff[] = [];
 
     constructor(data: unknown) {
       this.data = data;
     }
 
     setData(data: unknown) {
+      this.setDataCalls.push(data);
       this.data = data;
     }
 
-    updateData(data: { update?: unknown[]; remove?: string[] }) {
+    updateData(data: MockSourceDiff) {
       this.updateDataCalls.push(data);
       const collection = this.data as {
         type: "FeatureCollection";
-        features: Array<{ id: string }>;
+        features: MockFeature[];
       };
-      const updates = (data.update ?? []) as Array<{ id: string }>;
+      const additions = data.add ?? [];
       const removes = new Set(data.remove ?? []);
       const byId = new globalThis.Map(
         collection.features.map((feature) => [feature.id, feature]),
       );
-      updates.forEach((feature) => byId.set(feature.id, feature));
+      additions.forEach((feature) => byId.set(feature.id, feature));
+      data.update?.forEach((diff) => {
+        const feature = byId.get(diff.id);
+        if (!feature) return;
+        if (diff.newGeometry) feature.geometry = diff.newGeometry;
+        diff.removeProperties?.forEach((key) => {
+          delete feature.properties[key];
+        });
+        diff.addOrUpdateProperties?.forEach(({ key, value }) => {
+          feature.properties[key] = value;
+        });
+      });
       removes.forEach((id) => byId.delete(id));
       this.data = { ...collection, features: [...byId.values()] };
     }
@@ -309,7 +341,15 @@ describe("FleetLiveMap", () => {
     expect(map.sources.get("fleet-vehicles")?.data).toEqual(
       expect.objectContaining({
         type: "FeatureCollection",
-        features: [expect.objectContaining({ id: "vehicle-1" })],
+        features: [
+          expect.objectContaining({
+            id: "vehicle-1",
+            geometry: {
+              type: "Point",
+              coordinates: [-96.15, 19.15],
+            },
+          }),
+        ],
       }),
     );
     expect(map.sources.get("fleet-routes")?.data).toEqual(
@@ -415,6 +455,7 @@ describe("FleetLiveMap", () => {
 
   it("updates a source without creating another map and synchronizes map selection", async () => {
     const onSelectVehicle = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -444,13 +485,37 @@ describe("FleetLiveMap", () => {
     expect(
       (map.sources.get("fleet-vehicles")?.data as { features: Array<{ geometry: { coordinates: number[] } }> }).features[0].geometry.coordinates,
     ).toEqual([-96.15, 19.2]);
-    expect(map.sources.get("fleet-vehicles")?.updateDataCalls).toHaveLength(1);
+    expect(map.sources.get("fleet-vehicles")?.setDataCalls).toHaveLength(1);
+    expect(map.sources.get("fleet-vehicles")?.updateDataCalls).toEqual([
+      {
+        add: [],
+        update: [
+          {
+            id: "vehicle-1",
+            newGeometry: {
+              type: "Point",
+              coordinates: [-96.15, 19.2],
+            },
+            addOrUpdateProperties: expect.arrayContaining([
+              { key: "selected", value: true },
+            ]),
+          },
+        ],
+        remove: [],
+      },
+    ]);
+    expect(
+      (map.sources.get("fleet-vehicles")?.updateDataCalls[0] as MockSourceDiff)
+        .update?.[0],
+    ).not.toHaveProperty("geometry");
+    expect(fetchSpy).not.toHaveBeenCalled();
     await act(async () => {
       map.emitLayer("fleet-vehicles-symbol", { features: [{ id: "vehicle-1" }] });
     });
     expect(onSelectVehicle).toHaveBeenCalledWith("vehicle-1");
 
     await act(async () => root.unmount());
+    fetchSpy.mockRestore();
   });
 
   it("renders persisted heatmap cells with weight without recreating the map", async () => {
