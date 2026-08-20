@@ -163,6 +163,22 @@ describe("FleetLivePage", () => {
     await act(async () => root.unmount());
   });
 
+  it("keeps the visible units list and cards constrained to the panel width", async () => {
+    const { root, container } = await renderPage();
+
+    const unitsList = container.querySelector('[data-testid="fleet-units-list"]');
+    expect(unitsList?.className).toContain("min-w-0");
+    expect(unitsList?.className).toContain("overflow-x-hidden");
+
+    const unitButtons = Array.from(
+      container.querySelectorAll('[data-testid="fleet-unit-button"]'),
+    );
+    expect(unitButtons).toHaveLength(2);
+    expect(unitButtons.every((button) => button.className.includes("min-w-0"))).toBe(true);
+
+    await act(async () => root.unmount());
+  });
+
   it("synchronizes list selection and client-side route filters", async () => {
     const { root, container } = await renderPage();
     const unitButton = Array.from(

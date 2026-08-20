@@ -576,7 +576,7 @@ export function FleetLivePage() {
           </StatusMessage>
         )}
 
-        <section className="grid min-h-[38rem] gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <section className="grid min-w-0 min-h-[38rem] gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
           <FleetLiveMap
             editorActive={Boolean(draft)}
             editorPoints={draft?.points}
@@ -608,13 +608,16 @@ export function FleetLivePage() {
                 {filteredItems.length} en operación
               </h2>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div
+              className="min-w-0 min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
+              data-testid="fleet-units-list"
+            >
               {filteredItems.length === 0 ? (
                 <p className="rounded-2xl border border-dashed border-[color:var(--erp-border)] p-5 text-sm font-semibold text-[var(--erp-muted-foreground)]">
                   No hay unidades que coincidan con los filtros.
                 </p>
               ) : (
-                <div className="grid gap-2">
+                <div className="grid min-w-0 gap-2">
                   {filteredItems.map((item) => {
                     const selected = item.vehicle.id === activeSelectedVehicleId;
                     const speed = formatSpeed(item.position?.speedKph);
@@ -623,7 +626,7 @@ export function FleetLivePage() {
                       <button
                         aria-pressed={selected}
                         data-testid="fleet-unit-button"
-                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                        className={`min-w-0 w-full rounded-2xl border p-4 text-left transition ${
                           selected
                             ? "border-[var(--erp-brand-red)] bg-[rgba(182,42,34,0.07)] shadow-[0_8px_24px_rgba(182,42,34,0.12)]"
                             : "border-[color:var(--erp-border)] bg-[var(--erp-surface)] hover:border-[rgba(47,111,115,0.45)]"
@@ -632,7 +635,7 @@ export function FleetLivePage() {
                         onClick={() => setSelectedVehicleId(item.vehicle.id)}
                         type="button"
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-black text-[var(--erp-foreground)]">
                               {item.vehicle.code} · {item.vehicle.displayName}
@@ -650,15 +653,15 @@ export function FleetLivePage() {
                             title={item.position && !item.stale ? "GPS reciente" : "Sin posición o GPS stale"}
                           />
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                          <span className="font-semibold text-[var(--erp-muted-foreground)]">
+                        <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-xs">
+                          <span className="min-w-0 break-words font-semibold text-[var(--erp-muted-foreground)]">
                             {speed ?? "Velocidad no disponible"}
                           </span>
-                          <span className="text-right font-semibold text-[var(--erp-muted-foreground)]">
+                          <span className="min-w-0 whitespace-nowrap text-right font-semibold text-[var(--erp-muted-foreground)]">
                             {formatTime(item.position?.recordedAt)}
                           </span>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-[0.68rem] font-black uppercase tracking-[0.12em]">
+                        <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[0.68rem] font-black uppercase tracking-[0.12em]">
                           <span className="rounded-full bg-[rgba(47,111,115,0.10)] px-2 py-1 text-[var(--erp-info)]">
                             {progress.delivered}/{progress.total} pedidos
                           </span>
