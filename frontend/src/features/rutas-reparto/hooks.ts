@@ -307,12 +307,20 @@ export function useCreateDeliveryIncident(routeId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
+      idempotencyKey,
       orderId,
       payload,
     }: {
+      idempotencyKey: string;
       orderId: string;
       payload: CreateDeliveryIncidentPayload;
-    }) => deliveryService.createOrderIncident(orderId, payload, accessToken),
+    }) =>
+      deliveryService.createOrderIncident(
+        orderId,
+        payload,
+        idempotencyKey,
+        accessToken,
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
       if (routeId)

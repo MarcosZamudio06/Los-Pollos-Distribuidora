@@ -39,7 +39,7 @@ type MockPrisma = {
     update: jest.Mock;
     updateMany: jest.Mock;
   };
-  deliveryIncident: { create: jest.Mock };
+  deliveryIncident: { create: jest.Mock; findUnique: jest.Mock };
   vehiclePosition: { findFirst: jest.Mock };
   deliveryRoutePlanDraft: { findFirst: jest.Mock; updateMany: jest.Mock };
   deliveryEvidence: { create: jest.Mock };
@@ -196,6 +196,7 @@ function createPrisma(): MockPrisma {
       updateMany: jest.fn(),
     },
     deliveryIncident: {
+      findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({
         id: 'incident-1',
         type: 'DELIVERY_FAILURE',
@@ -2740,6 +2741,7 @@ describe('DeliveryService', () => {
           ],
         },
         driver,
+        'incident-return-key',
       ),
     ).resolves.toEqual(
       expect.objectContaining({
@@ -2772,6 +2774,121 @@ describe('DeliveryService', () => {
     );
     expect(prisma.deliveryIncident.create).toHaveBeenCalledTimes(1);
     expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays a returned-item incident without increasing route stock twice', async () => {
+    const fleetGateway = { emitIncidentCreated: jest.fn() };
+    const { service, prisma } = createService(undefined, fleetGateway);
+    const persistedIncident = {
+      id: 'incident-1',
+      type: 'DELIVERY_FAILURE',
+      status: 'OPEN',
+      reason: 'Cliente devolvió producto',
+      routeId: 'route-1',
+      deliveryOrderId: 'order-1',
+      vehicleId: null,
+      driverId: 'driver-1',
+      positionId: null,
+      statusSnapshot: DeliveryOrderStatus.RETURNED,
+      latitude: null,
+      longitude: null,
+      returnedItems: [
+        {
+          productId: 'product-1',
+          quantityKg: 2.5,
+          quantityPieces: 0,
+          reason: 'Cliente devolvió producto',
+        },
+      ],
+      evidence: [],
+      occurredAt: date('2026-06-19T12:15:00.000Z'),
+      reportedAt: date('2026-06-19T12:15:00.000Z'),
+      reportedByUserId: 'driver-1',
+      createdAt: date('2026-06-19T12:15:00.000Z'),
+      updatedAt: date('2026-06-19T12:15:00.000Z'),
+    };
+    prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+    prisma.deliveryOrder.update.mockResolvedValue(
+      createOrder({ status: DeliveryOrderStatus.RETURNED }),
+    );
+    let storedIncident: Record<string, unknown> | null = null;
+    prisma.deliveryIncident.findUnique.mockImplementation(() =>
+      Promise.resolve(storedIncident),
+    );
+    prisma.deliveryIncident.create.mockImplementation(({ data }) => {
+      storedIncident = { ...persistedIncident, ...data };
+      return Promise.resolve(storedIncident);
+    });
+    prisma.inventoryBalance.findUnique.mockResolvedValue({
+      productId: 'product-1',
+      locationId: 'route-stock-1',
+      quantityKg: money('6'),
+      quantityPieces: 4,
+      reservedQuantityKg: money('0'),
+      reservedQuantityPieces: 0,
+    });
+    prisma.inventoryMovement.create.mockResolvedValue({
+      id: 'movement-1',
+      productId: 'product-1',
+      locationId: 'route-stock-1',
+      type: InventoryMovementType.RETURN,
+      quantityKg: money('2.5'),
+      quantityPieces: 0,
+      reason: 'Cliente devolvió producto',
+    });
+    prisma.inventoryMovement.findMany.mockResolvedValue([
+      {
+        id: 'movement-1',
+        productId: 'product-1',
+        locationId: 'route-stock-1',
+        type: InventoryMovementType.RETURN,
+        quantityKg: money('2.5'),
+        quantityPieces: 0,
+        reason: 'Cliente devolvió producto',
+      },
+    ]);
+    const command = {
+      status: DeliveryOrderStatus.RETURNED,
+      reason: 'Cliente devolvió producto',
+      returnedItems: [
+        {
+          productId: 'product-1',
+          quantityKg: 2.5,
+          quantityPieces: 0,
+          reason: 'Cliente devolvió producto',
+        },
+      ],
+    };
+
+    const first = await service.registerIncident(
+      'order-1',
+      command,
+      driver,
+      'incident-retry-key',
+    );
+    const replay = await service.registerIncident(
+      'order-1',
+      command,
+      driver,
+      'incident-retry-key',
+    );
+    await expect(
+      service.registerIncident(
+        'order-1',
+        {
+          ...command,
+          reason: 'Cliente rechazó el pedido completo',
+        },
+        driver,
+        'incident-retry-key',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(first.incident.id).toBe('incident-1');
+    expect(replay.incident.id).toBe('incident-1');
+    expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(1);
+    expect(prisma.deliveryIncident.create).toHaveBeenCalledTimes(1);
+    expect(fleetGateway.emitIncidentCreated).toHaveBeenCalledTimes(1);
   });
 
   it('persists the incident context and publishes only after the transaction commits', async () => {
@@ -2843,6 +2960,7 @@ describe('DeliveryService', () => {
         reason: 'Cliente no localizado',
       },
       driver,
+      'incident-position-key',
     );
 
     expect(prisma.deliveryIncident.create).toHaveBeenCalledWith(
@@ -2900,6 +3018,7 @@ describe('DeliveryService', () => {
         reason: 'Cliente no localizado',
       },
       driver,
+      'incident-no-position-key',
     );
 
     expect(result.incident).toEqual(
@@ -2938,6 +3057,7 @@ describe('DeliveryService', () => {
           reason: 'Cliente no localizado',
         },
         driver,
+        'incident-failure-key',
       ),
     ).rejects.toThrow('incident write failed');
     expect(fleetGateway.emitIncidentCreated).not.toHaveBeenCalled();
@@ -2955,6 +3075,7 @@ describe('DeliveryService', () => {
           reason: 'Cliente no localizado',
         },
         driver,
+        'incident-foreign-key',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.deliveryOrder.findFirst).toHaveBeenCalledWith(

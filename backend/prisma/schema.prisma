@@ -1383,6 +1383,8 @@ model DeliveryIncident {
   reportedByUserId  String
   resolvedAt        DateTime?
   resolvedByUserId  String?
+  idempotencyKey    String?                @unique
+  idempotencyPayloadHash String?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   route             DeliveryRoute?         @relation(fields: [routeId], references: [id], onDelete: Restrict)

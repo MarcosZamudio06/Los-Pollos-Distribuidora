@@ -13,6 +13,7 @@ export function CancelPurchaseDialog({
   purchase,
 }: CancelPurchaseDialogProps) {
   const [reason, setReason] = useState("");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string | null>(null);
   const cancelPurchase = useCancelPurchase(purchase.id);
   const isDisabled =
@@ -23,7 +24,10 @@ export function CancelPurchaseDialog({
   async function submit() {
     setError(null);
     try {
-      await cancelPurchase.mutateAsync({ reason: reason.trim() });
+      await cancelPurchase.mutateAsync({
+        idempotencyKey,
+        payload: { reason: reason.trim() },
+      });
       onClose();
     } catch (caught) {
       setError(

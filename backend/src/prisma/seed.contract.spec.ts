@@ -39,6 +39,10 @@ const releaseWorkflowPath = resolve(
   __dirname,
   '../../../.github/workflows/release-images.yml',
 );
+const publicOriginValidatorPath = resolve(
+  __dirname,
+  '../../../scripts/validate-public-origin.mjs',
+);
 type UpsertMock<TArgs> = jest.MockedFunction<(args: TArgs) => Promise<unknown>>;
 type PrismaSeedMockClient = {
   role: {
@@ -482,6 +486,10 @@ describe('Prisma seed contract', () => {
     const frontendDockerfile = readFileSync(frontendDockerfilePath, 'utf8');
     const environmentExample = readFileSync(environmentExamplePath, 'utf8');
     const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const publicOriginValidator = readFileSync(
+      publicOriginValidatorPath,
+      'utf8',
+    );
 
     expect(
       frontendDockerfile.match(/^ARG OBJECT_STORAGE_PUBLIC_ORIGIN$/gm),
@@ -492,20 +500,27 @@ describe('Prisma seed contract', () => {
     expect(frontendDockerfile).not.toContain(
       "img-src 'self' data: blob: http://127.0.0.1:8333;",
     );
-    expect(frontendDockerfile).toContain(
+    expect(publicOriginValidator).toContain(
       'OBJECT_STORAGE_PUBLIC_ORIGIN must be an explicit HTTP(S) origin without wildcards',
     );
-    expect(frontendDockerfile).toContain('origin.includes("*")');
-    expect(frontendDockerfile).toContain('url.origin !== origin');
+    expect(publicOriginValidator).toContain('origin.includes("*")');
+    expect(publicOriginValidator).toContain('url.origin === origin');
+    expect(frontendDockerfile).toContain(
+      'node /app/scripts/validate-public-origin.mjs "${OBJECT_STORAGE_PUBLIC_ORIGIN}"',
+    );
 
-    const validator = frontendDockerfile.match(
-      /RUN node -e '([^'\n]+)' "\$\{OBJECT_STORAGE_PUBLIC_ORIGIN\}"/,
-    )?.[1];
-    expect(validator).toBeDefined();
-    const validateOrigin = (origin: string) =>
-      spawnSync(process.execPath, ['-e', validator!, origin], {
-        env: { ...process.env, OPENSSL_CONF: '/dev/null' },
-      }).status;
+    const validateOrigin = (origin: string, production = false) =>
+      spawnSync(
+        process.execPath,
+        [
+          publicOriginValidatorPath,
+          origin,
+          ...(production ? ['--production'] : []),
+        ],
+        {
+          env: { ...process.env, OPENSSL_CONF: '/dev/null' },
+        },
+      ).status;
 
     expect(validateOrigin('https://objects.example.test')).toBe(0);
     expect(validateOrigin('http://127.0.0.1:8333')).toBe(0);
@@ -517,6 +532,8 @@ describe('Prisma seed contract', () => {
     ]) {
       expect(validateOrigin(forbiddenOrigin)).not.toBe(0);
     }
+    expect(validateOrigin('https://objects.example.com', true)).not.toBe(0);
+    expect(validateOrigin('https://objects.pollos.mx', true)).toBe(0);
 
     expect(developmentCompose).toContain(
       'OBJECT_STORAGE_PUBLIC_ORIGIN: ${OBJECT_STORAGE_PUBLIC_ORIGIN:-http://127.0.0.1:8333}',
@@ -528,7 +545,10 @@ describe('Prisma seed contract', () => {
       'OBJECT_STORAGE_PUBLIC_ORIGIN: ${OBJECT_STORAGE_PUBLIC_ORIGIN:',
     );
     expect(releaseWorkflow).toContain(
-      'OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.com',
+      'OBJECT_STORAGE_PUBLIC_ORIGIN: ${{ vars.OBJECT_STORAGE_PUBLIC_ORIGIN }}',
+    );
+    expect(releaseWorkflow).toContain(
+      'REQUIRE_APPROVED_OBJECT_STORAGE_ORIGIN=true',
     );
     expect(productionCompose).toContain(
       'OBJECT_STORAGE_ENDPOINT: http://object-storage:8333',

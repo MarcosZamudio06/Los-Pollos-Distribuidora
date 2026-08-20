@@ -54,12 +54,12 @@ image to its step summary and uploads `release-digests.json` as a 90-day
 artifact. The artifact is the deployment record; do not copy a mutable tag
 into the VPS environment.
 
-The frontend release is built with the example public origin
-`https://objects.example.com` and the same-origin map style path. When real
-hostnames are approved, create a new release with the approved
-`OBJECT_STORAGE_PUBLIC_ORIGIN` build argument and update Caddy and the
-production environment together. This is a public configuration value, not a
-secret, and changing it after the image is built would leave the CSP stale.
+The frontend release reads the approved public origin from the required GitHub
+Actions repository variable `OBJECT_STORAGE_PUBLIC_ORIGIN`. The release fails
+before building when that variable is empty, is not HTTPS, or uses a reserved
+placeholder hostname. Keep that value aligned with Caddy and
+`OBJECT_STORAGE_PUBLIC_ENDPOINT`; changing it after the image is built would
+leave the CSP stale. This is public configuration, not a secret.
 
 ## Image contract
 

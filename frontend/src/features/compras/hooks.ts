@@ -32,8 +32,13 @@ export function useCreatePurchase() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreatePurchasePayload) =>
-      purchasesService.createPurchase(payload, accessToken),
+    mutationFn: ({
+      idempotencyKey,
+      payload,
+    }: {
+      idempotencyKey: string;
+      payload: CreatePurchasePayload;
+    }) => purchasesService.createPurchase(payload, idempotencyKey, accessToken),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["purchases"] });
       void queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -47,8 +52,19 @@ export function useCancelPurchase(purchaseId: string) {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CancelPurchasePayload) =>
-      purchasesService.cancelPurchase(purchaseId, payload, accessToken),
+    mutationFn: ({
+      idempotencyKey,
+      payload,
+    }: {
+      idempotencyKey: string;
+      payload: CancelPurchasePayload;
+    }) =>
+      purchasesService.cancelPurchase(
+        purchaseId,
+        payload,
+        idempotencyKey,
+        accessToken,
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["purchases"] });
       void queryClient.invalidateQueries({ queryKey: ["inventory-balances"] });

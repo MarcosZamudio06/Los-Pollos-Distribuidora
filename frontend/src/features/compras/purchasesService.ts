@@ -86,6 +86,7 @@ export const purchasesService = {
   },
   async createPurchase(
     payload: CreatePurchasePayload,
+    idempotencyKey: string,
     accessToken?: string | null,
   ) {
     const response = await apiClient.post<
@@ -93,13 +94,14 @@ export const purchasesService = {
       CreatePurchasePayload
     >("/purchases", {
       body: payload,
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },
   async cancelPurchase(
     id: string,
     payload: CancelPurchasePayload,
+    idempotencyKey: string,
     accessToken?: string | null,
   ) {
     const response = await apiClient.post<
@@ -107,7 +109,7 @@ export const purchasesService = {
       CancelPurchasePayload
     >(`/purchases/${id}/cancel`, {
       body: payload,
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },
