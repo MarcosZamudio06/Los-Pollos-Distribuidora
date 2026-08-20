@@ -72,6 +72,7 @@ type Props = {
 };
 
 export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [incidentType, setIncidentType] =
     useState<IncidentUiType>("NOT_DELIVERED");
   const [reason, setReason] = useState("");
@@ -119,6 +120,7 @@ export function DeliveryIncidentDialog({ onClose, order, routeId }: Props) {
     event.preventDefault();
     if (!canSubmit) return;
     await createIncident.mutateAsync({
+      idempotencyKey,
       orderId: order.id,
       payload: {
         reason: isOperationalIncident

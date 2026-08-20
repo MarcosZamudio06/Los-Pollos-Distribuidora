@@ -883,6 +883,11 @@ Propósito: registrar no entrega, devolución, rechazo parcial o incidencia.
 
 Permisos: `DRIVER` limitado a pedido asignado; `ADMIN`.
 
+Headers requeridos:
+
+- `Idempotency-Key`: identificador estable del comando. Debe conservarse al
+  reintentar una solicitud cuyo resultado sea incierto.
+
 Body importante:
 
 ```json
@@ -907,4 +912,11 @@ Validaciones:
 - Si afecta inventario, debe generar trazabilidad y movimiento con ubicación `ROUTE_STOCK` y motivo cuando corresponda.
 - Persistir un `DeliveryIncident` trazable con `routeId`, `deliveryOrderId`, `vehicleId` y `driverId` derivados de la asignación; asociar `positionId` y `zoneId` cuando existan.
 - El cliente no puede asignar arbitrariamente vehículo, conductor, ruta, posición o zona a la incidencia.
+- La incidencia, el cambio de estado y todos los movimientos de devolución se
+  confirman en una transacción `Serializable`. Repetir la misma clave y payload
+  devuelve la incidencia y movimientos persistidos sin modificar el stock;
+  reutilizar la clave con otro payload responde `409 Conflict`.
+- Una incidencia nueva se rechaza cuando el pedido ya tiene estado final. Las
+  colisiones concurrentes se reintentan de forma acotada y no pueden emitir un
+  segundo evento `fleet.incident.created`.
 - La tolerancia exacta de devolución o diferencia queda pendiente de negocio.

@@ -3,6 +3,7 @@ FROM node:24.14.1-alpine@sha256:8510330d3eb72c804231a834b1a8ebb55cb3796c3e443129
 ARG VITE_MAP_STYLE_URL
 ARG REQUIRE_PUBLIC_MAP_STYLE=false
 ARG OBJECT_STORAGE_PUBLIC_ORIGIN
+ARG REQUIRE_APPROVED_OBJECT_STORAGE_ORIGIN=false
 ENV VITE_API_BASE_URL=/api
 ENV VITE_MAP_STYLE_URL=${VITE_MAP_STYLE_URL}
 
@@ -19,12 +20,17 @@ COPY frontend/index.html frontend/tsconfig*.json frontend/vite.config.ts ./
 COPY frontend/public ./public
 COPY frontend/src ./src
 COPY shared /app/shared
+COPY scripts/validate-public-origin.mjs /app/scripts/validate-public-origin.mjs
 
 RUN if [ "${REQUIRE_PUBLIC_MAP_STYLE}" = "true" ] && [ -z "${VITE_MAP_STYLE_URL}" ]; then \
       echo "VITE_MAP_STYLE_URL is required for production frontend images" >&2; \
       exit 1; \
     fi
-RUN node -e 'const origin = process.argv[1]; let url; try { url = new URL(origin); } catch {} if (!url || !["http:", "https:"].includes(url.protocol) || url.origin !== origin || origin.includes("*")) { console.error("OBJECT_STORAGE_PUBLIC_ORIGIN must be an explicit HTTP(S) origin without wildcards"); process.exit(1); }' "${OBJECT_STORAGE_PUBLIC_ORIGIN}"
+RUN if [ "${REQUIRE_APPROVED_OBJECT_STORAGE_ORIGIN}" = "true" ]; then \
+      node /app/scripts/validate-public-origin.mjs "${OBJECT_STORAGE_PUBLIC_ORIGIN}" --production; \
+    else \
+      node /app/scripts/validate-public-origin.mjs "${OBJECT_STORAGE_PUBLIC_ORIGIN}"; \
+    fi
 RUN npm run build
 
 FROM nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752

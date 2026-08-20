@@ -84,11 +84,20 @@ export class DeliveryOrdersController {
     @Param('id') id: string,
     @Body() body: RegisterDeliveryIncidentDto,
     @CurrentUser() currentUser: AuthenticatedUser,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
     return {
       success: true,
       message: 'Delivery incident registered successfully',
-      data: await this.deliveryService.registerIncident(id, body, currentUser),
+      data: await this.deliveryService.registerIncident(
+        id,
+        body,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

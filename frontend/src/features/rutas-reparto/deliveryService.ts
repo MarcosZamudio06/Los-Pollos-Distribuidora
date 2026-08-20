@@ -321,6 +321,7 @@ export const deliveryService = {
   async createOrderIncident(
     orderId: string,
     payload: CreateDeliveryIncidentPayload,
+    idempotencyKey: string,
     accessToken?: string | null,
   ) {
     const response = await apiClient.post<
@@ -328,7 +329,7 @@ export const deliveryService = {
       CreateDeliveryIncidentPayload
     >(`/delivery-orders/${orderId}/incidents`, {
       body: payload,
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },

@@ -185,6 +185,8 @@ type DeliveryIncidentRecord = Record<string, unknown> & {
   reportedByUserId: string;
   resolvedAt?: Date | null;
   resolvedByUserId?: string | null;
+  idempotencyKey?: string | null;
+  idempotencyPayloadHash?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -1483,7 +1485,10 @@ export class DeliveryService {
     id: string,
     dto: RegisterDeliveryIncidentDto,
     currentUser: Actor,
+    idempotencyKey: string,
   ) {
+    this.assertIdempotencyKey(idempotencyKey);
+    const normalizedIdempotencyKey = idempotencyKey.trim();
     if (!INCIDENT_STATUS_REQUIRING_NOTES.has(dto.status)) {
       throw new BadRequestException(
         'Incident endpoint only accepts non-delivery, return, or partial rejection statuses',
@@ -1493,99 +1498,174 @@ export class DeliveryService {
       throw new BadRequestException('reason is required');
     }
 
-    const transactionResult = await this.prisma.$transaction(async (tx) => {
-      const order = await this.findAccessibleOrder(id, currentUser, tx);
-      this.assertCommercialDeliveryOrder(order);
-      if (!order.route?.routeStockLocationId) {
-        throw new BadRequestException(
-          'Route stock location is required to register delivery incidents',
+    const normalizedReturnedItems = (dto.returnedItems ?? []).map((item) => ({
+      productId: item.productId.trim(),
+      unit: item.unit ?? null,
+      quantityKg: item.quantityKg ?? null,
+      quantityPieces: item.quantityPieces ?? null,
+      reason: item.reason.trim(),
+    }));
+    const payloadHash = this.hashPayload({
+      operation: 'REGISTER_DELIVERY_INCIDENT',
+      deliveryOrderId: id,
+      status: dto.status,
+      reason: dto.reason.trim(),
+      returnedItems: normalizedReturnedItems,
+      userId: currentUser.id,
+    });
+    const movementKeys = normalizedReturnedItems.map(
+      (_, index) => `${normalizedIdempotencyKey}:return:${index}`,
+    );
+
+    try {
+      const transactionResult = await this.withSerializableRetry(
+        () =>
+          this.prisma.$transaction(
+            async (tx) => {
+              const order = await this.findAccessibleOrder(id, currentUser, tx);
+              this.assertCommercialDeliveryOrder(order);
+
+              const existingIncident = (await tx.deliveryIncident.findUnique({
+                where: { idempotencyKey: normalizedIdempotencyKey },
+              })) as DeliveryIncidentRecord | null;
+              if (existingIncident) {
+                this.assertIncidentReplay(existingIncident, id, payloadHash);
+                const inventoryMovements = await this.findIncidentMovements(
+                  tx,
+                  movementKeys,
+                );
+                return {
+                  deliveryOrder: this.toOrderResponse(order),
+                  inventoryMovements: inventoryMovements.map((movement) =>
+                    this.toInventoryMovementResponse(movement),
+                  ),
+                  incident: this.toIncidentResponse(existingIncident, order),
+                  event: null,
+                  originLocationId: order.route?.originLocationId ?? null,
+                };
+              }
+
+              if (FINAL_ORDER_STATUSES.has(order.status)) {
+                throw new ConflictException(
+                  'Delivery order already has a final status; retry with the original Idempotency-Key',
+                );
+              }
+              if (!order.route?.routeStockLocationId) {
+                throw new BadRequestException(
+                  'Route stock location is required to register delivery incidents',
+                );
+              }
+
+              const updatedOrder = (await tx.deliveryOrder.update({
+                where: { id: order.id },
+                data: {
+                  status: dto.status,
+                  notes: dto.reason.trim(),
+                },
+                include: {
+                  route: true,
+                  sale: {
+                    select: {
+                      id: true,
+                      saleNumber: true,
+                      customer: { select: { name: true } },
+                    },
+                  },
+                  accountReceivable: {
+                    select: {
+                      id: true,
+                      outstandingAmount: true,
+                      version: true,
+                    },
+                  },
+                  evidence: { select: { type: true } },
+                },
+              })) as DeliveryOrderRecord;
+
+              const inventoryMovements: InventoryMovementRecord[] = [];
+              for (const [index, item] of (dto.returnedItems ?? []).entries()) {
+                const movement = await this.recordRouteReturnMovement(tx, {
+                  order,
+                  item,
+                  userId: currentUser.id,
+                  routeStockLocationId: order.route.routeStockLocationId,
+                  reason: item.reason || dto.reason,
+                  idempotencyKey: movementKeys[index],
+                  idempotencyPayloadHash: payloadHash,
+                });
+                inventoryMovements.push(movement);
+              }
+
+              const occurredAt = new Date();
+              const position = await this.findRecentIncidentPosition(
+                tx,
+                order,
+                occurredAt,
+              );
+              const incident = (await tx.deliveryIncident.create({
+                data: {
+                  type: this.incidentTypeForStatus(dto.status),
+                  status: DeliveryIncidentStatus.OPEN,
+                  reason: dto.reason.trim(),
+                  routeId: order.routeId,
+                  deliveryOrderId: order.id,
+                  vehicleId: order.route.vehicleId ?? null,
+                  driverId: order.route.driverId ?? null,
+                  positionId: position?.id ?? null,
+                  statusSnapshot: updatedOrder.status,
+                  latitude: position?.latitude ?? null,
+                  longitude: position?.longitude ?? null,
+                  returnedItems: normalizedReturnedItems,
+                  evidence: [],
+                  occurredAt,
+                  reportedByUserId: currentUser.id,
+                  idempotencyKey: normalizedIdempotencyKey,
+                  idempotencyPayloadHash: payloadHash,
+                },
+              })) as DeliveryIncidentRecord;
+
+              const incidentResponse = this.toIncidentResponse(incident, order);
+
+              return {
+                deliveryOrder: this.toOrderResponse(updatedOrder),
+                inventoryMovements: inventoryMovements.map((movement) =>
+                  this.toInventoryMovementResponse(movement),
+                ),
+                incident: incidentResponse,
+                event: this.toIncidentEventPayload(incident, order),
+                originLocationId: order.route.originLocationId ?? null,
+              };
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        'INCIDENT_CONCURRENCY_CONFLICT',
+        'The delivery incident could not be completed after concurrent retries',
+      );
+
+      if (transactionResult.event) {
+        this.publishIncidentCreated(
+          transactionResult.event,
+          transactionResult.originLocationId,
         );
       }
 
-      const updatedOrder = (await tx.deliveryOrder.update({
-        where: { id: order.id },
-        data: {
-          status: dto.status,
-          notes: dto.reason.trim(),
-        },
-        include: {
-          route: true,
-          sale: {
-            select: {
-              id: true,
-              saleNumber: true,
-              customer: { select: { name: true } },
-            },
-          },
-          accountReceivable: {
-            select: { id: true, outstandingAmount: true, version: true },
-          },
-          evidence: { select: { type: true } },
-        },
-      })) as DeliveryOrderRecord;
-
-      const inventoryMovements: InventoryMovementRecord[] = [];
-      for (const item of dto.returnedItems ?? []) {
-        const movement = await this.recordRouteReturnMovement(tx, {
-          order,
-          item,
-          userId: currentUser.id,
-          routeStockLocationId: order.route.routeStockLocationId,
-          reason: item.reason || dto.reason,
-        });
-        inventoryMovements.push(movement);
-      }
-
-      const occurredAt = new Date();
-      const position = await this.findRecentIncidentPosition(
-        tx,
-        order,
-        occurredAt,
-      );
-      const incident = (await tx.deliveryIncident.create({
-        data: {
-          type: this.incidentTypeForStatus(dto.status),
-          status: DeliveryIncidentStatus.OPEN,
-          reason: dto.reason.trim(),
-          routeId: order.routeId,
-          deliveryOrderId: order.id,
-          vehicleId: order.route.vehicleId ?? null,
-          driverId: order.route.driverId ?? null,
-          positionId: position?.id ?? null,
-          statusSnapshot: updatedOrder.status,
-          latitude: position?.latitude ?? null,
-          longitude: position?.longitude ?? null,
-          returnedItems: (dto.returnedItems ??
-            []) as unknown as Prisma.InputJsonValue,
-          evidence: [],
-          occurredAt,
-          reportedByUserId: currentUser.id,
-        },
-      })) as DeliveryIncidentRecord;
-
-      const incidentResponse = this.toIncidentResponse(incident, order);
-
       return {
-        deliveryOrder: this.toOrderResponse(updatedOrder),
-        inventoryMovements: inventoryMovements.map((movement) =>
-          this.toInventoryMovementResponse(movement),
-        ),
-        incident: incidentResponse,
-        event: this.toIncidentEventPayload(incident, order),
-        originLocationId: order.route.originLocationId ?? null,
+        deliveryOrder: transactionResult.deliveryOrder,
+        inventoryMovements: transactionResult.inventoryMovements,
+        incident: transactionResult.incident,
       };
-    });
-
-    this.publishIncidentCreated(
-      transactionResult.event,
-      transactionResult.originLocationId,
-    );
-
-    return {
-      deliveryOrder: transactionResult.deliveryOrder,
-      inventoryMovements: transactionResult.inventoryMovements,
-      incident: transactionResult.incident,
-    };
+    } catch (error) {
+      if (this.isIdempotencyUniqueConflict(error)) {
+        return this.resolveExistingIncidentByKey(
+          id,
+          currentUser,
+          normalizedIdempotencyKey,
+          payloadHash,
+          movementKeys,
+        );
+      }
+      throw error;
+    }
   }
 
   private async findRecentIncidentPosition(
@@ -2613,6 +2693,64 @@ export class DeliveryService {
     );
   }
 
+  private assertIncidentReplay(
+    incident: DeliveryIncidentRecord,
+    orderId: string,
+    payloadHash: string,
+  ): void {
+    if (incident.deliveryOrderId !== orderId) {
+      throw new ConflictException(
+        'Idempotency-Key was already used for another delivery order',
+      );
+    }
+    this.assertSameIdempotencyPayload(
+      incident.idempotencyPayloadHash,
+      payloadHash,
+      'Idempotency-Key was already used for a different delivery incident payload',
+    );
+  }
+
+  private async findIncidentMovements(
+    client: Prisma.TransactionClient | PrismaService,
+    movementKeys: string[],
+  ): Promise<InventoryMovementRecord[]> {
+    if (movementKeys.length === 0) return [];
+    return await client.inventoryMovement.findMany({
+      where: { idempotencyKey: { in: movementKeys } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  private async resolveExistingIncidentByKey(
+    orderId: string,
+    currentUser: Actor,
+    idempotencyKey: string,
+    payloadHash: string,
+    movementKeys: string[],
+  ) {
+    const order = await this.findAccessibleOrder(orderId, currentUser);
+    const incident = (await this.prisma.deliveryIncident.findUnique({
+      where: { idempotencyKey },
+    })) as DeliveryIncidentRecord | null;
+    if (!incident) {
+      throw new ConflictException(
+        'Concurrent delivery incident is still in progress; retry with the same Idempotency-Key',
+      );
+    }
+    this.assertIncidentReplay(incident, orderId, payloadHash);
+    const inventoryMovements = await this.findIncidentMovements(
+      this.prisma,
+      movementKeys,
+    );
+    return {
+      deliveryOrder: this.toOrderResponse(order),
+      inventoryMovements: inventoryMovements.map((movement) =>
+        this.toInventoryMovementResponse(movement),
+      ),
+      incident: this.toIncidentResponse(incident, order),
+    };
+  }
+
   private async toEvidenceResponse(evidence: DeliveryEvidenceRecord) {
     return {
       id: evidence.id,
@@ -2746,6 +2884,8 @@ export class DeliveryService {
       userId: string;
       routeStockLocationId: string;
       reason: string;
+      idempotencyKey: string;
+      idempotencyPayloadHash: string;
     },
   ) {
     const quantityKg = this.roundQuantity(params.item.quantityKg ?? 0);
@@ -2787,6 +2927,8 @@ export class DeliveryService {
         referenceType: 'DeliveryOrder',
         referenceId: params.order.id,
         saleId: params.order.saleId,
+        idempotencyKey: params.idempotencyKey,
+        idempotencyPayloadHash: params.idempotencyPayloadHash,
       },
     }) as Promise<InventoryMovementRecord>;
   }
@@ -2921,6 +3063,8 @@ export class DeliveryService {
 
   private async withSerializableRetry<T>(
     operation: () => Promise<T>,
+    conflictCode = 'COLLECTION_CONCURRENCY_CONFLICT',
+    conflictMessage = 'The route collection could not be completed after concurrent retries',
   ): Promise<T> {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
@@ -2929,18 +3073,16 @@ export class DeliveryService {
         if (!this.isSerializableConflict(error)) throw error;
         if (attempt === 3) {
           throw new ConflictException({
-            code: 'COLLECTION_CONCURRENCY_CONFLICT',
-            message:
-              'The route collection could not be completed after concurrent retries',
+            code: conflictCode,
+            message: conflictMessage,
           });
         }
       }
     }
 
     throw new ConflictException({
-      code: 'COLLECTION_CONCURRENCY_CONFLICT',
-      message:
-        'The route collection could not be completed after concurrent retries',
+      code: conflictCode,
+      message: conflictMessage,
     });
   }
 

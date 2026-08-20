@@ -92,6 +92,7 @@ export function PurchaseFormPage() {
   const [items, setItems] = useState<PurchaseFormItem[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pendingPurchase, setPendingPurchase] = useState<{
+    idempotencyKey: string;
     payload: CreatePurchasePayload;
     supplierName: string;
     locationName: string;
@@ -113,6 +114,7 @@ export function PurchaseFormPage() {
     );
     if (validationErrors.length > 0 || !supplier || !location) return;
     setPendingPurchase({
+      idempotencyKey: crypto.randomUUID(),
       payload: buildPayload(
         supplier.id,
         location.id,
@@ -128,7 +130,10 @@ export function PurchaseFormPage() {
     if (!pendingPurchase || createPurchase.isPending) return;
     try {
       const purchase = await createPurchase.mutateAsync(
-        pendingPurchase.payload,
+        {
+          idempotencyKey: pendingPurchase.idempotencyKey,
+          payload: pendingPurchase.payload,
+        },
       );
       toast.success("Compra registrada correctamente.");
       setPendingPurchase(null);

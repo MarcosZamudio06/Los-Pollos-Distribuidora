@@ -77,6 +77,21 @@ describe('production release contract', () => {
     }
   });
 
+  it('fails closed unless the frontend release uses an approved Object Storage origin', () => {
+    expect(releaseWorkflow).toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN: ${{ vars.OBJECT_STORAGE_PUBLIC_ORIGIN }}',
+    );
+    expect(releaseWorkflow).toContain(
+      'node scripts/validate-public-origin.mjs "$OBJECT_STORAGE_PUBLIC_ORIGIN" --production',
+    );
+    expect(releaseWorkflow).toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN=${{ env.OBJECT_STORAGE_PUBLIC_ORIGIN }}',
+    );
+    expect(releaseWorkflow).not.toContain(
+      'OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.com',
+    );
+  });
+
   it('requires the same backend image reference for runtime and one-shot jobs', () => {
     const backendImage =
       'image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required for production}';

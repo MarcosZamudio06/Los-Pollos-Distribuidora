@@ -169,6 +169,9 @@ The canonical geospatial contracts are:
 - A logistics stop confirmation is allowed only on the assigned route while it is `IN_PROGRESS`; it records the authenticated DRIVER and server timestamp. It accepts no latitude/longitude and does not replace the inventory module's physical receipt command.
 - Route settlement compares expected vs collected amounts by payment method and records differences.
 - Returns, partial rejections, or product differences must preserve operational traceability and, when they affect stock, create inventory movement with mandatory reason.
+- Incident/return registration requires an idempotency key. Same-key replay
+  returns the persisted incident and movements without changing route stock or
+  emitting realtime twice; conflicting payload reuse is rejected.
 
 ## Permissions
 
@@ -240,6 +243,8 @@ The fleet map uses MapLibre GL JS only as a renderer. It does not expose Photon,
 - Reject route collection without receivable in MVP.
 - Derive collected amounts from `Payment`, not from a duplicated persisted money field.
 - Register incident or return.
+- Retry and concurrently submit an incident with returned items without
+  duplicating route-stock balances, inventory movements, incidents, or events.
 - Settle route and calculate expected vs collected difference.
 - Confirm a logistics stop without creating a `Payment`, querying a customer CxC, or confirming inventory movements.
 - Complete a logistics route only after its transport stop is confirmed, even when unrelated customer CxC exists elsewhere.

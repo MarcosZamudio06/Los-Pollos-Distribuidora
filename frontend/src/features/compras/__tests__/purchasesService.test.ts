@@ -25,6 +25,35 @@ describe("supplier service contracts", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "supplier-idempotency-key" });
   });
 
+  it("reuses the caller-owned idempotency key for purchase creation retries", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({ id: "purchase-1", purchaseNumber: "PUR-001" }),
+    );
+
+    await purchasesService.createPurchase(
+      {
+        allowCostUpdate: false,
+        items: [
+          {
+            productId: "product-1",
+            quantityKg: 10,
+            quantityPieces: 0,
+            unit: "KG",
+            unitCost: 40,
+          },
+        ],
+        locationId: "location-1",
+        supplierId: "supplier-1",
+      },
+      "purchase-retry-key",
+      "access-token",
+    );
+
+    expect(
+      new Headers(lastRequest().init?.headers).get("idempotency-key"),
+    ).toBe("purchase-retry-key");
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

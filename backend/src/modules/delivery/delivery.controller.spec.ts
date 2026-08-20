@@ -321,7 +321,11 @@ describe('Delivery controllers', () => {
       data: { payment: { id: 'payment-1' } },
     });
     await expect(
-      orderController.registerIncident('order-1', incidentDto, user),
+      (
+        orderController.registerIncident as unknown as (
+          ...args: unknown[]
+        ) => unknown
+      )('order-1', incidentDto, user, 'incident-idem'),
     ).resolves.toEqual({
       success: true,
       message: 'Delivery incident registered successfully',
@@ -374,6 +378,7 @@ describe('Delivery controllers', () => {
       'order-1',
       incidentDto,
       user,
+      'incident-idem',
     );
     expect(mockOf(service, 'openSettlement')).toHaveBeenCalledWith(
       'route-1',
@@ -391,6 +396,30 @@ describe('Delivery controllers', () => {
       user,
       'reopen-idem',
     );
+  });
+
+  it('requires Idempotency-Key for delivery incidents', async () => {
+    const service = {
+      registerIncident: jest.fn(),
+    } as unknown as jest.Mocked<DeliveryService>;
+    const controller = new DeliveryOrdersController(service);
+
+    await expect(
+      (
+        controller.registerIncident as unknown as (
+          ...args: unknown[]
+        ) => unknown
+      )(
+        'order-1',
+        {
+          status: DeliveryOrderStatus.RETURNED,
+          reason: 'Cliente devolvió producto',
+        },
+        { id: 'driver-1', role: 'DRIVER' },
+        undefined,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockOf(service, 'registerIncident')).not.toHaveBeenCalled();
   });
 
   it('requires Idempotency-Key for route collections', async () => {
