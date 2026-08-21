@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 const [origin, mode] = process.argv.slice(2);
 const production = mode === "--production";
 
@@ -24,6 +26,7 @@ if (!validOrigin) {
 if (production) {
   const hostname = url.hostname.toLowerCase();
   const reservedHostname =
+    isIP(hostname) !== 0 ||
     hostname === "localhost" ||
     hostname === "example.com" ||
     hostname.endsWith(".example.com") ||

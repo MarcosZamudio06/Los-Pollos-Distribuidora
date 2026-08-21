@@ -309,6 +309,7 @@ describe('CustomersService', () => {
           creditDays: 15,
           creditStatus: CreditStatus.ACTIVE,
           priceListId: 'price-list-1',
+          commercialPolicyId: 'policy-1',
           assignedRouteId: 'route-1',
           deliveryAddress: ' Delivery address ',
           fiscalName: 'Razón social opcional',
@@ -447,25 +448,85 @@ describe('CustomersService', () => {
   });
 
   it('rejects SELLER attempts to capture or modify restricted commercial credit fields', async () => {
+    const restrictedTerms = [
+      { creditLimit: 1000 },
+      { creditDays: 7 },
+      { creditStatus: CreditStatus.ACTIVE },
+      { commercialPolicyId: 'policy-2' },
+      { priceListId: 'price-list-2' },
+    ] as const;
+
+    for (const terms of restrictedTerms) {
+      const { service } = createService();
+      await expect(
+        service.create(
+          {
+            name: 'Retail Customer',
+            customerType: CustomerType.RETAIL,
+            ...terms,
+          },
+          sellerUser,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
     const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
+    await expect(
+      service.update('customer-1', { priceListId: 'price-list-2' }, sellerUser),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows SELLER create and update when restricted fields are own properties with undefined values', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findUnique.mockResolvedValueOnce(null);
+    prisma.customer.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(createCustomer(data as Partial<CustomerRecord>)),
+    );
 
     await expect(
       service.create(
         {
           name: 'Retail Customer',
           customerType: CustomerType.RETAIL,
-          creditLimit: 1000,
-          creditDays: 7,
-          creditStatus: CreditStatus.ACTIVE,
+          creditLimit: undefined,
+          creditDays: undefined,
+          creditStatus: undefined,
+          commercialPolicyId: undefined,
+          priceListId: undefined,
         },
         sellerUser,
       ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).resolves.toEqual(
+      expect.objectContaining({
+        name: 'Retail Customer',
+        customerType: CustomerType.RETAIL,
+      }),
+    );
 
     prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
+    prisma.customer.update.mockResolvedValueOnce(
+      createCustomer({ deliveryAddress: 'Updated route address' }),
+    );
+
     await expect(
-      service.update('customer-1', { priceListId: 'price-list-2' }, sellerUser),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+      service.update(
+        'customer-1',
+        {
+          deliveryAddress: ' Updated route address ',
+          creditLimit: undefined,
+          creditDays: undefined,
+          creditStatus: undefined,
+          commercialPolicyId: undefined,
+          priceListId: undefined,
+        },
+        sellerUser,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        deliveryAddress: 'Updated route address',
+      }),
+    );
   });
 
   it('allows SELLER to maintain basic and delivery customer fields', async () => {

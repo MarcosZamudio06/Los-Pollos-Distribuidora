@@ -1764,83 +1764,147 @@ export class DeliveryService {
     try {
       this.fleetGateway.emitIncidentCreated(payload, originLocationId);
     } catch {
-      // The committed incident remains authoritative when realtime delivery is unavailable.
+      this.logger.error('Realtime incident publication failed', {
+        incidentId: payload.incidentId,
+        routeId: payload.routeId,
+        deliveryOrderId: payload.deliveryOrderId,
+      });
     }
   }
 
-  async openSettlement(routeId: string, currentUser: Actor) {
-    const routeTypeRecord = (await this.prisma.deliveryRoute.findFirst({
-      where: this.buildRouteAccessWhere(routeId, currentUser),
-      select: { type: true },
-    })) as { type?: DeliveryRouteType } | null;
-
-    if (!routeTypeRecord) {
-      throw new NotFoundException('Delivery route not found');
-    }
-    if (this.isLogisticsRouteType(routeTypeRecord.type)) {
-      throw new BadRequestException(
-        'Logistics routes do not support route settlements',
-      );
-    }
-
-    const route = (await this.prisma.deliveryRoute.findFirst({
-      where: this.buildRouteAccessWhere(routeId, currentUser),
-      include: {
-        settlement: { select: { id: true } },
-        payments: { where: { status: PaymentStatus.APPLIED } },
-        deliveryOrders: {
-          include: {
-            accountReceivable: {
-              select: { id: true, outstandingAmount: true, version: true },
-            },
-          },
-        },
-      },
-    })) as DeliveryRouteRecord | null;
-
-    if (!route) {
-      throw new NotFoundException('Delivery route not found');
-    }
-
+  async openSettlement(
+    routeId: string,
+    currentUser: Actor,
+    idempotencyKey?: string,
+  ) {
     this.assertSettlementPermissions(currentUser);
-    this.assertRouteOrdersFinal(route);
-
-    const summary = this.buildSettlementSummary(route);
-    if (route.settlement?.id) {
-      const existingSettlement = (await this.prisma.routeSettlement.findUnique({
-        where: { id: route.settlement.id },
-      })) as RouteSettlementRecord | null;
-      if (existingSettlement) {
-        return this.toSettlementResponse(existingSettlement, summary);
-      }
-    }
-
-    const inventoryMovements = await this.prisma.inventoryMovement.findMany({
-      where: { locationId: route.routeStockLocationId },
+    this.assertIdempotencyKey(idempotencyKey);
+    const key = idempotencyKey.trim();
+    const payloadHash = this.hashPayload({
+      action: 'OPEN_OR_RECALCULATE',
+      routeId,
+      userId: currentUser.id,
     });
-    const settlementStatus =
-      summary.differenceAmount !== 0 ||
-      (inventoryMovements as unknown[]).length > 0
-        ? RouteSettlementStatus.REVIEW_REQUIRED
-        : RouteSettlementStatus.OPEN;
 
-    const settlement = (await this.prisma.routeSettlement.create({
-      data: {
-        routeId: route.id,
-        driverId: route.driverId,
-        status: settlementStatus,
-        expectedCashAmount: summary.expectedAmount,
-        expectedTransferAmount: 0,
-        differenceAmount: summary.differenceAmount,
-        paidAtDeliveryAmount: summary.collectedCashAmount,
-        overdueAmount:
-          summary.differenceAmount > 0 ? summary.differenceAmount : 0,
-        secondPassCollectionsAmount: summary.secondPassCollectedAmount,
-        routeCollectionsSummary: summary,
-      },
-    })) as RouteSettlementRecord;
+    try {
+      return await this.withSerializableRetry(
+        () =>
+          this.prisma.$transaction(
+            async (tx) => {
+              const routeTypeRecord = (await tx.deliveryRoute.findFirst({
+                where: this.buildRouteAccessWhere(routeId, currentUser),
+                select: { type: true },
+              })) as { type?: DeliveryRouteType } | null;
+              if (!routeTypeRecord) {
+                throw new NotFoundException('Delivery route not found');
+              }
+              if (this.isLogisticsRouteType(routeTypeRecord.type)) {
+                throw new BadRequestException(
+                  'Logistics routes do not support route settlements',
+                );
+              }
 
-    return this.toSettlementResponse(settlement, summary);
+              const replay = await tx.routeSettlementOpeningCommand.findUnique({
+                where: { idempotencyKey: key },
+                select: { payloadHash: true, responseSnapshot: true },
+              });
+              if (replay) {
+                return this.replaySettlementOpening(replay, payloadHash);
+              }
+
+              const route = (await tx.deliveryRoute.findFirst({
+                where: this.buildRouteAccessWhere(routeId, currentUser),
+                include: {
+                  settlement: { select: { id: true } },
+                  payments: { where: { status: PaymentStatus.APPLIED } },
+                  deliveryOrders: {
+                    include: {
+                      accountReceivable: {
+                        select: {
+                          id: true,
+                          outstandingAmount: true,
+                          version: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              })) as DeliveryRouteRecord | null;
+              if (!route) {
+                throw new NotFoundException('Delivery route not found');
+              }
+
+              this.assertRouteOrdersFinal(route);
+              const summary = this.buildSettlementSummary(route);
+              let settlement: RouteSettlementRecord | null = null;
+              if (route.settlement?.id) {
+                settlement = await tx.routeSettlement.findUnique({
+                  where: { id: route.settlement.id },
+                });
+              }
+
+              if (!settlement) {
+                const inventoryMovements = await tx.inventoryMovement.findMany({
+                  where: { locationId: route.routeStockLocationId },
+                });
+                const settlementStatus =
+                  summary.differenceAmount !== 0 ||
+                  (inventoryMovements as unknown[]).length > 0
+                    ? RouteSettlementStatus.REVIEW_REQUIRED
+                    : RouteSettlementStatus.OPEN;
+                settlement = await tx.routeSettlement.create({
+                  data: {
+                    routeId: route.id,
+                    driverId: route.driverId,
+                    status: settlementStatus,
+                    expectedCashAmount: summary.expectedAmount,
+                    expectedTransferAmount: 0,
+                    differenceAmount: summary.differenceAmount,
+                    paidAtDeliveryAmount: summary.collectedCashAmount,
+                    overdueAmount:
+                      summary.differenceAmount > 0
+                        ? summary.differenceAmount
+                        : 0,
+                    secondPassCollectionsAmount:
+                      summary.secondPassCollectedAmount,
+                    routeCollectionsSummary: summary,
+                  },
+                });
+              }
+
+              const response = this.toSettlementResponse(settlement, summary);
+              await tx.routeSettlementOpeningCommand.create({
+                data: {
+                  idempotencyKey: key,
+                  payloadHash,
+                  routeId,
+                  settlementId: settlement.id,
+                  createdByUserId: currentUser.id,
+                  responseSnapshot: response,
+                },
+              });
+              return response;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        'SETTLEMENT_OPEN_CONCURRENCY_CONFLICT',
+        'The route settlement could not be opened after concurrent retries',
+      );
+    } catch (error) {
+      if (!this.isIdempotencyUniqueConflict(error)) throw error;
+      const replay = await this.prisma.routeSettlementOpeningCommand.findUnique(
+        {
+          where: { idempotencyKey: key },
+          select: { payloadHash: true, responseSnapshot: true },
+        },
+      );
+      if (!replay) {
+        throw new ConflictException(
+          'The route settlement opening is already being processed',
+        );
+      }
+      return this.replaySettlementOpening(replay, payloadHash);
+    }
   }
 
   async closeSettlement(
@@ -3121,6 +3185,18 @@ export class DeliveryService {
     if (existingHash !== expectedHash) {
       throw new ConflictException(message);
     }
+  }
+
+  private replaySettlementOpening(
+    command: { payloadHash: string; responseSnapshot: Prisma.JsonValue },
+    payloadHash: string,
+  ) {
+    this.assertSameIdempotencyPayload(
+      command.payloadHash,
+      payloadHash,
+      'Idempotency-Key was already used for another route settlement command',
+    );
+    return this.jsonObject(command.responseSnapshot);
   }
 
   private buildSettlementActionPayload(

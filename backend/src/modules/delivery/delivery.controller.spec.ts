@@ -332,7 +332,7 @@ describe('Delivery controllers', () => {
       data: { deliveryOrder: { id: 'order-1' } },
     });
     await expect(
-      routeController.openSettlement('route-1', user),
+      routeController.openSettlement('route-1', user, 'open-idem'),
     ).resolves.toEqual({
       success: true,
       message: 'Route settlement calculated successfully',
@@ -383,6 +383,7 @@ describe('Delivery controllers', () => {
     expect(mockOf(service, 'openSettlement')).toHaveBeenCalledWith(
       'route-1',
       user,
+      'open-idem',
     );
     expect(mockOf(service, 'closeSettlement')).toHaveBeenCalledWith(
       'settlement-1',
@@ -448,5 +449,27 @@ describe('Delivery controllers', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(mockOf(service, 'registerCollection')).not.toHaveBeenCalled();
+  });
+
+  it('requires Idempotency-Key to open or recalculate a route settlement', async () => {
+    const service = {
+      openSettlement: jest.fn(),
+    } as unknown as jest.Mocked<DeliveryService>;
+    const controller = new DeliveryController(service);
+
+    await expect(
+      controller.openSettlement(
+        'route-1',
+        {
+          id: 'admin-1',
+          email: 'admin@example.com',
+          name: 'Admin',
+          role: 'ADMIN',
+          mustChangePassword: false,
+        },
+        undefined,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockOf(service, 'openSettlement')).not.toHaveBeenCalled();
   });
 });

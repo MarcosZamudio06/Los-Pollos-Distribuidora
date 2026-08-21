@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { useAuth } from "../auth";
 import { deliveryService } from "./deliveryService";
 import type {
@@ -152,7 +153,8 @@ export function useCompleteLogisticsStop(routeId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CompleteLogisticsStopPayload = {}) => {
-      if (!routeId) throw new Error("Route id is required to complete the stop.");
+      if (!routeId)
+        throw new Error("Route id is required to complete the stop.");
       return deliveryService.completeLogisticsStop(
         routeId,
         payload,
@@ -197,10 +199,20 @@ export function useAssignDeliveryRouteOrders(routeId: string) {
 export function useOpenRouteSettlement() {
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
+  const commandKeys = useRef(new Map<string, string>());
   return useMutation({
-    mutationFn: (routeId: string) =>
-      deliveryService.openSettlement(routeId, accessToken),
-    onSuccess: () => {
+    mutationFn: (routeId: string) => {
+      const existingKey = commandKeys.current.get(routeId);
+      const idempotencyKey = existingKey ?? crypto.randomUUID();
+      if (!existingKey) commandKeys.current.set(routeId, idempotencyKey);
+      return deliveryService.openSettlement(
+        routeId,
+        idempotencyKey,
+        accessToken,
+      );
+    },
+    onSuccess: (_data, routeId) => {
+      commandKeys.current.delete(routeId);
       void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
       void queryClient.invalidateQueries({ queryKey: ["route-settlements"] });
     },

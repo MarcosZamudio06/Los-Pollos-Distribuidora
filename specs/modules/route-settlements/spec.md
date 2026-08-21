@@ -29,6 +29,8 @@ Conciliar entregas, incidencias, devoluciones, efectivo, transferencias/deposito
 - Todo total cobrado en liquidación debe derivarse de `Payment`.
 - No cerrar ni cancelar operativamente una venta ya liquidada sin reapertura auditable.
 - La apertura/cálculo, el cierre y la reapertura deben respetar control de versión e idempotencia.
+- `Idempotency-Key` es obligatorio para apertura/cálculo, cierre y reapertura;
+  su ausencia responde `400 Bad Request` antes de ejecutar el comando.
 
 ## Permisos
 

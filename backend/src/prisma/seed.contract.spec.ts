@@ -532,7 +532,16 @@ describe('Prisma seed contract', () => {
     ]) {
       expect(validateOrigin(forbiddenOrigin)).not.toBe(0);
     }
-    expect(validateOrigin('https://objects.example.com', true)).not.toBe(0);
+    for (const forbiddenProductionOrigin of [
+      '',
+      '*',
+      'https://objects.example.com',
+      'https://example.com',
+      'https://localhost',
+      'https://127.0.0.1',
+    ]) {
+      expect(validateOrigin(forbiddenProductionOrigin, true)).not.toBe(0);
+    }
     expect(validateOrigin('https://objects.pollos.mx', true)).toBe(0);
 
     expect(developmentCompose).toContain(

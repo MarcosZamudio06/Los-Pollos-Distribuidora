@@ -62,6 +62,10 @@ type MockPrisma = {
     findUnique: jest.Mock;
     update: jest.Mock;
   };
+  routeSettlementOpeningCommand: {
+    create: jest.Mock;
+    findUnique: jest.Mock;
+  };
   operationalLocation: { create: jest.Mock; findFirst: jest.Mock };
   $transaction: jest.Mock;
 };
@@ -239,6 +243,10 @@ function createPrisma(): MockPrisma {
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+    },
+    routeSettlementOpeningCommand: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
     },
     operationalLocation: { create: jest.fn(), findFirst: jest.fn() },
     sale: { findMany: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
@@ -2999,6 +3007,92 @@ describe('DeliveryService', () => {
     );
   });
 
+  it('keeps a committed incident valid and logs non-sensitive context when realtime publication fails', async () => {
+    const fleetGateway = {
+      emitIncidentCreated: jest.fn(() => {
+        throw new Error('socket unavailable');
+      }),
+    };
+    const { service, prisma } = createService(undefined, fleetGateway);
+    const loggerError = jest
+      .spyOn(
+        (
+          service as unknown as {
+            logger: { error: (...args: unknown[]) => void };
+          }
+        ).logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+    prisma.deliveryOrder.findFirst.mockResolvedValue(
+      createOrder({
+        route: createRoute({
+          vehicleId: 'vehicle-1',
+          originLocationId: 'origin-1',
+        }),
+      }),
+    );
+    prisma.deliveryOrder.update.mockResolvedValue(
+      createOrder({
+        status: DeliveryOrderStatus.NOT_DELIVERED,
+        route: createRoute({
+          vehicleId: 'vehicle-1',
+          originLocationId: 'origin-1',
+        }),
+      }),
+    );
+    prisma.deliveryIncident.create.mockResolvedValue({
+      id: 'incident-1',
+      type: 'DELIVERY_FAILURE',
+      status: 'OPEN',
+      reason: 'Cliente no localizado',
+      routeId: 'route-1',
+      deliveryOrderId: 'order-1',
+      vehicleId: 'vehicle-1',
+      driverId: 'driver-1',
+      positionId: null,
+      statusSnapshot: DeliveryOrderStatus.NOT_DELIVERED,
+      latitude: null,
+      longitude: null,
+      returnedItems: [],
+      evidence: [],
+      occurredAt: date('2026-06-19T12:15:00.000Z'),
+      reportedAt: date('2026-06-19T12:15:00.000Z'),
+      reportedByUserId: 'driver-1',
+      createdAt: date('2026-06-19T12:15:00.000Z'),
+      updatedAt: date('2026-06-19T12:15:00.000Z'),
+    });
+
+    await expect(
+      service.registerIncident(
+        'order-1',
+        {
+          status: DeliveryOrderStatus.NOT_DELIVERED,
+          reason: 'Cliente no localizado',
+        },
+        driver,
+        'incident-realtime-failure-key',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        incident: expect.objectContaining({ id: 'incident-1' }),
+      }),
+    );
+
+    expect(prisma.deliveryIncident.create).toHaveBeenCalledTimes(1);
+    expect(loggerError).toHaveBeenCalledWith(
+      'Realtime incident publication failed',
+      {
+        incidentId: 'incident-1',
+        routeId: 'route-1',
+        deliveryOrderId: 'order-1',
+      },
+    );
+    expect(JSON.stringify(loggerError.mock.calls)).not.toMatch(
+      /jwt|cookie|authorization|evidence/i,
+    );
+  });
+
   it('stores an incident without GPS when the route has no recent persisted position', async () => {
     const { service, prisma } = createService();
     prisma.deliveryOrder.findFirst.mockResolvedValue(
@@ -3135,7 +3229,9 @@ describe('DeliveryService', () => {
       updatedAt: date('2026-06-19T13:00:00.000Z'),
     });
 
-    await expect(service.openSettlement('route-1', admin)).resolves.toEqual(
+    await expect(
+      service.openSettlement('route-1', admin, 'settlement-open-key'),
+    ).resolves.toEqual(
       expect.objectContaining({
         id: 'settlement-1',
         status: RouteSettlementStatus.REVIEW_REQUIRED,
@@ -3156,10 +3252,30 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+    expect(prisma.routeSettlementOpeningCommand.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        idempotencyKey: 'settlement-open-key',
+        routeId: 'route-1',
+        settlementId: 'settlement-1',
+        createdByUserId: 'admin-1',
+        payloadHash: expect.any(String),
+        responseSnapshot: expect.objectContaining({ id: 'settlement-1' }),
+      }),
+    });
   });
 
-  it('returns the existing route settlement instead of creating a duplicate on recalculation retry', async () => {
+  it('replays the same opening command without duplicating the settlement or command', async () => {
     const { service, prisma } = createService();
+    let command: Record<string, unknown> | null = null;
+    prisma.routeSettlementOpeningCommand.findUnique.mockImplementation(() =>
+      Promise.resolve(command),
+    );
+    prisma.routeSettlementOpeningCommand.create.mockImplementation(
+      ({ data }) => {
+        command = data;
+        return Promise.resolve(data);
+      },
+    );
     prisma.deliveryRoute.findFirst.mockResolvedValue(
       createRoute({
         settlement: { id: 'settlement-1' },
@@ -3191,14 +3307,111 @@ describe('DeliveryService', () => {
       closedAt: null,
     });
 
-    await expect(service.openSettlement('route-1', admin)).resolves.toEqual(
-      expect.objectContaining({
-        id: 'settlement-1',
-        status: RouteSettlementStatus.OPEN,
-      }),
+    const first = await service.openSettlement(
+      'route-1',
+      admin,
+      'settlement-retry-key',
+    );
+    const replay = await service.openSettlement(
+      'route-1',
+      admin,
+      'settlement-retry-key',
     );
 
+    expect(replay).toEqual(first);
     expect(prisma.routeSettlement.create).not.toHaveBeenCalled();
+    expect(prisma.routeSettlementOpeningCommand.create).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it('rejects reuse of an opening Idempotency-Key for an incompatible command', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(createRoute());
+    prisma.routeSettlementOpeningCommand.findUnique.mockResolvedValue({
+      idempotencyKey: 'settlement-conflict-key',
+      payloadHash: 'incompatible-payload-hash',
+      responseSnapshot: { id: 'settlement-foreign' },
+    });
+
+    await expect(
+      service.openSettlement('route-1', admin, 'settlement-conflict-key'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.routeSettlement.create).not.toHaveBeenCalled();
+  });
+
+  it('does not replay an opening snapshot when the route is outside the current access scope', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(null);
+    prisma.routeSettlementOpeningCommand.findUnique.mockResolvedValue({
+      idempotencyKey: 'settlement-scoped-key',
+      payloadHash: 'stored-hash',
+      responseSnapshot: { id: 'settlement-foreign' },
+    });
+
+    await expect(
+      service.openSettlement('route-foreign', admin, 'settlement-scoped-key'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(
+      prisma.routeSettlementOpeningCommand.findUnique,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('persists one opening effect for concurrent requests with the same Idempotency-Key', async () => {
+    const { service, prisma } = createService();
+    let settlement: Record<string, unknown> | null = null;
+    let command: Record<string, unknown> | null = null;
+    let persistentSettlementEffects = 0;
+    prisma.routeSettlementOpeningCommand.findUnique.mockImplementation(() =>
+      Promise.resolve(command),
+    );
+    prisma.routeSettlementOpeningCommand.create.mockImplementation(
+      ({ data }) => {
+        command = data;
+        return Promise.resolve(data);
+      },
+    );
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        deliveryOrders: [
+          createOrder({ status: DeliveryOrderStatus.DELIVERED }),
+        ],
+      }),
+    );
+    prisma.inventoryMovement.findMany.mockResolvedValue([]);
+    prisma.routeSettlement.create.mockImplementation(() => {
+      if (settlement) {
+        throw Object.assign(new Error('Unique constraint failed'), {
+          code: 'P2002',
+        });
+      }
+      settlement = {
+        id: 'settlement-1',
+        routeId: 'route-1',
+        driverId: 'driver-1',
+        status: RouteSettlementStatus.OPEN,
+        version: 1,
+        expectedCashAmount: money('500'),
+        expectedTransferAmount: money('0'),
+        differenceAmount: money('500'),
+        paidAtDeliveryAmount: money('0'),
+        overdueAmount: money('500'),
+        secondPassCollectionsAmount: money('0'),
+      };
+      persistentSettlementEffects += 1;
+      return Promise.resolve(settlement);
+    });
+
+    const [first, retry] = await Promise.all([
+      service.openSettlement('route-1', admin, 'settlement-concurrent-key'),
+      service.openSettlement('route-1', admin, 'settlement-concurrent-key'),
+    ]);
+
+    expect(retry).toEqual(first);
+    expect(persistentSettlementEffects).toBe(1);
+    expect(prisma.routeSettlementOpeningCommand.create).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('closes a route settlement with expectedVersion after all route orders are final', async () => {

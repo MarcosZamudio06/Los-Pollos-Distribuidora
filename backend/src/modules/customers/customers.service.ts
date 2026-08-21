@@ -450,7 +450,7 @@ export class CustomersService {
       'creditStatus',
       'commercialPolicyId',
       'priceListId',
-    ].some((field) => Object.prototype.hasOwnProperty.call(dto, field));
+    ].some((field) => dto[field] !== undefined);
   }
 
   private assertCoherentCreditTerms(source: CreditCompletenessSource): void {
@@ -489,8 +489,8 @@ export class CustomersService {
   }
 
   private hasCreditTermMutation(dto: CustomerMutationDto): boolean {
-    return ['creditLimit', 'creditDays', 'creditStatus'].some((field) =>
-      Object.prototype.hasOwnProperty.call(dto, field),
+    return ['creditLimit', 'creditDays', 'creditStatus'].some(
+      (field) => dto[field] !== undefined,
     );
   }
 

@@ -145,11 +145,19 @@ export class DeliveryController {
   async openSettlement(
     @Param('id') id: string,
     @CurrentUser() currentUser: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Idempotency-Key header is required');
+    }
     return {
       success: true,
       message: 'Route settlement calculated successfully',
-      data: await this.deliveryService.openSettlement(id, currentUser),
+      data: await this.deliveryService.openSettlement(
+        id,
+        currentUser,
+        idempotencyKey.trim(),
+      ),
     };
   }
 }

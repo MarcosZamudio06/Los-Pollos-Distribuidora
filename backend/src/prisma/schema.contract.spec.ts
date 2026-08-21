@@ -118,6 +118,10 @@ const logisticsRouteStopMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260815130000_add_logistics_route_stop_confirmation/migration.sql',
 );
+const routeSettlementOpeningCommandMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260820210000_add_route_settlement_opening_commands/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -185,6 +189,7 @@ describe('Prisma schema contract', () => {
       'DeliveryOrder',
       'DeliveryEvidence',
       'RouteSettlement',
+      'RouteSettlementOpeningCommand',
       'CashTerminal',
       'CashTerminalActivation',
       'CashShift',
@@ -218,13 +223,34 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(68);
+    expect(modelNames).toHaveLength(69);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(modelNames).not.toContain('SAT');
     expect(getModelBlock('Product')).not.toMatch(/\bstock\b/);
     expect(getModelBlock('Role')).toMatch(/version\s+Int\s+@default\(1\)/);
     expect(getModelBlock('AccessControlAuditLog')).toMatch(/reason\s+String/);
+  });
+
+  it('persists route settlement opening idempotency commands with immutable replay context', () => {
+    const command = getModelBlock('RouteSettlementOpeningCommand');
+    const migrationSql = readFileSync(
+      routeSettlementOpeningCommandMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(command).toMatch(/idempotencyKey\s+String\s+@unique/);
+    expect(command).toMatch(/payloadHash\s+String/);
+    expect(command).toMatch(/routeId\s+String/);
+    expect(command).toMatch(/settlementId\s+String/);
+    expect(command).toMatch(/createdByUserId\s+String/);
+    expect(command).toMatch(/responseSnapshot\s+Json/);
+    expect(migrationSql).toContain(
+      'CREATE UNIQUE INDEX "RouteSettlementOpeningCommand_idempotencyKey_key"',
+    );
+    expect(migrationSql).toContain(
+      'FOREIGN KEY ("settlementId") REFERENCES "RouteSettlement"("id")',
+    );
   });
 
   it('associates fleet units without requiring a vehicle on historical routes', () => {
@@ -275,15 +301,11 @@ describe('Prisma schema contract', () => {
     expect(route).toMatch(/logisticsStopCompletedByUserId\s+String\?/);
     expect(route).toMatch(/logisticsStopNotes\s+String\?/);
     expect(transfer).toMatch(/deliveryRoute\s+DeliveryRoute\?/);
-    expect(migrationSql).toContain(
-      'CREATE TYPE "DeliveryRouteType" AS ENUM',
-    );
+    expect(migrationSql).toContain('CREATE TYPE "DeliveryRouteType" AS ENUM');
     expect(migrationSql).toContain(
       'ADD COLUMN "type" "DeliveryRouteType" NOT NULL DEFAULT \'SALE_DELIVERY\'',
     );
-    expect(migrationSql).toContain(
-      'ADD COLUMN "inventoryTransferId" TEXT',
-    );
+    expect(migrationSql).toContain('ADD COLUMN "inventoryTransferId" TEXT');
     expect(migrationSql).toContain('DeliveryRoute_inventoryTransferId_key');
     expect(migrationSql).toContain(
       'DeliveryRoute_logistics_vehicle_required_check',
@@ -297,9 +319,7 @@ describe('Prisma schema contract', () => {
     expect(stopMigrationSql).toContain(
       'DeliveryRoute_logisticsStopCompletedByUserId_fkey',
     );
-    expect(migrationSql).not.toContain(
-      'ALTER COLUMN "vehicleId" SET NOT NULL',
-    );
+    expect(migrationSql).not.toContain('ALTER COLUMN "vehicleId" SET NOT NULL');
   });
 
   it('keeps persisted heatmap sources indexed for bounded analytics queries', () => {

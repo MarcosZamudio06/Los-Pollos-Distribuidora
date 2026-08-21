@@ -333,13 +333,17 @@ export const deliveryService = {
     });
     return unwrapItem(response);
   },
-  async openSettlement(routeId: string, accessToken?: string | null) {
+  async openSettlement(
+    routeId: string,
+    idempotencyKey: string,
+    accessToken?: string | null,
+  ) {
     const response = await apiClient.post<
       ItemEnvelope<RouteSettlementDetail>,
       Record<string, never>
     >(`/delivery-routes/${routeId}/settlement`, {
       body: {},
-      headers: authHeaders(accessToken, crypto.randomUUID()),
+      headers: authHeaders(accessToken, idempotencyKey),
     });
     return unwrapItem(response);
   },

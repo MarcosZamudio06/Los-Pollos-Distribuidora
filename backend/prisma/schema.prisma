@@ -442,6 +442,7 @@ model User {
   deliveryIncidentsAsDriver       DeliveryIncident[]            @relation("DeliveryIncidentDriver")
   reportedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentReportedBy")
   resolvedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentResolvedBy")
+  routeSettlementOpeningCommands RouteSettlementOpeningCommand[] @relation("RouteSettlementOpeningCreatedBy")
   createdRoutePlans               DeliveryRoutePlanDraft[]     @relation("RoutePlanCreatedBy")
   plannedRouteAssignments         DeliveryRoutePlanDraft[]     @relation("RoutePlanDriver")
   deliveredOrders                 DeliveryOrder[]              @relation("DeliveryOrderDeliveredBy")
@@ -1297,6 +1298,7 @@ model DeliveryRoute {
   positions              VehiclePosition[]                          @relation("VehiclePositionRoute")
   geofenceEvents         GeofenceEvent[]
   deliveryIncidents      DeliveryIncident[]
+  settlementOpeningCommands RouteSettlementOpeningCommand[]
 
   @@index([driverId, scheduledDate, status])
   @@index([type, scheduledDate, status])
@@ -1519,6 +1521,25 @@ model RouteSettlement {
   reopenedBy                  User?                 @relation("RouteSettlementReopenedBy", fields: [reopenedByUserId], references: [id])
   payments                    Payment[]
   inventoryMovements          InventoryMovement[]
+  openingCommands             RouteSettlementOpeningCommand[]
+}
+
+model RouteSettlementOpeningCommand {
+  id                  String          @id @default(cuid())
+  idempotencyKey      String          @unique
+  payloadHash         String
+  routeId             String
+  settlementId        String
+  createdByUserId     String
+  responseSnapshot    Json
+  createdAt           DateTime        @default(now())
+  route               DeliveryRoute   @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  settlement          RouteSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  createdBy           User            @relation("RouteSettlementOpeningCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([routeId, createdAt])
+  @@index([settlementId])
+  @@index([createdByUserId, createdAt])
 }
 
 model CashTerminal {

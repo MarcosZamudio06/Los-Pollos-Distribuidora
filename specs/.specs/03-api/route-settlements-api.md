@@ -7,8 +7,10 @@ La liquidación no sustituye la carga/devolución física. Cualquier diferencia 
 ## Convenciones
 
 - Operaciones críticas de apertura/cálculo, cierre y reapertura deben soportar control de versión e idempotencia.
-- Headers recomendados en comandos críticos:
+- Headers requeridos en comandos críticos:
   - `Idempotency-Key`
+- La ausencia de `Idempotency-Key` responde `400 Bad Request` sin iniciar la
+  operación.
 
 ## GET /api/route-settlements
 
@@ -50,6 +52,12 @@ Propósito: abrir o calcular liquidación de una ruta.
 
 Permisos: `ADMIN`, `COLLECTIONS` conforme a política.
 
+Headers requeridos:
+
+- `Idempotency-Key`: identificador estable de la apertura/cálculo. Debe
+  conservarse cuando el cliente reintente una solicitud cuyo resultado sea
+  incierto.
+
 Respuesta `data`:
 
 - Liquidación en estado `OPEN` o `REVIEW_REQUIRED` según diferencias detectadas.
@@ -64,6 +72,8 @@ Validaciones:
 - Debe detectar diferencias entre producto cargado, vendido, devuelto y remanente en `ROUTE_STOCK`.
 - Todo total cobrado debe derivarse de `Payment` asociados a `routeId` o `routeSettlementId`.
 - Reintentos con la misma `Idempotency-Key` no deben abrir ni recalcular una segunda liquidación para la misma operación.
+- Reutilizar la misma `Idempotency-Key` para una apertura/cálculo incompatible
+  responde `409 Conflict` sin modificar la liquidación existente.
 
 ## POST /api/route-settlements/:id/close
 
