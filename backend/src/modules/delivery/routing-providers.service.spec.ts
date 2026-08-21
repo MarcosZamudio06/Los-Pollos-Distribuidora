@@ -175,6 +175,34 @@ describe('RoutingProvidersService', () => {
     const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
     expect(url.searchParams.get('geometries')).toBe('geojson');
     expect(url.searchParams.get('overview')).toBe('full');
+    expect(url.searchParams.get('steps')).toBe('false');
+  });
+
+  it('requests OSRM steps for navigation without invoking VROOM', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 'Ok',
+          routes: [
+            {
+              distance: 1200,
+              duration: 240,
+              geometry: { type: 'LineString', coordinates: [] },
+              legs: [{ distance: 1200, duration: 240, steps: [] }],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const service = createService();
+
+    await service.buildNavigationRoute([-96.14, 19.18], [-96.13, 19.17]);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = new URL(fetchSpy.mock.calls[0][0] as string);
+    expect(url.hostname).toBe('osrm');
+    expect(url.searchParams.get('steps')).toBe('true');
   });
 
   it('translates provider failures into retryable 503 responses', async () => {

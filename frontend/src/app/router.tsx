@@ -23,6 +23,7 @@ import {
   CustomersPage,
   DailyClosePage,
   DashboardPage,
+  DriverNavigationPage,
   DeliveryRoutesPage,
   EmployeesPage,
   FleetLivePage,
@@ -60,6 +61,16 @@ export function AppRouter() {
             element={
               <ProtectedRoute>
                 <ChangePasswordPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-routes/:routeId/navigation"
+            element={
+              <ProtectedRoute>
+                <RoleRoute roles={ROUTE_ACCESS_ROLES.driverNavigation}>
+                  <DriverNavigationPage />
+                </RoleRoute>
               </ProtectedRoute>
             }
           />

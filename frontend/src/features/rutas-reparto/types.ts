@@ -170,6 +170,81 @@ export type RouteLocationPosition = {
   recordedAt: string;
 };
 
+export type DriverNavigationManeuverType =
+  | "DEPART"
+  | "ARRIVE"
+  | "CONTINUE"
+  | "TURN"
+  | "NEW_NAME"
+  | "MERGE"
+  | "ON_RAMP"
+  | "OFF_RAMP"
+  | "FORK"
+  | "END_OF_ROAD"
+  | "ROUNDABOUT"
+  | "ROUNDABOUT_TURN"
+  | "ROTARY"
+  | "EXIT_ROUNDABOUT"
+  | "EXIT_ROTARY"
+  | "NOTIFICATION"
+  | "UNKNOWN";
+
+export type DriverNavigationManeuverModifier =
+  | "UTURN"
+  | "SHARP_RIGHT"
+  | "RIGHT"
+  | "SLIGHT_RIGHT"
+  | "STRAIGHT"
+  | "SLIGHT_LEFT"
+  | "LEFT"
+  | "SHARP_LEFT"
+  | null;
+
+export type DriverNavigationManeuver = {
+  type: DriverNavigationManeuverType;
+  modifier: DriverNavigationManeuverModifier;
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+  bearingBefore: number | null;
+  bearingAfter: number | null;
+  exit: number | null;
+};
+
+export type DriverNavigationStep = {
+  distanceMeters: number;
+  durationSeconds: number;
+  streetName: string | null;
+  maneuver: DriverNavigationManeuver;
+};
+
+export type DriverNavigationTarget = {
+  kind: "DELIVERY_ORDER" | "LOGISTICS_STOP";
+  id: string;
+  stopSequence?: number;
+  label: string;
+  address?: string | null;
+  latitude: number;
+  longitude: number;
+};
+
+export type DriverNavigationResponse = {
+  routeId: string;
+  target: DriverNavigationTarget;
+  geometry: GeoJsonLineString;
+  distanceMeters: number;
+  durationSeconds: number;
+  steps: DriverNavigationStep[];
+};
+
+export type DriverNavigationRequest = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  headingDegrees?: number;
+};
+
 export type PublishFleetPositionPayload = {
   clientEventId: string;
   latitude: number;

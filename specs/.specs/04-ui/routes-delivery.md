@@ -215,7 +215,9 @@ Debe mostrar solo rutas asignadas al usuario `DRIVER`.
 
 Cuando `mapAvailable=true`, debe mostrar el recorrido estático aprobado por ADMIN, el origen, el regreso al origen y las paradas según `stopSequence`. Fuera de una ruta `IN_PROGRESS`, el mapa no solicita ubicación del dispositivo ni recalcula el trayecto.
 
-Cuando la ruta está `IN_PROGRESS`, la experiencia puede solicitar al navegador/dispositivo autenticado del `DRIVER` la posición GPS inicial y publicar posiciones mediante `POST /api/fleet/positions`. El body no incluye `routeId`, `vehicleId` ni `driverId`; el backend los deriva del JWT y de la ruta activa. La captura se detiene al completar o cancelar la ruta y nunca ocurre fuera de una ruta activa. Esta capacidad no es navegación giro a giro ni rerouting.
+Cuando la ruta está `IN_PROGRESS`, la experiencia puede solicitar al navegador/dispositivo autenticado del `DRIVER` la posición GPS inicial y publicar posiciones mediante `POST /api/fleet/positions`. El body no incluye `routeId`, `vehicleId` ni `driverId`; el backend los deriva del JWT y de la ruta activa. La captura se detiene al completar o cancelar la ruta y nunca ocurre fuera de una ruta activa.
+
+La misma posición puede solicitar navegación dinámica mediante `POST /api/delivery-routes/:routeId/navigation`. El cliente envía únicamente coordenadas actuales y metadatos GPS opcionales; no envía el destino. El backend deriva la próxima parada pendiente, consulta OSRM y devuelve una geometría efímera, ETA, distancia e instrucciones normalizadas. Esta capa no reemplaza la geometría aprobada, no cambia `stopSequence`, no ejecuta VROOM, no persiste el recorrido dinámico y no finaliza una parada por proximidad.
 
 Mientras la ruta está `IN_PROGRESS`, debe mostrar la acción `Terminar ruta`. La acción solo se habilita cuando existe al menos un pedido y `pendingOrdersCount=0`, es decir, todos los pedidos están en estado final. Al confirmar, consume `PATCH /api/delivery-routes/:id/status` con `status=COMPLETED`, muestra el resultado y explica que el seguimiento GPS dejará de aceptar nuevas posiciones.
 

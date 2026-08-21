@@ -30,8 +30,10 @@ type Props = {
   compact?: boolean;
   currentOrder?: RouteMapOrder;
   currentLocation?: RouteLocationPosition | null;
+  currentLocationLabel?: string;
   destinationLocation?: LogisticsLocation | null;
   geometry?: GeoJsonLineString | null;
+  navigationGeometry?: GeoJsonLineString | null;
   originLocation?: LogisticsLocation | null;
   orders?: RouteMapOrder[];
   routeName: string;
@@ -52,6 +54,8 @@ type MarkerDefinition = {
 const fallbackCenter: LngLat = [-96.1342, 19.1738];
 const routeSourceId = "driver-route";
 const routeLayerId = "driver-route-line";
+const navigationSourceId = "driver-navigation-route";
+const navigationLayerId = "driver-navigation-route-line";
 
 function isRenderableGeometry(
   geometry?: GeoJsonLineString | null,
@@ -191,9 +195,11 @@ function clearMarkers(markers: Map<string, MapLibreMarker>) {
 export function DriverRouteMap({
   compact = false,
   currentLocation,
+  currentLocationLabel = "Última ubicación GPS publicada",
   currentOrder,
   destinationLocation,
   geometry,
+  navigationGeometry,
   originLocation,
   orders = [],
   routeName,
@@ -203,6 +209,7 @@ export function DriverRouteMap({
   const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
   const markerRefs = useRef(new Map<string, MapLibreMarker>());
   const geometryRef = useRef(geometry);
+  const navigationGeometryRef = useRef(navigationGeometry);
   const compactRef = useRef(compact);
   const initialCenterRef = useRef<LngLat>(
     isLocatedLocation(originLocation)
@@ -211,15 +218,23 @@ export function DriverRouteMap({
         ? [destinationLocation.longitude, destinationLocation.latitude]
         : geometry?.coordinates[0]
           ? [geometry.coordinates[0][0], geometry.coordinates[0][1]]
-          : fallbackCenter,
+          : navigationGeometry?.coordinates[0]
+            ? [
+                navigationGeometry.coordinates[0][0],
+                navigationGeometry.coordinates[0][1],
+              ]
+            : isLocatedPosition(currentLocation)
+              ? [currentLocation.longitude, currentLocation.latitude]
+              : fallbackCenter,
   );
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState(false);
 
   useEffect(() => {
     geometryRef.current = geometry;
+    navigationGeometryRef.current = navigationGeometry;
     compactRef.current = compact;
-  }, [compact, destinationLocation, geometry, originLocation]);
+  }, [compact, destinationLocation, geometry, navigationGeometry, originLocation]);
 
   const mappedCurrentOrder = useMemo(
     () => (currentOrder && isLocatedOrder(currentOrder) ? currentOrder : null),
@@ -311,13 +326,14 @@ export function DriverRouteMap({
         location: true,
         origin: false,
         position: [currentLocation.longitude, currentLocation.latitude],
-        title: "Última ubicación GPS publicada",
+        title: currentLocationLabel,
       });
     }
 
     return definitions;
   }, [
     currentLocation,
+    currentLocationLabel,
     destinationLocation,
     geometry?.coordinates,
     mappedCurrentOrder,
@@ -369,6 +385,26 @@ export function DriverRouteMap({
               type: "line",
             });
           }
+          if (isRenderableGeometry(navigationGeometryRef.current)) {
+            map.addSource(navigationSourceId, {
+              data: navigationGeometryRef.current,
+              type: "geojson",
+            });
+            map.addLayer({
+              id: navigationLayerId,
+              layout: {
+                "line-cap": "round",
+                "line-join": "round",
+              },
+              paint: {
+                "line-color": "#2f6f73",
+                "line-opacity": 0.96,
+                "line-width": 7,
+              },
+              source: navigationSourceId,
+              type: "line",
+            });
+          }
           map.addControl(new maplibre.AttributionControl(), "bottom-right");
           setMapReady(true);
         };
@@ -403,13 +439,50 @@ export function DriverRouteMap({
       | GeoJSONSource
       | undefined;
     if (source && isRenderableGeometry(geometry)) source.setData(geometry);
+    const navigationSource = map.getSource(navigationSourceId) as
+      | GeoJSONSource
+      | undefined;
+    if (
+      navigationSource &&
+      isRenderableGeometry(navigationGeometry)
+    ) {
+      navigationSource.setData(navigationGeometry);
+    } else if (
+      !navigationSource &&
+      isRenderableGeometry(navigationGeometry)
+    ) {
+      map.addSource(navigationSourceId, {
+        data: navigationGeometry,
+        type: "geojson",
+      });
+      map.addLayer({
+        id: navigationLayerId,
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: {
+          "line-color": "#2f6f73",
+          "line-opacity": 0.96,
+          "line-width": 7,
+        },
+        source: navigationSourceId,
+        type: "line",
+      });
+    }
     const points = [
       ...(isRenderableGeometry(geometry) ? geometry.coordinates : []),
+      ...(isRenderableGeometry(navigationGeometry)
+        ? navigationGeometry.coordinates
+        : []),
       ...(isLocatedLocation(originLocation)
         ? [[originLocation.longitude, originLocation.latitude] as LngLat]
         : []),
       ...(isLocatedLocation(destinationLocation)
         ? [[destinationLocation.longitude, destinationLocation.latitude] as LngLat]
+        : []),
+      ...(isLocatedPosition(currentLocation)
+        ? [[currentLocation.longitude, currentLocation.latitude] as LngLat]
         : []),
     ];
     fitMapToGeometry(map, points, compact);
@@ -418,7 +491,9 @@ export function DriverRouteMap({
     destinationLocation,
     geometry,
     mapReady,
+    navigationGeometry,
     originLocation,
+    currentLocation,
   ]);
 
   useEffect(() => {
@@ -444,7 +519,13 @@ export function DriverRouteMap({
 
   const hasLocationPair =
     isLocatedLocation(originLocation) && isLocatedLocation(destinationLocation);
-  if (!isRenderableGeometry(geometry) && !hasLocationPair) return null;
+  if (
+    !isRenderableGeometry(geometry) &&
+    !isRenderableGeometry(navigationGeometry) &&
+    !hasLocationPair &&
+    !isLocatedPosition(currentLocation)
+  )
+    return null;
 
   return (
     <div

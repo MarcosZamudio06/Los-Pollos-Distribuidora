@@ -124,6 +124,39 @@ afterEach(async () => {
 });
 
 describe("MyRoutesPage route start", () => {
+  it("shows navigation CTA only for an active route with a located pending stop", async () => {
+    mockState.routeStatus = "IN_PROGRESS";
+    mockState.orders = [
+      {
+        id: "order-1",
+        saleNumber: "SALE-000001",
+        customerName: "Centro",
+        status: "PENDING",
+        stopSequence: 1,
+        latitude: 19.17,
+        longitude: -96.13,
+      },
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes"]}>
+          <MyRoutesPage />
+        </MemoryRouter>,
+      );
+    });
+
+    const navigationLink = [...container.querySelectorAll("a")].find(
+      (link) => link.textContent?.includes("Abrir navegación"),
+    );
+    expect(navigationLink?.getAttribute("href")).toBe(
+      "/my-routes/route-1/navigation",
+    );
+  });
+
   it("lets the assigned driver confirm starting a pending route", async () => {
     mockState.mutateAsync.mockResolvedValue({
       id: "route-1",

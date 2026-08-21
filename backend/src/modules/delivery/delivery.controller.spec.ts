@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { DeliveryController } from './delivery.controller';
+import { DeliveryRouteNavigationService } from './delivery-route-navigation.service';
 import { DeliveryOrdersController } from './delivery-orders.controller';
 import { RouteSettlementsController } from './route-settlements.controller';
 import { DeliveryService } from './delivery.service';
@@ -17,6 +18,8 @@ function mockOf<T extends object>(target: T, key: keyof T): jest.Mock {
 function methodOf(target: object, key: string): object {
   return Object.getOwnPropertyDescriptor(target, key)?.value as object;
 }
+
+const navigationServiceStub = {} as DeliveryRouteNavigationService;
 
 describe('Delivery controllers', () => {
   it('exposes delivery route endpoint permissions from the spec', () => {
@@ -32,6 +35,12 @@ describe('Delivery controllers', () => {
         methodOf(DeliveryController.prototype, 'findOne'),
       ),
     ).toEqual(['ADMIN', 'DRIVER', 'COLLECTIONS']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        methodOf(DeliveryController.prototype, 'navigate'),
+      ),
+    ).toEqual(['DRIVER']);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
@@ -100,6 +109,38 @@ describe('Delivery controllers', () => {
     ).toEqual(['ADMIN']);
   });
 
+  it('passes navigation GPS input to the DRIVER navigation service', async () => {
+    const service = {} as DeliveryService;
+    const navigationService = {
+      navigate: jest.fn().mockResolvedValue({ routeId: 'route-1' }),
+    } as unknown as jest.Mocked<DeliveryRouteNavigationService>;
+    const controller = new DeliveryController(service, navigationService);
+    const user = {
+      id: 'driver-1',
+      email: 'd@example.com',
+      name: 'Driver',
+      role: 'DRIVER',
+      mustChangePassword: false,
+    };
+    const body = {
+      latitude: 19.18,
+      longitude: -96.14,
+      accuracyMeters: 8.5,
+      headingDegrees: 180,
+    };
+
+    await expect(controller.navigate('route-1', body, user)).resolves.toEqual({
+      success: true,
+      message: 'Route navigation calculated successfully',
+      data: { routeId: 'route-1' },
+    });
+    expect(mockOf(navigationService, 'navigate')).toHaveBeenCalledWith(
+      'route-1',
+      body,
+      user,
+    );
+  });
+
   it('passes route and order status requests to the service with the current user', async () => {
     const service = {
       updateRouteStatus: jest
@@ -112,7 +153,10 @@ describe('Delivery controllers', () => {
         .fn()
         .mockResolvedValue({ id: 'order-1', status: 'DELIVERED' }),
     } as unknown as jest.Mocked<DeliveryService>;
-    const routeController = new DeliveryController(service);
+    const routeController = new DeliveryController(
+      service,
+      navigationServiceStub,
+    );
     const orderController = new DeliveryOrdersController(service);
     const user = {
       id: 'driver-1',
@@ -179,7 +223,7 @@ describe('Delivery controllers', () => {
         .fn()
         .mockResolvedValue({ id: 'route-1', orders: [{ id: 'order-2' }] }),
     } as unknown as jest.Mocked<DeliveryService>;
-    const controller = new DeliveryController(service);
+    const controller = new DeliveryController(service, navigationServiceStub);
     const user = {
       id: 'admin-1',
       email: 'a@example.com',
@@ -215,7 +259,7 @@ describe('Delivery controllers', () => {
     const service = {
       createRoute: jest.fn(),
     } as unknown as jest.Mocked<DeliveryService>;
-    const controller = new DeliveryController(service);
+    const controller = new DeliveryController(service, navigationServiceStub);
     const user = {
       id: 'admin-1',
       email: 'a@example.com',
@@ -242,7 +286,7 @@ describe('Delivery controllers', () => {
     const service = {
       assignOrdersToRoute: jest.fn(),
     } as unknown as jest.Mocked<DeliveryService>;
-    const controller = new DeliveryController(service);
+    const controller = new DeliveryController(service, navigationServiceStub);
     const user = {
       id: 'admin-1',
       email: 'a@example.com',
@@ -274,7 +318,10 @@ describe('Delivery controllers', () => {
         .fn()
         .mockResolvedValue({ id: 'settlement-1', status: 'OPEN' }),
     } as unknown as jest.Mocked<DeliveryService>;
-    const routeController = new DeliveryController(service);
+    const routeController = new DeliveryController(
+      service,
+      navigationServiceStub,
+    );
     const orderController = new DeliveryOrdersController(service);
     const settlementController = new RouteSettlementsController(service);
     const user = {
@@ -455,7 +502,7 @@ describe('Delivery controllers', () => {
     const service = {
       openSettlement: jest.fn(),
     } as unknown as jest.Mocked<DeliveryService>;
-    const controller = new DeliveryController(service);
+    const controller = new DeliveryController(service, navigationServiceStub);
 
     await expect(
       controller.openSettlement(
