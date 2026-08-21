@@ -29,6 +29,7 @@ export const ROUTE_ACCESS_ROLES = {
   deliveryRoutePlanner: ["ADMIN", "SELLER"],
   deliveryRouteReoptimization: ["ADMIN"],
   myRoutes: ["DRIVER"],
+  driverNavigation: ["DRIVER"],
   fleetLive: ["ADMIN"],
   fleetVehicles: ["ADMIN"],
   purchaseDetail: ["ADMIN", "WAREHOUSE"],

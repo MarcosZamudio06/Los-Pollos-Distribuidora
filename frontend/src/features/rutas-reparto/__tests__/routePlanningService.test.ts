@@ -218,6 +218,73 @@ describe("delivery route planning API contracts", () => {
     );
   });
 
+  it("requests driver navigation with the current position only", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        routeId: "route-1",
+        target: {
+          kind: "DELIVERY_ORDER",
+          id: "order-1",
+          stopSequence: 2,
+          label: "Polleria Centro",
+          address: "Centro",
+          latitude: 19.17,
+          longitude: -96.13,
+        },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [-96.14, 19.18],
+            [-96.13, 19.17],
+          ],
+        },
+        distanceMeters: 860,
+        durationSeconds: 180,
+        steps: [
+          {
+            distanceMeters: 120,
+            durationSeconds: 30,
+            streetName: "Avenida Centro",
+            maneuver: {
+              type: "TURN",
+              modifier: "RIGHT",
+              location: { latitude: 19.175, longitude: -96.135 },
+              bearingBefore: 90,
+              bearingAfter: 180,
+              exit: null,
+            },
+          },
+        ],
+      }),
+    );
+
+    await deliveryService.getRouteNavigation(
+      "route-1",
+      {
+        latitude: 19.18,
+        longitude: -96.14,
+        accuracyMeters: 12,
+        headingDegrees: 90,
+      },
+      "driver-token",
+    );
+
+    expect(requestAt().url).toBe("/api/delivery-routes/route-1/navigation");
+    expect(requestAt().init.method).toBe("POST");
+    expect(JSON.parse(String(requestAt().init.body))).toEqual({
+      latitude: 19.18,
+      longitude: -96.14,
+      accuracyMeters: 12,
+      headingDegrees: 90,
+    });
+    expect(JSON.parse(String(requestAt().init.body))).not.toHaveProperty(
+      "destination",
+    );
+    expect(new Headers(requestAt().init.headers).get("authorization")).toBe(
+      "Bearer driver-token",
+    );
+  });
+
   it("starts a route through the route status endpoint", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       okJson({

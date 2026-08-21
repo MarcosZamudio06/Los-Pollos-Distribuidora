@@ -44,6 +44,7 @@ import {
   validateDeliveryEvidence,
   type ValidatedDeliveryEvidence,
 } from './delivery-evidence.validation';
+import { FINAL_DELIVERY_ORDER_STATUS_SET } from './delivery-order-statuses';
 import { buildDeliveryEvidenceStorageKey } from './delivery-evidence-storage';
 import {
   CompleteLogisticsStopDto,
@@ -316,14 +317,6 @@ type PlannedStop = {
   legDistanceMeters: number;
   legDurationSeconds: number;
 };
-
-const FINAL_ORDER_STATUSES = new Set<DeliveryOrderStatus>([
-  DeliveryOrderStatus.DELIVERED,
-  DeliveryOrderStatus.NOT_DELIVERED,
-  DeliveryOrderStatus.CANCELLED,
-  DeliveryOrderStatus.PARTIALLY_REJECTED,
-  DeliveryOrderStatus.RETURNED,
-]);
 
 const INCIDENT_STATUS_REQUIRING_NOTES = new Set<DeliveryOrderStatus>([
   DeliveryOrderStatus.NOT_DELIVERED,
@@ -1000,7 +993,7 @@ export class DeliveryService {
         }
       } else {
         const hasOpenOrders = (route.deliveryOrders ?? []).some(
-          (order) => !FINAL_ORDER_STATUSES.has(order.status),
+          (order) => !FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status),
         );
         if (hasOpenOrders) {
           throw new BadRequestException(
@@ -1545,7 +1538,7 @@ export class DeliveryService {
                 };
               }
 
-              if (FINAL_ORDER_STATUSES.has(order.status)) {
+              if (FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status)) {
                 throw new ConflictException(
                   'Delivery order already has a final status; retry with the original Idempotency-Key',
                 );
@@ -2525,7 +2518,7 @@ export class DeliveryService {
       completedAt: route.completedAt?.toISOString() ?? null,
       ordersCount: orders.length,
       pendingOrdersCount: orders.filter(
-        (order) => !FINAL_ORDER_STATUSES.has(order.status),
+        (order) => !FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status),
       ).length,
       routeSettlementId: isLogistics ? null : (route.settlement?.id ?? null),
       logisticsStopStatus,
@@ -3007,7 +3000,7 @@ export class DeliveryService {
 
   private assertRouteOrdersFinal(route: DeliveryRouteRecord) {
     const hasOpenOrders = (route.deliveryOrders ?? []).some(
-      (order) => !FINAL_ORDER_STATUSES.has(order.status),
+      (order) => !FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status),
     );
     if (hasOpenOrders) {
       throw new BadRequestException(

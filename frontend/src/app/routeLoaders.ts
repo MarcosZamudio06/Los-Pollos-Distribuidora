@@ -94,6 +94,10 @@ const myRoutesRoute = createLazyRoute(
   () => import("../features/rutas-reparto"),
   "MyRoutesPage",
 );
+const driverNavigationRoute = createLazyRoute(
+  () => import("../features/chofer"),
+  "DriverNavigationPage",
+);
 const fleetLiveRoute = createLazyRoute(
   () => import("../features/fleet"),
   "FleetLivePage",
@@ -199,6 +203,7 @@ export const ProductListPage = productListRoute.Component;
 export const EmployeesPage = employeesRoute.Component;
 export const DeliveryRoutesPage = deliveryRoutesRoute.Component;
 export const MyRoutesPage = myRoutesRoute.Component;
+export const DriverNavigationPage = driverNavigationRoute.Component;
 export const FleetLivePage = fleetLiveRoute.Component;
 export const FleetVehiclesPage = fleetVehiclesRoute.Component;
 export const RouteDetailPage = routeDetailRoute.Component;

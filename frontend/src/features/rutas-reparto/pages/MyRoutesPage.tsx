@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiClientError } from "../../../lib/api";
 import {
   BadgeDollarSign,
@@ -6,6 +7,7 @@ import {
   ClipboardList,
   Clock3,
   MapPin,
+  Navigation,
   Route,
   Ruler,
   Truck,
@@ -47,6 +49,7 @@ import {
   routeTypeLabel,
   shortId,
 } from "../labels";
+import { canOpenDriverNavigation } from "../navigationTarget";
 import type {
   DeliveryOrder,
   DeliveryRouteListItem,
@@ -304,7 +307,18 @@ export function MyRoutesPage() {
                             : `Origen ${detail.originLocationName ?? shortId(detail.originLocationId)} · Unidad ${detail.vehicle?.displayName ?? "sin asignar"} · ROUTE_STOCK ${detail.routeStockLocationName ?? shortId(detail.routeStockLocationId)}`}
                         </p>
                       </div>
-                      <RouteStatusBadge status={detail.status} />
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {canOpenDriverNavigation(detail) && (
+                          <Link
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[var(--erp-brand-red)] bg-[var(--erp-brand-red)] px-4 py-2 text-sm font-black text-white transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:ring-4 focus-visible:ring-[var(--erp-ring)]"
+                            to={`/my-routes/${detail.id}/navigation`}
+                          >
+                            <Navigation aria-hidden="true" className="h-4 w-4" />
+                            Abrir navegación
+                          </Link>
+                        )}
+                        <RouteStatusBadge status={detail.status} />
+                      </div>
                     </div>
                     {isLogisticsRoute ? (
                       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

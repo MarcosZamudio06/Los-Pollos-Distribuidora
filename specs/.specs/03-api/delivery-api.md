@@ -17,7 +17,7 @@ cambiar los endpoints de rutas ni el modelo de negocio.
 |---|---|---|
 | `GeocodingPort` | Búsqueda directa y geocodificación inversa | Etiqueta, coordenadas y metadatos de procedencia opcionales |
 | `RouteOptimizationPort` | Ordenar paradas para un vehículo | Secuencia de ventas/paradas y estado de asignación |
-| `RoutingPort` | Calcular recorrido vial para una secuencia aprobada | GeoJSON, distancia y duración |
+| `RoutingPort` | Calcular recorrido vial para una secuencia aprobada o navegación dinámica hacia una parada derivada por backend | GeoJSON, distancia, duración y, cuando se solicita navegación, instrucciones normalizadas |
 
 La configuración pública del style pertenece exclusivamente al frontend:
 `VITE_MAP_STYLE_URL` se resuelve mediante `runtimeMapConfig` y
@@ -50,7 +50,7 @@ Convenciones:
 - Cada optimización corresponde a exactamente un vehículo y una ruta; VROOM no recibe ni optimiza múltiples vehículos.
 - La UI nunca consume Photon, VROOM u OSRM directamente; las URLs permanecen en la red interna del backend.
 
-Fuera de alcance: paradas libres sin venta, recálculo por desvíos, instrucciones giro a giro, mapas offline, capacidades, ventanas horarias, optimización de varios vehículos y tráfico en vivo. El tracking de posiciones de la ruta activa y la visualización administrativa de flota sí forman parte de este contrato; no constituyen navegación ni rerouting.
+Fuera de alcance: paradas libres sin venta, persistencia de recorridos dinámicos, mapas offline, capacidades, ventanas horarias, optimización de varios vehículos y tráfico en vivo. La navegación dinámica del `DRIVER` recalcula exclusivamente GPS actual → próxima parada pendiente derivada por backend; no altera el orden aprobado, no ejecuta VROOM y no finaliza paradas por proximidad.
 
 El navegador usa MapLibre GL JS únicamente como renderer. MapLibre no geocodifica, no ordena paradas, no calcula geometría, distancia o duración y no proporciona tráfico en vivo. `TrafficLayer` queda como capacidad futura condicionada a una fuente externa autorizada.
 
@@ -65,6 +65,63 @@ La respuesta `data` incluye `status`, `checkedAt`, `routingDataVersion`, `datase
 El backend puede consultar Photon, VROOM y OSRM para este diagnóstico porque son proveedores internos de servidor; nunca devuelve sus URLs al navegador. La URL del estilo MapLibre (`VITE_MAP_STYLE_URL`) es una configuración exclusiva del frontend y no forma parte de este endpoint.
 
 El contrato interno desacoplado `TrafficProvider` define `getTrafficSnapshot(bounds, observedAt)`, `getCapabilities()` y `healthCheck()`. La implementación por defecto es `NullTrafficProvider`, que no devuelve segmentos. No se expone todavía `GET /api/fleet/traffic`; si se habilita en una fase posterior sin proveedor disponible, deberá devolver explícitamente `available=false` y una colección vacía, nunca datos OSM estáticos etiquetados como tráfico vivo.
+
+### POST /api/delivery-routes/:routeId/navigation
+
+Propósito: calcular un recorrido efímero desde la posición GPS actual del `DRIVER` hasta la próxima parada pendiente de una ruta propia `IN_PROGRESS`.
+
+Permisos: únicamente rol `DRIVER`. El backend consulta la ruta por `routeId` y `driverId`; una ruta inexistente o asignada a otro conductor sigue la política anti-enumeración de rutas. Una ruta accesible que no esté `IN_PROGRESS` devuelve conflicto de dominio.
+
+Body:
+
+```json
+{
+  "latitude": 19.1738,
+  "longitude": -96.1342,
+  "accuracyMeters": 8.5,
+  "headingDegrees": 180
+}
+```
+
+`latitude` y `longitude` son requeridos y se validan como coordenadas WGS84 finitas. `accuracyMeters` es opcional y no negativo; `headingDegrees` es opcional y pertenece al rango `[0, 360)`. El body no acepta `destination`, `orderId`, `stopSequence`, `routeId`, `driverId` ni `vehicleId` como autoridad de destino.
+
+Para `SALE_DELIVERY`, el destino es el primer `DeliveryOrder` no finalizado ordenado por `stopSequence` ascendente y después por creación. Los estados finales son los estados finales vigentes del dominio: `DELIVERED`, `NOT_DELIVERED`, `CANCELLED`, `PARTIALLY_REJECTED` y `RETURNED`. Para `BRANCH_RETURN` y `CEDIS_SUPPLY`, el destino pendiente es `InventoryTransfer.destinationLocation` mientras `logisticsStopCompletedAt` sea nulo. Una ruta sin parada pendiente o con destino sin coordenadas devuelve un conflicto de dominio explícito.
+
+Respuesta `data`:
+
+```json
+{
+  "routeId": "route-id",
+  "target": {
+    "kind": "DELIVERY_ORDER",
+    "id": "delivery-order-id",
+    "stopSequence": 1,
+    "label": "Cliente Centro",
+    "address": "Av. Centro 123",
+    "latitude": 19.1802,
+    "longitude": -96.1421
+  },
+  "geometry": { "type": "LineString", "coordinates": [] },
+  "distanceMeters": 1250,
+  "durationSeconds": 240,
+  "steps": [
+    {
+      "distanceMeters": 120,
+      "durationSeconds": 30,
+      "streetName": "Av. Centro",
+      "maneuver": {
+        "type": "TURN",
+        "modifier": "RIGHT",
+        "location": { "latitude": 19.174, "longitude": -96.133 },
+        "bearingBefore": 0,
+        "bearingAfter": 90
+      }
+    }
+  ]
+}
+```
+
+`target.kind` es `DELIVERY_ORDER` para venta o `LOGISTICS_STOP` para una transferencia logística. Las instrucciones son provider-agnostic; contemplan continuar, giros leves/normales/fuertes, retorno, rotondas, calle, distancia, duración, bearings y coordenada de maniobra. OSRM se consume con `geometries=geojson`, `overview=full` y `steps=true`. La planeación existente conserva `steps=false`; la navegación no llama VROOM ni persiste `geometry`, distancia, duración o instrucciones.
 
 ## Permisos geoespaciales y de flota
 

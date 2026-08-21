@@ -275,6 +275,32 @@ describe("DriverRouteMap", () => {
     await act(async () => root.unmount());
   });
 
+  it("renders dynamic navigation geometry as a separate overlay", async () => {
+    const navigationGeometry = {
+      type: "LineString" as const,
+      coordinates: [
+        [-96.15, 19.19],
+        [-96.145, 19.185],
+      ] as [number, number][],
+    };
+    const { map, root } = await renderMap({ navigationGeometry });
+
+    expect(map.layers).toEqual([
+      "driver-route-line",
+      "driver-navigation-route-line",
+    ]);
+    expect(map.sources.get("driver-route")?.data).toBe(geometry);
+    expect(map.sources.get("driver-navigation-route")?.data).toBe(
+      navigationGeometry,
+    );
+    expect(map.fitBoundsCalls[0].bounds).toEqual([
+      [-96.15, 19.16],
+      [-96.12, 19.19],
+    ]);
+
+    await act(async () => root.unmount());
+  });
+
   it("renders logistics endpoints from canonical location coordinates without persisted geometry", async () => {
     const { container, map, root } = await renderMap({
       geometry: undefined,
@@ -307,6 +333,27 @@ describe("DriverRouteMap", () => {
         .querySelector('[data-marker-kind="destination"]')
         ?.getAttribute("aria-label"),
     ).toBe("Destino: CEDIS Principal");
+
+    await act(async () => root.unmount());
+  });
+
+  it("renders the immediate GPS marker even before a route geometry is available", async () => {
+    const { container, map, root } = await renderMap({
+      geometry: undefined,
+      currentLocation: {
+        accuracyMeters: 18,
+        headingDegrees: null,
+        latitude: 19.175,
+        longitude: -96.135,
+        recordedAt: "2026-08-12T16:00:00.000Z",
+        speedKph: null,
+      },
+    });
+
+    expect(map.layers).toEqual([]);
+    expect(
+      container.querySelector('[data-marker-kind="location"]'),
+    ).not.toBeNull();
 
     await act(async () => root.unmount());
   });

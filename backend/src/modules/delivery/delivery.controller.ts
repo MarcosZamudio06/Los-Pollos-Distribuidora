@@ -4,6 +4,8 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -19,15 +21,20 @@ import {
   AssignDeliveryRouteOrdersDto,
   CompleteLogisticsStopDto,
   CreateDeliveryRouteDto,
+  DeliveryRouteNavigationDto,
   ListDeliveryRoutesQueryDto,
   UpdateDeliveryRouteStatusDto,
 } from './dto';
+import { DeliveryRouteNavigationService } from './delivery-route-navigation.service';
 import { DeliveryService } from './delivery.service';
 
 @Controller('delivery-routes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DeliveryController {
-  constructor(private readonly deliveryService: DeliveryService) {}
+  constructor(
+    private readonly deliveryService: DeliveryService,
+    private readonly navigationService: DeliveryRouteNavigationService,
+  ) {}
 
   @Get()
   @Roles('ADMIN', 'DRIVER', 'COLLECTIONS', 'WAREHOUSE')
@@ -52,6 +59,21 @@ export class DeliveryController {
       success: true,
       message: 'Delivery route retrieved successfully',
       data: await this.deliveryService.findRoute(id, currentUser),
+    };
+  }
+
+  @Post(':routeId/navigation')
+  @HttpCode(HttpStatus.OK)
+  @Roles('DRIVER')
+  async navigate(
+    @Param('routeId') routeId: string,
+    @Body() body: DeliveryRouteNavigationDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      message: 'Route navigation calculated successfully',
+      data: await this.navigationService.navigate(routeId, body, currentUser),
     };
   }
 

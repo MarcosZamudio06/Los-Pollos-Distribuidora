@@ -67,6 +67,16 @@ export class RoutingProvidersService {
     );
   }
 
+  async buildNavigationRoute(origin: Coordinate, destination: Coordinate) {
+    return this.routingProvider.buildRoute(
+      [origin, destination].map(([longitude, latitude]) => ({
+        latitude,
+        longitude,
+      })),
+      { includeSteps: true },
+    );
+  }
+
   private toCoordinates([longitude, latitude]: Coordinate): Coordinates {
     return { latitude, longitude };
   }

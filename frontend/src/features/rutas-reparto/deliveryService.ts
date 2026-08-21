@@ -21,6 +21,8 @@ import type {
   EligibleDeliverySale,
   FleetPositionPublication,
   GeocodingResult,
+  DriverNavigationRequest,
+  DriverNavigationResponse,
   PlannerDriver,
   PlannerLocation,
   PlannerVehicle,
@@ -204,6 +206,20 @@ export const deliveryService = {
         headers: authHeaders(accessToken),
       },
     );
+    return unwrapItem(response);
+  },
+  async getRouteNavigation(
+    routeId: string,
+    payload: DriverNavigationRequest,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<DriverNavigationResponse>,
+      DriverNavigationRequest
+    >(`/delivery-routes/${routeId}/navigation`, {
+      body: payload,
+      headers: authHeaders(accessToken),
+    });
     return unwrapItem(response);
   },
   async updateRouteStatus(

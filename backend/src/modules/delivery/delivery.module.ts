@@ -11,6 +11,7 @@ import { RouteSettlementsController } from './route-settlements.controller';
 import { DeliveryService } from './delivery.service';
 import { DeliveryRoutePlanningController } from './delivery-route-planning.controller';
 import { DeliveryRoutePlanningService } from './delivery-route-planning.service';
+import { DeliveryRouteNavigationService } from './delivery-route-navigation.service';
 import { GeocodingController } from './geocoding.controller';
 import { RoutingProvidersService } from './routing-providers.service';
 import { RoutingTechnicalStatusController } from './routing-technical-status.controller';
@@ -39,6 +40,7 @@ import { VehicleService } from './vehicle.service';
   providers: [
     DeliveryService,
     DeliveryRoutePlanningService,
+    DeliveryRouteNavigationService,
     RoutingProvidersService,
     RoutingTechnicalStatusService,
     VehicleService,
