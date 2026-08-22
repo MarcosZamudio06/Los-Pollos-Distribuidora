@@ -124,9 +124,9 @@ export function DeliveryOrderCard({
             Vuelta
           </dt>
           <dd className="mt-1 text-[var(--erp-muted-foreground)]">
-            {order.collectionPass === "SECOND"
+            {order.collectionPass === 2
               ? "Segunda vuelta"
-              : order.collectionPass === "FIRST"
+              : order.collectionPass === 1
                 ? "Primera vuelta"
                 : "Sin cobro"}
           </dd>

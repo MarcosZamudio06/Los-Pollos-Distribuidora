@@ -85,6 +85,9 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Verificar que crear/vincular transferencias no cambie balances ni genere movimientos.
 - Confirmar transferencias vinculadas únicamente por `InventoryTransfersService` y comprobar salida/entrada atómicas.
 - Verificar mediante contrato de esquema que `DeliveryRouteType`, `inventoryTransferId` y las restricciones condicionales de Fleet se mantengan sin volver obligatorio `vehicleId` para rutas históricas.
+- Probar la confirmación de parada logística sin posición persistida, con precisión mayor a 100 metros, con posición stale y fuera del radio de 150 metros; en todos los casos verificar `422` y ausencia de actualización de `DeliveryRoute`.
+- Probar la confirmación con posición persistida reciente, precisa y cercana al destino canónico; verificar que registra la llegada sin crear cobros ni movimientos de inventario.
+- Probar la UI con `Abrir entrega`, `Llegué` y `Confirmar recepción` deshabilitados hasta que exista una posición GPS fresca, precisa y cercana, manteniendo la confirmación como acción explícita.
 - Cancelar `DRAFT`, `REQUESTED` e `IN_TRANSIT` con motivo; rechazar cancelación de `CONFIRMED`.
 - Rechazar productos o ubicaciones inactivas en creación y confirmación, conservando historia ya confirmada.
 - Validar refresh desde transferencias/movimientos, snapshots append-only, bloqueantes y transición a `READY_FOR_REVIEW`.
@@ -190,7 +193,7 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 - Verificar ausencia de doble decremento entre carga y venta.
 - Verificar idempotencia en creación, confirmación y cancelación de traspasos.
 - Verificar idempotencia en apertura/cálculo, cierre y reapertura de liquidación.
-- Verificar que el backend rechace `DELIVERED` si el pedido no tiene evidencia `PHOTO` y `GEOLOCATION`.
+- Verificar que el backend rechace `DELIVERED` si el pedido no tiene evidencia `PHOTO` y permita la transición cuando solo falta `GEOLOCATION`.
 - Verificar que el backend rechace una `PHOTO` inválida, un MIME/signature mismatch, una imagen fuera de tamaño/dimensiones y un `capturedAt` fuera de ventana.
 - Verificar que una `PHOTO` válida persista hash, MIME, tamaño, metadata, `receivedAt` y `capturedByUserId` del actor autenticado.
 

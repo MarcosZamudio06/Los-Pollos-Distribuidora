@@ -1188,7 +1188,7 @@ Tipos sugeridos:
 
 Notas:
 
-- Para marcar un pedido como `DELIVERED`, el backend debe encontrar al menos una evidencia `PHOTO` y una `GEOLOCATION` asociadas al pedido.
+- Para marcar un pedido como `DELIVERED`, el backend debe encontrar al menos una evidencia `PHOTO` asociada al pedido; `GEOLOCATION` es opcional.
 - Para `PHOTO`, el backend valida el data URL, el MIME declarado contra la firma binaria, el tamaño, las dimensiones y calcula `sha256`; la compresión del frontend no es una frontera de seguridad.
 - `receivedAt`, `capturedByUserId` y los metadatos de integridad los determina el backend. Los campos pueden ser nulos en registros históricos cuyo origen no pueda reconstruirse; las nuevas capturas deben guardar el usuario autenticado.
 - Las nuevas fotos se almacenan en Object Storage y `storageKey` es la referencia canónica. `mimeType`, `sha256`, `sizeBytes` y `metadata` quedan en PostgreSQL; `value` es nullable y solo conserva temporalmente el data URL de filas históricas pendientes de migración.

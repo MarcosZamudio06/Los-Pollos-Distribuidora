@@ -3,6 +3,7 @@ import {
   NAVIGATION_OFF_ROUTE_CONFIRMATIONS,
   distancePointToPolylineMeters,
   evaluateNavigationRecalculation,
+  isNearNavigationDestination,
 } from "../navigationSessionPolicy";
 import type { GeoJsonLineString, RouteLocationPosition } from "../../rutas-reparto/types";
 
@@ -18,18 +19,50 @@ function position(
   latitude: number,
   longitude: number,
   accuracyMeters = 12,
+  recordedAt = new Date().toISOString(),
 ): RouteLocationPosition {
   return {
     accuracyMeters,
     headingDegrees: 90,
     latitude,
     longitude,
-    recordedAt: "2026-08-20T18:00:00.000Z",
+    recordedAt,
     speedKph: 24,
   };
 }
 
 describe("navigation session policy", () => {
+  it("accepts arrival only with a fresh, precise position inside the destination radius", () => {
+    const destination = { latitude: 19.18, longitude: -96.14 };
+
+    expect(
+      isNearNavigationDestination(
+        position(destination.latitude, destination.longitude),
+        destination,
+      ),
+    ).toBe(true);
+    expect(
+      isNearNavigationDestination(
+        position(destination.latitude, destination.longitude, 100.01),
+        destination,
+      ),
+    ).toBe(false);
+    expect(
+      isNearNavigationDestination(
+        position(
+          destination.latitude,
+          destination.longitude,
+          12,
+          new Date(Date.now() - 60_001).toISOString(),
+        ),
+        destination,
+      ),
+    ).toBe(false);
+    expect(
+      isNearNavigationDestination(position(19.19, -96.14), destination),
+    ).toBe(false);
+  });
+
   it("calculates point-to-polyline distance without an external geometry library", () => {
     expect(
       distancePointToPolylineMeters(
@@ -121,4 +154,3 @@ describe("navigation session policy", () => {
     expect(decision.reason).toBeNull();
   });
 });
-

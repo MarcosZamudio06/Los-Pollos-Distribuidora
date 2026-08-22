@@ -10,6 +10,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import {
   CollectionStatus,
@@ -326,10 +327,21 @@ const INCIDENT_STATUS_REQUIRING_NOTES = new Set<DeliveryOrderStatus>([
 
 const REQUIRED_DELIVERY_EVIDENCE_TYPES: DeliveryEvidenceType[] = [
   DeliveryEvidenceType.PHOTO,
-  DeliveryEvidenceType.GEOLOCATION,
 ];
 
 const INCIDENT_POSITION_MAX_AGE_MS = 5 * 60 * 1000;
+const LOGISTICS_STOP_MAX_ACCURACY_METERS = 100;
+const LOGISTICS_STOP_MAX_DISTANCE_METERS = 150;
+const LOGISTICS_STOP_DEFAULT_POSITION_MAX_AGE_SECONDS = 60;
+const EARTH_RADIUS_METERS = 6_371_000;
+
+type LogisticsStopPositionRecord = {
+  latitude: DecimalLike;
+  longitude: DecimalLike;
+  accuracyMeters: DecimalLike;
+  recordedAt: Date | string;
+  receivedAt: Date | string;
+};
 
 @Injectable()
 export class DeliveryService {
@@ -342,6 +354,7 @@ export class DeliveryService {
     @Optional()
     @Inject(OBJECT_STORAGE)
     private readonly objectStorage?: ObjectStoragePort,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async findRoutes(query: ListDeliveryRoutesQueryDto = {}, currentUser: Actor) {
@@ -1061,7 +1074,15 @@ export class DeliveryService {
     const route = (await this.prisma.deliveryRoute.findFirst({
       where: this.buildRouteAccessWhere(id, currentUser),
       include: {
-        inventoryTransfer: { select: { id: true, status: true } },
+        inventoryTransfer: {
+          select: {
+            id: true,
+            status: true,
+            destinationLocation: {
+              select: { latitude: true, longitude: true },
+            },
+          },
+        },
       },
     })) as DeliveryRouteRecord | null;
 
@@ -1092,6 +1113,8 @@ export class DeliveryService {
       );
     }
 
+    await this.assertReliableLogisticsStopPosition(route);
+
     const updated = (await this.prisma.deliveryRoute.update({
       where: { id: route.id },
       data: {
@@ -1103,6 +1126,90 @@ export class DeliveryService {
     })) as DeliveryRouteRecord;
 
     return this.toRouteDetail(updated);
+  }
+
+  private async assertReliableLogisticsStopPosition(
+    route: DeliveryRouteRecord,
+  ): Promise<void> {
+    const destination = this.coordinatePair(
+      route.inventoryTransfer?.destinationLocation?.latitude,
+      route.inventoryTransfer?.destinationLocation?.longitude,
+    );
+    if (!destination) {
+      throw new ConflictException(
+        'Logistics stop destination is missing coordinates',
+      );
+    }
+
+    const position = (await this.prisma.vehiclePosition.findFirst({
+      where: {
+        routeId: route.id,
+        driverId: route.driverId,
+        ...(route.vehicleId ? { vehicleId: route.vehicleId } : {}),
+      },
+      orderBy: [{ recordedAt: 'desc' }, { receivedAt: 'desc' }],
+      select: {
+        latitude: true,
+        longitude: true,
+        accuracyMeters: true,
+        recordedAt: true,
+        receivedAt: true,
+      },
+    })) as LogisticsStopPositionRecord | null;
+
+    if (!position) {
+      throw new UnprocessableEntityException(
+        'A recent accurate GPS position at the logistics destination is required',
+      );
+    }
+
+    const accuracyMeters = this.toNumberOrNull(position.accuracyMeters);
+    if (
+      accuracyMeters === null ||
+      accuracyMeters < 0 ||
+      accuracyMeters > LOGISTICS_STOP_MAX_ACCURACY_METERS
+    ) {
+      throw new UnprocessableEntityException(
+        `GPS accuracy must be ${LOGISTICS_STOP_MAX_ACCURACY_METERS} meters or less`,
+      );
+    }
+
+    const recordedAtMs = new Date(position.recordedAt).getTime();
+    const receivedAtMs = new Date(position.receivedAt).getTime();
+    const nowMs = Date.now();
+    const maxAgeMs =
+      this.getConfigNumber(
+        'FLEET_POSITION_STALE_SECONDS',
+        LOGISTICS_STOP_DEFAULT_POSITION_MAX_AGE_SECONDS,
+      ) * 1000;
+    const recordedAgeMs = nowMs - recordedAtMs;
+    const receivedAgeMs = nowMs - receivedAtMs;
+    if (
+      !Number.isFinite(recordedAgeMs) ||
+      !Number.isFinite(receivedAgeMs) ||
+      recordedAgeMs < 0 ||
+      receivedAgeMs < 0 ||
+      recordedAgeMs > maxAgeMs ||
+      receivedAgeMs > maxAgeMs
+    ) {
+      throw new UnprocessableEntityException('GPS position is stale');
+    }
+
+    const currentPosition = this.coordinatePair(
+      position.latitude,
+      position.longitude,
+    );
+    const distanceMeters = currentPosition
+      ? this.distanceBetweenCoordinatesMeters(currentPosition, destination)
+      : Number.POSITIVE_INFINITY;
+    if (
+      !Number.isFinite(distanceMeters) ||
+      distanceMeters > LOGISTICS_STOP_MAX_DISTANCE_METERS
+    ) {
+      throw new UnprocessableEntityException(
+        `GPS position must be within ${LOGISTICS_STOP_MAX_DISTANCE_METERS} meters of the destination`,
+      );
+    }
   }
 
   async updateOrderStatus(
@@ -3246,6 +3353,44 @@ export class DeliveryService {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  }
+
+  private distanceBetweenCoordinatesMeters(
+    first: { latitude: number; longitude: number },
+    second: { latitude: number; longitude: number },
+  ): number {
+    const isValidCoordinate = (point: {
+      latitude: number;
+      longitude: number;
+    }) =>
+      Number.isFinite(point.latitude) &&
+      Number.isFinite(point.longitude) &&
+      point.latitude >= -90 &&
+      point.latitude <= 90 &&
+      point.longitude >= -180 &&
+      point.longitude <= 180;
+
+    if (!isValidCoordinate(first) || !isValidCoordinate(second)) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+    const latitudeDelta = toRadians(second.latitude - first.latitude);
+    const longitudeDelta = toRadians(second.longitude - first.longitude);
+    const firstLatitude = toRadians(first.latitude);
+    const secondLatitude = toRadians(second.latitude);
+    const haversine =
+      Math.sin(latitudeDelta / 2) ** 2 +
+      Math.cos(firstLatitude) *
+        Math.cos(secondLatitude) *
+        Math.sin(longitudeDelta / 2) ** 2;
+    return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(haversine));
+  }
+
+  private getConfigNumber(key: string, fallback: number): number {
+    const value = this.config?.get<number | string>(key);
+    const parsed = Number(value ?? fallback);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   private toNumber(value: DecimalLike): number {

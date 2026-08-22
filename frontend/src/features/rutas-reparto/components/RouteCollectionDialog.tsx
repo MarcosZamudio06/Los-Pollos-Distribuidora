@@ -24,7 +24,7 @@ import {
 } from "./RouteUi";
 
 const paymentMethods: PaymentMethod[] = ["CASH", "TRANSFER", "CARD", "DEPOSIT"];
-const collectionPasses: CollectionPass[] = ["FIRST", "SECOND"];
+const collectionPasses: CollectionPass[] = [1, 2];
 
 type SharedCollectionProps = {
   collectionPassMode?: "editable" | "second-pass";
@@ -55,8 +55,8 @@ function CollectionForm({
   );
   const initialPass =
     collectionPassMode === "second-pass"
-      ? "SECOND"
-      : ((order.collectionPass as CollectionPass | null) ?? "FIRST");
+      ? 2
+      : (order.collectionPass ?? 1);
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [reference, setReference] = useState("");
@@ -92,7 +92,7 @@ function CollectionForm({
         accountReceivableId: order.accountReceivableId,
         expectedVersion: order.accountReceivableVersion,
         amount: numericAmount,
-        collectionPass: forcedSecondPass ? "SECOND" : collectionPass,
+        collectionPass: forcedSecondPass ? 2 : collectionPass,
         paidAt: toIsoDateTime(paidAt),
         paymentMethod,
         reference: reference.trim() || undefined,
@@ -196,12 +196,12 @@ function CollectionForm({
               </div>
             ) : (
               <SelectInput
-                onChange={(event) => setCollectionPass(event.target.value)}
+                onChange={(event) => setCollectionPass(Number(event.target.value))}
                 value={collectionPass}
               >
                 {collectionPasses.map((item) => (
                   <option key={item} value={item}>
-                    {item === "SECOND" ? "Segunda vuelta" : "Primera vuelta"}
+                    {item === 2 ? "Segunda vuelta" : "Primera vuelta"}
                   </option>
                 ))}
               </SelectInput>
@@ -291,7 +291,7 @@ export function RouteSecondPassCollectionDialog(props: Props) {
     <CollectionForm
       {...props}
       collectionPassMode="second-pass"
-      description="Registra un cobro pendiente de la segunda vuelta. La solicitud envía collectionPass SECOND y no captura ni envía routeSettlementId."
+      description="Registra un cobro pendiente de la segunda vuelta. La solicitud envía collectionPass 2 y no captura ni envía routeSettlementId."
       eyebrow="Segunda vuelta"
       submitLabel="Registrar segunda vuelta"
       title="Registrar cobro de segunda vuelta"

@@ -33,7 +33,7 @@ afterEach(async () => {
 
 describe("UpdateDeliveryStatusDialog", () => {
   it("shows the backend reason when delivery status is rejected", async () => {
-    mockState.error = new Error("DELIVERED requires GEOLOCATION evidence");
+    mockState.error = new Error("DELIVERED requires PHOTO evidence");
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -49,7 +49,7 @@ describe("UpdateDeliveryStatusDialog", () => {
     });
 
     expect(container.textContent).toContain(
-      "DELIVERED requires GEOLOCATION evidence",
+      "DELIVERED requires PHOTO evidence",
     );
   });
 });

@@ -822,7 +822,9 @@ Validaciones:
 
 - La ruta debe ser `BRANCH_RETURN` o `CEDIS_SUPPLY`, estar asignada al DRIVER autenticado cuando corresponda y estar `IN_PROGRESS`.
 - El traslado vinculado debe existir y no estar `CANCELLED`.
-- El servidor registra `logisticsStopCompletedAt` y `logisticsStopCompletedByUserId`; el cliente no envía `latitude` ni `longitude`.
+- Antes de registrar la llegada, el servidor debe consultar la última `VehiclePosition` persistida y vinculada a la ruta, conductor y unidad. La posición debe existir, tener `accuracyMeters <= 100`, haber sido registrada y recibida dentro de `FLEET_POSITION_STALE_SECONDS` (60 segundos por defecto) y estar a no más de 150 metros de `InventoryTransfer.destinationLocation`.
+- Si falta una posición confiable, la precisión es insuficiente, la posición está stale o queda fuera del radio, el endpoint responde `422` y no modifica la ruta. El cliente no envía `latitude` ni `longitude`; el backend repite la validación contra GPS persistido para impedir bypass por invocación directa.
+- El servidor registra `logisticsStopCompletedAt` y `logisticsStopCompletedByUserId` únicamente después de superar las validaciones GPS.
 - La operación no crea ni modifica `Payment`, `AccountReceivable`, `PaymentAllocation`, reservas, cantidades, lotes o movimientos de inventario. La recepción de inventario continúa por los comandos canónicos del módulo de inventario/CEDIS.
 - La respuesta devuelve el detalle logístico del traslado y `logisticsStop.status=COMPLETED`.
 
@@ -879,8 +881,8 @@ Validaciones:
 - El backend calcula y persiste `sha256`, `mimeType`, `sizeBytes` y `metadata` de la imagen; el cliente no puede declarar esos valores como confiables. El binario se carga en Object Storage y nunca se persiste completo en PostgreSQL.
 - `capturedAt` no puede estar más de 5 minutos en el futuro ni tener más de 7 días de antigüedad. El backend asigna `receivedAt` y `capturedByUserId` desde la solicitud autenticada.
 - La respuesta incluye `storageKey`, `contentUrl`, `mimeType`, `sha256`, `sizeBytes`, `capturedAt`, `receivedAt`, `capturedByUserId` y `metadata`. Para una captura nueva, `value` es `null`, `storageKey` identifica el objeto privado y `contentUrl` expira; `value` solo permanece para compatibilidad temporal con evidencia histórica.
-- Para cambiar el pedido a `DELIVERED`, deben existir previamente al menos una evidencia `PHOTO` y una `GEOLOCATION`; `SIGNATURE` y `NOTE` son opcionales.
-- Si falta cualquiera de las evidencias obligatorias, responde `400 Bad Request` y no actualiza el pedido.
+- Para cambiar el pedido a `DELIVERED`, debe existir previamente al menos una evidencia `PHOTO`; `GEOLOCATION`, `SIGNATURE` y `NOTE` son opcionales.
+- Si falta la evidencia `PHOTO`, responde `400 Bad Request` y no actualiza el pedido.
 - Una foto inválida, un MIME que no corresponda con sus bytes, un tamaño/dimensión fuera de rango o una fecha fuera de ventana responde `400 Bad Request` y no crea evidencia.
 
 ## POST /api/delivery-orders/:id/collections

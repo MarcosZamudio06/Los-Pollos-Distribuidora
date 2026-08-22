@@ -219,6 +219,8 @@ Cuando la ruta está `IN_PROGRESS`, la experiencia puede solicitar al navegador/
 
 La misma posición puede solicitar navegación dinámica mediante `POST /api/delivery-routes/:routeId/navigation`. El cliente envía únicamente coordenadas actuales y metadatos GPS opcionales; no envía el destino. El backend deriva la próxima parada pendiente, consulta OSRM y devuelve una geometría efímera, ETA, distancia e instrucciones normalizadas. Esta capa no reemplaza la geometría aprobada, no cambia `stopSequence`, no ejecuta VROOM, no persiste el recorrido dinámico y no finaliza una parada por proximidad.
 
+La acción explícita de llegada debe permanecer bloqueada mientras no exista una posición GPS fresca, con precisión de 100 metros o menos y a no más de 150 metros del destino. Esto aplica a `Abrir entrega`, `Llegué` y `Confirmar recepción`; la proximidad solo habilita la acción y nunca completa una parada automáticamente. El backend vuelve a validar la última posición persistida antes de registrar la llegada.
+
 Mientras la ruta está `IN_PROGRESS`, debe mostrar la acción `Terminar ruta`. La acción solo se habilita cuando existe al menos un pedido y `pendingOrdersCount=0`, es decir, todos los pedidos están en estado final. Al confirmar, consume `PATCH /api/delivery-routes/:id/status` con `status=COMPLETED`, muestra el resultado y explica que el seguimiento GPS dejará de aceptar nuevas posiciones.
 
 Cada pedido debe mostrar:
@@ -269,8 +271,8 @@ Tipos permitidos:
 
 Restricciones:
 
-- Para marcar un pedido como entregado, la UI debe guiar la captura previa de evidencia `PHOTO` y `GEOLOCATION`; `SIGNATURE` y `NOTE` son opcionales.
-- El backend conserva la autoridad final y rechaza la transición si falta cualquiera de las dos evidencias obligatorias.
+- Para marcar un pedido como entregado, la UI debe guiar la captura previa de evidencia `PHOTO`; `GEOLOCATION`, `SIGNATURE` y `NOTE` son opcionales.
+- El backend conserva la autoridad final y rechaza la transición si falta la evidencia `PHOTO` obligatoria.
 - La compresión y validación preliminar de la UI solo mejora la experiencia; el backend vuelve a validar MIME, firma binaria, base64, tamaño, dimensiones y ventana temporal, sube el binario a Object Storage y la UI consume la URL firmada de lectura.
 - La revisión administrativa debe mostrar el actor `capturedByUserId` y los metadatos de integridad que la API entregue; no debe asumir que una imagen del cliente es auténtica por haber pasado la UI.
 - No asumir almacenamiento ni sincronización offline.

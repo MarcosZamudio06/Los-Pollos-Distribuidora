@@ -62,6 +62,9 @@ describe("DeliveryEvidenceCapture", () => {
     expect(photoInput).toBeTruthy();
     expect(photoInput?.getAttribute("accept")).toBe("image/*");
     expect(photoInput?.getAttribute("capture")).toBe("environment");
+    expect(container.textContent).toContain(
+      "geolocalización, firma y nota son opcionales.",
+    );
   });
 
   it("sends the selected photo as persisted evidence", async () => {

@@ -1991,7 +1991,7 @@ Reglas:
 - DRIVER solo ve rutas propias.
 - DRIVER solo actualiza pedidos propios.
 - Pedido entregado registra `deliveredAt`.
-- Debe soportar evidencia de entrega como alcance MVP; `DELIVERED` requiere `PHOTO` y `GEOLOCATION`, mientras `SIGNATURE` y `NOTE` son opcionales.
+- Debe soportar evidencia de entrega como alcance MVP; `DELIVERED` requiere `PHOTO`, mientras `GEOLOCATION`, `SIGNATURE` y `NOTE` son opcionales.
 - Debe soportar no entrega, devolución, rechazo parcial e incidencia.
 - Si hay saldo por cobrar, el cobro en ruta debe registrarse como pago aplicado a una sola cuenta por cobrar en MVP.
 
@@ -2113,7 +2113,7 @@ No crear endpoints hasta que los specs API correspondientes existan y definan ru
 
 Reglas:
 
-- Evidencia puede incluir foto, firma, geolocalización o nota; `DELIVERED` requiere `PHOTO` y `GEOLOCATION`, y el backend valida la integridad de `PHOTO`, la almacena en Object Storage y conserva su actor.
+- Evidencia puede incluir foto, firma, geolocalización o nota; `DELIVERED` requiere `PHOTO`, y el backend valida su integridad, la almacena en Object Storage y conserva su actor.
 - Registrar cobros en ruta solo cuando exista saldo por cobrar y la política lo permita.
 - Para MVP, cada pago de ruta aplica a una sola cuenta por cobrar mediante `Payment.accountReceivableId` requerido.
 - Liquidación compara pedidos entregados, devoluciones, incidencias y dinero cobrado.

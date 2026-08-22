@@ -23,7 +23,7 @@ export type EvidenceType =
 export type PaymentMethod = "CASH" | "TRANSFER" | "CARD" | "DEPOSIT" | string;
 export type RouteSettlementStatus =
   "OPEN" | "CLOSED" | "REVIEW_REQUIRED" | string;
-export type CollectionPass = "FIRST" | "SECOND" | string;
+export type CollectionPass = number;
 export type ReturnedItemUnit = "KG" | "PIECE" | "KG_AND_PIECE" | string;
 export type LogisticsStopStatus = "PENDING" | "COMPLETED" | string;
 
@@ -483,7 +483,7 @@ export type RouteSettlementPayment = {
   amount: number | string;
   status?: string | null;
   paidAt?: string | null;
-  collectionPass?: string | null;
+  collectionPass?: CollectionPass | null;
   routeId?: string | null;
   routeSettlementId?: string | null;
 };

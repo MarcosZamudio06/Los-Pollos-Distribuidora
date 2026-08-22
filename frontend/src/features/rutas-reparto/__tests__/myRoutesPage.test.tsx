@@ -16,6 +16,8 @@ const mockState = vi.hoisted(() => ({
   routeType: "SALE_DELIVERY",
   logisticsStop: null as Record<string, unknown> | null,
   orders: [] as Array<Record<string, unknown>>,
+  trackingIsTracking: false,
+  trackingPosition: null as Record<string, unknown> | null,
 }));
 
 vi.mock("../hooks", () => ({
@@ -99,8 +101,8 @@ vi.mock("../useRouteLocationTracking", () => ({
     canStart: false,
     errorMessage: null,
     isEligible: mockState.routeType !== "SALE_DELIVERY",
-    isTracking: false,
-    lastPosition: null,
+    isTracking: mockState.trackingIsTracking,
+    lastPosition: mockState.trackingPosition,
     lastPublishedAt: null,
     lastPublishedPosition: null,
     start: vi.fn(),
@@ -121,6 +123,8 @@ afterEach(async () => {
   mockState.routeType = "SALE_DELIVERY";
   mockState.logisticsStop = null;
   mockState.orders = [];
+  mockState.trackingIsTracking = false;
+  mockState.trackingPosition = null;
 });
 
 describe("MyRoutesPage route start", () => {
@@ -231,6 +235,15 @@ describe("MyRoutesPage route start", () => {
   it("confirms a logistics stop without showing commercial collection controls", async () => {
     mockState.routeStatus = "IN_PROGRESS";
     mockState.routeType = "BRANCH_RETURN";
+    mockState.trackingIsTracking = true;
+    mockState.trackingPosition = {
+      latitude: 19.1,
+      longitude: -96.1,
+      accuracyMeters: 10,
+      recordedAt: new Date().toISOString(),
+      speedKph: 0,
+      headingDegrees: null,
+    };
     mockState.logisticsStop = {
       status: "PENDING",
       inventoryTransferId: "transfer-1",
@@ -302,6 +315,9 @@ describe("MyRoutesPage route start", () => {
     const confirmTrigger = [...container.querySelectorAll("button")].find(
       (button) => button.textContent?.trim() === "Confirmar recepción",
     );
+    expect((confirmTrigger as HTMLButtonElement | undefined)?.disabled).toBe(
+      false,
+    );
     await act(async () => confirmTrigger?.click());
     const confirmationButtons = [
       ...document.querySelectorAll("button"),
@@ -312,6 +328,48 @@ describe("MyRoutesPage route start", () => {
     expect(mockState.mutateAsync).not.toHaveBeenCalledWith({
       status: "COMPLETED",
     });
+  });
+
+  it("disables logistics arrival confirmation without reliable GPS", async () => {
+    mockState.routeStatus = "IN_PROGRESS";
+    mockState.routeType = "BRANCH_RETURN";
+    mockState.logisticsStop = {
+      status: "PENDING",
+      inventoryTransferId: "transfer-1",
+      transferNumber: "TR-0001",
+      transferStatus: "IN_TRANSIT",
+      origin: {
+        id: "branch-1",
+        name: "Sucursal Centro",
+        latitude: 19.2,
+        longitude: -96.2,
+      },
+      destination: {
+        id: "cedis-1",
+        name: "CEDIS",
+        latitude: 19.1,
+        longitude: -96.1,
+      },
+      items: [],
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes"]}>
+          <MyRoutesPage />
+        </MemoryRouter>,
+      );
+    });
+
+    const confirmTrigger = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Confirmar recepción",
+    ) as HTMLButtonElement | undefined;
+    expect(confirmTrigger?.disabled).toBe(true);
+    await act(async () => confirmTrigger?.click());
+    expect(mockState.logisticsStopMutateAsync).not.toHaveBeenCalled();
   });
 
   it("identifies a CEDIS supply route and keeps its physical endpoints visible", async () => {

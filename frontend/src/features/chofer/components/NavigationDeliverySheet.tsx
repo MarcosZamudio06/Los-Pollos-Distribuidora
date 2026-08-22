@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   BadgeDollarSign,
   CheckCircle2,
   CircleAlert,
+  Maximize2,
   MapPin,
   Navigation,
   ReceiptText,
@@ -27,6 +29,7 @@ import {
 
 type Props = {
   canStart?: boolean;
+  isMinimized?: boolean;
   isStarting?: boolean;
   isNearDestination?: boolean;
   isTracking: boolean;
@@ -34,6 +37,7 @@ type Props = {
   onArrived: () => void;
   onNextStop?: () => void;
   onOpenDelivery: () => void;
+  onMinimizedChange?: (isMinimized: boolean) => void;
   onStart: () => void;
   route: DeliveryRouteDetail;
   target: DriverNavigationTarget | null;
@@ -49,6 +53,7 @@ function statusLabel(route: DeliveryRouteDetail, target: DriverNavigationTarget)
 
 export function NavigationDeliverySheet({
   canStart = true,
+  isMinimized: controlledIsMinimized,
   isStarting = false,
   isNearDestination = false,
   isTracking,
@@ -56,10 +61,24 @@ export function NavigationDeliverySheet({
   onArrived,
   onNextStop,
   onOpenDelivery,
+  onMinimizedChange,
   onStart,
   route,
   target,
 }: Props) {
+  const [internalIsMinimized, setInternalIsMinimized] = useState(false);
+  const isMinimized = controlledIsMinimized ?? internalIsMinimized;
+
+  function updateMinimized(nextValue: boolean) {
+    setInternalIsMinimized(nextValue);
+    onMinimizedChange?.(nextValue);
+  }
+
+  useEffect(() => {
+    setInternalIsMinimized(false);
+    onMinimizedChange?.(false);
+  }, [onMinimizedChange, target?.kind, target?.id]);
+
   if (!target) {
     return (
       <section
@@ -94,6 +113,44 @@ export function NavigationDeliverySheet({
   const isFinal = order ? isFinalOrderStatus(order.status) : false;
   const distance = navigation?.distanceMeters;
   const duration = navigation?.durationSeconds;
+  const canConfirmArrival = isTracking && isNearDestination;
+
+  if (isMinimized) {
+    return (
+      <section
+        aria-label="Detalle de la próxima parada minimizado"
+        className="pointer-events-none absolute inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-20 sm:inset-x-6 sm:bottom-6"
+        data-navigation-sheet="minimized"
+      >
+        <button
+          aria-label="Mostrar detalle completo de la parada"
+          className="pointer-events-auto mx-auto flex w-full max-w-2xl min-w-0 items-center gap-3 rounded-2xl border border-white/15 bg-[#17201b]/95 px-3 py-3 text-left text-white shadow-[0_-12px_32px_rgba(17,24,21,.28)] backdrop-blur transition hover:border-white/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40 sm:px-4"
+          onClick={() => updateMinimized(false)}
+          type="button"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgba(214,155,45,.16)] text-[var(--erp-brand-gold-soft)]">
+            {target.kind === "DELIVERY_ORDER" ? (
+              <ReceiptText aria-hidden="true" className="h-5 w-5" />
+            ) : (
+              <Truck aria-hidden="true" className="h-5 w-5" />
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
+              {target.stopSequence ? `Parada ${target.stopSequence}` : "Destino operativo"}
+            </span>
+            <span className="mt-1 block truncate text-sm font-black">
+              {target.label}
+            </span>
+          </span>
+          <span className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-xs font-black uppercase tracking-[0.08em] text-white/85">
+            <Maximize2 aria-hidden="true" className="h-4 w-4" />
+            <span className="hidden sm:inline">Mostrar detalle</span>
+          </span>
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -102,7 +159,14 @@ export function NavigationDeliverySheet({
       data-navigation-sheet="active"
     >
       <div className="sticky top-0 z-10 bg-[#17201b] px-4 pb-4 pt-3 text-white sm:rounded-t-[1.7rem] sm:px-6">
-        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/30" />
+        <button
+          aria-label="Minimizar detalle de la parada"
+          className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-white/30 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
+          onClick={() => updateMinimized(true)}
+          type="button"
+        >
+          <span className="sr-only">Minimizar detalle de la parada</span>
+        </button>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-[0.68rem] font-black uppercase tracking-[0.2em] text-[var(--erp-brand-gold-soft)]">
@@ -132,6 +196,19 @@ export function NavigationDeliverySheet({
           >
             <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
             <span>Estás cerca del destino. Pulsa “Abrir entrega” cuando estés listo.</span>
+          </div>
+        )}
+        {isTracking && !canConfirmArrival && (
+          <div
+            aria-live="polite"
+            className="flex items-start gap-2 rounded-xl border border-[rgba(182,42,34,0.28)] bg-[rgba(182,42,34,0.10)] px-3 py-3 text-sm font-black text-[var(--erp-danger)]"
+            role="status"
+          >
+            <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Acércate al destino con una precisión GPS de 100 m o menos para
+              habilitar la confirmación.
+            </span>
           </div>
         )}
         <div className="grid gap-3">
@@ -217,7 +294,8 @@ export function NavigationDeliverySheet({
           </button>
         ) : target.kind === "DELIVERY_ORDER" && !isFinal ? (
           <button
-            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--erp-brand-red)] px-5 text-base font-black text-white shadow-[0_12px_30px_rgba(182,42,34,.24)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(182,42,34,.28)]"
+            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--erp-brand-red)] px-5 text-base font-black text-white shadow-[0_12px_30px_rgba(182,42,34,.24)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(182,42,34,.28)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canConfirmArrival}
             onClick={onOpenDelivery}
             type="button"
           >
@@ -226,7 +304,8 @@ export function NavigationDeliverySheet({
           </button>
         ) : target.kind === "LOGISTICS_STOP" ? (
           <button
-            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--erp-brand-red)] px-5 text-base font-black text-white shadow-[0_12px_30px_rgba(182,42,34,.24)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(182,42,34,.28)]"
+            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--erp-brand-red)] px-5 text-base font-black text-white shadow-[0_12px_30px_rgba(182,42,34,.24)] transition hover:bg-[var(--erp-brand-red-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(182,42,34,.28)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canConfirmArrival}
             onClick={onArrived}
             type="button"
           >

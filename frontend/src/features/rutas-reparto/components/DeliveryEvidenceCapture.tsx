@@ -103,8 +103,8 @@ export function DeliveryEvidenceCapture({ onClose, order, routeId }: Props) {
             </h2>
             <p className="mt-2 text-sm leading-6 text-[#6f786f]">
               Venta {order.saleNumber ?? order.saleId ?? order.id}. Para marcar
-              el pedido como entregado se requieren una foto y una
-              geolocalización; firma y nota son opcionales.
+              el pedido como entregado se requiere una foto; geolocalización,
+              firma y nota son opcionales.
             </p>
           </div>
           <SecondaryButton className="w-auto shrink-0" onClick={onClose}>

@@ -17,6 +17,7 @@ type MockMap = {
   easeToCalls: Array<Record<string, unknown>>;
 };
 type MockMarker = {
+  callOrder: string[];
   element: HTMLElement;
   removed: boolean;
   setLngLatCalls: Array<[number, number]>;
@@ -104,6 +105,7 @@ const mapMock = vi.hoisted(() => {
   }
 
   class Marker {
+    callOrder: string[] = [];
     element: HTMLElement;
     removed = false;
     setLngLatCalls: Array<[number, number]> = [];
@@ -114,6 +116,7 @@ const mapMock = vi.hoisted(() => {
     }
 
     setLngLat(position: [number, number]) {
+      this.callOrder.push("setLngLat");
       this.setLngLatCalls.push(position);
       return this;
     }
@@ -123,6 +126,7 @@ const mapMock = vi.hoisted(() => {
     }
 
     addTo() {
+      this.callOrder.push("addTo");
       return this;
     }
 
@@ -226,6 +230,10 @@ describe("DriverNavigationMap", () => {
     const driverMarker = mapMock.state.markers.find(
       (marker) => marker.element.dataset.marker === "driver-navigation",
     );
+    expect(driverMarker?.callOrder.slice(0, 2)).toEqual([
+      "setLngLat",
+      "addTo",
+    ]);
     expect(driverMarker?.setLngLatCalls).toHaveLength(1);
 
     await act(async () => {
@@ -249,6 +257,11 @@ describe("DriverNavigationMap", () => {
 
     expect(mapMock.state.instances).toHaveLength(1);
     expect(mapMock.state.markers).toHaveLength(2);
+    expect(
+      mapMock.state.markers.find(
+        (marker) => marker.element.dataset.marker === "driver-navigation",
+      ),
+    ).toBe(driverMarker);
     expect(driverMarker?.element.textContent).not.toContain("GPS");
     expect(driverMarker?.setLngLatCalls).toHaveLength(2);
     expect(
@@ -259,6 +272,92 @@ describe("DriverNavigationMap", () => {
     expect(
       driverMarker?.element.getAttribute("data-low-accuracy"),
     ).toBe("true");
+
+    await act(async () => root.unmount());
+  });
+
+  it("initializes the destination marker before adding it to the map", async () => {
+    const { root } = await renderMap();
+    const destinationMarker = mapMock.state.markers.find(
+      (marker) => marker.element.dataset.marker === "destination",
+    );
+
+    expect(destinationMarker?.callOrder.slice(0, 2)).toEqual([
+      "setLngLat",
+      "addTo",
+    ]);
+    expect(destinationMarker?.setLngLatCalls[0]).toEqual([
+      destination.longitude,
+      destination.latitude,
+    ]);
+
+    await act(async () => root.unmount());
+  });
+
+  it("reuses the destination marker when its target changes", async () => {
+    const { root } = await renderMap();
+    const destinationMarker = mapMock.state.markers.find(
+      (marker) => marker.element.dataset.marker === "destination",
+    );
+    const updatedDestination = {
+      ...destination,
+      id: "order-2",
+      label: "Cliente Norte",
+      latitude: 19.171,
+      longitude: -96.129,
+    };
+
+    await act(async () => {
+      root.render(
+        <DriverNavigationMap
+          currentLocation={{
+            accuracyMeters: 16,
+            headingDegrees: 90,
+            latitude: 19.18,
+            longitude: -96.14,
+            recordedAt: "2026-08-20T18:00:00.000Z",
+            speedKph: 28,
+          }}
+          destination={updatedDestination}
+          geometry={geometry}
+          routeName="Ruta Centro"
+        />,
+      );
+    });
+
+    expect(mapMock.state.markers).toHaveLength(2);
+    expect(
+      mapMock.state.markers.find(
+        (marker) => marker.element.dataset.marker === "destination",
+      ),
+    ).toBe(destinationMarker);
+    expect(destinationMarker?.setLngLatCalls.at(-1)).toEqual([
+      updatedDestination.longitude,
+      updatedDestination.latitude,
+    ]);
+    expect(destinationMarker?.element.title).toBe(updatedDestination.label);
+
+    await act(async () => root.unmount());
+  });
+
+  it("does not create markers without valid coordinates", async () => {
+    const { root } = await renderMap({
+      currentLocation: {
+        accuracyMeters: 16,
+        headingDegrees: 90,
+        latitude: Number.NaN,
+        longitude: Number.NaN,
+        recordedAt: "2026-08-20T18:00:00.000Z",
+        speedKph: 28,
+      },
+      destination: {
+        ...destination,
+        latitude: Number.NaN,
+        longitude: Number.NaN,
+      },
+    });
+
+    expect(mapMock.state.markers).toHaveLength(0);
 
     await act(async () => root.unmount());
   });
@@ -314,6 +413,16 @@ describe("DriverNavigationMap", () => {
 
     act(() => ref.current?.overview());
     expect(map.fitBoundsCalls).toHaveLength(1);
+    await act(async () => root.unmount());
+  });
+
+  it("forwards a map click without changing navigation state", async () => {
+    const onMapClick = vi.fn();
+    const { map, root } = await renderMap({ onMapClick });
+
+    act(() => map.emit("click"));
+
+    expect(onMapClick).toHaveBeenCalledTimes(1);
     await act(async () => root.unmount());
   });
 });

@@ -149,7 +149,7 @@ The canonical geospatial contracts are:
 - `ADMIN` has all four fleet permissions. No role receives global fleet visibility implicitly from being a driver.
 - Delivered orders must store `deliveredAt`.
 - Delivery evidence is part of the MVP.
-- A transition to `DELIVERED` requires at least one `PHOTO` and one `GEOLOCATION` evidence record for the order. `SIGNATURE` and `NOTE` remain optional.
+- A transition to `DELIVERED` requires at least one `PHOTO` evidence record for the order. `GEOLOCATION`, `SIGNATURE`, and `NOTE` remain optional.
 - The backend is authoritative for delivery-evidence integrity: a `PHOTO` must be a bounded base64 data URL whose MIME matches its binary signature and whose dimensions are valid; the backend derives `sha256`, `mimeType`, `sizeBytes`, `receivedAt`, and `metadata` before uploading the binary to S3-compatible Object Storage.
 - Every new evidence record stores `capturedByUserId` from the authenticated actor. New PHOTO rows keep `value` null and persist the private `storageKey` plus integrity metadata in PostgreSQL. Historical rows may keep `value` populated only until the idempotent `evidence:migrate-to-object-storage` backfill completes.
 - Driver mobile experience is part of the MVP; offline support remains pending and must not be assumed without a later spec.
@@ -166,7 +166,7 @@ The canonical geospatial contracts are:
 - Double decrement between route load and delivered route sale is forbidden.
 - `SALE_DELIVERY` route completion requires orders closed, cancelled, or with final incident recorded.
 - `BRANCH_RETURN` and `CEDIS_SUPPLY` route completion requires the explicit logistics stop confirmation. It does not inspect unrelated customer orders, `AccountReceivable`, `Payment`, collection status, second-pass collection, or route settlement.
-- A logistics stop confirmation is allowed only on the assigned route while it is `IN_PROGRESS`; it records the authenticated DRIVER and server timestamp. It accepts no latitude/longitude and does not replace the inventory module's physical receipt command.
+- A logistics stop confirmation is allowed only on the assigned route while it is `IN_PROGRESS`. Before recording the authenticated DRIVER and server timestamp, the backend must validate the latest persisted `VehiclePosition` for that route, driver, and vehicle: it must exist, have `accuracyMeters <= 100`, be fresh within `FLEET_POSITION_STALE_SECONDS` (60 seconds by default), and be within 150 meters of the canonical `InventoryTransfer.destinationLocation`. The client accepts no latitude/longitude, and a missing, inaccurate, stale, or distant position rejects the command without changing the route. This does not replace the inventory module's physical receipt command.
 - Route settlement compares expected vs collected amounts by payment method and records differences.
 - Returns, partial rejections, or product differences must preserve operational traceability and, when they affect stock, create inventory movement with mandatory reason.
 - Incident/return registration requires an idempotency key. Same-key replay
@@ -234,7 +234,7 @@ The fleet map uses MapLibre GL JS only as a renderer. It does not expose Photon,
 - Driver only sees own routes.
 - Mark order as delivered.
 - Store delivery timestamp.
-- Reject `DELIVERED` without both `PHOTO` and `GEOLOCATION` evidence.
+- Reject `DELIVERED` without `PHOTO` evidence; missing `GEOLOCATION` must not block the transition.
 - Capture allowed evidence.
 - Capture PHOTO evidence from a supported device camera/file input, upload the validated binary to Object Storage, and persist only its storage locator and integrity metadata in PostgreSQL.
 - Reject non-image PHOTO values, MIME/signature mismatches, invalid base64, oversized images, invalid dimensions, and unreasonable capture timestamps.

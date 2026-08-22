@@ -17,7 +17,7 @@ Mantener visibles hasta que el negocio confirme:
 ## Decisiones cerradas
 
 - Las terminales de caja son entidades persistentes administradas y cada una se vincula a un `deviceId` registrado. Los turnos son independientes del cierre diario consolidado de sucursal.
-- Para marcar un pedido como `DELIVERED`, el backend exige evidencia `PHOTO` y `GEOLOCATION`. `SIGNATURE` y `NOTE` son opcionales y no sustituyen esos dos requisitos.
+- Para marcar un pedido como `DELIVERED`, el backend exige evidencia `PHOTO`. `GEOLOCATION`, `SIGNATURE` y `NOTE` son opcionales.
 - La evidencia `PHOTO` se valida en backend y se almacena en Object Storage compatible con S3: PostgreSQL conserva `storageKey`, `mimeType`, `sha256`, `sizeBytes`, `metadata`, `receivedAt` y `capturedByUserId`. `value` solo permanece nullable para compatibilidad temporal con filas históricas que deben pasar por el backfill idempotente.
 
 ## Proveedor de estilos y tiles para mapas

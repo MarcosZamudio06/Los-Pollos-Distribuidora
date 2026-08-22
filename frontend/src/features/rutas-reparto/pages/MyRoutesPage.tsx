@@ -50,6 +50,7 @@ import {
   shortId,
 } from "../labels";
 import { canOpenDriverNavigation } from "../navigationTarget";
+import { isNearNavigationDestination } from "../../chofer/navigationSessionPolicy";
 import type {
   DeliveryOrder,
   DeliveryRouteListItem,
@@ -154,6 +155,13 @@ export function MyRoutesPage() {
   const logisticsStop = detail?.logisticsStop;
   const logisticsStopCompleted = logisticsStop?.status === "COMPLETED";
   const tracking = useRouteLocationTracking({ route: detail });
+  const canConfirmLogisticsArrival = Boolean(
+    detail?.status === "IN_PROGRESS" &&
+      isLogisticsRoute &&
+      !logisticsStopCompleted &&
+      tracking.isTracking &&
+      isNearNavigationDestination(tracking.lastPosition, logisticsStop?.destination),
+  );
   const orders = detail?.orders ?? [];
   const finalOrders = orders.filter((order) =>
     isFinalOrderStatus(order.status),
@@ -441,6 +449,7 @@ export function MyRoutesPage() {
                     logisticsStop && (
                       <>
                         <LogisticsStopConfirmationControl
+                          canConfirm={canConfirmLogisticsArrival}
                           error={routeStatusError}
                           isCompleting={completeLogisticsStop.isPending}
                           onComplete={async () => {

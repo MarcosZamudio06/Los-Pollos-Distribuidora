@@ -463,13 +463,14 @@ export function useRouteLocationTracking({
     setLastPublishedAt(null);
   }, [route?.id, stopInternal]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
       mountedRef.current = false;
       clearTrackingResources();
-    },
-    [clearTrackingResources],
-  );
+    };
+  }, [clearTrackingResources]);
 
   return {
     canStart: isEligible && !isTracking,

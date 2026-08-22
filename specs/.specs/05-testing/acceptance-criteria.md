@@ -79,6 +79,9 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un suministro o devolución, cuando se registra sin `assignedDriverId` o `vehicleId`, entonces el backend rechaza el comando antes de crear transferencia o ruta.
 - Dado un suministro o devolución con IDs arbitrarios, cuando se registra, entonces el backend rechaza el comando si el conductor no es un `DRIVER` activo o la unidad no está activa/disponible.
 - Dado un suministro CEDIS → sucursal o una devolución sucursal → CEDIS, cuando se registra con ubicaciones sin coordenadas, entonces no persiste transferencia, reserva, vínculo ni `DeliveryRoute` y devuelve un error de dominio de coordenadas.
+- Dada una ruta logística `IN_PROGRESS` sin `VehiclePosition` persistida reciente, cuando se confirma la parada, entonces el backend responde `422` y no registra la llegada.
+- Dada una posición persistida con precisión mayor a 100 metros, stale o a más de 150 metros del destino canónico, cuando se confirma la parada, entonces el backend responde `422` y no cambia `DeliveryRoute`.
+- Dada una posición persistida reciente, con precisión de 100 metros o menos y dentro de 150 metros del destino, cuando se confirma explícitamente la parada, entonces registra la llegada y conserva la separación respecto a inventario, cobros y liquidación.
 - Dado un producto inactivo, cuando se intenta crear o confirmar una transferencia del ciclo, entonces se rechaza sin cambios parciales.
 - Dado un producto histórico que se desactivó después de confirmar, cuando se consulta o refresca, entonces conserva su snapshot y cantidades históricas.
 - Dado stock insuficiente, cuando se confirma una transferencia vinculada, entonces no cambia ningún balance, movimiento, transferencia o snapshot.
@@ -174,7 +177,7 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado un pedido marcado como entregado, cuando se actualiza, entonces registra `deliveredAt`.
 - Dado una no entrega, devolución, rechazo parcial o incidencia, cuando se registra, entonces conserva motivo obligatorio.
 - Dado evidencia de entrega, cuando se captura, entonces acepta tipos permitidos: foto, firma, geolocalización o nota.
-- Dado un pedido que cambia a `DELIVERED`, cuando no tiene `PHOTO` y `GEOLOCATION`, entonces el backend rechaza la transición.
+- Dado un pedido que cambia a `DELIVERED`, cuando no tiene `PHOTO`, entonces el backend rechaza la transición; la ausencia de `GEOLOCATION` no la bloquea.
 - Dada una captura `PHOTO` enviada directamente a la API, cuando el valor no es una imagen válida o su MIME no coincide con la firma binaria, entonces el backend responde `400` sin persistirla.
 - Dada una `PHOTO` válida, cuando se captura, entonces el backend persiste `sha256`, MIME, tamaño, dimensiones, `receivedAt` y `capturedByUserId` sin confiar en valores derivados por el cliente.
 - Dada una evidencia con `capturedAt` fuera de la ventana permitida, cuando se captura, entonces el backend responde `400` sin persistirla.

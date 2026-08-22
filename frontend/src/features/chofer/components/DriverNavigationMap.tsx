@@ -39,6 +39,7 @@ export type DriverNavigationMapProps = {
   follow?: boolean;
   geometry?: GeoJsonLineString | null;
   lowAccuracy?: boolean;
+  onMapClick?: () => void;
   onFollowInterrupted?: () => void;
   routeName: string;
 };
@@ -249,6 +250,7 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
     follow = true,
     geometry,
     lowAccuracy = false,
+    onMapClick,
     onFollowInterrupted,
     routeName,
   }: DriverNavigationMapProps,
@@ -272,6 +274,7 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
   const currentLocationRef = useRef(currentLocation);
   const destinationRef = useRef(destination);
   const onFollowInterruptedRef = useRef(onFollowInterrupted);
+  const onMapClickRef = useRef(onMapClick);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState(false);
 
@@ -283,7 +286,8 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
 
   useEffect(() => {
     onFollowInterruptedRef.current = onFollowInterrupted;
-  }, [onFollowInterrupted]);
+    onMapClickRef.current = onMapClick;
+  }, [onFollowInterrupted, onMapClick]);
 
   useImperativeHandle(
     forwardedRef,
@@ -327,6 +331,7 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
     let map: MapLibreMap | null = null;
     let handleLoad: (() => void) | undefined;
     const handleFollowInterrupted = () => onFollowInterruptedRef.current?.();
+    const handleMapClick = () => onMapClickRef.current?.();
 
     void loadMapLibre()
       .then((maplibre) => {
@@ -351,6 +356,7 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
         map.on("dragstart", handleFollowInterrupted);
         map.on("rotatestart", handleFollowInterrupted);
         map.on("pitchstart", handleFollowInterrupted);
+        map.on("click", handleMapClick);
       })
       .catch(() => {
         if (!disposed) setMapLoadError(true);
@@ -366,6 +372,7 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
       map?.off("dragstart", handleFollowInterrupted);
       map?.off("rotatestart", handleFollowInterrupted);
       map?.off("pitchstart", handleFollowInterrupted);
+      map?.off("click", handleMapClick);
       try {
         map?.remove();
       } catch {
@@ -387,12 +394,19 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
     const map = mapRef.current;
     if (isLocatedPosition(currentLocation)) {
       if (!driverMarkerRef.current) {
-        driverMarkerRef.current = new maplibreRef.current.Marker({
+        const marker = new maplibreRef.current.Marker({
           anchor: "center",
           element: createDriverMarkerElement(),
-        }).addTo(map);
+        });
+        setDriverMarkerState(marker, currentLocation, lowAccuracy);
+        driverMarkerRef.current = marker.addTo(map);
+      } else {
+        setDriverMarkerState(
+          driverMarkerRef.current,
+          currentLocation,
+          lowAccuracy,
+        );
       }
-      setDriverMarkerState(driverMarkerRef.current, currentLocation, lowAccuracy);
     }
   }, [currentLocation, currentLocation?.accuracyMeters, currentLocation?.headingDegrees, currentLocation?.latitude, currentLocation?.longitude, lowAccuracy, mapReady]);
 
@@ -420,12 +434,15 @@ export const DriverNavigationMap = forwardRef(function DriverNavigationMap(
       destinationMarkerRef.current = new maplibreRef.current.Marker({
         anchor: "bottom",
         element: createDestinationMarkerElement(destination),
-      }).addTo(mapRef.current);
+      })
+        .setLngLat([destination.longitude, destination.latitude])
+        .addTo(mapRef.current);
+    } else {
+      destinationMarkerRef.current.setLngLat([
+        destination.longitude,
+        destination.latitude,
+      ]);
     }
-    destinationMarkerRef.current.setLngLat([
-      destination.longitude,
-      destination.latitude,
-    ]);
     const element = destinationMarkerRef.current.getElement();
     element.style.display = "grid";
     element.setAttribute("aria-label", `Destino: ${destination.label}`);

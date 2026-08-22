@@ -14,6 +14,7 @@ const mockState = vi.hoisted(() => ({
   completeLogisticsStop: vi.fn(),
   updateRouteStatus: vi.fn(),
   navigationCalls: [] as Array<{ enabled: boolean; target: unknown }>,
+  trackingActive: false,
 }));
 
 vi.mock("../../auth", () => ({
@@ -41,8 +42,17 @@ vi.mock("../../rutas-reparto/useRouteLocationTracking", () => ({
     canStart: mockState.routeStatus === "IN_PROGRESS",
     errorMessage: null,
     isEligible: mockState.routeStatus === "IN_PROGRESS",
-    isTracking: false,
-    lastPosition: null,
+    isTracking: mockState.trackingActive,
+    lastPosition: mockState.trackingActive
+      ? {
+          latitude: 19.17,
+          longitude: -96.13,
+          accuracyMeters: 10,
+          recordedAt: new Date().toISOString(),
+          speedKph: 0,
+          headingDegrees: null,
+        }
+      : null,
     lastPublishedAt: null,
     lastPublishedPosition: null,
     start: mockState.start,
@@ -80,23 +90,38 @@ vi.mock("../hooks", () => ({
   },
 }));
 vi.mock("../components/DriverNavigationMap", () => ({
-  DriverNavigationMap: () => <div data-testid="driver-navigation-map" />,
+  DriverNavigationMap: ({ onMapClick }: { onMapClick?: () => void }) => (
+    <>
+      <div data-testid="driver-navigation-map" />
+      <button
+        aria-label="Simular clic en el mapa"
+        data-testid="driver-navigation-map-surface"
+        onClick={onMapClick}
+        type="button"
+      />
+    </>
+  ),
 }));
 vi.mock("../components/NavigationInstructionBanner", () => ({
   NavigationInstructionBanner: () => <div data-testid="navigation-instruction" />,
 }));
 vi.mock("../components/NavigationDeliverySheet", () => ({
   NavigationDeliverySheet: ({
+    isMinimized,
     onOpenDelivery,
     onStart,
     target,
   }: {
+    isMinimized: boolean;
     onOpenDelivery: () => void;
     onStart: () => void;
     target: { id: string } | null;
   }) => (
     <>
       <output data-navigation-target={target?.id ?? "none"} />
+      <output
+        data-navigation-sheet-state={isMinimized ? "minimized" : "expanded"}
+      />
       <button onClick={onStart} type="button">
         Iniciar navegación
       </button>
@@ -163,6 +188,7 @@ describe("DriverNavigationPage", () => {
     mockState.completeLogisticsStop.mockReset();
     mockState.updateRouteStatus.mockReset();
     mockState.navigationCalls.length = 0;
+    mockState.trackingActive = false;
   });
 
   afterEach(async () => {
@@ -196,6 +222,96 @@ describe("DriverNavigationPage", () => {
     expect(mockState.start).toHaveBeenCalledTimes(1);
   });
 
+  it("does not open arrival operations when GPS is not reliable", async () => {
+    const { container } = renderPage();
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes/route-1/navigation"]}>
+          <Routes>
+            <Route
+              element={<DriverNavigationPage />}
+              path="/my-routes/:routeId/navigation"
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Abrir entrega"))
+        ?.click();
+    });
+
+    expect(container.querySelector("[data-navigation-operations]")).toBeNull();
+  });
+
+  it("minimizes the stop sheet when the map is clicked", async () => {
+    const { container } = renderPage();
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes/route-1/navigation"]}>
+          <Routes>
+            <Route
+              element={<DriverNavigationPage />}
+              path="/my-routes/:routeId/navigation"
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    expect(
+      container.querySelector("[data-navigation-sheet-state='expanded']"),
+    ).not.toBeNull();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          "[data-testid='driver-navigation-map-surface']",
+        )
+        ?.click();
+    });
+
+    expect(
+      container.querySelector("[data-navigation-sheet-state='minimized']"),
+    ).not.toBeNull();
+  });
+
+  it("places the return control below the instruction banner", async () => {
+    const { container } = renderPage();
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes/route-1/navigation"]}>
+          <Routes>
+            <Route
+              element={<DriverNavigationPage />}
+              path="/my-routes/:routeId/navigation"
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    const instruction = container.querySelector(
+      "[data-testid='navigation-instruction']",
+    );
+    const returnButton = container.querySelector(
+      "button[aria-label='Volver a mis rutas']",
+    );
+    const siblings = instruction?.parentElement
+      ? [...instruction.parentElement.children]
+      : [];
+
+    expect(instruction).not.toBeNull();
+    expect(returnButton?.parentElement).toBe(instruction?.parentElement);
+    expect(siblings.indexOf(returnButton as Element)).toBe(
+      siblings.indexOf(instruction as Element) + 1,
+    );
+    expect(returnButton?.className).toContain("pointer-events-auto");
+    expect(returnButton?.className).not.toContain("absolute");
+  });
+
   it("does not enter navigation mode for a pending route", async () => {
     mockState.routeStatus = "PENDING";
     mockState.detail = {
@@ -221,7 +337,45 @@ describe("DriverNavigationPage", () => {
     expect(mockState.start).not.toHaveBeenCalled();
   });
 
+  it("returns to My Routes after the route is finished", async () => {
+    mockState.routeStatus = "COMPLETED";
+    mockState.detail = {
+      ...mockState.detail,
+      status: "COMPLETED",
+    } as DeliveryRouteDetail;
+    const { container } = renderPage();
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/my-routes/route-1/navigation"]}>
+          <Routes>
+            <Route
+              element={<DriverNavigationPage />}
+              path="/my-routes/:routeId/navigation"
+            />
+            <Route
+              element={<div data-testid="my-routes-screen" />}
+              path="/my-routes"
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("Ruta finalizada");
+    const exitButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Volver a mis rutas",
+    );
+    expect(exitButton).toBeTruthy();
+
+    await act(async () => exitButton?.click());
+
+    expect(mockState.stop).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("[data-testid='my-routes-screen']"))
+      .not.toBeNull();
+  });
+
   it("closes delivery actions and follows the server-selected next target", async () => {
+    mockState.trackingActive = true;
     mockState.detail = {
       ...mockState.detail,
       orders: [
@@ -315,6 +469,7 @@ describe("DriverNavigationPage", () => {
   });
 
   it("keeps the navigation session mounted while evidence and incidents are opened", async () => {
+    mockState.trackingActive = true;
     const { container } = renderPage();
     await act(async () => {
       root?.render(

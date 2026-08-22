@@ -87,8 +87,8 @@ export function UpdateDeliveryStatusDialog({ onClose, order, routeId }: Props) {
             </h2>
             <p className="mt-2 text-sm leading-6 text-[#6f786f]">
               El backend valida que el pedido pertenezca a tu ruta. Para entrega
-              se manda fecha y hora y deben existir previamente una foto y una
-              geolocalización.
+              se manda fecha y hora y debe existir previamente una foto; la
+              geolocalización es opcional.
             </p>
           </div>
           <SecondaryButton className="w-auto shrink-0" onClick={onClose}>

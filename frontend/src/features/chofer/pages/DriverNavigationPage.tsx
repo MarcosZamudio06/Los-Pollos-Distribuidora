@@ -25,6 +25,7 @@ import {
   RouteSecondPassCollectionDialog,
 } from "../../rutas-reparto/components/RouteCollectionDialog";
 import { RouteCompletionControl } from "../../rutas-reparto/components/RouteCompletionControl";
+import { SecondaryButton } from "../../rutas-reparto/components/RouteUi";
 import { UpdateDeliveryStatusDialog } from "../../rutas-reparto/components/UpdateDeliveryStatusDialog";
 import {
   useCompleteLogisticsStop,
@@ -45,7 +46,7 @@ import {
 import { useDriverNavigationSession } from "../hooks";
 import { DriverNavigationStatus } from "../components/DriverNavigationStatus";
 import { isFinalOrderStatus } from "../../rutas-reparto/labels";
-import { distanceBetweenNavigationPointsMeters } from "../navigationSessionPolicy";
+import { isNearNavigationDestination } from "../navigationSessionPolicy";
 
 function isProviderUnavailable(error: unknown) {
   if (!(error instanceof ApiClientError)) return Boolean(error);
@@ -89,6 +90,8 @@ export function DriverNavigationPage() {
   const mapRef = useRef<DriverNavigationMapHandle | null>(null);
   const previousTargetKeyRef = useRef<string | null>(null);
   const [operationsOpen, setOperationsOpen] = useState(false);
+  const [isNavigationSheetMinimized, setIsNavigationSheetMinimized] =
+    useState(false);
   const [statusOrder, setStatusOrder] = useState<DeliveryOrder | null>(null);
   const [evidenceOrder, setEvidenceOrder] = useState<DeliveryOrder | null>(
     null,
@@ -141,13 +144,11 @@ export function DriverNavigationPage() {
     target?.kind === "DELIVERY_ORDER"
       ? detail?.orders?.find((order) => order.id === target.id) ?? null
       : null;
-  const isNearDestination = Boolean(
-    tracking.lastPosition &&
-      target &&
-      tracking.lastPosition.accuracyMeters <= 100 &&
-      distanceBetweenNavigationPointsMeters(tracking.lastPosition, target) <=
-        150,
+  const isNearDestination = isNearNavigationDestination(
+    tracking.lastPosition,
+    target,
   );
+  const canConfirmArrival = tracking.isTracking && isNearDestination;
   const providerUnavailable = isProviderUnavailable(navigation.error);
   const isOffline = providerUnavailable || tracking.status === "sync_error";
   const routeAvailable = Boolean(
@@ -166,6 +167,7 @@ export function DriverNavigationPage() {
       setCollectionOrder(null);
       setSecondPassCollectionOrder(null);
       setIncidentOrder(null);
+      setIsNavigationSheetMinimized(false);
     }
     previousTargetKeyRef.current = targetKey;
   }, [targetKey]);
@@ -174,6 +176,11 @@ export function DriverNavigationPage() {
     tracking.stop();
     setOperationsOpen(false);
     navigate("/my-routes");
+  }
+
+  function openArrivalOperations() {
+    if (!canConfirmArrival) return;
+    setOperationsOpen(true);
   }
 
   async function finishRoute() {
@@ -191,6 +198,12 @@ export function DriverNavigationPage() {
 
   async function completeLogisticsDestination() {
     setRouteStatusError(null);
+    if (!canConfirmArrival) {
+      setRouteStatusError(
+        "Se requiere una posición GPS reciente, precisa y cercana al destino.",
+      );
+      return;
+    }
     try {
       await completeLogisticsStop.mutateAsync({});
     } catch (error) {
@@ -249,7 +262,7 @@ export function DriverNavigationPage() {
   }
 
   if (detail.status !== "IN_PROGRESS") {
-    return <InactiveRouteState route={detail} />;
+    return <InactiveRouteState onExit={closeNavigation} route={detail} />;
   }
 
   if (!pendingCandidate) {
@@ -325,6 +338,7 @@ export function DriverNavigationPage() {
         follow={navigation.follow}
         geometry={mapGeometry}
         lowAccuracy={isLowAccuracy}
+        onMapClick={() => setIsNavigationSheetMinimized(true)}
         onFollowInterrupted={navigation.suspendFollow}
         routeName={detail.name}
       />
@@ -340,16 +354,15 @@ export function DriverNavigationPage() {
           routeAvailable={!isNoGps && routeAvailable}
           step={navigation.nextStep}
         />
+        <button
+          aria-label="Volver a mis rutas"
+          className="pointer-events-auto ml-3 mt-3 grid min-h-12 min-w-12 place-items-center rounded-2xl border border-white/20 bg-[#17201b]/90 text-white shadow-[0_12px_32px_rgba(17,24,21,.28)] backdrop-blur transition hover:border-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40 sm:ml-6"
+          onClick={closeNavigation}
+          type="button"
+        >
+          <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+        </button>
       </div>
-
-      <button
-        aria-label="Volver a mis rutas"
-        className="absolute left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-40 grid min-h-12 min-w-12 place-items-center rounded-2xl border border-white/20 bg-[#17201b]/90 text-white shadow-[0_12px_32px_rgba(17,24,21,.28)] backdrop-blur transition hover:border-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40 sm:left-6"
-        onClick={closeNavigation}
-        type="button"
-      >
-        <ArrowLeft aria-hidden="true" className="h-5 w-5" />
-      </button>
 
       <NavigationMapControls
         onOverview={() => {
@@ -376,13 +389,15 @@ export function DriverNavigationPage() {
 
       <NavigationDeliverySheet
         canStart={tracking.canStart}
+        isMinimized={isNavigationSheetMinimized}
         isNearDestination={isNearDestination}
         isStarting={tracking.status === "requesting_permission"}
         isTracking={tracking.isTracking}
         navigation={navigation.data}
-        onArrived={() => setOperationsOpen(true)}
+        onArrived={openArrivalOperations}
         onNextStop={() => setOperationsOpen(false)}
-        onOpenDelivery={() => setOperationsOpen(true)}
+        onOpenDelivery={openArrivalOperations}
+        onMinimizedChange={setIsNavigationSheetMinimized}
         onStart={tracking.start}
         route={detail}
         target={target}
@@ -401,8 +416,9 @@ export function DriverNavigationPage() {
         route={detail}
       >
         {isLogisticsRoute(detail.type) && detail.logisticsStop && (
-          <div className="grid gap-4">
+          <div className="grid min-w-0 gap-4">
             <LogisticsStopConfirmationControl
+              canConfirm={canConfirmArrival}
               error={routeStatusError}
               isCompleting={completeLogisticsStop.isPending}
               onComplete={completeLogisticsDestination}
@@ -459,7 +475,13 @@ export function DriverNavigationPage() {
   );
 }
 
-function InactiveRouteState({ route }: { route: DeliveryRouteDetail }) {
+function InactiveRouteState({
+  onExit,
+  route,
+}: {
+  onExit: () => void;
+  route: DeliveryRouteDetail;
+}) {
   return (
     <NavigationFrame>
       <div className="flex items-center gap-3">
@@ -480,6 +502,9 @@ function InactiveRouteState({ route }: { route: DeliveryRouteDetail }) {
         La navegación sólo está disponible mientras la ruta permanece en
         IN_PROGRESS. {route.status === "PENDING" ? "Inicia la ruta desde Mis rutas." : "Esta ruta ya no admite navegación."}
       </DriverNavigationStatus>
+      <SecondaryButton className="w-full sm:w-auto" onClick={onExit}>
+        Volver a mis rutas
+      </SecondaryButton>
     </NavigationFrame>
   );
 }

@@ -1645,10 +1645,22 @@ describe('DeliveryService', () => {
         type: DeliveryRouteType.CEDIS_SUPPLY,
         status: DeliveryRouteStatus.IN_PROGRESS,
         inventoryTransferId: transfer.id,
-        inventoryTransfer: { id: transfer.id, status: transfer.status },
+        vehicleId: 'vehicle-1',
+        inventoryTransfer: {
+          id: transfer.id,
+          status: transfer.status,
+          destinationLocation: transfer.destinationLocation,
+        },
         deliveryOrders: [],
       }),
     );
+    prisma.vehiclePosition.findFirst.mockResolvedValue({
+      latitude: money('19.1700'),
+      longitude: money('-96.1300'),
+      accuracyMeters: money('10'),
+      recordedAt: new Date(Date.now() - 10_000),
+      receivedAt: new Date(Date.now() - 5_000),
+    });
     prisma.deliveryRoute.update.mockResolvedValue(
       createRoute({
         type: DeliveryRouteType.CEDIS_SUPPLY,
@@ -1687,9 +1699,145 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+    expect(prisma.vehiclePosition.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          routeId: 'route-1',
+          driverId: driver.id,
+          vehicleId: 'vehicle-1',
+        },
+      }),
+    );
     expect(prisma.deliveryOrder.update).not.toHaveBeenCalled();
     expect(prisma.accountReceivable.findUnique).not.toHaveBeenCalled();
     expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a logistics stop without a recent persisted GPS position', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: 'transfer-1',
+        inventoryTransfer: {
+          id: 'transfer-1',
+          status: InventoryTransferStatus.IN_TRANSIT,
+          destinationLocation: {
+            latitude: money('19.1700'),
+            longitude: money('-96.1300'),
+          },
+        },
+        deliveryOrders: [],
+      }),
+    );
+
+    await expect(
+      service.completeLogisticsStop('route-1', {}, driver),
+    ).rejects.toThrow(
+      'A recent accurate GPS position at the logistics destination is required',
+    );
+
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a logistics stop when persisted GPS accuracy is above the limit', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: 'transfer-1',
+        inventoryTransfer: {
+          id: 'transfer-1',
+          status: InventoryTransferStatus.IN_TRANSIT,
+          destinationLocation: {
+            latitude: money('19.1700'),
+            longitude: money('-96.1300'),
+          },
+        },
+        deliveryOrders: [],
+      }),
+    );
+    prisma.vehiclePosition.findFirst.mockResolvedValue({
+      latitude: money('19.1700'),
+      longitude: money('-96.1300'),
+      accuracyMeters: money('100.01'),
+      recordedAt: new Date(Date.now() - 10_000),
+      receivedAt: new Date(Date.now() - 5_000),
+    });
+
+    await expect(
+      service.completeLogisticsStop('route-1', {}, driver),
+    ).rejects.toThrow('GPS accuracy must be 100 meters or less');
+
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a logistics stop when persisted GPS is stale', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: 'transfer-1',
+        inventoryTransfer: {
+          id: 'transfer-1',
+          status: InventoryTransferStatus.IN_TRANSIT,
+          destinationLocation: {
+            latitude: money('19.1700'),
+            longitude: money('-96.1300'),
+          },
+        },
+        deliveryOrders: [],
+      }),
+    );
+    prisma.vehiclePosition.findFirst.mockResolvedValue({
+      latitude: money('19.1700'),
+      longitude: money('-96.1300'),
+      accuracyMeters: money('10'),
+      recordedAt: new Date(Date.now() - 61_000),
+      receivedAt: new Date(Date.now() - 5_000),
+    });
+
+    await expect(
+      service.completeLogisticsStop('route-1', {}, driver),
+    ).rejects.toThrow('GPS position is stale');
+
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a logistics stop when persisted GPS is outside the destination radius', async () => {
+    const { service, prisma } = createService();
+    prisma.deliveryRoute.findFirst.mockResolvedValue(
+      createRoute({
+        type: DeliveryRouteType.BRANCH_RETURN,
+        status: DeliveryRouteStatus.IN_PROGRESS,
+        inventoryTransferId: 'transfer-1',
+        inventoryTransfer: {
+          id: 'transfer-1',
+          status: InventoryTransferStatus.IN_TRANSIT,
+          destinationLocation: {
+            latitude: money('19.1700'),
+            longitude: money('-96.1300'),
+          },
+        },
+        deliveryOrders: [],
+      }),
+    );
+    prisma.vehiclePosition.findFirst.mockResolvedValue({
+      latitude: money('19.1800'),
+      longitude: money('-96.1300'),
+      accuracyMeters: money('10'),
+      recordedAt: new Date(Date.now() - 10_000),
+      receivedAt: new Date(Date.now() - 5_000),
+    });
+
+    await expect(
+      service.completeLogisticsStop('route-1', {}, driver),
+    ).rejects.toThrow('GPS position must be within 150 meters of the destination');
+
+    expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
   });
 
   it('rejects route collections on a logistics order context before touching Payment or CxC', async () => {
@@ -2058,7 +2206,6 @@ describe('DeliveryService', () => {
       createOrder({
         evidence: [
           { type: DeliveryEvidenceType.PHOTO },
-          { type: DeliveryEvidenceType.GEOLOCATION },
         ],
       }),
     );
@@ -2117,7 +2264,7 @@ describe('DeliveryService', () => {
         },
         driver,
       ),
-    ).rejects.toThrow('DELIVERED requires PHOTO and GEOLOCATION evidence');
+    ).rejects.toThrow('DELIVERED requires PHOTO evidence');
 
     expect(prisma.deliveryOrder.update).not.toHaveBeenCalled();
   });

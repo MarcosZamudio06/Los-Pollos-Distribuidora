@@ -186,7 +186,7 @@ Estas decisiones siguen abiertas y bloquean el diseño final de arquitectura, ba
 - Definir tolerancias permitidas de merma, diferencia de peso y devolución en reparto.
 - Definir política exacta de folio físico por ubicación y tipo de documento.
 - Definir si la experiencia móvil de choferes debe operar sin conexión y por cuánto tiempo.
-- La evidencia de entrega requiere `PHOTO` y `GEOLOCATION`; `SIGNATURE` y `NOTE` son opcionales.
+- La evidencia de entrega requiere `PHOTO`; `GEOLOCATION`, `SIGNATURE` y `NOTE` son opcionales.
 - Definir política fiscal futura: mantener solo ticket interno en MVP, o preparar nota administrativa/solicitud de factura para una fase posterior.
 - Definir catálogo final de bancos para pagos y transferencias.
 - Definir si el manejo de canastillas de clientes entra o no al dominio operativo.

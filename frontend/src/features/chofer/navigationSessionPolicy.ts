@@ -7,7 +7,11 @@ export const NAVIGATION_RECALCULATION_COOLDOWN_MS = 12_000;
 export const NAVIGATION_MOVEMENT_THRESHOLD_METERS = 75;
 export const NAVIGATION_OFF_ROUTE_THRESHOLD_METERS = 90;
 export const NAVIGATION_OFF_ROUTE_CONFIRMATIONS = 2;
-export const NAVIGATION_MAX_RECALC_ACCURACY_METERS = 100;
+export const NAVIGATION_MAX_ARRIVAL_ACCURACY_METERS = 100;
+export const NAVIGATION_MAX_ARRIVAL_DISTANCE_METERS = 150;
+export const NAVIGATION_MAX_ARRIVAL_POSITION_AGE_MS = 60_000;
+export const NAVIGATION_MAX_RECALC_ACCURACY_METERS =
+  NAVIGATION_MAX_ARRIVAL_ACCURACY_METERS;
 
 const EARTH_RADIUS_METERS = 6_371_000;
 
@@ -78,6 +82,37 @@ export function distanceBetweenNavigationPointsMeters(
       Math.cos(secondLatitude) *
       Math.sin(longitudeDelta / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(haversine));
+}
+
+export function isNearNavigationDestination(
+  position: RouteLocationPosition | null | undefined,
+  destination:
+    | { latitude?: number | null; longitude?: number | null }
+    | null
+    | undefined,
+) {
+  if (
+    !position ||
+    !destination ||
+    destination.latitude == null ||
+    destination.longitude == null
+  ) {
+    return false;
+  }
+
+  const recordedAtMs = Date.parse(position.recordedAt);
+  const positionAgeMs = Date.now() - recordedAtMs;
+  return Boolean(
+    isValidNavigationPosition(position) &&
+      position.accuracyMeters <= NAVIGATION_MAX_ARRIVAL_ACCURACY_METERS &&
+      Number.isFinite(positionAgeMs) &&
+      positionAgeMs >= 0 &&
+      positionAgeMs <= NAVIGATION_MAX_ARRIVAL_POSITION_AGE_MS &&
+      distanceBetweenNavigationPointsMeters(position, {
+        latitude: destination.latitude,
+        longitude: destination.longitude,
+      }) <= NAVIGATION_MAX_ARRIVAL_DISTANCE_METERS,
+  );
 }
 
 function distancePointToSegmentMeters(
@@ -217,4 +252,3 @@ export function evaluateNavigationRecalculation({
     reason,
   };
 }
-

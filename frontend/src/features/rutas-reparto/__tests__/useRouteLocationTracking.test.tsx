@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useEffect } from "react";
+import { act, StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "../../../lib/api";
@@ -94,14 +94,16 @@ function Harness({
 
 async function renderTracking(
   currentRoute: RouteLocationTrackingRoute,
+  strictMode = false,
 ): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const harness = (
+    <Harness currentRoute={currentRoute} onReady={(value) => (latest = value)} />
+  );
   await act(async () => {
-    root.render(
-      <Harness currentRoute={currentRoute} onReady={(value) => (latest = value)} />,
-    );
+    root.render(strictMode ? <StrictMode>{harness}</StrictMode> : harness);
   });
   return { container, root };
 }
@@ -204,6 +206,29 @@ describe("useRouteLocationTracking", () => {
     expect(latest?.isTracking).toBe(true);
 
     await act(async () => root.unmount());
+  });
+
+  it("starts and cleans up correctly when mounted under React StrictMode", async () => {
+    const { root } = await renderTracking(route(), true);
+
+    expect(latest?.canStart).toBe(true);
+    await act(async () => latest?.start());
+
+    expect(mockState.watchPosition).toHaveBeenCalledTimes(1);
+
+    await sendPosition(makePosition());
+
+    expect(latest?.lastPosition).toMatchObject({
+      accuracyMeters: 10,
+      latitude: 19.1738,
+      longitude: -96.1342,
+    });
+    expect(mockState.publishFleetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.unmount());
+
+    expect(mockState.clearWatch).toHaveBeenCalledTimes(1);
+    expect(mockState.clearWatch).toHaveBeenCalledWith(17);
   });
 
   it("publishes the browser reading without client-controlled route, driver, or vehicle ids", async () => {

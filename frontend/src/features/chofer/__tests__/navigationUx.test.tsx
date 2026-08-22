@@ -160,10 +160,60 @@ describe("navigation presentation", () => {
     act(() => root.unmount());
   });
 
+  it("minimizes the active stop panel to reveal the map and restores its details", () => {
+    const { container, root } = mount(
+      <NavigationDeliverySheet
+        isTracking
+        navigation={navigation}
+        onArrived={vi.fn()}
+        onOpenDelivery={vi.fn()}
+        onStart={vi.fn()}
+        route={route}
+        target={target}
+      />,
+    );
+
+    expect(container.querySelector("[data-navigation-sheet='active']"))
+      .not.toBeNull();
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>(
+          "button[aria-label='Minimizar detalle de la parada']",
+        )
+        ?.click();
+    });
+
+    expect(container.querySelector("[data-navigation-sheet='active']"))
+      .toBeNull();
+    expect(
+      container.querySelector("[data-navigation-sheet='minimized']"),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("Cliente Centro");
+    expect(container.textContent).not.toContain("Saldo por cobrar");
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>(
+          "button[aria-label='Mostrar detalle completo de la parada']",
+        )
+        ?.click();
+    });
+
+    expect(container.querySelector("[data-navigation-sheet='minimized']"))
+      .toBeNull();
+    expect(container.querySelector("[data-navigation-sheet='active']"))
+      .not.toBeNull();
+    expect(container.textContent).toContain("$425.00");
+
+    act(() => root.unmount());
+  });
+
   it("switches the delivery CTA after GPS has started", () => {
     const onOpenDelivery = vi.fn();
     const { container, root } = mount(
       <NavigationDeliverySheet
+        isNearDestination
         isTracking
         navigation={navigation}
         onArrived={vi.fn()}
@@ -180,6 +230,75 @@ describe("navigation presentation", () => {
     act(() => button?.click());
     expect(onOpenDelivery).toHaveBeenCalledTimes(1);
     act(() => root.unmount());
+  });
+
+  it("keeps delivery and logistics arrival actions disabled away from a reliable destination position", () => {
+    const onOpenDelivery = vi.fn();
+    const { container, root } = mount(
+      <NavigationDeliverySheet
+        isTracking
+        navigation={navigation}
+        onArrived={vi.fn()}
+        onOpenDelivery={onOpenDelivery}
+        onStart={vi.fn()}
+        route={route}
+        target={target}
+      />,
+    );
+
+    const deliveryButton = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent?.includes("Abrir entrega"),
+    ) as HTMLButtonElement | undefined;
+    expect(deliveryButton?.disabled).toBe(true);
+    act(() => deliveryButton?.click());
+    expect(onOpenDelivery).not.toHaveBeenCalled();
+    act(() => root.unmount());
+
+    const onArrived = vi.fn();
+    const logisticsRoute: DeliveryRouteDetail = {
+      ...route,
+      type: "BRANCH_RETURN",
+      orders: [],
+      logisticsStop: {
+        status: "PENDING",
+        inventoryTransferId: "transfer-1",
+        transferNumber: "TR-0001",
+        transferStatus: "IN_TRANSIT",
+        origin: null,
+        destination: {
+          id: "cedis-1",
+          name: "CEDIS",
+          latitude: target.latitude,
+          longitude: target.longitude,
+        },
+        items: [],
+      },
+    };
+    const logisticsTarget = {
+      kind: "LOGISTICS_STOP" as const,
+      id: "transfer-1",
+      label: "CEDIS",
+      latitude: target.latitude,
+      longitude: target.longitude,
+    };
+    const logisticsMount = mount(
+      <NavigationDeliverySheet
+        isTracking
+        navigation={{ ...navigation, target: logisticsTarget }}
+        onArrived={onArrived}
+        onOpenDelivery={vi.fn()}
+        onStart={vi.fn()}
+        route={logisticsRoute}
+        target={logisticsTarget}
+      />,
+    );
+    const arrivedButton = [...logisticsMount.container.querySelectorAll("button")].find(
+      (item) => item.textContent?.includes("Llegué"),
+    ) as HTMLButtonElement | undefined;
+    expect(arrivedButton?.disabled).toBe(true);
+    act(() => arrivedButton?.click());
+    expect(onArrived).not.toHaveBeenCalled();
+    act(() => logisticsMount.root.unmount());
   });
 
   it("only displays the near-destination hint and never changes delivery state automatically", () => {
