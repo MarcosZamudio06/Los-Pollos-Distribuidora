@@ -1,6 +1,6 @@
 # API — Clientes
 
-Define contratos para clientes minoristas, mayoristas e institucionales, su perfil comercial/facturado, crédito operativo y balance global por cliente. Los datos fiscales son comerciales y no habilitan CFDI.
+Define contratos para clientes minoristas, mayoristas e institucionales, su perfil comercial/fiscal, crédito operativo y balance global por cliente. El perfil fiscal prepara los datos CFDI 4.0, pero no emite ni timbra CFDI.
 
 ## GET /api/customers
 
@@ -19,17 +19,19 @@ Query:
 
 Respuesta `data.items[]`:
 
-- `id`, `customerNumber`, `name`, `commercialName`, `phone`, `email`, `billingEmail`, `address`.
+- `id`, `customerNumber`, `name`, `commercialName`, `phone`, `email`, `address`.
 - `customerType`, `priceListId`, `creditLimit`, `creditDays`, `creditStatus`, `requiresBilling`, `isBlockedForCredit`, `effectiveCreditStatus`.
 - `deliveryAddress`, `assignedRouteId`, `commercialPolicyId`.
-- `fiscalName`, `taxId`, `fiscalAddress` como datos comerciales opcionales.
+- `fiscalName`, `taxId`, `fiscalPostalCode`, `fiscalRegime`, `fiscalUseCode`, `billingEmail` y `fiscalAddress`.
 - `isActive`.
 - `creditSummary` opcional: `globalBalance`, `outstandingAmount`, `overdueAmount`, `availableCredit`, `lastPaymentDate`.
 
 Validaciones:
 
 - Permitir filtros para clientes facturados e institucionales.
-- No presentar datos fiscales como requisito para operar el MVP ni como emisión fiscal.
+- No presentar datos fiscales como emisión fiscal.
+- Mantener opcionales los campos fiscales mientras `requiresBilling=false`.
+- El backend devuelve los datos fiscales normalizados y es la autoridad de validación.
 
 ## GET /api/customers/:id
 
@@ -60,7 +62,6 @@ Body importante:
   "commercialName": "El Centro",
   "phone": "2290000000",
   "email": "cliente@example.com",
-  "billingEmail": "facturacion@cliente.com",
   "address": "Dirección del cliente",
   "customerType": "INSTITUTIONAL",
   "priceListId": "string opcional",
@@ -71,9 +72,13 @@ Body importante:
   "deliveryAddress": "Dirección de entrega",
   "assignedRouteId": "string opcional",
   "commercialPolicyId": "string opcional",
-  "fiscalName": "Razón social opcional",
-  "taxId": "RFC opcional",
-  "fiscalAddress": "Dirección fiscal opcional"
+  "fiscalName": "Razón social fiscal",
+  "taxId": "RFC",
+  "fiscalPostalCode": "91700",
+  "fiscalRegime": "601",
+  "fiscalUseCode": "G03",
+  "billingEmail": "facturacion@cliente.com",
+  "fiscalAddress": "Domicilio fiscal opcional"
 }
 ```
 
@@ -84,11 +89,18 @@ Validaciones:
 - `name` requerido.
 - `email` válido si existe.
 - `billingEmail` válido si existe.
+- Normalizar emails a minúsculas y recortar espacios; normalizar RFC y códigos fiscales a mayúsculas.
+- `taxId` debe cumplir una estructura RFC mexicana válida, incluido fragmento de fecha válido.
+- `fiscalPostalCode` debe contener exactamente cinco dígitos.
+- `fiscalRegime` debe pertenecer al catálogo SAT de régimen fiscal y `fiscalUseCode` al catálogo SAT de UsoCFDI versionado por la aplicación; no usar texto libre. La compatibilidad régimen/UsoCFDI se revalida en el servicio de catálogo/PAC antes de emitir.
+- Si `requiresBilling=true`, exigir `fiscalName`, `taxId`, `fiscalPostalCode`, `fiscalRegime`, `fiscalUseCode` y `billingEmail`. `fiscalAddress` no es obligatorio en la regla vigente.
+- Si `requiresBilling=false`, aceptar campos fiscales vacíos sin bloquear la creación o actualización.
+- Los errores de perfil deben responder `code` estable y `fields[]` con los nombres de campos afectados.
 - No duplicar `phone` si se captura como identificador comercial.
 - `customerType` requerido para distinguir `RETAIL`, `WHOLESALE` e `INSTITUTIONAL`.
 - Si el cliente tiene crédito, debe definir límite, días y estado de crédito.
 - Solo roles autorizados pueden capturar o modificar límite de crédito, días de crédito, bloqueo y política comercial.
-- Los campos fiscales no deben requerirse para operar el MVP ni activar CFDI.
+- El perfil fiscal no emite CFDI, no modifica ventas ni inventario y no sustituye `BillingRequest`.
 
 ## PATCH /api/customers/:id
 
@@ -100,6 +112,7 @@ Validaciones:
 
 - No permitir modificar límites de crédito o estado de bloqueo sin permiso autorizado.
 - Cliente inactivo no debe seleccionarse en nuevas ventas.
+- Aplicar las mismas reglas de normalización, catálogo y completitud fiscal del endpoint de creación.
 - Las condiciones específicas del cliente prevalecen sobre políticas globales solo si negocio lo autoriza.
 
 ## DELETE /api/customers/:id

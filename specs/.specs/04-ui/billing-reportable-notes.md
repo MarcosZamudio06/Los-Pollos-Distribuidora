@@ -2,7 +2,9 @@
 
 ## Objetivo
 
-Ofrecer una bandeja operativa para consultar notas facturables, crear solicitudes y conciliar facturas emitidas externamente, sin presentar acciones de CFDI, timbrado, PAC o SAT.
+Ofrecer una bandeja operativa para consultar notas facturables, crear
+solicitudes y conciliar facturas externas o nativas sin duplicar la autoridad
+fiscal.
 
 ## Ruta y acceso
 
@@ -22,6 +24,12 @@ El detalle muestra venta, partidas, perfil fiscal según rol, solicitudes, factu
 ## Acciones
 
 Permite solicitudes totales, parciales y agrupadas compatibles. Cancelar, rechazar, bloquear, revertir o autorizar excepciones requiere diálogo profesional, motivo obligatorio y foco accesible.
+
+Cuando se habilite la emisión nativa, solo `ADMIN` o `BILLING` con `cfdi.issue`
+verá la acción “Emitir CFDI” para una solicitud `APPROVED`. La UI muestra estado
+de operación y disponibilidad de artefactos desde backend; nunca captura ni
+sintetiza UUID, TFD, sellos, datos SAT, identificadores PAC, XML, PDF o acuses.
+Todos los headers generados deben ser blancos.
 
 La UI reutiliza componentes y tokens del ERP, mantiene navegación por teclado, etiquetas accesibles, diseño responsive y oculta datos fiscales a roles no autorizados. El backend sigue siendo la autoridad de permisos.
 

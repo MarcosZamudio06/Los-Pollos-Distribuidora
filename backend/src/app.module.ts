@@ -36,6 +36,8 @@ import { PointOfSaleDailyCloseModule } from './modules/point-of-sale-daily-close
 import { BillingModule } from './modules/billing/billing.module';
 import { CashManagementModule } from './modules/cash-management/cash-management.module';
 import { HealthModule } from './modules/health/health.module';
+import { LegalEntitiesModule } from './modules/legal-entities/legal-entities.module';
+import { CfdiModule } from './modules/cfdi/cfdi.module';
 
 @Module({
   imports: [
@@ -77,6 +79,8 @@ import { HealthModule } from './modules/health/health.module';
     PointOfSaleDailyCloseModule,
     CashManagementModule,
     BillingModule,
+    LegalEntitiesModule,
+    CfdiModule,
   ],
   controllers: [],
   providers: [

@@ -123,6 +123,16 @@ services:
       HTTP_BODY_LIMIT: ${HTTP_BODY_LIMIT:-1mb}
       DATABASE_SSL: "false"
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}?sslmode=disable
+      # Fiscal configuration is reference-only. Credential material belongs in
+      # a Docker secret or external secret manager resolved by the adapter.
+      CFDI_ENABLED: ${CFDI_ENABLED:-false}
+      FISCAL_PROVIDER: ${FISCAL_PROVIDER:-FACTURAMA}
+      FISCAL_PROVIDER_ENVIRONMENT: ${FISCAL_PROVIDER_ENVIRONMENT:-PRODUCTION}
+      CFDI_REQUEST_TIMEOUT_MS: ${CFDI_REQUEST_TIMEOUT_MS:-30000}
+      CFDI_MAX_RETRIES: ${CFDI_MAX_RETRIES:-3}
+      FACTURAMA_API_BASE_URL: ${FACTURAMA_API_BASE_URL:-}
+      FACTURAMA_API_MODE: ${FACTURAMA_API_MODE:-MULTI_ISSUER}
+      FACTURAMA_CREDENTIAL_REF: ${FACTURAMA_CREDENTIAL_REF:-}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}

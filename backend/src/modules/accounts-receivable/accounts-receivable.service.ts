@@ -267,6 +267,15 @@ export class AccountsReceivableService {
                 collectionPass: dto.collectionPass ?? null,
                 nextPaymentDate,
                 amount: paymentAmount.toString(),
+                currencyCode: dto.currencyCode?.trim().toUpperCase() ?? 'MXN',
+                exchangeRateToMxn:
+                  dto.exchangeRateToMxn !== undefined
+                    ? new Prisma.Decimal(String(dto.exchangeRateToMxn))
+                    : dto.currencyCode?.trim().toUpperCase() === 'MXN' ||
+                        !dto.currencyCode
+                      ? new Prisma.Decimal(1)
+                      : null,
+                fiscalPaymentFormCode: dto.fiscalPaymentFormCode?.trim() ?? null,
                 paymentMethod: dto.paymentMethod,
                 bankName:
                   dto.paymentMethod === 'CASH'
@@ -788,6 +797,9 @@ export class AccountsReceivableService {
       saleId: payment.saleId,
       customerId: payment.customerId,
       amount: toMoneyString(payment.amount),
+      currencyCode: payment.currencyCode,
+      exchangeRateToMxn: payment.exchangeRateToMxn?.toString() ?? null,
+      fiscalPaymentFormCode: payment.fiscalPaymentFormCode,
       paymentMethod: payment.paymentMethod,
       bankName: payment.bankName,
       referenceNumber: payment.referenceNumber,
@@ -814,6 +826,15 @@ export class AccountsReceivableService {
       operation: 'REGISTER_RECEIVABLE_PAYMENT',
       accountReceivableId,
       amount: dto.amount,
+      ...(dto.currencyCode
+        ? { currencyCode: dto.currencyCode.trim().toUpperCase() }
+        : {}),
+      ...(dto.exchangeRateToMxn !== undefined
+        ? { exchangeRateToMxn: String(dto.exchangeRateToMxn) }
+        : {}),
+      ...(dto.fiscalPaymentFormCode
+        ? { fiscalPaymentFormCode: dto.fiscalPaymentFormCode }
+        : {}),
       paymentMethod: dto.paymentMethod,
       bankName:
         dto.paymentMethod === 'CASH'

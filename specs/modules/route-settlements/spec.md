@@ -27,6 +27,9 @@ Conciliar entregas, incidencias, devoluciones, efectivo, transferencias/deposito
 - La liquidación no sustituye el corte diario de punto fijo.
 - La liquidación no sustituye la carga ni devolución física de inventario; toda diferencia de producto debe resolverse sobre `ROUTE_STOCK` con trazabilidad.
 - Todo total cobrado en liquidación debe derivarse de `Payment`.
+- REP 2.0 no crea un cobro de ruta adicional. Primera/segunda vuelta y
+  liquidación conservan el mismo `Payment(APPLIED)`; la relación fiscal futura
+  no cambia totales, diferencias ni estado de la ruta.
 - No cerrar ni cancelar operativamente una venta ya liquidada sin reapertura auditable.
 - La apertura/cálculo, el cierre y la reapertura deben respetar control de versión e idempotencia.
 - `Idempotency-Key` es obligatorio para apertura/cálculo, cierre y reapertura;

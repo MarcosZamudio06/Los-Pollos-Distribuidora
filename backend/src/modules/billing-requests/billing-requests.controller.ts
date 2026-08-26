@@ -20,6 +20,7 @@ import {
   CancelBillingRequestDto,
   CreateBillingRequestDto,
   LinkInvoiceDto,
+  IssueCfdiDto,
   ListBillingRequestsQueryDto,
   ReviewBillingRequestDto,
   UpdateBillingRequestDto,
@@ -165,6 +166,27 @@ export class BillingRequestsController {
         user,
         idempotencyKey.trim(),
       ),
+    };
+  }
+
+  @Post(':id/issue-cfdi')
+  @Roles('ADMIN', 'BILLING')
+  async issueCfdi(
+    @Param('id') id: string,
+    @Body() body: IssueCfdiDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    const key = idempotencyKey?.trim();
+    if (!key)
+      throw new BadRequestException('Idempotency-Key header is required');
+    if (key.length > 128)
+      throw new BadRequestException('IDEMPOTENCY_KEY_TOO_LONG');
+
+    return {
+      success: true,
+      message: 'CFDI issuance processed successfully',
+      data: await this.service.issueCfdi(id, body, user, key),
     };
   }
 }

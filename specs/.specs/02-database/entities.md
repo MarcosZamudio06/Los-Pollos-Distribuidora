@@ -13,6 +13,10 @@ Validaciones:
 - `presentationType` debe permitir `KG`, `WHOLE` o `CUT`.
 - `unit` debe permitir kilo, pieza o ambas unidades.
 - `presentationType` y `unit` son independientes: el primero clasifica el catálogo semántico y el segundo la captura operativa.
+- El perfil fiscal opcional agrega `satProductServiceCode`, `satUnitCode`, `taxObjectCode`, `defaultTaxCode`, `defaultFactorType` y `defaultRateOrQuota` sin sustituir `unit`.
+- `satUnitCode` no se deriva de `KG`, `PIECE` o `KG_AND_PIECE`; tampoco se asigna `satProductServiceCode` a productos históricos por heurística.
+- Un perfil vacío o incompleto no bloquea catálogo, compras o ventas comerciales. Su respuesta deriva `fiscalProfileStatus=INCOMPLETE`, `fiscalProfileMissingFields` y `fiscalProfileValidationCode=CFDI_PRODUCT_PROFILE_INCOMPLETE` para bloquear CFDI futuro.
+- Cambiar el perfil fiscal solo actualiza `Product`; nunca reescribe `SaleItem`, `PurchaseItem`, movimientos ni snapshots históricos.
 - La equivalencia kilo-pieza solo debe usarse cuando exista regla oficial aprobada por negocio.
 - Si el producto usa equivalencias kilo-pieza, debe existir relación con `ProductUnitEquivalent` aprobada o una decisión explícita de negocio que autorice el campo operativo equivalente.
 
@@ -298,8 +302,9 @@ Validaciones:
 - `phone` debe ser único si se usa como identificador comercial.
 - `customerType` requerido para distinguir cliente minorista, mayorista e institucional.
 - Si el cliente tiene crédito, debe definir límite de crédito, días de crédito y estado de crédito.
-- Un cliente facturado debe conservar número interno, RFC, razón social, alias/nombre comercial y correo administrativo.
-- Los datos fiscales son opcionales en MVP y no implican emisión CFDI.
+- Un cliente marcado con `requiresBilling=true` debe conservar `fiscalName`, `taxId`, `fiscalPostalCode`, `fiscalRegime`, `fiscalUseCode` y `billingEmail` completos.
+- `fiscalAddress` permanece opcional en la regla vigente; dirección comercial y dirección de entrega son datos distintos.
+- Los datos fiscales permanecen opcionales para clientes con `requiresBilling=false` y no implican emisión CFDI.
 - Puede relacionarse con una `CommercialPolicy` para heredar condiciones comerciales administrables.
 - Las condiciones de crédito específicas del cliente deben prevalecer sobre políticas globales solo si negocio lo autoriza.
 
@@ -697,6 +702,12 @@ Validaciones:
 
 - Emisor fiscal distinto de `OperationalLocation`.
 - Conserva identidad legal y estado; su relación operativa se configura y audita explícitamente.
+- Es la configuración fiscal autoritativa del emisor CFDI y propietaria lógica del CSD; `OperationalLocation` solo conserva ubicación operativa.
+- Campos fiscales aditivos: `cfdiEnabled`, `fiscalPostalCode` (lugar de expedición), `fiscalRegime`, `defaultSeries`, `certificateSerialNumber`, `certificateFingerprint`, `certificateSubject`, `certificateValidFrom` y `certificateValidTo`.
+- El perfil fiscal derivado expone `COMPLETE`/`INCOMPLETE`, campos faltantes y el código estable `CFDI_LEGAL_ENTITY_FISCAL_PROFILE_INCOMPLETE`. Un registro legado incompleto puede permanecer operativo cuando `cfdiEnabled=false`.
+- `cfdiEnabled=true` solo es válido con RFC estructuralmente correcto, código postal mexicano de cinco dígitos, régimen SAT catalogado, serie válida y metadata de certificado completa con vigencia ordenada.
+- Nunca almacena `.key`, contraseña de CSD, token PAC ni secretos equivalentes. La futura referencia a credenciales vive fuera de la entidad fiscal.
+- Una venta facturable debe resolver exactamente `Sale -> LegalEntity -> configuración fiscal activa` a través de un mapeo vigente `LegalEntityOperationalLocation`; cero mapeos, mapeos solapados, entidad inactiva, CFDI deshabilitado, perfil incompleto o certificado fuera de vigencia bloquean la venta fiscal con código estable.
 
 ### Invoice
 
@@ -729,9 +740,141 @@ Aplicación exacta por partida; la suma debe coincidir con la aplicación del do
 ### Extensiones a entidades existentes
 
 - `Sale` incorpora `currencyCode` y referencia a `LegalEntity` resuelta explícitamente.
+- La resolución fiscal de una venta ocurre antes de confirmar la transacción y no cambia inventario; si falla, la transacción completa se revierte.
 - `SaleItem` conserva descuento, base gravable, impuesto y total históricos.
 - `Customer` conserva perfil fiscal estructurado y su completitud se deriva.
 - `BillingRequest.customerId` permanece; `saleId` deja de ser autoritativo tras el backfill.
 - `PaymentAllocation` no se activa.
 
 Ver invariantes en `specs/modules/billing-reportable-notes/spec.md`.
+
+## Extensión post-MVP de CFDI 4.0 nativo
+
+### FiscalIssuerBinding
+
+Binding versionado entre `LegalEntity` y un proveedor/ambiente. Conserva
+referencias opacas a credenciales y emisor; jamás secretos.
+
+### FiscalFolioSequence
+
+Asigna serie y folio deterministas por emisor y tipo antes del llamado PAC.
+
+### Invoice e InvoiceConcept
+
+`Invoice` se extiende con origen, versión/tipo CFDI, fechas, snapshots JSONB de
+emisor/receptor, catálogos de pago, tipo de cambio, TFD, certificados, sellos,
+estados fiscales separados, sustitución, contador de intentos y último error.
+`InvoiceConcept` es el snapshot insert-only por concepto; no tiene relación a
+`Product` ni `Customer` mutable.
+
+### FiscalOperationAttempt
+
+Cada interacción `STAMP`, `CANCEL`, `STATUS` o `RECOVERY` conserva intento
+monotónico, estado, `correlationId`, idempotencia, hash, proveedor y error
+sanitizado. La unicidad de `sourceBillingRequestId` y
+`fiscalIdempotencyKey` en `Invoice` evita una segunda raíz nativa; un retry
+`STAMP` conserva clave y exige que el intento anterior sea reintentable.
+
+### FiscalCertificate
+
+Snapshot inmutable de número de certificado, huella SHA-256, sujeto/emisor y
+vigencia; nunca almacena llave privada, contraseña, token PAC o secreto.
+
+### FiscalArtifact
+
+Metadatos, checksum y estado del XML, PDF o acuse privado. No contiene payload:
+los bytes permanecen exclusivamente en ObjectStorage.
+
+### Extensiones a Invoice y perfiles
+
+- `Invoice.origin`: `LEGACY_EXTERNAL` o `NATIVE_CFDI`.
+- `Invoice.sourceBillingRequestId`: único y nulo para legacy.
+- `Invoice.status` conserva `ACTIVE`, `CANCELLED` y `SUBSTITUTED`; el estado PAC
+  pendiente nunca se duplica ahí.
+- `LegalEntity`, `Customer` y el perfil fiscal de producto deben cubrir los
+  datos estructurados de emisor, receptor y concepto requeridos por CFDI 4.0.
+
+Ver entidades, enums, state machines e invariantes en
+`specs/modules/cfdi/spec.md`.
+
+### SatCatalog, SatCatalogVersion y SatCatalogEntry
+
+El bounded context fiscal mantiene los códigos SAT en versiones insert-only.
+`SatCatalog` identifica el catálogo soportado y apunta a una versión activa;
+`SatCatalogVersion` conserva fuente, checksum, estado, conteo y timestamps;
+`SatCatalogEntry` conserva `code`, `description`, vigencia y metadata. No se
+relacionan por FK con `Invoice` o `InvoiceConcept`: una factura guarda el
+snapshot fiscal que se emitió, aun si la descripción del catálogo cambia.
+
+El importador realiza staging, validación y activación atómica. La migración no
+infiere ni siembra códigos oficiales; una carga exige archivo/versión fuente,
+checksum y aprobación operativa.
+
+## Diseño de entidades REP 2.0 (CFDI-16; no implementado)
+
+### PaymentReceipt
+
+Extensión fiscal uno-a-uno de `Invoice(PAYMENT_RECEIPT)`. Conserva versión del
+complemento, totales MXN, impuestos agregados y hash del snapshot. No es una
+raíz monetaria ni se suma en reportes de ingresos.
+
+Validaciones:
+
+- `invoiceId` único y la factura debe ser `NATIVE_CFDI/PAYMENT_RECEIPT`.
+- `complementVersion=2.0`.
+- totales calculados con Decimal desde detalles y aplicaciones.
+- snapshot inmutable desde `STAMPING`.
+
+### PaymentReceiptDetail
+
+Snapshot del nodo Pago y referencia a un `Payment` existente. Conserva fecha,
+FormaDePagoP, MonedaP, tipo de cambio, monto, operación, datos bancarios
+permitidos, fecha límite de emisión, impuestos y hash.
+
+Validaciones:
+
+- `Payment.status=APPLIED`.
+- el monto snapshot coincide con `Payment.amount`; `cashTendered` y
+  `changeGiven` nunca forman parte del REP.
+- FormaDePagoP se toma de `Payment.fiscalPaymentFormCode`, no se infiere de un
+  método operacional ambiguo.
+- la primera implementación acepta un detalle por REP y una emisión ordinaria
+  abierta por pago.
+- una sustitución referencia el detalle previo y no duplica su efecto.
+
+### PaymentInvoiceApplication
+
+Relación fiscal N:M entre `Payment` y `Invoice` de Ingreso, propiedad de un
+`PaymentReceiptDetail`. Resuelve explícitamente que una venta/documento puede
+estar facturado por más de una `Invoice`.
+
+Validaciones:
+
+- la factura relacionada es `NATIVE_CFDI`, `INCOME`, `ACTIVE`, `STAMPED`,
+  `PPD`, con UUID.
+- existe una ruta activa desde la venta del pago mediante `SaleDocument` e
+  `InvoiceSaleDocument`.
+- el importe no excede ni el saldo fiscal de la factura ni la capacidad de esa
+  venta dentro de la factura.
+- `ImpSaldoAnt - ImpPagado = ImpSaldoInsoluto`, todos con Decimal.
+- la suma de aplicaciones convertidas coincide exactamente con el monto del
+  detalle de pago.
+- `NumParcialidad` se deriva de aplicaciones `EFFECTIVE`; la sustitución
+  conserva la parcialidad reemplazada.
+- UUID, moneda, equivalencia, método DR, saldos, objeto de impuesto e impuestos
+  son snapshots insert-only.
+- conserva un snapshot de los `InvoiceSaleDocument` que justifican la capacidad
+  de la venta dentro del CFDI agrupado.
+- `RESERVED`/`UNKNOWN` bloquean otra emisión; `EFFECTIVE` solo se vuelve
+  `REVERSED` por cancelación fiscal confirmada.
+
+### Extensión fiscal de Payment
+
+`currencyCode`, `exchangeRateToMxn` y `fiscalPaymentFormCode` se agregarán de
+forma nullable en expand. `paymentMethod`, ruta, segunda vuelta y liquidación
+siguen siendo metadatos operativos. Un pago legacy incompleto conserva toda su
+operación económica y queda bloqueado únicamente para REP con remediación.
+
+`PaymentAllocation` continúa fuera del modelo: no se distribuye un pago entre
+cuentas por cobrar. `PaymentInvoiceApplication` distribuye su reflejo fiscal
+entre UUID relacionados y jamás modifica el dinero o saldo de cobranza.

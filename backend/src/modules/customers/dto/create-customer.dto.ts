@@ -3,16 +3,37 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { CreditStatus, CustomerType } from '@prisma/client';
+import {
+  SAT_CFDI_USE_CODES,
+  SAT_FISCAL_REGIME_CODES,
+} from '../../../../../shared/fiscal-catalog';
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
+}
+
+function normalizeEmail({ value }: TransformFnParams): unknown {
+  return typeof value === 'string' ? value.trim().toLowerCase() : value;
+}
+
+function normalizeTaxId({ value }: TransformFnParams): unknown {
+  return typeof value === 'string'
+    ? value.replace(/\s+/g, '').trim().toUpperCase()
+    : value;
+}
+
+function normalizeFiscalCode({ value }: TransformFnParams): unknown {
+  return typeof value === 'string' ? value.trim().toUpperCase() : value;
 }
 
 export class CreateCustomerDto {
@@ -37,12 +58,12 @@ export class CreateCustomerDto {
   phone?: string;
 
   @IsOptional()
-  @Transform(trimString)
+  @Transform(normalizeEmail)
   @IsEmail()
   email?: string;
 
   @IsOptional()
-  @Transform(trimString)
+  @Transform(normalizeEmail)
   @IsEmail()
   billingEmail?: string;
 
@@ -85,14 +106,45 @@ export class CreateCustomerDto {
   fiscalName?: string;
 
   @IsOptional()
-  @Transform(trimString)
+  @Transform(normalizeTaxId)
   @IsString()
+  @ValidateIf(
+    (_, value) => value !== undefined && value !== null && value !== '',
+  )
+  @Matches(/^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$/u)
   taxId?: string;
 
   @IsOptional()
   @Transform(trimString)
   @IsString()
   fiscalAddress?: string;
+
+  @IsOptional()
+  @Transform(trimString)
+  @IsString()
+  @ValidateIf(
+    (_, value) => value !== undefined && value !== null && value !== '',
+  )
+  @Matches(/^\d{5}$/)
+  fiscalPostalCode?: string;
+
+  @IsOptional()
+  @Transform(normalizeFiscalCode)
+  @IsString()
+  @ValidateIf(
+    (_, value) => value !== undefined && value !== null && value !== '',
+  )
+  @IsIn([...SAT_FISCAL_REGIME_CODES])
+  fiscalRegime?: string;
+
+  @IsOptional()
+  @Transform(normalizeFiscalCode)
+  @IsString()
+  @ValidateIf(
+    (_, value) => value !== undefined && value !== null && value !== '',
+  )
+  @IsIn([...SAT_CFDI_USE_CODES])
+  fiscalUseCode?: string;
 
   @IsOptional()
   @Transform(trimString)

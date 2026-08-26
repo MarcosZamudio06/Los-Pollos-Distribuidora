@@ -3,8 +3,11 @@
 > Estado: insumo funcional enlazado. La fuente canónica es
 > `specs/modules/billing-reportable-notes/spec.md`. En caso de diferencia,
 > prevalece el spec canónico y los documentos transversales que este enlaza.
-> El módulo registra facturas emitidas externamente; no emite CFDI, XML, no
-> timbra ni integra PAC o SAT.
+> Este documento describe conciliación legacy de facturas externas. La emisión
+> CFDI 4.0 nativa es un bounded context separado; su autoridad es
+> `specs/modules/cfdi/spec.md` y
+> `docs/adr/ADR-001-native-cfdi-4-architecture.md`, con ejecución definida en
+> `docs/adr/ADR-004-native-cfdi-issuance-execution.md`.
 
 ## 1. Objetivo
 
@@ -46,7 +49,8 @@ No representa una factura fiscal ni debe reemplazar al documento de venta.
 
 ### Invoice
 
-Registro de una factura emitida externamente.
+Raíz persistida de una factura legacy externa o de un CFDI nativo emitido por
+el bounded context fiscal.
 
 Puede estar relacionado con una o varias notas de venta.
 
@@ -215,7 +219,7 @@ Venta confirmada
 → Validación de datos fiscales
 → Creación de BillingRequest
 → Revisión o autorización
-→ Emisión de factura en el sistema externo
+→ Emisión CFDI nativa o registro de factura legacy externa
 → Relación factura-nota
 → Conciliación de importes
 → Estado total o parcialmente facturado
@@ -275,6 +279,7 @@ Campos mínimos:
 - Folio de nota.
 - Producto.
 - Descripción.
+- ClaveProdServ y ClaveUnidad SAT administradas en el perfil fiscal del producto; no se derivan de la unidad operacional.
 - Cantidad.
 - Unidad.
 - Precio unitario.
@@ -611,3 +616,63 @@ La implementación será aceptada cuando:
 16. Las operaciones críticas sean transaccionales.
 17. Los cálculos monetarios no presenten errores de precisión.
 18. Existan pruebas unitarias, de integración y end-to-end para los flujos críticos.
+
+## Anexo CFDI-15 — Catálogos SAT
+
+Los datos fiscales controlados se leen desde `SatCatalog`/`SatCatalogVersion`/
+`SatCatalogEntry`, no desde texto libre ni desde una consulta SAT en línea. La
+primera carga exige una fuente oficial revisada, `sourceVersion`, checksum y
+aprobación; la migración no siembra códigos inventados. El importador valida y
+activa versiones atómicamente, y `Invoice`/`InvoiceConcept` mantienen sus
+snapshots sin depender de descripciones futuras.
+
+## Anexo CFDI-16 — Arquitectura REP 2.0
+
+El REP se modela como `Invoice(PAYMENT_RECEIPT)` y conserva la infraestructura
+fiscal común. `Payment` continúa como única fuente económica;
+`PaymentReceipt`, `PaymentReceiptDetail` y `PaymentInvoiceApplication` son
+snapshots fiscales que no cambian caja, cartera, ventas, rutas o inventario.
+
+Una venta o documento puede estar facturado por varias `Invoice`. Por eso la
+entrada REP es `paymentId` y cada pago se distribuye de forma determinista
+sobre facturas PPD elegibles a través de `InvoiceSaleDocument`. La cadena de
+cada factura determina UUID, parcialidad, saldo anterior, importe pagado y
+saldo insoluto. Cobranza de ruta, pago parcial y segunda vuelta reutilizan el
+mismo `Payment(APPLIED)`.
+
+CFDI-16 canonizó la arquitectura y CFDI-17 implementa la emisión por pago sin
+crear una segunda raíz fiscal. La decisión arquitectónica completa está en
+`docs/adr/ADR-012-rep-2-payment-invoice-applications.md`; el contrato de
+ejecución está en `docs/adr/ADR-013-rep-2-implementation.md`.
+
+## Anexo CFDI-17 — Emisión REP 2.0
+
+`POST /api/billing/payments/:paymentId/issue-cfdi` crea un `Invoice` tipo `P`
+con `PaymentReceipt`, `PaymentReceiptDetail` y
+`PaymentInvoiceApplication`. El servidor vuelve a resolver las facturas PPD
+`STAMPED` mediante `InvoiceSaleDocument`, distribuye el importe con
+`Prisma.Decimal` y persiste los snapshots antes de llamar a Facturama. Un
+timeout deja el documento `UNKNOWN` y conserva la reserva para
+`StampReconciliationJob`; nunca se repite el timbrado automáticamente.
+
+Para documentos relacionados con `ObjetoImpDR=02`, los impuestos se toman del
+snapshot inmutable de `InvoiceConcept`, se prorratean al importe pagado con
+`Decimal` y se envían en los nodos `Taxes` de Pagos 2.0. Un desglose faltante o
+inválido bloquea la emisión; el cliente no puede proporcionar esos valores.
+
+XML/PDF se almacenan en ObjectStorage y la cancelación solo revierte las
+aplicaciones al recibir confirmación fiscal. La ausencia de PostgreSQL
+disposable no se interpreta como prueba de concurrencia.
+
+## Anexo CFDI-18 — Nota de crédito CFDI E
+
+La nota de crédito nace de `CreditAdjustment`, una operación comercial creada
+y aprobada de forma explícita. `DeliveryIncident`, devoluciones físicas e
+`InventoryMovement` son solo contexto operativo y nunca disparan un CFDI E.
+
+El ajuste relaciona una o varias facturas de Ingreso timbradas mediante UUID y
+`TipoRelacion` derivado (`01` crédito/bonificación/descuento; `03` devolución
+aprobada), selecciona conceptos e importes y reserva saldo acreditable al
+aprobar. La emisión crea una `Invoice` nativa tipo `EXPENSE`, usa snapshots
+originales, llama `FiscalProviderPort` fuera de la transacción y conserva
+`UNKNOWN` ante timeout para impedir doble timbrado.

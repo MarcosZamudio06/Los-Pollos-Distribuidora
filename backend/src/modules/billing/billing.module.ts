@@ -10,9 +10,11 @@ import { BillingRemediationController } from './billing-remediation.controller';
 import { BillingRemediationService } from './billing-remediation.service';
 import { RemediationImpactAnalyzer } from './remediation-impact-analyzer';
 import { SaleConsistencyValidator } from './sale-consistency-validator';
+import { CfdiModule } from '../cfdi/cfdi.module';
+import { CancellationStatusJob } from './cancellation-status.job';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, CfdiModule],
   controllers: [
     BillingReportController,
     InvoiceCancellationController,
@@ -25,6 +27,7 @@ import { SaleConsistencyValidator } from './sale-consistency-validator';
     BillingRemediationService,
     RemediationImpactAnalyzer,
     SaleConsistencyValidator,
+    CancellationStatusJob,
   ],
 })
 export class BillingModule {}

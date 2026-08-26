@@ -27,6 +27,8 @@ Respuesta `data.items[]`:
 - `presentationType`.
 - `salePrice`, `purchaseCost`, `minStock`.
 - `unit`, `pieceWeightEquivalent`, `equivalentPolicyStatus`.
+- `satProductServiceCode`, `satUnitCode`, `taxObjectCode`, `defaultTaxCode`, `defaultFactorType`, `defaultRateOrQuota` (nullable).
+- Indicadores derivados `fiscalProfileStatus`, `fiscalProfileComplete`, `fiscalProfileMissingFields` y `fiscalProfileValidationCode`.
 - `isActive`.
 - `inventoryBalance` opcional: `locationId`, `quantityKg`, `quantityPieces`, `minQuantityKg`, `minQuantityPieces`, `isLowStock`.
 
@@ -77,7 +79,13 @@ Body importante:
   "minStock": 10,
   "unit": "KG",
   "pieceWeightEquivalent": 1.8,
-  "equivalentPolicyStatus": "DRAFT"
+  "equivalentPolicyStatus": "DRAFT",
+  "satProductServiceCode": "10101500",
+  "satUnitCode": "KGM",
+  "taxObjectCode": "02",
+  "defaultTaxCode": "002",
+  "defaultFactorType": "Tasa",
+  "defaultRateOrQuota": 0.16
 }
 ```
 
@@ -95,6 +103,9 @@ Validaciones:
 - `unit` requerido y limitado a `KG`, `PIECE`, `KG_AND_PIECE`.
 - `sku` único si existe.
 - No aceptar `stock` como campo de creación.
+- Los seis campos fiscales son opcionales para conservar el alta comercial; si se envían se normalizan y validan en backend.
+- `satProductServiceCode` exige ocho dígitos y `satUnitCode` dos o tres caracteres alfanuméricos SAT; `taxObjectCode`, `defaultTaxCode` y `defaultFactorType` usan los catálogos versionados por la aplicación; `defaultRateOrQuota` es no negativo con hasta seis decimales.
+- No mapear automáticamente `unit` a `satUnitCode` ni asignar `satProductServiceCode` a productos existentes.
 - Si el producto se venderá por kilo y pieza, la equivalencia debe gestionarse mediante la API de equivalencias o quedar marcada como pendiente hasta aprobación.
 
 ## PATCH /api/products/:id
@@ -108,6 +119,7 @@ Body importante: mismos campos editables de creación, excepto inventario operat
 Validaciones:
 
 - No modificar saldos de inventario desde este endpoint.
+- Actualizar el perfil fiscal no modifica `SaleItem`, `PurchaseItem`, movimientos ni históricos.
 - No cambiar `presentationType` de forma que contradiga el historial comercial o el catálogo visible; si el cambio implica un producto distinto, debe crearse uno nuevo.
 - No cambiar unidad de forma que invalide ventas, compras o movimientos históricos.
 - No convertir kilo/pieza sin equivalencia oficial aprobada cuando aplique.
@@ -124,6 +136,12 @@ Validaciones:
 
 - No eliminar físicamente.
 - Un producto inactivo no debe poder usarse en nuevas ventas, compras o traspasos.
+
+### Perfil fiscal
+
+- `fiscalProfileStatus=INCOMPLETE` y `fiscalProfileValidationCode=CFDI_PRODUCT_PROFILE_INCOMPLETE` son indicadores derivados, no una segunda fuente persistida.
+- La API comercial no rechaza un perfil vacío o parcial; la futura API `/api/cfdi/**` debe rechazar el producto incompleto antes de construir el snapshot fiscal.
+- Los códigos SAT completos se revalidan mediante el servicio de catálogo/PAC antes de emitir; la validación estructural de esta API no inventa un catálogo completo.
 
 ## GET /api/categories
 

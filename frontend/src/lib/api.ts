@@ -3,6 +3,7 @@ export type HttpMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
 export type ApiErrorPayload = {
   code?: string;
   error?: string;
+  fields?: string[];
   findings?: Array<{ code: string; message: string }>;
   message?: string;
   statusCode?: number;

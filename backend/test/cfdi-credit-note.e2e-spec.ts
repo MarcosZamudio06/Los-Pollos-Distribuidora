@@ -1,0 +1,332 @@
+import {
+  CfdiDocumentType,
+  CreditAdjustmentStatus,
+  CreditStatus,
+  CustomerType,
+  FiscalCancellationStatus,
+  InvoiceFiscalStatus,
+  InvoiceOrigin,
+  OperationalLocationType,
+  Prisma,
+  PrismaClient,
+} from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { PrismaService } from '../src/database/prisma.service';
+import { CreditAdjustmentRepository } from '../src/modules/cfdi/credit-adjustment.repository';
+import { CreditAdjustmentService } from '../src/modules/cfdi/credit-adjustment.service';
+import { FakeFiscalProvider } from '../src/modules/cfdi/testing/fake-fiscal-provider';
+import { assertDisposableE2eEnvironment } from './e2e-environment';
+
+describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
+  const marker = `cfdi-credit-${randomUUID()}`;
+  const actor = { id: '', role: 'ADMIN' as const };
+  let prisma: PrismaClient;
+  let repository: CreditAdjustmentRepository;
+  let legalEntityId: string;
+  let customerId: string;
+  let invoiceSequence = 0;
+
+  beforeAll(async () => {
+    assertDisposableE2eEnvironment();
+    prisma = new PrismaClient();
+    await prisma.$connect();
+
+    const location = await prisma.operationalLocation.create({
+      data: {
+        name: `${marker} branch`,
+        code: marker,
+        type: OperationalLocationType.BRANCH,
+      },
+    });
+    const role = await prisma.role.create({
+      data: { name: `${marker}-admin` },
+    });
+    const user = await prisma.user.create({
+      data: {
+        name: `${marker} actor`,
+        email: `${marker}@example.test`,
+        controlNumber: marker,
+        phone: marker,
+        passwordHash: 'not-used-in-repository-test',
+        roleId: role.id,
+        operationalLocationId: location.id,
+      },
+    });
+    actor.id = user.id;
+
+    const legalEntity = await prisma.legalEntity.create({
+      data: {
+        legalName: 'CFDI CREDIT NOTE TEST SA DE CV',
+        taxId: `E${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+        fiscalPostalCode: '64000',
+        fiscalRegime: '601',
+        cfdiEnabled: true,
+        defaultSeries: `E${marker.slice(-6)}`,
+        certificateSerialNumber: '30001000000500003416',
+        certificateFingerprint: 'a'.repeat(64),
+        certificateSubject: 'CN=CFDI CREDIT NOTE TEST',
+        certificateValidFrom: new Date('2025-01-01T00:00:00.000Z'),
+        certificateValidTo: new Date('2030-01-01T00:00:00.000Z'),
+      },
+    });
+    legalEntityId = legalEntity.id;
+    const customer = await prisma.customer.create({
+      data: {
+        customerNumber: marker,
+        name: `${marker} customer`,
+        customerType: CustomerType.RETAIL,
+        creditStatus: CreditStatus.ACTIVE,
+        requiresBilling: true,
+        fiscalName: 'RECEPTOR DE PRUEBA',
+        taxId: `R${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+        fiscalPostalCode: '64000',
+        fiscalRegime: '601',
+        fiscalUseCode: 'G03',
+        billingEmail: `${marker}-billing@example.test`,
+      },
+    });
+    customerId = customer.id;
+    repository = new CreditAdjustmentRepository(
+      prisma as unknown as PrismaService,
+    );
+  });
+
+  afterAll(async () => {
+    await prisma?.$disconnect();
+  });
+
+  async function createOriginalInvoice() {
+    invoiceSequence += 1;
+    const uuid = randomUUID().toUpperCase();
+    const invoice = await prisma.invoice.create({
+      data: {
+        legalEntityId,
+        currencyCode: 'MXN',
+        exchangeRate: new Prisma.Decimal(1),
+        series: `I${marker.slice(-5)}`,
+        folio: String(invoiceSequence),
+        uuid,
+        origin: InvoiceOrigin.NATIVE_CFDI,
+        cfdiVersion: '4.0',
+        cfdiType: CfdiDocumentType.INCOME,
+        issuedAt: new Date('2026-08-24T12:00:00.000Z'),
+        stampedAt: new Date('2026-08-24T12:00:00.000Z'),
+        issuerSnapshot: {
+          legalEntityId,
+          legalName: 'CFDI CREDIT NOTE TEST SA DE CV',
+          taxId: 'EKU9003173C9',
+          fiscalPostalCode: '64000',
+          fiscalRegime: '601',
+          series: `E${marker.slice(-6)}`,
+          certificateSerialNumber: '30001000000500003416',
+          certificateFingerprint: 'a'.repeat(64),
+        },
+        receiverSnapshot: {
+          customerId,
+          fiscalName: 'RECEPTOR DE PRUEBA',
+          taxId: 'URE180429TM6',
+          fiscalPostalCode: '64000',
+          fiscalRegime: '601',
+          billingEmail: `${marker}-billing@example.test`,
+        },
+        fiscalStatus: InvoiceFiscalStatus.STAMPED,
+        cancellationStatus: FiscalCancellationStatus.NOT_REQUESTED,
+        subtotal: new Prisma.Decimal(100),
+        discount: new Prisma.Decimal(0),
+        tax: new Prisma.Decimal(16),
+        total: new Prisma.Decimal(116),
+        createdByUserId: actor.id,
+        concepts: {
+          create: {
+            lineNumber: 1,
+            productServiceCode: '10101504',
+            identificationNumber: `${marker}-${invoiceSequence}`,
+            description: 'PRODUCTO DE PRUEBA',
+            quantity: new Prisma.Decimal(2),
+            unitCode: 'H87',
+            unitValue: new Prisma.Decimal(50),
+            amount: new Prisma.Decimal(100),
+            discount: new Prisma.Decimal(0),
+            taxObjectCode: '02',
+            taxCode: '002',
+            factorType: 'Tasa',
+            rateOrQuota: new Prisma.Decimal('0.16'),
+            taxBase: new Prisma.Decimal(100),
+            taxAmount: new Prisma.Decimal(16),
+            total: new Prisma.Decimal(116),
+            taxesSnapshot: [
+              {
+                taxCode: '002',
+                factorType: 'Tasa',
+                rateOrQuota: '0.160000',
+                base: '100.00',
+                amount: '16.00',
+              },
+            ],
+            snapshotHash: 'b'.repeat(64),
+          },
+        },
+      },
+      include: { concepts: true },
+    });
+    return { invoice, concept: invoice.concepts[0] };
+  }
+
+  async function createAdjustment(
+    invoiceId: string,
+    conceptId: string,
+    creditTotal: string,
+    key: string,
+  ) {
+    return repository.create(
+      {
+        sourceType: 'BONUS',
+        internalReason: 'Bonificación comercial autorizable',
+        paymentFormCode: '03',
+        applications: [
+          {
+            invoiceId,
+            lines: [{ invoiceConceptId: conceptId, creditTotal }],
+          },
+        ],
+      },
+      actor,
+      key,
+    );
+  }
+
+  it('allows only one concurrent authorization when two drafts would over-credit', async () => {
+    const { invoice, concept } = await createOriginalInvoice();
+    const first = await createAdjustment(
+      invoice.id,
+      concept.id,
+      '80.00',
+      `${marker}:create-over-a`,
+    );
+    const second = await createAdjustment(
+      invoice.id,
+      concept.id,
+      '80.00',
+      `${marker}:create-over-b`,
+    );
+    const inventoryBefore = await prisma.inventoryMovement.count();
+
+    const results = await Promise.allSettled([
+      repository.approve(first.id, { expectedVersion: 1 }, actor),
+      repository.approve(second.id, { expectedVersion: 1 }, actor),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'rejected'),
+    ).toHaveLength(1);
+    await expect(
+      prisma.creditAdjustment.count({
+        where: {
+          id: { in: [first.id, second.id] },
+          status: CreditAdjustmentStatus.APPROVED,
+        },
+      }),
+    ).resolves.toBe(1);
+    await expect(prisma.inventoryMovement.count()).resolves.toBe(
+      inventoryBefore,
+    );
+  });
+
+  it('dispatches at most one STAMP for two concurrent issuance keys and replays the winner', async () => {
+    const { invoice, concept } = await createOriginalInvoice();
+    const draft = await createAdjustment(
+      invoice.id,
+      concept.id,
+      '58.00',
+      `${marker}:create-issue`,
+    );
+    const approved = await repository.approve(
+      draft.id,
+      { expectedVersion: 1 },
+      actor,
+    );
+    const fallback = new FakeFiscalProvider();
+    const provider = new FakeFiscalProvider({
+      stamp: async (command) => {
+        await new Promise((resolve) => setTimeout(resolve, 75));
+        return fallback.stamp(command);
+      },
+    });
+    const service = new CreditAdjustmentService(repository, provider);
+    const inventoryBefore = await prisma.inventoryMovement.count();
+
+    const results = await Promise.allSettled([
+      service.issue(
+        approved.id,
+        { expectedVersion: approved.version },
+        actor,
+        `${marker}:issue-a`,
+      ),
+      service.issue(
+        approved.id,
+        { expectedVersion: approved.version },
+        actor,
+        `${marker}:issue-b`,
+      ),
+    ]);
+
+    expect(
+      provider.calls.filter((call) => call.operation === 'stamp'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'rejected'),
+    ).toHaveLength(1);
+    const expense = await prisma.invoice.findUniqueOrThrow({
+      where: { sourceCreditAdjustmentId: approved.id },
+    });
+    expect(expense.cfdiType).toBe(CfdiDocumentType.EXPENSE);
+    expect(expense.fiscalStatus).toBe(InvoiceFiscalStatus.STAMPED);
+    expect(expense.total.toFixed(2)).toBe('58.00');
+    const winningKey = expense.fiscalIdempotencyKey!;
+    await expect(
+      service.issue(
+        approved.id,
+        { expectedVersion: approved.version },
+        actor,
+        winningKey,
+      ),
+    ).resolves.toMatchObject({ replayed: true, adjustmentStatus: 'ISSUED' });
+    expect(
+      provider.calls.filter((call) => call.operation === 'stamp'),
+    ).toHaveLength(1);
+    await expect(prisma.inventoryMovement.count()).resolves.toBe(
+      inventoryBefore,
+    );
+  });
+
+  it('rejects a credit operation for a fiscally cancelled original invoice', async () => {
+    const { invoice, concept } = await createOriginalInvoice();
+    const draft = await createAdjustment(
+      invoice.id,
+      concept.id,
+      '58.00',
+      `${marker}:cancelled-original`,
+    );
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: 'CANCELLED',
+        cancellationStatus: FiscalCancellationStatus.ACCEPTED,
+      },
+    });
+
+    await expect(
+      repository.approve(draft.id, { expectedVersion: 1 }, actor),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: 'CREDIT_NOTE_ORIGINAL_INVOICE_CANCELLED',
+      }),
+    });
+  });
+});

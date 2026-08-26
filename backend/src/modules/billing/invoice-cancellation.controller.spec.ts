@@ -27,10 +27,33 @@ describe('InvoiceCancellationController', () => {
     await expect(
       controller.cancel(
         'invoice-1',
-        { expectedVersion: 1, reason: 'Correction' },
+        {
+          expectedVersion: 1,
+          cancellationMotiveCode: '02',
+          internalReason: 'Correction',
+        },
         {} as never,
         undefined,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('forwards only the validated fiscal cancellation command', async () => {
+    const body = {
+      expectedVersion: 1,
+      cancellationMotiveCode: '01' as const,
+      internalReason: 'Replace incorrect CFDI',
+      replacementInvoiceId: 'invoice-2',
+    };
+    const actor = { id: 'billing-1', role: 'BILLING' } as never;
+
+    await controller.cancel('invoice-1', body, actor, ' cancel-key ');
+
+    expect(service.cancel).toHaveBeenCalledWith(
+      'invoice-1',
+      body,
+      actor,
+      'cancel-key',
+    );
   });
 });

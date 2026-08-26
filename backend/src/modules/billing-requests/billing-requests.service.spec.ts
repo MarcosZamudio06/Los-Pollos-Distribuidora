@@ -202,17 +202,186 @@ describe('BillingRequestsService', () => {
     expect(prisma.billingRequest.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
+          nativeInvoice: expect.objectContaining({
+            select: expect.objectContaining({
+              id: true,
+              fiscalStatus: true,
+              fiscalArtifacts: expect.anything(),
+            }),
+          }),
           documents: expect.objectContaining({
             include: expect.objectContaining({
               saleDocument: expect.objectContaining({
                 include: expect.objectContaining({
-                  sale: expect.objectContaining({ include: { items: true } }),
+                  sale: expect.objectContaining({
+                    include: expect.objectContaining({
+                      legalEntity: expect.anything(),
+                      items: expect.objectContaining({
+                        include: expect.objectContaining({
+                          product: expect.anything(),
+                        }),
+                      }),
+                    }),
+                  }),
                 }),
               }),
             }),
           }),
         }),
       }),
+    );
+  });
+
+  it('exposes an authoritative fiscal review with Decimal totals and SAT concept fields', async () => {
+    const { prisma } = createPrisma();
+    const service = new BillingRequestsService(
+      prisma as unknown as PrismaService,
+    );
+    prisma.billingRequest.findFirst.mockResolvedValue(
+      request({
+        status: BillingRequestStatus.APPROVED,
+        customer: {
+          id: 'customer-1',
+          name: 'Cliente Uno',
+          fiscalName: 'Cliente Uno SA de CV',
+          taxId: 'CLI010101AB1',
+          fiscalPostalCode: '64000',
+          fiscalRegime: '601',
+          fiscalUseCode: 'G03',
+          billingEmail: 'billing@example.test',
+        },
+        documents: [
+          {
+            id: 'request-document-1',
+            requestedItems: [
+              {
+                id: 'request-item-1',
+                saleItemId: 'sale-item-1',
+                requestedSubtotal: new Prisma.Decimal('100.00'),
+                requestedTax: new Prisma.Decimal('16.00'),
+                requestedTotal: new Prisma.Decimal('116.00'),
+                saleItem: {
+                  id: 'sale-item-1',
+                  productId: 'product-1',
+                  productNameSnapshot: 'Pollo entero',
+                  productSkuSnapshot: 'POL-001',
+                  quantitySnapshot: new Prisma.Decimal('10.000'),
+                  unit: 'KG',
+                  unitPriceSnapshot: new Prisma.Decimal('10.00'),
+                  taxableBase: new Prisma.Decimal('100.00'),
+                  discount: new Prisma.Decimal('0.00'),
+                  product: {
+                    id: 'product-1',
+                    satProductServiceCode: '50111500',
+                    satUnitCode: 'KGM',
+                    taxObjectCode: '02',
+                    defaultTaxCode: '002',
+                    defaultFactorType: 'Tasa',
+                    defaultRateOrQuota: new Prisma.Decimal('0.160000'),
+                  },
+                },
+              },
+            ],
+            saleDocument: {
+              sale: {
+                id: 'sale-1',
+                currencyCode: 'MXN',
+                legalEntity: {
+                  id: 'legal-1',
+                  legalName: 'Distribuidora Fiscal SA de CV',
+                  taxId: 'DIS010101AB1',
+                  fiscalPostalCode: '64000',
+                  fiscalRegime: '601',
+                  cfdiEnabled: true,
+                  isActive: true,
+                  defaultSeries: 'A',
+                  certificateSerialNumber: '30001000000500003416',
+                  certificateFingerprint: 'a'.repeat(64),
+                  certificateValidFrom: new Date('2026-01-01T00:00:00.000Z'),
+                  certificateValidTo: new Date('2027-01-01T00:00:00.000Z'),
+                },
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = await service.findOne('request-1', admin);
+
+    expect(result.cfdiReview).toMatchObject({
+      currencyCode: 'MXN',
+      totals: {
+        subtotal: '100.00',
+        discount: '0.00',
+        taxableBase: '100.00',
+        tax: '16.00',
+        total: '116.00',
+      },
+      profile: { complete: true },
+    });
+    expect(result.cfdiReview?.concepts[0]).toEqual(
+      expect.objectContaining({
+        productServiceCode: '50111500',
+        unitCode: 'KGM',
+        taxObjectCode: '02',
+        taxCode: '002',
+        factorType: 'Tasa',
+        rateOrQuota: '0.160000',
+      }),
+    );
+  });
+
+  it('does not expose fiscal snapshots to non-fiscal billing-request roles', async () => {
+    const { prisma } = createPrisma();
+    const service = new BillingRequestsService(
+      prisma as unknown as PrismaService,
+    );
+    prisma.billingRequest.findFirst.mockResolvedValue(
+      request({
+        customer: {
+          id: 'customer-1',
+          name: 'Cliente Uno',
+          fiscalName: 'Cliente Uno SA de CV',
+          taxId: 'CLI010101AB1',
+          fiscalPostalCode: '64000',
+          fiscalRegime: '601',
+          fiscalUseCode: 'G03',
+          billingEmail: 'billing@example.test',
+          requiresBilling: true,
+        },
+        nativeInvoice: {
+          id: 'invoice-1',
+          uuid: 'A8098C1A-F86E-11DA-BD1A-00112444BE1E',
+          fiscalStatus: 'STAMPED',
+        },
+        documents: [
+          {
+            requestedItems: [
+              { saleItem: { id: 'sale-item-1', product: { id: 'product-1' } } },
+            ],
+            saleDocument: {
+              sale: {
+                legalEntity: { id: 'legal-1', taxId: 'DIS010101AB1' },
+                items: [{ id: 'sale-item-1', product: { id: 'product-1' } }],
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = await service.findOne('request-1', seller);
+
+    expect(result).not.toHaveProperty('nativeInvoice');
+    expect(result).not.toHaveProperty('cfdiReview');
+    expect(result.customer).not.toHaveProperty('taxId');
+    expect(result.customer).not.toHaveProperty('fiscalName');
+    expect(result.documents?.[0].saleDocument.sale).not.toHaveProperty(
+      'legalEntity',
+    );
+    expect(result.documents?.[0].requestedItems[0].saleItem).not.toHaveProperty(
+      'product',
     );
   });
 

@@ -3,8 +3,19 @@ import type {
   OperationalUnit,
   Product,
   ProductFormValues,
+  ProductFactorType,
+  ProductTaxCode,
+  ProductTaxObjectCode,
   ProductPresentation,
 } from "./types";
+import {
+  isValidSatProductFactorType,
+  isValidSatProductServiceCode,
+  isValidSatProductTaxCode,
+  isValidSatProductTaxObjectCode,
+  isValidSatUnitCode,
+  normalizeProductFactorType,
+} from "../../../../shared/product-fiscal-catalog";
 
 export type ProductFormDraft = Omit<
   ProductFormValues,
@@ -15,6 +26,12 @@ export type ProductFormDraft = Omit<
   | "unit"
   | "pieceWeightEquivalent"
   | "equivalentPolicyStatus"
+  | "satProductServiceCode"
+  | "satUnitCode"
+  | "taxObjectCode"
+  | "defaultTaxCode"
+  | "defaultFactorType"
+  | "defaultRateOrQuota"
 > & {
   presentationType: ProductPresentation | "";
   salePrice: string;
@@ -23,6 +40,12 @@ export type ProductFormDraft = Omit<
   unit: OperationalUnit | "";
   pieceWeightEquivalent: string;
   equivalentPolicyStatus: EquivalentPolicyStatus | "";
+  satProductServiceCode: string;
+  satUnitCode: string;
+  taxObjectCode: ProductTaxObjectCode | "";
+  defaultTaxCode: ProductTaxCode | "";
+  defaultFactorType: ProductFactorType | "";
+  defaultRateOrQuota: string;
 };
 
 export type ProductFormField =
@@ -36,7 +59,13 @@ export type ProductFormField =
   | "minStock"
   | "unit"
   | "pieceWeightEquivalent"
-  | "equivalentPolicyStatus";
+  | "equivalentPolicyStatus"
+  | "satProductServiceCode"
+  | "satUnitCode"
+  | "taxObjectCode"
+  | "defaultTaxCode"
+  | "defaultFactorType"
+  | "defaultRateOrQuota";
 
 export type ProductFormErrors = Partial<Record<ProductFormField, string>>;
 
@@ -148,6 +177,15 @@ function numericDraftValue(
   return value == null ? "" : normalizeDecimalInput(String(value), maxDecimals);
 }
 
+function fiscalCodeDraftValue(value?: string | null) {
+  return value?.trim().toUpperCase() ?? "";
+}
+
+function factorTypeDraftValue(value?: ProductFactorType | null) {
+  if (!value) return "";
+  return normalizeProductFactorType(value);
+}
+
 export function toProductFormDraft(product?: Product | null): ProductFormDraft {
   return {
     name: collapseSpaces(product?.name ?? ""),
@@ -169,6 +207,14 @@ export function toProductFormDraft(product?: Product | null): ProductFormDraft {
       3,
     ),
     equivalentPolicyStatus: equivalentPolicyStatus(product),
+    satProductServiceCode: fiscalCodeDraftValue(product?.satProductServiceCode),
+    satUnitCode: fiscalCodeDraftValue(product?.satUnitCode),
+    taxObjectCode: fiscalCodeDraftValue(product?.taxObjectCode) as
+      ProductTaxObjectCode | "",
+    defaultTaxCode: fiscalCodeDraftValue(product?.defaultTaxCode) as
+      ProductTaxCode | "",
+    defaultFactorType: factorTypeDraftValue(product?.defaultFactorType),
+    defaultRateOrQuota: numericDraftValue(product?.defaultRateOrQuota, 6),
   };
 }
 
@@ -188,13 +234,20 @@ export function toProductFormValues(
     unit: draft.unit || "KG",
     pieceWeightEquivalent: parseDecimalValue(draft.pieceWeightEquivalent, 3),
     equivalentPolicyStatus: draft.equivalentPolicyStatus || "DRAFT",
+    satProductServiceCode: draft.satProductServiceCode.trim() || null,
+    satUnitCode: draft.satUnitCode.trim().toUpperCase() || null,
+    taxObjectCode: draft.taxObjectCode || null,
+    defaultTaxCode: draft.defaultTaxCode || null,
+    defaultFactorType: draft.defaultFactorType || null,
+    defaultRateOrQuota: parseDecimalValue(draft.defaultRateOrQuota, 6),
   };
 }
 
 function hasValidDecimalPrecision(value: string, maxDecimals: number) {
-  const normalized = normalizeDecimalInput(value, maxDecimals);
-  if (!normalized) return false;
-  const [, fraction = ""] = normalized.split(".");
+  const cleaned = value.replace(/[^\d.,-]/g, "").replace(/,/g, "");
+  if (!cleaned) return false;
+  const [, ...fractionalParts] = cleaned.split(".");
+  const fraction = fractionalParts.join("").replace(/\D/g, "");
   return fraction.length <= maxDecimals;
 }
 
@@ -280,6 +333,39 @@ export function validateProductField(
         EQUIVALENT_POLICY_STATUSES.has(draft.equivalentPolicyStatus)
         ? null
         : "Selecciona una política de equivalencia válida.";
+    case "satProductServiceCode":
+      if (!draft.satProductServiceCode) return null;
+      return isValidSatProductServiceCode(draft.satProductServiceCode)
+        ? null
+        : "La ClaveProdServ debe contener exactamente ocho dígitos.";
+    case "satUnitCode":
+      if (!draft.satUnitCode) return null;
+      return isValidSatUnitCode(draft.satUnitCode)
+        ? null
+        : "La ClaveUnidad debe contener dos o tres caracteres SAT.";
+    case "taxObjectCode":
+      if (!draft.taxObjectCode) return null;
+      return isValidSatProductTaxObjectCode(draft.taxObjectCode)
+        ? null
+        : "Selecciona un ObjetoImp válido del catálogo SAT.";
+    case "defaultTaxCode":
+      if (!draft.defaultTaxCode) return null;
+      return isValidSatProductTaxCode(draft.defaultTaxCode)
+        ? null
+        : "Selecciona un impuesto SAT válido.";
+    case "defaultFactorType":
+      if (!draft.defaultFactorType) return null;
+      return isValidSatProductFactorType(draft.defaultFactorType)
+        ? null
+        : "Selecciona un TipoFactor válido del catálogo SAT.";
+    case "defaultRateOrQuota": {
+      if (!draft.defaultRateOrQuota) return null;
+      const value = parseDecimalValue(draft.defaultRateOrQuota, 6);
+      if (value === null) return "La tasa o cuota debe ser numérica.";
+      if (!hasValidDecimalPrecision(draft.defaultRateOrQuota, 6))
+        return "La tasa o cuota permite hasta 6 decimales.";
+      return value >= 0 ? null : "La tasa o cuota no puede ser negativa.";
+    }
     default:
       return null;
   }
@@ -298,6 +384,12 @@ export function validateProductForm(draft: ProductFormDraft) {
     "unit",
     "pieceWeightEquivalent",
     "equivalentPolicyStatus",
+    "satProductServiceCode",
+    "satUnitCode",
+    "taxObjectCode",
+    "defaultTaxCode",
+    "defaultFactorType",
+    "defaultRateOrQuota",
   ];
 
   return fields.reduce<ProductFormErrors>((accumulator, field) => {

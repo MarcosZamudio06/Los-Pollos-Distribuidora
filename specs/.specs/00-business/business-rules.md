@@ -257,6 +257,12 @@
 - Una factura registrada por el ERP debe haber sido emitida externamente; el sistema no emite, timbra ni cancela CFDI ante SAT.
 - `SaleDocument` es la unidad facturable y `SaleItem` la unidad de detalle; `BillingRequest`, `Invoice`, `Sale` y `Payment` son conceptos separados.
 - `LegalEntity` es el emisor fiscal y no equivale a una ubicación operativa.
+- `LegalEntity` conserva la configuración fiscal activa del emisor: lugar de
+  expedición, régimen SAT, serie y metadata no secreta de certificado; los
+  secretos CSD/PAC viven fuera de la entidad.
+- Una venta que solicita factura debe resolver exactamente un mapeo vigente
+  `OperationalLocation -> LegalEntity` activo, habilitado y completo antes de
+  confirmarse; si no, la operación se rechaza sin mutar inventario.
 - Toda agrupación debe compartir cliente, perfil fiscal, moneda, entidad emisora y condiciones compatibles.
 - La política inicial permite `SIMPLE_NOTE` y `LARGE_NOTE`; `INTERNAL_RECEIPT` requiere habilitación explícita y `SCALE_TICKET` no es facturable por sí solo.
 - La fecha límite se deriva de la política y zona horaria operativa; una excepción vencida requiere `ADMIN`, motivo y auditoría.
@@ -272,3 +278,48 @@
 - `WAREHOUSE` y `DRIVER` no acceden al módulo ni a datos fiscales sensibles.
 
 El contrato completo está en `specs/modules/billing-reportable-notes/spec.md`.
+
+## 10. CFDI 4.0 nativo post-MVP
+
+- `BillingRequest.APPROVED` es el único estado que permite solicitar emisión
+  nativa; aprobar no realiza llamadas al PAC.
+- `Invoice` se persiste como raíz nativa con snapshot completo antes del I/O,
+  pero no representa un CFDI emitido hasta `fiscalStatus=STAMPED`. El trabajo
+  pendiente, fallido o ambiguo se separa en estado fiscal e intentos.
+- UUID, TFD, sellos, datos SAT, identificadores del proveedor y artefactos son
+  resultados exclusivos del backend/proveedor; nunca se aceptan desde el
+  frontend.
+- El snapshot fiscal de emisor, receptor, conceptos, impuestos y totales es
+  inmutable y se persiste antes de llamar al proveedor.
+- Solo puede existir una `Invoice` nativa por `BillingRequest`; correlación e
+  idempotencia son únicas por intento. `UNKNOWN` bloquea reenvíos hasta
+  reconciliar con el proveedor.
+- La primera integración usa Facturama mediante `FiscalProviderPort`; Finkok
+  debe poder agregarse sin cambiar el dominio ni la API pública.
+- PostgreSQL gobierna idempotencia, bloqueos, leases, estados y reconciliación.
+  No se agregan Redis, Kafka ni un microservicio fiscal.
+- XML, PDF y acuses se almacenan de forma privada mediante ObjectStorage con
+  checksum; una falla de almacenamiento no autoriza repetir la emisión.
+- Ninguna operación fiscal crea ni modifica `Sale`, `SaleItem`, `Payment`,
+  `AccountReceivable`, `InventoryBalance` o `InventoryMovement`.
+- El primer documento habilitado es Ingreso y su cancelación confirmada. La
+  arquitectura REP 2.0 queda aprobada en CFDI-16, pero su emisión continúa
+  deshabilitada hasta una tarea de implementación. Egreso, Traslado/Carta
+  Porte, nómina y comercio exterior quedan fuera hasta aprobación explícita.
+- `PaymentAllocation` continúa fuera del modelo. `Payment` es la fuente
+  económica; `PaymentReceiptDetail` y `PaymentInvoiceApplication` solo
+  fotografían su aplicación fiscal contra una o varias facturas PPD.
+- No se asume `Payment -> Sale -> un UUID`: una venta/documento puede estar
+  facturado por varias `Invoice`. El REP distribuye el pago de forma
+  determinista sobre facturas PPD elegibles mediante las aplicaciones vigentes.
+- Solo `Payment.status=APPLIED` habilita REP. Cobranza de ruta, pago parcial y
+  segunda vuelta reutilizan el mismo `Payment`; no crean dinero ni un recibo
+  fiscal alterno.
+- Los saldos económicos siguen en `AccountReceivable`; `NumParcialidad`,
+  `ImpSaldoAnt`, `ImpPagado` e `ImpSaldoInsoluto` se calculan desde la factura
+  PPD y sus aplicaciones REP, no desde el saldo global de la venta.
+- Solicitar cancelación de REP no libera su aplicación. Solo la cancelación
+  fiscal confirmada la revierte; un pago o CFDI de Ingreso con REP vigente no
+  puede cancelarse económicamente antes de resolver el REP.
+
+Ver `specs/modules/cfdi/spec.md`.

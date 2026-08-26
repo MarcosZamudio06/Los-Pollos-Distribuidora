@@ -15,6 +15,9 @@ permissions:
 
 env:
   NODE_VERSION: 24.14.1
+  # Normal CI is deterministic and must never contact a PAC.
+  CFDI_ENABLED: "false"
+  FISCAL_PROVIDER: NONE
 
 jobs:
   quality:
@@ -89,7 +92,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_e2e
       E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_e2e
-      E2E_DATABASE_DISPOSABLE: 'true'
+      E2E_DATABASE_DISPOSABLE: "true"
       JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
       JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
       OPENSSL_CONF: /dev/null
@@ -198,6 +201,12 @@ jobs:
 
       - name: Audit production dependencies
         run: npm run audit:dependencies
+
+      - name: Test fiscal asset policy
+        run: node --test scripts/validate-fiscal-assets.test.mjs
+
+      - name: Reject versioned fiscal secrets and production XML
+        run: git ls-files -z | node scripts/validate-fiscal-assets.mjs --files-from-stdin
 
       - name: Scan committed history for secrets
         uses: gitleaks/gitleaks-action@v3

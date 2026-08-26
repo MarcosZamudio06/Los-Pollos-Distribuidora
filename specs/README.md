@@ -48,7 +48,9 @@ Los documentos globales, históricos o auxiliares solo deben abrirse si la TASK 
 modules/
   accounts-receivable/
   auth/
+  billing-reportable-notes/
   billing-requests/
+  cfdi/
   branch-supply-cycles/
   clientes/
   compras/

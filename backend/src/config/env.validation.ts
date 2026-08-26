@@ -1,4 +1,5 @@
 import { DEFAULT_DATABASE_URL } from './database.config';
+import { assertAllowlistedFacturamaBaseUrl } from './fiscal-provider-url';
 
 type EnvironmentVariables = Record<string, string | undefined>;
 
@@ -11,6 +12,23 @@ const KNOWN_INSECURE_SECRETS = new Set([
 const MAXIMUM_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 const MAXIMUM_ROUTING_TIMEOUT_MS = 120_000;
 const MAXIMUM_HEALTH_DEPENDENCY_TIMEOUT_MS = 5_000;
+const MINIMUM_CFDI_REQUEST_TIMEOUT_MS = 100;
+const MAXIMUM_CFDI_REQUEST_TIMEOUT_MS = 120_000;
+const MAXIMUM_CFDI_RETRIES = 10;
+
+const FISCAL_PROVIDERS = ['NONE', 'FACTURAMA'] as const;
+const FISCAL_PROVIDER_ENVIRONMENTS = ['SANDBOX', 'PRODUCTION'] as const;
+const FACTURAMA_API_MODES = ['MULTI_ISSUER'] as const;
+const RAW_FISCAL_SECRET_KEYS = [
+  'FACTURAMA_USERNAME',
+  'FACTURAMA_PASSWORD',
+  'FACTURAMA_API_KEY',
+  'FACTURAMA_TOKEN',
+  'FACTURAMA_CREDENTIALS',
+  'CFDI_CSD_KEY',
+  'CFDI_CSD_PASSWORD',
+  'CFDI_CSD_CERTIFICATE',
+] as const;
 
 function parseBoolean(
   env: EnvironmentVariables,
@@ -39,6 +57,49 @@ function parseInteger(
     );
   }
   return parsed;
+}
+
+function parseEnum<T extends readonly string[]>(
+  env: EnvironmentVariables,
+  key: string,
+  defaultValue: T[number],
+  allowed: T,
+): T[number] {
+  const value = env[key]?.trim().toUpperCase() || defaultValue;
+  if (!allowed.includes(value)) {
+    throw new Error(`${key} must be one of ${allowed.join(', ')}`);
+  }
+  return value;
+}
+
+function parseOpaqueReference(
+  env: EnvironmentVariables,
+  key: string,
+): string | undefined {
+  const value = env[key]?.trim();
+  if (!value) return undefined;
+
+  if (
+    value.length > 256 ||
+    [...value].some(
+      (character) =>
+        character.charCodeAt(0) <= 0x20 || character.charCodeAt(0) === 0x7f,
+    )
+  ) {
+    throw new Error(`${key} must be an opaque secret-manager reference`);
+  }
+
+  return value;
+}
+
+function rejectRawFiscalSecrets(env: EnvironmentVariables): void {
+  for (const key of RAW_FISCAL_SECRET_KEYS) {
+    if (env[key]?.trim()) {
+      throw new Error(
+        `${key} must not be configured; use FACTURAMA_CREDENTIAL_REF with a secret manager or Docker secret`,
+      );
+    }
+  }
 }
 
 function parseCorsOrigins(value: string | undefined): string[] {
@@ -231,6 +292,41 @@ export function validateEnvironment(env: EnvironmentVariables) {
     'OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS',
     300,
   );
+  const cfdiEnabled = parseBoolean(env, 'CFDI_ENABLED', false);
+  const fiscalProvider = parseEnum(
+    env,
+    'FISCAL_PROVIDER',
+    'NONE',
+    FISCAL_PROVIDERS,
+  );
+  const fiscalProviderEnvironment = parseEnum(
+    env,
+    'FISCAL_PROVIDER_ENVIRONMENT',
+    'SANDBOX',
+    FISCAL_PROVIDER_ENVIRONMENTS,
+  );
+  const cfdiRequestTimeoutMs = parseInteger(
+    env,
+    'CFDI_REQUEST_TIMEOUT_MS',
+    30_000,
+  );
+  const cfdiMaxRetries = parseInteger(env, 'CFDI_MAX_RETRIES', 3, true);
+  const facturamaApiBaseUrl = parseOptionalHttpUrl(
+    env,
+    'FACTURAMA_API_BASE_URL',
+  );
+  const facturamaApiMode = parseEnum(
+    env,
+    'FACTURAMA_API_MODE',
+    'MULTI_ISSUER',
+    FACTURAMA_API_MODES,
+  );
+  const facturamaCredentialRef = parseOpaqueReference(
+    env,
+    'FACTURAMA_CREDENTIAL_REF',
+  );
+
+  rejectRawFiscalSecrets(env);
 
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
@@ -250,6 +346,50 @@ export function validateEnvironment(env: EnvironmentVariables) {
     throw new Error(
       `HEALTH_DEPENDENCY_TIMEOUT_MS cannot exceed ${MAXIMUM_HEALTH_DEPENDENCY_TIMEOUT_MS} milliseconds`,
     );
+  }
+  if (
+    cfdiRequestTimeoutMs < MINIMUM_CFDI_REQUEST_TIMEOUT_MS ||
+    cfdiRequestTimeoutMs > MAXIMUM_CFDI_REQUEST_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `CFDI_REQUEST_TIMEOUT_MS must be between ${MINIMUM_CFDI_REQUEST_TIMEOUT_MS} and ${MAXIMUM_CFDI_REQUEST_TIMEOUT_MS} milliseconds`,
+    );
+  }
+  if (cfdiMaxRetries > MAXIMUM_CFDI_RETRIES) {
+    throw new Error(`CFDI_MAX_RETRIES cannot exceed ${MAXIMUM_CFDI_RETRIES}`);
+  }
+  if (facturamaApiBaseUrl) {
+    assertAllowlistedFacturamaBaseUrl(
+      facturamaApiBaseUrl,
+      fiscalProviderEnvironment,
+    );
+  }
+  if (cfdiEnabled) {
+    if (fiscalProvider === 'NONE') {
+      throw new Error(
+        'FISCAL_PROVIDER must be configured when CFDI_ENABLED=true',
+      );
+    }
+    if (!env.FISCAL_PROVIDER?.trim()) {
+      throw new Error('FISCAL_PROVIDER is required when CFDI_ENABLED=true');
+    }
+    if (!env.FISCAL_PROVIDER_ENVIRONMENT?.trim()) {
+      throw new Error(
+        'FISCAL_PROVIDER_ENVIRONMENT is required when CFDI_ENABLED=true',
+      );
+    }
+    if (fiscalProvider === 'FACTURAMA') {
+      if (!facturamaApiBaseUrl) {
+        throw new Error(
+          'FACTURAMA_API_BASE_URL is required when CFDI_ENABLED=true and FISCAL_PROVIDER=FACTURAMA',
+        );
+      }
+      if (!facturamaCredentialRef) {
+        throw new Error(
+          'FACTURAMA_CREDENTIAL_REF is required when CFDI_ENABLED=true and FISCAL_PROVIDER=FACTURAMA',
+        );
+      }
+    }
   }
   if (mapDataPreparedAt && Number.isNaN(Date.parse(mapDataPreparedAt))) {
     throw new Error('MAP_DATA_PREPARED_AT must be a valid ISO date');
@@ -362,6 +502,14 @@ export function validateEnvironment(env: EnvironmentVariables) {
     CORS_ORIGINS: corsOrigins,
     DATABASE_SSL: databaseSsl,
     DATABASE_URL: env.DATABASE_URL?.trim() || DEFAULT_DATABASE_URL,
+    CFDI_ENABLED: cfdiEnabled,
+    CFDI_REQUEST_TIMEOUT_MS: cfdiRequestTimeoutMs,
+    CFDI_MAX_RETRIES: cfdiMaxRetries,
+    FISCAL_PROVIDER: fiscalProvider,
+    FISCAL_PROVIDER_ENVIRONMENT: fiscalProviderEnvironment,
+    FACTURAMA_API_BASE_URL: facturamaApiBaseUrl,
+    FACTURAMA_API_MODE: facturamaApiMode,
+    FACTURAMA_CREDENTIAL_REF: facturamaCredentialRef,
     JWT_ACCESS_SECRET: jwtAccessSecret,
     JWT_REFRESH_SECRET: jwtRefreshSecret,
     NODE_ENV: nodeEnv,

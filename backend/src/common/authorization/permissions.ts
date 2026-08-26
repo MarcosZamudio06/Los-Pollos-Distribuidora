@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   DAILY_CLOSES_DIFFERENCES_AUTHORIZE: 'daily_closes.differences.authorize',
   DAILY_CLOSES_REOPEN: 'daily_closes.reopen',
   FISCAL_INFORMATION_EXPORT: 'fiscal_information.export',
+  CFDI_PROVIDER_MANAGE: 'cfdi.provider.manage',
   FLEET_VIEW: 'fleet.view',
   FLEET_MANAGE: 'fleet.manage',
   FLEET_POSITION_PUBLISH: 'fleet.position.publish',
@@ -133,6 +134,10 @@ export const PERMISSION_DEFINITIONS = [
     description: 'Export fiscal information.',
   },
   {
+    key: PERMISSIONS.CFDI_PROVIDER_MANAGE,
+    description: 'Manage CFDI issuer and provider configuration.',
+  },
+  {
     key: PERMISSIONS.FLEET_VIEW,
     description: 'View fleet units and their operational assignments.',
   },
@@ -199,6 +204,7 @@ export const PERMISSION_METADATA: Record<
     group: 'Information',
     risk: 'sensitive',
   },
+  [PERMISSIONS.CFDI_PROVIDER_MANAGE]: { group: 'Finance', risk: 'critical' },
   [PERMISSIONS.FLEET_VIEW]: { group: 'Fleet', risk: 'standard' },
   [PERMISSIONS.FLEET_MANAGE]: { group: 'Fleet', risk: 'critical' },
   [PERMISSIONS.FLEET_POSITION_PUBLISH]: { group: 'Fleet', risk: 'sensitive' },
@@ -211,7 +217,10 @@ export const PERMISSION_METADATA: Record<
 
 export const ROLE_PERMISSION_KEYS: Record<string, readonly Permission[]> = {
   ADMIN: PERMISSION_DEFINITIONS.map(({ key }) => key),
-  BILLING: [PERMISSIONS.FISCAL_INFORMATION_EXPORT],
+  BILLING: [
+    PERMISSIONS.FISCAL_INFORMATION_EXPORT,
+    PERMISSIONS.CFDI_PROVIDER_MANAGE,
+  ],
   COLLECTIONS: [
     PERMISSIONS.COLLECTIONS_RECEIVE_CASH,
     PERMISSIONS.CASH_SHIFT_OPEN_OWN,

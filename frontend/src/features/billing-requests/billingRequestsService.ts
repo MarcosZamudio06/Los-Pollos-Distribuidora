@@ -4,7 +4,18 @@ import type {
   BillingRequestFilters,
   BillingRequestList,
   BillingRequestMutation,
+  CfdiIssuanceResult,
+  CancelInvoiceInput,
+  FiscalCancellationStatus,
+  FiscalArtifactDownload,
+  IssueCfdiInput,
   InvoiceReconciliationInput,
+  SatCatalog,
+  SatCatalogListItem,
+  SatCatalogKey,
+  CreateCreditAdjustmentInput,
+  CreditAdjustment,
+  CreditNoteIssuanceResult,
 } from "./types";
 
 type Envelope<T> = { data?: T } | T;
@@ -109,6 +120,139 @@ export const billingRequestsService = {
           },
         },
       ),
+    );
+  },
+  async issueCfdi(
+    id: string,
+    input: IssueCfdiInput,
+    token?: string | null,
+    idempotencyKey: string = crypto.randomUUID(),
+  ) {
+    return unwrap(
+      await apiClient.post<Envelope<CfdiIssuanceResult>, IssueCfdiInput>(
+        `/billing/requests/${id}/issue-cfdi`,
+        {
+          body: input,
+          headers: {
+            ...headers(token),
+            "Idempotency-Key": idempotencyKey,
+          },
+        },
+      ),
+    );
+  },
+  async getFiscalArtifact(
+    invoiceId: string,
+    type: "XML" | "PDF",
+    token?: string | null,
+  ) {
+    return unwrap(
+      await apiClient.get<Envelope<FiscalArtifactDownload>>(
+        `/billing/invoices/${invoiceId}/${type.toLowerCase()}`,
+        { headers: headers(token) },
+      ),
+    );
+  },
+  async cancelInvoice(
+    invoiceId: string,
+    input: CancelInvoiceInput,
+    token?: string | null,
+    idempotencyKey: string = crypto.randomUUID(),
+  ) {
+    return unwrap(
+      await apiClient.post<
+        Envelope<FiscalCancellationStatus>,
+        CancelInvoiceInput
+      >(`/billing/invoices/${invoiceId}/cancel`, {
+        body: input,
+        headers: {
+          ...headers(token),
+          "Idempotency-Key": idempotencyKey,
+        },
+      }),
+    );
+  },
+  async getCancellationStatus(invoiceId: string, token?: string | null) {
+    return unwrap(
+      await apiClient.get<Envelope<FiscalCancellationStatus>>(
+        `/billing/invoices/${invoiceId}/cancellation`,
+        { headers: headers(token) },
+      ),
+    );
+  },
+  async listSatCatalogs(token?: string | null) {
+    return unwrap(
+      await apiClient.get<Envelope<SatCatalogListItem[]>>("/cfdi/catalogs", {
+        headers: headers(token),
+      }),
+    );
+  },
+  async getSatCatalog(
+    key: SatCatalogKey,
+    token?: string | null,
+    options: { code?: string; asOf?: string; limit?: number } = {},
+  ) {
+    const params = new URLSearchParams();
+    Object.entries(options).forEach(([name, value]) => {
+      if (value !== undefined && value !== "") params.set(name, String(value));
+    });
+    return unwrap(
+      await apiClient.get<Envelope<SatCatalog>>(
+        `/cfdi/catalogs/${key}${params.size ? `?${params}` : ""}`,
+        { headers: headers(token) },
+      ),
+    );
+  },
+  async createCreditAdjustment(
+    input: CreateCreditAdjustmentInput,
+    token?: string | null,
+    idempotencyKey: string = crypto.randomUUID(),
+  ) {
+    return unwrap(
+      await apiClient.post<
+        Envelope<CreditAdjustment>,
+        CreateCreditAdjustmentInput
+      >("/billing/credit-adjustments", {
+        body: input,
+        headers: {
+          ...headers(token),
+          "Idempotency-Key": idempotencyKey,
+        },
+      }),
+    );
+  },
+  async approveCreditAdjustment(
+    id: string,
+    expectedVersion: number,
+    token?: string | null,
+  ) {
+    return unwrap(
+      await apiClient.post<
+        Envelope<CreditAdjustment>,
+        { expectedVersion: number }
+      >(`/billing/credit-adjustments/${id}/approve`, {
+        body: { expectedVersion },
+        headers: headers(token),
+      }),
+    );
+  },
+  async issueCreditAdjustment(
+    id: string,
+    expectedVersion: number,
+    token?: string | null,
+    idempotencyKey: string = crypto.randomUUID(),
+  ) {
+    return unwrap(
+      await apiClient.post<
+        Envelope<CreditNoteIssuanceResult>,
+        { expectedVersion: number }
+      >(`/billing/credit-adjustments/${id}/issue-cfdi`, {
+        body: { expectedVersion },
+        headers: {
+          ...headers(token),
+          "Idempotency-Key": idempotencyKey,
+        },
+      }),
     );
   },
 };

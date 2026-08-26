@@ -8,6 +8,7 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 
 - Crear y editar productos.
 - Clasificar productos por tipo semántico.
+- Administrar el perfil fiscal opcional del producto para la futura emisión CFDI.
 - Consultar stock por ubicación.
 - Registrar ajustes y mermas.
 - Consultar movimientos.
@@ -51,6 +52,8 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 - Los conflictos de disponibilidad, reserva, idempotencia y concurrencia deben exponer códigos estables en el sobre de error HTTP.
 - `INSUFFICIENT_STOCK`, `INVENTORY_RESERVATION_INTEGRITY_ERROR` e `INVENTORY_CONCURRENCY_CONFLICT` responden `409 Conflict` y no dejan mutaciones parciales.
 - `LOCATION_NOT_AUTHORIZED` responde `403 Forbidden`; `PRODUCT_INACTIVE` y `UNIT_MISMATCH` responden `400 Bad Request`.
+- Los códigos fiscales de producto se normalizan y validan en backend; el frontend no es autoridad y no convierte unidades operativas a claves SAT.
+- Un producto comercial puede permanecer sin perfil fiscal, pero queda elegible para CFDI solo cuando los seis campos están completos y válidos; el código estable de bloqueo es `CFDI_PRODUCT_PROFILE_INCOMPLETE`.
 
 ## Permisos
 

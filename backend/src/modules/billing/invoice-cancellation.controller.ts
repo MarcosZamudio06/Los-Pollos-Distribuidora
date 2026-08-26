@@ -32,7 +32,7 @@ export class InvoiceCancellationController {
       throw new BadRequestException('Idempotency-Key header is required');
     return {
       success: true,
-      message: 'Invoice cancelled successfully',
+      message: 'Invoice cancellation request processed',
       data: await this.service.cancel(id, body, user, idempotencyKey.trim()),
     };
   }

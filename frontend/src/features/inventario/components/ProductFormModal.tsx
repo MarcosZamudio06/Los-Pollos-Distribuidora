@@ -3,12 +3,23 @@ import { X } from "lucide-react";
 import { Input, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useSaveProduct } from "../hooks/useProducts";
-import type { OperationalUnit, Product, ProductFormValues } from "../types";
+import type {
+  OperationalUnit,
+  Product,
+  ProductFactorType,
+  ProductFormValues,
+  ProductTaxCode,
+  ProductTaxObjectCode,
+} from "../types";
+import {
+  SAT_PRODUCT_FACTOR_TYPES,
+  SAT_PRODUCT_TAX_CODES,
+  SAT_PRODUCT_TAX_OBJECT_CODES,
+} from "../../../../../shared/product-fiscal-catalog";
 import {
   cleanSku,
   collapseSpaces,
   firstProductFormErrorField,
-  formatCurrencyDisplay,
   formatDecimalDisplay,
   hasProductFormErrors,
   normalizeCurrencyInput,
@@ -56,8 +67,39 @@ const equivalentPolicyOptions: Array<{
   { value: "INACTIVE", label: "Inactivo" },
 ];
 
+const taxObjectCodeOptions: Array<{
+  value: ProductTaxObjectCode;
+  label: string;
+}> = SAT_PRODUCT_TAX_OBJECT_CODES.map((code) => ({
+  value: code,
+  label: `${code} · Objeto de impuesto`,
+}));
+
+const taxCodeOptions: Array<{ value: ProductTaxCode; label: string }> =
+  SAT_PRODUCT_TAX_CODES.map((code) => ({
+    value: code,
+    label:
+      code === "001"
+        ? "001 · ISR"
+        : code === "002"
+          ? "002 · IVA"
+          : "003 · IEPS",
+  }));
+
+const factorTypeOptions: Array<{
+  value: ProductFactorType;
+  label: string;
+}> = SAT_PRODUCT_FACTOR_TYPES.map((factorType) => ({
+  value: factorType,
+  label: factorType,
+}));
+
 type NumericField =
-  "salePrice" | "purchaseCost" | "minStock" | "pieceWeightEquivalent";
+  | "salePrice"
+  | "purchaseCost"
+  | "minStock"
+  | "pieceWeightEquivalent"
+  | "defaultRateOrQuota";
 
 function inputClass(hasError: boolean, isValid: boolean) {
   return cn(
@@ -101,8 +143,13 @@ function sanitizeText(value: string) {
   return collapseSpaces(value);
 }
 
+function sanitizeFiscalCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
 function numericMaxDecimals(field: NumericField, unit: OperationalUnit | "") {
   if (field === "pieceWeightEquivalent") return 3;
+  if (field === "defaultRateOrQuota") return 6;
   if (field === "minStock") return unit === "PIECE" ? 0 : 2;
   return 2;
 }
@@ -112,9 +159,7 @@ function normalizeNumericValue(
   value: string,
   unit: OperationalUnit | "",
 ) {
-  return field === "pieceWeightEquivalent" || field === "minStock"
-    ? normalizeDecimalInput(value, numericMaxDecimals(field, unit))
-    : normalizeCurrencyInput(value);
+  return normalizeDecimalInput(value, numericMaxDecimals(field, unit));
 }
 
 function formatNumericDisplay(
@@ -122,9 +167,7 @@ function formatNumericDisplay(
   value: string,
   unit: OperationalUnit | "",
 ) {
-  return field === "pieceWeightEquivalent" || field === "minStock"
-    ? formatDecimalDisplay(value, numericMaxDecimals(field, unit))
-    : formatCurrencyDisplay(value);
+  return formatDecimalDisplay(value, numericMaxDecimals(field, unit));
 }
 
 export function ProductFormModal({ product, onClose }: Props) {
@@ -204,7 +247,14 @@ export function ProductFormModal({ product, onClose }: Props) {
   }
 
   function blurTextField(
-    field: Extract<ProductFormField, "name" | "description" | "categoryId">,
+    field: Extract<
+      ProductFormField,
+      | "name"
+      | "description"
+      | "categoryId"
+      | "satProductServiceCode"
+      | "satUnitCode"
+    >,
   ) {
     const nextDraft = {
       ...draft,
@@ -221,6 +271,17 @@ export function ProductFormModal({ product, onClose }: Props) {
     } as ProductFormDraft;
     setDraft(nextDraft);
     markTouched("sku", nextDraft);
+  }
+
+  function blurFiscalCodeField(
+    field: Extract<ProductFormField, "satProductServiceCode" | "satUnitCode">,
+  ) {
+    const nextDraft = {
+      ...draft,
+      [field]: sanitizeFiscalCode(draft[field]),
+    } as ProductFormDraft;
+    setDraft(nextDraft);
+    markTouched(field, nextDraft);
   }
 
   function focusNumericField(field: NumericField) {
@@ -257,6 +318,12 @@ export function ProductFormModal({ product, onClose }: Props) {
       unit: true,
       pieceWeightEquivalent: true,
       equivalentPolicyStatus: true,
+      satProductServiceCode: true,
+      satUnitCode: true,
+      taxObjectCode: true,
+      defaultTaxCode: true,
+      defaultFactorType: true,
+      defaultRateOrQuota: true,
     });
     return nextErrors;
   }
@@ -282,6 +349,9 @@ export function ProductFormModal({ product, onClose }: Props) {
         draft.pieceWeightEquivalent,
         3,
       ),
+      satProductServiceCode: sanitizeFiscalCode(draft.satProductServiceCode),
+      satUnitCode: sanitizeFiscalCode(draft.satUnitCode),
+      defaultRateOrQuota: normalizeDecimalInput(draft.defaultRateOrQuota, 6),
     };
     setDraft(nextDraft);
 
@@ -775,6 +845,328 @@ export function ProductFormModal({ product, onClose }: Props) {
               )}
             </label>
           </div>
+
+          <section
+            aria-labelledby="product-fiscal-profile-title"
+            className="overflow-hidden rounded-2xl border border-[var(--erp-border)]"
+          >
+            <div className="bg-[var(--erp-brand-red)] px-4 py-4">
+              <h3
+                className="text-lg font-bold text-white"
+                id="product-fiscal-profile-title"
+              >
+                Perfil fiscal CFDI 4.0
+              </h3>
+              <p className="mt-1 text-sm text-white/80">
+                Opcional para operar comercialmente. La unidad SAT es
+                independiente de la unidad operativa y no se asigna por
+                equivalencia automática.
+              </p>
+            </div>
+            <div className="grid gap-4 bg-[var(--erp-surface-muted)]/45 p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label
+                  className="grid gap-2 text-sm font-semibold"
+                  htmlFor={getFieldId("satProductServiceCode")}
+                >
+                  ClaveProdServ SAT
+                  <Input
+                    aria-describedby={mergeDescribedBy(
+                      "satProductServiceCode",
+                      Boolean(errors.satProductServiceCode),
+                      true,
+                    )}
+                    aria-invalid={Boolean(errors.satProductServiceCode)}
+                    className={inputClass(
+                      Boolean(errors.satProductServiceCode),
+                      Boolean(
+                        touched.satProductServiceCode &&
+                        draft.satProductServiceCode &&
+                        !errors.satProductServiceCode,
+                      ),
+                    )}
+                    id={getFieldId("satProductServiceCode")}
+                    inputMode="numeric"
+                    onBlur={() => blurFiscalCodeField("satProductServiceCode")}
+                    onChange={(event) =>
+                      setDraftField(
+                        "satProductServiceCode",
+                        event.target.value,
+                        sanitizeFiscalCode,
+                      )
+                    }
+                    placeholder="01010101"
+                    value={draft.satProductServiceCode}
+                  />
+                  <span
+                    className="text-xs text-[var(--erp-muted-foreground)]"
+                    id={getHelpId("satProductServiceCode")}
+                  >
+                    Ocho dígitos del catálogo SAT; no se deriva del nombre ni de
+                    la unidad operativa.
+                  </span>
+                  {errors.satProductServiceCode && (
+                    <span
+                      className="text-xs font-medium text-[var(--erp-danger)]"
+                      id={getErrorId("satProductServiceCode")}
+                    >
+                      {errors.satProductServiceCode}
+                    </span>
+                  )}
+                </label>
+
+                <label
+                  className="grid gap-2 text-sm font-semibold"
+                  htmlFor={getFieldId("satUnitCode")}
+                >
+                  ClaveUnidad SAT
+                  <Input
+                    aria-describedby={mergeDescribedBy(
+                      "satUnitCode",
+                      Boolean(errors.satUnitCode),
+                      true,
+                    )}
+                    aria-invalid={Boolean(errors.satUnitCode)}
+                    className={inputClass(
+                      Boolean(errors.satUnitCode),
+                      Boolean(
+                        touched.satUnitCode &&
+                        draft.satUnitCode &&
+                        !errors.satUnitCode,
+                      ),
+                    )}
+                    id={getFieldId("satUnitCode")}
+                    onBlur={() => blurFiscalCodeField("satUnitCode")}
+                    onChange={(event) =>
+                      setDraftField(
+                        "satUnitCode",
+                        event.target.value,
+                        sanitizeFiscalCode,
+                      )
+                    }
+                    placeholder="KGM"
+                    value={draft.satUnitCode}
+                  />
+                  <span
+                    className="text-xs text-[var(--erp-muted-foreground)]"
+                    id={getHelpId("satUnitCode")}
+                  >
+                    Código SAT de dos o tres caracteres; no se copia desde KG o
+                    PIECE.
+                  </span>
+                  {errors.satUnitCode && (
+                    <span
+                      className="text-xs font-medium text-[var(--erp-danger)]"
+                      id={getErrorId("satUnitCode")}
+                    >
+                      {errors.satUnitCode}
+                    </span>
+                  )}
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <label
+                  className="grid gap-2 text-sm font-semibold"
+                  htmlFor={getFieldId("taxObjectCode")}
+                >
+                  ObjetoImp
+                  <Select
+                    aria-describedby={mergeDescribedBy(
+                      "taxObjectCode",
+                      Boolean(errors.taxObjectCode),
+                      false,
+                    )}
+                    aria-invalid={Boolean(errors.taxObjectCode)}
+                    className={inputClass(
+                      Boolean(errors.taxObjectCode),
+                      Boolean(
+                        touched.taxObjectCode &&
+                        draft.taxObjectCode &&
+                        !errors.taxObjectCode,
+                      ),
+                    )}
+                    id={getFieldId("taxObjectCode")}
+                    onBlur={() => markTouched("taxObjectCode")}
+                    onChange={(event) =>
+                      setDraftField("taxObjectCode", event.target.value)
+                    }
+                    value={draft.taxObjectCode}
+                  >
+                    <option value="">Selecciona ObjetoImp</option>
+                    {taxObjectCodeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                  {errors.taxObjectCode && (
+                    <span
+                      className="text-xs font-medium text-[var(--erp-danger)]"
+                      id={getErrorId("taxObjectCode")}
+                    >
+                      {errors.taxObjectCode}
+                    </span>
+                  )}
+                </label>
+
+                <label
+                  className="grid gap-2 text-sm font-semibold"
+                  htmlFor={getFieldId("defaultTaxCode")}
+                >
+                  Impuesto predeterminado
+                  <Select
+                    aria-describedby={mergeDescribedBy(
+                      "defaultTaxCode",
+                      Boolean(errors.defaultTaxCode),
+                      false,
+                    )}
+                    aria-invalid={Boolean(errors.defaultTaxCode)}
+                    className={inputClass(
+                      Boolean(errors.defaultTaxCode),
+                      Boolean(
+                        touched.defaultTaxCode &&
+                        draft.defaultTaxCode &&
+                        !errors.defaultTaxCode,
+                      ),
+                    )}
+                    id={getFieldId("defaultTaxCode")}
+                    onBlur={() => markTouched("defaultTaxCode")}
+                    onChange={(event) =>
+                      setDraftField("defaultTaxCode", event.target.value)
+                    }
+                    value={draft.defaultTaxCode}
+                  >
+                    <option value="">Selecciona impuesto</option>
+                    {taxCodeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                  {errors.defaultTaxCode && (
+                    <span
+                      className="text-xs font-medium text-[var(--erp-danger)]"
+                      id={getErrorId("defaultTaxCode")}
+                    >
+                      {errors.defaultTaxCode}
+                    </span>
+                  )}
+                </label>
+
+                <label
+                  className="grid gap-2 text-sm font-semibold"
+                  htmlFor={getFieldId("defaultFactorType")}
+                >
+                  TipoFactor
+                  <Select
+                    aria-describedby={mergeDescribedBy(
+                      "defaultFactorType",
+                      Boolean(errors.defaultFactorType),
+                      false,
+                    )}
+                    aria-invalid={Boolean(errors.defaultFactorType)}
+                    className={inputClass(
+                      Boolean(errors.defaultFactorType),
+                      Boolean(
+                        touched.defaultFactorType &&
+                        draft.defaultFactorType &&
+                        !errors.defaultFactorType,
+                      ),
+                    )}
+                    id={getFieldId("defaultFactorType")}
+                    onBlur={() => markTouched("defaultFactorType")}
+                    onChange={(event) =>
+                      setDraftField("defaultFactorType", event.target.value)
+                    }
+                    value={draft.defaultFactorType}
+                  >
+                    <option value="">Selecciona TipoFactor</option>
+                    {factorTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                  {errors.defaultFactorType && (
+                    <span
+                      className="text-xs font-medium text-[var(--erp-danger)]"
+                      id={getErrorId("defaultFactorType")}
+                    >
+                      {errors.defaultFactorType}
+                    </span>
+                  )}
+                </label>
+              </div>
+
+              <label
+                className="grid gap-2 text-sm font-semibold md:max-w-sm"
+                htmlFor={getFieldId("defaultRateOrQuota")}
+              >
+                Tasa o cuota predeterminada
+                <Input
+                  aria-describedby={mergeDescribedBy(
+                    "defaultRateOrQuota",
+                    Boolean(errors.defaultRateOrQuota),
+                    true,
+                  )}
+                  aria-invalid={Boolean(errors.defaultRateOrQuota)}
+                  className={inputClass(
+                    Boolean(errors.defaultRateOrQuota),
+                    Boolean(
+                      touched.defaultRateOrQuota &&
+                      draft.defaultRateOrQuota &&
+                      !errors.defaultRateOrQuota,
+                    ),
+                  )}
+                  id={getFieldId("defaultRateOrQuota")}
+                  inputMode="decimal"
+                  onBlur={() => blurNumericField("defaultRateOrQuota")}
+                  onChange={(event) =>
+                    setNumericField("defaultRateOrQuota", event.target.value)
+                  }
+                  onFocus={() => focusNumericField("defaultRateOrQuota")}
+                  placeholder="0.160000"
+                  value={numericDisplay("defaultRateOrQuota")}
+                />
+                <span
+                  className="text-xs text-[var(--erp-muted-foreground)]"
+                  id={getHelpId("defaultRateOrQuota")}
+                >
+                  Hasta seis decimales. El perfil fiscal no se considera
+                  completo hasta capturar los seis valores.
+                </span>
+                {errors.defaultRateOrQuota && (
+                  <span
+                    className="text-xs font-medium text-[var(--erp-danger)]"
+                    id={getErrorId("defaultRateOrQuota")}
+                  >
+                    {errors.defaultRateOrQuota}
+                  </span>
+                )}
+              </label>
+
+              {(!draft.satProductServiceCode ||
+                !draft.satUnitCode ||
+                !draft.taxObjectCode ||
+                !draft.defaultTaxCode ||
+                !draft.defaultFactorType ||
+                !draft.defaultRateOrQuota) && (
+                <p
+                  className="rounded-xl border border-[rgba(214,155,45,0.34)] bg-[rgba(214,155,45,0.12)] p-3 text-sm font-semibold text-[var(--erp-brand-gold-deep)]"
+                  data-testid="product-fiscal-profile-incomplete"
+                  role="status"
+                >
+                  Perfil fiscal incompleto. El producto puede seguir operando,
+                  pero CFDI lo rechazará con
+                  <code className="ml-1 font-mono text-xs">
+                    CFDI_PRODUCT_PROFILE_INCOMPLETE
+                  </code>
+                  .
+                </p>
+              )}
+            </div>
+          </section>
 
           {draft.unit === "KG_AND_PIECE" && (
             <p className="rounded-xl border border-[rgba(214,155,45,0.30)] bg-[rgba(214,155,45,0.12)] p-3 text-sm text-[var(--erp-brand-gold-deep)]">

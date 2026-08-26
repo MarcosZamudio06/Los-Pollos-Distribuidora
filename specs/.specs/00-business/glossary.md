@@ -134,7 +134,23 @@ Documento operativo emitido por el sistema para respaldar una venta dentro del n
 
 ## Factura fiscal
 
-Comprobante fiscal digital emitido conforme a regulación aplicable. En el MVP queda fuera de alcance y no debe confundirse con el ticket interno.
+Comprobante fiscal digital emitido conforme a regulación aplicable. En el MVP
+queda fuera de alcance y no debe confundirse con el ticket interno. En la fase
+CFDI 4.0 nativa aprobada se prepara como `Invoice`; solo se considera emitido
+cuando queda `STAMPED` con UUID confirmado.
+
+## REP 2.0
+
+CFDI de tipo Pago con Complemento para Recepción de Pagos 2.0 que refleja un
+`Payment(APPLIED)` recibido para uno o varios CFDI de Ingreso PPD. No registra
+dinero nuevo ni sustituye `Payment` o `AccountReceivable`.
+
+## Aplicación fiscal de pago
+
+Snapshot `PaymentInvoiceApplication` que relaciona un pago económico con una
+factura PPD concreta y conserva UUID, parcialidad, saldo anterior, importe
+pagado y saldo insoluto. Es distinta de `PaymentAllocation`: no distribuye
+dinero entre cuentas por cobrar.
 
 ## Reporte casi en tiempo real
 
@@ -150,7 +166,9 @@ Control de acceso basado en roles.
 
 ## Entidad legal emisora
 
-Persona moral o física que emite una factura externa. Es distinta de la ubicación operativa donde ocurre la venta, almacenamiento o entrega.
+Persona moral o física que emite una factura externa o un CFDI nativo. Es
+distinta de la ubicación operativa donde ocurre la venta, almacenamiento o
+entrega.
 
 ## Nota facturable
 
@@ -163,3 +181,23 @@ Conjunto estructurado de RFC o identificador fiscal, razón social, código post
 ## Registro de factura externa
 
 Representación auditable de una factura emitida fuera del ERP. Puede conservar serie, folio y UUID para conciliación, pero no implica emisión, XML, timbrado, PAC o integración SAT.
+
+## Operación fiscal
+
+Comando durable en PostgreSQL que conserva snapshot, idempotencia, proveedor y
+estado de emisión, cancelación o documento relacionado. No es una factura.
+
+## Snapshot fiscal
+
+Fotografía inmutable, generada por backend, del emisor, receptor, conceptos,
+impuestos y totales que se envían al proveedor fiscal.
+
+## Resultado fiscal ambiguo
+
+Estado en el que una llamada pudo haber sido procesada por el proveedor, pero
+el ERP no recibió evidencia concluyente. Bloquea reenvíos hasta reconciliar.
+
+## FiscalProviderPort
+
+Contrato neutral entre el dominio fiscal y adaptadores PAC como Facturama o un
+futuro Finkok.

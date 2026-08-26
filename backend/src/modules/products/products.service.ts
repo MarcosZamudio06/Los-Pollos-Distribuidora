@@ -20,6 +20,20 @@ import {
   ListProductsQueryDto,
   UpdateProductDto,
 } from './dto';
+import {
+  isValidSatProductFactorType,
+  isValidSatProductServiceCode,
+  isValidSatProductTaxCode,
+  isValidSatProductTaxObjectCode,
+  isValidSatUnitCode,
+  normalizeProductFactorType,
+  normalizeProductFiscalCode,
+  productFiscalProfileStatus,
+  type ProductFactorType,
+  type ProductFiscalProfileField,
+  type ProductTaxCode,
+  type ProductTaxObjectCode,
+} from '../../../../shared/product-fiscal-catalog';
 
 const PRODUCT_INCLUDE = {
   category: true,
@@ -44,6 +58,12 @@ type ProductRecord = {
   purchaseCost: DecimalLike;
   minStock: DecimalLike;
   unit: ProductUnit;
+  satProductServiceCode?: string | null;
+  satUnitCode?: string | null;
+  taxObjectCode?: string | null;
+  defaultTaxCode?: string | null;
+  defaultFactorType?: string | null;
+  defaultRateOrQuota?: DecimalLike;
   pieceWeightEquivalent: DecimalLike | null;
   equivalentPolicyStatus: EquivalentStatus | null;
   isActive: boolean;
@@ -87,6 +107,16 @@ type ProductResponse = {
   purchaseCost?: number;
   minStock: number;
   unit: ProductUnit;
+  satProductServiceCode: string | null;
+  satUnitCode: string | null;
+  taxObjectCode: ProductTaxObjectCode | null;
+  defaultTaxCode: ProductTaxCode | null;
+  defaultFactorType: ProductFactorType | null;
+  defaultRateOrQuota: number | null;
+  fiscalProfileStatus: 'COMPLETE' | 'INCOMPLETE';
+  fiscalProfileComplete: boolean;
+  fiscalProfileMissingFields: ProductFiscalProfileField[];
+  fiscalProfileValidationCode: string | null;
   pieceWeightEquivalent: number | null;
   equivalentPolicyStatus: EquivalentStatus | null;
   isActive: boolean;
@@ -260,9 +290,11 @@ export class ProductsService {
 
   async create(dto: CreateProductDto): Promise<ProductResponse> {
     this.assertValidCommercialData(dto);
+    this.assertValidFiscalProfile(dto);
     const sku = this.normalizeSku(dto.sku);
     const description = this.normalizeOptionalText(dto.description);
     const categoryId = this.normalizeOptionalText(dto.categoryId);
+    const fiscalProfile = this.normalizeFiscalProfile(dto);
     await this.assertSkuAvailable(sku);
     await this.assertCategoryExists(categoryId);
 
@@ -278,6 +310,12 @@ export class ProductsService {
           purchaseCost: dto.purchaseCost,
           minStock: dto.minStock,
           unit: dto.unit,
+          satProductServiceCode: fiscalProfile.satProductServiceCode ?? null,
+          satUnitCode: fiscalProfile.satUnitCode ?? null,
+          taxObjectCode: fiscalProfile.taxObjectCode ?? null,
+          defaultTaxCode: fiscalProfile.defaultTaxCode ?? null,
+          defaultFactorType: fiscalProfile.defaultFactorType ?? null,
+          defaultRateOrQuota: fiscalProfile.defaultRateOrQuota ?? null,
           pieceWeightEquivalent: dto.pieceWeightEquivalent ?? null,
           equivalentPolicyStatus: dto.equivalentPolicyStatus ?? null,
           isActive: true,
@@ -295,9 +333,11 @@ export class ProductsService {
   async update(id: string, dto: UpdateProductDto): Promise<ProductResponse> {
     const currentProduct = await this.findActiveProductForMutation(id);
     this.assertValidCommercialData(dto);
+    this.assertValidFiscalProfile(dto);
     const sku = this.normalizeSku(dto.sku);
     const description = this.normalizeOptionalText(dto.description);
     const categoryId = this.normalizeOptionalText(dto.categoryId);
+    const fiscalProfile = this.normalizeFiscalProfile(dto);
 
     if (sku !== undefined) {
       await this.assertSkuAvailable(sku, id);
@@ -326,6 +366,27 @@ export class ProductsService {
             : {}),
           ...(dto.minStock !== undefined ? { minStock: dto.minStock } : {}),
           ...(dto.unit !== undefined ? { unit: dto.unit } : {}),
+          ...(dto.satProductServiceCode !== undefined
+            ? {
+                satProductServiceCode:
+                  fiscalProfile.satProductServiceCode ?? null,
+              }
+            : {}),
+          ...(dto.satUnitCode !== undefined
+            ? { satUnitCode: fiscalProfile.satUnitCode ?? null }
+            : {}),
+          ...(dto.taxObjectCode !== undefined
+            ? { taxObjectCode: fiscalProfile.taxObjectCode ?? null }
+            : {}),
+          ...(dto.defaultTaxCode !== undefined
+            ? { defaultTaxCode: fiscalProfile.defaultTaxCode ?? null }
+            : {}),
+          ...(dto.defaultFactorType !== undefined
+            ? { defaultFactorType: fiscalProfile.defaultFactorType ?? null }
+            : {}),
+          ...(dto.defaultRateOrQuota !== undefined
+            ? { defaultRateOrQuota: fiscalProfile.defaultRateOrQuota ?? null }
+            : {}),
           ...(dto.pieceWeightEquivalent !== undefined
             ? { pieceWeightEquivalent: dto.pieceWeightEquivalent ?? null }
             : {}),
@@ -537,6 +598,121 @@ export class ProductsService {
     return product;
   }
 
+  private assertValidFiscalProfile(dto: ProductMutationDto): void {
+    const satProductServiceCode = this.normalizeOptionalFiscalCode(
+      dto.satProductServiceCode,
+    );
+    if (
+      satProductServiceCode &&
+      !isValidSatProductServiceCode(satProductServiceCode)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_PRODUCT_SAT_PRODUCT_SERVICE_CODE',
+        message: 'satProductServiceCode must contain exactly eight digits',
+        fields: ['satProductServiceCode'],
+      });
+    }
+
+    const satUnitCode = this.normalizeOptionalFiscalCode(dto.satUnitCode);
+    if (satUnitCode && !isValidSatUnitCode(satUnitCode)) {
+      throw new BadRequestException({
+        code: 'INVALID_PRODUCT_SAT_UNIT_CODE',
+        message: 'satUnitCode must contain two or three SAT code characters',
+        fields: ['satUnitCode'],
+      });
+    }
+
+    const taxObjectCode = this.normalizeOptionalFiscalCode(dto.taxObjectCode);
+    if (taxObjectCode && !isValidSatProductTaxObjectCode(taxObjectCode)) {
+      throw new BadRequestException({
+        code: 'INVALID_PRODUCT_TAX_OBJECT_CODE',
+        message: 'taxObjectCode must be a valid SAT c_ObjetoImp code',
+        fields: ['taxObjectCode'],
+      });
+    }
+
+    const defaultTaxCode = this.normalizeOptionalFiscalCode(dto.defaultTaxCode);
+    if (defaultTaxCode && !isValidSatProductTaxCode(defaultTaxCode)) {
+      throw new BadRequestException({
+        code: 'INVALID_PRODUCT_TAX_CODE',
+        message: 'defaultTaxCode must be a valid SAT c_Impuesto code',
+        fields: ['defaultTaxCode'],
+      });
+    }
+
+    if (
+      dto.defaultFactorType !== undefined &&
+      dto.defaultFactorType !== null &&
+      !isValidSatProductFactorType(String(dto.defaultFactorType))
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_PRODUCT_FACTOR_TYPE',
+        message: 'defaultFactorType must be Tasa, Cuota or Exento',
+        fields: ['defaultFactorType'],
+      });
+    }
+
+    if (
+      dto.defaultRateOrQuota !== undefined &&
+      dto.defaultRateOrQuota !== null
+    ) {
+      const rateOrQuota = Number(dto.defaultRateOrQuota);
+      const decimalPlaces =
+        String(dto.defaultRateOrQuota).split('.')[1]?.length ?? 0;
+      if (
+        !Number.isFinite(rateOrQuota) ||
+        rateOrQuota < 0 ||
+        decimalPlaces > 6
+      ) {
+        throw new BadRequestException({
+          code: 'INVALID_PRODUCT_RATE_OR_QUOTA',
+          message:
+            'defaultRateOrQuota must be a non-negative number with at most six decimals',
+          fields: ['defaultRateOrQuota'],
+        });
+      }
+    }
+  }
+
+  private normalizeFiscalProfile(dto: ProductMutationDto): {
+    satProductServiceCode?: string | null;
+    satUnitCode?: string | null;
+    taxObjectCode?: ProductTaxObjectCode | null;
+    defaultTaxCode?: ProductTaxCode | null;
+    defaultFactorType?: ProductFactorType | null;
+    defaultRateOrQuota?: number | null;
+  } {
+    const normalizeCode = (value?: string | null) =>
+      this.normalizeOptionalFiscalCode(value);
+    const normalizeRateOrQuota = (value?: number | null) => {
+      if (value === undefined || value === null) return value;
+      return Number(value);
+    };
+
+    return {
+      satProductServiceCode: normalizeCode(dto.satProductServiceCode),
+      satUnitCode: normalizeCode(dto.satUnitCode),
+      taxObjectCode: normalizeCode(dto.taxObjectCode) as
+        ProductTaxObjectCode | null | undefined,
+      defaultTaxCode: normalizeCode(dto.defaultTaxCode) as
+        ProductTaxCode | null | undefined,
+      defaultFactorType:
+        dto.defaultFactorType === undefined || dto.defaultFactorType === null
+          ? dto.defaultFactorType
+          : normalizeProductFactorType(String(dto.defaultFactorType)),
+      defaultRateOrQuota: normalizeRateOrQuota(dto.defaultRateOrQuota),
+    };
+  }
+
+  private normalizeOptionalFiscalCode(
+    value?: string | null,
+  ): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const normalized = normalizeProductFiscalCode(value);
+    return normalized.length > 0 ? normalized : null;
+  }
+
   private assertValidCommercialData(dto: ProductMutationDto): void {
     if (dto.salePrice !== undefined && dto.salePrice <= 0) {
       throw new BadRequestException('salePrice must be greater than 0');
@@ -640,6 +816,25 @@ export class ProductsService {
     product: ProductRecord,
     options: { includeBalances?: boolean; includePurchaseCost?: boolean } = {},
   ): ProductResponse {
+    const satProductServiceCode = product.satProductServiceCode ?? null;
+    const satUnitCode = product.satUnitCode ?? null;
+    const taxObjectCode = (product.taxObjectCode ??
+      null) as ProductTaxObjectCode | null;
+    const defaultTaxCode = (product.defaultTaxCode ??
+      null) as ProductTaxCode | null;
+    const defaultFactorType = (product.defaultFactorType ??
+      null) as ProductFactorType | null;
+    const defaultRateOrQuota = this.toNullableNumber(
+      product.defaultRateOrQuota,
+    );
+    const fiscalProfile = productFiscalProfileStatus({
+      satProductServiceCode,
+      satUnitCode,
+      taxObjectCode,
+      defaultTaxCode,
+      defaultFactorType,
+      defaultRateOrQuota,
+    });
     const response: ProductResponse = {
       id: product.id,
       name: product.name,
@@ -651,6 +846,16 @@ export class ProductsService {
       salePrice: this.toNumber(product.salePrice),
       minStock: this.toNumber(product.minStock),
       unit: product.unit,
+      satProductServiceCode,
+      satUnitCode,
+      taxObjectCode,
+      defaultTaxCode,
+      defaultFactorType,
+      defaultRateOrQuota,
+      fiscalProfileStatus: fiscalProfile.status,
+      fiscalProfileComplete: fiscalProfile.isComplete,
+      fiscalProfileMissingFields: fiscalProfile.missingFields,
+      fiscalProfileValidationCode: fiscalProfile.validationCode,
       pieceWeightEquivalent: this.toNullableNumber(
         product.pieceWeightEquivalent,
       ),

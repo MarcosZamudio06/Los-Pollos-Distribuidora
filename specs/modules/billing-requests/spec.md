@@ -2,7 +2,9 @@
 
 ## Objetivo
 
-Gestionar la relación interna entre cliente, venta, documento y cuenta por cobrar cuando administración solicita control de factura futura sin emitir CFDI.
+Gestionar la relación interna entre cliente, venta, documento y cuenta por
+cobrar. La solicitud nunca es un CFDI; en la fase fiscal post-MVP aprobada su
+estado `APPROVED` es la única entrada a un comando nativo separado.
 
 ## Funcionalidades
 
@@ -23,7 +25,12 @@ Gestionar la relación interna entre cliente, venta, documento y cuenta por cobr
 
 ## Reglas
 
-- No genera CFDI, SAT, PAC ni timbrado.
+- Crear, editar, revisar o aprobar la solicitud no invoca PAC ni genera CFDI.
+- `APPROVED` permite `POST /api/billing/requests/:id/issue-cfdi`; el estado
+  fiscal reside en `Invoice`/`FiscalOperationAttempt` y no reabre ni sobrecarga
+  el estado de la solicitud.
+- UUID, TFD, sellos, datos SAT, identificadores PAC y artefactos no son campos
+  de escritura de una solicitud.
 - Cada solicitud debe conservar trazabilidad de venta y cliente.
 - La cancelación no elimina historial de venta ni pagos.
 - Puede existir sin cuenta por cobrar en ventas de contado.
@@ -43,6 +50,15 @@ Las rutas exactas deben definirse en `specs/.specs/03-api/billing-requests-api.m
 - Detalle de solicitud.
 - Creación y enlace desde venta.
 - Estado de solicitud.
+- Para `APPROVED`, `InvoiceReconciliationPanel` se transforma en revisión y
+  emisión CFDI nativa; no se crea un módulo paralelo ni se muestran campos de
+  factura externa.
+- La revisión muestra emisor, receptor, RFC, régimen, CP, UsoCFDI, conceptos,
+  claves SAT, impuestos y totales server-owned. Solo permite escoger las
+  decisiones fiscales aceptadas por el endpoint.
+- `STAMP_UNKNOWN` es un estado visible y reconciliable, no un error genérico.
+- `STAMPED` muestra UUID, fechas, cancelación y descargas XML/PDF mediante URL
+  firmada temporal; nunca expone storageKey ni permite editar identidad fiscal.
 
 ## Pruebas mínimas
 
@@ -51,3 +67,5 @@ Las rutas exactas deben definirse en `specs/.specs/03-api/billing-requests-api.m
 - Enlazar solicitud a venta.
 - Cancelar solicitud.
 - Consultar reporte de solicitudes.
+- Validar elegibilidad de emisión nativa en `APPROVED` sin efectos fiscales al
+  aprobar.

@@ -36,6 +36,13 @@ Gestionar saldos, vencimientos, crédito atrasado, saldo final por cliente y pag
 - La antigüedad debe reconciliarse automáticamente al iniciar el backend y cada día, además de actualizarse transaccionalmente en pagos y cancelaciones.
 - La mora inicia el día calendario posterior al vencimiento; `DUE_SOON` cubre los siete días anteriores y el día de vencimiento.
 - Las nuevas ventas a crédito deben recalcular la mora en línea y aplicar `WARN_ONLY` o `BLOCK_NEW_CREDIT` de la política efectiva, sin modificar `Customer.creditStatus`.
+- REP 2.0 no modifica `AccountReceivable`: solo `Payment(APPLIED)` reduce el
+  saldo económico. `PaymentInvoiceApplication` refleja fiscalmente ese pago
+  contra una o varias facturas PPD y nunca sustituye
+  `AccountReceivable.outstandingAmount`.
+- Cancelar o sustituir un REP no restaura ni vuelve a descontar cartera. Para
+  cancelar económicamente un `Payment` primero deben quedar cancelados de forma
+  confirmada sus REP vigentes.
 
 ## Permisos
 

@@ -2,7 +2,10 @@
 
 > Este contrato describe el MVP legacy. La migración post-MVP por múltiples documentos e importes se define en `specs/.specs/03-api/billing-reportable-notes-api.md`; el contrato anterior solo puede mantenerse temporalmente durante expand–backfill–contract.
 
-Define contratos para la relación interna entre cliente, venta, documento y cuenta por cobrar cuando administración solicita control de factura futura. No emite CFDI ni habilita SAT.
+Define contratos para la relación interna entre cliente, venta, documento y
+cuenta por cobrar cuando administración solicita control de factura futura. No
+emite CFDI por sí misma. En la fase nativa aprobada, `APPROVED` es consumido
+únicamente por `POST /api/billing/requests/:id/issue-cfdi`.
 
 ## GET /api/billing-requests
 
@@ -34,6 +37,12 @@ Respuesta `data`:
 
 - Campos de la solicitud.
 - `customer`, `sale`, `accountReceivable` cuando existan.
+- En detalle, `cfdiReview` contiene emisor, receptor, conceptos con claves SAT,
+  impuestos y totales calculados por backend. Es una vista de revisión y no un
+  snapshot persistido.
+- `nativeInvoice` puede ser nulo antes de reservar emisión. Cuando existe,
+  devuelve identidad/estado fiscal, cancelación, último intento y estado de
+  artefactos sin `storageKey` ni secretos.
 
 ## POST /api/billing-requests
 
@@ -77,6 +86,47 @@ Validaciones:
 - Transiciones permitidas: `REQUESTED → IN_REVIEW|CANCELLED` e `IN_REVIEW → APPROVED|REJECTED|CANCELLED`.
 - `APPROVED`, `REJECTED` y `CANCELLED` son terminales.
 - Cada transición registra actor, fecha, motivo y notas en historial.
+- `APPROVED` continúa terminal en esta máquina. Procesamiento PAC, timeout,
+  reconciliación y éxito nunca se agregan como `BillingRequestStatus`.
+- La emisión nativa usa `POST /api/billing/requests/:id/issue-cfdi`, exige
+  `Idempotency-Key` y `expectedVersion`, y solo acepta UsoCFDI, método/forma de
+  pago, exportación y tipo de cambio permitido. UUID, TFD, sellos, importes,
+  certificado, estado PAC, identificadores PAC, XML y PDF son campos
+  prohibidos de entrada.
+
+## POST /api/billing/requests/:id/issue-cfdi
+
+Propósito: reservar y emitir un CFDI de Ingreso desde una solicitud `APPROVED`.
+
+Permisos: `ADMIN`, `BILLING`.
+
+Headers y body mínimo:
+
+```http
+Idempotency-Key: <clave estable por intención>
+```
+
+```json
+{
+  "expectedVersion": 4,
+  "cfdiUse": "G03",
+  "paymentMethod": "PUE",
+  "paymentForm": "03",
+  "exportCode": "01"
+}
+```
+
+La respuesta normalizada contiene `invoiceId`, `attemptId`, `fiscalStatus`,
+`operationStatus`, `uuid` nullable y `replayed`. `STAMPING`, `UNKNOWN` y
+`FAILED` se conservan para que la UI muestre `STAMPING`, `STAMP_UNKNOWN` o
+`STAMP_ERROR` sin convertir incertidumbre en un error genérico. Un timeout no
+autoriza una segunda emisión; la misma clave o una consulta de estado
+reconcilia la operación.
+
+El backend recalcula snapshots, conceptos, impuestos, totales y aplicaciones;
+no se aceptan desde el cliente UUID, TFD, sellos, certificados, estado del PAC,
+XML/PDF ni importes. La operación no muta `Sale`, `Payment`, `AccountReceivable`
+ni inventario.
 
 ## POST /api/billing-requests/:id/cancel
 

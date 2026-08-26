@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
@@ -24,12 +25,14 @@ import {
   InvoiceSaleDocumentApplicationDto,
   ReviewBillingRequestDto,
   UpdateBillingRequestDto,
+  IssueCfdiDto,
 } from './dto';
 import {
   BillingBalanceError,
   validateRequestedAmount,
 } from '../billing/billability-evaluator';
 import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
+import { CfdiIssuanceService } from '../cfdi/cfdi-issuance.service';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
 type InvoiceWithDocuments = {
@@ -85,6 +88,82 @@ const transitions: Record<
 
 const detailInclude = {
   customer: true,
+  nativeInvoice: {
+    select: {
+      id: true,
+      uuid: true,
+      version: true,
+      status: true,
+      series: true,
+      folio: true,
+      cfdiVersion: true,
+      cfdiType: true,
+      issuedAt: true,
+      stampedAt: true,
+      fiscalStatus: true,
+      cancellationStatus: true,
+      cancellationMotiveCode: true,
+      internalReason: true,
+      replacementInvoiceId: true,
+      replacementUuid: true,
+      fiscalUseCode: true,
+      exportCode: true,
+      paymentFormCode: true,
+      paymentMethodCode: true,
+      subtotal: true,
+      discount: true,
+      tax: true,
+      total: true,
+      fiscalAttemptCount: true,
+      lastFiscalAttemptAt: true,
+      lastFiscalErrorCode: true,
+      lastFiscalErrorMessage: true,
+      concepts: {
+        orderBy: { lineNumber: 'asc' as const },
+        select: {
+          id: true,
+          lineNumber: true,
+          description: true,
+          productServiceCode: true,
+          unitCode: true,
+          taxObjectCode: true,
+          amount: true,
+          discount: true,
+          taxAmount: true,
+          total: true,
+        },
+      },
+      fiscalOperationAttempts: {
+        orderBy: { createdAt: 'desc' as const },
+        take: 1,
+        select: {
+          id: true,
+          operation: true,
+          status: true,
+          correlationId: true,
+          attemptNumber: true,
+          startedAt: true,
+          completedAt: true,
+          errorCode: true,
+          errorMessage: true,
+        },
+      },
+      fiscalArtifacts: {
+        orderBy: { version: 'desc' as const },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          version: true,
+          mimeType: true,
+          sha256: true,
+          storedAt: true,
+          lastErrorCode: true,
+          lastErrorMessage: true,
+        },
+      },
+    },
+  },
   sale: true,
   accountReceivables: true,
   documents: {
@@ -92,9 +171,33 @@ const detailInclude = {
     include: {
       requestedItems: {
         where: { reversedAt: null },
-        include: { saleItem: true },
+        include: { saleItem: { include: { product: true } } },
       },
-      saleDocument: { include: { sale: { include: { items: true } } } },
+      saleDocument: {
+        include: {
+          sale: {
+            include: {
+              legalEntity: {
+                select: {
+                  id: true,
+                  legalName: true,
+                  taxId: true,
+                  fiscalPostalCode: true,
+                  fiscalRegime: true,
+                  cfdiEnabled: true,
+                  defaultSeries: true,
+                  certificateSerialNumber: true,
+                  certificateFingerprint: true,
+                  certificateValidFrom: true,
+                  certificateValidTo: true,
+                  isActive: true,
+                },
+              },
+              items: { include: { product: true } },
+            },
+          },
+        },
+      },
     },
   },
   requestedBy: { select: { id: true, name: true } },
@@ -105,12 +208,254 @@ const detailInclude = {
   },
 } satisfies Prisma.BillingRequestInclude;
 
+type FiscalReviewDecimalSource =
+  Prisma.Decimal | string | number | null | undefined;
+
+type BillingRequestDetailRecord = Prisma.BillingRequestGetPayload<{
+  include: typeof detailInclude;
+}>;
+
+function reviewDecimal(value: FiscalReviewDecimalSource): Prisma.Decimal {
+  if (value instanceof Prisma.Decimal) return value;
+  if (value === null || value === undefined || value === '')
+    return new Prisma.Decimal(0);
+  return new Prisma.Decimal(value);
+}
+
+function reviewDecimalString(value: FiscalReviewDecimalSource, scale = 2) {
+  return reviewDecimal(value).toDecimalPlaces(scale).toFixed(scale);
+}
+
+function reviewText(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime()))
+    return value.toISOString();
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function reviewField(source: unknown, field: string): unknown {
+  if (!source || typeof source !== 'object') return undefined;
+  return (source as Record<string, unknown>)[field];
+}
+
+function missingReviewFields(source: unknown, fields: readonly string[]) {
+  return fields.filter((field) => !reviewText(reviewField(source, field)));
+}
+
+function buildFiscalReview(request: BillingRequestDetailRecord) {
+  const documents = request.documents;
+  const firstSale = documents[0]?.saleDocument?.sale ?? request.sale ?? null;
+  const issuer = firstSale?.legalEntity ?? null;
+  const customer = request.customer;
+  const issuerMissingFields = missingReviewFields(issuer, [
+    'legalName',
+    'taxId',
+    'fiscalPostalCode',
+    'fiscalRegime',
+    'defaultSeries',
+    'certificateSerialNumber',
+    'certificateFingerprint',
+    'certificateValidFrom',
+    'certificateValidTo',
+  ]);
+  const receiverMissingFields = missingReviewFields(customer, [
+    'fiscalName',
+    'taxId',
+    'fiscalPostalCode',
+    'fiscalRegime',
+    'fiscalUseCode',
+    'billingEmail',
+  ]);
+
+  let subtotal = new Prisma.Decimal(0);
+  let discount = new Prisma.Decimal(0);
+  let taxableBase = new Prisma.Decimal(0);
+  let tax = new Prisma.Decimal(0);
+  let total = new Prisma.Decimal(0);
+  const concepts: Array<Record<string, unknown>> = [];
+  const conceptIssues: Array<{ saleItemId: string; missingFields: string[] }> =
+    [];
+
+  for (const document of documents) {
+    for (const requestedItem of document.requestedItems) {
+      const saleItem = requestedItem.saleItem;
+      const product = saleItem.product;
+      const requestedSubtotal = reviewDecimal(requestedItem.requestedSubtotal);
+      const requestedTax = reviewDecimal(requestedItem.requestedTax);
+      const requestedTotal = reviewDecimal(requestedItem.requestedTotal);
+      const sourceTaxableBase = reviewDecimal(saleItem.taxableBase);
+      const ratio = sourceTaxableBase.greaterThan(0)
+        ? requestedSubtotal.dividedBy(sourceTaxableBase)
+        : new Prisma.Decimal(0);
+      const allocatedDiscount = reviewDecimal(saleItem.discount).times(ratio);
+      const conceptAmount = requestedSubtotal.plus(allocatedDiscount);
+      subtotal = subtotal.plus(conceptAmount);
+      discount = discount.plus(allocatedDiscount);
+      taxableBase = taxableBase.plus(requestedSubtotal);
+      tax = tax.plus(requestedTax);
+      total = total.plus(requestedTotal);
+
+      const fiscalFields = [
+        'satProductServiceCode',
+        'satUnitCode',
+        'taxObjectCode',
+        'defaultTaxCode',
+        'defaultFactorType',
+        'defaultRateOrQuota',
+      ];
+      const missingFields = fiscalFields.filter((field) => {
+        const value = reviewField(product, field);
+        if (field === 'defaultRateOrQuota')
+          return value === null || value === undefined;
+        return !reviewText(value);
+      });
+      const saleItemId = String(requestedItem.saleItemId ?? saleItem.id ?? '');
+      if (missingFields.length)
+        conceptIssues.push({ saleItemId, missingFields });
+
+      concepts.push({
+        billingRequestItemId: requestedItem.id ?? null,
+        saleItemId,
+        productId: saleItem.productId,
+        description: saleItem.productNameSnapshot,
+        sku: saleItem.productSkuSnapshot,
+        quantity: reviewDecimalString(saleItem.quantitySnapshot, 6),
+        operationalUnit: saleItem.unit,
+        productServiceCode: product.satProductServiceCode,
+        unitCode: product.satUnitCode,
+        taxObjectCode: product.taxObjectCode,
+        taxCode: product.defaultTaxCode,
+        factorType: product.defaultFactorType,
+        rateOrQuota:
+          product.defaultRateOrQuota === null ||
+          product.defaultRateOrQuota === undefined
+            ? null
+            : reviewDecimalString(product.defaultRateOrQuota, 6),
+        unitValue: reviewDecimalString(saleItem.unitPriceSnapshot, 6),
+        amount: reviewDecimalString(conceptAmount),
+        discount: reviewDecimalString(allocatedDiscount),
+        taxableBase: reviewDecimalString(requestedSubtotal),
+        tax: reviewDecimalString(requestedTax),
+        total: reviewDecimalString(requestedTotal),
+      });
+    }
+  }
+
+  return {
+    currencyCode: firstSale?.currencyCode ?? null,
+    issuer: issuer
+      ? {
+          id: issuer.id,
+          legalName: issuer.legalName,
+          taxId: issuer.taxId,
+          fiscalPostalCode: issuer.fiscalPostalCode,
+          fiscalRegime: issuer.fiscalRegime,
+          cfdiEnabled: issuer.cfdiEnabled,
+          isActive: issuer.isActive,
+          defaultSeries: issuer.defaultSeries,
+          certificateSerialNumber: issuer.certificateSerialNumber,
+          certificateFingerprint: issuer.certificateFingerprint,
+          certificateValidFrom: issuer.certificateValidFrom,
+          certificateValidTo: issuer.certificateValidTo,
+        }
+      : null,
+    receiver: customer
+      ? {
+          id: customer.id,
+          fiscalName: customer.fiscalName,
+          taxId: customer.taxId,
+          fiscalAddress: customer.fiscalAddress,
+          fiscalPostalCode: customer.fiscalPostalCode,
+          fiscalRegime: customer.fiscalRegime,
+          fiscalUseCode: customer.fiscalUseCode,
+          billingEmail: customer.billingEmail,
+        }
+      : null,
+    concepts,
+    totals: {
+      subtotal: reviewDecimalString(subtotal),
+      discount: reviewDecimalString(discount),
+      taxableBase: reviewDecimalString(taxableBase),
+      tax: reviewDecimalString(tax),
+      total: reviewDecimalString(total),
+    },
+    profile: {
+      complete:
+        Boolean(issuer?.cfdiEnabled && issuer?.isActive) &&
+        issuerMissingFields.length === 0 &&
+        receiverMissingFields.length === 0 &&
+        conceptIssues.length === 0,
+      issuerMissingFields,
+      receiverMissingFields,
+      conceptIssues,
+    },
+  };
+}
+
+function redactFiscalDetail(request: BillingRequestDetailRecord) {
+  const safeRequest = { ...request };
+  const nativeInvoice = safeRequest.nativeInvoice;
+  delete (safeRequest as Record<string, unknown>).nativeInvoice;
+  void nativeInvoice;
+
+  if (safeRequest.customer) {
+    const safeCustomer = { ...safeRequest.customer };
+    for (const field of [
+      'billingEmail',
+      'fiscalName',
+      'taxId',
+      'fiscalAddress',
+      'fiscalPostalCode',
+      'fiscalRegime',
+      'fiscalUseCode',
+      'requiresBilling',
+    ]) {
+      delete (safeCustomer as Record<string, unknown>)[field];
+    }
+    safeRequest.customer = safeCustomer;
+  }
+
+  safeRequest.documents = safeRequest.documents.map((document) => {
+    const safeDocument = { ...document };
+    safeDocument.requestedItems = document.requestedItems.map((item) => {
+      const safeItem = { ...item.saleItem };
+      delete (safeItem as Record<string, unknown>).product;
+      return { ...item, saleItem: safeItem };
+    });
+    const safeSale = { ...document.saleDocument.sale };
+    delete (safeSale as Record<string, unknown>).legalEntity;
+    safeSale.items = safeSale.items.map((item) => {
+      const safeSaleItem = { ...item };
+      delete (safeSaleItem as Record<string, unknown>).product;
+      return safeSaleItem;
+    });
+    safeDocument.saleDocument = {
+      ...document.saleDocument,
+      sale: safeSale,
+    };
+    return safeDocument;
+  });
+
+  return safeRequest;
+}
+
 @Injectable()
 export class BillingRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly cfdiIssuance?: CfdiIssuanceService,
   ) {}
+
+  issueCfdi(
+    id: string,
+    dto: IssueCfdiDto,
+    actor: Actor,
+    idempotencyKey: string,
+  ) {
+    if (!this.cfdiIssuance)
+      throw new ServiceUnavailableException('CFDI_ISSUANCE_UNAVAILABLE');
+    return this.cfdiIssuance.issue(id, dto, actor, idempotencyKey);
+  }
 
   async findAll(query: ListBillingRequestsQueryDto, actor: Actor) {
     const where = this.applyScope(this.buildWhere(query), actor);
@@ -145,7 +490,12 @@ export class BillingRequestsService {
       include: detailInclude,
     });
     if (!request) throw new NotFoundException('Billing request not found');
-    return request;
+    if (actor.role !== 'ADMIN' && actor.role !== 'BILLING')
+      return redactFiscalDetail(request);
+    return {
+      ...request,
+      cfdiReview: buildFiscalReview(request),
+    };
   }
 
   async create(

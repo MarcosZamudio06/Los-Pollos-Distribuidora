@@ -5,10 +5,17 @@ import { cn } from "@/lib/utils";
 import { useSaveCustomer } from "../hooks/useCustomers";
 import type { Customer, CustomerType, CreditStatus } from "../types";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
+import { ApiClientError } from "@/lib/api";
 import { toast } from "sonner";
+import {
+  SAT_CFDI_USES,
+  SAT_FISCAL_REGIMES,
+} from "../../../../../shared/fiscal-catalog";
 import {
   cleanCustomerNumber,
   cleanEmail,
+  cleanFiscalCode,
+  cleanFiscalPostalCode,
   cleanTaxId,
   collapseSpaces,
   firstCustomerFormErrorField,
@@ -52,6 +59,16 @@ const creditStatusOptions: Array<{ value: CreditStatus; label: string }> = [
   { value: "SUSPENDED", label: "Suspendido" },
 ];
 
+const fiscalRegimeOptions = SAT_FISCAL_REGIMES.map(({ code, label }) => ({
+  value: code,
+  label: `${code} · ${label}`,
+}));
+
+const fiscalUseCodeOptions = SAT_CFDI_USES.map(({ code, label }) => ({
+  value: code,
+  label: `${code} · ${label}`,
+}));
+
 function inputClass(hasError: boolean, isValid: boolean) {
   return cn(
     fieldBaseClass,
@@ -92,6 +109,40 @@ function mergeDescribedBy(
 
 function sanitizeText(value: string) {
   return collapseSpaces(value);
+}
+
+const serverFiscalFieldMessages: Record<
+  Extract<
+    CustomerFormField,
+    | "fiscalName"
+    | "taxId"
+    | "fiscalPostalCode"
+    | "fiscalRegime"
+    | "fiscalUseCode"
+    | "billingEmail"
+  >,
+  string
+> = {
+  fiscalName: "La razón social es obligatoria para facturación.",
+  taxId: "El RFC no es válido para el perfil fiscal.",
+  fiscalPostalCode: "El código postal fiscal no es válido.",
+  fiscalRegime: "El régimen fiscal no pertenece al catálogo SAT.",
+  fiscalUseCode: "El uso de CFDI no pertenece al catálogo SAT.",
+  billingEmail: "El email de facturación es obligatorio y debe ser válido.",
+};
+
+function getServerFiscalFields(error: unknown) {
+  if (!(error instanceof ApiClientError) || !error.payload) return [];
+  if (
+    typeof error.payload === "string" ||
+    !Array.isArray(error.payload.fields)
+  ) {
+    return [];
+  }
+  return error.payload.fields.filter(
+    (field): field is keyof typeof serverFiscalFieldMessages =>
+      field in serverFiscalFieldMessages,
+  );
 }
 
 export function CustomerFormModal({
@@ -238,9 +289,32 @@ export function CustomerFormModal({
       fiscalName: true,
       taxId: true,
       fiscalAddress: true,
+      fiscalPostalCode: true,
+      fiscalRegime: true,
+      fiscalUseCode: true,
       address: true,
     });
     return nextErrors;
+  }
+
+  function handleSaveError(caughtError: unknown) {
+    const serverFields = getServerFiscalFields(caughtError);
+    if (serverFields.length > 0) {
+      setErrors((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          serverFields.map((field) => [
+            field,
+            serverFiscalFieldMessages[field],
+          ]),
+        ),
+      }));
+    }
+    setSubmitError(
+      caughtError instanceof Error
+        ? caughtError.message
+        : "No se pudo guardar el cliente.",
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -273,11 +347,7 @@ export function CustomerFormModal({
       toast.success("Cliente actualizado correctamente.");
       onClose();
     } catch (caughtError) {
-      setSubmitError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "No se pudo guardar el cliente.",
-      );
+      handleSaveError(caughtError);
     }
   }
 
@@ -289,11 +359,7 @@ export function CustomerFormModal({
       setPendingCustomer(null);
       onClose();
     } catch (caughtError) {
-      setSubmitError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "No se pudo guardar el cliente.",
-      );
+      handleSaveError(caughtError);
     }
   }
 
@@ -586,54 +652,13 @@ export function CustomerFormModal({
                 </span>
               )}
             </label>
-
-            <label
-              className="grid gap-2 text-sm font-semibold"
-              htmlFor={getFieldId("billingEmail")}
-            >
-              Email de facturación
-              <Input
-                aria-describedby={mergeDescribedBy(
-                  "billingEmail",
-                  Boolean(errors.billingEmail),
-                  false,
-                )}
-                aria-invalid={Boolean(errors.billingEmail)}
-                autoComplete="email"
-                className={inputClass(
-                  Boolean(errors.billingEmail),
-                  Boolean(
-                    touched.billingEmail &&
-                    draft.billingEmail &&
-                    !errors.billingEmail,
-                  ),
-                )}
-                id={getFieldId("billingEmail")}
-                inputMode="email"
-                onBlur={() => markTouched("billingEmail")}
-                onChange={(event) =>
-                  setDraftField("billingEmail", event.target.value, cleanEmail)
-                }
-                placeholder="cliente@empresa.com.mx"
-                type="email"
-                value={draft.billingEmail}
-              />
-              {errors.billingEmail && (
-                <span
-                  className="text-xs font-medium text-[var(--erp-danger)]"
-                  id={getErrorId("billingEmail")}
-                >
-                  {errors.billingEmail}
-                </span>
-              )}
-            </label>
           </div>
 
           <label
             className="grid gap-2 text-sm font-semibold"
             htmlFor={getFieldId("address")}
           >
-            Dirección
+            Dirección comercial
             <textarea
               aria-describedby={mergeDescribedBy(
                 "address",
@@ -889,12 +914,72 @@ export function CustomerFormModal({
                 </span>
               )}
             </label>
+          </div>
+
+          <div className="rounded-2xl bg-[var(--erp-charcoal)] px-4 py-3 text-white">
+            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-white">
+              Datos fiscales CFDI 4.0
+            </h3>
+            <p className="mt-1 text-xs text-white/75">
+              Son opcionales para clientes no facturables. El backend exige el
+              perfil completo cuando activas “Requiere facturación”.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label
+              className="grid gap-2 text-sm font-semibold"
+              htmlFor={getFieldId("billingEmail")}
+            >
+              Email de facturación{draft.requiresBilling ? " *" : ""}
+              <Input
+                aria-describedby={mergeDescribedBy(
+                  "billingEmail",
+                  Boolean(errors.billingEmail),
+                  true,
+                )}
+                aria-invalid={Boolean(errors.billingEmail)}
+                aria-required={draft.requiresBilling}
+                autoComplete="email"
+                className={inputClass(
+                  Boolean(errors.billingEmail),
+                  Boolean(
+                    touched.billingEmail &&
+                    draft.billingEmail &&
+                    !errors.billingEmail,
+                  ),
+                )}
+                id={getFieldId("billingEmail")}
+                inputMode="email"
+                onBlur={() => markTouched("billingEmail")}
+                onChange={(event) =>
+                  setDraftField("billingEmail", event.target.value, cleanEmail)
+                }
+                placeholder="cliente@empresa.com.mx"
+                type="email"
+                value={draft.billingEmail}
+              />
+              <span
+                className="text-xs text-[var(--erp-muted-foreground)]"
+                id={getHelpId("billingEmail")}
+              >
+                Recibe XML, PDF y acuses cuando el cliente requiere factura.
+              </span>
+              {errors.billingEmail && (
+                <span
+                  className="text-xs font-medium text-[var(--erp-danger)]"
+                  id={getErrorId("billingEmail")}
+                >
+                  {errors.billingEmail}
+                </span>
+              )}
+            </label>
 
             <label
               className="grid gap-2 text-sm font-semibold"
               htmlFor={getFieldId("fiscalName")}
             >
-              Razón social
+              Razón social{draft.requiresBilling ? " *" : ""}
               <Input
                 aria-describedby={mergeDescribedBy(
                   "fiscalName",
@@ -902,6 +987,7 @@ export function CustomerFormModal({
                   false,
                 )}
                 aria-invalid={Boolean(errors.fiscalName)}
+                aria-required={draft.requiresBilling}
                 autoComplete="organization"
                 className={inputClass(
                   Boolean(errors.fiscalName),
@@ -928,14 +1014,12 @@ export function CustomerFormModal({
                 </span>
               )}
             </label>
-          </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
             <label
               className="grid gap-2 text-sm font-semibold"
               htmlFor={getFieldId("taxId")}
             >
-              RFC
+              RFC{draft.requiresBilling ? " *" : ""}
               <Input
                 aria-describedby={mergeDescribedBy(
                   "taxId",
@@ -943,6 +1027,7 @@ export function CustomerFormModal({
                   true,
                 )}
                 aria-invalid={Boolean(errors.taxId)}
+                aria-required={draft.requiresBilling}
                 autoComplete="off"
                 className={inputClass(
                   Boolean(errors.taxId),
@@ -975,9 +1060,159 @@ export function CustomerFormModal({
 
             <label
               className="grid gap-2 text-sm font-semibold"
+              htmlFor={getFieldId("fiscalPostalCode")}
+            >
+              Código postal fiscal{draft.requiresBilling ? " *" : ""}
+              <Input
+                aria-describedby={mergeDescribedBy(
+                  "fiscalPostalCode",
+                  Boolean(errors.fiscalPostalCode),
+                  true,
+                )}
+                aria-invalid={Boolean(errors.fiscalPostalCode)}
+                aria-required={draft.requiresBilling}
+                autoComplete="postal-code"
+                className={inputClass(
+                  Boolean(errors.fiscalPostalCode),
+                  Boolean(
+                    touched.fiscalPostalCode &&
+                    draft.fiscalPostalCode &&
+                    !errors.fiscalPostalCode,
+                  ),
+                )}
+                id={getFieldId("fiscalPostalCode")}
+                inputMode="numeric"
+                maxLength={5}
+                onBlur={() => markTouched("fiscalPostalCode")}
+                onChange={(event) =>
+                  setDraftField(
+                    "fiscalPostalCode",
+                    event.target.value,
+                    cleanFiscalPostalCode,
+                  )
+                }
+                placeholder="91700"
+                value={draft.fiscalPostalCode}
+              />
+              <span
+                className="text-xs text-[var(--erp-muted-foreground)]"
+                id={getHelpId("fiscalPostalCode")}
+              >
+                Código postal de la constancia de situación fiscal.
+              </span>
+              {errors.fiscalPostalCode && (
+                <span
+                  className="text-xs font-medium text-[var(--erp-danger)]"
+                  id={getErrorId("fiscalPostalCode")}
+                >
+                  {errors.fiscalPostalCode}
+                </span>
+              )}
+            </label>
+
+            <label
+              className="grid gap-2 text-sm font-semibold"
+              htmlFor={getFieldId("fiscalRegime")}
+            >
+              Régimen fiscal{draft.requiresBilling ? " *" : ""}
+              <Select
+                aria-describedby={mergeDescribedBy(
+                  "fiscalRegime",
+                  Boolean(errors.fiscalRegime),
+                  false,
+                )}
+                aria-invalid={Boolean(errors.fiscalRegime)}
+                aria-required={draft.requiresBilling}
+                className={inputClass(
+                  Boolean(errors.fiscalRegime),
+                  Boolean(
+                    touched.fiscalRegime &&
+                    draft.fiscalRegime &&
+                    !errors.fiscalRegime,
+                  ),
+                )}
+                id={getFieldId("fiscalRegime")}
+                onBlur={() => markTouched("fiscalRegime")}
+                onChange={(event) =>
+                  setDraftField(
+                    "fiscalRegime",
+                    event.target.value,
+                    cleanFiscalCode,
+                  )
+                }
+                value={draft.fiscalRegime}
+              >
+                <option value="">Selecciona un régimen</option>
+                {fiscalRegimeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+              {errors.fiscalRegime && (
+                <span
+                  className="text-xs font-medium text-[var(--erp-danger)]"
+                  id={getErrorId("fiscalRegime")}
+                >
+                  {errors.fiscalRegime}
+                </span>
+              )}
+            </label>
+
+            <label
+              className="grid gap-2 text-sm font-semibold"
+              htmlFor={getFieldId("fiscalUseCode")}
+            >
+              Uso de CFDI{draft.requiresBilling ? " *" : ""}
+              <Select
+                aria-describedby={mergeDescribedBy(
+                  "fiscalUseCode",
+                  Boolean(errors.fiscalUseCode),
+                  false,
+                )}
+                aria-invalid={Boolean(errors.fiscalUseCode)}
+                aria-required={draft.requiresBilling}
+                className={inputClass(
+                  Boolean(errors.fiscalUseCode),
+                  Boolean(
+                    touched.fiscalUseCode &&
+                    draft.fiscalUseCode &&
+                    !errors.fiscalUseCode,
+                  ),
+                )}
+                id={getFieldId("fiscalUseCode")}
+                onBlur={() => markTouched("fiscalUseCode")}
+                onChange={(event) =>
+                  setDraftField(
+                    "fiscalUseCode",
+                    event.target.value,
+                    cleanFiscalCode,
+                  )
+                }
+                value={draft.fiscalUseCode}
+              >
+                <option value="">Selecciona un uso</option>
+                {fiscalUseCodeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+              {errors.fiscalUseCode && (
+                <span
+                  className="text-xs font-medium text-[var(--erp-danger)]"
+                  id={getErrorId("fiscalUseCode")}
+                >
+                  {errors.fiscalUseCode}
+                </span>
+              )}
+            </label>
+
+            <label
+              className="grid gap-2 text-sm font-semibold"
               htmlFor={getFieldId("fiscalAddress")}
             >
-              Dirección fiscal
+              Domicilio fiscal (opcional)
               <textarea
                 aria-describedby={mergeDescribedBy(
                   "fiscalAddress",

@@ -38,6 +38,7 @@ import {
   TablePagination,
   useTablePagination,
 } from "../../../components/shared/table-pagination";
+import { productFiscalProfileStatus } from "../../../../../shared/product-fiscal-catalog";
 
 function categoryName(product: Product) {
   if (!product.category) return "—";
@@ -85,6 +86,17 @@ function productEquivalence(product: Product) {
 
 function isProductActive(product: Product) {
   return product.isActive ?? product.active ?? product.status !== "INACTIVE";
+}
+
+function fiscalProfileStatus(product: Product) {
+  if (product.fiscalProfileStatus && product.fiscalProfileComplete !== undefined) {
+    return {
+      isComplete: product.fiscalProfileComplete,
+      missingFields: product.fiscalProfileMissingFields ?? [],
+    };
+  }
+
+  return productFiscalProfileStatus(product);
 }
 
 const fieldClass =
@@ -391,6 +403,7 @@ export function ProductListPage() {
                       )}
                       <th className={tableCellClass}>Unidad</th>
                       <th className={tableCellClass}>Equivalencia</th>
+                      <th className={tableCellClass}>Perfil fiscal</th>
                       <th className={tableCellClass}>Ubicación</th>
                       <th className={tableCellClass}>Físico kg</th>
                       <th className={tableCellClass}>Comprometido kg</th>
@@ -407,6 +420,7 @@ export function ProductListPage() {
                   <tbody>
                     {pagination.pageItems.map((product) => {
                       const balance = productBalance(product);
+                      const fiscalProfile = fiscalProfileStatus(product);
                       return (
                         <tr
                           key={product.id}
@@ -447,6 +461,20 @@ export function ProductListPage() {
                             className={`${tableCellClass} min-w-44 text-[var(--erp-muted-foreground)]`}
                           >
                             {productEquivalence(product)}
+                          </td>
+                          <td className={tableCellClass}>
+                            <span
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${fiscalProfile.isComplete ? "border-[rgba(63,123,65,0.22)] bg-[rgba(63,123,65,0.10)] text-[var(--erp-success)]" : "border-[rgba(214,155,45,0.34)] bg-[rgba(214,155,45,0.12)] text-[var(--erp-brand-gold-deep)]"}`}
+                              title={
+                                fiscalProfile.isComplete
+                                  ? "Perfil fiscal completo"
+                                  : `Faltan: ${fiscalProfile.missingFields.join(", ")}`
+                              }
+                            >
+                              {fiscalProfile.isComplete
+                                ? "Completo"
+                                : "Incompleto"}
+                            </span>
                           </td>
                           <td className={tableCellClass}>
                             {balance?.locationName ??

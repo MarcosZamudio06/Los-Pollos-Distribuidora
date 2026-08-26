@@ -24,6 +24,13 @@ function getInput(container: HTMLElement, id: string) {
   return element;
 }
 
+function getSelect(container: HTMLElement, id: string) {
+  const element = container.querySelector(`#${id}`);
+  if (!(element instanceof HTMLSelectElement))
+    throw new Error(`Select not found: ${id}`);
+  return element;
+}
+
 function setNativeValue(element: HTMLInputElement, value: string) {
   const descriptor = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,
@@ -72,6 +79,13 @@ describe("CustomerFormModal UX", () => {
     expect(html).toContain(
       "RFC SAT: 12 caracteres para persona moral y 13 para persona física.",
     );
+    expect(html).toContain("Datos fiscales CFDI 4.0");
+    expect(html).toContain("Dirección comercial");
+    expect(html).toContain("Dirección de entrega");
+    expect(html).toContain("Domicilio fiscal (opcional)");
+    expect(html).toContain("Código postal fiscal");
+    expect(html).toContain("Régimen fiscal");
+    expect(html).toContain("Uso de CFDI");
   });
 
   it("formatea teléfono y RFC mientras el usuario captura", async () => {
@@ -86,6 +100,10 @@ describe("CustomerFormModal UX", () => {
     try {
       const phone = getInput(container, "customer-form-phone");
       const taxId = getInput(container, "customer-form-taxId");
+      const fiscalPostalCode = getInput(
+        container,
+        "customer-form-fiscalPostalCode",
+      );
 
       await act(async () => {
         setNativeValue(phone, "229abc1234567");
@@ -98,6 +116,36 @@ describe("CustomerFormModal UX", () => {
         taxId.dispatchEvent(new Event("input", { bubbles: true }));
       });
       expect(taxId.value).toBe("ABC010203AB9");
+
+      await act(async () => {
+        setNativeValue(fiscalPostalCode, "91a700");
+        fiscalPostalCode.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(fiscalPostalCode.value).toBe("91700");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("renderiza los catálogos SAT como selects controlados", async () => {
+    const { container, root } = await renderDom(
+      <CustomerFormModal
+        canManageCommercialTerms
+        customer={null}
+        onClose={() => undefined}
+      />,
+    );
+
+    try {
+      expect(
+        getSelect(container, "customer-form-fiscalRegime").textContent,
+      ).toContain("601");
+      expect(
+        getSelect(container, "customer-form-fiscalUseCode").textContent,
+      ).toContain("G03");
     } finally {
       await act(async () => {
         root.unmount();

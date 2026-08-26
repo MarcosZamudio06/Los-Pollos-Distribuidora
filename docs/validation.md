@@ -21,6 +21,29 @@ de integrar cambios.
 - build de las imágenes Docker de backend y frontend;
 - auditoría de dependencias productivas y escaneo de secretos.
 
+Para CFDI, el mismo gate fija `CFDI_ENABLED=false` y
+`FISCAL_PROVIDER=NONE`, ejecuta el validador de assets fiscales y conserva el
+corpus completo PostgreSQL después de `prisma migrate deploy`. La validación
+local del escaneo es:
+
+```bash
+OPENSSL_CONF=/dev/null node --test scripts/validate-fiscal-assets.test.mjs
+OPENSSL_CONF=/dev/null node scripts/validate-fiscal-assets.mjs
+```
+
+Para repetir la evidencia focalizada de CFDI-21 sin llamar al PAC:
+
+```bash
+OPENSSL_CONF=/dev/null pnpm --dir backend exec jest src/config/env.validation.spec.ts src/modules/cfdi/rep-issuance.controller.spec.ts src/modules/cfdi/credit-adjustment.controller.spec.ts src/modules/cfdi/adapters/facturama/facturama.adapter.spec.ts src/modules/cfdi/fiscal-artifact.service.spec.ts src/modules/cfdi/stamp-reconciliation.job.spec.ts src/modules/billing/cancellation-status.job.spec.ts --runInBand
+gitleaks git --redact --no-banner --config .gitleaks.toml
+```
+
+La única conexión real al PAC vive en
+`.github/workflows/cfdi-sandbox.yml`. Debe lanzarse manualmente sobre el
+environment protegido `cfdi-sandbox`, con credenciales y el ID/UUID de un CFDI
+de prueba existentes en GitHub secrets. El workflow solo consulta estado/XML
+en `https://apisandbox.facturama.mx`: no timbra ni cancela.
+
 La protección de rama se configura en GitHub, no dentro del YAML:
 
 1. Abrir `Settings > Branches` o `Settings > Rules > Rulesets`.
