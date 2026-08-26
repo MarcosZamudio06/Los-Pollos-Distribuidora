@@ -1,7 +1,15 @@
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
 
-import { FacturamaAdapter } from '../src/modules/cfdi/adapters/facturama/facturama.adapter';
-import type { FiscalCredentialResolver } from '../src/modules/cfdi/adapters/fiscal-credential.resolver';
+import { CfdiModule } from '../src/modules/cfdi/cfdi.module';
+import {
+  FISCAL_CREDENTIAL_RESOLVER,
+  type FiscalCredentialResolver,
+} from '../src/modules/cfdi/adapters/fiscal-credential.resolver';
+import {
+  FISCAL_PROVIDER_PORT,
+  type FiscalProviderPort,
+} from '../src/modules/cfdi/domain/fiscal-provider.port';
 
 describe('Facturama protected sandbox contract (e2e)', () => {
   it('is network-disabled in normal CI and reads an existing sandbox CFDI only when explicitly enabled', async () => {
@@ -21,25 +29,38 @@ describe('Facturama protected sandbox contract (e2e)', () => {
         return Promise.resolve({ username, password });
       },
     };
-    const adapter = new FacturamaAdapter(
-      new ConfigService({
-        FISCAL_PROVIDER: 'FACTURAMA',
-        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
-        FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
-        FACTURAMA_API_MODE: 'MULTI_ISSUER',
-        FACTURAMA_CREDENTIAL_REF: 'github-actions://facturama-sandbox',
-        CFDI_REQUEST_TIMEOUT_MS: 30_000,
-      }),
-      resolver,
-    );
+    const moduleFixture = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          ignoreEnvFile: true,
+          load: [
+            () => ({
+              CFDI_ENABLED: true,
+              FISCAL_PROVIDER: 'FACTURAMA',
+              FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+              FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
+              FACTURAMA_API_MODE: 'MULTI_ISSUER',
+              FACTURAMA_CREDENTIAL_REF: 'github-actions://facturama-sandbox',
+              CFDI_REQUEST_TIMEOUT_MS: 30_000,
+            }),
+          ],
+        }),
+        CfdiModule,
+      ],
+    })
+      .overrideProvider(FISCAL_CREDENTIAL_RESOLVER)
+      .useValue(resolver)
+      .compile();
+    const provider =
+      moduleFixture.get<FiscalProviderPort>(FISCAL_PROVIDER_PORT);
 
-    const status = await adapter.getStatus({
+    const status = await provider.getStatus({
       correlationId: 'github-actions-sandbox-status',
       providerKey: 'FACTURAMA',
       providerDocumentId,
       uuid,
     });
-    const xml = await adapter.getXml({
+    const xml = await provider.getXml({
       correlationId: 'github-actions-sandbox-xml',
       providerKey: 'FACTURAMA',
       providerDocumentId,
@@ -50,6 +71,7 @@ describe('Facturama protected sandbox contract (e2e)', () => {
     expect(xml.provider).toBe('FACTURAMA');
     expect(xml.artifactType).toBe('XML');
     expect(xml.content.length).toBeGreaterThan(0);
+    await moduleFixture.close();
   });
 });
 

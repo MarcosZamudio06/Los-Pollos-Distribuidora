@@ -27,6 +27,14 @@ import {
 } from './sat-catalog.service';
 import { FiscalEventLogger } from './fiscal-event.logger';
 import { CertificateExpiryJob } from './certificate-expiry.job';
+import {
+  DockerSecretFiscalCredentialResolver,
+  FISCAL_CREDENTIAL_RESOLVER,
+} from './adapters/fiscal-credential.resolver';
+import {
+  FISCAL_PROVIDER_ADAPTERS,
+  FiscalProviderResolver,
+} from './adapters/fiscal-provider.resolver';
 
 @Module({
   imports: [PrismaModule, AuthModule, ConfigModule, ObjectStorageModule],
@@ -54,7 +62,21 @@ import { CertificateExpiryJob } from './certificate-expiry.job';
     FiscalEventLogger,
     CertificateExpiryJob,
     FacturamaAdapter,
-    { provide: FISCAL_PROVIDER_PORT, useExisting: FacturamaAdapter },
+    {
+      provide: FISCAL_PROVIDER_ADAPTERS,
+      inject: [FacturamaAdapter],
+      useFactory: (facturama: FacturamaAdapter) => [facturama],
+    },
+    FiscalProviderResolver,
+    {
+      provide: FISCAL_CREDENTIAL_RESOLVER,
+      useFactory: () => new DockerSecretFiscalCredentialResolver(),
+    },
+    {
+      provide: FISCAL_PROVIDER_PORT,
+      inject: [FiscalProviderResolver],
+      useFactory: (resolver: FiscalProviderResolver) => resolver.resolve(),
+    },
   ],
   exports: [
     CfdiDocumentBuilder,

@@ -112,6 +112,12 @@ FACTURAMA_CREDENTIAL_REF=
   secret manager. Usuario, contraseña, CSD, claves y tokens no se guardan en
   PostgreSQL, no usan variables `VITE_*`, no se versionan y no aparecen en
   logs/respuestas.
+  El resolver concreto incluido usa `docker-secret://<nombre>` y lee
+  `/run/secrets/<nombre>` como un JSON acotado con `environment`, `username` y
+  `password`; `environment` debe coincidir con `FISCAL_PROVIDER_ENVIRONMENT`.
+  Referencias a un secret manager externo requieren registrar otro
+  `FiscalCredentialResolver`; una referencia sin resolver falla cerrado antes
+  de abrir red.
 - No se aceptan variables `FACTURAMA_PASSWORD`, `FACTURAMA_API_KEY`, tokens ni
   `CFDI_CSD_*`; el validador las rechaza para evitar credenciales en claro.
 - `docker-compose.production.yml` solo propaga referencias y valores no
