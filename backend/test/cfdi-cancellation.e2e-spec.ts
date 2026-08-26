@@ -74,11 +74,11 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     const legalEntity = await prisma.legalEntity.create({
       data: {
         legalName: 'CFDI CANCELLATION TEST SA DE CV',
-        taxId: 'AAA010101AAA',
+        taxId: `CCA010101${randomUUID().replaceAll('-', '').slice(0, 3).toUpperCase()}`,
         fiscalPostalCode: '64000',
         fiscalRegime: '601',
         cfdiEnabled: true,
-        defaultSeries: `C${marker.slice(-4)}`,
+        defaultSeries: `C${marker.slice(-4).toUpperCase()}`,
         certificateSerialNumber: '30001000000500003416',
         certificateFingerprint: 'a'.repeat(64),
         certificateSubject: 'CN=CFDI CANCELLATION TEST',

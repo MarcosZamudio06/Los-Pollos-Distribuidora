@@ -240,34 +240,21 @@ describe('CFDI issuance PostgreSQL concurrency (e2e)', () => {
     ).resolves.toBe(1);
   });
 
-  it('prevents over-invoicing the same document through another approved request', async () => {
+  it('prevents another request after the document is fully invoiced', async () => {
     const existingSale = await prisma.saleDocument.findUniqueOrThrow({
       where: { id: saleDocumentId },
       select: { saleId: true },
     });
-    const secondRequestId = await createApprovedRequest(prisma, {
-      marker: `${marker}-second`,
-      customerId,
-      actorId,
-      saleId: existingSale.saleId,
-      saleDocumentId,
-      saleItemId,
-    });
-
     await expect(
-      service.issue(
-        secondRequestId,
-        {
-          expectedVersion: 1,
-          cfdiUse: 'G03',
-          paymentMethod: 'PUE',
-          paymentForm: '01',
-          exportCode: '01',
-        },
-        { id: actorId, role: 'ADMIN' },
-        `${marker}:over-invoice`,
-      ),
-    ).rejects.toMatchObject({ message: 'OVER_INVOICED' });
+      createApprovedRequest(prisma, {
+        marker: `${marker}-second`,
+        customerId,
+        actorId,
+        saleId: existingSale.saleId,
+        saleDocumentId,
+        saleItemId,
+      }),
+    ).rejects.toThrow('OVER_REQUESTED');
     expect(
       provider.calls.filter((call) => call.operation === 'stamp'),
     ).toHaveLength(1);

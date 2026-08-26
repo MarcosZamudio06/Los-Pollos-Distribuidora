@@ -65,11 +65,11 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
     const legalEntity = await prisma.legalEntity.create({
       data: {
         legalName: 'CFDI CREDIT NOTE TEST SA DE CV',
-        taxId: `E${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+        taxId: `CNE010101${randomUUID().replaceAll('-', '').slice(0, 3).toUpperCase()}`,
         fiscalPostalCode: '64000',
         fiscalRegime: '601',
         cfdiEnabled: true,
-        defaultSeries: `E${marker.slice(-6)}`,
+        defaultSeries: `E${marker.slice(-6).toUpperCase()}`,
         certificateSerialNumber: '30001000000500003416',
         certificateFingerprint: 'a'.repeat(64),
         certificateSubject: 'CN=CFDI CREDIT NOTE TEST',
@@ -86,7 +86,7 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
         creditStatus: CreditStatus.ACTIVE,
         requiresBilling: true,
         fiscalName: 'RECEPTOR DE PRUEBA',
-        taxId: `R${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+        taxId: `CNR010101${randomUUID().replaceAll('-', '').slice(0, 3).toUpperCase()}`,
         fiscalPostalCode: '64000',
         fiscalRegime: '601',
         fiscalUseCode: 'G03',
