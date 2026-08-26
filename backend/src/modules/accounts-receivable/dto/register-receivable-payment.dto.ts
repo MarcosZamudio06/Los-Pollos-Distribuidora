@@ -32,9 +32,12 @@ export class RegisterReceivablePaymentDto {
   paymentMethod!: PaymentMethod;
 
   @IsOptional()
-  @Transform(({ value }: TransformFnParams) =>
-    typeof value === 'string' ? value.trim().toUpperCase() : value,
-  )
+  @Transform(({ value }: TransformFnParams) => {
+    const rawValue = value as unknown;
+    return typeof rawValue === 'string'
+      ? rawValue.trim().toUpperCase()
+      : rawValue;
+  })
   @IsString()
   @Matches(/^[A-Z]{3}$/)
   currencyCode?: string;

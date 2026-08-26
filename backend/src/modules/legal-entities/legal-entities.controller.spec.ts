@@ -16,12 +16,17 @@ describe('LegalEntitiesController', () => {
   });
 
   it('delegates CRUD operations to the authoritative service', async () => {
+    const findAll = jest.fn().mockResolvedValue({ items: [] });
+    const findOne = jest.fn().mockResolvedValue({ id: 'legal-entity-1' });
+    const create = jest.fn().mockResolvedValue({ id: 'legal-entity-1' });
+    const update = jest.fn().mockResolvedValue({ id: 'legal-entity-1' });
+    const deactivate = jest.fn().mockResolvedValue({ id: 'legal-entity-1' });
     const service = {
-      findAll: jest.fn().mockResolvedValue({ items: [] }),
-      findOne: jest.fn().mockResolvedValue({ id: 'legal-entity-1' }),
-      create: jest.fn().mockResolvedValue({ id: 'legal-entity-1' }),
-      update: jest.fn().mockResolvedValue({ id: 'legal-entity-1' }),
-      deactivate: jest.fn().mockResolvedValue({ id: 'legal-entity-1' }),
+      findAll,
+      findOne,
+      create,
+      update,
+      deactivate,
     } as unknown as LegalEntitiesService;
     const controller = new LegalEntitiesController(service);
 
@@ -40,10 +45,10 @@ describe('LegalEntitiesController', () => {
     await expect(controller.deactivate('legal-entity-1')).resolves.toEqual(
       expect.objectContaining({ success: true }),
     );
-    expect(service.findAll).toHaveBeenCalled();
-    expect(service.findOne).toHaveBeenCalledWith('legal-entity-1');
-    expect(service.create).toHaveBeenCalled();
-    expect(service.update).toHaveBeenCalledWith('legal-entity-1', {});
-    expect(service.deactivate).toHaveBeenCalledWith('legal-entity-1');
+    expect(findAll.mock.calls).toHaveLength(1);
+    expect(findOne.mock.calls).toEqual([['legal-entity-1']]);
+    expect(create.mock.calls).toHaveLength(1);
+    expect(update.mock.calls).toEqual([['legal-entity-1', {}]]);
+    expect(deactivate.mock.calls).toEqual([['legal-entity-1']]);
   });
 });

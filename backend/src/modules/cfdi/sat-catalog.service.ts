@@ -285,8 +285,10 @@ export class SatCatalogService {
       entries: row?.activeVersion?.entries.map((entry) => ({ ...entry })) ?? [],
     };
     if (this.cache.size >= MAX_CACHE_ENTRIES) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest) this.cache.delete(oldest);
+      for (const oldest of this.cache.keys()) {
+        this.cache.delete(oldest);
+        break;
+      }
     }
     this.cache.set(cacheKey, {
       expiresAt: Date.now() + DEFAULT_CACHE_TTL_MS,
@@ -406,7 +408,7 @@ export class SatCatalogImportService {
     });
 
     this.catalogs.invalidate(key);
-    return this.toSummary(result as never);
+    return this.toSummary(result);
   }
 
   async validate(versionId: string): Promise<SatCatalogVersionSummary> {

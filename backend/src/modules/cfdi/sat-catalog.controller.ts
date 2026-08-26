@@ -6,11 +6,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import type { AuthenticatedUser } from '../auth/auth.types';
 import { SatCatalogQueryDto } from './dto/sat-catalog-query.dto';
 import { SatCatalogService } from './sat-catalog.service';
 
@@ -22,7 +20,7 @@ export class SatCatalogController {
 
   @Get()
   @Header('Cache-Control', 'private, max-age=300')
-  async list(@CurrentUser() _user: AuthenticatedUser) {
+  async list() {
     return {
       success: true,
       message: 'SAT catalogs retrieved successfully',
@@ -32,11 +30,7 @@ export class SatCatalogController {
 
   @Get(':key')
   @Header('Cache-Control', 'private, max-age=300')
-  async get(
-    @Param('key') key: string,
-    @Query() query: SatCatalogQueryDto,
-    @CurrentUser() _user: AuthenticatedUser,
-  ) {
+  async get(@Param('key') key: string, @Query() query: SatCatalogQueryDto) {
     return {
       success: true,
       message: 'SAT catalog retrieved successfully',

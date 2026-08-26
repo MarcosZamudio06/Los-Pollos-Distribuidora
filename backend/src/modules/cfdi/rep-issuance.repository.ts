@@ -91,7 +91,7 @@ function requestHash(paymentId: string, dto: IssuePaymentCfdiDto): string {
 
 function asObject(value: Prisma.JsonValue | null): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? value
     : {};
 }
 

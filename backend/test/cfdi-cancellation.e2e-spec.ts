@@ -40,11 +40,19 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     prisma = new PrismaClient();
     await prisma.$connect();
 
+    const distributionCenter = await prisma.operationalLocation.create({
+      data: {
+        name: `${marker} distribution center`,
+        code: `${marker}-cedis`,
+        type: OperationalLocationType.DISTRIBUTION_CENTER,
+      },
+    });
     const location = await prisma.operationalLocation.create({
       data: {
         name: `${marker} branch`,
         code: marker,
         type: OperationalLocationType.BRANCH,
+        parentId: distributionCenter.id,
       },
     });
     locationId = location.id;

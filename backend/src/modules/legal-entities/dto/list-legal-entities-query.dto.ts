@@ -21,9 +21,10 @@ export class ListLegalEntitiesQueryDto {
   isActive?: boolean;
 
   @IsOptional()
-  @Transform(({ value }: TransformFnParams) =>
-    typeof value === 'string' ? value.trim() : value,
-  )
+  @Transform(({ value }: TransformFnParams) => {
+    const rawValue = value as unknown;
+    return typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+  })
   @IsString()
   search?: string;
 
