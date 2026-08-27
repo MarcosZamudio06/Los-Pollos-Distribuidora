@@ -217,6 +217,12 @@ Campos:
 - purchaseCost
 - minStock
 - unit
+- satProductServiceCode (nullable, SAT `c_ClaveProdServ` estructural de ocho dígitos)
+- satUnitCode (nullable, SAT `c_ClaveUnidad`, independiente de `ProductUnit`)
+- taxObjectCode (nullable, SAT `c_ObjetoImp` versionado)
+- defaultTaxCode (nullable, SAT `c_Impuesto` versionado)
+- defaultFactorType (nullable, SAT `c_TipoFactor` versionado)
+- defaultRateOrQuota (nullable, decimal de hasta seis posiciones)
 - pieceWeightEquivalent
 - equivalentPolicyStatus
 - isActive
@@ -238,6 +244,10 @@ Reglas:
 - sku único si existe.
 - `presentationType` clasifica el catálogo semántico del producto y debe permitir `KG`, `WHOLE` o `CUT`.
 - `unit` sigue siendo la unidad operativa y debe permitir productos vendidos por kilo, pieza o ambas unidades.
+- `satUnitCode` nunca se infiere desde `unit`: `KG`, `PIECE` y `KG_AND_PIECE` siguen siendo unidades operacionales del ERP.
+- `satProductServiceCode` no se asigna automáticamente a productos existentes; los seis campos fiscales son opcionales para operación comercial.
+- Un perfil fiscal parcial o vacío conserva la operación comercial, pero deriva el código estable `CFDI_PRODUCT_PROFILE_INCOMPLETE` y bloquea la futura emisión CFDI.
+- La base de datos conserva los campos fiscales nullable mediante migración aditiva y aplica únicamente checks estructurales/catalogados; la pertenencia completa a catálogos SAT se revalida antes de emitir.
 - `presentationType` y `unit` son independientes: el primero clasifica el catálogo, el segundo define la captura operativa.
 - `pieceWeightEquivalent` es opcional mientras no existan equivalencias oficiales aprobadas por negocio.
 - Para trazabilidad completa, las equivalencias oficiales deben preferir `ProductUnitEquivalent`; `pieceWeightEquivalent` solo puede usarse como atajo operativo si no reemplaza historial ni auditoría.
@@ -350,6 +360,9 @@ Campos:
 - fiscalName
 - taxId
 - fiscalAddress
+- fiscalPostalCode
+- fiscalRegime
+- fiscalUseCode
 - deliveryAddress
 - assignedRouteId
 - commercialPolicyId
@@ -1615,7 +1628,11 @@ Reglas:
 
 Esta extensión permite persistir `LegalEntity`, `Invoice`, `BillingRequestSaleDocument`, `InvoiceSaleDocument` e `InvoiceSaleItemApplication` para conciliación. No crea tablas ni servicios de certificados, XML, timbrado, PAC o integración SAT.
 
+- `LegalEntity` es el emisor fiscal autoritativo y permanece separado de `OperationalLocation`, que solo representa una ubicación operativa.
+- La configuración fiscal aditiva de `LegalEntity` incluye `cfdiEnabled`, lugar de expedición (`fiscalPostalCode`), `fiscalRegime`, `defaultSeries` y metadata no secreta del certificado (`certificateSerialNumber`, `certificateFingerprint`, `certificateSubject`, `certificateValidFrom`, `certificateValidTo`). No se almacenan `.key`, contraseña CSD ni token PAC.
+- El servicio de LegalEntity normaliza RFC/códigos, deriva estado y permite mantener perfiles incompletos para operación legacy. Solo `cfdiEnabled=true` exige el perfil completo y fechas de certificado ordenadas.
 - `Sale.currencyCode` inicia en `MXN` para legacy y `Sale.legalEntityId` se resuelve mediante conciliación explícita de ubicación–emisor.
+- Una venta con `requiresAdministrativeInvoice=true` debe resolver exactamente un mapeo vigente hacia una entidad activa, habilitada y fiscalmente completa antes de confirmar la transacción; el fallo revierte cualquier reserva de inventario.
 - `SaleDocument` debe existir para el `Sale.documentType`; `INTERNAL_RECEIPT` puede coexistir como documento adicional.
 - `BillingRequest.saleId` y `AccountReceivable.billingRequestId` dejan de ser relaciones autoritativas y pierden unicidad después de expandir, conciliar y validar las relaciones N:M.
 - Las aplicaciones monetarias usan `Decimal(14,2)`, actor, timestamps y reversión lógica.
@@ -1628,3 +1645,162 @@ Esta extensión permite persistir `LegalEntity`, `Invoice`, `BillingRequestSaleD
 - Una migración de backfill crea o reabre `INVALID_SALE_TOTAL` cuando cualquier partida incumple su ecuación o base gravable, o cuando las sumas de partidas no coinciden con subtotal, descuento, impuesto, base gravable y total de la venta.
 
 La estructura e invariantes están en `specs/modules/billing-reportable-notes/spec.md`.
+
+## Extensión post-MVP: persistencia CFDI 4.0 nativa
+
+- Nuevos enums persistidos en CFDI-04: `InvoiceOrigin`, `CfdiDocumentType`,
+  `InvoiceFiscalStatus`, `FiscalCancellationStatus`, `FiscalOperationType`,
+  `FiscalOperationStatus`, `FiscalArtifactType` y `FiscalArtifactStatus`.
+- Nuevas tablas: `InvoiceConcept`, `FiscalArtifact`,
+  `FiscalOperationAttempt` y `FiscalCertificate`.
+- `Invoice.origin` se agrega en expand y se backfillea como
+  `LEGACY_EXTERNAL`; ninguna fila existente se convierte en nativa.
+- `Invoice.sourceBillingRequestId` único impide más de una raíz nativa por
+  solicitud; `Invoice.fiscalIdempotencyKey` también es único, la correlación es
+  única por intento y los retries `STAMP` reutilizan la clave idempotente con
+  numeración consecutiva.
+- UUID y `(legalEntityId, series, folio)` conservan unicidad.
+- Constraints validan perfil mínimo nativo, metadata obligatoria al quedar
+  `STAMPED`, ecuaciones de conceptos, hashes e intentos.
+- Triggers de inmutabilidad rechazan cambios al snapshot fiscal nativo y
+  update/delete de conceptos.
+- PostgreSQL es la única autoridad de intentos, estados y reconciliación.
+- No existe foreign key ni trigger desde una operación fiscal hacia balances o
+  movimientos de inventario; las pruebas de regresión verifican cero writes.
+- La migración real `20260822120000_add_cfdi_fiscal_data_model` sigue
+  expand–backfill–validate, conserva aplicaciones/sustituciones legacy y crea
+  remediaciones solo para UUID inválido o totales inconsistentes, sin inferir
+  catálogos o snapshots.
+
+Los detalles normativos están en `specs/modules/cfdi/spec.md`.
+
+## Catálogos SAT versionados (CFDI-15)
+
+La persistencia fiscal agrega `SatCatalog`, `SatCatalogVersion` y
+`SatCatalogEntry` con estados `STAGING`, `VALIDATED`, `ACTIVE`, `RETIRED` y
+`FAILED`. Cada versión guarda `sourceVersion`, checksum SHA-256, conteo,
+metadata y timestamps; cada entrada guarda código, descripción, vigencia y
+metadata. `SatCatalog.activeVersionId` apunta a una sola versión activa y se
+actualiza junto con el retiro de la anterior en una transacción corta.
+
+La migración `20260823140000_add_sat_catalog_versioning` es aditiva, crea los
+checks estructurales e índices y no inserta filas SAT. El importador normaliza,
+valida duplicados/rangos/JSON, verifica checksum y no habilita una versión hasta
+`VALIDATED`; no existe consulta SAT en tiempo real durante ventas. Las facturas
+no tienen FK a entradas de catálogo: `Invoice`/`InvoiceConcept` conservan sus
+propios códigos y descripciones históricas.
+
+## Diseño persistente REP 2.0 (CFDI-16; no implementado)
+
+`Invoice` sigue siendo la raíz fiscal. Un REP usa
+`origin=NATIVE_CFDI`, `cfdiType=PAYMENT_RECEIPT`, `currencyCode=XXX`, subtotal,
+impuesto y total `0`; reutiliza UUID, serie/folio, estados, cancelación,
+intentos, certificados y artefactos existentes. `sourceBillingRequestId` queda
+nulo porque la entrada es `Payment`, no `BillingRequest`.
+
+El concepto fiscal fijo se conserva en `InvoiceConcept` con los códigos
+oficiales de Pago; no referencia `Product`. La implementación deberá extender
+el catálogo versionado con `c_TipoRelacion` antes de permitir sustitución `04`.
+
+El diseño agrega el enum `PaymentInvoiceApplicationStatus`:
+
+- `RESERVED`, `UNKNOWN`, `EFFECTIVE`, `REPLACEMENT_PENDING`;
+- `RELEASED`, `REVERSED`, `INCONSISTENT`.
+
+### Extensión aditiva de Payment
+
+Campos fiscales propuestos, nullable durante expand:
+
+- `currencyCode`;
+- `exchangeRateToMxn`;
+- `fiscalPaymentFormCode`;
+- `payerAccountTaxId`, `payerAccountNumber`;
+- `beneficiaryAccountTaxId`, `beneficiaryAccountNumber`;
+- `paymentChainType`, `paymentCertificate`, `paymentChain`, `paymentSeal` solo
+  si un medio futuro los exige.
+
+`paymentMethod` permanece operacional. No se infiere automáticamente una
+`c_FormaPago` para valores ambiguos. Los datos bancarios no se exponen ni se
+llenan cuando la regla fiscal no los requiere.
+
+### PaymentReceipt
+
+Extensión uno-a-uno propiedad de `Invoice(PAYMENT_RECEIPT)`:
+
+- `id`, `invoiceId` único;
+- `complementVersion` (`2.0`);
+- `totalPaymentsMxn`;
+- `taxTotalsSnapshot` JSONB;
+- `snapshotHash` SHA-256;
+- `createdAt`.
+
+### PaymentReceiptDetail
+
+Snapshot de un nodo Pago:
+
+- `id`, `paymentReceiptId`, `paymentId`;
+- `paymentDate`, `paymentFormCode`, `paymentCurrencyCode`;
+- `issuanceDueAt`, derivado del pago y la zona horaria operativa;
+- `exchangeRateToMxn`, `amount`;
+- `operationNumber` y metadata bancaria permitida;
+- `paymentTaxesSnapshot` JSONB, `snapshotHash`;
+- `replacesDetailId` nullable;
+- `createdAt`.
+
+La primera implementación exige un solo detalle por REP y una emisión
+ordinaria abierta por `Payment`. El modelo conserva cardinalidad uno-a-muchos
+para una agrupación mensual futura expresamente aprobada. Una sustitución puede
+referenciar el detalle anterior sin contar ambos como efectivos.
+
+### PaymentInvoiceApplication
+
+Relación fiscal entre un `PaymentReceiptDetail` y una `Invoice` de Ingreso:
+
+- `id`, `paymentReceiptDetailId`, `paymentId`, `relatedInvoiceId`;
+- `sourceAccountReceivableId`, `sourceSaleId` para trazabilidad y validación;
+- `sourceDocumentsSnapshot` con ids/importes de `InvoiceSaleDocument` usados
+  para justificar la capacidad de la venta;
+- `relatedUuid`, `relatedSeries`, `relatedFolio` como snapshots;
+- `documentCurrencyCode`, `equivalenceDr`, `paymentMethodDr`;
+- `installmentNumber` (`NumParcialidad`);
+- `previousBalance` (`ImpSaldoAnt`), `amountPaid` (`ImpPagado`) y
+  `remainingBalance` (`ImpSaldoInsoluto`);
+- `taxObjectCode`, `documentTaxesSnapshot`, `snapshotHash`;
+- `status`, `replacesApplicationId`, `releasedAt`, `reversedAt`, `createdAt`.
+
+Constraints e índices requeridos en la migración futura:
+
+- `UNIQUE(paymentReceiptId, paymentId)` y
+  `UNIQUE(paymentReceiptDetailId, relatedInvoiceId)`;
+- checks de importe positivo, parcialidad positiva y ecuación exacta de saldo;
+- índice por `(relatedInvoiceId, status, installmentNumber)` y por
+  `(paymentId, status)`;
+- unicidad parcial para una emisión ordinaria abierta por pago; las
+  sustituciones deben referenciar el REP reemplazado;
+- triggers insert-only para snapshots después de `STAMPING`;
+- ninguna FK, función o trigger modifica `Payment`, `AccountReceivable`,
+  `Sale`, `SaleDocument`, cierres, rutas o inventario.
+
+### Cálculo y locking
+
+La transacción `Serializable` bloquea `Payment`, su `AccountReceivable`, las
+facturas PPD candidatas y sus aplicaciones por orden estable. La ruta de
+facturas es `Payment -> Sale -> SaleDocument -> InvoiceSaleDocument -> Invoice`.
+El saldo anterior se calcula sobre el total de cada `Invoice`; la capacidad de
+la venta se limita a sus `InvoiceSaleDocument.totalApplied`. Un pago se reparte
+por `Invoice.issuedAt`, `uuid`, `id` hasta que la suma coincide exactamente con
+`Payment.amount`.
+
+`NumParcialidad` es el máximo efectivo de la factura más uno. Una sustitución
+copia el número y saldos sustituidos. Un pago elegible anterior por
+`paidAt,id` bloquea la emisión posterior. Estados `UNKNOWN`, cancelación
+pendiente y reemplazo pendiente conservan la reserva y evitan otra cadena.
+
+### Migración y legacy
+
+CFDI-16 no crea todavía migración Prisma/SQL. La implementación seguirá
+expand-backfill-validate: no crea REP históricos, no asocia pagos a UUID por
+heurística y no completa forma fiscal ambigua. Solo `NATIVE_CFDI`, `INCOME`,
+`ACTIVE`, `STAMPED`, `PPD` será elegible inicialmente. Registros incompletos o
+facturas legacy se registran en `BillingDataRemediation` sin cambiar su saldo
+económico.

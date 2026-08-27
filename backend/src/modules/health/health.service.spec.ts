@@ -130,6 +130,27 @@ describe('HealthService', () => {
     );
   });
 
+  it('keeps readiness independent from fiscal dependency degradation', async () => {
+    service.onApplicationBootstrap();
+    $queryRawUnsafe
+      .mockResolvedValueOnce([{ result: 1 }])
+      .mockRejectedValueOnce(new Error('fiscal metadata unavailable'))
+      .mockResolvedValue([{ result: 1 }]);
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const result = await service.getDependencies();
+
+    expect(result.status).toBe('degraded');
+    expect(result.dependencies.fiscal).toEqual(
+      expect.objectContaining({ status: 'down' }),
+    );
+    await expect(service.getReadiness()).resolves.toEqual(
+      expect.objectContaining({ data: { status: 'ready' } }),
+    );
+  });
+
   it('bounds a dependency probe that never returns', async () => {
     service.onApplicationBootstrap();
     $queryRawUnsafe.mockResolvedValue([{ result: 1 }]);

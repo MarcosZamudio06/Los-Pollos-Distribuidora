@@ -103,6 +103,13 @@ in Git. Required runtime secrets include:
 - `SEED_ADMIN_PASSWORD`, supplied only to the interactive one-shot bootstrap;
 - separate `BACKUP_S3_*` credentials for Backblaze B2.
 
+CFDI remains disabled by default. If a later fiscal rollout sets
+`CFDI_ENABLED=true`, the deployment must also provide an explicit
+`FISCAL_PROVIDER_ENVIRONMENT`, an approved HTTPS `FACTURAMA_API_BASE_URL`, and
+an opaque `FACTURAMA_CREDENTIAL_REF` resolved from Docker Secrets or the
+approved secret manager. Never place a Facturama password, token, CSD
+certificate, or private key in this file or in Compose.
+
 GitHub Actions receives only its built-in `GITHUB_TOKEN`. Cloudflare tokens,
 certificates, private keys, B2 credentials, and application secrets belong to
 their respective host/provider secret stores and must never be copied into a

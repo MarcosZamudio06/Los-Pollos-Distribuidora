@@ -46,6 +46,7 @@ describe('BillingRequestsController API', () => {
     reject: jest.fn(),
     cancel: jest.fn(),
     linkInvoice: jest.fn(),
+    issueCfdi: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -256,6 +257,73 @@ describe('BillingRequestsController API', () => {
       .post('/api/billing/requests')
       .set('Authorization', 'Bearer admin')
       .send({ customerId: 'customer-1', documents: [], reason: 'Seguimiento' })
+      .expect(400);
+  });
+
+  it('issues native CFDI only for ADMIN or BILLING with an idempotency key', async () => {
+    const payload = {
+      expectedVersion: 3,
+      cfdiUse: 'G03',
+      paymentMethod: 'PUE',
+      paymentForm: '01',
+      exportCode: '01',
+    };
+
+    await request(app.getHttpServer())
+      .post('/api/billing/requests/request-1/issue-cfdi')
+      .set('Authorization', 'Bearer admin')
+      .set('Idempotency-Key', 'stamp-1')
+      .send(payload)
+      .expect(201);
+
+    expect(service.issueCfdi).toHaveBeenCalledWith(
+      'request-1',
+      expect.objectContaining(payload),
+      admin,
+      'stamp-1',
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/billing/requests/request-1/issue-cfdi')
+      .set('Authorization', 'Bearer billing')
+      .set('Idempotency-Key', 'stamp-2')
+      .send(payload)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/api/billing/requests/request-1/issue-cfdi')
+      .set('Authorization', 'Bearer seller')
+      .set('Idempotency-Key', 'stamp-3')
+      .send(payload)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post('/api/billing/requests/request-1/issue-cfdi')
+      .set('Authorization', 'Bearer admin')
+      .send(payload)
+      .expect(400);
+  });
+
+  it.each([
+    'uuid',
+    'cfdiSeal',
+    'tfd',
+    'total',
+    'certificateNumber',
+    'providerStatus',
+  ])('rejects server-owned fiscal field %s', async (field) => {
+    await request(app.getHttpServer())
+      .post('/api/billing/requests/request-1/issue-cfdi')
+      .set('Authorization', 'Bearer admin')
+      .set('Idempotency-Key', `forbidden-${field}`)
+      .send({
+        expectedVersion: 3,
+        cfdiUse: 'G03',
+        paymentMethod: 'PUE',
+        paymentForm: '01',
+        exportCode: '01',
+        [field]: 'frontend-owned-value',
+      })
       .expect(400);
   });
 });

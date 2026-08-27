@@ -14,6 +14,7 @@ type ExceptionPayload = {
   code?: unknown;
   error?: unknown;
   errors?: unknown;
+  fields?: unknown;
   findings?: unknown;
   message?: unknown;
   saleIds?: unknown;
@@ -142,7 +143,13 @@ export class SanitizedHttpExceptionFilter implements ExceptionFilter {
     ) {
       extensions.code = payload.message.trim();
     }
-    for (const key of ['blockers', 'errors', 'findings', 'saleIds'] as const) {
+    for (const key of [
+      'blockers',
+      'errors',
+      'fields',
+      'findings',
+      'saleIds',
+    ] as const) {
       if (Array.isArray(payload[key])) extensions[key] = payload[key];
     }
     return extensions;

@@ -92,13 +92,31 @@ export class HealthService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async getDependencies() {
-    const [database, photon, osrm, vroom, tileserver, objectStorage] =
+    const [database, fiscal, photon, osrm, vroom, tileserver, objectStorage] =
       await Promise.all([
         this.probe('database', async () => {
           await this.withTimeout(
             this.prisma.$queryRawUnsafe('SELECT 1'),
             this.dependencyTimeoutMs,
           );
+        }),
+        this.probe('fiscal', async () => {
+          const rows = await this.withTimeout(
+            this.prisma.$queryRawUnsafe<Array<{ invalidCount: number }>>(
+              `SELECT COUNT(*)::int AS "invalidCount"
+                 FROM "LegalEntity"
+                WHERE "isActive" = TRUE
+                  AND "cfdiEnabled" = TRUE
+                  AND (
+                    "certificateValidTo" IS NULL
+                    OR "certificateValidTo" <= NOW()
+                  )`,
+            ),
+            this.dependencyTimeoutMs,
+          );
+          if ((rows[0]?.invalidCount ?? 0) > 0) {
+            throw new Error('fiscal issuer metadata requires attention');
+          }
         }),
         this.probeHttp('PHOTON_URL', '/status'),
         this.probeHttp(
@@ -112,6 +130,7 @@ export class HealthService implements OnApplicationBootstrap, OnModuleDestroy {
 
     const dependencies = {
       database,
+      fiscal,
       photon,
       osrm,
       vroom,

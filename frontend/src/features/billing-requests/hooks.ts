@@ -4,7 +4,11 @@ import { billingRequestsService } from "./billingRequestsService";
 import type {
   BillingRequestFilters,
   BillingRequestMutation,
+  CancelInvoiceInput,
+  IssueCfdiInput,
   InvoiceReconciliationInput,
+  SatCatalogKey,
+  CreateCreditAdjustmentInput,
 } from "./types";
 
 export function useBillingRequests(filters: BillingRequestFilters) {
@@ -81,5 +85,149 @@ export function useLinkBillingInvoice(id: string) {
       void client.invalidateQueries({ queryKey: ["billing-requests"] });
       void client.invalidateQueries({ queryKey: ["billing-reportable-notes"] });
     },
+  });
+}
+
+export function useIssueBillingCfdi(id: string) {
+  const { accessToken } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (command: { input: IssueCfdiInput; idempotencyKey: string }) =>
+      billingRequestsService.issueCfdi(
+        id,
+        command.input,
+        accessToken,
+        command.idempotencyKey,
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["billing-requests", id] });
+      void client.invalidateQueries({ queryKey: ["billing-requests"] });
+      void client.invalidateQueries({ queryKey: ["billing-invoices"] });
+    },
+    onError: () => {
+      // A 409 or transport failure may race with a backend reservation. The
+      // next detail fetch is the source of truth instead of a client retry.
+      void client.invalidateQueries({ queryKey: ["billing-requests", id] });
+    },
+  });
+}
+
+export function useFiscalArtifactDownload() {
+  const { accessToken } = useAuth();
+  return useMutation({
+    mutationFn: (command: { invoiceId: string; type: "XML" | "PDF" }) =>
+      billingRequestsService.getFiscalArtifact(
+        command.invoiceId,
+        command.type,
+        accessToken,
+      ),
+  });
+}
+
+export function useCancelInvoice(invoiceId: string) {
+  const { accessToken } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (command: {
+      input: CancelInvoiceInput;
+      idempotencyKey: string;
+    }) =>
+      billingRequestsService.cancelInvoice(
+        invoiceId,
+        command.input,
+        accessToken,
+        command.idempotencyKey,
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["billing-requests"] });
+      void client.invalidateQueries({ queryKey: ["billing-invoices"] });
+      void client.invalidateQueries({
+        queryKey: ["billing-invoice-cancellation", invoiceId],
+      });
+    },
+    onError: () => {
+      // The server may have accepted the request before the transport failed;
+      // refresh the request instead of issuing another browser-side command.
+      void client.invalidateQueries({ queryKey: ["billing-requests"] });
+    },
+  });
+}
+
+/** Manual status refresh only. There is deliberately no refetchInterval. */
+export function useCancellationStatus(invoiceId?: string, enabled = false) {
+  const { accessToken } = useAuth();
+  return useQuery({
+    enabled: Boolean(invoiceId) && enabled,
+    queryKey: ["billing-invoice-cancellation", invoiceId],
+    queryFn: () =>
+      billingRequestsService.getCancellationStatus(
+        invoiceId as string,
+        accessToken,
+      ),
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    staleTime: 15_000,
+  });
+}
+
+export function useSatCatalog(key: SatCatalogKey, enabled = true) {
+  const { accessToken } = useAuth();
+  return useQuery({
+    enabled,
+    queryKey: ["sat-catalog", key],
+    queryFn: () => billingRequestsService.getSatCatalog(key, accessToken),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useCreateCreditAdjustment() {
+  const { accessToken } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (command: {
+      input: CreateCreditAdjustmentInput;
+      idempotencyKey: string;
+    }) =>
+      billingRequestsService.createCreditAdjustment(
+        command.input,
+        accessToken,
+        command.idempotencyKey,
+      ),
+    onSuccess: () =>
+      void client.invalidateQueries({ queryKey: ["billing-invoices"] }),
+  });
+}
+
+export function useApproveCreditAdjustment() {
+  const { accessToken } = useAuth();
+  return useMutation({
+    mutationFn: (command: { id: string; expectedVersion: number }) =>
+      billingRequestsService.approveCreditAdjustment(
+        command.id,
+        command.expectedVersion,
+        accessToken,
+      ),
+  });
+}
+
+export function useIssueCreditAdjustment() {
+  const { accessToken } = useAuth();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (command: {
+      id: string;
+      expectedVersion: number;
+      idempotencyKey: string;
+    }) =>
+      billingRequestsService.issueCreditAdjustment(
+        command.id,
+        command.expectedVersion,
+        accessToken,
+        command.idempotencyKey,
+      ),
+    onSuccess: () =>
+      void client.invalidateQueries({ queryKey: ["billing-invoices"] }),
   });
 }

@@ -149,3 +149,27 @@ describe('fleet permission contract', () => {
     expect(ROLE_PERMISSION_KEYS.DRIVER).not.toContain(PERMISSIONS.FLEET_MANAGE);
   });
 });
+
+describe('CFDI issuer configuration permission contract', () => {
+  it('allows only ADMIN and BILLING to manage issuer configuration', () => {
+    expect(PERMISSIONS.CFDI_PROVIDER_MANAGE).toBe('cfdi.provider.manage');
+    expect(PERMISSION_DEFINITIONS.map(({ key }) => key)).toContain(
+      PERMISSIONS.CFDI_PROVIDER_MANAGE,
+    );
+    expect(PERMISSION_METADATA[PERMISSIONS.CFDI_PROVIDER_MANAGE]).toEqual({
+      group: 'Finance',
+      risk: 'critical',
+    });
+    expect(ROLE_PERMISSION_KEYS.ADMIN).toContain(
+      PERMISSIONS.CFDI_PROVIDER_MANAGE,
+    );
+    expect(ROLE_PERMISSION_KEYS.BILLING).toContain(
+      PERMISSIONS.CFDI_PROVIDER_MANAGE,
+    );
+    for (const role of ['COLLECTIONS', 'DRIVER', 'SELLER', 'WAREHOUSE']) {
+      expect(ROLE_PERMISSION_KEYS[role]).not.toContain(
+        PERMISSIONS.CFDI_PROVIDER_MANAGE,
+      );
+    }
+  });
+});

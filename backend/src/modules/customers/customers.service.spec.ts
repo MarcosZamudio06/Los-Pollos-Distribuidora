@@ -36,6 +36,9 @@ type CustomerRecord = {
   fiscalName: string | null;
   taxId: string | null;
   fiscalAddress: string | null;
+  fiscalPostalCode: string | null;
+  fiscalRegime: string | null;
+  fiscalUseCode: string | null;
   deliveryAddress: string | null;
   assignedRouteId: string | null;
   commercialPolicyId: string | null;
@@ -115,8 +118,11 @@ function createCustomer(
     creditStatus: CreditStatus.ACTIVE,
     requiresBilling: true,
     fiscalName: 'Razón social opcional',
-    taxId: 'RFC123456789',
+    taxId: 'XAXX010101000',
     fiscalAddress: 'Fiscal address',
+    fiscalPostalCode: '91700',
+    fiscalRegime: '601',
+    fiscalUseCode: 'G03',
     deliveryAddress: 'Delivery address',
     assignedRouteId: 'route-1',
     commercialPolicyId: 'policy-1',
@@ -243,7 +249,7 @@ describe('CustomersService', () => {
       expect.objectContaining({
         id: 'customer-1',
         fiscalName: 'Razón social opcional',
-        taxId: 'RFC123456789',
+        taxId: 'XAXX010101000',
         requiresBilling: true,
         commercialPolicy: null,
         creditSummary: expect.objectContaining({
@@ -392,6 +398,146 @@ describe('CustomersService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.customer.create).not.toHaveBeenCalled();
+  });
+
+  it('normalizes and validates the complete fiscal profile only for billable customers', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findUnique.mockResolvedValue(null);
+    prisma.customer.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(createCustomer(data as Partial<CustomerRecord>)),
+    );
+
+    await expect(
+      service.create(
+        {
+          name: 'Cliente facturable',
+          customerType: CustomerType.INSTITUTIONAL,
+          requiresBilling: true,
+          billingEmail: '  FACTURACION@EMPRESA.COM.MX ',
+          fiscalName: ' Empresa Facturable ',
+          taxId: ' abc010203ab9 ',
+          fiscalPostalCode: ' 91700 ',
+          fiscalRegime: ' 601 ',
+          fiscalUseCode: ' g03 ',
+        },
+        adminUser,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        requiresBilling: true,
+        billingEmail: 'facturacion@empresa.com.mx',
+        fiscalName: 'Empresa Facturable',
+        taxId: 'ABC010203AB9',
+        fiscalPostalCode: '91700',
+        fiscalRegime: '601',
+        fiscalUseCode: 'G03',
+      }),
+    );
+    expect(prisma.customer.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        billingEmail: 'facturacion@empresa.com.mx',
+        taxId: 'ABC010203AB9',
+        fiscalPostalCode: '91700',
+        fiscalRegime: '601',
+        fiscalUseCode: 'G03',
+      }),
+    });
+
+    const { service: optionalService, prisma: optionalPrisma } =
+      createService();
+    optionalPrisma.customer.findUnique.mockResolvedValue(null);
+    optionalPrisma.customer.create.mockImplementation(
+      ({ data }: { data: unknown }) =>
+        Promise.resolve(createCustomer(data as Partial<CustomerRecord>)),
+    );
+    await expect(
+      optionalService.create(
+        { name: 'Cliente no facturable', customerType: CustomerType.RETAIL },
+        adminUser,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ name: 'Cliente no facturable' }),
+    );
+  });
+
+  it('rejects malformed RFC, postal code, and SAT catalog codes', async () => {
+    const invalidProfiles = [
+      { taxId: 'ABC991332AB9', expectedField: 'taxId' },
+      { fiscalPostalCode: '9170A', expectedField: 'fiscalPostalCode' },
+      { fiscalRegime: '999', expectedField: 'fiscalRegime' },
+      { fiscalUseCode: 'P01', expectedField: 'fiscalUseCode' },
+      { billingEmail: 'not-an-email', expectedField: 'billingEmail' },
+    ] as const;
+
+    for (const invalidProfile of invalidProfiles) {
+      const { service, prisma } = createService();
+      prisma.customer.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(
+          {
+            name: 'Cliente con perfil inválido',
+            customerType: CustomerType.RETAIL,
+            ...invalidProfile,
+          },
+          adminUser,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: expect.stringMatching(/^INVALID_/),
+          fields: [invalidProfile.expectedField],
+        }),
+      });
+      expect(prisma.customer.create).not.toHaveBeenCalled();
+    }
+  });
+
+  it('requires the merged fiscal profile when an existing customer remains billable', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());
+
+    await expect(
+      service.update('customer-1', { fiscalPostalCode: '' }, adminUser),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'MISSING_FISCAL_PROFILE',
+        fields: expect.arrayContaining(['fiscalPostalCode']),
+      }),
+    });
+    expect(prisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('preserves unrelated updates for legacy non-billable fiscal data', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce(
+      createCustomer({
+        requiresBilling: false,
+        taxId: 'LEGACY-RFC',
+      }),
+    );
+    prisma.customer.update.mockResolvedValueOnce(
+      createCustomer({
+        requiresBilling: false,
+        taxId: 'LEGACY-RFC',
+        deliveryAddress: 'Updated delivery address',
+      }),
+    );
+
+    await expect(
+      service.update(
+        'customer-1',
+        { deliveryAddress: 'Updated delivery address' },
+        adminUser,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        deliveryAddress: 'Updated delivery address',
+        taxId: 'LEGACY-RFC',
+      }),
+    );
+    expect(prisma.customer.update).toHaveBeenCalledWith({
+      where: { id: 'customer-1' },
+      data: { deliveryAddress: 'Updated delivery address' },
+    });
   });
 
   it('updates active customers, maps unique phone races, and soft-deactivates without physical delete', async () => {

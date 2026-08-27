@@ -363,3 +363,92 @@ El cambio explícito de PRD habilita un bounded context de facturación operativ
 `LegalEntity` modela el emisor y no se confunde con `OperationalLocation`. Reporte, indicadores y exportaciones comparten read model y predicado de filtros. Importes JSON se serializan como cadenas decimales; CSV/XLSX conserva importes numéricos.
 
 La fuente canónica es `specs/modules/billing-reportable-notes/spec.md`. Persisten fuera de alcance CFDI/XML, timbrado, PAC, integración SAT y `PaymentAllocation`.
+
+## 16. Bounded context CFDI 4.0 nativo
+
+La fase fiscal aprobada se implementa dentro del monolito NestJS como un módulo
+aislado `cfdi`. Reutiliza el modelo contable de facturación, pero no comparte
+los comandos de Sales, Inventory, Payments o Accounts Receivable.
+
+`BillingRequest.APPROVED` habilita un comando; no es un estado PAC. Una
+`Invoice` `NATIVE_CFDI` persiste snapshots e identidad antes de cualquier red,
+pero solo se considera emitida al quedar `STAMPED`. `FiscalOperationAttempt`
+conserva idempotencia, correlación y reconciliación. La factura mantiene
+`InvoiceSaleDocument` e `InvoiceSaleItemApplication`, por lo que no existe una
+segunda relación CFDI-venta.
+
+El núcleo `cfdi/domain` permanece neutral al proveedor y separa lectura de
+construcción: `CfdiValidationService` resuelve únicamente una solicitud
+`APPROVED` y sus saldos vigentes; `CfdiDocumentBuilder` valida perfiles,
+composición, catálogos, configuración de pago y ecuaciones con
+`Prisma.Decimal`, y devuelve un snapshot profundamente inmutable con hash
+canónico. Ninguno ejecuta comandos de Sales, Inventory, Payments o Accounts
+Receivable. La máquina de dominio expone transiciones explícitas desde
+`DRAFT`/`VALIDATING` hasta timbrado, ambigüedad, cancelación y sustitución, y se
+proyecta sobre los enums persistidos de `Invoice` sin introducir otra fuente
+de verdad.
+
+Los códigos fiscales se resuelven contra `SatCatalog`/`SatCatalogVersion`/
+`SatCatalogEntry`, cargados por un proceso de importación revisado y activados
+atómicamente. No se consulta SAT durante una venta, no se siembran códigos
+supuestos y una factura conserva código/descripción en su propio snapshot sin
+FK hacia una entrada mutable. La API de catálogo es read-only para
+`ADMIN`/`BILLING` y una versión no configurada bloquea emisión CFDI, no la
+operación comercial.
+
+`FiscalProviderPort` protege el dominio de DTOs y errores del proveedor. El
+primer adaptador es Facturama Multiemisor y la selección ocurre por un binding
+de `LegalEntity`; un futuro Finkok implementa el mismo puerto. Credenciales,
+CSD, UUID, TFD, sellos, datos SAT, identificadores PAC y artefactos nunca cruzan
+un contrato de escritura frontend.
+
+La coordinación usa PostgreSQL con transacciones serializables, restricciones,
+leases y `FOR UPDATE SKIP LOCKED`. Las llamadas PAC y ObjectStorage ocurren
+fuera de las transacciones. Un timeout se persiste como `UNKNOWN`, se reconcilia
+por referencia o emisor/serie/folio y no se reenvía automáticamente. No se
+incorporan Redis, Kafka ni microservicio fiscal.
+
+La emisión inicial separa explícitamente preparación, red y finalización. La
+preparación reserva la única raíz, folio, snapshot, conceptos y aplicaciones;
+la llamada PAC ocurre después del commit; la finalización conserva la reserva
+en éxito/`UNKNOWN` y la revierte solo ante rechazo definitivo. Un rollback tras
+éxito remoto nunca repite el POST y fuerza conciliación.
+
+XML, PDF y acuses se publican mediante el ObjectStorage privado existente con
+clave determinista y checksum. PostgreSQL conserva únicamente metadata/hash;
+no guarda bytes ni funciona como segunda fuente de archivos.
+
+Permisos dedicados `cfdi.*` limitan lectura, emisión, reconciliación,
+cancelación, artefactos y configuración. `ADMIN` y `BILLING` operan la primera
+fase; los demás roles no obtienen comandos fiscales por defecto.
+
+La fuente canónica es `specs/modules/cfdi/spec.md`; la decisión y alternativas
+están en `docs/adr/ADR-001-native-cfdi-4-architecture.md`.
+
+## 17. Arquitectura REP 2.0
+
+CFDI-16 extiende el bounded context fiscal sin cambiar la autoridad económica.
+`Payment` continúa siendo el dinero recibido y `AccountReceivable` el saldo de
+cobranza. El REP se persiste como `Invoice(PAYMENT_RECEIPT)` y posee
+`PaymentReceipt`, `PaymentReceiptDetail` y `PaymentInvoiceApplication` como
+snapshots fiscales; ninguna de esas entidades participa en caja, cartera,
+liquidación de ruta o inventario.
+
+La frontera no supone un único UUID por venta. Resuelve las facturas de Ingreso
+PPD mediante `InvoiceSaleDocument`, permite que un `Payment` se distribuya
+sobre varias facturas y calcula parcialidad/saldos desde la cadena fiscal de
+cada `Invoice`. La capacidad de cada factura también se limita por el importe
+de la venta que `InvoiceSaleDocument` aplicó, evitando que un pago de una venta
+consuma el tramo de otra venta dentro de una factura agrupada.
+
+La coordinación repite la frontera corta DB/red del timbrado actual:
+transacción `Serializable` para reservar, llamada PAC fuera del lock y
+finalización atómica. `UNKNOWN` conserva la reserva y bloquea duplicados. La
+cancelación solo revierte aplicaciones tras confirmación fiscal, y una
+sustitución mantiene una sola cadena efectiva mientras el original se cancela.
+
+Cobranza en ruta, pago parcial y segunda vuelta no crean un flujo fiscal
+paralelo: cuando producen `Payment(APPLIED)`, ese mismo registro puede originar
+el REP. La entrada API se diseña por pago, no por una factura supuesta. El
+contrato completo vive en `specs/modules/cfdi/spec.md` y la decisión en
+`docs/adr/ADR-012-rep-2-payment-invoice-applications.md`.

@@ -22,6 +22,9 @@ export type Customer = {
   fiscalName?: string | null;
   taxId?: string | null;
   fiscalAddress?: string | null;
+  fiscalPostalCode?: string | null;
+  fiscalRegime?: string | null;
+  fiscalUseCode?: string | null;
   deliveryAddress?: string | null;
   assignedRouteId?: string | null;
   assignedRoute?: { id: string; name?: string | null } | string | null;
@@ -104,6 +107,9 @@ export type CustomerFormValues = {
   fiscalName: string;
   taxId: string;
   fiscalAddress: string;
+  fiscalPostalCode: string;
+  fiscalRegime: string;
+  fiscalUseCode: string;
 };
 
 export type CustomerSale = {

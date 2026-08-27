@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsEmpty,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -23,6 +24,10 @@ import {
 
 function trim({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
+}
+
+function upper({ value }: TransformFnParams): unknown {
+  return typeof value === 'string' ? value.trim().toUpperCase() : value;
 }
 
 export class ListBillingRequestsQueryDto {
@@ -101,6 +106,33 @@ export class CancelBillingRequestDto {
 }
 
 export class ReviewBillingRequestDto extends CancelBillingRequestDto {}
+
+export class IssueCfdiDto {
+  @Type(() => Number) @IsInt() @Min(1) expectedVersion!: number;
+  @Transform(upper) @IsString() @Matches(/^[A-Z0-9]{3}$/) cfdiUse!: string;
+  @Transform(upper) @IsString() @Matches(/^(PUE|PPD)$/) paymentMethod!: string;
+  @Transform(upper) @IsString() @Matches(/^\d{2}$/) paymentForm!: string;
+  @Transform(upper) @IsString() @Matches(/^\d{2}$/) exportCode!: string;
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\d+(\.\d{1,6})?$/)
+  tipoCambio?: string;
+
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) uuid?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) cfdiSeal?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) satSeal?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) seals?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) tfd?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) tfdVersion?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) subtotal?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) discount?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) tax?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) total?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) certificateNumber?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) providerStatus?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) providerReference?: never;
+}
 
 export class InvoiceSaleItemApplicationDto {
   @Transform(trim) @IsString() @IsNotEmpty() saleItemId!: string;

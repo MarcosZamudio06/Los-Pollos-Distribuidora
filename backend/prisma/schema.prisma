@@ -160,6 +160,100 @@ enum InvoiceStatus {
   SUBSTITUTED
 }
 
+enum InvoiceOrigin {
+  LEGACY_EXTERNAL
+  NATIVE_CFDI
+}
+
+enum CfdiDocumentType {
+  INCOME
+  EXPENSE
+  PAYMENT_RECEIPT
+}
+
+enum InvoiceFiscalStatus {
+  LEGACY
+  DRAFT
+  READY
+  STAMPING
+  STAMPED
+  FAILED
+  UNKNOWN
+}
+
+enum FiscalCancellationStatus {
+  NOT_APPLICABLE
+  NOT_REQUESTED
+  PENDING
+  ACCEPTED
+  REJECTED
+  UNKNOWN
+}
+
+enum FiscalOperationType {
+  STAMP
+  CANCEL
+  STATUS
+  RECOVERY
+}
+
+enum FiscalOperationStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  RETRYABLE_FAILURE
+  TERMINAL_FAILURE
+  UNKNOWN
+}
+
+enum PaymentInvoiceApplicationStatus {
+  RESERVED
+  UNKNOWN
+  EFFECTIVE
+  REPLACEMENT_PENDING
+  RELEASED
+  REVERSED
+  INCONSISTENT
+}
+
+enum CreditAdjustmentStatus {
+  DRAFT
+  APPROVED
+  ISSUING
+  UNKNOWN
+  ISSUED
+  ISSUE_ERROR
+  REJECTED
+  CANCELLED
+}
+
+enum CreditAdjustmentSourceType {
+  APPROVED_RETURN
+  BONUS
+  POST_SALE_DISCOUNT
+  COMMERCIAL_ADJUSTMENT
+}
+
+enum FiscalArtifactType {
+  XML
+  PDF
+  CANCELLATION_ACK
+}
+
+enum FiscalArtifactStatus {
+  PENDING
+  AVAILABLE
+  FAILED
+}
+
+enum SatCatalogVersionStatus {
+  STAGING
+  VALIDATED
+  ACTIVE
+  RETIRED
+  FAILED
+}
+
 enum DeliveryRouteStatus {
   PENDING
   IN_PROGRESS
@@ -394,108 +488,111 @@ model RolePermission {
 }
 
 model User {
-  id                              String                       @id @default(cuid())
+  id                              String                          @id @default(cuid())
   name                            String
-  email                           String                       @unique
-  controlNumber                   String                       @unique
-  phone                           String                       @unique
+  email                           String                          @unique
+  controlNumber                   String                          @unique
+  phone                           String                          @unique
   passwordHash                    String
   roleId                          String
   operationalLocationId           String
   cedisLocationId                 String?
-  isActive                        Boolean                      @default(true)
-  mustChangePassword              Boolean                      @default(false)
-  sessionVersion                  Int                          @default(0)
+  isActive                        Boolean                         @default(true)
+  mustChangePassword              Boolean                         @default(false)
+  sessionVersion                  Int                             @default(0)
   deactivatedAt                   DateTime?
   deactivatedByUserId             String?
   deactivationReason              String?
-  createdAt                       DateTime                     @default(now())
-  updatedAt                       DateTime                     @updatedAt
-  role                            Role                         @relation(fields: [roleId], references: [id])
-  operationalLocation             OperationalLocation          @relation("UserOperationalLocation", fields: [operationalLocationId], references: [id])
-  cedisLocation                   OperationalLocation?         @relation("UserCedisAssignment", fields: [cedisLocationId], references: [id], onDelete: Restrict)
-  deactivatedBy                   User?                        @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id])
-  deactivatedUsers                User[]                       @relation("UserDeactivatedBy")
-  sales                           Sale[]                       @relation("SaleCreatedBy")
-  cashierSales                    Sale[]                       @relation("SaleCashier")
-  deliveredSales                  Sale[]                       @relation("SaleDeliveredBy")
-  collectedSales                  Sale[]                       @relation("SaleCollectedBy")
-  cancelledSales                  Sale[]                       @relation("SaleCancelledBy")
-  deliveredSaleDocuments          SaleDocument[]               @relation("SaleDocumentDeliveredBy")
-  collectedSaleDocuments          SaleDocument[]               @relation("SaleDocumentCollectedBy")
+  createdAt                       DateTime                        @default(now())
+  updatedAt                       DateTime                        @updatedAt
+  role                            Role                            @relation(fields: [roleId], references: [id])
+  operationalLocation             OperationalLocation             @relation("UserOperationalLocation", fields: [operationalLocationId], references: [id])
+  cedisLocation                   OperationalLocation?            @relation("UserCedisAssignment", fields: [cedisLocationId], references: [id], onDelete: Restrict)
+  deactivatedBy                   User?                           @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id])
+  deactivatedUsers                User[]                          @relation("UserDeactivatedBy")
+  sales                           Sale[]                          @relation("SaleCreatedBy")
+  cashierSales                    Sale[]                          @relation("SaleCashier")
+  deliveredSales                  Sale[]                          @relation("SaleDeliveredBy")
+  collectedSales                  Sale[]                          @relation("SaleCollectedBy")
+  cancelledSales                  Sale[]                          @relation("SaleCancelledBy")
+  deliveredSaleDocuments          SaleDocument[]                  @relation("SaleDocumentDeliveredBy")
+  collectedSaleDocuments          SaleDocument[]                  @relation("SaleDocumentCollectedBy")
   purchases                       Purchase[]
   inventoryMovements              InventoryMovement[]
-  inventoryTransfers              InventoryTransfer[]          @relation("InventoryTransferCreatedBy")
-  cancelledInventoryTransfers     InventoryTransfer[]          @relation("InventoryTransferCancelledBy")
-  approvedEquivalents             ProductUnitEquivalent[]      @relation("EquivalentApprovedBy")
-  createdEquivalents              ProductUnitEquivalent[]      @relation("EquivalentCreatedBy")
-  payments                        Payment[]                    @relation("PaymentRegisteredBy")
-  collectedPayments               Payment[]                    @relation("PaymentCollectedBy")
-  cancelledPayments               Payment[]                    @relation("PaymentCancelledBy")
-  createdCommercialPolicies       CommercialPolicy[]           @relation("CommercialPolicyCreatedBy")
-  updatedCommercialPolicies       CommercialPolicy[]           @relation("CommercialPolicyUpdatedBy")
-  createdOperationalConfigs       OperationalConfig[]          @relation("OperationalConfigCreatedBy")
-  updatedOperationalConfigs       OperationalConfig[]          @relation("OperationalConfigUpdatedBy")
-  deliveryRoutes                  DeliveryRoute[]              @relation("DeliveryRouteDriver")
-  completedLogisticsStops         DeliveryRoute[]              @relation("DeliveryRouteLogisticsStopCompletedBy")
-  vehiclePositions                VehiclePosition[]            @relation("VehiclePositionDriver")
-  deliveryIncidentsAsDriver       DeliveryIncident[]            @relation("DeliveryIncidentDriver")
-  reportedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentReportedBy")
-  resolvedDeliveryIncidents       DeliveryIncident[]            @relation("DeliveryIncidentResolvedBy")
-  routeSettlementOpeningCommands RouteSettlementOpeningCommand[] @relation("RouteSettlementOpeningCreatedBy")
-  createdRoutePlans               DeliveryRoutePlanDraft[]     @relation("RoutePlanCreatedBy")
-  plannedRouteAssignments         DeliveryRoutePlanDraft[]     @relation("RoutePlanDriver")
-  deliveredOrders                 DeliveryOrder[]              @relation("DeliveryOrderDeliveredBy")
-  collectedOrders                 DeliveryOrder[]              @relation("DeliveryOrderCollectedBy")
-  createdDeliveryZones            DeliveryZone[]               @relation("DeliveryZoneCreatedBy")
-  updatedDeliveryZones            DeliveryZone[]               @relation("DeliveryZoneUpdatedBy")
-  requestedBillingRequests        BillingRequest[]             @relation("BillingRequestRequestedBy")
-  reviewedBillingRequests         BillingRequest[]             @relation("BillingRequestReviewedBy")
-  billingRequestChanges           BillingRequestHistory[]      @relation("BillingRequestHistoryChangedBy")
-  createdInvoices                 Invoice[]                    @relation("InvoiceCreatedBy")
-  cancelledInvoices               Invoice[]                    @relation("InvoiceCancelledBy")
-  createdBillingDocuments         BillingRequestSaleDocument[] @relation("BillingRequestSaleDocumentCreatedBy")
-  reversedBillingDocuments        BillingRequestSaleDocument[] @relation("BillingRequestSaleDocumentReversedBy")
-  createdInvoiceDocuments         InvoiceSaleDocument[]        @relation("InvoiceSaleDocumentCreatedBy")
-  reversedInvoiceDocuments        InvoiceSaleDocument[]        @relation("InvoiceSaleDocumentReversedBy")
-  createdInvoiceItemApplications  InvoiceSaleItemApplication[] @relation("InvoiceSaleItemApplicationCreatedBy")
-  reversedInvoiceItemApplications InvoiceSaleItemApplication[] @relation("InvoiceSaleItemApplicationReversedBy")
-  resolvedBillingRemediations     BillingDataRemediation[]     @relation("BillingDataRemediationResolvedBy")
-  billingAuditLogs                BillingAuditLog[]            @relation("BillingAuditActor")
-  accessControlAuditLogs          AccessControlAuditLog[]      @relation("AccessControlAuditActor")
-  collectedReceivables            AccountReceivable[]          @relation("AccountReceivableCollector")
-  routeSettlements                RouteSettlement[]            @relation("RouteSettlementDriver")
-  reopenedRouteSettlements        RouteSettlement[]            @relation("RouteSettlementReopenedBy")
-  openedDailyCloses               PointOfSaleDailyClose[]      @relation("DailyCloseOpenedBy")
-  reviewedDailyCloses             PointOfSaleDailyClose[]      @relation("DailyCloseReviewedBy")
-  closedDailyCloses               PointOfSaleDailyClose[]      @relation("DailyCloseClosedBy")
-  cancelledDailyCloses            PointOfSaleDailyClose[]      @relation("DailyCloseCancelledBy")
-  reopenedDailyCloses             PointOfSaleDailyClose[]      @relation("DailyCloseReopenedBy")
+  inventoryTransfers              InventoryTransfer[]             @relation("InventoryTransferCreatedBy")
+  cancelledInventoryTransfers     InventoryTransfer[]             @relation("InventoryTransferCancelledBy")
+  approvedEquivalents             ProductUnitEquivalent[]         @relation("EquivalentApprovedBy")
+  createdEquivalents              ProductUnitEquivalent[]         @relation("EquivalentCreatedBy")
+  payments                        Payment[]                       @relation("PaymentRegisteredBy")
+  collectedPayments               Payment[]                       @relation("PaymentCollectedBy")
+  cancelledPayments               Payment[]                       @relation("PaymentCancelledBy")
+  createdCommercialPolicies       CommercialPolicy[]              @relation("CommercialPolicyCreatedBy")
+  updatedCommercialPolicies       CommercialPolicy[]              @relation("CommercialPolicyUpdatedBy")
+  createdOperationalConfigs       OperationalConfig[]             @relation("OperationalConfigCreatedBy")
+  updatedOperationalConfigs       OperationalConfig[]             @relation("OperationalConfigUpdatedBy")
+  deliveryRoutes                  DeliveryRoute[]                 @relation("DeliveryRouteDriver")
+  completedLogisticsStops         DeliveryRoute[]                 @relation("DeliveryRouteLogisticsStopCompletedBy")
+  vehiclePositions                VehiclePosition[]               @relation("VehiclePositionDriver")
+  deliveryIncidentsAsDriver       DeliveryIncident[]              @relation("DeliveryIncidentDriver")
+  reportedDeliveryIncidents       DeliveryIncident[]              @relation("DeliveryIncidentReportedBy")
+  resolvedDeliveryIncidents       DeliveryIncident[]              @relation("DeliveryIncidentResolvedBy")
+  routeSettlementOpeningCommands  RouteSettlementOpeningCommand[] @relation("RouteSettlementOpeningCreatedBy")
+  createdRoutePlans               DeliveryRoutePlanDraft[]        @relation("RoutePlanCreatedBy")
+  plannedRouteAssignments         DeliveryRoutePlanDraft[]        @relation("RoutePlanDriver")
+  deliveredOrders                 DeliveryOrder[]                 @relation("DeliveryOrderDeliveredBy")
+  collectedOrders                 DeliveryOrder[]                 @relation("DeliveryOrderCollectedBy")
+  createdDeliveryZones            DeliveryZone[]                  @relation("DeliveryZoneCreatedBy")
+  updatedDeliveryZones            DeliveryZone[]                  @relation("DeliveryZoneUpdatedBy")
+  requestedBillingRequests        BillingRequest[]                @relation("BillingRequestRequestedBy")
+  reviewedBillingRequests         BillingRequest[]                @relation("BillingRequestReviewedBy")
+  billingRequestChanges           BillingRequestHistory[]         @relation("BillingRequestHistoryChangedBy")
+  createdInvoices                 Invoice[]                       @relation("InvoiceCreatedBy")
+  createdPaymentReceipts          PaymentReceipt[]                @relation("PaymentReceiptCreatedBy")
+  createdCreditAdjustments        CreditAdjustment[]              @relation("CreditAdjustmentCreatedBy")
+  authorizedCreditAdjustments     CreditAdjustment[]              @relation("CreditAdjustmentAuthorizedBy")
+  cancelledInvoices               Invoice[]                       @relation("InvoiceCancelledBy")
+  createdBillingDocuments         BillingRequestSaleDocument[]    @relation("BillingRequestSaleDocumentCreatedBy")
+  reversedBillingDocuments        BillingRequestSaleDocument[]    @relation("BillingRequestSaleDocumentReversedBy")
+  createdInvoiceDocuments         InvoiceSaleDocument[]           @relation("InvoiceSaleDocumentCreatedBy")
+  reversedInvoiceDocuments        InvoiceSaleDocument[]           @relation("InvoiceSaleDocumentReversedBy")
+  createdInvoiceItemApplications  InvoiceSaleItemApplication[]    @relation("InvoiceSaleItemApplicationCreatedBy")
+  reversedInvoiceItemApplications InvoiceSaleItemApplication[]    @relation("InvoiceSaleItemApplicationReversedBy")
+  resolvedBillingRemediations     BillingDataRemediation[]        @relation("BillingDataRemediationResolvedBy")
+  billingAuditLogs                BillingAuditLog[]               @relation("BillingAuditActor")
+  accessControlAuditLogs          AccessControlAuditLog[]         @relation("AccessControlAuditActor")
+  collectedReceivables            AccountReceivable[]             @relation("AccountReceivableCollector")
+  routeSettlements                RouteSettlement[]               @relation("RouteSettlementDriver")
+  reopenedRouteSettlements        RouteSettlement[]               @relation("RouteSettlementReopenedBy")
+  openedDailyCloses               PointOfSaleDailyClose[]         @relation("DailyCloseOpenedBy")
+  reviewedDailyCloses             PointOfSaleDailyClose[]         @relation("DailyCloseReviewedBy")
+  closedDailyCloses               PointOfSaleDailyClose[]         @relation("DailyCloseClosedBy")
+  cancelledDailyCloses            PointOfSaleDailyClose[]         @relation("DailyCloseCancelledBy")
+  reopenedDailyCloses             PointOfSaleDailyClose[]         @relation("DailyCloseReopenedBy")
   createdDailyCloseLines          PointOfSaleDailyCloseLine[]
-  countedDailyCloseInventories    DailyCloseInventoryCount[]   @relation("DailyCloseInventoryCountedBy")
-  dailyCloseEvents                DailyCloseEvent[]            @relation("DailyCloseEventCreatedBy")
-  dailyCloseSnapshots             DailyCloseSnapshot[]         @relation("DailyCloseSnapshotCreatedBy")
-  justifiedDailyCloseDifferences  DailyCloseDifference[]       @relation("DailyCloseDifferenceJustifiedBy")
-  authorizedDailyCloseDifferences DailyCloseDifference[]       @relation("DailyCloseDifferenceAuthorizedBy")
-  branchSupplyCyclesOpened        BranchSupplyCycle[]          @relation("BranchSupplyCycleOpenedBy")
-  branchSupplyCyclesReviewed      BranchSupplyCycle[]          @relation("BranchSupplyCycleReviewedBy")
-  branchSupplyCyclesClosed        BranchSupplyCycle[]          @relation("BranchSupplyCycleClosedBy")
-  branchSupplyCyclesCancelled     BranchSupplyCycle[]          @relation("BranchSupplyCycleCancelledBy")
-  branchSupplyCyclesReopened      BranchSupplyCycle[]          @relation("BranchSupplyCycleReopenedBy")
-  branchSupplyCycleTransfers      BranchSupplyCycleTransfer[]  @relation("BranchSupplyCycleTransferLinkedBy")
-  branchSupplyReceiptsReceived    BranchSupplyReceipt[]        @relation("BranchSupplyReceiptReceivedBy")
-  branchSupplyCycleEvents         BranchSupplyCycleEvent[]     @relation("BranchSupplyCycleEventActor")
+  countedDailyCloseInventories    DailyCloseInventoryCount[]      @relation("DailyCloseInventoryCountedBy")
+  dailyCloseEvents                DailyCloseEvent[]               @relation("DailyCloseEventCreatedBy")
+  dailyCloseSnapshots             DailyCloseSnapshot[]            @relation("DailyCloseSnapshotCreatedBy")
+  justifiedDailyCloseDifferences  DailyCloseDifference[]          @relation("DailyCloseDifferenceJustifiedBy")
+  authorizedDailyCloseDifferences DailyCloseDifference[]          @relation("DailyCloseDifferenceAuthorizedBy")
+  branchSupplyCyclesOpened        BranchSupplyCycle[]             @relation("BranchSupplyCycleOpenedBy")
+  branchSupplyCyclesReviewed      BranchSupplyCycle[]             @relation("BranchSupplyCycleReviewedBy")
+  branchSupplyCyclesClosed        BranchSupplyCycle[]             @relation("BranchSupplyCycleClosedBy")
+  branchSupplyCyclesCancelled     BranchSupplyCycle[]             @relation("BranchSupplyCycleCancelledBy")
+  branchSupplyCyclesReopened      BranchSupplyCycle[]             @relation("BranchSupplyCycleReopenedBy")
+  branchSupplyCycleTransfers      BranchSupplyCycleTransfer[]     @relation("BranchSupplyCycleTransferLinkedBy")
+  branchSupplyReceiptsReceived    BranchSupplyReceipt[]           @relation("BranchSupplyReceiptReceivedBy")
+  branchSupplyCycleEvents         BranchSupplyCycleEvent[]        @relation("BranchSupplyCycleEventActor")
   branchSupplyCycleSnapshots      BranchSupplyCycleSnapshot[]
   cashMovements                   CashMovement[]
-  cashShifts                      CashShift[]                  @relation("CashShiftCashier")
-  closedCashShifts                CashShift[]                  @relation("CashShiftClosedBy")
-  requestedTerminalActivations    CashTerminalActivation[]     @relation("CashTerminalActivationRequestedBy")
-  consumedTerminalActivations     CashTerminalActivation[]     @relation("CashTerminalActivationConsumedBy")
+  cashShifts                      CashShift[]                     @relation("CashShiftCashier")
+  closedCashShifts                CashShift[]                     @relation("CashShiftClosedBy")
+  requestedTerminalActivations    CashTerminalActivation[]        @relation("CashTerminalActivationRequestedBy")
+  consumedTerminalActivations     CashTerminalActivation[]        @relation("CashTerminalActivationConsumedBy")
   capturedScaleTickets            ScaleTicketReference[]
-  issuedDiscountAuthorizations    DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedBy")
-  grantedDiscountAuthorizations   DiscountAuthorization[]      @relation("DiscountAuthorizationAuthorizedFor")
+  issuedDiscountAuthorizations    DiscountAuthorization[]         @relation("DiscountAuthorizationAuthorizedBy")
+  grantedDiscountAuthorizations   DiscountAuthorization[]         @relation("DiscountAuthorizationAuthorizedFor")
   authSessions                    AuthSession[]
-  capturedDeliveryEvidence         DeliveryEvidence[]           @relation("DeliveryEvidenceCapturedBy")
+  capturedDeliveryEvidence        DeliveryEvidence[]              @relation("DeliveryEvidenceCapturedBy")
 
   @@index([deactivatedByUserId])
   @@index([operationalLocationId])
@@ -585,6 +682,12 @@ model Product {
   purchaseCost                      Decimal                            @db.Decimal(14, 2)
   minStock                          Decimal                            @default(0) @db.Decimal(14, 3)
   unit                              ProductUnit
+  satProductServiceCode             String?                            @db.VarChar(8)
+  satUnitCode                       String?                            @db.VarChar(3)
+  taxObjectCode                     String?                            @db.VarChar(2)
+  defaultTaxCode                    String?                            @db.VarChar(3)
+  defaultFactorType                 String?                            @db.VarChar(8)
+  defaultRateOrQuota                Decimal?                           @db.Decimal(14, 6)
   pieceWeightEquivalent             Decimal?                           @db.Decimal(14, 3)
   equivalentPolicyStatus            EquivalentStatus?
   isActive                          Boolean                            @default(true)
@@ -688,6 +791,7 @@ model Customer {
   accountReceivables AccountReceivable[]
   payments           Payment[]
   billingRequests    BillingRequest[]
+  creditAdjustments  CreditAdjustment[]
 }
 
 model Supplier {
@@ -766,6 +870,7 @@ model Sale {
   items                                  SaleItem[]
   documents                              SaleDocument[]
   payments                               Payment[]
+  paymentInvoiceApplications             PaymentInvoiceApplication[]
   accountReceivable                      AccountReceivable?          @relation("AccountReceivableSale")
   originatedReceivables                  AccountReceivable[]         @relation("AccountReceivableOriginalSale")
   billingRequests                        BillingRequest[]
@@ -844,6 +949,7 @@ model SaleDocument {
   route                         DeliveryRoute?               @relation(fields: [routeId], references: [id])
   billingRequestDocuments       BillingRequestSaleDocument[]
   invoiceDocuments              InvoiceSaleDocument[]
+  paymentInvoiceApplications    PaymentInvoiceApplication[]
   scaleTicketReferences         ScaleTicketReference[]
 
   @@index([operationalLocationId, physicalFolio])
@@ -979,51 +1085,55 @@ model InventoryTransferItem {
 }
 
 model AccountReceivable {
-  id                    String            @id @default(cuid())
-  customerId            String
-  saleId                String            @unique
-  billingRequestId      String?
-  originalSaleId        String
-  originalAmount        Decimal           @db.Decimal(14, 2)
-  outstandingAmount     Decimal           @db.Decimal(14, 2)
-  saleDate              DateTime
-  dueDate               DateTime
-  paymentTermsDays      Int
-  lastPaymentDate       DateTime?
-  daysOverdue           Int               @default(0)
-  paidAt                DateTime?
-  cancelledAt           DateTime?
-  agingStatus           AgingStatus       @default(CURRENT)
-  physicalDocumentFolio String?
-  collectorUserId       String?
-  commercialPolicyId    String?
-  status                CollectionStatus  @default(UNPAID)
-  version               Int               @default(1)
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  customer              Customer          @relation(fields: [customerId], references: [id])
-  sale                  Sale              @relation("AccountReceivableSale", fields: [saleId], references: [id])
-  billingRequest        BillingRequest?   @relation(fields: [billingRequestId], references: [id])
-  originalSale          Sale              @relation("AccountReceivableOriginalSale", fields: [originalSaleId], references: [id])
-  collector             User?             @relation("AccountReceivableCollector", fields: [collectorUserId], references: [id])
-  commercialPolicy      CommercialPolicy? @relation(fields: [commercialPolicyId], references: [id])
-  payments              Payment[]
-  deliveryOrders        DeliveryOrder[]
+  id                         String                      @id @default(cuid())
+  customerId                 String
+  saleId                     String                      @unique
+  billingRequestId           String?
+  originalSaleId             String
+  originalAmount             Decimal                     @db.Decimal(14, 2)
+  outstandingAmount          Decimal                     @db.Decimal(14, 2)
+  saleDate                   DateTime
+  dueDate                    DateTime
+  paymentTermsDays           Int
+  lastPaymentDate            DateTime?
+  daysOverdue                Int                         @default(0)
+  paidAt                     DateTime?
+  cancelledAt                DateTime?
+  agingStatus                AgingStatus                 @default(CURRENT)
+  physicalDocumentFolio      String?
+  collectorUserId            String?
+  commercialPolicyId         String?
+  status                     CollectionStatus            @default(UNPAID)
+  version                    Int                         @default(1)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  customer                   Customer                    @relation(fields: [customerId], references: [id])
+  sale                       Sale                        @relation("AccountReceivableSale", fields: [saleId], references: [id])
+  billingRequest             BillingRequest?             @relation(fields: [billingRequestId], references: [id])
+  originalSale               Sale                        @relation("AccountReceivableOriginalSale", fields: [originalSaleId], references: [id])
+  collector                  User?                       @relation("AccountReceivableCollector", fields: [collectorUserId], references: [id])
+  commercialPolicy           CommercialPolicy?           @relation(fields: [commercialPolicyId], references: [id])
+  payments                   Payment[]
+  deliveryOrders             DeliveryOrder[]
+  paymentInvoiceApplications PaymentInvoiceApplication[]
 
   @@index([customerId, status, dueDate])
 }
 
 model Payment {
-  id                         String                 @id @default(cuid())
+  id                         String                      @id @default(cuid())
   accountReceivableId        String?
   saleId                     String?
   customerId                 String?
   userId                     String
   collectedByUserId          String?
   collectionPass             Int?
-  amount                     Decimal                @db.Decimal(14, 2)
-  cashTendered               Decimal?               @db.Decimal(14, 2)
-  changeGiven                Decimal?               @db.Decimal(14, 2)
+  amount                     Decimal                     @db.Decimal(14, 2)
+  currencyCode               String                      @default("MXN") @db.VarChar(3)
+  exchangeRateToMxn          Decimal?                    @db.Decimal(18, 6)
+  fiscalPaymentFormCode      String?                     @db.VarChar(2)
+  cashTendered               Decimal?                    @db.Decimal(14, 2)
+  changeGiven                Decimal?                    @db.Decimal(14, 2)
   paymentMethod              PaymentMethod
   bankName                   String?
   referenceNumber            String?
@@ -1035,30 +1145,32 @@ model Payment {
   routeSettlementId          String?
   pointOfSaleDailyCloseId    String?
   cashShiftId                String?
-  status                     PaymentStatus          @default(REGISTERED)
-  paidAt                     DateTime               @default(now())
+  status                     PaymentStatus               @default(REGISTERED)
+  paidAt                     DateTime                    @default(now())
   cancelledAt                DateTime?
   cancelledByUserId          String?
   nextPaymentDate            DateTime?
   cancellationReason         String?
-  idempotencyKey             String?                @unique
+  idempotencyKey             String?                     @unique
   idempotencyPayloadHash     String?
-  cancellationIdempotencyKey String?                @unique
+  cancellationIdempotencyKey String?                     @unique
   cancellationPayloadHash    String?
-  version                    Int                    @default(1)
-  createdAt                  DateTime               @default(now())
-  updatedAt                  DateTime               @updatedAt
-  accountReceivable          AccountReceivable?     @relation(fields: [accountReceivableId], references: [id])
-  sale                       Sale?                  @relation(fields: [saleId], references: [id])
-  customer                   Customer?              @relation(fields: [customerId], references: [id])
-  user                       User                   @relation("PaymentRegisteredBy", fields: [userId], references: [id])
-  collectedBy                User?                  @relation("PaymentCollectedBy", fields: [collectedByUserId], references: [id])
-  cancelledBy                User?                  @relation("PaymentCancelledBy", fields: [cancelledByUserId], references: [id])
-  operationalLocation        OperationalLocation?   @relation(fields: [operationalLocationId], references: [id])
-  route                      DeliveryRoute?         @relation(fields: [routeId], references: [id])
-  routeSettlement            RouteSettlement?       @relation(fields: [routeSettlementId], references: [id])
-  pointOfSaleDailyClose      PointOfSaleDailyClose? @relation(fields: [pointOfSaleDailyCloseId], references: [id])
-  cashShift                  CashShift?             @relation(fields: [cashShiftId], references: [id])
+  version                    Int                         @default(1)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  accountReceivable          AccountReceivable?          @relation(fields: [accountReceivableId], references: [id])
+  sale                       Sale?                       @relation(fields: [saleId], references: [id])
+  customer                   Customer?                   @relation(fields: [customerId], references: [id])
+  user                       User                        @relation("PaymentRegisteredBy", fields: [userId], references: [id])
+  collectedBy                User?                       @relation("PaymentCollectedBy", fields: [collectedByUserId], references: [id])
+  cancelledBy                User?                       @relation("PaymentCancelledBy", fields: [cancelledByUserId], references: [id])
+  operationalLocation        OperationalLocation?        @relation(fields: [operationalLocationId], references: [id])
+  route                      DeliveryRoute?              @relation(fields: [routeId], references: [id])
+  routeSettlement            RouteSettlement?            @relation(fields: [routeSettlementId], references: [id])
+  pointOfSaleDailyClose      PointOfSaleDailyClose?      @relation(fields: [pointOfSaleDailyCloseId], references: [id])
+  cashShift                  CashShift?                  @relation(fields: [cashShiftId], references: [id])
+  paymentReceiptDetails      PaymentReceiptDetail[]
+  paymentInvoiceApplications PaymentInvoiceApplication[] @relation("PaymentInvoiceApplications")
 
   @@index([accountReceivableId, paidAt])
   @@index([saleId, paidAt])
@@ -1066,6 +1178,7 @@ model Payment {
   @@index([pointOfSaleDailyCloseId, paidAt])
   @@index([cashShiftId, paidAt])
   @@index([cancelledByUserId])
+  @@index([currencyCode, paidAt])
 }
 
 model BillingRequest {
@@ -1094,6 +1207,7 @@ model BillingRequest {
   documents               BillingRequestSaleDocument[]
   retryOf                 BillingRequest?              @relation("BillingRequestRetry", fields: [retryOfBillingRequestId], references: [id])
   retries                 BillingRequest[]             @relation("BillingRequestRetry")
+  nativeInvoice           Invoice?                     @relation("InvoiceSourceBillingRequest")
 
   @@index([customerId, status, requestedAt])
   @@index([requestedByUserId, requestedAt])
@@ -1206,20 +1320,20 @@ model OperationalConfig {
 }
 
 model Vehicle {
-  id              String                   @id @default(cuid())
-  code            String                   @unique
-  displayName     String
-  plateNumber     String?                  @unique
-  homeLocationId  String?
-  isActive        Boolean                  @default(true)
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  homeLocation    OperationalLocation?     @relation("VehicleHomeLocation", fields: [homeLocationId], references: [id])
-  routes          DeliveryRoute[]
-  routePlanDrafts DeliveryRoutePlanDraft[]
-  positions       VehiclePosition[]        @relation("VehiclePositionVehicle")
-  geofenceEvents  GeofenceEvent[]
-  geofenceStates  VehicleGeofenceState[]
+  id                String                   @id @default(cuid())
+  code              String                   @unique
+  displayName       String
+  plateNumber       String?                  @unique
+  homeLocationId    String?
+  isActive          Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  homeLocation      OperationalLocation?     @relation("VehicleHomeLocation", fields: [homeLocationId], references: [id])
+  routes            DeliveryRoute[]
+  routePlanDrafts   DeliveryRoutePlanDraft[]
+  positions         VehiclePosition[]        @relation("VehiclePositionVehicle")
+  geofenceEvents    GeofenceEvent[]
+  geofenceStates    VehicleGeofenceState[]
   deliveryIncidents DeliveryIncident[]
 
   @@index([homeLocationId, isActive])
@@ -1227,25 +1341,25 @@ model Vehicle {
 }
 
 model VehiclePosition {
-  id             String                               @id @default(cuid())
-  clientEventId  String                               @unique
-  vehicleId      String
-  routeId        String
-  driverId       String
-  latitude       Decimal                              @db.Decimal(9, 6)
-  longitude      Decimal                              @db.Decimal(9, 6)
-  positionPoint  Unsupported("geometry(Point, 4326)")
-  accuracyMeters Decimal?                             @db.Decimal(8, 2)
-  speedKph       Decimal?                             @db.Decimal(8, 2)
-  headingDegrees Decimal?                             @db.Decimal(6, 3)
-  recordedAt     DateTime
-  receivedAt     DateTime                             @default(now())
-  vehicle        Vehicle                              @relation("VehiclePositionVehicle", fields: [vehicleId], references: [id])
-  route          DeliveryRoute                        @relation("VehiclePositionRoute", fields: [routeId], references: [id])
-  driver         User                                 @relation("VehiclePositionDriver", fields: [driverId], references: [id])
-  geofenceEvents GeofenceEvent[]                      @relation("GeofenceEventPosition")
-  geofenceStates VehicleGeofenceState[]               @relation("GeofenceStateLastPosition")
-  deliveryIncidents DeliveryIncident[]                @relation("DeliveryIncidentPosition")
+  id                String                               @id @default(cuid())
+  clientEventId     String                               @unique
+  vehicleId         String
+  routeId           String
+  driverId          String
+  latitude          Decimal                              @db.Decimal(9, 6)
+  longitude         Decimal                              @db.Decimal(9, 6)
+  positionPoint     Unsupported("geometry(Point, 4326)")
+  accuracyMeters    Decimal?                             @db.Decimal(8, 2)
+  speedKph          Decimal?                             @db.Decimal(8, 2)
+  headingDegrees    Decimal?                             @db.Decimal(6, 3)
+  recordedAt        DateTime
+  receivedAt        DateTime                             @default(now())
+  vehicle           Vehicle                              @relation("VehiclePositionVehicle", fields: [vehicleId], references: [id])
+  route             DeliveryRoute                        @relation("VehiclePositionRoute", fields: [routeId], references: [id])
+  driver            User                                 @relation("VehiclePositionDriver", fields: [driverId], references: [id])
+  geofenceEvents    GeofenceEvent[]                      @relation("GeofenceEventPosition")
+  geofenceStates    VehicleGeofenceState[]               @relation("GeofenceStateLastPosition")
+  deliveryIncidents DeliveryIncident[]                   @relation("DeliveryIncidentPosition")
 
   @@index([vehicleId, recordedAt(sort: Desc)])
   @@index([routeId, recordedAt])
@@ -1254,51 +1368,51 @@ model VehiclePosition {
 }
 
 model DeliveryRoute {
-  id                     String                                     @id @default(cuid())
-  name                   String
-  type                   DeliveryRouteType                           @default(SALE_DELIVERY)
-  driverId               String
-  vehicleId              String?
-  inventoryTransferId    String?                                    @unique
-  status                 DeliveryRouteStatus                        @default(PENDING)
-  scheduledDate          DateTime
-  originLocationId       String?
-  routeStockLocationId   String                                     @unique
-  startedAt              DateTime?
-  completedAt            DateTime?
+  id                             String                                     @id @default(cuid())
+  name                           String
+  type                           DeliveryRouteType                          @default(SALE_DELIVERY)
+  driverId                       String
+  vehicleId                      String?
+  inventoryTransferId            String?                                    @unique
+  status                         DeliveryRouteStatus                        @default(PENDING)
+  scheduledDate                  DateTime
+  originLocationId               String?
+  routeStockLocationId           String                                     @unique
+  startedAt                      DateTime?
+  completedAt                    DateTime?
   logisticsStopCompletedAt       DateTime?
   logisticsStopCompletedByUserId String?
   logisticsStopNotes             String?
-  optimizationStatus     RouteOptimizationStatus                    @default(NOT_OPTIMIZED)
-  geometry               Json?
-  routeGeometry          Unsupported("geometry(LineString, 4326)")?
-  distanceMeters         Int?
-  durationSeconds        Int?
-  optimizedAt            DateTime?
-  routingProfile         String?
-  routingDataVersion     String?
-  creationIdempotencyKey String?                                    @unique
-  creationPayloadHash    String?
-  createdAt              DateTime                                   @default(now())
-  updatedAt              DateTime                                   @updatedAt
-  driver                 User                                       @relation("DeliveryRouteDriver", fields: [driverId], references: [id])
-  logisticsStopCompletedBy User?                                    @relation("DeliveryRouteLogisticsStopCompletedBy", fields: [logisticsStopCompletedByUserId], references: [id])
-  vehicle                Vehicle?                                   @relation(fields: [vehicleId], references: [id])
-  inventoryTransfer      InventoryTransfer?                         @relation(fields: [inventoryTransferId], references: [id], onDelete: Restrict)
-  originLocation         OperationalLocation?                       @relation("RouteOriginLocation", fields: [originLocationId], references: [id])
-  routeStockLocation     OperationalLocation                        @relation("RouteStockLocation", fields: [routeStockLocationId], references: [id])
-  assignedCustomers      Customer[]
-  sales                  Sale[]
-  saleDocuments          SaleDocument[]
-  payments               Payment[]
-  deliveryOrders         DeliveryOrder[]
-  settlement             RouteSettlement?
-  sourcePlans            DeliveryRoutePlanDraft[]                   @relation("RoutePlanSourceRoute")
-  consumedPlans          DeliveryRoutePlanDraft[]                   @relation("RoutePlanConsumedRoute")
-  positions              VehiclePosition[]                          @relation("VehiclePositionRoute")
-  geofenceEvents         GeofenceEvent[]
-  deliveryIncidents      DeliveryIncident[]
-  settlementOpeningCommands RouteSettlementOpeningCommand[]
+  optimizationStatus             RouteOptimizationStatus                    @default(NOT_OPTIMIZED)
+  geometry                       Json?
+  routeGeometry                  Unsupported("geometry(LineString, 4326)")?
+  distanceMeters                 Int?
+  durationSeconds                Int?
+  optimizedAt                    DateTime?
+  routingProfile                 String?
+  routingDataVersion             String?
+  creationIdempotencyKey         String?                                    @unique
+  creationPayloadHash            String?
+  createdAt                      DateTime                                   @default(now())
+  updatedAt                      DateTime                                   @updatedAt
+  driver                         User                                       @relation("DeliveryRouteDriver", fields: [driverId], references: [id])
+  logisticsStopCompletedBy       User?                                      @relation("DeliveryRouteLogisticsStopCompletedBy", fields: [logisticsStopCompletedByUserId], references: [id])
+  vehicle                        Vehicle?                                   @relation(fields: [vehicleId], references: [id])
+  inventoryTransfer              InventoryTransfer?                         @relation(fields: [inventoryTransferId], references: [id], onDelete: Restrict)
+  originLocation                 OperationalLocation?                       @relation("RouteOriginLocation", fields: [originLocationId], references: [id])
+  routeStockLocation             OperationalLocation                        @relation("RouteStockLocation", fields: [routeStockLocationId], references: [id])
+  assignedCustomers              Customer[]
+  sales                          Sale[]
+  saleDocuments                  SaleDocument[]
+  payments                       Payment[]
+  deliveryOrders                 DeliveryOrder[]
+  settlement                     RouteSettlement?
+  sourcePlans                    DeliveryRoutePlanDraft[]                   @relation("RoutePlanSourceRoute")
+  consumedPlans                  DeliveryRoutePlanDraft[]                   @relation("RoutePlanConsumedRoute")
+  positions                      VehiclePosition[]                          @relation("VehiclePositionRoute")
+  geofenceEvents                 GeofenceEvent[]
+  deliveryIncidents              DeliveryIncident[]
+  settlementOpeningCommands      RouteSettlementOpeningCommand[]
 
   @@index([driverId, scheduledDate, status])
   @@index([type, scheduledDate, status])
@@ -1306,21 +1420,21 @@ model DeliveryRoute {
 }
 
 model DeliveryZone {
-  id               String                                 @id @default(cuid())
-  name             String
-  originLocationId String
-  geometry         Json
-  zoneGeometry     Unsupported("geometry(Polygon, 4326)")
-  isActive         Boolean                                @default(true)
-  createdByUserId  String
-  updatedByUserId  String
-  createdAt        DateTime                               @default(now())
-  updatedAt        DateTime                               @updatedAt
-  originLocation   OperationalLocation                    @relation("DeliveryZoneOriginLocation", fields: [originLocationId], references: [id], onDelete: Restrict)
-  createdBy        User                                   @relation("DeliveryZoneCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  updatedBy        User                                   @relation("DeliveryZoneUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: Restrict)
-  geofenceEvents   GeofenceEvent[]
-  vehicleStates    VehicleGeofenceState[]
+  id                String                                 @id @default(cuid())
+  name              String
+  originLocationId  String
+  geometry          Json
+  zoneGeometry      Unsupported("geometry(Polygon, 4326)")
+  isActive          Boolean                                @default(true)
+  createdByUserId   String
+  updatedByUserId   String
+  createdAt         DateTime                               @default(now())
+  updatedAt         DateTime                               @updatedAt
+  originLocation    OperationalLocation                    @relation("DeliveryZoneOriginLocation", fields: [originLocationId], references: [id], onDelete: Restrict)
+  createdBy         User                                   @relation("DeliveryZoneCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy         User                                   @relation("DeliveryZoneUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  geofenceEvents    GeofenceEvent[]
+  vehicleStates     VehicleGeofenceState[]
   deliveryIncidents DeliveryIncident[]
 
   @@index([originLocationId, isActive])
@@ -1363,40 +1477,40 @@ model VehicleGeofenceState {
 }
 
 model DeliveryIncident {
-  id                String                 @id @default(cuid())
-  type              DeliveryIncidentType
-  status            DeliveryIncidentStatus @default(OPEN)
-  reason            String
-  details           String?
-  routeId           String?
-  deliveryOrderId   String?
-  vehicleId         String?
-  driverId          String?
-  positionId        String?
-  statusSnapshot    DeliveryOrderStatus
-  latitude          Decimal?               @db.Decimal(9, 6)
-  longitude         Decimal?               @db.Decimal(9, 6)
-  zoneId            String?
-  returnedItems     Json                   @default("[]")
-  evidence          Json                   @default("[]")
-  resolution        String?
-  occurredAt        DateTime
-  reportedAt        DateTime               @default(now())
-  reportedByUserId  String
-  resolvedAt        DateTime?
-  resolvedByUserId  String?
-  idempotencyKey    String?                @unique
+  id                     String                 @id @default(cuid())
+  type                   DeliveryIncidentType
+  status                 DeliveryIncidentStatus @default(OPEN)
+  reason                 String
+  details                String?
+  routeId                String?
+  deliveryOrderId        String?
+  vehicleId              String?
+  driverId               String?
+  positionId             String?
+  statusSnapshot         DeliveryOrderStatus
+  latitude               Decimal?               @db.Decimal(9, 6)
+  longitude              Decimal?               @db.Decimal(9, 6)
+  zoneId                 String?
+  returnedItems          Json                   @default("[]")
+  evidence               Json                   @default("[]")
+  resolution             String?
+  occurredAt             DateTime
+  reportedAt             DateTime               @default(now())
+  reportedByUserId       String
+  resolvedAt             DateTime?
+  resolvedByUserId       String?
+  idempotencyKey         String?                @unique
   idempotencyPayloadHash String?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-  route             DeliveryRoute?         @relation(fields: [routeId], references: [id], onDelete: Restrict)
-  deliveryOrder     DeliveryOrder?        @relation(fields: [deliveryOrderId], references: [id], onDelete: Restrict)
-  vehicle           Vehicle?              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  driver            User?                 @relation("DeliveryIncidentDriver", fields: [driverId], references: [id], onDelete: Restrict)
-  position          VehiclePosition?      @relation("DeliveryIncidentPosition", fields: [positionId], references: [id], onDelete: Restrict)
-  zone              DeliveryZone?         @relation(fields: [zoneId], references: [id], onDelete: Restrict)
-  reportedBy        User                  @relation("DeliveryIncidentReportedBy", fields: [reportedByUserId], references: [id], onDelete: Restrict)
-  resolvedBy        User?                 @relation("DeliveryIncidentResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  route                  DeliveryRoute?         @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  deliveryOrder          DeliveryOrder?         @relation(fields: [deliveryOrderId], references: [id], onDelete: Restrict)
+  vehicle                Vehicle?               @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver                 User?                  @relation("DeliveryIncidentDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  position               VehiclePosition?       @relation("DeliveryIncidentPosition", fields: [positionId], references: [id], onDelete: Restrict)
+  zone                   DeliveryZone?          @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  reportedBy             User                   @relation("DeliveryIncidentReportedBy", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  resolvedBy             User?                  @relation("DeliveryIncidentResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
 
   @@index([routeId, occurredAt])
   @@index([deliveryOrderId, occurredAt])
@@ -1497,45 +1611,45 @@ model DeliveryEvidence {
 }
 
 model RouteSettlement {
-  id                          String                @id @default(cuid())
-  routeId                     String                @unique
+  id                          String                          @id @default(cuid())
+  routeId                     String                          @unique
   driverId                    String
-  status                      RouteSettlementStatus @default(OPEN)
-  version                     Int                   @default(1)
-  expectedCashAmount          Decimal               @default(0) @db.Decimal(14, 2)
-  expectedTransferAmount      Decimal               @default(0) @db.Decimal(14, 2)
-  differenceAmount            Decimal               @default(0) @db.Decimal(14, 2)
+  status                      RouteSettlementStatus           @default(OPEN)
+  version                     Int                             @default(1)
+  expectedCashAmount          Decimal                         @default(0) @db.Decimal(14, 2)
+  expectedTransferAmount      Decimal                         @default(0) @db.Decimal(14, 2)
+  differenceAmount            Decimal                         @default(0) @db.Decimal(14, 2)
   notes                       String?
   closedAt                    DateTime?
   reopenedAt                  DateTime?
   reopenedByUserId            String?
   reopenedReason              String?
   routeCollectionsSummary     Json?
-  paidAtDeliveryAmount        Decimal               @default(0) @db.Decimal(14, 2)
-  overdueAmount               Decimal               @default(0) @db.Decimal(14, 2)
-  secondPassCollectionsAmount Decimal               @default(0) @db.Decimal(14, 2)
-  createdAt                   DateTime              @default(now())
-  updatedAt                   DateTime              @updatedAt
-  route                       DeliveryRoute         @relation(fields: [routeId], references: [id])
-  driver                      User                  @relation("RouteSettlementDriver", fields: [driverId], references: [id])
-  reopenedBy                  User?                 @relation("RouteSettlementReopenedBy", fields: [reopenedByUserId], references: [id])
+  paidAtDeliveryAmount        Decimal                         @default(0) @db.Decimal(14, 2)
+  overdueAmount               Decimal                         @default(0) @db.Decimal(14, 2)
+  secondPassCollectionsAmount Decimal                         @default(0) @db.Decimal(14, 2)
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+  route                       DeliveryRoute                   @relation(fields: [routeId], references: [id])
+  driver                      User                            @relation("RouteSettlementDriver", fields: [driverId], references: [id])
+  reopenedBy                  User?                           @relation("RouteSettlementReopenedBy", fields: [reopenedByUserId], references: [id])
   payments                    Payment[]
   inventoryMovements          InventoryMovement[]
   openingCommands             RouteSettlementOpeningCommand[]
 }
 
 model RouteSettlementOpeningCommand {
-  id                  String          @id @default(cuid())
-  idempotencyKey      String          @unique
-  payloadHash         String
-  routeId             String
-  settlementId        String
-  createdByUserId     String
-  responseSnapshot    Json
-  createdAt           DateTime        @default(now())
-  route               DeliveryRoute   @relation(fields: [routeId], references: [id], onDelete: Restrict)
-  settlement          RouteSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
-  createdBy           User            @relation("RouteSettlementOpeningCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id               String          @id @default(cuid())
+  idempotencyKey   String          @unique
+  payloadHash      String
+  routeId          String
+  settlementId     String
+  createdByUserId  String
+  responseSnapshot Json
+  createdAt        DateTime        @default(now())
+  route            DeliveryRoute   @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  settlement       RouteSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  createdBy        User            @relation("RouteSettlementOpeningCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([routeId, createdAt])
   @@index([settlementId])
@@ -2109,12 +2223,22 @@ model LegalEntity {
   taxId                       String                           @unique
   fiscalPostalCode            String?
   fiscalRegime                String?
+  cfdiEnabled                 Boolean                          @default(false)
+  defaultSeries               String?                          @db.VarChar(10)
+  certificateSerialNumber     String?                          @db.VarChar(64)
+  certificateFingerprint      String?                          @db.VarChar(128)
+  certificateSubject          String?                          @db.VarChar(255)
+  certificateValidFrom        DateTime?
+  certificateValidTo          DateTime?
   isActive                    Boolean                          @default(true)
   createdAt                   DateTime                         @default(now())
   updatedAt                   DateTime                         @updatedAt
   operationalLocationMappings LegalEntityOperationalLocation[]
   sales                       Sale[]
   invoices                    Invoice[]
+  fiscalCertificates          FiscalCertificate[]
+  fiscalFolioSequences        FiscalFolioSequence[]
+  creditAdjustments           CreditAdjustment[]
 
   @@index([isActive, legalName])
 }
@@ -2135,40 +2259,416 @@ model LegalEntityOperationalLocation {
 }
 
 model Invoice {
-  id                         String                @id @default(cuid())
-  legalEntityId              String
-  currencyCode               String                @db.VarChar(3)
-  series                     String
-  folio                      String
-  uuid                       String?               @unique
-  subtotal                   Decimal               @db.Decimal(14, 2)
-  discount                   Decimal               @default(0) @db.Decimal(14, 2)
-  tax                        Decimal               @default(0) @db.Decimal(14, 2)
-  total                      Decimal               @db.Decimal(14, 2)
-  status                     InvoiceStatus         @default(ACTIVE)
-  cancelledAt                DateTime?
-  cancelledByUserId          String?
-  cancellationReason         String?
-  substitutedByInvoiceId     String?               @unique
-  version                    Int                   @default(1)
-  linkIdempotencyKey         String?               @unique
-  linkPayloadHash            String?
-  cancellationIdempotencyKey String?               @unique
-  cancellationPayloadHash    String?
-  createdByUserId            String
-  createdAt                  DateTime              @default(now())
-  updatedAt                  DateTime              @updatedAt
-  legalEntity                LegalEntity           @relation(fields: [legalEntityId], references: [id])
-  createdBy                  User                  @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
-  cancelledBy                User?                 @relation("InvoiceCancelledBy", fields: [cancelledByUserId], references: [id])
-  substitutedBy              Invoice?              @relation("InvoiceSubstitution", fields: [substitutedByInvoiceId], references: [id])
-  substitutes                Invoice?              @relation("InvoiceSubstitution")
-  documents                  InvoiceSaleDocument[]
+  id                           String                      @id @default(cuid())
+  legalEntityId                String
+  sourceBillingRequestId       String?                     @unique
+  sourceCreditAdjustmentId     String?                     @unique
+  fiscalCertificateId          String?
+  fiscalIdempotencyKey         String?                     @unique
+  fiscalRequestHash            String?                     @db.VarChar(64)
+  currencyCode                 String                      @db.VarChar(3)
+  exchangeRate                 Decimal?                    @db.Decimal(18, 6)
+  series                       String
+  folio                        String
+  uuid                         String?                     @unique
+  origin                       InvoiceOrigin               @default(LEGACY_EXTERNAL)
+  cfdiVersion                  String?                     @db.VarChar(5)
+  cfdiType                     CfdiDocumentType?
+  issuedAt                     DateTime?
+  stampedAt                    DateTime?
+  tfdVersion                   String?                     @db.VarChar(5)
+  issuerSnapshot               Json?
+  receiverSnapshot             Json?
+  fiscalSnapshotHash           String?                     @db.VarChar(64)
+  fiscalUseCode                String?                     @db.VarChar(3)
+  exportCode                   String?                     @db.VarChar(2)
+  paymentFormCode              String?                     @db.VarChar(2)
+  paymentMethodCode            String?                     @db.VarChar(3)
+  certificateNumber            String?                     @db.VarChar(64)
+  satCertificateNumber         String?                     @db.VarChar(64)
+  certificationProviderTaxId   String?                     @db.VarChar(13)
+  cfdiSeal                     String?
+  satSeal                      String?
+  fiscalStatus                 InvoiceFiscalStatus         @default(LEGACY)
+  cancellationStatus           FiscalCancellationStatus    @default(NOT_APPLICABLE)
+  substitutionUuid             String?                     @db.VarChar(36)
+  fiscalAttemptCount           Int                         @default(0)
+  lastFiscalAttemptAt          DateTime?
+  lastFiscalErrorCode          String?
+  lastFiscalErrorMessage       String?
+  subtotal                     Decimal                     @db.Decimal(14, 2)
+  discount                     Decimal                     @default(0) @db.Decimal(14, 2)
+  tax                          Decimal                     @default(0) @db.Decimal(14, 2)
+  total                        Decimal                     @db.Decimal(14, 2)
+  status                       InvoiceStatus               @default(ACTIVE)
+  cancelledAt                  DateTime?
+  cancelledByUserId            String?
+  cancellationReason           String?
+  cancellationMotiveCode       String?                     @db.VarChar(2)
+  internalReason               String?
+  replacementInvoiceId         String?                     @unique
+  replacementUuid              String?                     @db.VarChar(36)
+  substitutedByInvoiceId       String?                     @unique
+  version                      Int                         @default(1)
+  linkIdempotencyKey           String?                     @unique
+  linkPayloadHash              String?
+  cancellationIdempotencyKey   String?                     @unique
+  cancellationPayloadHash      String?
+  createdByUserId              String
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  legalEntity                  LegalEntity                 @relation(fields: [legalEntityId], references: [id])
+  sourceBillingRequest         BillingRequest?             @relation("InvoiceSourceBillingRequest", fields: [sourceBillingRequestId], references: [id], onDelete: Restrict)
+  sourceCreditAdjustment       CreditAdjustment?           @relation("CreditAdjustmentFiscalInvoice", fields: [sourceCreditAdjustmentId], references: [id], onDelete: Restrict)
+  fiscalCertificate            FiscalCertificate?          @relation(fields: [fiscalCertificateId], references: [id], onDelete: Restrict)
+  createdBy                    User                        @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
+  cancelledBy                  User?                       @relation("InvoiceCancelledBy", fields: [cancelledByUserId], references: [id])
+  replacementInvoice           Invoice?                    @relation("InvoiceFiscalReplacement", fields: [replacementInvoiceId], references: [id], onDelete: Restrict)
+  replacementFor               Invoice?                    @relation("InvoiceFiscalReplacement")
+  substitutedBy                Invoice?                    @relation("InvoiceSubstitution", fields: [substitutedByInvoiceId], references: [id])
+  substitutes                  Invoice?                    @relation("InvoiceSubstitution")
+  documents                    InvoiceSaleDocument[]
+  concepts                     InvoiceConcept[]
+  fiscalArtifacts              FiscalArtifact[]
+  fiscalOperationAttempts      FiscalOperationAttempt[]
+  paymentReceipt               PaymentReceipt?
+  paymentInvoiceApplications   PaymentInvoiceApplication[] @relation("PaymentInvoiceApplicationRelatedInvoice")
+  creditAdjustmentApplications CreditAdjustmentInvoice[]   @relation("CreditAdjustmentOriginalInvoice")
 
   @@unique([legalEntityId, series, folio])
   @@index([status, createdAt])
+  @@index([fiscalStatus, stampedAt])
+  @@index([cancellationStatus, updatedAt])
   @@index([legalEntityId, currencyCode, createdAt])
+  @@index([fiscalCertificateId])
   @@index([cancelledByUserId])
+}
+
+model InvoiceConcept {
+  id                    String                 @id @default(cuid())
+  invoiceId             String
+  lineNumber            Int
+  sourceSaleItemId      String?
+  productServiceCode    String                 @db.VarChar(8)
+  identificationNumber  String?
+  description           String
+  quantity              Decimal                @db.Decimal(18, 6)
+  unitCode              String                 @db.VarChar(3)
+  unitName              String?
+  unitValue             Decimal                @db.Decimal(18, 6)
+  amount                Decimal                @db.Decimal(14, 2)
+  discount              Decimal                @default(0) @db.Decimal(14, 2)
+  taxObjectCode         String                 @db.VarChar(2)
+  taxCode               String?                @db.VarChar(3)
+  factorType            String?                @db.VarChar(10)
+  rateOrQuota           Decimal?               @db.Decimal(18, 6)
+  taxBase               Decimal?               @db.Decimal(14, 2)
+  taxAmount             Decimal                @default(0) @db.Decimal(14, 2)
+  total                 Decimal                @db.Decimal(14, 2)
+  taxesSnapshot         Json?
+  snapshotHash          String                 @db.VarChar(64)
+  createdAt             DateTime               @default(now())
+  invoice               Invoice                @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  creditAdjustmentLines CreditAdjustmentLine[]
+
+  @@unique([invoiceId, lineNumber])
+  @@index([invoiceId, sourceSaleItemId])
+}
+
+model CreditAdjustment {
+  id                     String                     @id @default(cuid())
+  status                 CreditAdjustmentStatus     @default(DRAFT)
+  sourceType             CreditAdjustmentSourceType
+  sourceReference        String?
+  internalReason         String
+  paymentFormCode        String                     @db.VarChar(2)
+  relationshipTypeCode   String                     @db.VarChar(2)
+  legalEntityId          String
+  customerId             String
+  currencyCode           String                     @db.VarChar(3)
+  exchangeRate           Decimal                    @db.Decimal(18, 6)
+  subtotal               Decimal                    @default(0) @db.Decimal(14, 2)
+  discount               Decimal                    @default(0) @db.Decimal(14, 2)
+  tax                    Decimal                    @default(0) @db.Decimal(14, 2)
+  total                  Decimal                    @default(0) @db.Decimal(14, 2)
+  snapshotHash           String?                    @db.VarChar(64)
+  creationIdempotencyKey String                     @unique
+  creationRequestHash    String                     @db.VarChar(64)
+  createdByUserId        String
+  authorizedByUserId     String?
+  authorizedAt           DateTime?
+  version                Int                        @default(1)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  legalEntity            LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  customer               Customer                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy              User                       @relation("CreditAdjustmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  authorizedBy           User?                      @relation("CreditAdjustmentAuthorizedBy", fields: [authorizedByUserId], references: [id], onDelete: Restrict)
+  applications           CreditAdjustmentInvoice[]
+  fiscalInvoice          Invoice?                   @relation("CreditAdjustmentFiscalInvoice")
+
+  @@index([status, createdAt])
+  @@index([legalEntityId, currencyCode, createdAt])
+  @@index([customerId, createdAt])
+  @@index([authorizedByUserId, authorizedAt])
+}
+
+model CreditAdjustmentInvoice {
+  id                   String                 @id @default(cuid())
+  creditAdjustmentId   String
+  originalInvoiceId    String
+  relatedUuid          String                 @db.VarChar(36)
+  relationshipTypeCode String                 @db.VarChar(2)
+  subtotal             Decimal                @default(0) @db.Decimal(14, 2)
+  discount             Decimal                @default(0) @db.Decimal(14, 2)
+  tax                  Decimal                @default(0) @db.Decimal(14, 2)
+  total                Decimal                @default(0) @db.Decimal(14, 2)
+  snapshotHash         String?                @db.VarChar(64)
+  createdAt            DateTime               @default(now())
+  creditAdjustment     CreditAdjustment       @relation(fields: [creditAdjustmentId], references: [id], onDelete: Restrict)
+  originalInvoice      Invoice                @relation("CreditAdjustmentOriginalInvoice", fields: [originalInvoiceId], references: [id], onDelete: Restrict)
+  lines                CreditAdjustmentLine[]
+
+  @@unique([creditAdjustmentId, originalInvoiceId])
+  @@index([originalInvoiceId, createdAt])
+}
+
+model CreditAdjustmentLine {
+  id                        String                  @id @default(cuid())
+  creditAdjustmentInvoiceId String
+  originalInvoiceConceptId  String
+  requestedCreditTotal      Decimal                 @db.Decimal(14, 2)
+  creditSubtotal            Decimal                 @db.Decimal(14, 2)
+  creditDiscount            Decimal                 @default(0) @db.Decimal(14, 2)
+  creditTaxableBase         Decimal                 @db.Decimal(14, 2)
+  creditTax                 Decimal                 @default(0) @db.Decimal(14, 2)
+  creditTotal               Decimal                 @db.Decimal(14, 2)
+  originalConceptSnapshot   Json
+  taxesSnapshot             Json?
+  snapshotHash              String                  @db.VarChar(64)
+  createdAt                 DateTime                @default(now())
+  creditAdjustmentInvoice   CreditAdjustmentInvoice @relation(fields: [creditAdjustmentInvoiceId], references: [id], onDelete: Restrict)
+  originalInvoiceConcept    InvoiceConcept          @relation(fields: [originalInvoiceConceptId], references: [id], onDelete: Restrict)
+
+  @@unique([creditAdjustmentInvoiceId, originalInvoiceConceptId])
+  @@index([originalInvoiceConceptId, createdAt])
+}
+
+model PaymentReceipt {
+  id                String                 @id @default(cuid())
+  invoiceId         String                 @unique
+  complementVersion String                 @default("2.0") @db.VarChar(4)
+  totalPaymentsMxn  Decimal                @db.Decimal(14, 2)
+  taxTotalsSnapshot Json?
+  snapshotHash      String                 @db.VarChar(64)
+  createdByUserId   String
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  invoice           Invoice                @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdBy         User                   @relation("PaymentReceiptCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  details           PaymentReceiptDetail[]
+
+  @@index([createdAt])
+  @@index([createdByUserId, createdAt])
+}
+
+model PaymentReceiptDetail {
+  id                    String                      @id @default(cuid())
+  paymentReceiptId      String
+  paymentId             String
+  paymentDate           DateTime
+  paymentFormCode       String                      @db.VarChar(2)
+  currencyCode          String                      @db.VarChar(3)
+  exchangeRateToMxn     Decimal                     @db.Decimal(18, 6)
+  amount                Decimal                     @db.Decimal(14, 2)
+  sourcePaymentSnapshot Json?
+  snapshotHash          String                      @db.VarChar(64)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  paymentReceipt        PaymentReceipt              @relation(fields: [paymentReceiptId], references: [id], onDelete: Restrict)
+  payment               Payment                     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  applications          PaymentInvoiceApplication[]
+
+  @@unique([paymentId])
+  @@index([paymentId, createdAt])
+  @@index([paymentReceiptId, paymentDate])
+}
+
+model PaymentInvoiceApplication {
+  id                        String                          @id @default(cuid())
+  paymentReceiptDetailId    String
+  paymentId                 String
+  relatedInvoiceId          String
+  sourceAccountReceivableId String?
+  sourceSaleId              String?
+  sourceSaleDocumentId      String?
+  relatedUuid               String                          @db.VarChar(36)
+  relatedSeries             String?
+  relatedFolio              String?
+  documentCurrencyCode      String                          @db.VarChar(3)
+  equivalenceDr             Decimal?                        @db.Decimal(18, 6)
+  paymentMethodDr           String                          @db.VarChar(3)
+  partialityNumber          Int
+  previousBalanceAmount     Decimal                         @db.Decimal(14, 2)
+  amountPaid                Decimal                         @db.Decimal(14, 2)
+  remainingBalance          Decimal                         @db.Decimal(14, 2)
+  taxObjectCode             String                          @db.VarChar(2)
+  taxesSnapshot             Json?
+  sourceDocumentsSnapshot   Json?
+  snapshotHash              String                          @db.VarChar(64)
+  status                    PaymentInvoiceApplicationStatus @default(RESERVED)
+  reversedAt                DateTime?
+  createdAt                 DateTime                        @default(now())
+  updatedAt                 DateTime                        @updatedAt
+  paymentReceiptDetail      PaymentReceiptDetail            @relation(fields: [paymentReceiptDetailId], references: [id], onDelete: Restrict)
+  payment                   Payment                         @relation("PaymentInvoiceApplications", fields: [paymentId], references: [id], onDelete: Restrict)
+  relatedInvoice            Invoice                         @relation("PaymentInvoiceApplicationRelatedInvoice", fields: [relatedInvoiceId], references: [id], onDelete: Restrict)
+  sourceAccountReceivable   AccountReceivable?              @relation(fields: [sourceAccountReceivableId], references: [id], onDelete: Restrict)
+  sourceSale                Sale?                           @relation(fields: [sourceSaleId], references: [id], onDelete: Restrict)
+  sourceSaleDocument        SaleDocument?                   @relation(fields: [sourceSaleDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentReceiptDetailId, relatedInvoiceId])
+  @@index([paymentId, status])
+  @@index([relatedInvoiceId, status, partialityNumber])
+  @@index([sourceAccountReceivableId, status])
+}
+
+model FiscalArtifact {
+  id                 String                  @id @default(cuid())
+  invoiceId          String
+  operationAttemptId String?
+  type               FiscalArtifactType
+  status             FiscalArtifactStatus    @default(PENDING)
+  version            Int                     @default(1)
+  storageKey         String                  @unique
+  mimeType           String
+  byteSize           BigInt?
+  sha256             String?                 @db.VarChar(64)
+  providerHash       String?
+  metadata           Json?
+  lastErrorCode      String?
+  lastErrorMessage   String?
+  storedAt           DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  invoice            Invoice                 @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  operationAttempt   FiscalOperationAttempt? @relation(fields: [operationAttemptId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, type, version])
+  @@index([status, createdAt])
+  @@index([operationAttemptId])
+}
+
+model FiscalOperationAttempt {
+  id                String                @id @default(cuid())
+  invoiceId         String
+  operation         FiscalOperationType
+  status            FiscalOperationStatus @default(PENDING)
+  attemptNumber     Int
+  correlationId     String                @unique
+  idempotencyKey    String                @unique
+  requestHash       String                @db.VarChar(64)
+  providerKey       String
+  providerReference String?
+  httpStatus        Int?
+  startedAt         DateTime              @default(now())
+  completedAt       DateTime?
+  nextRetryAt       DateTime?
+  errorCode         String?
+  errorMessage      String?
+  responseDigest    String?               @db.VarChar(64)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  invoice           Invoice               @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  artifacts         FiscalArtifact[]
+
+  @@unique([invoiceId, operation, attemptNumber])
+  @@index([status, nextRetryAt])
+  @@index([invoiceId, operation, createdAt])
+}
+
+model FiscalFolioSequence {
+  id            String           @id @default(cuid())
+  legalEntityId String
+  cfdiType      CfdiDocumentType
+  series        String           @db.VarChar(10)
+  nextValue     BigInt           @default(1)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  legalEntity   LegalEntity      @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+
+  @@unique([legalEntityId, cfdiType, series])
+  @@index([legalEntityId, updatedAt])
+}
+
+model FiscalCertificate {
+  id                String      @id @default(cuid())
+  legalEntityId     String
+  serialNumber      String      @db.VarChar(64)
+  fingerprintSha256 String      @db.VarChar(64)
+  subject           String?
+  issuer            String?
+  validFrom         DateTime
+  validTo           DateTime
+  createdAt         DateTime    @default(now())
+  retiredAt         DateTime?
+  legalEntity       LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  invoices          Invoice[]
+
+  @@unique([legalEntityId, serialNumber])
+  @@index([legalEntityId, validFrom, validTo])
+}
+
+model SatCatalog {
+  id              String              @id @default(cuid())
+  key             String              @unique @db.VarChar(64)
+  name            String              @db.VarChar(128)
+  description     String?
+  activeVersionId String?             @unique
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  activeVersion   SatCatalogVersion?  @relation("SatCatalogActiveVersion", fields: [activeVersionId], references: [id], onDelete: Restrict)
+  versions        SatCatalogVersion[] @relation("SatCatalogVersions")
+
+  @@index([activeVersionId])
+}
+
+model SatCatalogVersion {
+  id             String                  @id @default(cuid())
+  catalogId      String
+  sourceVersion  String                  @db.VarChar(128)
+  status         SatCatalogVersionStatus @default(STAGING)
+  checksumSha256 String                  @db.VarChar(64)
+  rowCount       Int                     @default(0)
+  metadata       Json?
+  stagedAt       DateTime                @default(now())
+  validatedAt    DateTime?
+  activatedAt    DateTime?
+  retiredAt      DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  catalog        SatCatalog              @relation("SatCatalogVersions", fields: [catalogId], references: [id], onDelete: Restrict)
+  activeCatalog  SatCatalog?             @relation("SatCatalogActiveVersion")
+  entries        SatCatalogEntry[]
+
+  @@unique([catalogId, sourceVersion])
+  @@index([catalogId, status, activatedAt])
+}
+
+model SatCatalogEntry {
+  id               String            @id @default(cuid())
+  catalogVersionId String
+  code             String            @db.VarChar(64)
+  description      String            @db.VarChar(512)
+  validFrom        DateTime?
+  validTo          DateTime?
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  catalogVersion   SatCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([catalogVersionId, code])
+  @@index([catalogVersionId, code])
+  @@index([code, validFrom, validTo])
 }
 
 model BillingRequestSaleDocument {

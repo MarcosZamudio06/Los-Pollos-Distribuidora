@@ -17,7 +17,9 @@
 .specs/03-api/accounts-receivable-api.md
 .specs/03-api/api-conventions.md
 .specs/03-api/auth-api.md
+.specs/03-api/billing-reportable-notes-api.md
 .specs/03-api/billing-requests-api.md
+.specs/03-api/cfdi-api.md
 .specs/03-api/branch-supply-cycles-api.md
 .specs/03-api/commercial-policies-api.md
 .specs/03-api/customers-api.md
@@ -35,6 +37,7 @@
 .specs/03-api/sales-documents-api.md
 .specs/04-ui/accounts-receivable.md
 .specs/04-ui/billing-requests.md
+.specs/04-ui/billing-reportable-notes.md
 .specs/04-ui/customers.md
 .specs/04-ui/dashboard.md
 .specs/04-ui/inventory.md
@@ -55,10 +58,13 @@
 .specs/07-workflows/opencode-gentleman-workflow.md
 .specs/07-workflows/prompts.md
 .specs/07-workflows/task.md
+.specs/07-workflows/task/action.md
 README.md
 modules/accounts-receivable/spec.md
 modules/auth/spec.md
+modules/billing-reportable-notes/spec.md
 modules/billing-requests/spec.md
+modules/cfdi/spec.md
 modules/branch-supply-cycles/spec.md
 modules/clientes/spec.md
 modules/compras/spec.md

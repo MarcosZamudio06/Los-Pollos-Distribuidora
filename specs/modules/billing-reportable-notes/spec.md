@@ -4,7 +4,11 @@
 
 El ERP incorporará, como fase posterior al MVP, un módulo operativo para identificar notas facturables, crear solicitudes totales, parciales o agrupadas y conciliar facturas emitidas por un sistema externo.
 
-Esta capacidad **no emite facturas fiscales**. Quedan fuera de alcance la generación de CFDI, XML, timbrado, integración con PAC o SAT, certificados y cancelación ante la autoridad. El UUID, cuando exista, es únicamente un identificador de una factura ya emitida externamente.
+Esta capacidad continúa conciliando facturas externas legacy y no emite por sí
+misma un CFDI. La emisión nativa es un bounded context separado gobernado por
+`specs/modules/cfdi/spec.md`. Ambos contextos reutilizan `Invoice` y las
+relaciones existentes por documento y partida; `Invoice.origin` distingue
+`LEGACY_EXTERNAL` de `NATIVE_CFDI` sin duplicar la autoridad contable.
 
 Este documento es la fuente canónica del módulo. `docs/spec-factura/spec.md` conserva el detalle funcional de origen y debe interpretarse conforme a estas decisiones y a los specs transversales enlazados.
 
@@ -14,7 +18,9 @@ Este documento es la fuente canónica del módulo. `docs/spec-factura/spec.md` c
 - `SaleDocument` representa cada documento comercial originado por la venta y es la unidad facturable.
 - `SaleItem` representa la unidad de detalle para aplicaciones exactas por partida.
 - `BillingRequest` representa una solicitud, nunca una factura.
-- `Invoice` registra y concilia una factura emitida externamente; no la genera ni la timbra.
+- `Invoice` es la raíz persistida de una factura. En este módulo registra una
+  factura externa; en el módulo nativo solo se crea después de timbrado
+  confirmado.
 - `Payment` continúa ligado a `Sale` o `AccountReceivable`.
 - `PaymentAllocation` permanece fuera del modelo. La conciliación de cobro se deriva por `Invoice → SaleDocument → Sale`.
 - Vincular, cancelar o sustituir una factura no crea ni modifica ventas, pagos o movimientos de inventario.
@@ -110,7 +116,12 @@ No se persiste como fuente de verdad ni se cambia manualmente. Solicitudes recha
 
 El read model expone `pendingSubtotal`, `pendingTax` y `pendingTotal`, además de las partidas con saldo vigente y su mismo desglose. Una solicitud parcial se compone exclusivamente mediante selección exacta de partidas; no se prorratea el total del documento. El backend recalcula el desglose desde `SaleItem` menos aplicaciones vigentes y reservas de solicitudes activas, y rechaza importes enviados que no coincidan exactamente. La selección queda normalizada en `BillingRequestSaleItem`, con subtotal, impuesto y total solicitados por partida.
 
-## Factura externa
+## Origen de factura y factura externa
+
+`Invoice.origin` es `LEGACY_EXTERNAL` para el flujo descrito aquí y
+`NATIVE_CFDI` para el módulo fiscal separado. Reportes y saldos aplicados usan
+la misma autoridad `Invoice.status`, `InvoiceSaleDocument` e
+`InvoiceSaleItemApplication` para ambos orígenes.
 
 `Invoice` conserva emisor, moneda, serie, folio, UUID opcional, importes, estado, versión, cancelación y sustitución. Estados mínimos:
 
@@ -156,12 +167,19 @@ Comandos principales:
 - `POST /api/billing/requests/:id/approve`
 - `POST /api/billing/requests/:id/reject`
 - `POST /api/billing/requests/:id/cancel`
-- `POST /api/billing/requests/:id/link-invoice`
-- `POST /api/billing/invoices/:id/cancel`
+- `POST /api/billing/requests/:id/link-invoice` (solo conciliación externa
+  legacy; se retirará tras el cutover nativo)
+- `POST /api/billing/invoices/:id/cancel` (cancelación operativa legacy)
+- La emisión y cancelación fiscales nativas usan `/api/cfdi/**` según
+  `specs/.specs/03-api/cfdi-api.md`.
 
 Los importes JSON se exponen como cadenas decimales. Los comandos críticos requieren `Idempotency-Key` y `expectedVersion`. Los errores usan códigos estables, entre ellos `OVER_INVOICED`, `ACTIVE_REQUEST_EXISTS`, `MIXED_CURRENCIES` y `MIXED_LEGAL_ENTITIES`.
 
-La cancelación operativa revierte lógicamente las aplicaciones vigentes, conserva historia y auditoría, y reabre el saldo facturable derivado. Se bloquea cuando la factura no está activa o participa en una sustitución incompatible; no representa una cancelación ante SAT.
+La cancelación operativa revierte lógicamente las aplicaciones vigentes,
+conserva historia y auditoría, y reabre el saldo facturable derivado. Se bloquea
+cuando la factura no está activa o participa en una sustitución incompatible;
+no representa una cancelación ante SAT y debe rechazar `NATIVE_CFDI` cuando se
+introduzca el origen.
 
 ## Permisos
 

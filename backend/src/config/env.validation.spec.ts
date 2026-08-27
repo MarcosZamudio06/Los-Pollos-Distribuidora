@@ -47,6 +47,12 @@ describe('validateEnvironment', () => {
         FLEET_POSITION_FUTURE_TOLERANCE_SECONDS: 300,
         FLEET_ANALYTICS_MAX_RANGE_DAYS: 31,
         FLEET_POSITION_RETENTION_DAYS: 365,
+        CFDI_ENABLED: false,
+        FISCAL_PROVIDER: 'NONE',
+        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+        CFDI_REQUEST_TIMEOUT_MS: 30000,
+        CFDI_MAX_RETRIES: 3,
+        FACTURAMA_API_MODE: 'MULTI_ISSUER',
       }),
     );
   });
@@ -348,5 +354,178 @@ describe('validateEnvironment', () => {
         OBJECT_STORAGE_PUBLIC_ENDPOINT: 'https://objects.example.com',
       }),
     );
+  });
+
+  it('validates CFDI provider configuration without exposing credentials', () => {
+    expect(
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+        FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
+        FACTURAMA_CREDENTIAL_REF: 'secret-manager://facturama/sandbox',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        CFDI_ENABLED: true,
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+        CFDI_REQUEST_TIMEOUT_MS: 30000,
+        CFDI_MAX_RETRIES: 3,
+        FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
+        FACTURAMA_CREDENTIAL_REF: 'secret-manager://facturama/sandbox',
+      }),
+    );
+
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+        FACTURAMA_CREDENTIAL_REF: 'secret-manager://raw-secret',
+      }),
+    ).toThrow('FACTURAMA_API_BASE_URL is required');
+  });
+
+  it('requires complete Facturama configuration when fiscal mode is enabled', () => {
+    expect(() => validateEnvironment({ CFDI_ENABLED: 'true' })).toThrow(
+      'FISCAL_PROVIDER must be configured when CFDI_ENABLED=true',
+    );
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+      }),
+    ).toThrow('FISCAL_PROVIDER_ENVIRONMENT is required');
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'PRODUCTION',
+      }),
+    ).toThrow('FACTURAMA_API_BASE_URL is required');
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'PRODUCTION',
+        FACTURAMA_API_BASE_URL: 'https://api.facturama.mx',
+      }),
+    ).toThrow('FACTURAMA_CREDENTIAL_REF is required');
+  });
+
+  it('accepts a complete production fiscal configuration with an opaque reference', () => {
+    expect(
+      validateEnvironment({
+        NODE_ENV: 'production',
+        DATABASE_SSL: 'true',
+        DATABASE_URL:
+          'postgresql://user:password@database:5432/app?sslmode=require',
+        JWT_ACCESS_SECRET: 'access-'.padEnd(40, 'a'),
+        JWT_REFRESH_SECRET: 'refresh-'.padEnd(40, 'b'),
+        OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'PRODUCTION',
+        CFDI_REQUEST_TIMEOUT_MS: '45000',
+        CFDI_MAX_RETRIES: '2',
+        FACTURAMA_API_BASE_URL: 'https://api.facturama.mx',
+        FACTURAMA_API_MODE: 'MULTI_ISSUER',
+        FACTURAMA_CREDENTIAL_REF:
+          'docker-secret://facturama-production-credentials',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        CFDI_ENABLED: true,
+        CFDI_REQUEST_TIMEOUT_MS: 45000,
+        CFDI_MAX_RETRIES: 2,
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'PRODUCTION',
+        FACTURAMA_CREDENTIAL_REF:
+          'docker-secret://facturama-production-credentials',
+      }),
+    );
+  });
+
+  it('requires HTTPS for the Facturama production endpoint', () => {
+    expect(() =>
+      validateEnvironment({
+        FISCAL_PROVIDER_ENVIRONMENT: 'PRODUCTION',
+        FACTURAMA_API_BASE_URL: 'http://api.facturama.mx',
+      }),
+    ).toThrow('FACTURAMA_API_BASE_URL must use HTTPS');
+  });
+
+  it('rejects Facturama endpoints outside the environment allowlist', () => {
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'PRODUCTION',
+        FACTURAMA_API_BASE_URL: 'https://attacker.example',
+        FACTURAMA_CREDENTIAL_REF: 'secret-manager://facturama/production',
+      }),
+    ).toThrow(
+      'FACTURAMA_API_BASE_URL is not allowlisted for FISCAL_PROVIDER_ENVIRONMENT=PRODUCTION',
+    );
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+        FACTURAMA_API_BASE_URL: 'https://api.facturama.mx',
+        FACTURAMA_CREDENTIAL_REF: 'secret-manager://facturama/sandbox',
+      }),
+    ).toThrow(
+      'FACTURAMA_API_BASE_URL is not allowlisted for FISCAL_PROVIDER_ENVIRONMENT=SANDBOX',
+    );
+  });
+
+  it('rejects unsupported fiscal values, unsafe retries, and raw secret variables', () => {
+    expect(() => validateEnvironment({ FISCAL_PROVIDER: 'UNKNOWN' })).toThrow(
+      'FISCAL_PROVIDER must be one of NONE, FACTURAMA',
+    );
+    expect(() =>
+      validateEnvironment({ FISCAL_PROVIDER_ENVIRONMENT: 'LIVE' }),
+    ).toThrow('FISCAL_PROVIDER_ENVIRONMENT must be one of SANDBOX, PRODUCTION');
+    expect(() =>
+      validateEnvironment({ CFDI_REQUEST_TIMEOUT_MS: '99' }),
+    ).toThrow('CFDI_REQUEST_TIMEOUT_MS must be between 100 and 120000');
+    expect(() =>
+      validateEnvironment({ CFDI_REQUEST_TIMEOUT_MS: '120001' }),
+    ).toThrow('CFDI_REQUEST_TIMEOUT_MS must be between 100 and 120000');
+    expect(() => validateEnvironment({ CFDI_MAX_RETRIES: '11' })).toThrow(
+      'CFDI_MAX_RETRIES cannot exceed 10',
+    );
+    try {
+      validateEnvironment({ FACTURAMA_PASSWORD: 'never-log-this' });
+      throw new Error('expected raw secret rejection');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        'FACTURAMA_PASSWORD must not be configured; use FACTURAMA_CREDENTIAL_REF',
+      );
+      expect((error as Error).message).not.toContain('never-log-this');
+    }
+  });
+
+  it('requires explicit fiscal environment and opaque reference syntax when enabled', () => {
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
+        FACTURAMA_CREDENTIAL_REF: 'secret-manager://facturama/sandbox',
+      }),
+    ).toThrow('FISCAL_PROVIDER_ENVIRONMENT is required');
+    expect(() =>
+      validateEnvironment({
+        CFDI_ENABLED: 'true',
+        FISCAL_PROVIDER: 'FACTURAMA',
+        FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+        FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
+        FACTURAMA_CREDENTIAL_REF: 'contains whitespace',
+      }),
+    ).toThrow('FACTURAMA_CREDENTIAL_REF must be an opaque');
   });
 });

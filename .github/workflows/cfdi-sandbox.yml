@@ -1,0 +1,52 @@
+name: CFDI Facturama Sandbox
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cfdi-facturama-sandbox
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24.14.1
+  CFDI_ENABLED: "true"
+  FISCAL_PROVIDER: FACTURAMA
+  FISCAL_PROVIDER_ENVIRONMENT: SANDBOX
+  FACTURAMA_API_BASE_URL: https://apisandbox.facturama.mx
+  FACTURAMA_API_MODE: MULTI_ISSUER
+  FACTURAMA_CREDENTIAL_REF: github-actions://facturama-sandbox
+  CFDI_REQUEST_TIMEOUT_MS: 30000
+  CFDI_MAX_RETRIES: 0
+
+jobs:
+  provider-read-contract:
+    name: Protected Facturama sandbox read contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cfdi-sandbox
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Run provider read contract against sandbox
+        env:
+          RUN_FACTURAMA_SANDBOX: "true"
+          FACTURAMA_SANDBOX_USERNAME: ${{ secrets.FACTURAMA_SANDBOX_USERNAME }}
+          FACTURAMA_SANDBOX_PASSWORD: ${{ secrets.FACTURAMA_SANDBOX_PASSWORD }}
+          FACTURAMA_SANDBOX_DOCUMENT_ID: ${{ secrets.FACTURAMA_SANDBOX_DOCUMENT_ID }}
+          FACTURAMA_SANDBOX_UUID: ${{ secrets.FACTURAMA_SANDBOX_UUID }}
+          OPENSSL_CONF: /dev/null
+        run: npm --prefix backend run test:e2e -- --runInBand --runTestsByPath test/facturama-sandbox.e2e-spec.ts

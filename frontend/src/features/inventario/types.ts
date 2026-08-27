@@ -1,6 +1,11 @@
 export type OperationalUnit = "KG" | "PIECE" | "KG_AND_PIECE";
 export type ProductPresentation = "KG" | "WHOLE" | "CUT";
 export type EquivalentPolicyStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
+export type ProductTaxObjectCode =
+  "01" | "02" | "03" | "04" | "05" | "06" | "07" | "08";
+export type ProductTaxCode = "001" | "002" | "003";
+export type ProductFactorType = "Tasa" | "Cuota" | "Exento";
+export type ProductFiscalProfileStatus = "COMPLETE" | "INCOMPLETE";
 export type ProductStatus = "ACTIVE" | "INACTIVE" | string;
 export type InventoryMovementType =
   | "IN"
@@ -131,6 +136,16 @@ export type Product = {
   minStock?: number | null;
   unit?: OperationalUnit | null;
   operationalUnit?: OperationalUnit | null;
+  satProductServiceCode?: string | null;
+  satUnitCode?: string | null;
+  taxObjectCode?: ProductTaxObjectCode | null;
+  defaultTaxCode?: ProductTaxCode | null;
+  defaultFactorType?: ProductFactorType | null;
+  defaultRateOrQuota?: number | null;
+  fiscalProfileStatus?: ProductFiscalProfileStatus;
+  fiscalProfileComplete?: boolean;
+  fiscalProfileMissingFields?: string[];
+  fiscalProfileValidationCode?: string | null;
   pieceWeightEquivalent?: number | null;
   equivalentWeightKg?: number | null;
   equivalentPolicyStatus?: EquivalentPolicyStatus | null;
@@ -147,11 +162,7 @@ export type Product = {
 
 const CANONICAL_PRODUCT_UNITS = ["KG", "PIECE", "KG_AND_PIECE"] as const;
 const CANONICAL_PRESENTATION_TYPES = ["KG", "WHOLE", "CUT"] as const;
-const CANONICAL_EQUIVALENCE_STATUSES = [
-  "DRAFT",
-  "ACTIVE",
-  "INACTIVE",
-] as const;
+const CANONICAL_EQUIVALENCE_STATUSES = ["DRAFT", "ACTIVE", "INACTIVE"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -245,12 +256,9 @@ export function isCanonicalInventoryBalance(
 
   if (
     unit === "PIECE" &&
-    [
-      quantityKg,
-      reservedQuantityKg,
-      availableQuantityKg,
-      minQuantityKg,
-    ].some((quantity) => quantity !== 0)
+    [quantityKg, reservedQuantityKg, availableQuantityKg, minQuantityKg].some(
+      (quantity) => quantity !== 0,
+    )
   ) {
     return false;
   }
@@ -336,6 +344,12 @@ export type ProductFormValues = {
   purchaseCost: number;
   minStock: number;
   unit: OperationalUnit;
+  satProductServiceCode?: string | null;
+  satUnitCode?: string | null;
+  taxObjectCode?: ProductTaxObjectCode | null;
+  defaultTaxCode?: ProductTaxCode | null;
+  defaultFactorType?: ProductFactorType | null;
+  defaultRateOrQuota?: number | null;
   pieceWeightEquivalent?: number | null;
   equivalentPolicyStatus?: EquivalentPolicyStatus | null;
 };

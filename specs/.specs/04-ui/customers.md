@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Administrar clientes minoristas, mayoristas e institucionales, su perfil facturado, crédito, bloqueo, historial y datos de entrega sin tratar los datos fiscales como emisión CFDI.
+Administrar clientes minoristas, mayoristas e institucionales, su perfil comercial y fiscal CFDI 4.0, crédito, bloqueo, historial y datos de entrega sin tratar la captura fiscal como emisión CFDI.
 
 ## Alcance TASK-041
 
@@ -27,7 +27,6 @@ Columnas:
 - Nombre comercial.
 - Teléfono.
 - Email.
-- Email de facturación.
 - Tipo de cliente: `RETAIL`, `WHOLESALE` o `INSTITUTIONAL`.
 - Estado de crédito.
 - Saldo global.
@@ -69,24 +68,32 @@ Campos:
 - Nombre comercial.
 - Teléfono.
 - Email.
-- Email de facturación.
-- Dirección.
+- Dirección comercial.
 - Tipo de cliente.
 - Lista de precios opcional.
 - Límite de crédito.
 - Días de crédito.
 - Estado de crédito.
 - Requiere facturación administrativa.
-- Dirección de entrega.
 - Ruta asignada.
 - Política comercial.
-- Razón social opcional.
-- RFC opcional.
-- Dirección fiscal opcional.
+- Dirección de entrega.
+- Sección separada de datos fiscales CFDI 4.0:
+  - Email de facturación.
+  - Razón social fiscal.
+  - RFC.
+  - Código postal fiscal.
+  - Régimen fiscal seleccionado del catálogo SAT.
+  - Uso de CFDI seleccionado del catálogo SAT.
+  - Domicilio fiscal opcional.
 
 Restricciones:
 
-- Los campos fiscales son opcionales en MVP.
+- Los seis campos del perfil fiscal son opcionales mientras `requiresBilling=false`.
+- Al activar `requiresBilling=true`, mostrar los seis campos como requeridos y presentar los errores `fields[]` devueltos por backend.
+- No permitir régimen fiscal ni UsoCFDI mediante texto libre; usar opciones del catálogo compartido.
+- La validación del backend es autoritativa; las validaciones de UI solo anticipan errores y mejoran accesibilidad.
+- Mantener diferenciadas dirección comercial, dirección de entrega y domicilio fiscal.
 - No presentar captura fiscal como emisión, timbrado ni factura CFDI.
 - Solo roles autorizados pueden modificar límite de crédito, días, estado de bloqueo o política comercial.
 
@@ -157,6 +164,10 @@ Toda vista debe contemplar:
 - Nombre requerido.
 - Email válido si se captura.
 - Email de facturación válido si se captura.
+- RFC con estructura válida cuando se captura.
+- Código postal fiscal de cinco dígitos cuando se captura.
+- Régimen fiscal y UsoCFDI pertenecientes al catálogo SAT.
+- Perfil fiscal completo cuando `requiresBilling=true`.
 - Teléfono no duplicado cuando se use como identificador comercial.
 - Tipo de cliente requerido.
 - Cliente inactivo no debe seleccionarse para nuevas ventas.

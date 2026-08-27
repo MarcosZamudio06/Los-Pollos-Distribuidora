@@ -25,6 +25,10 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 
 - Dado un producto válido, cuando se crea, entonces queda disponible en catálogo sin crear stock operativo global.
 - Dado un producto creado con presentación semántica, cuando se consulta, entonces el sistema distingue `KG`, `WHOLE` o `CUT` y no lo infiere solo por el nombre.
+- Dado un producto sin configuración fiscal, cuando se crea o edita, entonces continúa operable comercialmente y la API muestra `fiscalProfileStatus=INCOMPLETE` con `CFDI_PRODUCT_PROFILE_INCOMPLETE`.
+- Dado un producto con `satProductServiceCode`, `satUnitCode`, `taxObjectCode`, `defaultTaxCode`, `defaultFactorType` y `defaultRateOrQuota` válidos, cuando se consulta, entonces muestra perfil fiscal completo sin alterar `ProductUnit`.
+- Dado un código fiscal estructuralmente inválido, cuando se crea o edita el producto, entonces responde error de campo estable sin crear movimientos ni modificar históricos.
+- Dado un producto con ventas históricas, cuando se actualiza su perfil fiscal, entonces las partidas y snapshots históricos permanecen idénticos.
 - Dado una consulta de disponibilidad, cuando se solicita inventario, entonces el sistema muestra saldos por `locationId` mediante `quantityKg` y/o `quantityPieces`, no como stock global único.
 - Dado una ubicación operativa inactiva, cuando se intenta usar en ventas, compras, ajustes o traspasos nuevos, entonces la operación se rechaza.
 - Dado una ubicación operativa inactiva, cuando se intenta confirmar una venta con esa ubicación como `locationId`, entonces el backend rechaza la operación antes de descontar inventario y no crea venta, items, cuenta por cobrar, ticket ni movimientos.
@@ -266,5 +270,276 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - `SELLER` ve únicamente notas propias; `WAREHOUSE` y `DRIVER` no acceden al módulo ni a datos fiscales.
 - Vincular, cancelar o sustituir facturas no crea ni modifica `Sale`, `Payment` o `InventoryMovement`.
 - Con los mismos filtros, tabla, resumen, CSV y XLSX producen conteos e importes conciliados.
-- Puede registrarse UUID de una factura externa, pero no existe emisión CFDI, XML, timbrado, PAC ni integración SAT.
+- Puede conservarse el UUID de una factura externa legacy sin convertirlo en
+  una emisión nativa; las solicitudes `APPROVED` usan el flujo CFDI nativo
+  documentado abajo y la identidad PAC sigue siendo server-owned.
 - `PaymentAllocation` no existe como mecanismo del flujo.
+
+## CFDI 4.0 nativo
+
+- Dado un `LegalEntity` incompleto con `cfdiEnabled=false`, el CRUD permite
+  conservarlo como registro legacy y expone `CFDI_LEGAL_ENTITY_FISCAL_PROFILE_INCOMPLETE`.
+- Dado `cfdiEnabled=true`, RFC, lugar de expedición, régimen SAT, serie y
+  metadata de certificado incompletos o inválidos, el backend rechaza la
+  activación antes de persistir.
+- Dada una venta facturable, solo un mapeo vigente a una entidad activa,
+  habilitada, completa y con certificado vigente permite continuar; cero,
+  solapados o inactivos bloquean con código estable y no dejan reserva de
+  inventario.
+- Las rutas administrativas de `LegalEntity` solo aceptan `ADMIN` y `BILLING`;
+  no almacenan `.key`, contraseña CSD ni token PAC.
+- Dada una solicitud `APPROVED`, repetir emisión con la misma idempotencia crea
+  exactamente una raíz `Invoice` nativa y el mismo intento `STAMP`.
+- Dadas dos claves concurrentes sobre la misma solicitud `APPROVED`, PostgreSQL
+  permite como máximo una raíz, un intento y un POST efectivo al PAC.
+- Dada una solicitud fuera de `APPROVED`, la emisión se rechaza antes de llamar
+  al proveedor u ObjectStorage.
+- Dada una solicitud `APPROVED` sin `Invoice` nativa, cuando el núcleo fiscal la
+  construye, entonces resuelve emisor, receptor y partidas desde backend,
+  recalcula con `Prisma.Decimal` y devuelve un snapshot profundamente inmutable
+  sin UUID, TFD ni sellos.
+- Dadas ventas de diferente cliente, moneda o entidad legal, perfiles fiscales
+  incompletos, claves SAT inválidas, configuración de pago incoherente,
+  ecuaciones distintas o importes superiores al saldo vigente, cuando se
+  construye el documento, entonces falla con un código de dominio estable y no
+  realiza ninguna escritura.
+- Dado cualquiera de los trece estados fiscales de dominio, solo los eventos
+  declarados pueden transicionar; todo otro evento devuelve
+  `INVALID_STATE_TRANSITION` y no cambia el estado persistido.
+- Dado un timeout después del envío, factura e intento quedan `UNKNOWN`,
+  bloquean una segunda emisión y se reconcilian por referencia o
+  emisor/serie/folio.
+- Dado un rollback al persistir una respuesta PAC exitosa, el POST no se repite
+  y un intento de recuperación marca la operación `UNKNOWN` para conciliación.
+- Dada una emisión confirmada, UUID, TFD, sellos, datos SAT, identificadores PAC
+  y artefactos provienen únicamente de la respuesta validada del proveedor.
+- Dado un body con campos fiscales propiedad del servidor, la validación
+  estricta lo rechaza.
+- Dada cualquier operación fiscal, los valores y conteos de `Sale`, `Payment`,
+  `AccountReceivable`, `InventoryBalance` e `InventoryMovement` permanecen
+  iguales.
+- Dada una caída de ObjectStorage después del timbrado, no se emite otro CFDI;
+  el artefacto queda `FAILED` como inconsistencia recuperable, conserva el
+  UUID confirmado y se publica con checksum al recuperarse.
+- Dado XML/PDF disponible, cuando se solicita su descarga, entonces el backend
+  verifica `AVAILABLE`, hash y tamaño, aplica ownership/scope y devuelve solo
+  una URL firmada temporal sin exponer `storageKey`.
+- Dado XML con UUID distinto al UUID persistido o al TFD, cuando se publica,
+  entonces queda `FAILED` con código estable y no se sube como artefacto
+  autoritativo.
+- Dado un artefacto faltante de una factura `STAMPED`, cuando se consulta,
+  entonces responde `FISCAL_ARTIFACT_MISSING` y queda abierta la recuperación
+  sin cambiar el estado fiscal ni llamar `stamp`.
+- Dado un acuse de cancelación posterior, cuando se recibe, entonces se
+  persiste como `CANCELLATION_ACK` con la misma validación de hash y bucket
+  privado.
+- Dado un usuario `ADMIN` o `BILLING`, cuando consulta el historial fiscal,
+  entonces obtiene paginación y filtros por fecha, cliente, RFC, UUID,
+  serie/folio, estado fiscal, entidad legal, ubicación y tipo CFDI sin N+1.
+- Dado el detalle de una `Invoice`, entonces emisor, receptor, conceptos,
+  impuestos, totales, aplicaciones, artefactos, cancelación y auditoría se
+  leen de snapshots/relaciones persistidas; no se consulta `Customer` o
+  `Product` para reconstruir historia.
+- Dada una factura legacy sin snapshots, entonces la API devuelve
+  `snapshotAvailable=false` y no inventa datos fiscales actuales.
+- Dado `SELLER`, `COLLECTIONS`, `WAREHOUSE` o `DRIVER`, cuando intenta leer
+  historial/detalle/estado fiscal, entonces recibe `CFDI_INVOICE_READ_FORBIDDEN`;
+  solo los alcances de descarga de artefactos expresamente documentados siguen
+  vigentes.
+- Dadas facturas existentes durante la migración, todas quedan
+  `LEGACY_EXTERNAL`/`LEGACY` y conservan UUID, aplicaciones, estado,
+  sustituciones, reportes y auditoría; UUID inválido o total inconsistente crea
+  remediación estable sin completar ningún dato fiscal.
+- Dada una `Invoice` nativa anterior al timbrado, su UUID puede ser nulo y no se
+  presenta como emitida; al quedar `STAMPED`, UUID, TFD, certificados,
+  proveedor certificador y sellos son obligatorios.
+- Dado un cambio posterior en `Product`, `Customer` o `LegalEntity`, los
+  snapshots de `Invoice`/`InvoiceConcept`/`FiscalCertificate` no cambian.
+- Dado un `NATIVE_CFDI` `ACTIVE/STAMPED`, el endpoint de cancelación exige
+  motivo SAT, razón interna, `expectedVersion` e idempotencia y carga UUID/
+  referencia PAC únicamente desde backend.
+- Dada la matriz RBAC, solo permisos `cfdi.*` autorizan endpoints fiscales;
+  ocultar controles en frontend no es autorización.
+- Facturama sandbox y un fake neutral satisfacen el mismo contrato del puerto;
+  Finkok podrá ejecutar esa suite sin cambiar dominio o API.
+
+### CFDI-11 — Revisión y emisión nativa en solicitudes
+
+- Dada una solicitud `APPROVED` de `ADMIN` o `BILLING`, cuando se abre el
+  detalle, entonces la UI reutiliza `InvoiceReconciliationPanel` y muestra una
+  revisión fiscal de emisor, receptor, RFC, régimen, CP, UsoCFDI, conceptos,
+  claves SAT, impuestos, FormaPago, MetodoPago y totales server-owned.
+- Dada una revisión fiscal, cuando el operador observa campos de UUID, TFD,
+  sellos, certificados o total, entonces son valores de solo lectura o no
+  existen como inputs editables.
+- Dado un perfil fiscal incompleto, cuando se abre la solicitud, entonces la
+  UI identifica los campos/conceptos faltantes y deshabilita `Emitir CFDI`, sin
+  sustituir la validación del backend.
+- Dado un click en `Emitir CFDI`, cuando se envía, entonces solo se transmiten
+  `expectedVersion`, `Idempotency-Key` y decisiones fiscales permitidas, y el
+  segundo click queda bloqueado.
+- Dado `STAMPING`, `STAMP_UNKNOWN`, `STAMP_ERROR` o `STAMPED`, cuando se
+  actualiza el detalle, entonces cada estado se muestra explícitamente;
+  `STAMP_UNKNOWN` instruye reconciliar y nunca se muestra como error genérico.
+- Dado `STAMPED` con XML/PDF disponibles, cuando se solicitan, entonces la UI
+  muestra UUID, fechas, cancelación y abre la URL firmada temporal sin exponer
+  `storageKey`; artefactos pendientes permanecen visibles como pendientes.
+- Dado `SELLER`, `COLLECTIONS`, `WAREHOUSE` o `DRIVER`, cuando se abre una
+  solicitud aprobada, entonces no se muestra la CTA de emisión fiscal.
+
+### CFDI-12 — Reconciliación de operaciones inciertas
+
+- Dadas dos instancias de `StampReconciliationJob`, cuando solo una obtiene el
+  advisory lock PostgreSQL `71823043`, entonces únicamente esa instancia
+  reclama y consulta operaciones.
+- Dada una operación `STAMP_UNKNOWN` con referencia PAC, cuando el proveedor
+  confirma el CFDI, entonces el backend persiste UUID/TFD, completa `Invoice`,
+  marca los intentos y recupera XML/PDF sin ejecutar `stamp` otra vez.
+- Dado XML cuyo TFD UUID no coincide con el UUID del estado, entonces la
+  factura permanece `UNKNOWN`, no se marca `STAMPED` y se abre
+  `BillingDataRemediation`.
+- Dado un timeout repetido, cuando se agota `CFDI_MAX_RETRIES`, entonces no se
+  crea otro CFDI, la operación queda reconciliable y existe remediación con
+  código estable.
+- Dado un `FISCAL_PROVIDER_NOT_FOUND`, entonces solo se programan consultas
+  `STATUS/RECOVERY` acotadas; el job nunca llama `stamp` automáticamente.
+- Dado un artefacto faltante o una caída de ObjectStorage, entonces la factura
+  confirmada conserva `STAMPED`/UUID y el artefacto queda recuperable.
+- Dado un proceso sin base PostgreSQL real, las pruebas unitarias deben
+  distinguir el lock simulado de la prueba de concurrencia PostgreSQL, que se
+  reporta `NOT_TESTED` si no hay infraestructura.
+
+### CFDI-13 — Cancelación fiscal confirmada
+
+- Dada una factura `ACTIVE/STAMPED`, al reservar cancelación se persiste un
+  intento `CANCEL`, versión, hash/idempotencia y auditoría sin revertir
+  `InvoiceSaleDocument` ni `InvoiceSaleItemApplication`.
+- Dado `PENDING`, `REJECTED` o timeout PAC, la factura permanece `ACTIVE`, el
+  saldo facturable sigue reservado y no existe segundo request efectivo.
+- Dada respuesta fiscal `CANCELLED` cuyo UUID coincide con el histórico, la
+  misma transacción cambia `Invoice.status=CANCELLED`,
+  `cancellationStatus=ACCEPTED` y revierte aplicaciones para liberar saldo.
+- Dado un replay con la misma clave y payload, se devuelve el mismo estado sin
+  llamar otra vez al PAC; payload distinto produce `IDEMPOTENCY_CONFLICT`.
+- Dadas dos claves concurrentes en PostgreSQL, como máximo una reserva y una
+  llamada efectiva alcanzan al proveedor.
+- Dado motivo `01`, la ausencia de sustituto o un sustituto no `STAMPED`, sin
+  UUID, de otra entidad o no posterior se rechaza antes de llamar al PAC; el
+  UUID sustituto se resuelve desde `replacementInvoiceId`, nunca del request.
+- Ningún resultado de cancelación sobrescribe `Invoice.uuid`, ni modifica
+  `Sale`, `Payment`, `AccountReceivable`, inventario o movimientos.
+
+### CFDI-14 — Operación asíncrona de cancelación
+
+- Dadas dos instancias de `CancellationStatusJob`, cuando solo una obtiene el
+  advisory lock PostgreSQL `71823044`, entonces solo esa instancia reclama
+  cancelaciones y cada lote contiene como máximo 50 facturas.
+- Dada una cancelación persistida como `CANCEL_REQUESTED` o
+  `CANCEL_PENDING_ACCEPTANCE` (`cancellationStatus=PENDING`), cuando el job
+  consulta el proveedor, entonces crea un intento `STATUS` y nunca vuelve a
+  enviar `cancel`.
+- Dado un timeout que dejó `cancellationStatus=UNKNOWN` sin intento `STATUS`,
+  entonces el siguiente lote lo reclama para consulta; un resultado terminal
+  no se vuelve a encolar automáticamente.
+- Dada una respuesta `PENDING`, timeout o 5xx transitorio, entonces la factura
+  permanece `ACTIVE`, las aplicaciones y el saldo permanecen reservados y el
+  siguiente intento se programa con backoff respetando `CFDI_MAX_RETRIES`.
+- Dado un rechazo fiscal, entonces se proyecta `REJECTED`/`ERROR`, se registra
+  auditoría sanitizada y no se libera saldo; al agotar reintentos se crea o
+  actualiza `BillingDataRemediation` sin generar otro CFDI.
+- Dada una respuesta `CANCELLED` con UUID, correlación y referencia PAC
+  coincidentes, entonces la transacción cambia el estado fiscal, revierte
+  aplicaciones, libera el saldo y persiste el acuse como `FiscalArtifact` si
+  existe.
+- Dado un acuse faltante, UUID divergente o fallo de ObjectStorage, entonces la
+  confirmación fiscal no se duplica; el artefacto queda `FAILED`/recuperable o
+  se abre remediación y el UUID histórico no cambia.
+- Dado `GET /api/billing/invoices/:id/cancellation`, entonces `ADMIN`/`BILLING`
+  reciben estado, próximo retry, operación, acuse y auditoría resumida sin
+  `storageKey`; otros roles reciben `CFDI_INVOICE_READ_FORBIDDEN`.
+- Dada la UI de una factura pendiente, entonces muestra `Pending` y deshabilita
+  repetir cancelación; la consulta manual no usa polling agresivo ni sustituye
+  el estado persistido del job.
+
+### CFDI-15 — Catálogos SAT versionados
+
+- Dado un archivo de catálogo con códigos únicos, cuando se importa, entonces
+  queda en `STAGING` con checksum SHA-256 y sin llamar al SAT en tiempo real.
+- Dado un código duplicado, descripción vacía, rango inválido o metadata no
+  serializable, entonces la importación se rechaza antes de activar una
+  versión.
+- Dado un checksum proporcionado que no coincide con las entradas canónicas,
+  entonces la importación falla con `SAT_CATALOG_CHECKSUM_MISMATCH`.
+- Dada una versión `STAGING`, cuando pasa validación, entonces cambia a
+  `VALIDATED`; una versión no validada no puede activarse.
+- Dada una versión validada, cuando se activa, entonces PostgreSQL retira la
+  versión anterior y cambia el puntero activo en una sola transacción.
+- Dadas dos lecturas concurrentes durante una activación, entonces ninguna
+  observa una combinación de versión/entradas de distintas cargas.
+- Dado un catálogo soportado sin fuente importada, entonces el endpoint devuelve
+  `configured=false` y entradas vacías; no se inventan códigos SAT.
+- Dada una factura histórica, cuando cambia la descripción de una entrada SAT,
+  entonces sus códigos/descripciones snapshot permanecen iguales y no se
+  reconstruyen desde `Customer`, `Product` o `SatCatalogEntry`.
+- Dado un usuario distinto de `ADMIN` o `BILLING`, cuando consulta el endpoint,
+  entonces recibe el rechazo RBAC fiscal canónico.
+
+### CFDI-16 — Arquitectura REP 2.0
+
+- Dada una venta distribuida entre dos facturas PPD, cuando se prepara REP para
+  un `Payment(APPLIED)`, entonces se crean dos aplicaciones fiscales hasta
+  distribuir exactamente el pago y no se elige un UUID único por la venta.
+- Dada una factura que agrupa varias ventas, cuando se aplica un pago, entonces
+  no consume más que el tramo de `InvoiceSaleDocument` perteneciente a su venta.
+- Dados pagos parciales sucesivos, cuando se emiten en orden `paidAt,id`,
+  entonces `NumParcialidad` es monotónico y cada
+  `ImpSaldoInsoluto = ImpSaldoAnt - ImpPagado` con Decimal.
+- Dado un pago que liquida la factura, entonces la última aplicación deja
+  `ImpSaldoInsoluto=0`; `AccountReceivable` no recibe una segunda escritura
+  fiscal.
+- Dado un pago cuyo monto excede el saldo PPD facturado elegible, entonces se
+  rechaza con `REP_UNALLOCATED_PAYMENT_AMOUNT` y no se emite un REP parcial.
+- Dado un pago posterior con otro anterior elegible sin representar, entonces
+  se rechaza con `REP_OUT_OF_ORDER_PAYMENT` y no se altera la parcialidad.
+- Dado `REGISTERED` o `CANCELLED`, entonces el pago no habilita emisión REP.
+- Dado un cobro en ruta o segunda vuelta `APPLIED`, entonces usa el mismo
+  `Payment`; `routeId`, `collectionPass` y `RouteSettlement` no crean dinero ni
+  parcialidades adicionales.
+- Dadas dos solicitudes concurrentes sobre el mismo pago, entonces PostgreSQL
+  permite como máximo una reserva/emisión ordinaria.
+- Dado timeout PAC, entonces el REP queda `UNKNOWN`, conserva sus aplicaciones
+  reservadas y ningún replay ejecuta otro `stamp`.
+- Dada solicitud de cancelación REP pendiente, entonces las aplicaciones
+  continúan efectivas; solo `CANCELLED` confirmado las revierte.
+- Dado un REP con una aplicación posterior dependiente, entonces su
+  cancelación/sustitución se bloquea con
+  `REP_DEPENDENT_APPLICATION_EXISTS` hasta resolver en orden inverso.
+- Dada sustitución motivo `01`, entonces el nuevo REP conserva parcialidad y
+  saldos del sustituido, relación `04` y una sola cadena interna efectiva.
+- Dado un REP vigente, entonces cancelar económicamente su `Payment` o el CFDI
+  de Ingreso relacionado se rechaza antes de modificar saldos.
+- Dado un pago legacy sin moneda o FormaPago SAT verificable, entonces se abre
+  remediación y solo REP queda bloqueado; cobranza, caja, ruta y reportes
+  continúan usando `Payment` sin cambios.
+
+### CFDI-21 — Auditoría de seguridad fiscal
+
+- Dado cualquier controller que emite REP o Egreso, entonces JWT y la allowlist
+  `ADMIN`/`BILLING` se aplican en runtime; `SELLER`, `COLLECTIONS` y `DRIVER`
+  reciben rechazo antes de ejecutar el servicio.
+- Dado un ID arbitrario de factura, entonces no se genera URL firmada para un
+  `SELLER` ajeno, un `COLLECTIONS` sin cuenta por cobrar vinculada ni `DRIVER`.
+- Dado un TTL global de ObjectStorage mayor, entonces una URL firmada fiscal
+  nunca supera cinco minutos y no expone `storageKey`.
+- Dada configuración Facturama, entonces solo se acepta el origen exacto del
+  ambiente y se rechaza cualquier host, path o credencial embebida antes de
+  resolver el secreto PAC.
+- Dada una respuesta PAC mayor a 16 MiB, con o sin `Content-Length`, entonces
+  se rechaza con código estable y la lectura chunked se cancela.
+- Dado XML del proveedor con `DOCTYPE` o `ENTITY`, entonces no se persiste como
+  artefacto ni promueve la factura a estado confirmado.
+- Dado un error externo con Authorization, PAC/CSD passwords, private key, JWT,
+  secreto de ObjectStorage o XML, entonces los logs conservan únicamente un
+  código interno estable.
+- Gitleaks y el validador de assets fiscales no encuentran secretos, llaves,
+  certificados privados ni XML productivo versionado.

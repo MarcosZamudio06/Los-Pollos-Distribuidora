@@ -261,3 +261,32 @@ El cierre diario de punto de venta es distinto de `RouteSettlement`: el primero 
 Se aprueba una fase post-MVP para identificar notas facturables, gestionar solicitudes totales, parciales o agrupadas y registrar facturas emitidas externamente. El ERP conserva serie, folio y UUID opcional únicamente para conciliación; no genera CFDI, XML, no timbra y no integra PAC o SAT.
 
 Esta fase incorpora `LegalEntity`, moneda de venta, perfil fiscal mínimo, rol `BILLING`, política de facturabilidad y vencimiento, conforme a `specs/modules/billing-reportable-notes/spec.md`. `PaymentAllocation` continúa fuera del alcance.
+
+## 9. Fase posterior aprobada: CFDI 4.0 nativo
+
+Se aprueba diseñar e implementar, en una fase independiente del MVP y de la
+conciliación externa, la emisión nativa de CFDI 4.0 de Ingreso. La aprobación
+administrativa de una `BillingRequest` es su única entrada, pero no emite por sí
+misma. `Invoice` es la raíz persistida solo después de que el proveedor confirma
+la emisión.
+
+La fase mantiene separados `Sale`, `SaleDocument`, `BillingRequest`, `Invoice`
+y `Payment`; reutiliza `InvoiceSaleDocument` e
+`InvoiceSaleItemApplication`; conserva XML, PDF y acuses en ObjectStorage; y
+usa PostgreSQL para idempotencia, estados y reconciliación. No modifica
+inventario, ventas, pagos o cuentas por cobrar.
+
+El primer proveedor es Facturama detrás de `FiscalProviderPort`; Finkok queda
+como segundo adaptador futuro. No se agregan Redis, Kafka ni un microservicio
+fiscal. Cancelación fiscal ya forma parte del contexto. CFDI-16 aprueba la
+arquitectura REP 2.0 sobre `Payment` sin habilitar todavía su emisión; Egreso,
+Traslado, Carta Porte, nómina y comercio exterior permanecen fuera hasta
+aprobar un caso fiscal específico.
+
+REP 2.0 no introduce `PaymentAllocation` ni dinero paralelo. Un pago aplicado
+puede relacionarse fiscalmente con varias `Invoice` mediante snapshots
+`PaymentReceiptDetail`/`PaymentInvoiceApplication`, porque una venta puede estar
+facturada parcial o totalmente por más de un UUID.
+
+El contrato canónico completo está en `specs/modules/cfdi/spec.md` y
+`docs/adr/ADR-001-native-cfdi-4-architecture.md`.

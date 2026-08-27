@@ -27,6 +27,9 @@ const draft: CustomerFormDraft = {
   email: "cliente@empresa.com.mx",
   fiscalAddress: "Av. Independencia #245, Col. Centro, Veracruz, Ver.",
   fiscalName: "Comercializadora del Golfo S.A. de C.V.",
+  fiscalPostalCode: "91700",
+  fiscalRegime: "601",
+  fiscalUseCode: "G03",
   name: "Pollería Los Hermanos",
   phone: "2291234567",
   priceListId: "PL-MAYOREO-01",
@@ -48,10 +51,56 @@ describe("customer form utilities", () => {
 
   it("acepta los campos válidos del formulario de cliente", () => {
     expect(validateCustomerField("taxId", draft, true)).toBeNull();
+    expect(validateCustomerField("fiscalPostalCode", draft, true)).toBeNull();
+    expect(validateCustomerField("fiscalRegime", draft, true)).toBeNull();
+    expect(validateCustomerField("fiscalUseCode", draft, true)).toBeNull();
     expect(validateCustomerField("phone", draft, true)).toBeNull();
     expect(validateCustomerForm(draft, true)).toEqual({});
     expect(toCustomerFormValues(draft).creditLimit).toBe(25000);
     expect(toCustomerFormValues(draft).assignedRouteId).toBe("route-1");
     expect(toCustomerFormValues(draft).commercialPolicyId).toBe("policy-1");
+  });
+
+  it("exige el perfil fiscal completo solo cuando requiere facturación", () => {
+    const incomplete = {
+      ...draft,
+      billingEmail: "",
+      fiscalName: "",
+      taxId: "",
+      fiscalPostalCode: "",
+      fiscalRegime: "",
+      fiscalUseCode: "",
+    };
+
+    expect(validateCustomerForm(incomplete, true)).toEqual(
+      expect.objectContaining({
+        billingEmail: expect.stringContaining("obligatorio"),
+        fiscalName: expect.stringContaining("obligatoria"),
+        taxId: expect.stringContaining("obligatorio"),
+        fiscalPostalCode: expect.stringContaining("obligatorio"),
+        fiscalRegime: expect.stringContaining("obligatorio"),
+        fiscalUseCode: expect.stringContaining("obligatorio"),
+      }),
+    );
+    expect(
+      validateCustomerForm({ ...incomplete, requiresBilling: false }, true),
+    ).toEqual({});
+  });
+
+  it("rechaza códigos fiscales fuera del catálogo compartido", () => {
+    expect(
+      validateCustomerField(
+        "fiscalRegime",
+        { ...draft, fiscalRegime: "999" },
+        true,
+      ),
+    ).toContain("catálogo SAT");
+    expect(
+      validateCustomerField(
+        "fiscalUseCode",
+        { ...draft, fiscalUseCode: "P01" },
+        true,
+      ),
+    ).toContain("catálogo SAT");
   });
 });

@@ -48,6 +48,7 @@ import {
 import { evaluateCreditDecision } from './credit-decision';
 import { SalesRealtimeService } from './sales-realtime.service';
 import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
+import { LegalEntitiesService } from '../legal-entities/legal-entities.service';
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -440,6 +441,7 @@ export class SalesService {
     private readonly dailyCloseService: PointOfSaleDailyCloseService,
     @Optional() private readonly salesRealtime?: SalesRealtimeService,
     @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly legalEntitiesService?: LegalEntitiesService,
   ) {}
 
   async findAll(query: ListSalesQueryDto = {}, currentUser: Actor) {
@@ -809,26 +811,36 @@ export class SalesService {
               );
           }
 
+          const legalEntityMapping =
+            dto.requiresAdministrativeInvoice && this.legalEntitiesService
+              ? {
+                  legalEntityId: (
+                    await this.legalEntitiesService.resolveForOperationalLocation(
+                      dto.locationId,
+                      new Date(),
+                      tx,
+                    )
+                  ).legalEntityId,
+                }
+              : await tx.legalEntityOperationalLocation.findFirst({
+                  where: {
+                    operationalLocationId: dto.locationId,
+                    effectiveFrom: { lte: new Date() },
+                    OR: [
+                      { effectiveTo: null },
+                      { effectiveTo: { gt: new Date() } },
+                    ],
+                    legalEntity: { isActive: true },
+                  },
+                  orderBy: { effectiveFrom: 'desc' },
+                  select: { legalEntityId: true },
+                });
+
           const inventoryChanges = await this.reserveInventory(
             tx,
             preparedItems,
             dto.locationId,
           );
-
-          const legalEntityMapping =
-            await tx.legalEntityOperationalLocation.findFirst({
-              where: {
-                operationalLocationId: dto.locationId,
-                effectiveFrom: { lte: new Date() },
-                OR: [
-                  { effectiveTo: null },
-                  { effectiveTo: { gt: new Date() } },
-                ],
-                legalEntity: { isActive: true },
-              },
-              orderBy: { effectiveFrom: 'desc' },
-              select: { legalEntityId: true },
-            });
 
           const saleNumber = await this.nextSaleNumber(tx);
           const registeredAt = new Date();

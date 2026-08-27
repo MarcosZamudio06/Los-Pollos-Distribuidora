@@ -36,6 +36,7 @@ Columnas:
 - Saldo en piezas (`quantityPieces`).
 - Mínimo por ubicación.
 - Bajo stock por ubicación.
+- Perfil fiscal: completo o incompleto, con campos faltantes visibles.
 - Estado activo/inactivo.
 - Acciones.
 
@@ -68,6 +69,7 @@ Campos:
 - Unidad operativa: kilo, pieza o ambas.
 - Peso equivalente por pieza como dato operativo opcional mientras la equivalencia oficial no esté aprobada.
 - Estado de política de equivalencia.
+- Perfil fiscal opcional: `ClaveProdServ`, `ClaveUnidad`, `ObjetoImp`, impuesto, `TipoFactor` y tasa/cuota.
 
 Restricciones:
 
@@ -75,6 +77,9 @@ Restricciones:
 - No modificar saldos desde el endpoint de producto.
 - La presentación semántica del producto debe distinguir pollo entero de cortes y no debe inferirse solo por el nombre.
 - Si el producto usa kilo y pieza, mostrar aviso de que la equivalencia oficial se gestiona en el flujo de equivalencias.
+- Mostrar una sección diferenciada para datos fiscales y una alerta `Perfil fiscal incompleto` cuando falte cualquiera de los seis campos, sin impedir guardar ni operar comercialmente.
+- Presentar `KG`, `PIECE` y `KG_AND_PIECE` como unidades operativas; nunca rellenar `ClaveUnidad` automáticamente.
+- Los selects de impuestos usan catálogos compartidos versionados; las claves SAT extensas se capturan como códigos y el backend mantiene la validación autoritativa.
 
 ## Vista de saldos por ubicación
 

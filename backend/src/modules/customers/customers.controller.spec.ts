@@ -55,8 +55,11 @@ const customerResponse = {
   requiresBilling: true,
   isBlockedForCredit: false,
   fiscalName: 'Razón social opcional',
-  taxId: 'RFC123456789',
+  taxId: 'XAXX010101000',
   fiscalAddress: 'Fiscal address',
+  fiscalPostalCode: '91700',
+  fiscalRegime: '601',
+  fiscalUseCode: 'G03',
   deliveryAddress: 'Delivery address',
   assignedRouteId: 'route-1',
   commercialPolicyId: 'policy-1',
@@ -266,6 +269,10 @@ describe('CustomersController API', () => {
         creditStatus: 'ACTIVE',
         requiresBilling: true,
         fiscalName: 'Razón social opcional',
+        taxId: 'XAXX010101000',
+        fiscalPostalCode: '91700',
+        fiscalRegime: '601',
+        fiscalUseCode: 'G03',
       })
       .expect(201)
       .expect(({ body }) => {
@@ -294,6 +301,19 @@ describe('CustomersController API', () => {
         name: 'Invalid Email',
         email: 'not-an-email',
         customerType: 'RETAIL',
+      })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post('/api/customers')
+      .set('Authorization', 'Bearer admin-token')
+      .send({
+        name: 'Invalid Fiscal Profile',
+        customerType: 'RETAIL',
+        taxId: 'BAD-RFC',
+        fiscalPostalCode: '9170A',
+        fiscalRegime: '999',
+        fiscalUseCode: 'P01',
       })
       .expect(400);
   });

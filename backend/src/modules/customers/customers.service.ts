@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { isEmail } from 'class-validator';
 import { ConfigService } from '@nestjs/config';
 import { CollectionStatus, CreditStatus, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -19,6 +20,17 @@ import {
 } from './dto';
 import { calculateCreditState } from '../sales/credit-decision';
 import { Money, toMoneyString } from '../../../../shared/money';
+import {
+  CUSTOMER_FISCAL_PROFILE_FIELDS,
+  isStructurallyValidFiscalRfc,
+  isValidMexicanFiscalPostalCode,
+  isValidSatCfdiUseCode,
+  isValidSatFiscalRegime,
+  missingCustomerFiscalProfileFields,
+  normalizeFiscalTaxId,
+  type CustomerFiscalProfileField,
+  type CustomerFiscalProfileSource,
+} from '../../../../shared/fiscal-catalog';
 import { buildCivilDateRangeWhere } from '../../common/utils/civil-date-range';
 
 type CustomerRecord = Prisma.CustomerGetPayload<{
@@ -56,6 +68,9 @@ type CustomerMutationData = {
   fiscalName?: string | null;
   taxId?: string | null;
   fiscalAddress?: string | null;
+  fiscalPostalCode?: string | null;
+  fiscalRegime?: string | null;
+  fiscalUseCode?: string | null;
   deliveryAddress?: string | null;
   assignedRouteId?: string | null;
   commercialPolicyId?: string | null;
@@ -206,6 +221,7 @@ export class CustomersService {
     this.assertCoherentCreditTerms(dto);
 
     const data = this.normalizeMutationData(dto, true);
+    this.assertFiscalProfile(data);
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone);
@@ -237,6 +253,13 @@ export class CustomersService {
     this.assertCoherentCreditTermsForUpdate(dto, currentCustomer);
 
     const data = this.normalizeMutationData(dto, false);
+    const fiscalFieldsToValidate = CUSTOMER_FISCAL_PROFILE_FIELDS.filter(
+      (field) => Object.prototype.hasOwnProperty.call(dto, field),
+    );
+    this.assertFiscalProfile(
+      { ...currentCustomer, ...data },
+      fiscalFieldsToValidate,
+    );
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone, currentCustomer.id);
@@ -520,10 +543,10 @@ export class CustomersService {
         ? { phone: this.normalizeOptionalText(dto.phone) }
         : {}),
       ...(dto.email !== undefined
-        ? { email: this.normalizeOptionalText(dto.email) }
+        ? { email: this.normalizeOptionalEmail(dto.email) }
         : {}),
       ...(dto.billingEmail !== undefined
-        ? { billingEmail: this.normalizeOptionalText(dto.billingEmail) }
+        ? { billingEmail: this.normalizeOptionalEmail(dto.billingEmail) }
         : {}),
       ...(dto.address !== undefined
         ? { address: this.normalizeOptionalText(dto.address) }
@@ -548,10 +571,21 @@ export class CustomersService {
         ? { fiscalName: this.normalizeOptionalText(dto.fiscalName) }
         : {}),
       ...(dto.taxId !== undefined
-        ? { taxId: this.normalizeOptionalText(dto.taxId) }
+        ? { taxId: this.normalizeOptionalFiscalTaxId(dto.taxId) }
         : {}),
       ...(dto.fiscalAddress !== undefined
         ? { fiscalAddress: this.normalizeOptionalText(dto.fiscalAddress) }
+        : {}),
+      ...(dto.fiscalPostalCode !== undefined
+        ? {
+            fiscalPostalCode: this.normalizeOptionalText(dto.fiscalPostalCode),
+          }
+        : {}),
+      ...(dto.fiscalRegime !== undefined
+        ? { fiscalRegime: this.normalizeOptionalFiscalCode(dto.fiscalRegime) }
+        : {}),
+      ...(dto.fiscalUseCode !== undefined
+        ? { fiscalUseCode: this.normalizeOptionalFiscalCode(dto.fiscalUseCode) }
         : {}),
       ...(dto.deliveryAddress !== undefined
         ? { deliveryAddress: this.normalizeOptionalText(dto.deliveryAddress) }
@@ -576,6 +610,126 @@ export class CustomersService {
 
     const normalizedValue = value.trim();
     return normalizedValue.length > 0 ? normalizedValue : null;
+  }
+
+  private normalizeOptionalEmail(value?: string | null): string | null {
+    const normalizedValue = this.normalizeOptionalText(value);
+    return normalizedValue?.toLowerCase() ?? null;
+  }
+
+  private normalizeOptionalFiscalTaxId(value?: string | null): string | null {
+    const normalizedValue = this.normalizeOptionalText(value);
+    return normalizedValue ? normalizeFiscalTaxId(normalizedValue) : null;
+  }
+
+  private normalizeOptionalFiscalCode(value?: string | null): string | null {
+    const normalizedValue = this.normalizeOptionalText(value);
+    return normalizedValue?.toUpperCase() ?? null;
+  }
+
+  private assertFiscalProfile(
+    source: CustomerFiscalProfileSource & {
+      requiresBilling?: boolean | null;
+    },
+    fieldsToValidate: readonly CustomerFiscalProfileField[] = CUSTOMER_FISCAL_PROFILE_FIELDS,
+  ): void {
+    const normalizedSource = {
+      ...source,
+      taxId:
+        typeof source.taxId === 'string'
+          ? normalizeFiscalTaxId(source.taxId)
+          : source.taxId,
+      fiscalPostalCode:
+        typeof source.fiscalPostalCode === 'string'
+          ? source.fiscalPostalCode.trim()
+          : source.fiscalPostalCode,
+      fiscalRegime:
+        typeof source.fiscalRegime === 'string'
+          ? source.fiscalRegime.trim().toUpperCase()
+          : source.fiscalRegime,
+      fiscalUseCode:
+        typeof source.fiscalUseCode === 'string'
+          ? source.fiscalUseCode.trim().toUpperCase()
+          : source.fiscalUseCode,
+    };
+
+    if (
+      (source.requiresBilling || fieldsToValidate.includes('taxId')) &&
+      typeof normalizedSource.taxId === 'string' &&
+      normalizedSource.taxId.length > 0 &&
+      !isStructurallyValidFiscalRfc(normalizedSource.taxId)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_TAX_ID',
+        message: 'taxId must be a structurally valid Mexican RFC',
+        fields: ['taxId'],
+      });
+    }
+
+    if (
+      (source.requiresBilling ||
+        fieldsToValidate.includes('fiscalPostalCode')) &&
+      typeof normalizedSource.fiscalPostalCode === 'string' &&
+      normalizedSource.fiscalPostalCode.length > 0 &&
+      !isValidMexicanFiscalPostalCode(normalizedSource.fiscalPostalCode)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_FISCAL_POSTAL_CODE',
+        message: 'fiscalPostalCode must contain exactly five digits',
+        fields: ['fiscalPostalCode'],
+      });
+    }
+
+    if (
+      (source.requiresBilling || fieldsToValidate.includes('fiscalRegime')) &&
+      typeof normalizedSource.fiscalRegime === 'string' &&
+      normalizedSource.fiscalRegime.length > 0 &&
+      !isValidSatFiscalRegime(normalizedSource.fiscalRegime)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_FISCAL_REGIME',
+        message: 'fiscalRegime must be a valid SAT catalog code',
+        fields: ['fiscalRegime'],
+      });
+    }
+
+    if (
+      (source.requiresBilling || fieldsToValidate.includes('fiscalUseCode')) &&
+      typeof normalizedSource.fiscalUseCode === 'string' &&
+      normalizedSource.fiscalUseCode.length > 0 &&
+      !isValidSatCfdiUseCode(normalizedSource.fiscalUseCode)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_FISCAL_USE_CODE',
+        message: 'fiscalUseCode must be a valid SAT catalog code',
+        fields: ['fiscalUseCode'],
+      });
+    }
+
+    if (
+      (source.requiresBilling || fieldsToValidate.includes('billingEmail')) &&
+      typeof normalizedSource.billingEmail === 'string' &&
+      normalizedSource.billingEmail.trim().length > 0 &&
+      !isEmail(normalizedSource.billingEmail.trim())
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_BILLING_EMAIL',
+        message: 'billingEmail must contain a valid email address',
+        fields: ['billingEmail'],
+      });
+    }
+
+    if (!normalizedSource.requiresBilling) return;
+
+    const missingFields = missingCustomerFiscalProfileFields(normalizedSource);
+    if (missingFields.length > 0) {
+      throw new BadRequestException({
+        code: 'MISSING_FISCAL_PROFILE',
+        message:
+          'Complete the fiscal profile before marking the customer as requiring billing',
+        fields: missingFields,
+      });
+    }
   }
 
   private toCustomerResponse(

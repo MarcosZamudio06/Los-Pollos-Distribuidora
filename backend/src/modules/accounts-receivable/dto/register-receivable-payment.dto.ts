@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Min,
 } from 'class-validator';
 import { PaymentMethod } from '@prisma/client';
@@ -29,6 +30,32 @@ export class RegisterReceivablePaymentDto {
 
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
+
+  @IsOptional()
+  @Transform(({ value }: TransformFnParams) => {
+    const rawValue = value as unknown;
+    return typeof rawValue === 'string'
+      ? rawValue.trim().toUpperCase()
+      : rawValue;
+  })
+  @IsString()
+  @Matches(/^[A-Z]{3}$/)
+  currencyCode?: string;
+
+  @IsOptional()
+  @Transform(({ value }: TransformFnParams) => {
+    const rawValue = value as unknown;
+    return typeof rawValue === 'number' && Number.isFinite(rawValue)
+      ? String(rawValue)
+      : rawValue;
+  })
+  @IsDecimal({ decimal_digits: '1,6', force_decimal: false })
+  exchangeRateToMxn?: string | number;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{2}$/)
+  fiscalPaymentFormCode?: string;
 
   @IsOptional()
   @IsString()

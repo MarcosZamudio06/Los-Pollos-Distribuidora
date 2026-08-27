@@ -22,6 +22,80 @@ La base de datos de pruebas debe aislar datos por ejecución. Las pruebas de int
 3. **Frontend interacción crítica**: formularios y permisos visibles que previenen errores operativos.
 4. **E2E prioritario**: solo flujos que cruzan módulos y cuyo fallo compromete operación diaria.
 
+## Artefactos fiscales
+
+Las pruebas de `FiscalArtifactService` deben demostrar, sin almacenar payloads
+fiscales en PostgreSQL:
+
+- descarga XML/PDF/acuse desde el `FiscalProviderPort` y subida al
+  `ObjectStoragePort` con SHA-256 y tamaño calculados del contenido real;
+- key privada determinista y URL firmada temporal sin exponer `storageKey`;
+- coincidencia entre UUID persistido, TFD y atributo `UUID` del XML;
+- `STAMPED` sin XML/PDF como inconsistencia recuperable (`FAILED` con código
+  estable), sin cambiar UUID ni emitir otro CFDI;
+- fallos de proveedor, storage o metadata como estados recuperables y sin
+  mensajes externos sensibles;
+- ownership/scope para `ADMIN`, `BILLING`, `SELLER` y `COLLECTIONS`, con
+  denegación para cualquier usuario fuera del alcance.
+
+La integración debe usar un bucket privado o fake equivalente y verificar la
+persistencia real de metadata (`type`, `storageKey`, `sha256`, `byteSize`,
+`mimeType`, `createdAt`).
+
+## Seguridad fiscal
+
+La suite CFDI de seguridad debe demostrar:
+
+- guards locales de autenticación y roles en cada controller fiscal, además de
+  la política global, con `ADMIN`/`BILLING` permitidos y roles no fiscales
+  rechazados;
+- ownership de artefactos para `SELLER`, alcance de cuenta por cobrar para
+  `COLLECTIONS` y rechazo de IDs arbitrarios antes de generar URL firmada;
+- URL fiscal firmada limitada a cinco minutos aunque el TTL global esté mal
+  configurado;
+- allowlist exacta del origen PAC por ambiente antes de resolver credenciales;
+- límite de 16 MiB tanto por `Content-Length` como durante streaming chunked,
+  cancelando la lectura al excederlo;
+- rechazo de XML con `DOCTYPE` o `ENTITY` antes de ObjectStorage o promoción de
+  estado;
+- logs con códigos internos estables, sin stack/código arbitrario del proveedor,
+  Authorization, JWT, passwords, CSD, secretos de storage ni XML completo;
+- escaneo versionado mediante gitleaks y la política de assets fiscales.
+
+## Lectura fiscal e historial
+
+Las pruebas de `FiscalInvoiceReadService` y sus controllers deben demostrar:
+
+- paginación determinista y filtros de fecha, cliente, RFC, UUID, serie/folio,
+  estado fiscal, entidad legal, ubicación y tipo CFDI;
+- una consulta paginada batched más el conteo, sin bucles de consultas por
+  factura ni reconstrucción desde `Customer` o `Product`;
+- detalle basado en `Invoice.issuerSnapshot`, `Invoice.receiverSnapshot` e
+  `InvoiceConcept`, con conceptos, impuestos, aplicaciones de
+  `InvoiceSaleDocument`/`InvoiceSaleItemApplication`, artefactos, cancelación e
+  historial de auditoría resumido;
+- `status` sin cargar conceptos y con estado de operación/artefactos;
+- importes monetarios serializados como strings decimales, ausencia honesta de
+  snapshots legacy y `ADMIN`/`BILLING` como única política de lectura.
+
+## UI de emisión CFDI nativa
+
+Las pruebas Vitest de `InvoiceReconciliationPanel` deben demostrar:
+
+- revisión server-owned de emisor, receptor, RFC, régimen, CP, UsoCFDI,
+  conceptos, claves SAT, impuestos, FormaPago, MetodoPago y totales;
+- ausencia de inputs para UUID, TFD, sellos, certificados o totales calculados;
+- CTA `Emitir CFDI` visible solo para `ADMIN`/`BILLING`, deshabilitada con perfil
+  incompleto, durante `STAMPING` y cuando ya existe una Invoice nativa;
+- envío de `expectedVersion` y una `Idempotency-Key` estable sin payload fiscal
+  propiedad del servidor;
+- mapeo de `UNKNOWN` a `STAMP_UNKNOWN`, con mensaje de reconciliación distinto
+  de `STAMP_ERROR`, además de loading, errores de validación y conflicto de
+  versión;
+- estado `STAMPED` con UUID, fechas, cancelación y botones XML/PDF solo para
+  artefactos `AVAILABLE`, usando URL firmada recibida del backend;
+- no doble submit ni reintento automático tras timeout/PAC indeterminado.
+
 ## Regla determinista para reportes casi en tiempo real
 
 El criterio de latencia máxima de 60 segundos debe probarse sin esperas reales prolongadas, sin `sleep`, sin temporizadores aleatorios y sin depender del reloj de pared de la máquina de CI.
@@ -234,6 +308,9 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 
 - El contrato API correspondiente de productos crea producto sin aceptar `stock` operativo global.
 - El contrato API correspondiente de productos devuelve disponibilidad por ubicación cuando recibe `locationId`.
+- El contrato API de productos permite alta sin perfil fiscal, devuelve `CFDI_PRODUCT_PROFILE_INCOMPLETE` como indicador estable y no bloquea la operación comercial.
+- El contrato API de productos acepta un perfil fiscal completo con seis campos, normaliza códigos y rechaza ClaveProdServ/ClaveUnidad, ObjetoImp, impuesto, TipoFactor o tasa/cuota inválidos.
+- Cambiar el perfil fiscal de un producto no actualiza `SaleItem`, `PurchaseItem`, movimientos ni snapshots históricos.
 - El contrato API correspondiente de saldos de inventario requiere o agrupa claramente por ubicación, sin stock global.
 - El contrato API correspondiente de ajustes de inventario registra movimiento con ubicación, unidad, cantidades y motivo.
 - El contrato API correspondiente de ajustes de inventario rechaza ubicación inactiva sin modificar saldos ni crear movimiento.
@@ -258,6 +335,8 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 ### Clientes, cobranza y pagos
 
 - El contrato API correspondiente de clientes permite filtros por tipo, crédito, política y ruta asignada.
+- El contrato API correspondiente de clientes normaliza y valida RFC, código postal fiscal y códigos SAT; rechaza el perfil incompleto cuando `requiresBilling=true` y permite perfil vacío cuando es `false`.
+- La respuesta de error de perfil fiscal conserva `code` y `fields[]` para asignar mensajes por campo sin exponer secretos.
 - El contrato API correspondiente de resumen de crédito calcula saldo, mora y disponibilidad de crédito.
 - El contrato API correspondiente de cuentas por cobrar lista estados vigentes, parcialmente pagados, pagados, vencidos y cancelados.
 - El contrato API correspondiente de pagos de cobranza requiere `Payment.accountReceivableId` y actualiza saldo transaccionalmente.
@@ -320,6 +399,8 @@ Cada prueba de reporte debe usar únicamente el metadato de frescura definido ex
 ### Clientes y cobranza
 
 - Customer form valida nombre, email y tipo de cliente.
+- Customer form separa dirección comercial, dirección de entrega y domicilio fiscal; usa selects para régimen/UsoCFDI y marca el perfil completo cuando `requiresBilling=true`.
+- Customer form muestra errores fiscales por campo y no sustituye la validación autoritativa del backend.
 - UI distingue cliente minorista y mayorista.
 - Resumen de crédito muestra saldo pendiente, vencido, disponible y motivo de bloqueo.
 - Registro de pago exige `accountReceivableId`, monto, método y no permite exceder saldo.
@@ -422,3 +503,93 @@ Las siguientes pruebas no deben inventar comportamiento final. Deben marcarse co
 - Conciliación: aplicaciones vigentes contra documentos/facturas y saldo de venta contra `Payment`/`AccountReceivable`.
 - Regresión: vincular, cancelar o sustituir facturas no crea ni modifica ventas, pagos o inventario.
 - Límite fiscal: se prueba registro de factura externa y UUID sin emisión CFDI, XML, timbrado, PAC o SAT; `PaymentAllocation` permanece ausente.
+
+## Estrategia post-MVP para CFDI 4.0 nativo
+
+- **Unitarias:** snapshot inmutable, ecuaciones de conceptos/impuestos,
+  máquinas de estado de operación/factura/artefacto, permisos, clasificación de
+  timeout y normalización de errores PAC.
+- **Núcleo CFDI-05:** cubrir los trece estados de dominio, cada transición
+  permitida y el rechazo de toda combinación no declarada; probar
+  `Prisma.Decimal` sin aritmética binaria, asignación proporcional de cantidad
+  y descuento, hash/snapshot profundamente inmutable, perfiles SAT, composición
+  homogénea, FormaPago/MetodoPago, tipo de cambio, saldos disponibles y códigos
+  de error estables. El test del loader debe demostrar consultas read-only y
+  excluir aplicaciones canceladas o revertidas del consumo vigente.
+- **Contrato de adaptador:** ejecutar la misma suite contra el fake neutral y
+  Facturama sandbox; exigirla sin cambios a un futuro Finkok.
+- **Integración PostgreSQL:** comando serializable, emisión única por solicitud,
+  replay idempotente, dos claves concurrentes con un solo POST efectivo,
+  secuencia fiscal, bloqueo `UNKNOWN`, reserva/reversión de aplicaciones,
+  inmutabilidad de snapshot y constraints de factura/aplicaciones.
+- **Runtime de timeout:** simular aceptación PAC y pérdida de respuesta;
+  reconciliar a un solo `Invoice` y probar que no hubo segundo POST.
+- **ObjectStorage:** staging, put-if-absent, readback de metadata, checksum,
+  retry, signed URL autorizado y ausencia de delete para artefactos confirmados.
+- **HTTP E2E:** matriz autenticada `cfdi.*`, DTO allowlist estricto, errores
+  estables, strings decimales, campos fiscales solo servidor y redacción de
+  secretos.
+- **LegalEntity:** CRUD autenticado solo para `ADMIN`/`BILLING`, normalización
+  RFC/código postal/régimen/serie, perfil incompleto permitido cuando CFDI está
+  deshabilitado y rechazo de `.key`, contraseña CSD o token PAC.
+- **Resolución de venta:** probar entidad activa e inactiva, ubicación sin
+  emisor, emisor incompleto, certificado fuera de vigencia, mapeos históricos
+  y solapados; una venta facturable no reserva inventario si la resolución
+  falla.
+- **Migración:** PostgreSQL desechable con expand/backfill/validate/rollback para
+  facturas legacy activas, canceladas y sustituidas, más paridad exacta de
+  reportes.
+- **Contrato CFDI-04:** Prisma y SQL conservan `Invoice`,
+  `InvoiceSaleDocument` e `InvoiceSaleItemApplication`; verifican enums
+  separados, UUID nullable/único, snapshots/conceptos inmutables, artifacts sin
+  bytes, certificados sin secretos y remediación legacy sin inferencia.
+- **Regresión:** probar cero escrituras en ventas, pagos, cartera, balances y
+  movimientos de inventario para toda operación fiscal.
+- **Frontend:** confirmación autorizada, polling/reconciliación, artefactos,
+  headers blancos y ausencia de inputs UUID/TFD/sellos/PAC.
+
+### Estrategia CFDI-16 para REP 2.0
+
+- **Dominio:** PUE contra PPD, pago `APPLIED`, concepto fijo de Pago,
+  FormaDePagoP/MonedaP, impuestos DR/P/Totales y ecuaciones Decimal.
+- **Asignación:** una venta en varias facturas, una factura con varias ventas,
+  pago distribuido, capacidad por `InvoiceSaleDocument`, pago parcial y
+  liquidación.
+- **Cadena:** orden `paidAt,id`, parcialidad, saldos, sustitución que conserva
+  número y rechazo de aplicación posterior fuera de orden.
+- **PostgreSQL:** dos emisiones sobre el mismo pago, dos pagos sobre la misma
+  factura, locks estables, constraints, replay y reserva `UNKNOWN`.
+- **PAC:** contrato real Pagos 2.0, timeout antes/después de respuesta,
+  recuperación sin segundo POST, XML/TFD/UUID y artefactos.
+- **Cancelación:** pending/rejected/timeout no revierten; confirmación sí;
+  dependencia posterior, motivo `01`, relación `04` y una sola cadena efectiva.
+- **Operación:** cobranza fija, ruta, segunda vuelta y liquidación conservan el
+  mismo `Payment`; REP produce cero cambios en cartera, caja, cierres, ventas e
+  inventario.
+- **Migración:** pagos legacy sin moneda/forma SAT se remedian sin inferencia y
+  sin bloquear su lectura u operación económica.
+
+Un release no puede declararse con mocks unitarios únicamente. La primera
+activación exige PostgreSQL desechable, HTTP autenticado, runtime compatible con
+ObjectStorage y evidencia del sandbox Facturama.
+
+### Quality Gate CFDI
+
+- El CI ordinario fija `CFDI_ENABLED=false` y `FISCAL_PROVIDER=NONE`; ninguna
+  prueba de PR o `main` puede resolver credenciales, llamar un PAC o consumir
+  timbres.
+- Las suites unitarias conservan los thresholds globales vigentes y cubren
+  estados, `Decimal`, impuestos, UsoCFDI, ObjetoImp, PUE/PPD, mappings,
+  cancelación, REP 2.0 y Egreso mediante fake/fixtures sanitizadas.
+- El job PostgreSQL parte de una base limpia, ejecuta `prisma migrate deploy` y
+  todo el corpus E2E: idempotencia/unique, concurrencia, rollback, locks,
+  advisory locks de reconciliación, sobrefacturación y sobre-acreditación.
+- El gate de seguridad rechaza material fiscal versionado (`.key`, `.cer`,
+  contenedores de llave o PEM privado) y CFDI XML que no esté bajo fixtures, no
+  declare `cfdi-fixture:synthetic` o contenga RFC fuera del allowlist sintético.
+- La verificación real de Facturama es un workflow exclusivamente
+  `workflow_dispatch`, protegido por el environment `cfdi-sandbox`, fijo a la
+  URL sandbox y con secrets de GitHub. Solo consulta un CFDI sandbox existente;
+  no emite, cancela ni admite endpoint productivo.
+- Backend/frontend typecheck, Docker build, dependency audit, gitleaks y los
+  thresholds preexistentes siguen siendo requisitos; CFDI no reduce ningún gate.

@@ -47,6 +47,23 @@ const productResponse = {
   purchaseCost: 90,
   minStock: 10,
   unit: ProductUnit.KG,
+  satProductServiceCode: null,
+  satUnitCode: null,
+  taxObjectCode: null,
+  defaultTaxCode: null,
+  defaultFactorType: null,
+  defaultRateOrQuota: null,
+  fiscalProfileStatus: 'INCOMPLETE',
+  fiscalProfileComplete: false,
+  fiscalProfileMissingFields: [
+    'satProductServiceCode',
+    'satUnitCode',
+    'taxObjectCode',
+    'defaultTaxCode',
+    'defaultFactorType',
+    'defaultRateOrQuota',
+  ],
+  fiscalProfileValidationCode: 'CFDI_PRODUCT_PROFILE_INCOMPLETE',
   pieceWeightEquivalent: null,
   equivalentPolicyStatus: EquivalentStatus.DRAFT,
   isActive: true,
@@ -202,6 +219,50 @@ describe('ProductsController API', () => {
         minStock: 10,
         unit: ProductUnit.KG,
         stock: 100,
+      })
+      .expect(400);
+  });
+
+  it('accepts the optional fiscal profile without deriving SAT unit from the operational unit', async () => {
+    await request(app.getHttpServer())
+      .post('/api/products')
+      .set('Authorization', 'Bearer admin-token')
+      .send({
+        name: 'Pechuga fiscal',
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 10,
+        unit: ProductUnit.KG,
+        satProductServiceCode: '10101500',
+        satUnitCode: 'KGM',
+        taxObjectCode: '02',
+        defaultTaxCode: '002',
+        defaultFactorType: 'Tasa',
+        defaultRateOrQuota: 0.16,
+      })
+      .expect(201);
+
+    expect(productsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        unit: ProductUnit.KG,
+        satProductServiceCode: '10101500',
+        satUnitCode: 'KGM',
+        defaultFactorType: 'Tasa',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/products')
+      .set('Authorization', 'Bearer admin-token')
+      .send({
+        name: 'Producto fiscal inválido',
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 10,
+        unit: ProductUnit.KG,
+        satProductServiceCode: '123',
       })
       .expect(400);
   });

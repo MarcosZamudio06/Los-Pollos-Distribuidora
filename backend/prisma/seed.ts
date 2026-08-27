@@ -359,7 +359,7 @@ async function seedInitialRoleUsers(prisma: SeedPrismaClient): Promise<void> {
     });
   }
   await prisma.$executeRawUnsafe?.(
-    'SELECT setval(\'"User_controlNumber_seq"\', GREATEST((SELECT COALESCE(MAX(SUBSTRING("controlNumber" FROM 6)::bigint), 1) FROM "User"), 1), true)',
+    'SELECT setval(\'"User_controlNumber_seq"\', GREATEST((SELECT COALESCE(MAX(SUBSTRING("controlNumber" FROM 6)::bigint), 1) FROM "User" WHERE "controlNumber" ~ \'^EPDP-[0-9]+$\'), 1), true)',
   );
 }
 

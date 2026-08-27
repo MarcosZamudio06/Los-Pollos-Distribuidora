@@ -18,6 +18,22 @@ const productBarcodeMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260724190000_add_product_barcode/migration.sql',
 );
+const productFiscalProfileMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260822100000_add_product_fiscal_profile/migration.sql',
+);
+const legalEntityFiscalConfigurationMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260822110000_add_legal_entity_fiscal_configuration/migration.sql',
+);
+const cfdiProviderManagePermissionMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260822111000_add_cfdi_provider_manage_permission/migration.sql',
+);
+const cfdiFiscalDataModelMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260822120000_add_cfdi_fiscal_data_model/migration.sql',
+);
 const dailyCloseDifferenceMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260724200000_add_daily_close_differences/migration.sql',
@@ -122,6 +138,10 @@ const routeSettlementOpeningCommandMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260820210000_add_route_settlement_opening_commands/migration.sql',
 );
+const satCatalogVersioningMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260823140000_add_sat_catalog_versioning/migration.sql',
+);
 
 const schema = readFileSync(schemaPath, 'utf8');
 
@@ -174,6 +194,9 @@ describe('Prisma schema contract', () => {
       'InventoryTransferItem',
       'AccountReceivable',
       'Payment',
+      'PaymentReceipt',
+      'PaymentReceiptDetail',
+      'PaymentInvoiceApplication',
       'CommercialPolicy',
       'DiscountAuthorization',
       'BillingPolicy',
@@ -206,6 +229,17 @@ describe('Prisma schema contract', () => {
       'LegalEntity',
       'LegalEntityOperationalLocation',
       'Invoice',
+      'InvoiceConcept',
+      'CreditAdjustment',
+      'CreditAdjustmentInvoice',
+      'CreditAdjustmentLine',
+      'FiscalArtifact',
+      'FiscalOperationAttempt',
+      'FiscalFolioSequence',
+      'FiscalCertificate',
+      'SatCatalog',
+      'SatCatalogVersion',
+      'SatCatalogEntry',
       'BillingRequestSaleDocument',
       'BillingRequestSaleItem',
       'InvoiceSaleDocument',
@@ -223,10 +257,9 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(69);
+    expect(modelNames).toHaveLength(83);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
-    expect(modelNames).not.toContain('SAT');
     expect(getModelBlock('Product')).not.toMatch(/\bstock\b/);
     expect(getModelBlock('Role')).toMatch(/version\s+Int\s+@default\(1\)/);
     expect(getModelBlock('AccessControlAuditLog')).toMatch(/reason\s+String/);
@@ -909,6 +942,129 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).toContain(
       'CREATE UNIQUE INDEX "Product_barcode_key" ON "Product"("barcode")',
     );
+  });
+
+  it('keeps the nullable Product fiscal profile synchronized with an additive migration', () => {
+    const product = getModelBlock('Product');
+    const migrationSql = readFileSync(
+      productFiscalProfileMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(product).toMatch(/satProductServiceCode\s+String\?/);
+    expect(product).toMatch(/satUnitCode\s+String\?/);
+    expect(product).toMatch(/taxObjectCode\s+String\?/);
+    expect(product).toMatch(/defaultTaxCode\s+String\?/);
+    expect(product).toMatch(/defaultFactorType\s+String\?/);
+    expect(product).toMatch(/defaultRateOrQuota\s+Decimal\?/);
+    expect(migrationSql).toContain(
+      'ADD COLUMN "satProductServiceCode" VARCHAR(8)',
+    );
+    expect(migrationSql).toContain('ADD COLUMN "satUnitCode" VARCHAR(3)');
+    expect(migrationSql).toContain(
+      'Product_defaultRateOrQuota_non_negative_check',
+    );
+    expect(migrationSql).toContain(
+      'Product_satProductServiceCode_format_check',
+    );
+    expect(migrationSql).toContain('Product_satUnitCode_format_check');
+    expect(migrationSql).toContain('Product_taxObjectCode_catalog_check');
+    expect(migrationSql).toContain('Product_defaultTaxCode_catalog_check');
+    expect(migrationSql).toContain('Product_defaultFactorType_catalog_check');
+    expect(migrationSql).not.toMatch(/\bUPDATE\s+"Product"/i);
+  });
+
+  it('keeps LegalEntity as the fiscal issuer with additive, secret-free configuration', () => {
+    const legalEntity = getModelBlock('LegalEntity');
+    const migrationSql = readFileSync(
+      legalEntityFiscalConfigurationMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(legalEntity).toMatch(/fiscalPostalCode\s+String\?/);
+    expect(legalEntity).toMatch(/fiscalRegime\s+String\?/);
+    expect(legalEntity).toMatch(/cfdiEnabled\s+Boolean\s+@default\(false\)/);
+    expect(legalEntity).toMatch(/defaultSeries\s+String\?/);
+    expect(legalEntity).toMatch(/certificateSerialNumber\s+String\?/);
+    expect(legalEntity).toMatch(/certificateFingerprint\s+String\?/);
+    expect(legalEntity).toMatch(/certificateValidFrom\s+DateTime\?/);
+    expect(legalEntity).toMatch(/certificateValidTo\s+DateTime\?/);
+    expect(legalEntity).not.toMatch(/\b(key|password|pacToken|token)\b/i);
+    expect(migrationSql).toContain(
+      'ADD COLUMN "cfdiEnabled" BOOLEAN NOT NULL DEFAULT false',
+    );
+    expect(migrationSql).toContain('LegalEntity_cfdi_configuration_check');
+    expect(migrationSql).not.toMatch(/\bUPDATE\s+"LegalEntity"/i);
+  });
+
+  it('synchronizes the CFDI issuer-management permission for existing roles', () => {
+    const migrationSql = readFileSync(
+      cfdiProviderManagePermissionMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(migrationSql).toContain("'cfdi.provider.manage'");
+    expect(migrationSql).toContain("role.\"name\" IN ('ADMIN', 'BILLING')");
+    expect(migrationSql).toContain('ON CONFLICT DO NOTHING');
+  });
+
+  it('keeps the additive CFDI fiscal persistence model synchronized with its migration', () => {
+    const invoice = getModelBlock('Invoice');
+    const migrationSql = readFileSync(
+      cfdiFiscalDataModelMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(invoice).toMatch(
+      /origin\s+InvoiceOrigin\s+@default\(LEGACY_EXTERNAL\)/,
+    );
+    expect(invoice).toMatch(/concepts\s+InvoiceConcept\[\]/);
+    expect(invoice).toMatch(/fiscalArtifacts\s+FiscalArtifact\[\]/);
+    expect(invoice).toMatch(
+      /fiscalOperationAttempts\s+FiscalOperationAttempt\[\]/,
+    );
+    expect(migrationSql).toContain('CREATE TABLE "InvoiceConcept"');
+    expect(migrationSql).toContain('CREATE TABLE "FiscalArtifact"');
+    expect(migrationSql).toContain('CREATE TABLE "FiscalOperationAttempt"');
+    expect(migrationSql).toContain('CREATE TABLE "FiscalCertificate"');
+    expect(migrationSql).not.toMatch(
+      /(?:ALTER|DROP)\s+TABLE\s+"InvoiceSaleDocument"/i,
+    );
+    expect(migrationSql).not.toMatch(
+      /(?:ALTER|DROP)\s+TABLE\s+"InvoiceSaleItemApplication"/i,
+    );
+  });
+
+  it('persists SAT catalogs as versioned, checksum-validated data without seeding fiscal facts', () => {
+    const catalog = getModelBlock('SatCatalog');
+    const version = getModelBlock('SatCatalogVersion');
+    const entry = getModelBlock('SatCatalogEntry');
+    const migrationSql = readFileSync(
+      satCatalogVersioningMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(getEnumBlock('SatCatalogVersionStatus')).toMatch(
+      /STAGING[\s\S]*VALIDATED[\s\S]*ACTIVE[\s\S]*RETIRED[\s\S]*FAILED/,
+    );
+    expect(catalog).toMatch(
+      /key\s+String\s+String\s+@unique|key\s+String\s+@unique/,
+    );
+    expect(catalog).toMatch(/activeVersionId\s+String\?/);
+    expect(version).toMatch(/checksumSha256\s+String/);
+    expect(version).toMatch(/sourceVersion\s+String/);
+    expect(version).toMatch(/status\s+SatCatalogVersionStatus/);
+    expect(entry).toMatch(/code\s+String/);
+    expect(entry).toMatch(/description\s+String/);
+    expect(entry).toMatch(/validFrom\s+DateTime\?/);
+    expect(entry).toMatch(/validTo\s+DateTime\?/);
+    expect(entry).toMatch(/metadata\s+Json\?/);
+    expect(migrationSql).toContain('CREATE TABLE "SatCatalog"');
+    expect(migrationSql).toContain('CREATE TABLE "SatCatalogVersion"');
+    expect(migrationSql).toContain('CREATE TABLE "SatCatalogEntry"');
+    expect(migrationSql).toContain('SatCatalogVersion_integrity_check');
+    expect(migrationSql).toContain('SatCatalog_activeVersionId_fkey');
+    expect(migrationSql).not.toMatch(/INSERT\s+INTO\s+"SatCatalogEntry"/i);
   });
 
   it('keeps scale ticket provenance and sale-document reconciliation fields', () => {

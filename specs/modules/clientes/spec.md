@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Administrar clientes minoristas y mayoristas para ventas, crédito, condiciones comerciales, historial, entregas y cobranza.
+Administrar clientes minoristas, mayoristas e institucionales para ventas, crédito, condiciones comerciales, historial, entregas, cobranza y preparación fiscal CFDI 4.0.
 
 ## Funcionalidades
 
@@ -36,15 +36,22 @@ Administrar clientes minoristas y mayoristas para ventas, crédito, condiciones 
 - creditLimit.
 - creditDays.
 - creditStatus.
+- requiresBilling.
+- billingEmail.
 - fiscalName.
 - taxId.
 - fiscalAddress.
+- fiscalPostalCode.
+- fiscalRegime.
+- fiscalUseCode.
 - deliveryAddress.
 - assignedRouteId.
 - commercialPolicyId.
 - isActive.
 
-Nota: los campos fiscales son preparación comercial para una fase futura y no habilitan CFDI en el MVP.
+Los seis campos que integran el perfil fiscal requerido son `fiscalName`, `taxId`, `fiscalPostalCode`, `fiscalRegime`, `fiscalUseCode` y `billingEmail`. `fiscalAddress` permanece opcional porque no forma parte de la regla actual de billabilidad. El perfil puede estar vacío mientras `requiresBilling=false`; al activar `requiresBilling=true`, el backend debe exigir los seis campos y conservar la autoridad de validación.
+
+Los códigos de `fiscalRegime` y `fiscalUseCode` provienen del catálogo SAT versionado por la aplicación; no se permiten entradas libres. La matriz de compatibilidad entre régimen y UsoCFDI debe revalidarse en el servicio de catálogo/PAC antes de emitir, porque esta tarea solo cierra la pertenencia de cada código. Los datos fiscales no emiten ni timbran CFDI por sí mismos.
 
 ## Reglas
 
@@ -60,6 +67,10 @@ Nota: los campos fiscales son preparación comercial para una fase futura y no h
 - Un cliente bloqueado por mora o exceso de límite no debe recibir nuevas ventas a crédito sin autorización administrativa explícita.
 - Las condiciones específicas del cliente prevalecen sobre políticas globales solo si negocio lo autoriza.
 - Las ventas, cuentas por cobrar y pagos deben conservar trazabilidad hacia cliente y política comercial aplicada.
+- Normalizar RFC, códigos fiscales, código postal y correos antes de persistirlos.
+- Validar RFC con reglas estructurales, código postal fiscal con cinco dígitos y régimen/UsoCFDI contra el catálogo SAT disponible.
+- Separar dirección comercial, dirección de entrega y domicilio fiscal en API y UI; no copiar una dirección en otra de forma implícita.
+- Los errores de perfil fiscal deben identificar los campos afectados sin convertir la UI en autoridad de negocio.
 
 ## Modelo MVP de pagos
 
@@ -118,4 +129,7 @@ Pendiente de especificación API antes de implementar:
 - Desactivar cliente.
 - Rechazar selección de cliente inactivo en nuevas ventas.
 - Identificar cliente bloqueado por mora o límite excedido.
-- Validar que datos fiscales no sean requeridos para operar el MVP ni habiliten CFDI.
+- Permitir cliente no facturable con perfil fiscal vacío.
+- Rechazar `requiresBilling=true` cuando falte cualquiera de los seis campos del perfil fiscal.
+- Rechazar RFC, código postal, régimen o UsoCFDI inválidos.
+- Validar que el perfil fiscal no emita CFDI ni modifique ventas o inventario.

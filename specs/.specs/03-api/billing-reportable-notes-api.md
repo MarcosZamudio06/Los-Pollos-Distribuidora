@@ -2,7 +2,10 @@
 
 ## Alcance
 
-Contratos de la fase post-MVP para consulta, solicitud y conciliación de facturas emitidas externamente. No emiten CFDI, XML, timbrado ni integran PAC o SAT.
+Contratos de la fase post-MVP para consulta, solicitud y conciliación de
+facturas emitidas externamente. No emiten CFDI por sí mismos. El CFDI nativo usa
+una API separada bajo `/api/cfdi/**`; ambos orígenes reutilizan el mismo
+`Invoice` y las mismas relaciones persistidas de aplicación.
 
 ## Convenciones comunes
 
@@ -47,13 +50,20 @@ Requiere permiso, `expectedVersion` y motivo obligatorio. No elimina aplicacione
 
 ## POST /api/billing/requests/:id/link-invoice
 
-Registra o referencia una factura externa y sus aplicaciones por documento y partida. Requiere `Idempotency-Key`, `expectedVersion` y rol `ADMIN` o `BILLING`. Debe rechazar diferencias entre suma de partidas, aplicación por documento, totales de factura y saldo disponible.
+Registra o referencia una factura externa y sus aplicaciones por documento y partida. Requiere `Idempotency-Key`, `expectedVersion` y rol `ADMIN` o `BILLING`. Debe rechazar diferencias entre suma de partidas, aplicación por documento, totales de factura y saldo disponible. Esta ruta legacy solo acepta `LEGACY_EXTERNAL` durante la coexistencia, no emite CFDI y se retira tras completar el cutover. El flujo nativo nunca acepta UUID ni resultados SAT/PAC desde frontend.
 
 Cuando `invoice.substitutesInvoiceId` está presente, `invoice.substitutionReason` es obligatorio. La factura original se bloquea antes de validarla y debe continuar `ACTIVE`, sin sustitución concurrente. La sustituta debe conservar exactamente el mismo emisor, moneda y aplicaciones vigentes por nota y partida —incluidos subtotal, impuesto y total— antes de marcar la original como `SUBSTITUTED`. El motivo y la relación se conservan en auditoría.
 
 ## POST /api/billing/invoices/:id/cancel
 
-Cancela operativamente una factura externa con rol `ADMIN` o `BILLING`. Requiere `Idempotency-Key`, `expectedVersion` y motivo obligatorio. En una transacción serializable marca la factura `CANCELLED`, revierte lógicamente sus aplicaciones por documento y partida, registra auditoría y reapertura del saldo facturable derivado. Rechaza facturas no activas, versiones obsoletas, claves idempotentes con payload distinto y cadenas de sustitución incompatibles. No cancela CFDI ante SAT.
+Cancela operativamente una factura `LEGACY_EXTERNAL` con rol `ADMIN` o
+`BILLING`. Requiere `Idempotency-Key`, `expectedVersion` y motivo obligatorio.
+En una transacción serializable marca la factura `CANCELLED`, revierte
+lógicamente sus aplicaciones por documento y partida, registra auditoría y
+reapertura del saldo facturable derivado. Rechaza facturas no activas, versiones
+obsoletas, claves idempotentes con payload distinto, cadenas de sustitución
+incompatibles y cualquier `NATIVE_CFDI`. La cancelación fiscal futura se reserva
+en `POST /api/cfdi/invoices/:id/cancel`.
 
 ## GET /api/billing/remediations
 

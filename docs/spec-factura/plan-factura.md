@@ -1,11 +1,21 @@
 # Plan de implementación — Reporte detallado de notas facturables
 
+> Estado: plan histórico ya ejecutado en el modelo actual. Las afirmaciones de
+> “no existe” en la sección de baseline corresponden al levantamiento original
+> y no describen el checkout vigente. La conciliación externa se gobierna por
+> `specs/modules/billing-reportable-notes/spec.md`; la arquitectura CFDI 4.0
+> nativa se gobierna por `specs/modules/cfdi/spec.md` y
+> `docs/adr/ADR-001-native-cfdi-4-architecture.md`, refinado para persistencia
+> por `docs/adr/ADR-002-invoice-native-cfdi-persistence.md`, proveedor por
+> `docs/adr/ADR-003-facturama-provider-adapter.md` y ejecución por
+> `docs/adr/ADR-004-native-cfdi-issuance-execution.md`.
+
 ## 1. Estado actual
 
 ### Capacidades existentes
 
 - `Sale`, `SaleItem` y `SaleDocument` conservan venta, partidas, importes, ubicación, ruta y snapshots históricos en `backend/prisma/
-  schema.prisma`.
+schema.prisma`.
 - La confirmación de venta, pagos, cuenta por cobrar, movimiento de inventario, documento interno y solicitud administrativa se ejecutan en una
   transacción serializable en `backend/src/modules/sales/sales.service.ts`.
 - `BillingRequest` **sí es operativo**, no solo estructura:
@@ -27,25 +37,39 @@
 - No hay infraestructura CSV/XLSX ni dependencia para Excel.
 - No existe auditoría transversal; `BillingRequestHistory` cubre únicamente cambios de estado de solicitudes.
 - No existe rol `BILLING` o equivalente; los roles actuales son `ADMIN`, `SELLER`, `WAREHOUSE`, `COLLECTIONS` y `DRIVER`.
-- Los datos fiscales de `Customer` se limitan principalmente a razón social, RFC, dirección y correo; no permiten validar un perfil fiscal
-  completo.
-- La entidad emisora fiscal y la moneda no están modeladas.
+- `Customer` ya expone el perfil fiscal CFDI 4.0 completo en Prisma, DTO, servicio y formulario; la matriz de compatibilidad
+  régimen/UsoCFDI y la verificación contra PAC siguen fuera de esta tarea.
+- `Product` ahora conserva un perfil fiscal CFDI nullable con seis campos y estado derivado; los productos incompletos siguen operables, pero la emisión nativa los bloqueará con `CFDI_PRODUCT_PROFILE_INCOMPLETE`.
+- `LegalEntity` ya modela la entidad emisora fiscal separada de
+  `OperationalLocation`, con configuración CFDI aditiva, metadata de
+  certificado sin secretos y estado de perfil derivado. La emisión nativa usa
+  `FiscalProviderPort`, cuyo primer adapter es Facturama, únicamente desde
+  `BillingRequest.APPROVED` y con coordinación persistida en PostgreSQL.
+- `Invoice` ya tiene el modelo persistente CFDI-04 aditivo, con snapshots,
+  conceptos, intentos, artefactos y certificados. Las filas existentes se
+  conservan como `LEGACY_EXTERNAL`/`LEGACY`; UUID inválido o total
+  inconsistente genera `BillingDataRemediation` y no se infiere ningún dato
+  SAT desde `Customer`, `Product` o `LegalEntity` mutable.
 - `Sale.documentType` conserva el tipo solicitado, pero la creación actual persiste en `SaleDocument` únicamente un `INTERNAL_RECEIPT`. Esto
   impide usar hoy `SaleDocument` como raíz confiable del reporte.
 - `SaleItem` no conserva descuento, base gravable, impuesto y total por partida.
-- `docs/spec-factura/spec.md` está sin seguimiento Git y contradice el alcance fiscal vigente de los specs canónicos, que excluyen factura
-  fiscal, UUID, SAT y `PaymentAllocation`.
+- `docs/spec-factura/spec.md` conserva el levantamiento histórico de
+  conciliación legacy; sus exclusiones de emisión fiscal ya no gobiernan el
+  bounded context CFDI canónico.
 
 ## 2. Brechas y decisiones de arquitectura
 
-### Bloqueos previos
+### Bloqueos previos ya cerrados
 
-Antes de la Fase 1 debe canonizarse el nuevo alcance. El spec introduce una capacidad post-MVP que actualmente contradice PRD, arquitectura,
-reglas de negocio, base de datos, API, UI y pruebas canónicas.
+La Fase 0 original exigía canonizar el nuevo alcance porque el spec introducía
+una capacidad post-MVP que contradecía PRD, arquitectura, base de datos, API,
+UI y pruebas canónicas. Esa decisión ya está cerrada en `specs/modules/cfdi/`
+y los ADR fiscales; esta sección se conserva como trazabilidad histórica.
 
 La actualización documental debe aprobar expresamente:
 
-- Registro de facturas fiscales externas y UUID, sin implementar emisión, PAC, XML, timbrado ni integración SAT.
+- Registro de facturas externas y emisión CFDI nativa quedaron separados; la
+  emisión vigente usa `FiscalProviderPort` y el primer adapter Facturama.
 - Nueva entidad emisora `LegalEntity`, distinta de ubicación operativa.
 - Perfil fiscal mínimo del cliente y reglas de completitud.
 - Moneda de venta; migración inicial a `MXN`.
@@ -53,12 +77,15 @@ La actualización documental debe aprobar expresamente:
 - Nuevo rol `BILLING`.
 - Permanencia de `PaymentAllocation` fuera del alcance.
 
-Sin estas decisiones, las fases de facturas, agrupación y validación fiscal quedan **BLOCKED**.
+Estas decisiones desbloquearon las fases de persistencia, emisión, REP 2.0,
+cancelación y artefactos; Egreso y los demás tipos de comprobante siguen fuera
+del primer slice.
 
 ### Decisiones propuestas
 
 - Mantener `Sale`, `SaleDocument`, `BillingRequest`, `Invoice` y `Payment` como conceptos separados.
-- Tratar `Invoice` como registro y conciliación de una factura emitida externamente; este módulo no la timbra.
+- Tratar `Invoice` como raíz persistida tanto de factura legacy externa como de
+  CFDI nativo; solo el bounded context CFDI puede timbrar la segunda.
 - Usar `SaleDocument` como unidad facturable y `SaleItem` como unidad de detalle.
 - Sustituir las relaciones directas por:
   - `BillingRequestSaleDocument`, con importes solicitados.
@@ -260,8 +287,56 @@ El módulo estará terminado cuando:
 
 ## Supuestos
 
-- La factura será registrada después de emitirse externamente; no se implementará emisión fiscal.
+- La conciliación legacy continuará registrando facturas externas; la emisión
+  fiscal nativa se ejecuta exclusivamente mediante el bounded context CFDI.
 - `PaymentAllocation` continuará fuera del modelo.
 - La moneda inicial para datos legacy será `MXN`.
 - `SaleDocument` será la unidad facturable y deberá normalizarse antes del reporte.
 - La Fase 1 no puede comenzar hasta resolver y aprobar la Fase 0.
+
+## CFDI-15 — Catálogos SAT versionados
+
+- Crear las tablas de catálogo y la migración aditiva sin datos inferidos.
+- Importar archivos oficiales mediante staging, checksum, validación y
+  activación atómica; conservar versiones retiradas para auditoría.
+- Exponer únicamente lectura a `ADMIN`/`BILLING` con caché privada y no llamar al
+  SAT durante ventas.
+- Consumir la versión activa desde el frontend; mantener selects controlados de
+  compatibilidad hasta que cada ambiente tenga una importación aprobada.
+
+## CFDI-17 — Implementación REP 2.0
+
+- Estado: implementación de emisión completada; concurrencia PostgreSQL
+  desechable queda como evidencia de infraestructura pendiente.
+- [x] Expandir `Payment` con moneda y FormaPago SAT separada del método
+      operacional, sin inferir valores legacy ambiguos.
+- [x] Crear migración aditiva para `PaymentReceipt`, `PaymentReceiptDetail`,
+      `PaymentInvoiceApplication` y su estado.
+- [x] Implementar cálculo puro Decimal y pruebas de multi-factura,
+      parcialidad, saldo y capacidad de venta dentro de una factura agrupada.
+- [x] Reservar por `Payment` con transacción `Serializable`, idempotencia y
+      locks ordenados; llamar al PAC fuera de la transacción.
+- [x] Extender el port/adapter contra el payload oficial vigente de Pagos 2.0;
+      no reutilizar el payload de Ingreso por semejanza; mapear `Taxes` desde
+      snapshots inmutables para `ObjetoImpDR=02`.
+- [x] Reconciliar timeout sin repetir `stamp`, persistir XML/PDF mediante
+      ObjectStorage y reutilizar la raíz fiscal `Invoice`.
+- [x] Reutilizar cancelación confirmada para revertir aplicaciones REP solo
+      después de `CANCELLED`.
+- [x] Exponer emisión por `paymentId`; preview e historial quedan reservados,
+      manteniendo resultados PAC y saldos server-owned.
+- [ ] Ejecutar concurrencia PostgreSQL desechable y demostrar cero cambios en
+      saldos, cierre, ruta, ventas e inventario cuando el entorno esté disponible.
+
+## CFDI-18 — Nota de crédito
+
+- [x] Separar operación comercial `CreditAdjustment` de `Invoice EXPENSE`.
+- [x] Persistir ajuste, facturas relacionadas y líneas acreditadas.
+- [x] Implementar aprobación serializable con saldo acreditable y locks
+      PostgreSQL en orden estable.
+- [x] Emitir CFDI E mediante `FiscalProviderPort` y Facturama.
+- [x] Reutilizar artefactos, reconciliación y cancelación fiscal.
+- [x] Agregar UI mínima de creación/aprobación/emisión.
+- [x] Agregar pruebas unitarias y contract.
+- [ ] Ejecutar `backend/test/cfdi-credit-note.e2e-spec.ts` contra PostgreSQL
+      desechable; no sustituir esta evidencia con mocks.

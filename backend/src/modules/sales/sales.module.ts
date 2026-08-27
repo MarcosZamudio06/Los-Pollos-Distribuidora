@@ -7,6 +7,7 @@ import { SalesController } from './sales.controller';
 import { SalesGateway } from './sales.gateway';
 import { SalesRealtimeService } from './sales-realtime.service';
 import { SalesService } from './sales.service';
+import { LegalEntitiesModule } from '../legal-entities/legal-entities.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SalesService } from './sales.service';
     AuthModule,
     InventoryModule,
     PointOfSaleDailyCloseModule,
+    LegalEntitiesModule,
   ],
   controllers: [SalesController],
   providers: [SalesService, SalesGateway, SalesRealtimeService],

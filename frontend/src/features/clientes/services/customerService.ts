@@ -76,6 +76,9 @@ function toPayload(
     fiscalName: cleanText(values.fiscalName),
     taxId: cleanText(values.taxId),
     fiscalAddress: cleanText(values.fiscalAddress),
+    fiscalPostalCode: cleanText(values.fiscalPostalCode),
+    fiscalRegime: cleanText(values.fiscalRegime),
+    fiscalUseCode: cleanText(values.fiscalUseCode),
   };
 
   if (!canManageCommercialTerms) {

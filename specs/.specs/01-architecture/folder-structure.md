@@ -99,6 +99,13 @@ backend/
       sales/
       sales-documents/
       billing-requests/
+      cfdi/
+        application/
+        domain/
+        infrastructure/
+          providers/
+            facturama/
+            finkok/
       delivery-routes/
       driver-mobile/
       commercial-policies/
@@ -115,6 +122,7 @@ backend/
 
 ```text
 shared/
+  fiscal-catalog.ts
   types/
     auth.ts
     product.ts
@@ -149,12 +157,15 @@ shared/
 | Reportes casi en tiempo real        | `features/reportes/`, `features/dashboard/`                | `modules/reports/`                                   | Latencia máxima de 60 segundos en condiciones normales.                                                              |
 | Ticket interno                      | `features/ventas/`                                         | `modules/sales-documents/`, `modules/sales/`         | No equivale a CFDI ni factura fiscal.                                                                                |
 | Solicitud administrativa de factura | `features/ventas/`, `features/clientes/`                   | `modules/billing-requests/`, `modules/sales/`        | No es CFDI ni documento operativo de venta.                                                                          |
+| CFDI 4.0 nativo                      | `features/billing-requests/`, `features/cfdi/`              | `modules/cfdi/`, `modules/object-storage/`           | Solo desde solicitud aprobada; proveedor detrás de `FiscalProviderPort`; no modifica venta, pago ni inventario.      |
 
 ## Decisiones pendientes que pueden modificar estructura
 
 - Si la experiencia móvil de choferes se implementa como aplicación nativa fuera de `frontend/`, este documento debe actualizarse antes de crear carpetas nuevas.
 - Si el modelo final separa sucursales y almacenes como módulos independientes, `modules/locations/` puede dividirse solo después de actualizar arquitectura y base de datos.
-- Si una fase futura agrega CFDI/SAT real, puede requerirse un módulo fiscal separado; no debe crearse para el MVP sin actualización de specs.
+- La fase CFDI 4.0 aprobada usa `modules/cfdi/`; no debe agregarse código PAC a
+  `sales/`, `payments/`, `billing-requests/` u `object-storage/` fuera de sus
+  contratos públicos.
 - Si configuración administrativa requiere pantallas o endpoints, deben existir specs explícitos en `.specs/03-api/` y `.specs/04-ui/` antes de implementarlos.
 
 ## Gobierno documental de módulos
@@ -166,6 +177,7 @@ Nombres canónicos de specs de módulo:
 - `specs/modules/sales/spec.md`
 - `specs/modules/sales-documents/spec.md`
 - `specs/modules/billing-requests/spec.md`
+- `specs/modules/cfdi/spec.md`
 - `specs/modules/reports/spec.md`
 - `specs/modules/routes-delivery/spec.md`
 
