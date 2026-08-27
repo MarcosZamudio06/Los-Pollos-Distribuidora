@@ -1,4 +1,5 @@
 import {
+  BillingRequestStatus,
   CfdiDocumentType,
   CreditAdjustmentStatus,
   CreditStatus,
@@ -24,6 +25,7 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
   let repository: CreditAdjustmentRepository;
   let legalEntityId: string;
   let customerId: string;
+  let fiscalCertificateId: string;
   let invoiceSequence = 0;
 
   beforeAll(async () => {
@@ -78,6 +80,17 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
       },
     });
     legalEntityId = legalEntity.id;
+    const fiscalCertificate = await prisma.fiscalCertificate.create({
+      data: {
+        legalEntityId,
+        serialNumber: '30001000000500003416',
+        fingerprintSha256: 'a'.repeat(64),
+        subject: 'CN=CFDI CREDIT NOTE TEST',
+        validFrom: new Date('2025-01-01T00:00:00.000Z'),
+        validTo: new Date('2030-01-01T00:00:00.000Z'),
+      },
+    });
+    fiscalCertificateId = fiscalCertificate.id;
     const customer = await prisma.customer.create({
       data: {
         customerNumber: marker,
@@ -106,9 +119,20 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
   async function createOriginalInvoice() {
     invoiceSequence += 1;
     const uuid = randomUUID().toUpperCase();
+    const sourceBillingRequest = await prisma.billingRequest.create({
+      data: {
+        customerId,
+        requestedByUserId: actor.id,
+        status: BillingRequestStatus.APPROVED,
+      },
+    });
     const invoice = await prisma.invoice.create({
       data: {
         legalEntityId,
+        sourceBillingRequestId: sourceBillingRequest.id,
+        fiscalCertificateId,
+        fiscalIdempotencyKey: `${marker}-original-${invoiceSequence}`,
+        fiscalRequestHash: 'c'.repeat(64),
         currencyCode: 'MXN',
         exchangeRate: new Prisma.Decimal(1),
         series: `I${marker.slice(-5)}`,
@@ -119,6 +143,7 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
         cfdiType: CfdiDocumentType.INCOME,
         issuedAt: new Date('2026-08-24T12:00:00.000Z'),
         stampedAt: new Date('2026-08-24T12:00:00.000Z'),
+        tfdVersion: '1.1',
         issuerSnapshot: {
           legalEntityId,
           legalName: 'CFDI CREDIT NOTE TEST SA DE CV',
@@ -137,6 +162,16 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
           fiscalRegime: '601',
           billingEmail: `${marker}-billing@example.test`,
         },
+        fiscalSnapshotHash: 'd'.repeat(64),
+        fiscalUseCode: 'G03',
+        exportCode: '01',
+        paymentFormCode: '03',
+        paymentMethodCode: 'PUE',
+        certificateNumber: '30001000000500003416',
+        satCertificateNumber: '30001000000500003417',
+        certificationProviderTaxId: 'EKU9003173C9',
+        cfdiSeal: 'test-cfdi-seal',
+        satSeal: 'test-sat-seal',
         fiscalStatus: InvoiceFiscalStatus.STAMPED,
         cancellationStatus: FiscalCancellationStatus.NOT_REQUESTED,
         subtotal: new Prisma.Decimal(100),
