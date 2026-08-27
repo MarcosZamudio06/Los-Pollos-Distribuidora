@@ -1,6 +1,7 @@
 import {
   BillingRequestStatus,
   CfdiDocumentType,
+  CostSnapshotSource,
   CreditAdjustmentStatus,
   CreditStatus,
   CustomerType,
@@ -10,6 +11,13 @@ import {
   OperationalLocationType,
   Prisma,
   PrismaClient,
+  ProductPresentationType,
+  ProductUnit,
+  SaleChannel,
+  SaleDocumentStatus,
+  SaleDocumentType,
+  SalePaymentType,
+  SaleStatus,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../src/database/prisma.service';
@@ -26,6 +34,8 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
   let legalEntityId: string;
   let customerId: string;
   let fiscalCertificateId: string;
+  let locationId: string;
+  let productId: string;
   let invoiceSequence = 0;
 
   beforeAll(async () => {
@@ -48,6 +58,7 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
         parentId: distributionCenter.id,
       },
     });
+    locationId = location.id;
     const role = await prisma.role.create({
       data: { name: `${marker}-admin` },
     });
@@ -107,6 +118,23 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
       },
     });
     customerId = customer.id;
+    const product = await prisma.product.create({
+      data: {
+        name: `${marker} product`,
+        sku: marker,
+        presentationType: ProductPresentationType.KG,
+        salePrice: new Prisma.Decimal(50),
+        purchaseCost: new Prisma.Decimal(35),
+        unit: ProductUnit.KG,
+        satProductServiceCode: '10101504',
+        satUnitCode: 'H87',
+        taxObjectCode: '02',
+        defaultTaxCode: '002',
+        defaultFactorType: 'Tasa',
+        defaultRateOrQuota: new Prisma.Decimal('0.16'),
+      },
+    });
+    productId = product.id;
     repository = new CreditAdjustmentRepository(
       prisma as unknown as PrismaService,
     );
@@ -119,100 +147,204 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
   async function createOriginalInvoice() {
     invoiceSequence += 1;
     const uuid = randomUUID().toUpperCase();
-    const sourceBillingRequest = await prisma.billingRequest.create({
-      data: {
-        customerId,
-        requestedByUserId: actor.id,
-        status: BillingRequestStatus.APPROVED,
-      },
-    });
-    const invoice = await prisma.invoice.create({
-      data: {
-        legalEntityId,
-        sourceBillingRequestId: sourceBillingRequest.id,
-        fiscalCertificateId,
-        fiscalIdempotencyKey: `${marker}-original-${invoiceSequence}`,
-        fiscalRequestHash: 'c'.repeat(64),
-        currencyCode: 'MXN',
-        exchangeRate: new Prisma.Decimal(1),
-        series: `I${marker.slice(-5)}`,
-        folio: String(invoiceSequence),
-        uuid,
-        origin: InvoiceOrigin.NATIVE_CFDI,
-        cfdiVersion: '4.0',
-        cfdiType: CfdiDocumentType.INCOME,
-        issuedAt: new Date('2026-08-24T12:00:00.000Z'),
-        stampedAt: new Date('2026-08-24T12:00:00.000Z'),
-        tfdVersion: '1.1',
-        issuerSnapshot: {
-          legalEntityId,
-          legalName: 'CFDI CREDIT NOTE TEST SA DE CV',
-          taxId: 'EKU9003173C9',
-          fiscalPostalCode: '64000',
-          fiscalRegime: '601',
-          series: `E${marker.slice(-6)}`,
-          certificateSerialNumber: '30001000000500003416',
-          certificateFingerprint: 'a'.repeat(64),
-        },
-        receiverSnapshot: {
+    const sequence = invoiceSequence;
+    const quantity = new Prisma.Decimal(2);
+    const unitValue = new Prisma.Decimal(50);
+    const subtotal = quantity.mul(unitValue);
+    const discount = new Prisma.Decimal(0);
+    const taxableBase = subtotal.minus(discount);
+    const taxRate = new Prisma.Decimal('0.16');
+    const tax = taxableBase.mul(taxRate);
+    const total = taxableBase.plus(tax);
+
+    return prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.create({
+        data: {
+          saleNumber: `${marker}-sale-${sequence}`,
           customerId,
-          fiscalName: 'RECEPTOR DE PRUEBA',
-          taxId: 'URE180429TM6',
-          fiscalPostalCode: '64000',
-          fiscalRegime: '601',
-          billingEmail: `${marker}-billing@example.test`,
+          userId: actor.id,
+          locationId,
+          legalEntityId,
+          saleChannel: SaleChannel.COUNTER,
+          documentType: SaleDocumentType.SIMPLE_NOTE,
+          currencyCode: 'MXN',
+          subtotal,
+          discount,
+          tax,
+          total,
+          paymentType: SalePaymentType.CASH_SALE,
+          status: SaleStatus.CONFIRMED,
         },
-        fiscalSnapshotHash: 'd'.repeat(64),
-        fiscalUseCode: 'G03',
-        exportCode: '01',
-        paymentFormCode: '03',
-        paymentMethodCode: 'PUE',
-        certificateNumber: '30001000000500003416',
-        satCertificateNumber: '30001000000500003417',
-        certificationProviderTaxId: 'EKU9003173C9',
-        cfdiSeal: 'test-cfdi-seal',
-        satSeal: 'test-sat-seal',
-        fiscalStatus: InvoiceFiscalStatus.STAMPED,
-        cancellationStatus: FiscalCancellationStatus.NOT_REQUESTED,
-        subtotal: new Prisma.Decimal(100),
-        discount: new Prisma.Decimal(0),
-        tax: new Prisma.Decimal(16),
-        total: new Prisma.Decimal(116),
-        createdByUserId: actor.id,
-        concepts: {
-          create: {
-            lineNumber: 1,
-            productServiceCode: '10101504',
-            identificationNumber: `${marker}-${invoiceSequence}`,
-            description: 'PRODUCTO DE PRUEBA',
-            quantity: new Prisma.Decimal(2),
-            unitCode: 'H87',
-            unitValue: new Prisma.Decimal(50),
-            amount: new Prisma.Decimal(100),
-            discount: new Prisma.Decimal(0),
-            taxObjectCode: '02',
-            taxCode: '002',
-            factorType: 'Tasa',
-            rateOrQuota: new Prisma.Decimal('0.16'),
-            taxBase: new Prisma.Decimal(100),
-            taxAmount: new Prisma.Decimal(16),
-            total: new Prisma.Decimal(116),
-            taxesSnapshot: [
-              {
-                taxCode: '002',
-                factorType: 'Tasa',
-                rateOrQuota: '0.160000',
-                base: '100.00',
-                amount: '16.00',
-              },
-            ],
-            snapshotHash: 'b'.repeat(64),
+      });
+      const saleItem = await tx.saleItem.create({
+        data: {
+          saleId: sale.id,
+          productId,
+          quantity,
+          quantityKg: quantity,
+          unit: ProductUnit.KG,
+          unitPrice: unitValue,
+          productNameSnapshot: `${marker} product`,
+          productSkuSnapshot: marker,
+          unitPriceSnapshot: unitValue,
+          quantitySnapshot: quantity,
+          subtotal,
+          discount,
+          taxableBase,
+          tax,
+          total,
+          unitCostSnapshot: new Prisma.Decimal(35),
+          costSubtotalSnapshot: quantity.mul(35),
+          costSnapshotSource: CostSnapshotSource.SALE_CONFIRMATION,
+        },
+      });
+      const saleDocument = await tx.saleDocument.create({
+        data: {
+          saleId: sale.id,
+          documentType: SaleDocumentType.SIMPLE_NOTE,
+          operationalLocationId: locationId,
+          status: SaleDocumentStatus.ISSUED,
+        },
+      });
+      const sourceBillingRequest = await tx.billingRequest.create({
+        data: {
+          saleId: sale.id,
+          customerId,
+          requestedByUserId: actor.id,
+          reviewedByUserId: actor.id,
+          reviewedAt: new Date('2026-08-24T11:00:00.000Z'),
+          status: BillingRequestStatus.APPROVED,
+        },
+      });
+      const requestDocument = await tx.billingRequestSaleDocument.create({
+        data: {
+          billingRequestId: sourceBillingRequest.id,
+          saleDocumentId: saleDocument.id,
+          requestedSubtotal: taxableBase,
+          requestedTax: tax,
+          requestedTotal: total,
+          createdByUserId: actor.id,
+        },
+      });
+      await tx.billingRequestSaleItem.create({
+        data: {
+          billingRequestSaleDocumentId: requestDocument.id,
+          saleItemId: saleItem.id,
+          requestedSubtotal: taxableBase,
+          requestedTax: tax,
+          requestedTotal: total,
+        },
+      });
+      const invoice = await tx.invoice.create({
+        data: {
+          legalEntityId,
+          sourceBillingRequestId: sourceBillingRequest.id,
+          fiscalCertificateId,
+          fiscalIdempotencyKey: `${marker}-original-${sequence}`,
+          fiscalRequestHash: 'c'.repeat(64),
+          currencyCode: 'MXN',
+          exchangeRate: new Prisma.Decimal(1),
+          series: `I${marker.slice(-5)}`,
+          folio: String(sequence),
+          uuid,
+          origin: InvoiceOrigin.NATIVE_CFDI,
+          cfdiVersion: '4.0',
+          cfdiType: CfdiDocumentType.INCOME,
+          issuedAt: new Date('2026-08-24T12:00:00.000Z'),
+          stampedAt: new Date('2026-08-24T12:00:00.000Z'),
+          tfdVersion: '1.1',
+          issuerSnapshot: {
+            legalEntityId,
+            legalName: 'CFDI CREDIT NOTE TEST SA DE CV',
+            taxId: 'EKU9003173C9',
+            fiscalPostalCode: '64000',
+            fiscalRegime: '601',
+            series: `E${marker.slice(-6)}`,
+            certificateSerialNumber: '30001000000500003416',
+            certificateFingerprint: 'a'.repeat(64),
+          },
+          receiverSnapshot: {
+            customerId,
+            fiscalName: 'RECEPTOR DE PRUEBA',
+            taxId: 'URE180429TM6',
+            fiscalPostalCode: '64000',
+            fiscalRegime: '601',
+            billingEmail: `${marker}-billing@example.test`,
+          },
+          fiscalSnapshotHash: 'd'.repeat(64),
+          fiscalUseCode: 'G03',
+          exportCode: '01',
+          paymentFormCode: '03',
+          paymentMethodCode: 'PUE',
+          certificateNumber: '30001000000500003416',
+          satCertificateNumber: '30001000000500003417',
+          certificationProviderTaxId: 'EKU9003173C9',
+          cfdiSeal: 'test-cfdi-seal',
+          satSeal: 'test-sat-seal',
+          fiscalStatus: InvoiceFiscalStatus.STAMPED,
+          cancellationStatus: FiscalCancellationStatus.NOT_REQUESTED,
+          subtotal,
+          discount,
+          tax,
+          total,
+          createdByUserId: actor.id,
+          concepts: {
+            create: {
+              lineNumber: 1,
+              sourceSaleItemId: saleItem.id,
+              productServiceCode: '10101504',
+              identificationNumber: `${marker}-${sequence}`,
+              description: 'PRODUCTO DE PRUEBA',
+              quantity,
+              unitCode: 'H87',
+              unitValue,
+              amount: subtotal,
+              discount,
+              taxObjectCode: '02',
+              taxCode: '002',
+              factorType: 'Tasa',
+              rateOrQuota: taxRate,
+              taxBase: taxableBase,
+              taxAmount: tax,
+              total,
+              taxesSnapshot: [
+                {
+                  taxCode: '002',
+                  factorType: 'Tasa',
+                  rateOrQuota: taxRate.toFixed(6),
+                  base: taxableBase.toFixed(2),
+                  amount: tax.toFixed(2),
+                },
+              ],
+              snapshotHash: 'b'.repeat(64),
+            },
           },
         },
-      },
-      include: { concepts: true },
+        include: { concepts: true },
+      });
+      const application = await tx.invoiceSaleDocument.create({
+        data: {
+          invoiceId: invoice.id,
+          saleDocumentId: saleDocument.id,
+          billingRequestSaleDocumentId: requestDocument.id,
+          subtotalApplied: taxableBase,
+          taxApplied: tax,
+          totalApplied: total,
+          createdByUserId: actor.id,
+        },
+      });
+      await tx.invoiceSaleItemApplication.create({
+        data: {
+          invoiceSaleDocumentId: application.id,
+          saleItemId: saleItem.id,
+          subtotalApplied: taxableBase,
+          taxApplied: tax,
+          totalApplied: total,
+          createdByUserId: actor.id,
+        },
+      });
+      return { invoice, concept: invoice.concepts[0] };
     });
-    return { invoice, concept: invoice.concepts[0] };
   }
 
   async function createAdjustment(

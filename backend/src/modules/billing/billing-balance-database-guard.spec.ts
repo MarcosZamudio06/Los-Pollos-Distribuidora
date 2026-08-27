@@ -76,6 +76,28 @@ describe('billing request invoice application database guard', () => {
   });
 });
 
+describe('fiscal document invoice application database guard', () => {
+  const migration = readFileSync(
+    resolve(
+      process.cwd(),
+      'prisma/migrations/20260826200000_scope_invoice_application_totals_guard/migration.sql',
+    ),
+    'utf8',
+  );
+
+  it('keeps application totals strict for sale invoices but excludes fiscal documents without sale applications', () => {
+    expect(migration).toContain(
+      `invoice_cfdi_type IN ('EXPENSE', 'PAYMENT_RECEIPT')`,
+    );
+    expect(migration).toContain(
+      'applied_subtotal <> invoice_subtotal - invoice_discount',
+    );
+    expect(migration).toContain('applied_tax <> invoice_tax');
+    expect(migration).toContain('applied_total <> invoice_total');
+    expect(migration).toContain("MESSAGE = 'INVOICE_TOTAL_MISMATCH'");
+  });
+});
+
 describe('billing request sale item database guard', () => {
   const migration = readFileSync(
     resolve(
