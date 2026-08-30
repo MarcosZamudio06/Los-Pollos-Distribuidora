@@ -77,6 +77,8 @@ const snapshot = {
   snapshotHash: 'c'.repeat(64),
 } as const;
 
+const originalUuid = '215CEC43-7E57-44AC-9D63-B54BBC4745BD';
+
 function sourceDocument() {
   return {
     id: 'request-document-1',
@@ -352,6 +354,80 @@ describe('CfdiIssuanceRepository preparation', () => {
       ),
     ).rejects.toMatchObject({ message: 'OVER_INVOICED' });
     expect(invalid.tx.invoice.create).not.toHaveBeenCalled();
+  });
+
+  it('resolves a server-owned original and persists the type 04 relation on income issuance', async () => {
+    const { repository, tx, validation } = harness();
+    const original = {
+      id: 'invoice-original-1',
+      sourceBillingRequestId: 'request-original-1',
+      legalEntityId: 'issuer-1',
+      status: 'ACTIVE',
+      fiscalStatus: 'STAMPED',
+      cfdiType: 'INCOME',
+      uuid: originalUuid,
+      stampedAt: new Date('2026-08-22T17:00:00.000Z'),
+      cancellationStatus: 'NOT_REQUESTED',
+      replacementInvoiceId: null,
+      replacementUuid: null,
+      substitutedByInvoiceId: null,
+      nativeSubstitute: null,
+    };
+    tx.invoice.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(original);
+    validation.buildApprovedRequestWithClient.mockImplementation(
+      (_client, _billingRequestId, options) => ({
+        ...snapshot,
+        relationships: [
+          {
+            typeCode: '04',
+            relatedInvoiceId: options.substitution!.originalInvoiceId,
+            relatedUuid: options.substitution!.originalUuid,
+          },
+        ],
+      }),
+    );
+
+    const result = await repository.prepare(
+      'request-1',
+      { ...dto, substitutesInvoiceId: original.id },
+      { id: 'admin-1', role: 'ADMIN' },
+      'stamp-substitution-1',
+      'FACTURAMA',
+    );
+
+    expect(result.snapshot?.relationships).toEqual([
+      {
+        typeCode: '04',
+        relatedInvoiceId: original.id,
+        relatedUuid: originalUuid,
+      },
+    ]);
+    expect(validation.buildApprovedRequestWithClient).toHaveBeenCalledWith(
+      tx,
+      'request-1',
+      expect.objectContaining({
+        substitution: {
+          originalInvoiceId: original.id,
+          originalUuid,
+        },
+      }),
+    );
+    expect(tx.invoice.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          substitutionOfInvoiceId: original.id,
+          fiscalRelationships: [
+            {
+              typeCode: '04',
+              relatedInvoiceId: original.id,
+              relatedUuid: originalUuid,
+            },
+          ],
+        }),
+      }),
+    );
   });
 });
 

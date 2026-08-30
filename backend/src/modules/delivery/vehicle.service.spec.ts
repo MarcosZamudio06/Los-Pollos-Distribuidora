@@ -86,7 +86,9 @@ describe('VehicleService', () => {
 
   it('creates a vehicle and validates its active home location', async () => {
     const prisma = createPrisma();
-    prisma.operationalLocation.findFirst.mockResolvedValue({ id: 'location-1' });
+    prisma.operationalLocation.findFirst.mockResolvedValue({
+      id: 'location-1',
+    });
     prisma.vehicle.create.mockResolvedValue(
       vehicle({ homeLocationId: 'location-1', plateNumber: 'ABC-123' }),
     );
@@ -123,17 +125,20 @@ describe('VehicleService', () => {
     expect(prisma.vehicle.create).not.toHaveBeenCalled();
   });
 
-  it.each(['code', 'plateNumber'])('maps duplicate %s to conflict', async (field) => {
-    const prisma = createPrisma();
-    prisma.vehicle.create.mockRejectedValue(uniqueError(field));
+  it.each(['code', 'plateNumber'])(
+    'maps duplicate %s to conflict',
+    async (field) => {
+      const prisma = createPrisma();
+      prisma.vehicle.create.mockRejectedValue(uniqueError(field));
 
-    await expect(
-      new VehicleService(prisma as unknown as PrismaService).create({
-        code: 'UNIDAD-01',
-        displayName: 'Unidad 1',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-  });
+      await expect(
+        new VehicleService(prisma as unknown as PrismaService).create({
+          code: 'UNIDAD-01',
+          displayName: 'Unidad 1',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    },
+  );
 
   it('uses a safe fallback for unexpected duplicate target metadata', async () => {
     const prisma = createPrisma();
@@ -186,10 +191,9 @@ describe('VehicleService', () => {
     prisma.vehicle.findUnique.mockResolvedValue(null);
 
     await expect(
-      new VehicleService(prisma as unknown as PrismaService).update(
-        'missing',
-        { displayName: 'Unidad' },
-      ),
+      new VehicleService(prisma as unknown as PrismaService).update('missing', {
+        displayName: 'Unidad',
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

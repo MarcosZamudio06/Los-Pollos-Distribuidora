@@ -2279,6 +2279,7 @@ model Invoice {
   tfdVersion                   String?                     @db.VarChar(5)
   issuerSnapshot               Json?
   receiverSnapshot             Json?
+  fiscalRelationships          Json?
   fiscalSnapshotHash           String?                     @db.VarChar(64)
   fiscalUseCode                String?                     @db.VarChar(3)
   exportCode                   String?                     @db.VarChar(2)
@@ -2309,6 +2310,7 @@ model Invoice {
   replacementInvoiceId         String?                     @unique
   replacementUuid              String?                     @db.VarChar(36)
   substitutedByInvoiceId       String?                     @unique
+  substitutionOfInvoiceId      String?                     @unique
   version                      Int                         @default(1)
   linkIdempotencyKey           String?                     @unique
   linkPayloadHash              String?
@@ -2327,6 +2329,8 @@ model Invoice {
   replacementFor               Invoice?                    @relation("InvoiceFiscalReplacement")
   substitutedBy                Invoice?                    @relation("InvoiceSubstitution", fields: [substitutedByInvoiceId], references: [id])
   substitutes                  Invoice?                    @relation("InvoiceSubstitution")
+  substitutionOfInvoice        Invoice?                    @relation("InvoiceNativeFiscalSubstitution", fields: [substitutionOfInvoiceId], references: [id], onDelete: Restrict)
+  nativeSubstitute              Invoice?                    @relation("InvoiceNativeFiscalSubstitution")
   documents                    InvoiceSaleDocument[]
   concepts                     InvoiceConcept[]
   fiscalArtifacts              FiscalArtifact[]

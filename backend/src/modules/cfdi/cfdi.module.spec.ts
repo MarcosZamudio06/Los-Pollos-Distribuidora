@@ -11,6 +11,7 @@ import {
   FISCAL_PROVIDER_PORT,
   type FiscalProviderPort,
 } from './domain/fiscal-provider.port';
+import { DisabledFiscalProvider } from './adapters/fiscal-provider.resolver';
 
 describe('CfdiModule fiscal provider wiring', () => {
   let moduleFixture: TestingModule | undefined;
@@ -35,6 +36,17 @@ describe('CfdiModule fiscal provider wiring', () => {
     );
     expect(moduleFixture.get(FISCAL_CREDENTIAL_RESOLVER)).toBeInstanceOf(
       DockerSecretFiscalCredentialResolver,
+    );
+  });
+
+  it('wires the disabled provider before Facturama when CFDI is disabled', async () => {
+    moduleFixture = await compileCfdiModule({
+      CFDI_ENABLED: false,
+      FISCAL_PROVIDER: 'FACTURAMA',
+    });
+
+    expect(moduleFixture.get(FISCAL_PROVIDER_PORT)).toBeInstanceOf(
+      DisabledFiscalProvider,
     );
   });
 

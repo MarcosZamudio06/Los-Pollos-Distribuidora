@@ -29,6 +29,7 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
   const actor = { id: '', role: 'ADMIN' as const };
   let prisma: PrismaClient;
   let issuance: CfdiIssuanceService;
+  let issuanceProvider: FakeFiscalProvider;
   let customerId: string;
   let productId: string;
   let locationId: string;
@@ -122,12 +123,13 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     productId = product.id;
 
     const prismaService = prisma as unknown as PrismaService;
+    issuanceProvider = new FakeFiscalProvider();
     issuance = new CfdiIssuanceService(
       new CfdiIssuanceRepository(
         prismaService,
         new CfdiValidationService(prismaService, new CfdiDocumentBuilder()),
       ),
-      new FakeFiscalProvider(),
+      issuanceProvider,
     );
   });
 
@@ -298,11 +300,36 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
   });
 
   it('requires and persists a previously stamped replacement for motive 01', async () => {
+    issuanceProvider.calls.length = 0;
     const original = await createIssuedInvoice('replacement-original');
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    const replacement = await createIssuedInvoice('replacement-new');
-    const provider = new FakeFiscalProvider();
-    const service = cancellationService(provider);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const replacement = await createIssuedInvoice(
+      'replacement-new',
+      original.invoiceId,
+    );
+    const service = cancellationService(issuanceProvider);
+
+    const replacementStored = await prisma.invoice.findUniqueOrThrow({
+      where: { id: replacement.invoiceId },
+      select: {
+        fiscalStatus: true,
+        uuid: true,
+        fiscalRelationships: true,
+        substitutionOfInvoiceId: true,
+      },
+    });
+    expect(replacementStored).toMatchObject({
+      fiscalStatus: 'STAMPED',
+      uuid: replacement.uuid,
+      substitutionOfInvoiceId: original.invoiceId,
+      fiscalRelationships: [
+        {
+          typeCode: '04',
+          relatedInvoiceId: original.invoiceId,
+          relatedUuid: original.uuid,
+        },
+      ],
+    });
 
     await expect(
       service.cancel(
@@ -323,6 +350,42 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
       actor,
       `${marker}:cancel-replacement`,
     );
+
+    const operations = issuanceProvider.calls
+      .filter(
+        (call) => call.operation === 'stamp' || call.operation === 'cancel',
+      )
+      .map((call) => call.operation);
+    expect(operations).toEqual(['stamp', 'stamp', 'cancel']);
+    const stampCalls = issuanceProvider.calls.filter(
+      (call) => call.operation === 'stamp',
+    );
+    expect(
+      (
+        stampCalls[1].command as {
+          snapshot: {
+            relationships?: Array<{
+              typeCode: string;
+              relatedInvoiceId: string;
+              relatedUuid: string;
+            }>;
+          };
+        }
+      ).snapshot.relationships,
+    ).toEqual([
+      {
+        typeCode: '04',
+        relatedInvoiceId: original.invoiceId,
+        relatedUuid: original.uuid,
+      },
+    ]);
+    expect(
+      issuanceProvider.calls.find((call) => call.operation === 'cancel')
+        ?.command,
+    ).toMatchObject({
+      motive: '01',
+      replacementUuid: replacement.uuid,
+    });
 
     const stored = await prisma.invoice.findUniqueOrThrow({
       where: { id: original.invoiceId },
@@ -364,7 +427,10 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     );
   }
 
-  async function createIssuedInvoice(label: string) {
+  async function createIssuedInvoice(
+    label: string,
+    substitutesInvoiceId?: string,
+  ) {
     sequence += 1;
     const suffix = `${marker}-${sequence}-${label}`;
     const sale = await prisma.sale.create({
@@ -454,6 +520,7 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
         paymentMethod: 'PUE',
         paymentForm: '01',
         exportCode: '01',
+        ...(substitutesInvoiceId ? { substitutesInvoiceId } : {}),
       },
       actor,
       `${suffix}:stamp`,

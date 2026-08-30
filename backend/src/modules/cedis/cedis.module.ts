@@ -15,7 +15,12 @@ import { CedisDashboardQueryService } from './cedis-dashboard.query.service';
 import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.query.service';
 
 @Module({
-  imports: [AuthModule, DeliveryModule, InventoryModule, PointOfSaleDailyCloseModule],
+  imports: [
+    AuthModule,
+    DeliveryModule,
+    InventoryModule,
+    PointOfSaleDailyCloseModule,
+  ],
   controllers: [
     BranchSupplyCyclesController,
     BranchSupplyReceiptsController,

@@ -30,6 +30,7 @@ import type {
   FiscalIssuanceFailureOutcome,
   PreparedCfdiIssuance,
 } from './cfdi-issuance.types';
+import type { CfdiSubstitutionBuildInput } from './domain/cfdi-document.types';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
 
@@ -57,6 +58,13 @@ const existingInvoiceSelect = {
   },
 } satisfies Prisma.InvoiceSelect;
 
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type ResolvedCfdiSubstitution = CfdiSubstitutionBuildInput & {
+  readonly originalLegalEntityId: string;
+};
+
 @Injectable()
 export class CfdiIssuanceRepository {
   constructor(
@@ -75,6 +83,7 @@ export class CfdiIssuanceRepository {
           paymentForm: dto.paymentForm.trim().toUpperCase(),
           exportCode: dto.exportCode.trim().toUpperCase(),
           tipoCambio: dto.tipoCambio?.trim() ?? null,
+          substitutesInvoiceId: dto.substitutesInvoiceId?.trim() || null,
         }),
       )
       .digest('hex');
@@ -150,6 +159,12 @@ export class CfdiIssuanceRepository {
             );
             await tx.$queryRaw`SELECT "id" FROM "SaleDocument" WHERE "id" IN (${Prisma.join(documentIds)}) ORDER BY "id" FOR UPDATE`;
 
+            const substitution = await this.resolveSubstitution(
+              tx,
+              billingRequestId,
+              dto.substitutesInvoiceId,
+            );
+
             const snapshot =
               await this.validation.buildApprovedRequestWithClient(
                 tx,
@@ -163,8 +178,19 @@ export class CfdiIssuanceRepository {
                     paymentMethodCode: dto.paymentMethod,
                     exchangeRate: new Prisma.Decimal(dto.tipoCambio ?? 1),
                   },
+                  ...(substitution
+                    ? {
+                        substitution: {
+                          originalInvoiceId: substitution.originalInvoiceId,
+                          originalUuid: substitution.originalUuid,
+                        },
+                      }
+                    : {}),
                 },
               );
+            if (substitution) {
+              this.validateSubstitutionSnapshot(snapshot, substitution);
+            }
             if (snapshot.currencyCode !== 'MXN' && !dto.tipoCambio) {
               throw new UnprocessableEntityException(
                 'INVALID_PAYMENT_CONFIGURATION',
@@ -253,6 +279,12 @@ export class CfdiIssuanceRepository {
                 tax: new Prisma.Decimal(snapshot.totals.tax),
                 total: new Prisma.Decimal(snapshot.totals.total),
                 createdByUserId: actor.id,
+                ...(substitution
+                  ? {
+                      substitutionOfInvoiceId: substitution.originalInvoiceId,
+                      fiscalRelationships: this.toJson(snapshot.relationships!),
+                    }
+                  : {}),
               },
               select: { id: true, version: true },
             });
@@ -550,6 +582,11 @@ export class CfdiIssuanceRepository {
               lastFiscalErrorCode: failure.code,
               lastFiscalErrorMessage: failure.code,
               version: { increment: 1 },
+              ...(prepared.snapshot?.relationships?.length
+                ? {
+                    substitutionOfInvoiceId: null,
+                  }
+                : {}),
             },
           });
           await tx.fiscalOperationAttempt.update({
@@ -686,6 +723,82 @@ export class CfdiIssuanceRepository {
       operationStatus: attempt.status,
       uuid: invoice.uuid,
     };
+  }
+
+  private async resolveSubstitution(
+    tx: Prisma.TransactionClient,
+    billingRequestId: string,
+    requestedOriginalId?: string,
+  ): Promise<ResolvedCfdiSubstitution | null> {
+    const originalId = requestedOriginalId?.trim();
+    if (!originalId) return null;
+
+    await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${originalId} FOR UPDATE`;
+    const original = await tx.invoice.findUnique({
+      where: { id: originalId },
+      select: {
+        id: true,
+        sourceBillingRequestId: true,
+        legalEntityId: true,
+        status: true,
+        fiscalStatus: true,
+        uuid: true,
+        stampedAt: true,
+        cancellationStatus: true,
+        replacementInvoiceId: true,
+        replacementUuid: true,
+        substitutedByInvoiceId: true,
+        nativeSubstitute: { select: { id: true } },
+      },
+    });
+
+    if (!original || original.sourceBillingRequestId === billingRequestId) {
+      throw new UnprocessableEntityException('INVALID_SUBSTITUTION_ORIGINAL');
+    }
+    if (
+      original.status !== 'ACTIVE' ||
+      original.fiscalStatus !== InvoiceFiscalStatus.STAMPED ||
+      !original.uuid ||
+      !UUID.test(original.uuid.trim())
+    ) {
+      throw new UnprocessableEntityException('INVALID_SUBSTITUTION_ORIGINAL');
+    }
+    if (
+      original.cancellationStatus === 'PENDING' ||
+      original.cancellationStatus === 'ACCEPTED' ||
+      original.replacementInvoiceId ||
+      original.replacementUuid ||
+      original.substitutedByInvoiceId ||
+      original.nativeSubstitute
+    ) {
+      throw new ConflictException('SUBSTITUTION_ALREADY_RESERVED');
+    }
+
+    return {
+      originalInvoiceId: original.id,
+      originalUuid: original.uuid.trim().toUpperCase(),
+      originalLegalEntityId: original.legalEntityId,
+    };
+  }
+
+  private validateSubstitutionSnapshot(
+    snapshot: NonNullable<PreparedCfdiIssuance['snapshot']>,
+    substitution: ResolvedCfdiSubstitution,
+  ): void {
+    const relationship = snapshot.relationships;
+    if (snapshot.issuer.legalEntityId !== substitution.originalLegalEntityId)
+      throw new UnprocessableEntityException(
+        'SUBSTITUTION_LEGAL_ENTITY_MISMATCH',
+      );
+    if (
+      !relationship ||
+      relationship.length !== 1 ||
+      relationship[0].typeCode !== '04' ||
+      relationship[0].relatedInvoiceId !== substitution.originalInvoiceId ||
+      relationship[0].relatedUuid !== substitution.originalUuid
+    ) {
+      throw new UnprocessableEntityException('INVALID_SUBSTITUTION_RELATION');
+    }
   }
 
   private result(

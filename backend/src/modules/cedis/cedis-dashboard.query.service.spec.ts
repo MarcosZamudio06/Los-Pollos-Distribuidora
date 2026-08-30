@@ -533,7 +533,10 @@ describe('CedisDashboardQueryService', () => {
 
     expect(() => assertCycleScope(cycle(), branchWarehouse)).not.toThrow();
     expect(() =>
-      assertCycleScope(cycle({ branchLocationId: 'branch-2' }), branchWarehouse),
+      assertCycleScope(
+        cycle({ branchLocationId: 'branch-2' }),
+        branchWarehouse,
+      ),
     ).toThrow(new ForbiddenException('LOCATION_NOT_AUTHORIZED'));
   });
 

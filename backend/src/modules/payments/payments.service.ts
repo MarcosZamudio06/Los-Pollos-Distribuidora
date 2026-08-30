@@ -121,7 +121,7 @@ export class PaymentsService {
             null;
           if (initialDailyCloseId) {
             await acquireDraftDailyCloseLifecycleLock(tx, initialDailyCloseId);
-            payment = (await tx.payment.findUnique({
+            payment = await tx.payment.findUnique({
               where: { id },
               include: {
                 accountReceivable: true,
@@ -140,7 +140,7 @@ export class PaymentsService {
                   },
                 },
               },
-            }));
+            });
             if (!payment) throw new NotFoundException('Payment not found');
             if (payment.status === PaymentStatus.CANCELLED)
               throw new BadRequestException('Payment is already cancelled');

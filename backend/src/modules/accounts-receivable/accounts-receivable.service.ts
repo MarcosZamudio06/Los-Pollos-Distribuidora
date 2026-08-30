@@ -275,7 +275,8 @@ export class AccountsReceivableService {
                         !dto.currencyCode
                       ? new Prisma.Decimal(1)
                       : null,
-                fiscalPaymentFormCode: dto.fiscalPaymentFormCode?.trim() ?? null,
+                fiscalPaymentFormCode:
+                  dto.fiscalPaymentFormCode?.trim() ?? null,
                 paymentMethod: dto.paymentMethod,
                 bankName:
                   dto.paymentMethod === 'CASH'

@@ -954,7 +954,10 @@ cambiar comportamiento fiscal visible.
 - [x] El security gate rechaza llaves/certificados, PEM privado, referencias
       fiscales crudas y XML CFDI no sintético.
 - [x] Facturama real queda aislado en un workflow manual, protegido y fijo a
-      sandbox; solo lee estado/XML de un documento sandbox existente.
+      sandbox; separa el contrato read-only de un documento existente del
+      contrato explícito de stamp con `RUN_FACTURAMA_SANDBOX_STAMP="true"`.
+      El contrato de escritura valida el mismo UUID mediante estado/XML y no
+      pertenece al `test:e2e` normal.
 - [x] Prisma clean deploy, backend/frontend typecheck y Docker build permanecen
       dentro del Quality Gate agregador.
 
@@ -975,6 +978,8 @@ cambiar comportamiento fiscal visible.
 - `backend/src/config/cfdi-quality-gate.contract.spec.ts`
 - `backend/test/cfdi-advisory-lock.e2e-spec.ts`
 - `backend/test/facturama-sandbox.e2e-spec.ts`
+- `backend/test/facturama-sandbox-stamp.protected.spec.ts`
+- `backend/test/jest-facturama-sandbox-stamp.json`
 
 # CFDI-21-SECURITY-AUDIT — Auditoría de seguridad fiscal
 

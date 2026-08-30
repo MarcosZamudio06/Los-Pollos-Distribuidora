@@ -179,6 +179,33 @@ El snapshot raíz valida los valores oficiales de Pago: `Exportacion=01`,
 REP, CFDI-15 deberá incorporar `c_TipoRelacion` al catálogo versionado para la
 relación `04` de sustitución; ningún código se agrega como free text.
 
+### Sustitución de CFDI de Ingreso (motivo SAT `01`)
+
+La sustitución nativa usa una referencia server-owned opcional
+`substitutesInvoiceId` en `POST /api/billing/requests/:id/issue-cfdi`. El
+backend bloquea el CFDI original, exige que exista, esté `ACTIVE/STAMPED`,
+tenga UUID válido, no tenga otra sustitución reservada y pertenezca a la
+misma `LegalEntity` que el nuevo CFDI. El cliente nunca envía UUID ni
+`TipoRelacion`.
+
+La preparación persiste en el snapshot del nuevo CFDI una única relación:
+
+```json
+{
+  "typeCode": "04",
+  "relatedInvoiceId": "invoice-original-1",
+  "relatedUuid": "UUID-DEL-ORIGINAL"
+}
+```
+
+La relación se conserva server-side junto con la referencia al original y su
+índice único impide dos sustituciones nativas concurrentes del mismo CFDI.
+Primero se timbra el nuevo CFDI; solo después de confirmar `STAMPED` y UUID
+válido se permite cancelar el original con motivo `01` y
+`uuidReplacement=UUID-DEL-NUEVO`. La cancelación rechaza antes del PAC un
+sustituto inexistente, no timbrado, sin UUID o sin la relación `04` exacta.
+Las relaciones `01` y `03` existentes de notas de crédito no cambian.
+
 `Payment.paymentMethod` es operacional y no basta para todos los códigos SAT.
 Antes de implementar se agregará de forma aditiva a `Payment`:
 
@@ -754,7 +781,7 @@ Extiende la raíz existente sin reemplazarla. Conserva `status` para la
 operación legacy y agrega estados fiscales separados, versión/tipo CFDI,
 emisión/timbrado, UsoCFDI, Exportación, forma/método de pago, moneda/tipo de
 cambio, snapshots JSONB de emisor/receptor, certificado, TFD, sellos,
-sustitución, contador de intentos y último error.
+sustitución, relaciones fiscales, contador de intentos y último error.
 
 `sourceBillingRequestId` y `fiscalIdempotencyKey` son únicos cuando existen y
 evitan dos raíces nativas para una solicitud/comando; `fiscalRequestHash`
@@ -832,6 +859,9 @@ sección «Arquitectura REP 2.0 (CFDI-16)».
   `replacementInvoiceId` y `replacementUuid`. `cancellationReason`,
   `substitutionUuid` y `substitutedByInvoiceId` permanecen como compatibilidad
   legacy, no como autoridad de comandos nativos.
+- `substitutionOfInvoiceId` y `fiscalRelationships` son la representación
+  server-owned de una sustitución nativa de Ingreso; el primero es único por
+  CFDI original y la segunda conserva el snapshot exacto de la relación `04`.
 - `LegalEntity` debe exponer los datos estructurados del emisor CFDI 4.0.
 - `Sale.requiresAdministrativeInvoice=true` obliga a resolver una única
   configuración fiscal activa desde `Sale.locationId` mediante
@@ -1080,7 +1110,10 @@ headers de autenticación.
 - Una solicitud de cancelación nunca revierte aplicaciones; únicamente una
   respuesta fiscal `CANCELLED` confirmada libera el saldo facturable.
 - Un motivo `01` nunca acepta UUID desde el cliente: la relación y UUID del
-  sustituto se resuelven desde una `Invoice` previamente `STAMPED`.
+  sustituto se resuelven desde una `Invoice` previamente `STAMPED`, y esa
+  factura debe conservar una relación `04` exacta hacia el original.
+- Una sustitución de Ingreso reserva como máximo un nuevo CFDI por original;
+  una transacción concurrente no puede crear una segunda relación `04` válida.
 - UUID, TFD, sellos, atributos SAT, IDs proveedor y bytes no tienen ruta
   pública de escritura.
 - La operación fiscal no crea ni actualiza `Sale`, `SaleItem`, `Payment`,
@@ -1257,9 +1290,14 @@ las migraciones desde cero. Los jobs de reconciliación comparten la misma
 evidencia de exclusión por advisory lock que sus pruebas de dos instancias.
 
 El repositorio rechaza llaves/certificados fiscales versionados, material PEM
-privado y XML CFDI no sanitizado. La lectura real de Facturama solo existe en un
+privado y XML CFDI no sanitizado. Facturama real solo se verifica mediante un
 workflow manual protegido, fijo a sandbox y con credenciales provenientes de
-secrets; nunca forma parte de PR, `main`, release ni Docker build.
+secrets; el contrato de lectura consulta un CFDI existente y el contrato de
+escritura exige `RUN_FACTURAMA_SANDBOX_STAMP="true"` antes de ejecutar
+`FiscalProviderPort.stamp()` real. El contrato de escritura valida el UUID
+retornado, `getStatus()`, XML CFDI 4.0 y `TimbreFiscalDigital.UUID` del mismo
+documento. Ningún contrato forma parte de PR, `main`, release, Docker build o
+el `test:e2e` normal.
 
 ## CFDI-12 — Reconciliación de `STAMP_UNKNOWN`
 

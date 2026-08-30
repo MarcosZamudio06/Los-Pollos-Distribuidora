@@ -426,6 +426,8 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
 - Dado motivo `01`, la ausencia de sustituto o un sustituto no `STAMPED`, sin
   UUID, de otra entidad o no posterior se rechaza antes de llamar al PAC; el
   UUID sustituto se resuelve desde `replacementInvoiceId`, nunca del request.
+  El sustituto válido debe conservar una relación `04` exacta hacia el CFDI
+  original; el nuevo CFDI se timbra antes de solicitar la cancelación.
 - Ningún resultado de cancelación sobrescribe `Invoice.uuid`, ni modifica
   `Sale`, `Payment`, `AccountReceivable`, inventario o movimientos.
 

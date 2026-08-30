@@ -30,16 +30,17 @@ export class FiscalProviderResolver {
   ) {}
 
   resolve(): FiscalProviderPort {
+    if (!this.cfdiEnabled()) {
+      return this.disabledProvider;
+    }
+
     const provider = this.config
       .get<string>('FISCAL_PROVIDER', NO_PROVIDER)
       .trim()
       .toUpperCase();
 
     if (provider === NO_PROVIDER) {
-      if (this.cfdiEnabled()) {
-        throw new Error('FISCAL_PROVIDER_CONFIGURATION');
-      }
-      return this.disabledProvider;
+      throw new Error('FISCAL_PROVIDER_CONFIGURATION');
     }
     const adapter = this.adapters.find(
       (candidate) => candidate.providerKey.toUpperCase() === provider,
@@ -47,7 +48,7 @@ export class FiscalProviderResolver {
     if (!adapter) {
       throw new Error('FISCAL_PROVIDER_UNKNOWN');
     }
-    if (provider === FACTURAMA_PROVIDER && this.cfdiEnabled()) {
+    if (provider === FACTURAMA_PROVIDER) {
       this.assertFacturamaConfiguration();
     }
     return adapter;

@@ -2,6 +2,15 @@ name: CFDI Facturama Sandbox
 
 on:
   workflow_dispatch:
+    inputs:
+      contract:
+        description: "Contract to execute (read is the safe default; stamp creates a new sandbox CFDI)"
+        required: true
+        default: read
+        type: choice
+        options:
+          - read
+          - stamp
 
 permissions:
   contents: read
@@ -24,6 +33,7 @@ env:
 jobs:
   provider-read-contract:
     name: Protected Facturama sandbox read contract
+    if: ${{ inputs.contract != 'stamp' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: cfdi-sandbox
@@ -50,3 +60,41 @@ jobs:
           FACTURAMA_SANDBOX_UUID: ${{ secrets.FACTURAMA_SANDBOX_UUID }}
           OPENSSL_CONF: /dev/null
         run: npm --prefix backend run test:e2e -- --runInBand --runTestsByPath test/facturama-sandbox.e2e-spec.ts
+
+  provider-stamp-contract:
+    name: Protected Facturama sandbox stamp contract
+    if: ${{ inputs.contract == 'stamp' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: cfdi-sandbox
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Run real Facturama sandbox stamp contract
+        working-directory: backend
+        env:
+          RUN_FACTURAMA_SANDBOX_STAMP: "true"
+          FACTURAMA_SANDBOX_USERNAME: ${{ secrets.FACTURAMA_SANDBOX_USERNAME }}
+          FACTURAMA_SANDBOX_PASSWORD: ${{ secrets.FACTURAMA_SANDBOX_PASSWORD }}
+          FACTURAMA_SANDBOX_ISSUER_RFC: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_RFC }}
+          FACTURAMA_SANDBOX_ISSUER_NAME: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_NAME }}
+          FACTURAMA_SANDBOX_ISSUER_FISCAL_REGIME: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_FISCAL_REGIME }}
+          FACTURAMA_SANDBOX_ISSUER_POSTAL_CODE: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_POSTAL_CODE }}
+          FACTURAMA_SANDBOX_RECEIVER_RFC: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_RFC }}
+          FACTURAMA_SANDBOX_RECEIVER_NAME: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_NAME }}
+          FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME }}
+          FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE }}
+          FACTURAMA_SANDBOX_RECEIVER_CFDI_USE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_CFDI_USE }}
+          OPENSSL_CONF: /dev/null
+        run: npm exec -- jest --config ./test/jest-facturama-sandbox-stamp.json --runInBand --runTestsByPath test/facturama-sandbox-stamp.protected.spec.ts

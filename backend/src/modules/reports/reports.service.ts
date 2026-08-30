@@ -662,9 +662,7 @@ export class ReportsService {
         : query.agingStatus;
 
     return {
-      ...(user.role === 'SELLER'
-        ? { sale: { userId: user.id } }
-        : {}),
+      ...(user.role === 'SELLER' ? { sale: { userId: user.id } } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(agingStatus ? { agingStatus } : {}),

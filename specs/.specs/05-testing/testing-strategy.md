@@ -588,8 +588,14 @@ ObjectStorage y evidencia del sandbox Facturama.
   contenedores de llave o PEM privado) y CFDI XML que no esté bajo fixtures, no
   declare `cfdi-fixture:synthetic` o contenga RFC fuera del allowlist sintético.
 - La verificación real de Facturama es un workflow exclusivamente
-  `workflow_dispatch`, protegido por el environment `cfdi-sandbox`, fijo a la
-  URL sandbox y con secrets de GitHub. Solo consulta un CFDI sandbox existente;
-  no emite, cancela ni admite endpoint productivo.
+  `workflow_dispatch`, protegido por el environment `cfdi-sandbox` y fijo a la
+  URL sandbox. La entrada `contract=read` conserva el contrato de lectura de un
+  CFDI existente; la entrada `contract=stamp` habilita, solo con
+  `RUN_FACTURAMA_SANDBOX_STAMP="true"`, el contrato separado que ejecuta
+  `FiscalProviderPort.stamp()` real contra `POST /api-lite/3/cfdis`, consulta
+  estado y descarga XML del mismo UUID. Credenciales y datos fiscales del
+  emisor provienen de secrets; el CSD debe estar cargado previamente en la
+  cuenta Sandbox. Ningún contrato admite endpoint productivo ni forma parte de
+  PR, `main`, `npm test` o el `test:e2e` normal.
 - Backend/frontend typecheck, Docker build, dependency audit, gitleaks y los
   thresholds preexistentes siguen siendo requisitos; CFDI no reduce ningún gate.

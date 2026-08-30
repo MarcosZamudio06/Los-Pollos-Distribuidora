@@ -52,5 +52,10 @@ describe('CFDI quality gate contract', () => {
     expect(workflow).not.toContain('FISCAL_PROVIDER_ENVIRONMENT: PRODUCTION');
     expect(workflow).not.toContain('https://api.facturama.mx');
     expect(workflow).toMatch(/secrets\.FACTURAMA_SANDBOX_/);
+    expect(workflow).toContain('contract:');
+    expect(workflow).toContain("if: ${{ inputs.contract == 'stamp' }}");
+    expect(workflow).toContain('RUN_FACTURAMA_SANDBOX_STAMP: "true"');
+    expect(workflow).toContain('jest-facturama-sandbox-stamp.json');
+    expect(workflow).toContain('FACTURAMA_SANDBOX_ISSUER_RFC');
   });
 });

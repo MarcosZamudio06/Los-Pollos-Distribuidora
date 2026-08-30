@@ -412,44 +412,46 @@ describe('BranchSupplyCycleReconciliationService', () => {
     );
   });
 
-  it.each([
-    'PENDING_JUSTIFICATION',
-    'PENDING_AUTHORIZATION',
-  ])('blocks closure for %s daily-close differences', (differenceStatus) => {
-    const result = service.calculate(
-      baseInput({
-        transfers: [
-          {
-            ...transfer('SUPPLY', 10),
-            transfer: {
-              ...transfer('SUPPLY', 10).transfer,
-              status: 'REQUESTED',
-            },
-          },
-        ],
-        dailyClose: dailyClose({
-          cashShifts: [{ id: 'shift-1', status: 'OPEN' }],
-          differences: [
+  it.each(['PENDING_JUSTIFICATION', 'PENDING_AUTHORIZATION'])(
+    'blocks closure for %s daily-close differences',
+    (differenceStatus) => {
+      const result = service.calculate(
+        baseInput({
+          transfers: [
             {
-              id: 'difference-1',
-              referenceKey: 'CASH',
-              differenceValue: '-10.00',
-              status: differenceStatus,
+              ...transfer('SUPPLY', 10),
+              transfer: {
+                ...transfer('SUPPLY', 10).transfer,
+                status: 'REQUESTED',
+              },
             },
           ],
+          dailyClose: dailyClose({
+            cashShifts: [{ id: 'shift-1', status: 'OPEN' }],
+            differences: [
+              {
+                id: 'difference-1',
+                referenceKey: 'CASH',
+                differenceValue: '-10.00',
+                status: differenceStatus,
+              },
+            ],
+          }),
         }),
-      }),
-    );
+      );
 
-    expect(result.canClose).toBe(false);
-    expect(result.blockers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'TRANSFER_PENDING' }),
-        expect.objectContaining({ code: 'CASH_SHIFT_OPEN' }),
-        expect.objectContaining({ code: 'DAILY_CLOSE_DIFFERENCE_UNRESOLVED' }),
-      ]),
-    );
-  });
+      expect(result.canClose).toBe(false);
+      expect(result.blockers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'TRANSFER_PENDING' }),
+          expect.objectContaining({ code: 'CASH_SHIFT_OPEN' }),
+          expect.objectContaining({
+            code: 'DAILY_CLOSE_DIFFERENCE_UNRESOLVED',
+          }),
+        ]),
+      );
+    },
+  );
 
   it('allows a reviewed daily close to be closed together with the CEDIS cycle', () => {
     const result = service.calculate(

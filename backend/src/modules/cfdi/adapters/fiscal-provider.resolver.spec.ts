@@ -34,6 +34,24 @@ describe('FiscalProviderResolver', () => {
     expect(resolver.resolve()).toBeInstanceOf(DisabledFiscalProvider);
   });
 
+  it('returns a disabled provider when Facturama is configured and CFDI is disabled', () => {
+    const resolver = new FiscalProviderResolver(
+      new ConfigService({ CFDI_ENABLED: false, FISCAL_PROVIDER: 'FACTURAMA' }),
+      [facturama],
+    );
+
+    expect(resolver.resolve()).toBeInstanceOf(DisabledFiscalProvider);
+  });
+
+  it('rejects NONE when CFDI is enabled', () => {
+    const resolver = new FiscalProviderResolver(
+      new ConfigService({ CFDI_ENABLED: true, FISCAL_PROVIDER: 'NONE' }),
+      [facturama],
+    );
+
+    expect(() => resolver.resolve()).toThrow('FISCAL_PROVIDER_CONFIGURATION');
+  });
+
   it('rejects an unknown provider explicitly', () => {
     const resolver = new FiscalProviderResolver(
       new ConfigService({ CFDI_ENABLED: true, FISCAL_PROVIDER: 'UNKNOWN' }),

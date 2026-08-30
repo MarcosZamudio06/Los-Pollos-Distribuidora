@@ -26,6 +26,13 @@ const cancellationMigration = readFileSync(
   ),
   'utf8',
 );
+const substitutionMigration = readFileSync(
+  resolve(
+    __dirname,
+    '../../prisma/migrations/20260828100000_add_cfdi_income_substitution_relation/migration.sql',
+  ),
+  'utf8',
+);
 const repMigration = readFileSync(
   resolve(
     __dirname,
@@ -73,6 +80,7 @@ describe('CFDI fiscal persistence contract', () => {
     expect(invoice).toMatch(/stampedAt\s+DateTime\?/);
     expect(invoice).toMatch(/issuerSnapshot\s+Json\?/);
     expect(invoice).toMatch(/receiverSnapshot\s+Json\?/);
+    expect(invoice).toMatch(/fiscalRelationships\s+Json\?/);
     expect(invoice).toMatch(/fiscalSnapshotHash\s+String\?/);
     expect(invoice).toMatch(/fiscalIdempotencyKey\s+String\?\s+@unique/);
     expect(invoice).toMatch(/fiscalRequestHash\s+String\?/);
@@ -96,6 +104,13 @@ describe('CFDI fiscal persistence contract', () => {
     expect(invoice).toMatch(/internalReason\s+String\?/);
     expect(invoice).toMatch(/replacementInvoiceId\s+String\?\s+@unique/);
     expect(invoice).toMatch(/replacementUuid\s+String\?/);
+    expect(invoice).toMatch(/substitutionOfInvoiceId\s+String\?\s+@unique/);
+    expect(invoice).toMatch(
+      /substitutionOfInvoice\s+Invoice\?.*InvoiceNativeFiscalSubstitution/,
+    );
+    expect(invoice).toMatch(
+      /nativeSubstitute\s+Invoice\?.*InvoiceNativeFiscalSubstitution/,
+    );
     expect(invoice).toMatch(/fiscalAttemptCount\s+Int\s+@default\(0\)/);
     expect(invoice).toMatch(/lastFiscalErrorCode\s+String\?/);
     expect(invoice).toMatch(/lastFiscalErrorMessage\s+String\?/);
@@ -118,6 +133,24 @@ describe('CFDI fiscal persistence contract', () => {
     );
     expect(cancellationMigration).toContain(
       'CREATE TRIGGER invoice_uuid_immutable_after_stamp',
+    );
+  });
+
+  it('persists the native income substitution relation independently of legacy fields', () => {
+    expect(substitutionMigration).toContain(
+      'ADD COLUMN "fiscalRelationships" JSONB',
+    );
+    expect(substitutionMigration).toContain(
+      'ADD COLUMN "substitutionOfInvoiceId" TEXT',
+    );
+    expect(substitutionMigration).toContain(
+      'CREATE UNIQUE INDEX "Invoice_substitutionOfInvoiceId_key"',
+    );
+    expect(substitutionMigration).toContain(
+      'FOREIGN KEY ("substitutionOfInvoiceId") REFERENCES "Invoice"("id")',
+    );
+    expect(substitutionMigration).toContain(
+      'NEW."fiscalRelationships" IS DISTINCT FROM OLD."fiscalRelationships"',
     );
   });
 

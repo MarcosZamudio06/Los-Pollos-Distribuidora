@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ProductUnit } from '@prisma/client';
 import { Money } from '../../../../shared/money';
-import {
-  getUnresolvedDailyCloseDifferenceBlockers,
-} from '../point-of-sale-daily-close/daily-close-difference-policy';
+import { getUnresolvedDailyCloseDifferenceBlockers } from '../point-of-sale-daily-close/daily-close-difference-policy';
 
 export type ReconciliationDecimal =
   number | string | { toString(): string } | null | undefined;

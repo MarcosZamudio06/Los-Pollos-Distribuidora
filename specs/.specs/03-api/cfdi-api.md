@@ -76,15 +76,26 @@ Body:
   "paymentMethod": "PUE",
   "paymentForm": "01",
   "exportCode": "01",
-  "tipoCambio": "1.000000"
+  "tipoCambio": "1.000000",
+  "substitutesInvoiceId": "invoice-original-1"
 }
 ```
 
 El request contiene únicamente decisiones fiscales permitidas. `tipoCambio`
 se omite para MXN y es obligatorio para moneda extranjera. El backend deriva
 emisor, receptor, conceptos, impuestos, totales, serie, folio y proveedor desde
-registros canónicos. UUID, TFD, sellos, certificados, estado PAC, importes y
-referencias de proveedor se rechazan como entrada.
+registros canónicos. `substitutesInvoiceId` es una referencia server-owned
+opcional al CFDI de Ingreso original; el backend bloquea y resuelve su UUID,
+entidad legal y relación fiscal `04`. No se acepta `UUID`, `TipoRelacion` ni
+un arreglo `relationships` desde el cliente. UUID, TFD, sellos, certificados,
+estado PAC, importes y referencias de proveedor se rechazan como entrada.
+
+Cuando existe `substitutesInvoiceId`, el snapshot del nuevo CFDI contiene
+exactamente `relationships=[{ typeCode: "04", relatedInvoiceId,
+relatedUuid }]`. El nuevo CFDI debe quedar `STAMPED` antes de solicitar la
+cancelación del original con motivo `01`; una solicitud de cancelación con un
+sustituto inexistente, no timbrado, sin UUID o sin esa relación exacta se
+rechaza antes de llamar al PAC.
 
 La preparación serializable persiste `Invoice`, snapshot, conceptos,
 aplicaciones y un intento `PROCESSING`; después confirma la transacción y llama
@@ -216,9 +227,11 @@ Body:
 
 `cancellationMotiveCode` acepta exclusivamente `01`, `02`, `03` o `04`.
 `replacementInvoiceId` se permite y exige solo para `01`; debe identificar un
-CFDI distinto, activo, previamente `STAMPED`, con UUID y la misma entidad legal.
-El backend resuelve `replacementUuid`. UUID original/sustituto, referencias
-PAC, estados fiscales y acuses no se aceptan en el request.
+CFDI distinto, activo, previamente `STAMPED`, con UUID, la misma entidad legal
+y una relación fiscal persistida exactamente como `TipoRelacion=04` hacia el
+CFDI cancelado. El backend resuelve `replacementUuid`. UUID
+original/sustituto, relaciones fiscales arbitrarias, referencias PAC, estados
+fiscales y acuses no se aceptan en el request.
 
 El comando reserva `CANCEL_REQUESTED` en una transacción serializable y llama
 al proveedor fuera de locks PostgreSQL. La respuesta devuelve la factura con

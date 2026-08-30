@@ -33,6 +33,8 @@ import type {
 const ZERO = new Prisma.Decimal(0);
 const ONE = new Prisma.Decimal(1);
 const SAT_EXPORT_CODES = ['01', '02', '03', '04'] as const;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const money = (value: Prisma.Decimal) =>
   value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
@@ -91,6 +93,7 @@ export class CfdiDocumentBuilder {
     const currencyCode = input.documents[0].sale.currencyCode;
     this.validateComposition(input, currencyCode);
     this.validatePayment(input, currencyCode);
+    this.validateSubstitution(input);
 
     const concepts: CfdiConceptSnapshot[] = [];
     for (const document of input.documents) {
@@ -138,6 +141,19 @@ export class CfdiDocumentBuilder {
       sourceDocumentIds: input.documents
         .map((document) => document.saleDocumentId)
         .sort(),
+      ...(input.substitution
+        ? {
+            relationships: [
+              {
+                typeCode: '04' as const,
+                relatedInvoiceId: input.substitution.originalInvoiceId.trim(),
+                relatedUuid: input.substitution.originalUuid
+                  .trim()
+                  .toUpperCase(),
+              },
+            ],
+          }
+        : {}),
       issuer: {
         legalEntityId: input.issuer.id,
         legalName: input.issuer.legalName.trim(),
@@ -286,6 +302,20 @@ export class CfdiDocumentBuilder {
         currencyCode,
         paymentMethodCode: payment.paymentMethodCode,
         paymentFormCode: payment.paymentFormCode,
+      });
+    }
+  }
+
+  private validateSubstitution(input: CfdiDocumentBuildInput): void {
+    const substitution = input.substitution;
+    if (!substitution) return;
+
+    if (
+      !substitution.originalInvoiceId.trim() ||
+      !UUID.test(substitution.originalUuid.trim())
+    ) {
+      throw new CfdiDomainError('CFDI_SUBSTITUTION_INVALID', {
+        originalInvoiceId: substitution.originalInvoiceId,
       });
     }
   }

@@ -8,11 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  DeliveryRouteStatus,
-  DeliveryRouteType,
-  Prisma,
-} from '@prisma/client';
+import { DeliveryRouteStatus, DeliveryRouteType, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';

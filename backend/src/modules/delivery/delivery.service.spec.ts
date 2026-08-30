@@ -1835,7 +1835,9 @@ describe('DeliveryService', () => {
 
     await expect(
       service.completeLogisticsStop('route-1', {}, driver),
-    ).rejects.toThrow('GPS position must be within 150 meters of the destination');
+    ).rejects.toThrow(
+      'GPS position must be within 150 meters of the destination',
+    );
 
     expect(prisma.deliveryRoute.update).not.toHaveBeenCalled();
   });
@@ -2204,9 +2206,7 @@ describe('DeliveryService', () => {
     const { service, prisma } = createService();
     prisma.deliveryOrder.findFirst.mockResolvedValue(
       createOrder({
-        evidence: [
-          { type: DeliveryEvidenceType.PHOTO },
-        ],
+        evidence: [{ type: DeliveryEvidenceType.PHOTO }],
       }),
     );
     prisma.deliveryOrder.update.mockResolvedValue(

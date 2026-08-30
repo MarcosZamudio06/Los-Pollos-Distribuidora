@@ -38,7 +38,12 @@ const RETURN_INCLUDE = {
         include: {
           driver: { select: { id: true, name: true } },
           vehicle: {
-            select: { id: true, code: true, displayName: true, plateNumber: true },
+            select: {
+              id: true,
+              code: true,
+              displayName: true,
+              plateNumber: true,
+            },
           },
         },
       },
@@ -302,7 +307,8 @@ export class BranchReturnsService {
             driver: transfer.deliveryRoute.driver,
             vehicleId: transfer.deliveryRoute.vehicleId as string,
             vehicle: transfer.deliveryRoute.vehicle!,
-            inventoryTransferId: transfer.deliveryRoute.inventoryTransferId as string,
+            inventoryTransferId: transfer.deliveryRoute
+              .inventoryTransferId as string,
             originLocationId: transfer.deliveryRoute.originLocationId,
             scheduledDate: transfer.deliveryRoute.scheduledDate.toISOString(),
           }

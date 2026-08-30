@@ -119,6 +119,13 @@ export class IssueCfdiDto {
   @Matches(/^\d+(\.\d{1,6})?$/)
   tipoCambio?: string;
 
+  /** Server-owned reference to the stamped invoice being replaced. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  substitutesInvoiceId?: string;
+
   @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) uuid?: never;
   @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) cfdiSeal?: never;
   @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) satSeal?: never;
@@ -132,6 +139,7 @@ export class IssueCfdiDto {
   @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) certificateNumber?: never;
   @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) providerStatus?: never;
   @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) providerReference?: never;
+  @IsEmpty({ message: 'SERVER_OWNED_FISCAL_FIELD' }) relationships?: never;
 }
 
 export class InvoiceSaleItemApplicationDto {

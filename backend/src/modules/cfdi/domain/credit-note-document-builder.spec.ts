@@ -27,7 +27,7 @@ function input(creditTotal = '116.00', availableTotal = '116.00') {
       customerId: 'customer-1',
       fiscalName: 'RECEPTOR DE PRUEBA',
       taxId: 'URE180429TM6',
-      fiscalPostalCode: '65000',
+      fiscalPostalCode: '86991',
       fiscalRegime: '601',
       billingEmail: 'billing@example.test',
     },

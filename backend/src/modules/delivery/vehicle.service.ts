@@ -139,9 +139,7 @@ export class VehicleService {
       });
   }
 
-  private buildWhere(
-    query: ListVehiclesQueryDto,
-  ): Prisma.VehicleWhereInput {
+  private buildWhere(query: ListVehiclesQueryDto): Prisma.VehicleWhereInput {
     const active = query.active ?? query.isActive;
     const search = query.search?.trim();
     return {

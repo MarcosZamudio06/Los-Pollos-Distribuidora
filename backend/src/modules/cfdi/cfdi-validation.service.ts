@@ -23,7 +23,7 @@ const approvedRequestInclude = {
         include: {
           sale: { include: { legalEntity: true } },
           invoiceDocuments: {
-            include: { invoice: { select: { status: true } } },
+            include: { invoice: { select: { id: true, status: true } } },
           },
         },
       },
@@ -37,7 +37,9 @@ const approvedRequestInclude = {
               invoiceApplications: {
                 include: {
                   invoiceSaleDocument: {
-                    include: { invoice: { select: { status: true } } },
+                    include: {
+                      invoice: { select: { id: true, status: true } },
+                    },
                   },
                 },
               },
@@ -198,12 +200,15 @@ export class CfdiValidationService {
         certificateValidTo: issuer.certificateValidTo,
       },
       payment: options.payment,
+      ...(options.substitution ? { substitution: options.substitution } : {}),
       documents: request.documents.map((document) => {
         const sale = document.saleDocument.sale;
         const activeDocumentApplications =
           document.saleDocument.invoiceDocuments.filter(
             (application) =>
               !application.reversedAt &&
+              application.invoice.id !==
+                (options.substitution?.originalInvoiceId ?? null) &&
               application.invoice.status === InvoiceStatus.ACTIVE,
           );
         return {
@@ -243,6 +248,8 @@ export class CfdiValidationService {
               (application) =>
                 !application.reversedAt &&
                 !application.invoiceSaleDocument.reversedAt &&
+                application.invoiceSaleDocument.invoice.id !==
+                  (options.substitution?.originalInvoiceId ?? null) &&
                 application.invoiceSaleDocument.invoice.status ===
                   InvoiceStatus.ACTIVE,
             );

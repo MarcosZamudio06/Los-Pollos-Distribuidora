@@ -40,6 +40,12 @@ export interface CfdiDocumentBuildInput {
   };
   payment: CfdiPaymentConfiguration;
   documents: CfdiSourceDocument[];
+  substitution?: CfdiSubstitutionBuildInput;
+}
+
+export interface CfdiSubstitutionBuildInput {
+  readonly originalInvoiceId: string;
+  readonly originalUuid: string;
 }
 
 export interface CfdiSourceDocument {
@@ -150,6 +156,7 @@ export interface CfdiDocumentSnapshot {
     readonly fiscalUseCode: string;
     readonly billingEmail: string;
   };
+  readonly relationships?: readonly CfdiIncomeRelationshipSnapshot[];
   readonly concepts: readonly CfdiConceptSnapshot[];
   readonly totals: {
     readonly subtotal: string;
@@ -159,6 +166,12 @@ export interface CfdiDocumentSnapshot {
     readonly total: string;
   };
   readonly snapshotHash: string;
+}
+
+export interface CfdiIncomeRelationshipSnapshot {
+  readonly typeCode: '04';
+  readonly relatedInvoiceId: string;
+  readonly relatedUuid: string;
 }
 
 export interface CfdiPaymentReceiptApplicationSnapshot {
@@ -274,4 +287,5 @@ export interface BuildApprovedRequestOptions {
   issuedAt: Date;
   payment: CfdiPaymentConfiguration;
   cfdiUse?: string;
+  substitution?: CfdiSubstitutionBuildInput;
 }

@@ -113,9 +113,10 @@ export class DeliveryRoutePlanningService {
   private assertCatalogAccess(currentUser?: Actor) {
     if (
       currentUser?.role === 'WAREHOUSE' &&
-      !currentUser.permissions?.some((permission) =>
-        permission === PERMISSIONS.CEDIS_DISPATCH ||
-        permission === PERMISSIONS.CEDIS_REQUEST_RETURNS,
+      !currentUser.permissions?.some(
+        (permission) =>
+          permission === PERMISSIONS.CEDIS_DISPATCH ||
+          permission === PERMISSIONS.CEDIS_REQUEST_RETURNS,
       )
     ) {
       throw new ForbiddenException('Insufficient permissions');

@@ -160,7 +160,13 @@ function createService() {
     dailyCloseService as unknown as PointOfSaleDailyCloseService,
     deliveryService as unknown as DeliveryService,
   );
-  return { prisma, inventoryTransfers, dailyCloseService, deliveryService, service };
+  return {
+    prisma,
+    inventoryTransfers,
+    dailyCloseService,
+    deliveryService,
+    service,
+  };
 }
 
 describe('BranchSupplyCyclesService', () => {
@@ -325,7 +331,8 @@ describe('BranchSupplyCyclesService', () => {
   });
 
   it('creates a requested supply transfer in the same transaction without confirming it', async () => {
-    const { prisma, inventoryTransfers, deliveryService, service } = createService();
+    const { prisma, inventoryTransfers, deliveryService, service } =
+      createService();
     const cycle = createCycle();
     const transfer = {
       id: 'transfer-1',
@@ -879,7 +886,8 @@ describe('BranchSupplyCyclesService', () => {
   });
 
   it('creates a return transfer from the branch back to the CEDIS', async () => {
-    const { prisma, inventoryTransfers, deliveryService, service } = createService();
+    const { prisma, inventoryTransfers, deliveryService, service } =
+      createService();
     prisma.branchSupplyCycle.findUnique
       .mockResolvedValueOnce(
         createCycle({

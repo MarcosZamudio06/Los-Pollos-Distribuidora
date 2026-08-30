@@ -74,7 +74,7 @@ describe('FleetController', () => {
       controller.publishPosition(
         {
           clientEventId: 'event-1',
-                    latitude: 19.1738,
+          latitude: 19.1738,
           longitude: -96.1342,
           recordedAt: '2026-08-12T16:00:00.000Z',
         },

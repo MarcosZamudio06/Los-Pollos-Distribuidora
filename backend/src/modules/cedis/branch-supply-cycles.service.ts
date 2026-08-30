@@ -949,7 +949,10 @@ export class BranchSupplyCyclesService {
       dto.assignedDriverId,
       'assignedDriverId',
     );
-    const vehicleId = this.requireLogisticsAssignment(dto.vehicleId, 'vehicleId');
+    const vehicleId = this.requireLogisticsAssignment(
+      dto.vehicleId,
+      'vehicleId',
+    );
     const canViewCosts = this.canViewCosts(actor);
     const eventKey = this.eventKey(role, cycleId, key);
 

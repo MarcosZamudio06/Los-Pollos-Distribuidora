@@ -65,7 +65,11 @@ interface FacturamaIssuePayload {
   CfdiType: 'I' | 'E';
   NameId: 1 | 2;
   ExpeditionPlace: string;
-  Date: string;
+  /**
+   * Facturama treats this as an optional local wall-clock. It must only be
+   * sent when a fiscal timezone has resolved the internal instant safely.
+   */
+  Date?: string;
   Serie?: string;
   Folio: string;
   PaymentForm: string;
@@ -87,7 +91,7 @@ interface FacturamaIssuePayload {
   };
   Items: FacturamaItem[];
   Relations?: {
-    Type: '01' | '03';
+    Type: '01' | '03' | '04';
     Cfdis: Array<{ Uuid: string }>;
   };
 }
@@ -121,7 +125,8 @@ interface FacturamaPaymentReceiptPayload {
   CfdiType: 'P';
   NameId: 14;
   ExpeditionPlace: string;
-  Date: string;
+  /** See FacturamaIssuePayload.Date; payment event Date is separate. */
+  Date?: string;
   Serie?: string;
   Folio: string;
   Exportation: '01';
@@ -482,6 +487,10 @@ function buildIssuePayload(
   const snapshot = command.snapshot;
   const correlationId = command.correlationId;
   const folio = command.folio.trim();
+  // `snapshot.issuedAt` is an unambiguous instant, while Facturama's optional
+  // top-level Date is a local wall-clock. No issuer/expedition timezone exists
+  // in this boundary, so omit it and let Facturama resolve it from the postal
+  // code. A payment complement's Date is a separate fiscal event and remains.
   if (!folio || folio.includes('|') || folio.length > 40) {
     throw new FiscalProviderError(
       'FISCAL_PROVIDER_CONFIGURATION',
@@ -536,7 +545,6 @@ function buildIssuePayload(
       CfdiType: 'P',
       NameId: 14,
       ExpeditionPlace: snapshot.issuer.fiscalPostalCode,
-      Date: snapshot.issuedAt,
       ...(command.series?.trim() || snapshot.issuer.series
         ? { Serie: command.series?.trim() || snapshot.issuer.series }
         : {}),
@@ -600,6 +608,7 @@ function buildIssuePayload(
     const firstType = snapshot.relationships[0]?.typeCode;
     if (
       !firstType ||
+      (firstType !== '01' && firstType !== '03') ||
       snapshot.relationships.some(
         (relationship) =>
           relationship.typeCode !== firstType ||
@@ -620,13 +629,30 @@ function buildIssuePayload(
         Uuid: relationship.relatedUuid,
       })),
     };
+  } else if (snapshot.relationships) {
+    if (
+      snapshot.relationships.length !== 1 ||
+      snapshot.relationships[0].typeCode !== '04' ||
+      !UUID.test(snapshot.relationships[0].relatedUuid)
+    ) {
+      throw new FiscalProviderError(
+        'FISCAL_PROVIDER_VALIDATION',
+        operation,
+        correlationId,
+        null,
+        false,
+      );
+    }
+    relations = {
+      Type: '04',
+      Cfdis: [{ Uuid: snapshot.relationships[0].relatedUuid }],
+    };
   }
 
   return {
     CfdiType: creditNote ? 'E' : 'I',
     NameId: creditNote ? 2 : 1,
     ExpeditionPlace: snapshot.issuer.fiscalPostalCode,
-    Date: snapshot.issuedAt,
     ...(command.series?.trim() || snapshot.issuer.series
       ? { Serie: command.series?.trim() || snapshot.issuer.series }
       : {}),

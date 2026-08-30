@@ -40,9 +40,43 @@ gitleaks git --redact --no-banner --config .gitleaks.toml
 
 La única conexión real al PAC vive en
 `.github/workflows/cfdi-sandbox.yml`. Debe lanzarse manualmente sobre el
-environment protegido `cfdi-sandbox`, con credenciales y el ID/UUID de un CFDI
-de prueba existentes en GitHub secrets. El workflow solo consulta estado/XML
-en `https://apisandbox.facturama.mx`: no timbra ni cancela.
+environment protegido `cfdi-sandbox`, siempre con
+`https://apisandbox.facturama.mx`. `contract=read` ejecuta el contrato
+read-only sobre un CFDI existente; `contract=stamp` ejecuta el contrato
+separado de escritura y requiere que la prueba confirme
+`RUN_FACTURAMA_SANDBOX_STAMP="true"` antes de inicializar NestJS o abrir red.
+El contrato de escritura no es seleccionado por defecto, no pertenece a
+`npm test` ni al `test:e2e` normal y no acepta `https://api.facturama.mx`.
+
+### Secrets y fixtures del contrato de escritura Facturama
+
+Configurar en el environment protegido `cfdi-sandbox`, sin versionar valores:
+
+- `FACTURAMA_SANDBOX_USERNAME`
+- `FACTURAMA_SANDBOX_PASSWORD`
+- `FACTURAMA_SANDBOX_ISSUER_RFC`
+- `FACTURAMA_SANDBOX_ISSUER_NAME`
+- `FACTURAMA_SANDBOX_ISSUER_FISCAL_REGIME`
+- `FACTURAMA_SANDBOX_ISSUER_POSTAL_CODE`
+
+El RFC emisor, nombre, régimen y código postal deben corresponder al emisor
+cuyo CSD ya está cargado en Facturama Sandbox. La prueba no lee ni guarda CSD,
+claves privadas, contraseñas de CSD o tokens. El resolver recibe la referencia
+opaca `github-actions://facturama-sandbox` y entrega las credenciales en
+memoria al `FacturamaAdapter` real.
+
+Opcionalmente se pueden configurar
+`FACTURAMA_SANDBOX_RECEIVER_RFC`, `FACTURAMA_SANDBOX_RECEIVER_NAME`,
+`FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME`,
+`FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE` y
+`FACTURAMA_SANDBOX_RECEIVER_CFDI_USE`. Si no se configuran, la prueba usa el
+fixture público de receptor de la guía CFDI 4.0 Multiemisor de Facturama.
+El único concepto usa también un fixture no sensible de esa guía
+(`ProductCode=25173108`, `UnitCode=E48`, importe `1.00` más IVA del 16%);
+no representa una venta del ERP ni un producto real.
+La prueba crea un solo folio único por ejecución, deja el CFDI Sandbox como
+evidencia y solo reporta IDs opacos, un UUID parcialmente redactado y estados;
+no imprime credenciales, payload, XML, PDF ni headers de autorización.
 
 La protección de rama se configura en GitHub, no dentro del YAML:
 

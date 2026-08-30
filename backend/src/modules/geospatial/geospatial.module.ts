@@ -20,10 +20,6 @@ import { VroomRouteOptimizationProvider } from './providers/vroom-route-optimiza
       useExisting: VroomRouteOptimizationProvider,
     },
   ],
-  exports: [
-    GEOCODING_PROVIDER,
-    ROUTING_PROVIDER,
-    ROUTE_OPTIMIZATION_PROVIDER,
-  ],
+  exports: [GEOCODING_PROVIDER, ROUTING_PROVIDER, ROUTE_OPTIMIZATION_PROVIDER],
 })
 export class GeospatialModule {}

@@ -42,7 +42,12 @@ function cancellationDto(
   };
 }
 
-function harness(options: { provider?: Record<string, jest.Mock> } = {}) {
+function harness(
+  options: {
+    provider?: Record<string, jest.Mock>;
+    replacement?: Record<string, unknown>;
+  } = {},
+) {
   let invoiceState: InvoiceState = {
     id: 'invoice-1',
     legalEntityId: 'legal-entity-1',
@@ -94,6 +99,15 @@ function harness(options: { provider?: Record<string, jest.Mock> } = {}) {
     uuid: replacementUuid,
     stampedAt: new Date('2026-08-23T12:00:00.000Z'),
     issuedAt: new Date('2026-08-23T11:59:00.000Z'),
+    substitutionOfInvoiceId: 'invoice-1',
+    fiscalRelationships: [
+      {
+        typeCode: '04',
+        relatedInvoiceId: 'invoice-1',
+        relatedUuid: originalUuid,
+      },
+    ],
+    ...options.replacement,
   };
   const cancelAttempt = {
     id: 'cancel-attempt-1',
@@ -648,6 +662,74 @@ describe('InvoiceCancellationService', () => {
       replacementInvoiceId: 'replacement-1',
       replacementUuid,
     });
+  });
+
+  it('rejects motive 01 when the replacement has no type 04 relationship', async () => {
+    const { service, provider, tx } = harness({
+      replacement: { fiscalRelationships: [] },
+    });
+
+    await expect(
+      service.cancel(
+        'invoice-1',
+        cancellationDto({
+          cancellationMotiveCode: '01',
+          replacementInvoiceId: 'replacement-1',
+        }),
+        actor,
+        'cancel-key-missing-relation',
+      ),
+    ).rejects.toMatchObject({ message: 'INVALID_REPLACEMENT_RELATION' });
+    expect(provider.cancel).not.toHaveBeenCalled();
+    expect(tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects motive 01 when the replacement relation points to another UUID', async () => {
+    const { service, provider, tx } = harness({
+      replacement: {
+        fiscalRelationships: [
+          {
+            typeCode: '04',
+            relatedInvoiceId: 'invoice-1',
+            relatedUuid: replacementUuid,
+          },
+        ],
+      },
+    });
+
+    await expect(
+      service.cancel(
+        'invoice-1',
+        cancellationDto({
+          cancellationMotiveCode: '01',
+          replacementInvoiceId: 'replacement-1',
+        }),
+        actor,
+        'cancel-key-wrong-relation-uuid',
+      ),
+    ).rejects.toMatchObject({ message: 'INVALID_REPLACEMENT_RELATION' });
+    expect(provider.cancel).not.toHaveBeenCalled();
+    expect(tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects motive 01 when the replacement is not stamped', async () => {
+    const { service, provider, tx } = harness({
+      replacement: { fiscalStatus: 'READY' },
+    });
+
+    await expect(
+      service.cancel(
+        'invoice-1',
+        cancellationDto({
+          cancellationMotiveCode: '01',
+          replacementInvoiceId: 'replacement-1',
+        }),
+        actor,
+        'cancel-key-replacement-not-stamped',
+      ),
+    ).rejects.toMatchObject({ message: 'INVALID_REPLACEMENT_INVOICE' });
+    expect(provider.cancel).not.toHaveBeenCalled();
+    expect(tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
   });
 
   it('fails closed when no fiscal provider is configured', async () => {

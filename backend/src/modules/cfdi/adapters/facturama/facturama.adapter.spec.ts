@@ -39,7 +39,7 @@ function snapshot(): CfdiDocumentSnapshot {
       customerId: 'customer-1',
       fiscalName: 'RECEPTOR DE PRUEBA',
       taxId: 'URE180429TM6',
-      fiscalPostalCode: '65000',
+      fiscalPostalCode: '86991',
       fiscalRegime: '601',
       fiscalUseCode: 'G03',
       billingEmail: 'billing@example.test',
@@ -109,6 +109,19 @@ function creditNoteSnapshot(): CfdiCreditNoteSnapshot {
   };
 }
 
+function substitutionSnapshot(): CfdiDocumentSnapshot {
+  return {
+    ...snapshot(),
+    relationships: [
+      {
+        typeCode: '04',
+        relatedInvoiceId: 'invoice-original-1',
+        relatedUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+      },
+    ],
+  };
+}
+
 function paymentReceiptSnapshot(): CfdiPaymentReceiptSnapshot {
   return {
     cfdiVersion: '4.0',
@@ -136,7 +149,7 @@ function paymentReceiptSnapshot(): CfdiPaymentReceiptSnapshot {
       customerId: 'customer-1',
       fiscalName: 'RECEPTOR DE PRUEBA',
       taxId: 'URE180429TM6',
-      fiscalPostalCode: '65000',
+      fiscalPostalCode: '86991',
       fiscalRegime: '601',
       fiscalUseCode: 'CP01',
       billingEmail: 'billing@example.test',
@@ -314,6 +327,7 @@ describe('FacturamaAdapter', () => {
           Cfdis: [{ Uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD' }],
         },
       });
+      expect(payload).not.toHaveProperty('Date');
       expect(payload.Items).toHaveLength(1);
       return response(stampResponse());
     }) as unknown as typeof fetch;
@@ -326,6 +340,34 @@ describe('FacturamaAdapter', () => {
         series: 'E',
         folio: '1',
         snapshot: creditNoteSnapshot(),
+      }),
+    ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
+  it('maps an income substitution to Facturama Relations type 04', async () => {
+    const fetcher = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      expect(requestUrl(input)).toBe(
+        'https://apisandbox.facturama.mx/api-lite/3/cfdis',
+      );
+      const payload = JSON.parse(init?.body as string);
+      expect(payload).toMatchObject({
+        CfdiType: 'I',
+        Relations: {
+          Type: '04',
+          Cfdis: [{ Uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD' }],
+        },
+      });
+      return response(stampResponse());
+    }) as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-income-substitution-1',
+        idempotencyKey: 'income-substitution-idem-1',
+        series: 'A',
+        folio: '101',
+        snapshot: substitutionSnapshot(),
       }),
     ).resolves.toMatchObject({ outcome: 'STAMPED' });
   });
@@ -347,9 +389,10 @@ describe('FacturamaAdapter', () => {
         Receiver: {
           Rfc: 'URE180429TM6',
           CfdiUse: 'G03',
-          TaxZipCode: '65000',
+          TaxZipCode: '86991',
         },
       });
+      expect(payload).not.toHaveProperty('Relations');
       expect(payload.Items[0]).toMatchObject({
         ProductCode: '10101504',
         UnitCode: 'H87',
@@ -386,6 +429,51 @@ describe('FacturamaAdapter', () => {
     });
   });
 
+  it.each(['UTC', 'America/Mexico_City'] as const)(
+    'omits Facturama generation Date for an immediate income stamp from host timezone %s',
+    async (hostTimezone) => {
+      const previousTimezone = process.env.TZ;
+      process.env.TZ = hostTimezone;
+      const issuedAt = '2026-08-30T03:16:54.000Z';
+      const issueSnapshot = { ...snapshot(), issuedAt };
+      let payload: Record<string, unknown> | undefined;
+
+      try {
+        const fetcher = jest.fn(
+          (input: RequestInfo | URL, init?: RequestInit) => {
+            expect(requestUrl(input)).toBe(
+              'https://apisandbox.facturama.mx/api-lite/3/cfdis',
+            );
+            payload = JSON.parse(init?.body as string) as Record<
+              string,
+              unknown
+            >;
+            return response(stampResponse());
+          },
+        ) as unknown as typeof fetch;
+        const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+        await expect(
+          adapter.stamp({
+            correlationId: 'corr-date-1',
+            idempotencyKey: 'date-idem-1',
+            folio: '103',
+            snapshot: issueSnapshot,
+          }),
+        ).resolves.toMatchObject({ outcome: 'STAMPED' });
+        expect(payload).toBeDefined();
+        expect(payload).not.toHaveProperty('Date');
+        expect(payload!.ExpeditionPlace).toBe(
+          issueSnapshot.issuer.fiscalPostalCode,
+        );
+        expect(JSON.stringify(payload)).not.toContain('2026-08-30 03:16:54');
+      } finally {
+        if (previousTimezone === undefined) delete process.env.TZ;
+        else process.env.TZ = previousTimezone;
+      }
+    },
+  );
+
   it('maps the official Facturama Payment Receipt 2.0 payload without inventing totals', async () => {
     const fetcher = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
       expect(requestUrl(input)).toBe(
@@ -399,9 +487,14 @@ describe('FacturamaAdapter', () => {
         Exportation: '01',
         Receiver: { CfdiUse: 'CP01', Rfc: 'URE180429TM6' },
       });
+      expect(payload).not.toHaveProperty('Date');
+      expect(payload.ExpeditionPlace).toBe(
+        paymentReceiptSnapshot().issuer.fiscalPostalCode,
+      );
       expect(payload).not.toHaveProperty('PaymentForm');
       expect(payload).not.toHaveProperty('PaymentMethod');
       expect(payload.Complemento.Payments[0]).toMatchObject({
+        Date: paymentReceiptSnapshot().payment.paidAt,
         PaymentForm: '03',
         Amount: '1500.00',
         RelatedDocuments: [

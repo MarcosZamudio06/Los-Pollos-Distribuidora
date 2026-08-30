@@ -152,6 +152,31 @@ describe('CfdiDocumentBuilder', () => {
     expect('satSeal' in snapshot).toBe(false);
   });
 
+  it('keeps issuedAt as an unambiguous instant in the internal snapshot', () => {
+    expect(builder.build(buildInput()).issuedAt).toBe(
+      '2026-08-22T18:00:00.000Z',
+    );
+  });
+
+  it('includes one server-resolved type 04 relationship for an income substitution', () => {
+    const input = buildInput();
+    input.substitution = {
+      originalInvoiceId: 'invoice-original-1',
+      originalUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+    };
+
+    const snapshot = builder.build(input);
+
+    expect(snapshot.relationships).toEqual([
+      {
+        typeCode: '04',
+        relatedInvoiceId: 'invoice-original-1',
+        relatedUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+      },
+    ]);
+    expect(Object.isFrozen(snapshot.relationships)).toBe(true);
+  });
+
   it('allocates partial quantities and discount without floating-point drift', () => {
     const input = buildInput();
     const item = input.documents[0].items[0];

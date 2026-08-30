@@ -77,19 +77,16 @@ describe('Production bootstrap contract', () => {
     expect(packageJson.scripts?.['bootstrap:production']).not.toContain(
       'prisma db seed',
     );
-    expect(packageJson.scripts?.['bootstrap:production:rotate-admin']).not.toContain(
-      'prisma db seed',
-    );
+    expect(
+      packageJson.scripts?.['bootstrap:production:rotate-admin'],
+    ).not.toContain('prisma db seed');
   });
 
   it.each([
     [undefined, 'SEED_ADMIN_PASSWORD is required for production bootstrap'],
     ['', 'SEED_ADMIN_PASSWORD is required for production bootstrap'],
     ['   ', 'SEED_ADMIN_PASSWORD is required for production bootstrap'],
-    [
-      'shortpass',
-      'SEED_ADMIN_PASSWORD must be at least 10 characters long',
-    ],
+    ['shortpass', 'SEED_ADMIN_PASSWORD must be at least 10 characters long'],
   ])(
     'rejects an unusable SEED_ADMIN_PASSWORD (%p) before hashing or writing data',
     async (password, expectedError) => {
@@ -105,10 +102,14 @@ describe('Production bootstrap contract', () => {
       const hashPassword = jest.fn().mockResolvedValue('unused-hash');
 
       await expect(
-        bootstrapProduction(client, {
-          NODE_ENV: 'production',
-          SEED_ADMIN_PASSWORD: password,
-        }, { hashPassword }),
+        bootstrapProduction(
+          client,
+          {
+            NODE_ENV: 'production',
+            SEED_ADMIN_PASSWORD: password,
+          },
+          { hashPassword },
+        ),
       ).rejects.toThrow(expectedError);
 
       expect(hashPassword).not.toHaveBeenCalled();

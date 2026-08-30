@@ -103,6 +103,8 @@ export type CancellationReconciliationResult = {
 };
 
 const MOTIVES = ['01', '02', '03', '04'] as const;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_PROVIDER_ERRORS = new Set([
   'FISCAL_PROVIDER_CONFIGURATION',
   'FISCAL_PROVIDER_CREDENTIALS_UNAVAILABLE',
@@ -111,6 +113,24 @@ const TERMINAL_PROVIDER_ERRORS = new Set([
   'FISCAL_PROVIDER_RESPONSE_INVALID',
   'FISCAL_PROVIDER_CANCEL_REJECTED',
 ]);
+
+function hasExactSubstitutionRelationship(
+  value: unknown,
+  originalInvoiceId: string,
+  originalUuid: string,
+): boolean {
+  if (!Array.isArray(value) || value.length !== 1) return false;
+  const relationship: unknown = value[0];
+  if (!relationship || typeof relationship !== 'object') return false;
+  const candidate = relationship as Record<string, unknown>;
+  return (
+    candidate.typeCode === '04' &&
+    candidate.relatedInvoiceId === originalInvoiceId &&
+    typeof candidate.relatedUuid === 'string' &&
+    candidate.relatedUuid.trim().toUpperCase() ===
+      originalUuid.trim().toUpperCase()
+  );
+}
 
 @Injectable()
 export class InvoiceCancellationService {
@@ -648,7 +668,8 @@ export class InvoiceCancellationService {
             throw new BadRequestException('INVOICE_NOT_ACTIVE');
           if (
             invoice.fiscalStatus !== InvoiceFiscalStatus.STAMPED ||
-            !invoice.uuid
+            !invoice.uuid ||
+            !UUID.test(invoice.uuid.trim())
           ) {
             throw new BadRequestException('INVOICE_NOT_FISCALLY_STAMPED');
           }
@@ -808,6 +829,8 @@ export class InvoiceCancellationService {
         uuid: true,
         issuedAt: true,
         stampedAt: true,
+        substitutionOfInvoiceId: true,
+        fiscalRelationships: true,
       },
     });
     if (
@@ -815,9 +838,20 @@ export class InvoiceCancellationService {
       replacement.legalEntityId !== invoice.legalEntityId ||
       replacement.status !== InvoiceStatus.ACTIVE ||
       replacement.fiscalStatus !== InvoiceFiscalStatus.STAMPED ||
-      !replacement.uuid
+      !replacement.uuid ||
+      !UUID.test(replacement.uuid.trim())
     ) {
       throw new BadRequestException('INVALID_REPLACEMENT_INVOICE');
+    }
+    if (
+      replacement.substitutionOfInvoiceId !== invoice.id ||
+      !hasExactSubstitutionRelationship(
+        replacement.fiscalRelationships,
+        invoice.id,
+        invoice.uuid ?? '',
+      )
+    ) {
+      throw new BadRequestException('INVALID_REPLACEMENT_RELATION');
     }
     if (
       invoice.stampedAt &&

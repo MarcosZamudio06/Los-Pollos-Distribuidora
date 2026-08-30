@@ -39,15 +39,13 @@ describe('BranchReturnsController API', () => {
       ),
     } as unknown as AuthService;
     service = {
-      list: jest
-        .fn()
-        .mockResolvedValue({
-          items: [],
-          total: 0,
-          page: 1,
-          limit: 25,
-          totalPages: 0,
-        }),
+      list: jest.fn().mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 25,
+        totalPages: 0,
+      }),
       findOne: jest.fn(),
       complete: jest
         .fn()

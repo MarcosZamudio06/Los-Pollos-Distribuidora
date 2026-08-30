@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import {
