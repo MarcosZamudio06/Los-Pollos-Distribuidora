@@ -77,6 +77,11 @@ Body:
   "paymentForm": "01",
   "exportCode": "01",
   "tipoCambio": "1.000000",
+  "globalInformation": {
+    "periodicity": "04",
+    "months": "08",
+    "year": 2026
+  },
   "substitutesInvoiceId": "invoice-original-1"
 }
 ```
@@ -89,6 +94,15 @@ opcional al CFDI de Ingreso original; el backend bloquea y resuelve su UUID,
 entidad legal y relación fiscal `04`. No se acepta `UUID`, `TipoRelacion` ni
 un arreglo `relationships` desde el cliente. UUID, TFD, sellos, certificados,
 estado PAC, importes y referencias de proveedor se rechazan como entrada.
+
+`globalInformation` es opcional y su presencia declara explícitamente un CFDI
+global; no se infiere desde el RFC del cliente. Sus claves son catálogos
+cerrados y el backend las contrasta con las fechas operativas server-owned de
+las ventas. Cuando existe, exige receptor `XAXX010101000`, nombre `PUBLICO EN
+GENERAL`, régimen `616`, UsoCFDI `S01`, código postal igual a
+`ExpeditionPlace`, `MetodoPago=PUE` y `Exportacion=01`. Sin ese bloque, el RFC
+genérico nacional se rechaza y una factura nominativa no genera
+`GlobalInformation`.
 
 Cuando existe `substitutesInvoiceId`, el snapshot del nuevo CFDI contiene
 exactamente `relationships=[{ typeCode: "04", relatedInvoiceId,

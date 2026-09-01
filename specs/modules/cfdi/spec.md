@@ -157,6 +157,31 @@ pruebas específicas.
 | Pago total o parcial posterior a la emisión             | `MetodoPago=PPD`, `FormaPago=99`  | Se emite por cada pago o agrupación futura autorizada                                     |
 | CFDI de Ingreso `PUE` pagado después                    | Inconsistencia fiscal             | No se corrige emitiendo REP; requiere cancelación/reexpedición conforme a política fiscal |
 
+### CFDI global de operaciones con público en general
+
+La factura nominativa y el CFDI global son intenciones fiscales distintas. La
+emisión global se declara explícitamente mediante `globalInformation`; nunca se
+infiere solo porque `Customer.taxId=XAXX010101000`. La ausencia del bloque
+identifica una factura nominativa y bloquea ese RFC genérico con
+`GLOBAL_INVOICE_INFORMATION_REQUIRED`.
+
+`globalInformation` contiene únicamente claves controladas `periodicity`
+(`01` diario, `02` semanal, `03` quincenal, `04` mensual o `05` bimestral),
+`months` (`01`-`12`, o `13`-`18` exclusivamente para periodicidad `05`) y un
+`year` entero. El año debe coincidir con el año de emisión o alguno de los cinco
+ejercicios anteriores. El backend valida el periodo contra la fecha operativa
+server-owned de cada venta: usa `Sale.businessDate` y solo cuando no existe usa
+`registeredAt` o `createdAt` convertidos a `APP_TIMEZONE`. Diario exige una
+misma fecha, semanal una misma semana iniciada en lunes, quincenal una misma
+mitad del mes, mensual un mismo mes y bimestral el par indicado.
+
+Un snapshot global exige simultáneamente receptor `XAXX010101000`, nombre
+`PUBLICO EN GENERAL`, régimen `616`, UsoCFDI `S01`, código postal igual al lugar
+de expedición del emisor, `MetodoPago=PUE` y `Exportacion=01`. Su
+`globalInformationSnapshot` se persiste como evidencia fiscal inmutable. Una
+factura nominativa conserva el perfil fiscal real del cliente y omite por
+completo `globalInformation`.
+
 Solo un `Payment.status=APPLIED` habilita la preparación de REP. `REGISTERED`
 no representa dinero aplicado y `CANCELLED` no puede reflejarse fiscalmente. Un
 `Payment` ya incluido en un REP reservado, `UNKNOWN`, `STAMPED` o con
@@ -445,7 +470,8 @@ tiempo real durante una venta. `SatCatalog`, `SatCatalogVersion` y
 `c_ClaveProdServ`, `c_ClaveUnidad`, `c_RegimenFiscal`, `c_UsoCFDI`,
 `c_FormaPago`, `c_MetodoPago`, `c_Impuesto`, `c_TasaOCuota`,
 `c_TipoDeComprobante`, `c_Moneda`, `c_MotivoCancelacion`, `c_CodigoPostal` y
-`c_ObjetoImp`, además de `c_TipoRelacion` requerido por Egreso. Cada entrada conserva `code`, `description`, `validFrom`,
+`c_ObjetoImp`, `c_Periodicidad`, `c_Meses`, además de `c_TipoRelacion`
+requerido por Egreso. Cada entrada conserva `code`, `description`, `validFrom`,
 `validTo` y `metadata`; cada versión conserva `sourceVersion`, checksum SHA-256,
 conteo, estado y marcas de staging/validación/activación.
 
@@ -472,6 +498,29 @@ Frontend usa esta API cuando existe una versión activa; los snapshots
 compatibles existentes solo mantienen selects controlados mientras el entorno
 no haya importado su primera versión y no sustituyen la validación fiscal
 server-owned.
+
+Para CFDI 4.0, `c_UsoCFDI` no se valida únicamente por existencia. Cada entrada
+de `c_UsoCFDI` conserva en `metadata` la clasificación explícita de persona
+física/moral y la lista de códigos de `RégimenFiscalReceptor` permitidos. Las
+entradas de `c_RegimenFiscal` conservan la misma clasificación y ambos catálogos
+conservan `validFrom`/`validTo`. `isCfdiUseCompatible` exige simultáneamente la
+existencia, vigencia, tipo de persona y relación de régimen indicada por SAT.
+
+Cuando existe una versión activa de `c_UsoCFDI` y `c_RegimenFiscal`, esos
+metadatos versionados son autoritativos para la emisión; si falta cualquiera de
+los dos catálogos o la metadata de compatibilidad es inválida, la operación se
+bloquea y no usa el fallback. Sin una versión importada, el ERP usa únicamente
+la proyección estática revisada de `shared/fiscal-catalog.ts`. La fuente de esa
+proyección es el archivo oficial SAT `catCFDI_V_4_20260821.xls`; no se permiten
+asociaciones obtenidas de blogs ni matrices parciales.
+
+El tipo de persona se deriva del RFC ordinario (12 caracteres: moral; 13:
+física). `XAXX010101000` y `XEXX010101000` se tratan como RFC genéricos y
+requieren `RégimenFiscalReceptor=616` y `UsoCFDI=S01`; XAXX además requiere el
+bloque explícito de factura global descrito arriba. La compatibilidad se valida
+antes de persistir snapshots, reservar folio o crear `FiscalOperationAttempt`.
+Una incompatibilidad produce `CFDI_USE_REGIME_INCOMPATIBLE` con solo los datos
+fiscales no sensibles necesarios para corrección.
 
 `Invoice` e `InvoiceConcept` conservan códigos y descripciones en sus snapshots
 inmutables. No existe una relación fiscal que obligue a reconstruir una factura
@@ -507,7 +556,8 @@ superior al saldo facturable vigente. Los códigos de dominio son estables:
 `INVALID_CFDI_USE`, `INVALID_PAYMENT_CONFIGURATION`, `TOTAL_MISMATCH`,
 `OVER_INVOICED`, `MIXED_CUSTOMERS`, `MIXED_CURRENCIES`,
 `MIXED_LEGAL_ENTITIES`, `BILLING_REQUEST_NOT_APPROVED` y
-`CFDI_ALREADY_EXISTS`.
+`CFDI_ALREADY_EXISTS`. La combinación inválida de UsoCFDI, régimen o persona
+produce `CFDI_USE_REGIME_INCOMPATIBLE`.
 
 La configuración de pago es un comando interno server-owned. `PUE` exige una
 FormaPago distinta de `99`; `PPD` exige `99`. Para `MXN`, el tipo de cambio es
@@ -605,6 +655,9 @@ dominio importe DTOs del PAC:
 - emisión: `POST /api-lite/3/cfdis`, con `Issuer`, `Receiver`, `Items`,
   `TaxObject`, `PaymentForm`, `PaymentMethod`, `Currency`, `Exportation`,
   serie y folio server-owned;
+- para un snapshot explícitamente global, emisión agrega exactamente
+  `GlobalInformation { Periodicity, Months, Year }`; una factura nominativa lo
+  omite;
 - cancelación: `DELETE /api-lite/cfdis/{id}` con motivo y, cuando aplica,
   `uuidReplacement`;
 - estado: `GET /cfdi/{id}?type=issuedLite`;

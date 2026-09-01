@@ -83,6 +83,13 @@ export class CfdiIssuanceRepository {
           paymentForm: dto.paymentForm.trim().toUpperCase(),
           exportCode: dto.exportCode.trim().toUpperCase(),
           tipoCambio: dto.tipoCambio?.trim() ?? null,
+          globalInformation: dto.globalInformation
+            ? {
+                periodicity: dto.globalInformation.periodicity,
+                months: dto.globalInformation.months,
+                year: dto.globalInformation.year,
+              }
+            : null,
           substitutesInvoiceId: dto.substitutesInvoiceId?.trim() || null,
         }),
       )
@@ -178,6 +185,9 @@ export class CfdiIssuanceRepository {
                     paymentMethodCode: dto.paymentMethod,
                     exchangeRate: new Prisma.Decimal(dto.tipoCambio ?? 1),
                   },
+                  ...(dto.globalInformation
+                    ? { globalInformation: dto.globalInformation }
+                    : {}),
                   ...(substitution
                     ? {
                         substitution: {
@@ -267,6 +277,13 @@ export class CfdiIssuanceRepository {
                 issuedAt: new Date(snapshot.issuedAt),
                 issuerSnapshot: this.toJson(snapshot.issuer),
                 receiverSnapshot: this.toJson(snapshot.receiver),
+                ...(snapshot.globalInformation
+                  ? {
+                      globalInformationSnapshot: this.toJson(
+                        snapshot.globalInformation,
+                      ),
+                    }
+                  : {}),
                 fiscalSnapshotHash: snapshot.snapshotHash,
                 fiscalUseCode: snapshot.receiver.fiscalUseCode,
                 exportCode: snapshot.exportCode,
@@ -427,8 +444,20 @@ export class CfdiIssuanceRepository {
         ),
       );
     } catch (error) {
-      if (error instanceof CfdiDomainError)
+      if (error instanceof CfdiDomainError) {
+        if (error.code === 'CFDI_USE_REGIME_INCOMPATIBLE') {
+          throw new UnprocessableEntityException({
+            code: error.code,
+            message:
+              'The selected CFDI use is incompatible with the receiver fiscal regime and person type',
+            fields: ['fiscalRegime', 'fiscalUseCode'],
+            cfdiUse: error.details?.cfdiUse,
+            fiscalRegime: error.details?.fiscalRegime,
+            receiverPersonType: error.details?.receiverPersonType,
+          });
+        }
         throw new UnprocessableEntityException(error.code);
+      }
       throw error;
     }
   }

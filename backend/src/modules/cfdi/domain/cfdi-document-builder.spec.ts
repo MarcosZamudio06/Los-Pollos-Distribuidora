@@ -177,6 +177,164 @@ describe('CfdiDocumentBuilder', () => {
     expect(Object.isFrozen(snapshot.relationships)).toBe(true);
   });
 
+  it('builds an explicit valid global invoice with canonical receiver and period data', () => {
+    const input = buildInput();
+    input.customer.fiscalName = 'PUBLICO EN GENERAL';
+    input.customer.taxId = 'XAXX010101000';
+    input.customer.fiscalPostalCode = input.issuer.fiscalPostalCode;
+    input.customer.fiscalRegime = '616';
+    input.customer.fiscalUseCode = 'S01';
+    input.globalInformation = {
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    };
+    input.documents[0].operationDate = '2026-08-15';
+
+    const snapshot = builder.build(input);
+
+    expect(snapshot.globalInformation).toEqual({
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    });
+    expect(snapshot.receiver).toMatchObject({
+      taxId: 'XAXX010101000',
+      fiscalName: 'PUBLICO EN GENERAL',
+      fiscalRegime: '616',
+      fiscalUseCode: 'S01',
+      fiscalPostalCode: '64000',
+    });
+    expect(snapshot.paymentMethodCode).toBe('PUE');
+    expect(snapshot.exportCode).toBe('01');
+    expect(Object.isFrozen(snapshot.globalInformation)).toBe(true);
+  });
+
+  it.each([
+    [
+      'ordinary use',
+      (input: CfdiDocumentBuildInput) => (input.customer.fiscalUseCode = 'G03'),
+      'GLOBAL_INVOICE_RECEIVER_INVALID',
+    ],
+    [
+      'wrong regime',
+      (input: CfdiDocumentBuildInput) => (input.customer.fiscalRegime = '601'),
+      'GLOBAL_INVOICE_RECEIVER_INVALID',
+    ],
+    [
+      'wrong name',
+      (input: CfdiDocumentBuildInput) =>
+        (input.customer.fiscalName = 'PUBLICO GENERAL'),
+      'GLOBAL_INVOICE_RECEIVER_INVALID',
+    ],
+    [
+      'wrong postal code',
+      (input: CfdiDocumentBuildInput) =>
+        (input.customer.fiscalPostalCode = '64100'),
+      'GLOBAL_INVOICE_RECEIVER_INVALID',
+    ],
+    [
+      'PPD',
+      (input: CfdiDocumentBuildInput) => {
+        input.payment.paymentMethodCode = 'PPD';
+        input.payment.paymentFormCode = '99';
+      },
+      'GLOBAL_INVOICE_PAYMENT_INVALID',
+    ],
+    [
+      'exportation',
+      (input: CfdiDocumentBuildInput) => (input.payment.exportCode = '02'),
+      'GLOBAL_INVOICE_EXPORTATION_INVALID',
+    ],
+    [
+      'invalid periodicity',
+      (input: CfdiDocumentBuildInput) =>
+        (input.globalInformation!.periodicity = '06' as never),
+      'GLOBAL_INVOICE_PERIOD_INVALID',
+    ],
+    [
+      'invalid months',
+      (input: CfdiDocumentBuildInput) =>
+        (input.globalInformation!.months = '13'),
+      'GLOBAL_INVOICE_PERIOD_INVALID',
+    ],
+    [
+      'invalid year',
+      (input: CfdiDocumentBuildInput) => (input.globalInformation!.year = 2020),
+      'GLOBAL_INVOICE_PERIOD_INVALID',
+    ],
+  ])('rejects a global invoice with %s', (_case, mutate, code) => {
+    const input = buildInput();
+    input.customer = {
+      ...input.customer,
+      fiscalName: 'PUBLICO EN GENERAL',
+      taxId: 'XAXX010101000',
+      fiscalPostalCode: '64000',
+      fiscalRegime: '616',
+      fiscalUseCode: 'S01',
+    };
+    input.globalInformation = {
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    };
+    input.documents[0].operationDate = '2026-08-15';
+    mutate(input);
+
+    expectDomainError(() => builder.build(input), code);
+  });
+
+  it('rejects the generic domestic RFC when global information is absent', () => {
+    const input = buildInput();
+    input.customer.taxId = 'XAXX010101000';
+    input.customer.fiscalName = 'PUBLICO EN GENERAL';
+    input.customer.fiscalRegime = '616';
+    input.customer.fiscalUseCode = 'G03';
+
+    expectDomainError(
+      () => builder.build(input),
+      'GLOBAL_INVOICE_INFORMATION_REQUIRED',
+    );
+  });
+
+  it('rejects global information for a nominative receiver', () => {
+    const input = buildInput();
+    input.globalInformation = {
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    };
+    input.documents[0].operationDate = '2026-08-15';
+
+    expectDomainError(
+      () => builder.build(input),
+      'GLOBAL_INVOICE_RECEIVER_INVALID',
+    );
+  });
+
+  it('rejects global period metadata that does not match the operation dates', () => {
+    const input = buildInput();
+    input.customer = {
+      ...input.customer,
+      fiscalName: 'PUBLICO EN GENERAL',
+      taxId: 'XAXX010101000',
+      fiscalPostalCode: '64000',
+      fiscalRegime: '616',
+      fiscalUseCode: 'S01',
+    };
+    input.globalInformation = {
+      periodicity: '04',
+      months: '07',
+      year: 2026,
+    };
+    input.documents[0].operationDate = '2026-08-15';
+
+    expectDomainError(
+      () => builder.build(input),
+      'GLOBAL_INVOICE_PERIOD_INVALID',
+    );
+  });
+
   it('allocates partial quantities and discount without floating-point drift', () => {
     const input = buildInput();
     const item = input.documents[0].items[0];
@@ -262,6 +420,68 @@ describe('CfdiDocumentBuilder', () => {
     const input = buildInput();
     input.customer.fiscalUseCode = 'ZZZ';
     expectDomainError(() => builder.build(input), 'INVALID_CFDI_USE');
+  });
+
+  it('rejects an unknown RégimenFiscalReceptor with a stable code', () => {
+    const input = buildInput();
+    input.customer.fiscalRegime = '999';
+    expectDomainError(() => builder.build(input), 'MISSING_FISCAL_PROFILE');
+  });
+
+  it.each([
+    [
+      'a regime not allowed by the selected use',
+      { fiscalRegime: '616', fiscalUseCode: 'G03' },
+    ],
+    [
+      'a physical-person use for a moral-person receiver',
+      { fiscalRegime: '605', fiscalUseCode: 'D01' },
+    ],
+    [
+      'a payroll use for a moral-person receiver',
+      { fiscalRegime: '601', fiscalUseCode: 'CN01' },
+    ],
+  ])(
+    'rejects %s before building the fiscal snapshot',
+    (_case, fiscalFields) => {
+      const input = buildInput();
+      Object.assign(input.customer, fiscalFields);
+
+      expectDomainError(
+        () => builder.build(input),
+        'CFDI_USE_REGIME_INCOMPATIBLE',
+      );
+    },
+  );
+
+  it('accepts a physical-person regime and personal-use combination', () => {
+    const input = buildInput();
+    input.customer.taxId = 'ABCD010101AB1';
+    input.customer.fiscalRegime = '605';
+    input.customer.fiscalUseCode = 'D01';
+
+    expect(builder.build(input).receiver).toMatchObject({
+      taxId: 'ABCD010101AB1',
+      fiscalRegime: '605',
+      fiscalUseCode: 'D01',
+    });
+  });
+
+  it('keeps XEXX restricted to regime 616 and S01', () => {
+    const input = buildInput();
+    input.customer.taxId = 'XEXX010101000';
+    input.customer.fiscalRegime = '616';
+    input.customer.fiscalUseCode = 'S01';
+    expect(builder.build(input).receiver.taxId).toBe('XEXX010101000');
+
+    const invalid = buildInput();
+    invalid.customer.taxId = 'XEXX010101000';
+    invalid.customer.fiscalRegime = '616';
+    invalid.customer.fiscalUseCode = 'G03';
+    expectDomainError(
+      () => builder.build(invalid),
+      'CFDI_USE_REGIME_INCOMPATIBLE',
+    );
   });
 
   it('rejects issuer certificate fingerprints that cannot satisfy the persisted SHA-256 contract', () => {

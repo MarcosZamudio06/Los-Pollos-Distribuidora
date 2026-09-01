@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { CfdiDocumentBuilder } from './domain/cfdi-document-builder';
 import { CfdiDomainError } from './domain/cfdi-domain.error';
 import { CfdiValidationService } from './cfdi-validation.service';
+import { SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA } from '../../../../shared/fiscal-catalog';
 
 const d = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value);
 
@@ -39,6 +40,9 @@ function loadedRequest(status = 'APPROVED') {
             discount: d(10),
             tax: d(16),
             total: d(116),
+            businessDate: new Date('2026-08-15T00:00:00.000Z'),
+            registeredAt: new Date('2026-08-15T17:30:00.000Z'),
+            createdAt: new Date('2026-08-15T17:29:00.000Z'),
             legalEntity: {
               id: 'issuer-1',
               isActive: true,
@@ -121,6 +125,41 @@ describe('CfdiValidationService', () => {
       expect.objectContaining({ where: { id: 'request-1' } }),
     );
     expect(Object.keys(prisma)).toEqual(['billingRequest']);
+  });
+
+  it('derives global period consistency from the server-owned sale business date', async () => {
+    const request = loadedRequest();
+    request.customer = {
+      ...request.customer,
+      fiscalName: 'PUBLICO EN GENERAL',
+      taxId: 'XAXX010101000',
+      fiscalPostalCode: '64000',
+      fiscalRegime: '616',
+      fiscalUseCode: 'S01',
+    };
+    const prisma = {
+      billingRequest: { findUnique: jest.fn().mockResolvedValue(request) },
+    };
+    const service = new CfdiValidationService(
+      prisma as never,
+      new CfdiDocumentBuilder(),
+    );
+
+    const result = await service.buildApprovedRequest('request-1', {
+      issuedAt: new Date('2026-08-22T18:00:00.000Z'),
+      payment,
+      globalInformation: {
+        periodicity: '04',
+        months: '08',
+        year: 2026,
+      },
+    });
+
+    expect(result.globalInformation).toEqual({
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    });
   });
 
   it('returns stable errors for missing, unapproved or already-rooted requests', async () => {
@@ -298,6 +337,158 @@ describe('CfdiValidationService', () => {
       }),
       'SAT_CATALOG_CODE_NOT_FOUND',
     );
+  });
+
+  it('uses active versioned compatibility metadata instead of the static fallback', async () => {
+    const prisma = {
+      billingRequest: {
+        findUnique: jest.fn().mockResolvedValue(loadedRequest()),
+      },
+    };
+    const issuedAt = new Date('2026-08-22T18:00:00.000Z');
+    const catalogs = {
+      get: jest.fn((key: string, query: { code: string; asOf: Date }) =>
+        Promise.resolve({
+          key,
+          configured: true,
+          entries: [
+            {
+              code: query.code,
+              validFrom: null,
+              validTo: null,
+              metadata:
+                key === 'c_UsoCFDI'
+                  ? {
+                      schema: SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA,
+                      appliesTo: { physical: true, moral: true },
+                      fiscalRegimes: ['603'],
+                    }
+                  : {
+                      schema: SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA,
+                      appliesTo: { physical: false, moral: true },
+                    },
+            },
+          ],
+        }),
+      ),
+    };
+    const service = new CfdiValidationService(
+      prisma as never,
+      new CfdiDocumentBuilder(),
+      catalogs as never,
+    );
+
+    await expectDomainError(
+      service.buildApprovedRequest('request-1', {
+        issuedAt,
+        payment,
+      }),
+      'CFDI_USE_REGIME_INCOMPATIBLE',
+    );
+    expect(catalogs.get).toHaveBeenNthCalledWith(1, 'c_UsoCFDI', {
+      code: 'G03',
+      asOf: issuedAt,
+    });
+  });
+
+  it('fails closed when the active compatibility metadata is malformed', async () => {
+    const prisma = {
+      billingRequest: {
+        findUnique: jest.fn().mockResolvedValue(loadedRequest()),
+      },
+    };
+    const catalogs = {
+      get: jest.fn((_key: string, query: { code: string }) =>
+        Promise.resolve({
+          configured: true,
+          entries: [
+            {
+              code: query.code,
+              validFrom: null,
+              validTo: null,
+              metadata: null,
+            },
+          ],
+        }),
+      ),
+    };
+    const service = new CfdiValidationService(
+      prisma as never,
+      new CfdiDocumentBuilder(),
+      catalogs as never,
+    );
+
+    await expectDomainError(
+      service.buildApprovedRequest('request-1', {
+        issuedAt: new Date('2026-08-22T18:00:00.000Z'),
+        payment,
+      }),
+      'SAT_CATALOG_COMPATIBILITY_METADATA_INVALID',
+    );
+  });
+
+  it('validates global periodicity and months against active SAT catalogs', async () => {
+    const request = loadedRequest();
+    request.customer = {
+      ...request.customer,
+      fiscalName: 'PUBLICO EN GENERAL',
+      taxId: 'XAXX010101000',
+      fiscalPostalCode: '64000',
+      fiscalRegime: '616',
+      fiscalUseCode: 'S01',
+    };
+    const prisma = {
+      billingRequest: { findUnique: jest.fn().mockResolvedValue(request) },
+    };
+    const catalogs = {
+      get: jest.fn((key: string, query: { code: string }) =>
+        Promise.resolve({
+          key,
+          configured: true,
+          entries: [
+            {
+              code: query.code,
+              validFrom: null,
+              validTo: null,
+              metadata:
+                key === 'c_UsoCFDI'
+                  ? {
+                      schema: SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA,
+                      appliesTo: { physical: true, moral: true },
+                      fiscalRegimes: query.code === 'S01' ? ['616'] : ['601'],
+                    }
+                  : key === 'c_RegimenFiscal'
+                    ? {
+                        schema: SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA,
+                        appliesTo:
+                          query.code === '616'
+                            ? { physical: true, moral: false }
+                            : { physical: false, moral: true },
+                      }
+                    : null,
+            },
+          ],
+        }),
+      ),
+    };
+    const service = new CfdiValidationService(
+      prisma as never,
+      new CfdiDocumentBuilder(),
+      catalogs as never,
+    );
+
+    await service.buildApprovedRequest('request-1', {
+      issuedAt: new Date('2026-08-22T18:00:00.000Z'),
+      payment,
+      globalInformation: {
+        periodicity: '04',
+        months: '08',
+        year: 2026,
+      },
+    });
+
+    expect(catalogs.get).toHaveBeenCalledWith('c_Periodicidad', { code: '04' });
+    expect(catalogs.get).toHaveBeenCalledWith('c_Meses', { code: '08' });
   });
 });
 

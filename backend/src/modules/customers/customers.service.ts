@@ -22,6 +22,8 @@ import { calculateCreditState } from '../sales/credit-decision';
 import { Money, toMoneyString } from '../../../../shared/money';
 import {
   CUSTOMER_FISCAL_PROFILE_FIELDS,
+  deriveSatReceiverPersonType,
+  isCfdiUseCompatible,
   isStructurallyValidFiscalRfc,
   isValidMexicanFiscalPostalCode,
   isValidSatCfdiUseCode,
@@ -221,7 +223,7 @@ export class CustomersService {
     this.assertCoherentCreditTerms(dto);
 
     const data = this.normalizeMutationData(dto, true);
-    this.assertFiscalProfile(data);
+    this.assertFiscalProfile(data, CUSTOMER_FISCAL_PROFILE_FIELDS, true);
 
     if (typeof data.phone === 'string') {
       await this.assertPhoneAvailable(data.phone);
@@ -259,6 +261,7 @@ export class CustomersService {
     this.assertFiscalProfile(
       { ...currentCustomer, ...data },
       fiscalFieldsToValidate,
+      fiscalFieldsToValidate.length > 0 || dto.requiresBilling === true,
     );
 
     if (typeof data.phone === 'string') {
@@ -632,6 +635,8 @@ export class CustomersService {
       requiresBilling?: boolean | null;
     },
     fieldsToValidate: readonly CustomerFiscalProfileField[] = CUSTOMER_FISCAL_PROFILE_FIELDS,
+    validateCompatibility = fieldsToValidate.length ===
+      CUSTOMER_FISCAL_PROFILE_FIELDS.length,
   ): void {
     const normalizedSource = {
       ...source,
@@ -719,10 +724,8 @@ export class CustomersService {
       });
     }
 
-    if (!normalizedSource.requiresBilling) return;
-
     const missingFields = missingCustomerFiscalProfileFields(normalizedSource);
-    if (missingFields.length > 0) {
+    if (normalizedSource.requiresBilling && missingFields.length > 0) {
       throw new BadRequestException({
         code: 'MISSING_FISCAL_PROFILE',
         message:
@@ -730,6 +733,40 @@ export class CustomersService {
         fields: missingFields,
       });
     }
+
+    if (
+      !validateCompatibility ||
+      missingFields.length > 0 ||
+      typeof normalizedSource.taxId !== 'string' ||
+      typeof normalizedSource.fiscalRegime !== 'string' ||
+      typeof normalizedSource.fiscalUseCode !== 'string' ||
+      !isStructurallyValidFiscalRfc(normalizedSource.taxId) ||
+      !isValidSatFiscalRegime(normalizedSource.fiscalRegime) ||
+      !isValidSatCfdiUseCode(normalizedSource.fiscalUseCode)
+    ) {
+      return;
+    }
+
+    const receiverPersonType = deriveSatReceiverPersonType(
+      normalizedSource.taxId,
+    );
+    if (
+      isCfdiUseCompatible({
+        cfdiUse: normalizedSource.fiscalUseCode,
+        fiscalRegime: normalizedSource.fiscalRegime,
+        receiverPersonType,
+      })
+    ) {
+      return;
+    }
+
+    throw new BadRequestException({
+      code: 'CFDI_USE_REGIME_INCOMPATIBLE',
+      message:
+        'The selected CFDI use is incompatible with the receiver fiscal regime and person type',
+      fields: ['fiscalRegime', 'fiscalUseCode'],
+      receiverPersonType: receiverPersonType ?? 'unknown',
+    });
   }
 
   private toCustomerResponse(

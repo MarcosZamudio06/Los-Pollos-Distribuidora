@@ -109,6 +109,8 @@ const issueErrorMessages: Record<string, string> = {
     "Completa el perfil fiscal del emisor y del receptor antes de timbrar.",
   MISSING_PRODUCT_FISCAL_PROFILE: "Completa el perfil fiscal de los conceptos.",
   INVALID_CFDI_USE: "Selecciona un UsoCFDI válido del catálogo SAT.",
+  CFDI_USE_REGIME_INCOMPATIBLE:
+    "El Uso CFDI seleccionado no es compatible con el régimen fiscal del receptor.",
   INVALID_PAYMENT_CONFIGURATION:
     "La FormaPago y el MetodoPago no son compatibles para este CFDI.",
   TOTAL_MISMATCH:
@@ -134,6 +136,16 @@ const issueErrorMessages: Record<string, string> = {
     "El catálogo SAT requerido aún no está configurado; solicita una importación aprobada.",
   SAT_CATALOG_CODE_NOT_FOUND:
     "Uno de los códigos fiscales no pertenece a la versión SAT activa.",
+  GLOBAL_INVOICE_INFORMATION_REQUIRED:
+    "El RFC genérico nacional solo puede emitirse como factura global explícita.",
+  GLOBAL_INVOICE_RECEIVER_INVALID:
+    "La factura global requiere Público en General, régimen 616 y el código postal del emisor.",
+  GLOBAL_INVOICE_PAYMENT_INVALID:
+    "La factura global requiere el método de pago PUE.",
+  GLOBAL_INVOICE_EXPORTATION_INVALID:
+    "La factura global requiere Exportación 01.",
+  GLOBAL_INVOICE_PERIOD_INVALID:
+    "La periodicidad, mes o año no coincide con las operaciones seleccionadas.",
 };
 
 export function getCfdiIssueErrorDetails(error: unknown): string[] {

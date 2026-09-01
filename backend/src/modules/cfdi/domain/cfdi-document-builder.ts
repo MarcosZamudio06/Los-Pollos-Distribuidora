@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import {
   isStructurallyValidFiscalRfc,
+  deriveSatReceiverPersonType,
+  isCfdiUseCompatible,
   isValidMexicanFiscalPostalCode,
   isValidSatCfdiUseCode,
   isValidSatFiscalRegime,
@@ -21,6 +23,12 @@ import {
   isValidSatUnitCode,
   missingProductFiscalProfileFields,
 } from '../../../../../shared/product-fiscal-catalog';
+import {
+  isGlobalMonthsCoherent,
+  isSatGlobalMonths,
+  isSatGlobalPeriodicity,
+  type CfdiGlobalInformation,
+} from '../../../../../shared/cfdi-global-information';
 import { CfdiDomainError } from './cfdi-domain.error';
 import type {
   CfdiConceptSnapshot,
@@ -93,6 +101,8 @@ export class CfdiDocumentBuilder {
     const currencyCode = input.documents[0].sale.currencyCode;
     this.validateComposition(input, currencyCode);
     this.validatePayment(input, currencyCode);
+    this.validateGlobalInvoice(input);
+    this.validateReceiverFiscalCompatibility(input);
     this.validateSubstitution(input);
 
     const concepts: CfdiConceptSnapshot[] = [];
@@ -141,6 +151,15 @@ export class CfdiDocumentBuilder {
       sourceDocumentIds: input.documents
         .map((document) => document.saleDocumentId)
         .sort(),
+      ...(input.globalInformation
+        ? {
+            globalInformation: {
+              periodicity: input.globalInformation.periodicity,
+              months: input.globalInformation.months,
+              year: input.globalInformation.year,
+            },
+          }
+        : {}),
       ...(input.substitution
         ? {
             relationships: [
@@ -199,6 +218,17 @@ export class CfdiDocumentBuilder {
       });
 
     const customerMissing = missingCustomerFiscalProfileFields(input.customer);
+    const customerFiscalRegime = input.customer.fiscalRegime?.trim() ?? '';
+    const customerFiscalUse =
+      input.customer.fiscalUseCode?.trim().toUpperCase() ?? '';
+    const regimeKnown = input.satFiscalCompatibilityCatalog
+      ? input.satFiscalCompatibilityCatalog.fiscalRegimes.some(
+          (entry) => entry.code === customerFiscalRegime,
+        )
+      : Boolean(
+          input.customer.fiscalRegime &&
+          isValidSatFiscalRegime(input.customer.fiscalRegime),
+        );
     if (
       customerMissing.length ||
       !input.customer.taxId ||
@@ -206,7 +236,7 @@ export class CfdiDocumentBuilder {
       !input.customer.fiscalPostalCode ||
       !isValidMexicanFiscalPostalCode(input.customer.fiscalPostalCode) ||
       !input.customer.fiscalRegime ||
-      !isValidSatFiscalRegime(input.customer.fiscalRegime)
+      !regimeKnown
     ) {
       throw new CfdiDomainError('MISSING_FISCAL_PROFILE', {
         scope: 'receiver',
@@ -214,10 +244,15 @@ export class CfdiDocumentBuilder {
       });
     }
 
-    if (
-      !input.customer.fiscalUseCode ||
-      !isValidSatCfdiUseCode(input.customer.fiscalUseCode)
-    ) {
+    const useKnown = input.satFiscalCompatibilityCatalog
+      ? input.satFiscalCompatibilityCatalog.cfdiUses.some(
+          (entry) => entry.code === customerFiscalUse,
+        )
+      : Boolean(
+          input.customer.fiscalUseCode &&
+          isValidSatCfdiUseCode(input.customer.fiscalUseCode),
+        );
+    if (!input.customer.fiscalUseCode || !useKnown) {
       throw new CfdiDomainError('INVALID_CFDI_USE', {
         fiscalUseCode: input.customer.fiscalUseCode,
       });
@@ -318,6 +353,151 @@ export class CfdiDocumentBuilder {
         originalInvoiceId: substitution.originalInvoiceId,
       });
     }
+  }
+
+  private validateGlobalInvoice(input: CfdiDocumentBuildInput): void {
+    const genericReceiver =
+      normalizeFiscalTaxId(input.customer.taxId ?? '') === 'XAXX010101000';
+    const global = input.globalInformation;
+
+    if (!global) {
+      if (genericReceiver) {
+        throw new CfdiDomainError('GLOBAL_INVOICE_INFORMATION_REQUIRED');
+      }
+      return;
+    }
+
+    const receiverValid =
+      genericReceiver &&
+      input.customer.fiscalName?.trim().toUpperCase() ===
+        'PUBLICO EN GENERAL' &&
+      input.customer.fiscalRegime?.trim() === '616' &&
+      input.customer.fiscalUseCode?.trim().toUpperCase() === 'S01' &&
+      input.customer.fiscalPostalCode?.trim() ===
+        input.issuer.fiscalPostalCode?.trim();
+    if (!receiverValid) {
+      throw new CfdiDomainError('GLOBAL_INVOICE_RECEIVER_INVALID');
+    }
+    if (input.payment.paymentMethodCode !== 'PUE') {
+      throw new CfdiDomainError('GLOBAL_INVOICE_PAYMENT_INVALID');
+    }
+    if (input.payment.exportCode !== '01') {
+      throw new CfdiDomainError('GLOBAL_INVOICE_EXPORTATION_INVALID');
+    }
+
+    const issuedYear = input.issuedAt.getUTCFullYear();
+    if (
+      !isSatGlobalPeriodicity(global.periodicity) ||
+      !isSatGlobalMonths(global.months) ||
+      !isGlobalMonthsCoherent(global.periodicity, global.months) ||
+      !Number.isInteger(global.year) ||
+      global.year > issuedYear ||
+      global.year < issuedYear - 5 ||
+      !this.isOperationPeriodCoherent(input, global)
+    ) {
+      throw new CfdiDomainError('GLOBAL_INVOICE_PERIOD_INVALID', {
+        periodicity: global.periodicity,
+        months: global.months,
+        year: global.year,
+      });
+    }
+  }
+
+  private validateReceiverFiscalCompatibility(
+    input: CfdiDocumentBuildInput,
+  ): void {
+    const receiverPersonType = deriveSatReceiverPersonType(
+      input.customer.taxId ?? '',
+    );
+    const fiscalUse = input.customer.fiscalUseCode?.trim().toUpperCase() ?? '';
+    const fiscalRegime = input.customer.fiscalRegime?.trim() ?? '';
+    if (
+      isCfdiUseCompatible(
+        {
+          cfdiUse: fiscalUse,
+          fiscalRegime,
+          receiverPersonType,
+          effectiveDate: input.issuedAt,
+          receiverTaxId: input.customer.taxId ?? undefined,
+        },
+        input.satFiscalCompatibilityCatalog,
+      )
+    ) {
+      return;
+    }
+
+    throw new CfdiDomainError('CFDI_USE_REGIME_INCOMPATIBLE', {
+      cfdiUse: fiscalUse,
+      fiscalRegime,
+      receiverPersonType: receiverPersonType ?? 'unknown',
+    });
+  }
+
+  private isOperationPeriodCoherent(
+    input: CfdiDocumentBuildInput,
+    global: CfdiGlobalInformation,
+  ): boolean {
+    const dates = input.documents.map((document) =>
+      this.parseOperationDate(document.operationDate),
+    );
+    if (dates.some((date) => date === null)) return false;
+    const resolved = dates as Date[];
+    const expectedMonths = this.expectedOperationMonths(global);
+    if (
+      resolved.some(
+        (date) =>
+          date.getUTCFullYear() !== global.year ||
+          !expectedMonths.includes(date.getUTCMonth() + 1),
+      )
+    ) {
+      return false;
+    }
+
+    const first = resolved[0];
+    if (!first) return false;
+    if (global.periodicity === '01') {
+      return resolved.every((date) => date.getTime() === first.getTime());
+    }
+    if (global.periodicity === '02') {
+      const week = this.utcWeekStart(first);
+      return resolved.every(
+        (date) => this.utcWeekStart(date).getTime() === week.getTime(),
+      );
+    }
+    if (global.periodicity === '03') {
+      const fortnight = first.getUTCDate() <= 15 ? 1 : 2;
+      return resolved.every(
+        (date) => (date.getUTCDate() <= 15 ? 1 : 2) === fortnight,
+      );
+    }
+    return true;
+  }
+
+  private parseOperationDate(value: string | undefined): Date | null {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+      ? null
+      : date;
+  }
+
+  private expectedOperationMonths(global: CfdiGlobalInformation): number[] {
+    const code = Number(global.months);
+    if (global.periodicity !== '05') return [code];
+    const firstMonth = (code - 13) * 2 + 1;
+    return [firstMonth, firstMonth + 1];
+  }
+
+  private utcWeekStart(date: Date): Date {
+    const mondayOffset = (date.getUTCDay() + 6) % 7;
+    return new Date(
+      Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate() - mondayOffset,
+      ),
+    );
   }
 
   private validateDocument(document: CfdiSourceDocument): void {

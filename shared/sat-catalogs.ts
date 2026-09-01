@@ -19,6 +19,8 @@ export const SAT_CATALOG_KEYS = [
   "c_CodigoPostal",
   "c_ObjetoImp",
   "c_TipoRelacion",
+  "c_Periodicidad",
+  "c_Meses",
 ] as const;
 
 export type SatCatalogKey = (typeof SAT_CATALOG_KEYS)[number];
@@ -52,4 +54,6 @@ export const SAT_CATALOG_DESCRIPTIONS: Record<SatCatalogKey, string> = {
   c_CodigoPostal: "SAT fiscal postal codes",
   c_ObjetoImp: "SAT tax object codes",
   c_TipoRelacion: "SAT CFDI relationship types",
+  c_Periodicidad: "SAT global invoice periodicities",
+  c_Meses: "SAT global invoice months",
 };

@@ -11,6 +11,10 @@ import {
   normalizeSatCatalogKey,
   type SatCatalogKey,
 } from '../../../../shared/sat-catalogs';
+import {
+  isSatCfdiUseCompatibilityMetadata,
+  isSatFiscalRegimeCompatibilityMetadata,
+} from '../../../../shared/fiscal-catalog';
 import { PrismaService } from '../../database/prisma.service';
 import type {
   NormalizedSatCatalogImportEntry,
@@ -157,6 +161,26 @@ export function normalizeSatCatalogEntries(
       metadata: normalizeMetadata(entry.metadata),
     };
   });
+}
+
+export function validateSatFiscalCompatibilityMetadata(
+  key: SatCatalogKey,
+  entries: readonly NormalizedSatCatalogImportEntry[],
+): void {
+  if (key !== 'c_UsoCFDI' && key !== 'c_RegimenFiscal') return;
+
+  for (const entry of entries) {
+    const valid =
+      key === 'c_UsoCFDI'
+        ? isSatCfdiUseCompatibilityMetadata(entry.metadata)
+        : isSatFiscalRegimeCompatibilityMetadata(entry.metadata);
+    if (!valid) {
+      throw catalogValidationError(
+        'SAT_CATALOG_COMPATIBILITY_METADATA_INVALID',
+        `${key} entry ${entry.code} must include the reviewed compatibility metadata`,
+      );
+    }
+  }
 }
 
 export function calculateSatCatalogChecksum(
@@ -346,6 +370,7 @@ export class SatCatalogImportService {
     }
 
     const normalizedEntries = normalizeSatCatalogEntries(entries);
+    validateSatFiscalCompatibilityMetadata(key, normalizedEntries);
     const checksumSha256 = calculateSatCatalogChecksum(normalizedEntries);
     if (
       suppliedChecksum &&
@@ -421,6 +446,11 @@ export class SatCatalogImportService {
     });
     if (!version) throw new NotFoundException('SAT_CATALOG_VERSION_NOT_FOUND');
     if (version.status === SatCatalogVersionStatus.ACTIVE) {
+      const normalizedEntries = normalizeSatCatalogEntries(version.entries);
+      validateSatFiscalCompatibilityMetadata(
+        normalizeSatCatalogKey(version.catalog.key),
+        normalizedEntries,
+      );
       return this.toSummary(version);
     }
     if (
@@ -436,6 +466,10 @@ export class SatCatalogImportService {
     let normalizedEntries: NormalizedSatCatalogImportEntry[];
     try {
       normalizedEntries = normalizeSatCatalogEntries(version.entries);
+      validateSatFiscalCompatibilityMetadata(
+        normalizeSatCatalogKey(version.catalog.key),
+        normalizedEntries,
+      );
       const checksum = calculateSatCatalogChecksum(normalizedEntries);
       if (checksum !== version.checksumSha256) {
         throw new UnprocessableEntityException({

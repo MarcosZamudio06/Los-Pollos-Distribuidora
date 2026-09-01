@@ -6,12 +6,17 @@ import {
   SatCatalogImportService,
   SatCatalogService,
 } from './sat-catalog.service';
+import { SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA } from '../../../../shared/fiscal-catalog';
 
 const entry = {
   code: ' TEST-01 ',
   description: ' Test catalog entry ',
   validFrom: '2026-01-01T00:00:00.000Z',
-  metadata: { source: 'fixture' },
+  metadata: {
+    schema: SAT_FISCAL_COMPATIBILITY_METADATA_SCHEMA,
+    appliesTo: { physical: true, moral: true },
+    fiscalRegimes: ['601'],
+  },
 };
 
 function versionRow(overrides: Record<string, unknown> = {}) {
@@ -69,11 +74,17 @@ describe('SatCatalogService', () => {
     };
     const service = new SatCatalogService(prisma as never);
     const result = await service.list();
-    expect(result).toHaveLength(14);
+    expect(result).toHaveLength(16);
     expect(result.find((item) => item.key === 'c_UsoCFDI')).toEqual(
       expect.objectContaining({ configured: false, activeVersion: null }),
     );
     expect(result.find((item) => item.key === 'c_TipoRelacion')).toEqual(
+      expect.objectContaining({ configured: false, activeVersion: null }),
+    );
+    expect(result.find((item) => item.key === 'c_Periodicidad')).toEqual(
+      expect.objectContaining({ configured: false, activeVersion: null }),
+    );
+    expect(result.find((item) => item.key === 'c_Meses')).toEqual(
       expect.objectContaining({ configured: false, activeVersion: null }),
     );
   });
@@ -166,6 +177,20 @@ describe('SatCatalogImportService', () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({
         code: 'SAT_CATALOG_CHECKSUM_MISMATCH',
+      }),
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('requires compatibility metadata when importing c_UsoCFDI', async () => {
+    const { service, prisma } = harness();
+    await expect(
+      service.stage('c_UsoCFDI', 'sat-2026-01', [
+        { code: 'G03', description: 'Gastos en general' },
+      ]),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'SAT_CATALOG_COMPATIBILITY_METADATA_INVALID',
       }),
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();

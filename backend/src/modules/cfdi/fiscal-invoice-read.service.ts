@@ -95,6 +95,7 @@ const LIST_SELECT = {
   substitutedByInvoiceId: true,
   issuerSnapshot: true,
   receiverSnapshot: true,
+  globalInformationSnapshot: true,
   createdAt: true,
   updatedAt: true,
   fiscalArtifacts: {
@@ -474,6 +475,7 @@ export class FiscalInvoiceReadService {
       exchangeRate: this.decimal(invoice.exchangeRate, 6),
       issuer: this.snapshot(invoice.issuerSnapshot),
       receiver: this.snapshot(invoice.receiverSnapshot),
+      globalInformation: this.snapshot(invoice.globalInformationSnapshot),
       snapshotAvailable: Boolean(
         invoice.issuerSnapshot && invoice.receiverSnapshot,
       ),

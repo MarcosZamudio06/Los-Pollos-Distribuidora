@@ -3,6 +3,7 @@ import {
   CostSnapshotSource,
   CreditStatus,
   CustomerType,
+  FiscalOperationType,
   OperationalLocationType,
   Prisma,
   PrismaClient,
@@ -95,10 +96,10 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
         customerType: CustomerType.RETAIL,
         creditStatus: CreditStatus.ACTIVE,
         requiresBilling: true,
-        fiscalName: 'PUBLICO EN GENERAL',
-        taxId: 'XAXX010101000',
+        fiscalName: 'USUARIO DE PRUEBA SA DE CV',
+        taxId: 'URE180429TM6',
         fiscalPostalCode: '64000',
-        fiscalRegime: '616',
+        fiscalRegime: '601',
         fiscalUseCode: 'G03',
         billingEmail: `${marker}-billing@example.test`,
       },
@@ -142,7 +143,7 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     const provider = new FakeFiscalProvider();
     const service = cancellationService(provider);
 
-    await service.cancel(
+    const result = await service.cancel(
       issued.invoiceId,
       cancellationDto(issued.version),
       actor,
@@ -155,9 +156,165 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     });
     expect(stored.status).toBe('CANCELLED');
     expect(stored.cancellationStatus).toBe('ACCEPTED');
+    expect(stored.cancellationMotiveCode).toBe('02');
+    expect(stored.replacementUuid).toBeNull();
     expect(stored.uuid).toBe(issued.uuid);
     expect(stored.documents[0]?.reversedAt).not.toBeNull();
     expect(stored.documents[0]?.itemApplications[0]?.reversedAt).not.toBeNull();
+    expect(
+      provider.calls.filter((call) => call.operation === 'cancel'),
+    ).toHaveLength(1);
+    expect(
+      provider.calls.find((call) => call.operation === 'cancel')?.command,
+    ).toMatchObject({ motive: '02' });
+    expect(
+      provider.calls.find((call) => call.operation === 'cancel')?.command,
+    ).not.toHaveProperty('replacementUuid');
+    expect(result.cancellationMotiveCode).toBe('02');
+  });
+
+  it('cancels an ordinary invoice with motive 03 without a replacement UUID', async () => {
+    const issued = await createIssuedInvoice('motive-03');
+    const provider = new FakeFiscalProvider();
+
+    await cancellationService(provider).cancel(
+      issued.invoiceId,
+      {
+        ...cancellationDto(issued.version),
+        cancellationMotiveCode: '03',
+      },
+      actor,
+      `${marker}:cancel-motive-03`,
+    );
+
+    const stored = await prisma.invoice.findUniqueOrThrow({
+      where: { id: issued.invoiceId },
+      select: {
+        status: true,
+        cancellationStatus: true,
+        cancellationMotiveCode: true,
+        replacementUuid: true,
+        documents: { select: { reversedAt: true } },
+      },
+    });
+    expect(stored).toMatchObject({
+      status: 'CANCELLED',
+      cancellationStatus: 'ACCEPTED',
+      cancellationMotiveCode: '03',
+      replacementUuid: null,
+    });
+    expect(stored.documents[0]?.reversedAt).not.toBeNull();
+    expect(
+      provider.calls.filter((call) => call.operation === 'cancel'),
+    ).toHaveLength(1);
+    expect(
+      provider.calls.find((call) => call.operation === 'cancel')?.command,
+    ).toMatchObject({ motive: '03' });
+    expect(
+      provider.calls.find((call) => call.operation === 'cancel')?.command,
+    ).not.toHaveProperty('replacementUuid');
+  });
+
+  it('rejects motive 04 for an ordinary invoice before reserving or calling the provider', async () => {
+    const issued = await createIssuedInvoice('motive-04-ordinary');
+    const provider = new FakeFiscalProvider();
+
+    await expect(
+      cancellationService(provider).cancel(
+        issued.invoiceId,
+        {
+          ...cancellationDto(issued.version),
+          cancellationMotiveCode: '04',
+        },
+        actor,
+        `${marker}:cancel-motive-04-ordinary`,
+      ),
+    ).rejects.toThrow('CANCELLATION_MOTIVE_04_REQUIRES_GLOBAL_INVOICE');
+
+    expect(
+      provider.calls.filter((call) => call.operation === 'cancel'),
+    ).toHaveLength(0);
+    await expect(
+      prisma.fiscalOperationAttempt.count({
+        where: {
+          invoiceId: issued.invoiceId,
+          operation: FiscalOperationType.CANCEL,
+        },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.invoice.findUniqueOrThrow({
+        where: { id: issued.invoiceId },
+        select: { status: true, cancellationStatus: true },
+      }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+      cancellationStatus: 'NOT_REQUESTED',
+    });
+  });
+
+  it('cancels a stamped global invoice with motive 04 without a replacement UUID', async () => {
+    const issued = await createIssuedInvoice('motive-04-global', undefined, {
+      global: true,
+    });
+    const globalBeforeCancellation = await prisma.invoice.findUniqueOrThrow({
+      where: { id: issued.invoiceId },
+      select: {
+        globalInformationSnapshot: true,
+        receiverSnapshot: true,
+      },
+    });
+    expect(globalBeforeCancellation).toMatchObject({
+      globalInformationSnapshot: {
+        periodicity: '04',
+        months: '08',
+        year: 2026,
+      },
+      receiverSnapshot: {
+        taxId: 'XAXX010101000',
+        fiscalName: 'PUBLICO EN GENERAL',
+        fiscalRegime: '616',
+        fiscalUseCode: 'S01',
+      },
+    });
+
+    const provider = new FakeFiscalProvider();
+    await cancellationService(provider).cancel(
+      issued.invoiceId,
+      {
+        ...cancellationDto(issued.version),
+        cancellationMotiveCode: '04',
+      },
+      actor,
+      `${marker}:cancel-motive-04-global`,
+    );
+
+    const stored = await prisma.invoice.findUniqueOrThrow({
+      where: { id: issued.invoiceId },
+      select: {
+        status: true,
+        cancellationStatus: true,
+        cancellationMotiveCode: true,
+        replacementUuid: true,
+        documents: { select: { reversedAt: true } },
+      },
+    });
+    expect(stored).toMatchObject({
+      status: 'CANCELLED',
+      cancellationStatus: 'ACCEPTED',
+      cancellationMotiveCode: '04',
+      replacementUuid: null,
+    });
+    expect(stored.documents[0]?.reversedAt).not.toBeNull();
+    expect(
+      provider.calls.filter((call) => call.operation === 'cancel'),
+    ).toHaveLength(1);
+    expect(
+      provider.calls.find((call) => call.operation === 'cancel')?.command,
+    ).toMatchObject({ motive: '04' });
+    expect(
+      provider.calls.find((call) => call.operation === 'cancel')?.command,
+    ).not.toHaveProperty('replacementUuid');
   });
 
   it('keeps applications reserved while receptor acceptance is pending', async () => {
@@ -430,13 +587,34 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
   async function createIssuedInvoice(
     label: string,
     substitutesInvoiceId?: string,
+    options: { global?: boolean } = {},
   ) {
     sequence += 1;
     const suffix = `${marker}-${sequence}-${label}`;
+    const isGlobal = options.global === true;
+    const invoiceCustomerId = isGlobal
+      ? (
+          await prisma.customer.create({
+            data: {
+              customerNumber: `${suffix}-customer`,
+              name: `${suffix} public customer`,
+              customerType: CustomerType.RETAIL,
+              creditStatus: CreditStatus.ACTIVE,
+              requiresBilling: true,
+              fiscalName: 'PUBLICO EN GENERAL',
+              taxId: 'XAXX010101000',
+              fiscalPostalCode: '64000',
+              fiscalRegime: '616',
+              fiscalUseCode: 'S01',
+              billingEmail: `${suffix}@example.test`,
+            },
+          })
+        ).id
+      : customerId;
     const sale = await prisma.sale.create({
       data: {
         saleNumber: suffix,
-        customerId,
+        customerId: invoiceCustomerId,
         userId: actor.id,
         locationId,
         legalEntityId,
@@ -449,6 +627,9 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
         total: new Prisma.Decimal(116),
         paymentType: SalePaymentType.CASH_SALE,
         status: SaleStatus.CONFIRMED,
+        ...(isGlobal
+          ? { businessDate: new Date('2026-08-20T00:00:00.000Z') }
+          : {}),
       },
     });
     const item = await prisma.saleItem.create({
@@ -483,7 +664,7 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
     });
     const request = await prisma.billingRequest.create({
       data: {
-        customerId,
+        customerId: invoiceCustomerId,
         saleId: sale.id,
         requestedByUserId: actor.id,
         reviewedByUserId: actor.id,
@@ -516,10 +697,19 @@ describe('CFDI cancellation PostgreSQL semantics (e2e)', () => {
       request.id,
       {
         expectedVersion: 1,
-        cfdiUse: 'G03',
+        cfdiUse: isGlobal ? 'S01' : 'G03',
         paymentMethod: 'PUE',
         paymentForm: '01',
         exportCode: '01',
+        ...(isGlobal
+          ? {
+              globalInformation: {
+                periodicity: '04' as const,
+                months: '08' as const,
+                year: 2026,
+              },
+            }
+          : {}),
         ...(substitutesInvoiceId ? { substitutesInvoiceId } : {}),
       },
       actor,

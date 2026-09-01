@@ -678,6 +678,18 @@ export class InvoiceCancellationService {
           if (invoice.cancellationStatus === 'ACCEPTED')
             throw new BadRequestException('INVOICE_ALREADY_CANCELLED');
 
+          if (dto.cancellationMotiveCode !== '01' && dto.replacementInvoiceId) {
+            throw new BadRequestException('REPLACEMENT_ONLY_FOR_MOTIVE_01');
+          }
+          if (
+            dto.cancellationMotiveCode === '04' &&
+            !invoice.globalInformationSnapshot
+          ) {
+            throw new BadRequestException(
+              'CANCELLATION_MOTIVE_04_REQUIRES_GLOBAL_INVOICE',
+            );
+          }
+
           const stampAttempt = await tx.fiscalOperationAttempt.findFirst({
             where: {
               invoiceId: id,

@@ -39,6 +39,14 @@ function setNativeValue(element: HTMLInputElement, value: string) {
   descriptor?.set?.call(element, value);
 }
 
+function setNativeSelectValue(element: HTMLSelectElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  );
+  descriptor?.set?.call(element, value);
+}
+
 async function renderDom(
   element: React.ReactElement,
 ): Promise<{ container: HTMLElement; root: Root }> {
@@ -146,6 +154,45 @@ describe("CustomerFormModal UX", () => {
       expect(
         getSelect(container, "customer-form-fiscalUseCode").textContent,
       ).toContain("G03");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("filtra usos y regímenes incompatibles después de identificar al receptor", async () => {
+    const { container, root } = await renderDom(
+      <CustomerFormModal
+        canManageCommercialTerms
+        customer={null}
+        onClose={() => undefined}
+      />,
+    );
+
+    try {
+      const taxId = getInput(container, "customer-form-taxId");
+      const fiscalRegime = getSelect(container, "customer-form-fiscalRegime");
+      const fiscalUseCode = getSelect(container, "customer-form-fiscalUseCode");
+
+      await act(async () => {
+        setNativeValue(taxId, "ABC010101AB9");
+        taxId.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () => {
+        setNativeSelectValue(fiscalRegime, "601");
+        fiscalRegime.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await act(async () => {
+        setNativeSelectValue(fiscalUseCode, "G03");
+        fiscalUseCode.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      expect(fiscalRegime.textContent).toContain("601");
+      expect(fiscalRegime.textContent).not.toContain("605");
+      expect(fiscalUseCode.textContent).toContain("G03");
+      expect(fiscalUseCode.textContent).not.toContain("D01");
     } finally {
       await act(async () => {
         root.unmount();

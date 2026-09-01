@@ -79,7 +79,9 @@ function snapshot(): CfdiDocumentSnapshot {
   };
 }
 
-function creditNoteSnapshot(): CfdiCreditNoteSnapshot {
+function creditNoteSnapshot(
+  relationshipType: '01' | '03' = '01',
+): CfdiCreditNoteSnapshot {
   const income = snapshot();
   return {
     cfdiVersion: '4.0',
@@ -98,7 +100,7 @@ function creditNoteSnapshot(): CfdiCreditNoteSnapshot {
     receiver: { ...income.receiver, fiscalUseCode: 'G02' },
     relationships: [
       {
-        typeCode: '01',
+        typeCode: relationshipType,
         relatedInvoiceId: 'invoice-1',
         relatedUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
       },
@@ -119,6 +121,27 @@ function substitutionSnapshot(): CfdiDocumentSnapshot {
         relatedUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
       },
     ],
+  };
+}
+
+function globalSnapshot(): CfdiDocumentSnapshot {
+  return {
+    ...snapshot(),
+    paymentMethodCode: 'PUE',
+    exportCode: '01',
+    receiver: {
+      ...snapshot().receiver,
+      fiscalName: 'PUBLICO EN GENERAL',
+      taxId: 'XAXX010101000',
+      fiscalPostalCode: '78240',
+      fiscalRegime: '616',
+      fiscalUseCode: 'S01',
+    },
+    globalInformation: {
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    },
   };
 }
 
@@ -223,9 +246,9 @@ function requestUrl(input: RequestInfo | URL): string {
   return input instanceof URL ? input.toString() : input.url;
 }
 
-function stampResponse() {
+function stampResponse(providerDocumentId = 'facturama-document-1') {
   return {
-    Id: 'facturama-document-1',
+    Id: providerDocumentId,
     Date: '2026-08-22T10:00:00',
     Complement: {
       TaxStamp: {
@@ -344,6 +367,36 @@ describe('FacturamaAdapter', () => {
     ).resolves.toMatchObject({ outcome: 'STAMPED' });
   });
 
+  it('maps an approved-return CFDI E to Facturama relation type 03', async () => {
+    const fetcher = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      expect(requestUrl(input)).toBe(
+        'https://apisandbox.facturama.mx/api-lite/3/cfdis',
+      );
+      const payload = JSON.parse(init?.body as string);
+      expect(payload).toMatchObject({
+        CfdiType: 'E',
+        NameId: 2,
+        Receiver: { CfdiUse: 'G02' },
+        Relations: {
+          Type: '03',
+          Cfdis: [{ Uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD' }],
+        },
+      });
+      return response(stampResponse());
+    }) as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-credit-return-1',
+        idempotencyKey: 'credit-return-idem-1',
+        series: 'E',
+        folio: '2',
+        snapshot: creditNoteSnapshot('03'),
+      }),
+    ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
   it('maps an income substitution to Facturama Relations type 04', async () => {
     const fetcher = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
       expect(requestUrl(input)).toBe(
@@ -370,6 +423,80 @@ describe('FacturamaAdapter', () => {
         snapshot: substitutionSnapshot(),
       }),
     ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
+  it('maps GlobalInformation exactly for an explicit global invoice only', async () => {
+    const fetcher = jest.fn(() =>
+      response(stampResponse()),
+    ) as unknown as jest.MockedFunction<typeof fetch>;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await adapter.stamp({
+      correlationId: 'corr-global-1',
+      idempotencyKey: 'global-idem-1',
+      folio: '102',
+      series: 'A',
+      snapshot: globalSnapshot(),
+    });
+    await adapter.stamp({
+      correlationId: 'corr-nominative-1',
+      idempotencyKey: 'nominative-idem-1',
+      folio: '103',
+      series: 'A',
+      snapshot: snapshot(),
+    });
+
+    const globalPayload = JSON.parse(
+      fetcher.mock.calls[0]?.[1]?.body as string,
+    ) as Record<string, unknown>;
+    const nominativePayload = JSON.parse(
+      fetcher.mock.calls[1]?.[1]?.body as string,
+    ) as Record<string, unknown>;
+    expect(globalPayload.GlobalInformation).toEqual({
+      Periodicity: '04',
+      Months: '08',
+      Year: 2026,
+    });
+    expect(globalPayload.Receiver).toEqual({
+      CfdiUse: 'S01',
+      Rfc: 'XAXX010101000',
+      Name: 'PUBLICO EN GENERAL',
+      FiscalRegime: '616',
+      TaxZipCode: '78240',
+    });
+    expect(nominativePayload).not.toHaveProperty('GlobalInformation');
+  });
+
+  it.each([
+    [
+      'generic receiver without global information',
+      () => {
+        const value = globalSnapshot();
+        delete (value as { globalInformation?: unknown }).globalInformation;
+        return value;
+      },
+    ],
+    [
+      'global receiver with an ordinary use',
+      () => ({
+        ...globalSnapshot(),
+        receiver: { ...globalSnapshot().receiver, fiscalUseCode: 'G03' },
+      }),
+    ],
+  ])('rejects %s before Facturama network I/O', async (_case, factory) => {
+    const fetcher = jest.fn() as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-invalid-global',
+        idempotencyKey: 'invalid-global-idem',
+        folio: '104',
+        series: 'A',
+        snapshot: factory(),
+      }),
+    ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_VALIDATION' });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('stamps the real multi-issuer payload and normalizes the TFD', async () => {
@@ -428,6 +555,120 @@ describe('FacturamaAdapter', () => {
       pdfReference: { artifactType: 'PDF' },
     });
   });
+
+  it('accepts and preserves an opaque Facturama provider document ID', async () => {
+    const providerDocumentId = 'opaque/provider+document=?#%';
+    const fetcher = jest.fn(() =>
+      response(stampResponse(providerDocumentId)),
+    ) as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    const result = await adapter.stamp({
+      correlationId: 'corr-opaque-provider-id',
+      idempotencyKey: 'opaque-provider-id-idem',
+      series: 'A',
+      folio: '105',
+      snapshot: snapshot(),
+    });
+
+    expect(result.providerDocumentId).toBe(providerDocumentId);
+  });
+
+  it('encodes an opaque provider document ID in every Facturama URL', async () => {
+    const providerDocumentId = 'opaque/provider+document=?#%';
+    const encodedProviderDocumentId = encodeURIComponent(providerDocumentId);
+    const urls: string[] = [];
+    const fetcher = jest.fn((input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      urls.push(url);
+      if (url.includes('/api-lite/cfdis/')) {
+        return response({
+          Status: 'canceled',
+          RequestDate: '2026-08-22T10:01:00',
+          CancelationDate: '2026-08-22T10:01:02',
+        });
+      }
+      if (url.includes('/Cfdi/xml/')) {
+        return response({
+          ContentEncoding: 'base64',
+          ContentType: 'xml',
+          Content: Buffer.from('<cfdi:Comprobante />').toString('base64'),
+        });
+      }
+      if (url.includes('/Cfdi/pdf/')) {
+        return response({
+          ContentEncoding: 'base64',
+          ContentType: 'pdf',
+          Content: Buffer.from('%PDF-fake').toString('base64'),
+        });
+      }
+      return response({
+        Status: 'active',
+        Complement: {
+          TaxStamp: { Uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD' },
+        },
+      });
+    }) as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    const command = {
+      providerDocumentId,
+      uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+    };
+
+    await adapter.cancel({
+      correlationId: 'corr-opaque-cancel',
+      ...command,
+      motive: '02',
+    });
+    await adapter.getStatus({
+      correlationId: 'corr-opaque-status',
+      ...command,
+    });
+    await adapter.getCancellationStatus({
+      correlationId: 'corr-opaque-cancellation-status',
+      ...command,
+    });
+    await adapter.getXml({
+      correlationId: 'corr-opaque-xml',
+      providerDocumentId,
+    });
+    await adapter.getPdf({
+      correlationId: 'corr-opaque-pdf',
+      providerDocumentId,
+    });
+
+    expect(urls).toEqual([
+      `https://apisandbox.facturama.mx/api-lite/cfdis/${encodedProviderDocumentId}?motive=02`,
+      `https://apisandbox.facturama.mx/cfdi/${encodedProviderDocumentId}?type=issuedLite`,
+      `https://apisandbox.facturama.mx/cfdi/${encodedProviderDocumentId}?type=issuedLite`,
+      `https://apisandbox.facturama.mx/Cfdi/xml/issuedLite/${encodedProviderDocumentId}`,
+      `https://apisandbox.facturama.mx/Cfdi/pdf/issuedLite/${encodedProviderDocumentId}`,
+    ]);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['whitespace-only', ' \t\n'],
+    ['NUL', 'opaque\u0000provider-id'],
+    ['CR/LF', 'opaque\r\nprovider-id'],
+    ['other control', 'opaque\u0007provider-id'],
+    ['non-string', 123],
+    ['oversized', 'x'.repeat(4097)],
+  ] as const)(
+    'rejects an invalid provider document ID: %s',
+    async (_label, value) => {
+      const fetcher = jest.fn() as unknown as typeof fetch;
+      const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+      await expect(
+        adapter.getStatus({
+          correlationId: 'corr-invalid-provider-id',
+          providerDocumentId: value as unknown as string,
+        }),
+      ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_RESPONSE_INVALID' });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['UTC', 'America/Mexico_City'] as const)(
     'omits Facturama generation Date for an immediate income stamp from host timezone %s',
@@ -488,6 +729,8 @@ describe('FacturamaAdapter', () => {
         Receiver: { CfdiUse: 'CP01', Rfc: 'URE180429TM6' },
       });
       expect(payload).not.toHaveProperty('Date');
+      expect(payload).not.toHaveProperty('Currency');
+      expect(payload).not.toHaveProperty('Items');
       expect(payload.ExpeditionPlace).toBe(
         paymentReceiptSnapshot().issuer.fiscalPostalCode,
       );
@@ -497,6 +740,7 @@ describe('FacturamaAdapter', () => {
         Date: paymentReceiptSnapshot().payment.paidAt,
         PaymentForm: '03',
         Amount: '1500.00',
+        Currency: 'MXN',
         RelatedDocuments: [
           {
             Uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
@@ -837,6 +1081,36 @@ describe('FacturamaAdapter', () => {
     ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_RESPONSE_INVALID' });
     expect(cancelled).toBe(true);
   });
+
+  it.each(['02', '03', '04'] as const)(
+    'sends cancellation motive %s through the exact DELETE contract without uuidReplacement',
+    async (motive) => {
+      const fetcher = jest.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(requestUrl(input)).toBe(
+            `https://apisandbox.facturama.mx/api-lite/cfdis/facturama-document-1?motive=${motive}`,
+          );
+          expect(init?.method).toBe('DELETE');
+          return response({
+            Status: 'canceled',
+            RequestDate: '2026-08-22T10:01:00',
+            CancelationDate: '2026-08-22T10:01:02',
+          });
+        },
+      ) as unknown as typeof fetch;
+      const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+      await expect(
+        adapter.cancel({
+          correlationId: `corr-cancel-${motive}`,
+          providerDocumentId: 'facturama-document-1',
+          uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+          motive,
+        }),
+      ).resolves.toMatchObject({ status: 'CANCELLED' });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('normalizes a cancellation request that is pending receptor acceptance', async () => {
     const fetcher = jest.fn((input: RequestInfo | URL) => {

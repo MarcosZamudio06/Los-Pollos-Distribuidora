@@ -235,6 +235,57 @@ describe('CfdiIssuanceRepository preparation', () => {
     );
   });
 
+  it('includes global decisions in idempotency and persists the validated snapshot', async () => {
+    const globalDto = {
+      ...dto,
+      cfdiUse: 'S01',
+      globalInformation: {
+        periodicity: '04' as const,
+        months: '08' as const,
+        year: 2026,
+      },
+    };
+    const global = {
+      ...snapshot,
+      globalInformation: globalDto.globalInformation,
+      receiver: {
+        ...snapshot.receiver,
+        fiscalName: 'PUBLICO EN GENERAL',
+        taxId: 'XAXX010101000',
+        fiscalRegime: '616',
+        fiscalUseCode: 'S01',
+      },
+    } as const;
+    const { repository, tx, validation } = harness();
+    validation.buildApprovedRequestWithClient.mockResolvedValueOnce(global);
+
+    await repository.prepare(
+      'request-1',
+      globalDto,
+      { id: 'admin-1', role: 'ADMIN' },
+      'stamp-global-1',
+      'FACTURAMA',
+    );
+
+    expect(CfdiIssuanceRepository.requestHash('request-1', globalDto)).not.toBe(
+      CfdiIssuanceRepository.requestHash('request-1', dto),
+    );
+    expect(validation.buildApprovedRequestWithClient).toHaveBeenCalledWith(
+      tx,
+      'request-1',
+      expect.objectContaining({
+        globalInformation: globalDto.globalInformation,
+      }),
+    );
+    expect(tx.invoice.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          globalInformationSnapshot: globalDto.globalInformation,
+        }),
+      }),
+    );
+  });
+
   it('replays the same key/hash and rejects payload drift or another issuance root', async () => {
     const same = harness();
     const requestHash = CfdiIssuanceRepository.requestHash('request-1', dto);
@@ -354,6 +405,42 @@ describe('CfdiIssuanceRepository preparation', () => {
       ),
     ).rejects.toMatchObject({ message: 'OVER_INVOICED' });
     expect(invalid.tx.invoice.create).not.toHaveBeenCalled();
+    expect(invalid.tx.fiscalCertificate.upsert).not.toHaveBeenCalled();
+    expect(invalid.tx.fiscalFolioSequence.upsert).not.toHaveBeenCalled();
+    expect(invalid.tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an incompatible UsoCFDI before creating an invoice or STAMP attempt', async () => {
+    const invalid = harness();
+    invalid.validation.buildApprovedRequestWithClient.mockRejectedValue(
+      new CfdiDomainError('CFDI_USE_REGIME_INCOMPATIBLE', {
+        cfdiUse: 'D01',
+        fiscalRegime: '601',
+        receiverPersonType: 'moral',
+      }),
+    );
+
+    await expect(
+      invalid.repository.prepare(
+        'request-1',
+        { ...dto, cfdiUse: 'D01' },
+        { id: 'admin-1', role: 'ADMIN' },
+        'stamp-incompatible-1',
+        'FACTURAMA',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CFDI_USE_REGIME_INCOMPATIBLE',
+        fields: ['fiscalRegime', 'fiscalUseCode'],
+        cfdiUse: 'D01',
+        fiscalRegime: '601',
+        receiverPersonType: 'moral',
+      }),
+    });
+
+    expect(invalid.tx.invoice.create).not.toHaveBeenCalled();
+    expect(invalid.tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
+    expect(invalid.tx.fiscalOperationAttempt.update).not.toHaveBeenCalled();
   });
 
   it('resolves a server-owned original and persists the type 04 relation on income issuance', async () => {

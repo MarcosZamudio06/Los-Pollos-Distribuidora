@@ -11,12 +11,15 @@ import type { RequestWithId } from '../middleware/request-id.middleware';
 
 type ExceptionPayload = {
   blockers?: unknown;
+  cfdiUse?: unknown;
   code?: unknown;
   error?: unknown;
   errors?: unknown;
   fields?: unknown;
+  fiscalRegime?: unknown;
   findings?: unknown;
   message?: unknown;
+  receiverPersonType?: unknown;
   saleIds?: unknown;
 };
 
@@ -145,12 +148,20 @@ export class SanitizedHttpExceptionFilter implements ExceptionFilter {
     }
     for (const key of [
       'blockers',
+      'cfdiUse',
       'errors',
       'fields',
+      'fiscalRegime',
       'findings',
+      'receiverPersonType',
       'saleIds',
     ] as const) {
-      if (Array.isArray(payload[key])) extensions[key] = payload[key];
+      if (
+        Array.isArray(payload[key]) ||
+        (typeof payload[key] === 'string' && payload[key].trim())
+      ) {
+        extensions[key] = payload[key];
+      }
     }
     return extensions;
   }

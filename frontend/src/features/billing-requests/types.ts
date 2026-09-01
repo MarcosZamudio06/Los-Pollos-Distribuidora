@@ -15,7 +15,9 @@ export type SatCatalogKey =
   | "c_MotivoCancelacion"
   | "c_CodigoPostal"
   | "c_ObjetoImp"
-  | "c_TipoRelacion";
+  | "c_TipoRelacion"
+  | "c_Periodicidad"
+  | "c_Meses";
 
 export type SatCatalogEntry = {
   code: string;
@@ -201,6 +203,29 @@ export type BillingRequestNativeInvoice = {
   exportCode?: string | null;
   paymentFormCode?: string | null;
   paymentMethodCode?: string | null;
+  globalInformationSnapshot?: {
+    periodicity: "01" | "02" | "03" | "04" | "05";
+    months:
+      | "01"
+      | "02"
+      | "03"
+      | "04"
+      | "05"
+      | "06"
+      | "07"
+      | "08"
+      | "09"
+      | "10"
+      | "11"
+      | "12"
+      | "13"
+      | "14"
+      | "15"
+      | "16"
+      | "17"
+      | "18";
+    year: number;
+  } | null;
   subtotal: string | number;
   discount: string | number;
   tax: string | number;
@@ -424,6 +449,9 @@ export type IssueCfdiInput = {
   paymentForm: string;
   exportCode: string;
   tipoCambio?: string;
+  globalInformation?: NonNullable<
+    BillingRequestNativeInvoice["globalInformationSnapshot"]
+  >;
 };
 
 export type CfdiIssuanceResult = {

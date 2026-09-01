@@ -1,15 +1,22 @@
 import { Prisma } from '@prisma/client';
 import { CfdiDomainError } from './cfdi-domain.error';
-import { buildCreditNoteDocument } from './credit-note-document-builder';
+import {
+  buildCreditNoteDocument,
+  type CreditAdjustmentSource,
+} from './credit-note-document-builder';
 
 const decimal = (value: string) => new Prisma.Decimal(value);
 
-function input(creditTotal = '116.00', availableTotal = '116.00') {
+function input(
+  creditTotal = '116.00',
+  availableTotal = '116.00',
+  sourceType: CreditAdjustmentSource = 'BONUS',
+) {
   return {
     creditAdjustmentId: 'adjustment-1',
     creditAdjustmentVersion: 2,
     issuedAt: new Date('2026-08-24T12:00:00.000Z'),
-    sourceType: 'BONUS' as const,
+    sourceType,
     currencyCode: 'MXN',
     exchangeRate: decimal('1'),
     paymentFormCode: '03',
@@ -35,7 +42,7 @@ function input(creditTotal = '116.00', availableTotal = '116.00') {
       {
         originalInvoiceId: 'invoice-1',
         originalUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
-        relationshipTypeCode: '01' as const,
+        relationshipTypeCode: sourceType === 'APPROVED_RETURN' ? '03' : '01',
         concepts: [
           {
             creditAdjustmentLineId: 'line-1',
@@ -116,6 +123,20 @@ describe('buildCreditNoteDocument', () => {
       total: '58.00',
     });
     expect(result.snapshot.totals.total).toBe('58.00');
+  });
+
+  it('derives relationship 03 for an approved return', () => {
+    const result = buildCreditNoteDocument(
+      input('58.00', '116.00', 'APPROVED_RETURN'),
+    );
+
+    expect(result.snapshot.relationships).toEqual([
+      {
+        typeCode: '03',
+        relatedInvoiceId: 'invoice-1',
+        relatedUuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+      },
+    ]);
   });
 
   it('rejects credit above the currently accreditable concept balance', () => {

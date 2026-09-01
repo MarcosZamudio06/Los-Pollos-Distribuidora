@@ -73,4 +73,40 @@ describe('IssueCfdiDto substitution validation', () => {
       true,
     );
   });
+
+  it('accepts a typed global invoice period and normalizes its SAT codes', async () => {
+    const dto = plainToInstance(IssueCfdiDto, {
+      ...issue,
+      cfdiUse: 's01',
+      globalInformation: {
+        periodicity: '04',
+        months: '08',
+        year: 2026,
+      },
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.globalInformation).toEqual({
+      periodicity: '04',
+      months: '08',
+      year: 2026,
+    });
+  });
+
+  it.each([
+    [{ periodicity: '06', months: '08', year: 2026 }, 'periodicity'],
+    [{ periodicity: '04', months: '19', year: 2026 }, 'months'],
+    [{ periodicity: '04', months: '08', year: 20.26 }, 'year'],
+  ])('rejects invalid global invoice catalog data %p', async (value, field) => {
+    const dto = plainToInstance(IssueCfdiDto, {
+      ...issue,
+      globalInformation: value,
+    });
+
+    const errors = await validate(dto);
+    const nested = errors.find(
+      (error) => error.property === 'globalInformation',
+    )?.children;
+    expect(nested?.some((error) => error.property === field)).toBe(true);
+  });
 });

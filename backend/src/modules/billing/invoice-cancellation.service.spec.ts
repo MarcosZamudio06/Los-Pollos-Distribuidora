@@ -46,6 +46,7 @@ function harness(
   options: {
     provider?: Record<string, jest.Mock>;
     replacement?: Record<string, unknown>;
+    globalInformationSnapshot?: Record<string, unknown> | null;
   } = {},
 ) {
   let invoiceState: InvoiceState = {
@@ -65,6 +66,7 @@ function harness(
     cancellationPayloadHash: null,
     replacementInvoiceId: null,
     replacementUuid: null,
+    globalInformationSnapshot: options.globalInformationSnapshot ?? null,
     substitutedByInvoiceId: null,
     substitutes: null,
     documents: [
@@ -448,6 +450,125 @@ describe('InvoiceCancellationService', () => {
       cancellationStatus: 'ACCEPTED',
     });
   });
+
+  it.each(['02', '03'] as const)(
+    'accepts ordinary invoice cancellation motive %s without a replacement UUID',
+    async (motive) => {
+      const { service, tx, provider, getInvoice } = harness();
+
+      const result = await service.cancel(
+        'invoice-1',
+        cancellationDto({ cancellationMotiveCode: motive }),
+        actor,
+        `cancel-key-motive-${motive}`,
+      );
+
+      expect(provider.cancel).toHaveBeenCalledTimes(1);
+      expect(provider.cancel).toHaveBeenCalledWith(
+        expect.objectContaining({ motive }),
+      );
+      expect(provider.cancel.mock.calls[0]?.[0]).not.toHaveProperty(
+        'replacementUuid',
+      );
+      expect(tx.fiscalOperationAttempt.create).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        cancellationMotiveCode: motive,
+        replacementInvoiceId: null,
+        replacementUuid: null,
+      });
+      expect(getInvoice()).toMatchObject({
+        cancellationMotiveCode: motive,
+        replacementInvoiceId: null,
+        replacementUuid: null,
+      });
+    },
+  );
+
+  it('rejects motive 04 for an ordinary invoice before reserving an attempt', async () => {
+    const { service, tx, provider } = harness();
+
+    await expect(
+      service.cancel(
+        'invoice-1',
+        cancellationDto({ cancellationMotiveCode: '04' }),
+        actor,
+        'cancel-key-motive-04-ordinary',
+      ),
+    ).rejects.toMatchObject({
+      message: 'CANCELLATION_MOTIVE_04_REQUIRES_GLOBAL_INVOICE',
+    });
+
+    expect(tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
+    expect(provider.cancel).not.toHaveBeenCalled();
+  });
+
+  it('accepts motive 04 only for an invoice with the persisted global snapshot', async () => {
+    const { service, tx, provider, getInvoice } = harness({
+      globalInformationSnapshot: {
+        periodicity: '04',
+        months: '08',
+        year: 2026,
+      },
+    });
+
+    const result = await service.cancel(
+      'invoice-1',
+      cancellationDto({ cancellationMotiveCode: '04' }),
+      actor,
+      'cancel-key-motive-04-global',
+    );
+
+    expect(provider.cancel).toHaveBeenCalledTimes(1);
+    expect(provider.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ motive: '04' }),
+    );
+    expect(provider.cancel.mock.calls[0]?.[0]).not.toHaveProperty(
+      'replacementUuid',
+    );
+    expect(tx.fiscalOperationAttempt.create).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      cancellationMotiveCode: '04',
+      replacementInvoiceId: null,
+      replacementUuid: null,
+    });
+    expect(getInvoice()).toMatchObject({
+      cancellationMotiveCode: '04',
+      replacementInvoiceId: null,
+      replacementUuid: null,
+    });
+  });
+
+  it.each(['02', '03', '04'] as const)(
+    'rejects a replacement invoice for motive %s before calling the provider',
+    async (motive) => {
+      const { service, tx, provider } = harness(
+        motive === '04'
+          ? {
+              globalInformationSnapshot: {
+                periodicity: '04',
+                months: '08',
+                year: 2026,
+              },
+            }
+          : {},
+      );
+
+      await expect(
+        service.cancel(
+          'invoice-1',
+          cancellationDto({
+            cancellationMotiveCode: motive,
+            replacementInvoiceId: 'replacement-1',
+          }),
+          actor,
+          `cancel-key-replacement-motive-${motive}`,
+        ),
+      ).rejects.toMatchObject({ message: 'REPLACEMENT_ONLY_FOR_MOTIVE_01' });
+
+      expect(tx.fiscalOperationAttempt.create).not.toHaveBeenCalled();
+      expect(provider.cancel).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps applications and billable balance untouched while cancellation is pending', async () => {
     const { service, tx, provider, getInvoice } = harness({

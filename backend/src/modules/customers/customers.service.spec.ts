@@ -491,6 +491,55 @@ describe('CustomersService', () => {
     }
   });
 
+  it('rejects a complete fiscal profile with an incompatible SAT use and regime', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.create(
+        {
+          name: 'Cliente con combinación fiscal inválida',
+          customerType: CustomerType.INSTITUTIONAL,
+          requiresBilling: true,
+          billingEmail: 'facturacion@empresa.com.mx',
+          fiscalName: 'Empresa Facturable',
+          taxId: 'ABC010101AB9',
+          fiscalPostalCode: '91700',
+          fiscalRegime: '605',
+          fiscalUseCode: 'D01',
+        },
+        adminUser,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CFDI_USE_REGIME_INCOMPATIBLE',
+        fields: ['fiscalRegime', 'fiscalUseCode'],
+        receiverPersonType: 'moral',
+      }),
+    });
+    expect(prisma.customer.create).not.toHaveBeenCalled();
+  });
+
+  it('rechecks compatibility when an existing fiscal profile is changed', async () => {
+    const { service, prisma } = createService();
+    prisma.customer.findFirst.mockResolvedValueOnce(
+      createCustomer({
+        taxId: 'ABC010101AB9',
+        fiscalRegime: '601',
+        fiscalUseCode: 'G03',
+      }),
+    );
+
+    await expect(
+      service.update('customer-1', { fiscalUseCode: 'D01' }, adminUser),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CFDI_USE_REGIME_INCOMPATIBLE',
+      }),
+    });
+    expect(prisma.customer.update).not.toHaveBeenCalled();
+  });
+
   it('requires the merged fiscal profile when an existing customer remains billable', async () => {
     const { service, prisma } = createService();
     prisma.customer.findFirst.mockResolvedValueOnce(createCustomer());

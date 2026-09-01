@@ -1,4 +1,5 @@
 import { FiscalProviderError } from './domain/fiscal-provider.port';
+import { CfdiDomainError } from './domain/cfdi-domain.error';
 import { FakeFiscalProvider } from './testing/fake-fiscal-provider';
 import { CfdiIssuanceService } from './cfdi-issuance.service';
 
@@ -106,6 +107,31 @@ function repository() {
 }
 
 describe('CfdiIssuanceService', () => {
+  it('does not call the provider when receiver fiscal compatibility fails during preparation', async () => {
+    const repo = repository();
+    repo.prepare.mockRejectedValue(
+      new CfdiDomainError('CFDI_USE_REGIME_INCOMPATIBLE', {
+        cfdiUse: 'D01',
+        fiscalRegime: '601',
+        receiverPersonType: 'moral',
+      }),
+    );
+    const provider = new FakeFiscalProvider();
+    const service = new CfdiIssuanceService(repo as never, provider);
+
+    await expect(
+      service.issue(
+        'request-1',
+        { ...dto, cfdiUse: 'D01' },
+        { id: 'admin-1', role: 'ADMIN' },
+        'stamp-incompatible-1',
+      ),
+    ).rejects.toMatchObject({ code: 'CFDI_USE_REGIME_INCOMPATIBLE' });
+    expect(provider.calls).toHaveLength(0);
+    expect(repo.finalizeStamped).not.toHaveBeenCalled();
+    expect(repo.finalizeFailure).not.toHaveBeenCalled();
+  });
+
   it('calls the provider only after durable preparation and atomically finalizes success', async () => {
     const calls: string[] = [];
     const repo = repository();

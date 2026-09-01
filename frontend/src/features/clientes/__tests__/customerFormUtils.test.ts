@@ -5,6 +5,7 @@ import {
   cleanTaxId,
   formatCurrencyDisplay,
   formatMexicanPhone,
+  getCustomerFiscalCompatibilityError,
   parseCurrencyValue,
   toCustomerFormValues,
   validateCustomerField,
@@ -102,5 +103,40 @@ describe("customer form utilities", () => {
         true,
       ),
     ).toContain("catálogo SAT");
+  });
+
+  it("valida la compatibilidad SAT por persona y régimen", () => {
+    expect(getCustomerFiscalCompatibilityError(draft)).toBeNull();
+    expect(
+      getCustomerFiscalCompatibilityError({
+        ...draft,
+        taxId: "ABCD010101AB9",
+        fiscalRegime: "605",
+        fiscalUseCode: "D01",
+      }),
+    ).toBeNull();
+    expect(
+      getCustomerFiscalCompatibilityError({
+        ...draft,
+        fiscalRegime: "605",
+        fiscalUseCode: "D01",
+      }),
+    ).toContain("no es compatible");
+    expect(
+      getCustomerFiscalCompatibilityError({
+        ...draft,
+        taxId: "XEXX010101000",
+        fiscalRegime: "616",
+        fiscalUseCode: "G03",
+      }),
+    ).toContain("no es compatible");
+    expect(
+      getCustomerFiscalCompatibilityError({
+        ...draft,
+        taxId: "XAXX010101000",
+        fiscalRegime: "616",
+        fiscalUseCode: "S01",
+      }),
+    ).toBeNull();
   });
 });

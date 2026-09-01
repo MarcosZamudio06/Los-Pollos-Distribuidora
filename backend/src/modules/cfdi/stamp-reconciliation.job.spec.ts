@@ -149,6 +149,51 @@ describe('StampReconciliationJob', () => {
     expect(tx.fiscalOperationAttempt.findMany).not.toHaveBeenCalled();
   });
 
+  it('claims initial and due UNKNOWN attempts but excludes terminal UNKNOWN attempts', async () => {
+    const { job, tx } = harness();
+    const now = new Date('2026-08-23T19:00:00.000Z');
+    const staleBefore = new Date('2026-08-23T18:59:00.000Z');
+    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+
+    await job.reconcile(now);
+
+    expect(tx.fiscalOperationAttempt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          invoice: {
+            fiscalStatus: 'UNKNOWN',
+            fiscalOperationAttempts: {
+              none: {
+                operation: 'RECOVERY',
+                status: 'PROCESSING',
+                updatedAt: { gte: staleBefore },
+              },
+            },
+          },
+          OR: [
+            {
+              status: 'UNKNOWN',
+              nextRetryAt: { lte: now },
+            },
+            {
+              status: 'UNKNOWN',
+              nextRetryAt: null,
+              invoice: {
+                fiscalOperationAttempts: {
+                  none: { operation: 'RECOVERY' },
+                },
+              },
+            },
+            {
+              status: 'PROCESSING',
+              updatedAt: { lt: staleBefore },
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
   it('allows only the instance granted the advisory lock to reconcile a shared candidate', async () => {
     const first = harness();
     const second = harness();
@@ -265,7 +310,7 @@ describe('StampReconciliationJob', () => {
     config.get.mockImplementation((key: string, fallback?: unknown) =>
       key === 'CFDI_MAX_RETRIES' ? 3 : fallback,
     );
-    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.$queryRawUnsafe.mockResolvedValue([{ acquired: true }]);
     tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
       {
         ...candidate(),
@@ -285,10 +330,16 @@ describe('StampReconciliationJob', () => {
       ),
     );
 
-    await expect(
-      job.reconcile(new Date('2026-08-23T19:00:00.000Z')),
-    ).resolves.toMatchObject({ stillUnknown: 1 });
-    expect(tx.billingDataRemediation.upsert).toHaveBeenCalled();
+    const now = new Date('2026-08-23T19:00:00.000Z');
+    await expect(job.reconcile(now)).resolves.toMatchObject({
+      started: 1,
+      stillUnknown: 1,
+    });
+    await expect(job.reconcile(now)).resolves.toMatchObject({ started: 0 });
+    expect(provider.getStatus).toHaveBeenCalledTimes(1);
+    expect(tx.fiscalOperationAttempt.create).toHaveBeenCalledTimes(1);
+    expect(tx.billingDataRemediation.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.billingAuditLog.create).toHaveBeenCalledTimes(1);
     expect(provider).not.toHaveProperty('stamp');
   });
 
@@ -328,18 +379,22 @@ describe('StampReconciliationJob', () => {
 
   it('opens remediation and does not stamp when XML UUID disagrees with provider status', async () => {
     const { job, tx, provider } = harness();
-    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.$queryRawUnsafe.mockResolvedValue([{ acquired: true }]);
     tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([candidate()]);
     provider.getStatus.mockResolvedValueOnce(status());
     provider.getXml.mockResolvedValueOnce(
       xmlContent('00000000-0000-4000-8000-000000000000'),
     );
 
-    await expect(
-      job.reconcile(new Date('2026-08-23T19:00:00.000Z')),
-    ).resolves.toMatchObject({
+    const now = new Date('2026-08-23T19:00:00.000Z');
+    await expect(job.reconcile(now)).resolves.toMatchObject({
       stillUnknown: 1,
     });
+    await expect(job.reconcile(now)).resolves.toMatchObject({ started: 0 });
+    expect(provider.getStatus).toHaveBeenCalledTimes(1);
+    expect(tx.fiscalOperationAttempt.create).toHaveBeenCalledTimes(1);
+    expect(tx.billingDataRemediation.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.billingAuditLog.create).toHaveBeenCalledTimes(1);
     expect(tx.billingDataRemediation.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

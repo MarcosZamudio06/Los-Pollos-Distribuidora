@@ -10,6 +10,14 @@
 Gestionar la relación interna de solicitudes administrativas. La aprobación
 permanece separada de la operación fiscal nativa.
 
+## Emisión nominativa y global
+
+El panel de emisión obliga a elegir explícitamente factura nominativa o factura
+global. La selección global fija UsoCFDI `S01`, MetodoPago `PUE` y Exportación
+`01`, y requiere periodicidad, mes/bimestre y año mediante controles cerrados;
+no permite campos fiscales libres ni envía datos del receptor. El backend sigue
+siendo autoritativo y rechaza un periodo incompatible con las ventas.
+
 ## Alcance
 
 Pantallas y componentes requeridos:

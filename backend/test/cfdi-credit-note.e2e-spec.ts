@@ -352,10 +352,14 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
     conceptId: string,
     creditTotal: string,
     key: string,
+    sourceType: 'BONUS' | 'APPROVED_RETURN' = 'BONUS',
   ) {
     return repository.create(
       {
-        sourceType: 'BONUS',
+        sourceType,
+        ...(sourceType === 'APPROVED_RETURN'
+          ? { sourceReference: `${marker}:return-${key}` }
+          : {}),
         internalReason: 'Bonificación comercial autorizable',
         paymentFormCode: '03',
         applications: [
@@ -369,6 +373,56 @@ describe('CFDI E credit adjustment PostgreSQL concurrency (e2e)', () => {
       key,
     );
   }
+
+  it('persists and issues relationship 03 for an approved return', async () => {
+    const { invoice, concept } = await createOriginalInvoice();
+    const draft = await createAdjustment(
+      invoice.id,
+      concept.id,
+      '58.00',
+      `${marker}:create-return`,
+      'APPROVED_RETURN',
+    );
+    const approved = await repository.approve(
+      draft.id,
+      { expectedVersion: 1 },
+      actor,
+    );
+    const provider = new FakeFiscalProvider();
+    const service = new CreditAdjustmentService(repository, provider);
+
+    await expect(
+      service.issue(
+        approved.id,
+        { expectedVersion: approved.version },
+        actor,
+        `${marker}:issue-return`,
+      ),
+    ).resolves.toMatchObject({
+      adjustmentStatus: CreditAdjustmentStatus.ISSUED,
+      fiscalStatus: 'STAMPED',
+    });
+
+    const stampCall = provider.calls.find((call) => call.operation === 'stamp');
+    expect(stampCall?.command).toMatchObject({
+      snapshot: {
+        cfdiType: 'CREDIT_NOTE',
+        fiscalUseCode: 'G02',
+        relationships: [
+          {
+            typeCode: '03',
+            relatedUuid: invoice.uuid,
+          },
+        ],
+      },
+    });
+    await expect(
+      prisma.creditAdjustmentInvoice.findFirstOrThrow({
+        where: { creditAdjustmentId: approved.id },
+        select: { relationshipTypeCode: true },
+      }),
+    ).resolves.toMatchObject({ relationshipTypeCode: '03' });
+  });
 
   it('allows only one concurrent authorization when two drafts would over-credit', async () => {
     const { invoice, concept } = await createOriginalInvoice();

@@ -8,7 +8,14 @@ import type {
   CfdiDocumentBuildInput,
   CfdiDocumentSnapshot,
 } from './domain/cfdi-document.types';
+import {
+  isSatCfdiUseCompatibilityMetadata,
+  isSatFiscalRegimeCompatibilityMetadata,
+  type SatCfdiUseCatalogEntry,
+  type SatFiscalRegimeCatalogEntry,
+} from '../../../../shared/fiscal-catalog';
 import { SatCatalogService } from './sat-catalog.service';
+import { DEFAULT_APP_TIMEZONE } from '../../common/utils/civil-date-range';
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -98,9 +105,98 @@ export class CfdiValidationService {
         invoiceId: request.nativeInvoice.id,
       });
 
-    const snapshot = this.builder.build(this.toBuildInput(request, options));
+    const buildInput = this.toBuildInput(request, options);
+    const compatibilityCatalog = this.satCatalogs
+      ? await this.resolveReceiverCompatibilityCatalog(
+          buildInput,
+          options.issuedAt,
+        )
+      : undefined;
+    const snapshot = this.builder.build({
+      ...buildInput,
+      ...(compatibilityCatalog
+        ? { satFiscalCompatibilityCatalog: compatibilityCatalog }
+        : {}),
+    });
     if (this.satCatalogs) await this.validateActiveCatalogs(snapshot);
     return snapshot;
+  }
+
+  private async resolveReceiverCompatibilityCatalog(
+    input: CfdiDocumentBuildInput,
+    effectiveDate: Date,
+  ) {
+    const fiscalUseCode = input.customer.fiscalUseCode;
+    const fiscalRegime = input.customer.fiscalRegime;
+    if (!fiscalUseCode || !fiscalRegime) return undefined;
+
+    const useCatalog = await this.satCatalogs!.get('c_UsoCFDI', {
+      code: fiscalUseCode,
+      asOf: effectiveDate,
+    });
+    if (!useCatalog.configured) {
+      throw new CfdiDomainError('SAT_CATALOG_NOT_CONFIGURED', {
+        catalogKey: 'c_UsoCFDI',
+      });
+    }
+    const regimeCatalog = await this.satCatalogs!.get('c_RegimenFiscal', {
+      code: fiscalRegime,
+      asOf: effectiveDate,
+    });
+    if (!regimeCatalog.configured) {
+      throw new CfdiDomainError('SAT_CATALOG_NOT_CONFIGURED', {
+        catalogKey: 'c_RegimenFiscal',
+      });
+    }
+
+    const useEntry = useCatalog.entries.find(
+      (entry) => entry.code === fiscalUseCode.trim().toUpperCase(),
+    );
+    if (!useEntry) {
+      throw new CfdiDomainError('SAT_CATALOG_CODE_NOT_FOUND', {
+        catalogKey: 'c_UsoCFDI',
+        code: fiscalUseCode,
+      });
+    }
+    const regimeEntry = regimeCatalog.entries.find(
+      (entry) => entry.code === fiscalRegime.trim(),
+    );
+    if (!regimeEntry) {
+      throw new CfdiDomainError('SAT_CATALOG_CODE_NOT_FOUND', {
+        catalogKey: 'c_RegimenFiscal',
+        code: fiscalRegime,
+      });
+    }
+
+    if (!isSatCfdiUseCompatibilityMetadata(useEntry.metadata)) {
+      throw new CfdiDomainError('SAT_CATALOG_COMPATIBILITY_METADATA_INVALID', {
+        catalogKey: 'c_UsoCFDI',
+        code: useEntry.code,
+      });
+    }
+    if (!isSatFiscalRegimeCompatibilityMetadata(regimeEntry.metadata)) {
+      throw new CfdiDomainError('SAT_CATALOG_COMPATIBILITY_METADATA_INVALID', {
+        catalogKey: 'c_RegimenFiscal',
+        code: regimeEntry.code,
+      });
+    }
+
+    const use: SatCfdiUseCatalogEntry = {
+      code: useEntry.code,
+      label: useEntry.description,
+      appliesTo: useEntry.metadata.appliesTo,
+      validFrom: useEntry.validFrom?.toISOString() ?? null,
+      validTo: useEntry.validTo?.toISOString() ?? null,
+      fiscalRegimes: useEntry.metadata.fiscalRegimes,
+    };
+    const regime: SatFiscalRegimeCatalogEntry = {
+      code: regimeEntry.code,
+      label: regimeEntry.description,
+      appliesTo: regimeEntry.metadata.appliesTo,
+      validFrom: regimeEntry.validFrom?.toISOString() ?? null,
+      validTo: regimeEntry.validTo?.toISOString() ?? null,
+    };
+    return { cfdiUses: [use], fiscalRegimes: [regime] } as const;
   }
 
   private async validateActiveCatalogs(
@@ -122,6 +218,10 @@ export class CfdiValidationService {
     add('c_RegimenFiscal', snapshot.receiver.fiscalRegime);
     add('c_CodigoPostal', snapshot.issuer.fiscalPostalCode);
     add('c_CodigoPostal', snapshot.receiver.fiscalPostalCode);
+    if (snapshot.globalInformation) {
+      add('c_Periodicidad', snapshot.globalInformation.periodicity);
+      add('c_Meses', snapshot.globalInformation.months);
+    }
     for (const concept of snapshot.concepts) {
       add('c_ClaveProdServ', concept.productServiceCode);
       add('c_ClaveUnidad', concept.unitCode);
@@ -200,6 +300,9 @@ export class CfdiValidationService {
         certificateValidTo: issuer.certificateValidTo,
       },
       payment: options.payment,
+      ...(options.globalInformation
+        ? { globalInformation: options.globalInformation }
+        : {}),
       ...(options.substitution ? { substitution: options.substitution } : {}),
       documents: request.documents.map((document) => {
         const sale = document.saleDocument.sale;
@@ -231,6 +334,11 @@ export class CfdiValidationService {
             activeDocumentApplications.map(
               (application) => application.totalApplied,
             ),
+          ),
+          operationDate: this.operationDate(
+            sale.businessDate,
+            sale.registeredAt,
+            sale.createdAt,
           ),
           sale: {
             id: sale.id,
@@ -300,6 +408,26 @@ export class CfdiValidationService {
         };
       }),
     };
+  }
+
+  private operationDate(
+    businessDate: Date | null,
+    registeredAt: Date | null,
+    createdAt: Date,
+  ): string {
+    if (businessDate) return businessDate.toISOString().slice(0, 10);
+
+    const value = registeredAt ?? createdAt;
+    const timeZone = process.env.APP_TIMEZONE?.trim() || DEFAULT_APP_TIMEZONE;
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(value);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((item) => item.type === type)?.value ?? '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
   }
 }
 

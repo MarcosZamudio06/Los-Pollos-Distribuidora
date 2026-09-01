@@ -4,6 +4,7 @@ import {
   CreditStatus,
   CustomerType,
   InventoryMovementType,
+  OperationalLocationType,
   PaymentMethod,
   ProductPresentationType,
   ProductUnit,
@@ -87,13 +88,34 @@ describe('Operational day journey (e2e)', () => {
     prisma = moduleFixture.get(PrismaService);
     await seed(prisma as never);
 
-    const [cedis, branch] = await Promise.all([
-      prisma.operationalLocation.findUnique({ where: { code: 'CEDIS-VER' } }),
-      prisma.operationalLocation.findUnique({ where: { code: 'VER' } }),
+    const [cedis, branchTemplate] = await Promise.all([
+      prisma.operationalLocation.findUnique({
+        where: { code: 'CEDIS-VER' },
+      }),
+      prisma.operationalLocation.findUnique({
+        where: { code: 'VER' },
+        select: { latitude: true, longitude: true },
+      }),
     ]);
-    if (!cedis || !branch)
-      throw new Error('Base operational locations missing');
+    if (!cedis) throw new Error('Base CEDIS operational location missing');
+    if (
+      !branchTemplate ||
+      branchTemplate.latitude === null ||
+      branchTemplate.longitude === null
+    ) {
+      throw new Error('Seed VER geographic coordinates are missing');
+    }
     cedisLocationId = cedis.id;
+    const branch = await prisma.operationalLocation.create({
+      data: {
+        name: `${marker} branch`,
+        code: `${marker}-branch`,
+        type: OperationalLocationType.BRANCH,
+        parentId: cedis.id,
+        latitude: branchTemplate.latitude,
+        longitude: branchTemplate.longitude,
+      },
+    });
     branchLocationId = branch.id;
 
     const driver = await prisma.user.findUnique({
@@ -111,21 +133,6 @@ describe('Operational day journey (e2e)', () => {
       select: { id: true },
     });
     vehicleId = vehicle.id;
-
-    const businessDateValue = new Date(`${businessDate}T00:00:00.000Z`);
-    const existingClose = await prisma.pointOfSaleDailyClose.findFirst({
-      where: {
-        operationalLocationId: branchLocationId,
-        businessDate: businessDateValue,
-        status: { not: 'CANCELLED' },
-      },
-      select: { id: true },
-    });
-    if (existingClose) {
-      throw new Error(
-        `Disposable E2E database already contains a daily close for ${businessDate}`,
-      );
-    }
 
     const product = await prisma.product.create({
       data: {

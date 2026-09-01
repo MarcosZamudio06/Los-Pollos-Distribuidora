@@ -1,4 +1,6 @@
 import type { Prisma } from '@prisma/client';
+import type { CfdiGlobalInformation } from '../../../../../shared/cfdi-global-information';
+import type { SatFiscalCompatibilityCatalog } from '../../../../../shared/fiscal-catalog';
 
 export interface CfdiPaymentConfiguration {
   exportCode: string;
@@ -40,6 +42,12 @@ export interface CfdiDocumentBuildInput {
   };
   payment: CfdiPaymentConfiguration;
   documents: CfdiSourceDocument[];
+  /**
+   * A versioned SAT projection resolved by CfdiValidationService. When it is
+   * absent, the shared reviewed fallback is used by the pure builder.
+   */
+  satFiscalCompatibilityCatalog?: SatFiscalCompatibilityCatalog;
+  globalInformation?: CfdiGlobalInformation;
   substitution?: CfdiSubstitutionBuildInput;
 }
 
@@ -57,6 +65,7 @@ export interface CfdiSourceDocument {
   activeInvoicedSubtotal: Prisma.Decimal;
   activeInvoicedTax: Prisma.Decimal;
   activeInvoicedTotal: Prisma.Decimal;
+  operationDate?: string;
   sale: {
     id: string;
     customerId: string | null;
@@ -156,6 +165,7 @@ export interface CfdiDocumentSnapshot {
     readonly fiscalUseCode: string;
     readonly billingEmail: string;
   };
+  readonly globalInformation?: Readonly<CfdiGlobalInformation>;
   readonly relationships?: readonly CfdiIncomeRelationshipSnapshot[];
   readonly concepts: readonly CfdiConceptSnapshot[];
   readonly totals: {
@@ -287,5 +297,6 @@ export interface BuildApprovedRequestOptions {
   issuedAt: Date;
   payment: CfdiPaymentConfiguration;
   cfdiUse?: string;
+  globalInformation?: CfdiGlobalInformation;
   substitution?: CfdiSubstitutionBuildInput;
 }

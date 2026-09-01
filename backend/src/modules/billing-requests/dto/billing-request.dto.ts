@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsEmpty,
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -21,6 +22,12 @@ import {
   CIVIL_DATE_FROM_QUERY_DESCRIPTION,
   CIVIL_DATE_TO_QUERY_DESCRIPTION,
 } from '../../../common/utils/civil-date-range';
+import {
+  SAT_GLOBAL_MONTHS,
+  SAT_GLOBAL_PERIODICITIES,
+  type SatGlobalMonths,
+  type SatGlobalPeriodicity,
+} from '../../../../../shared/cfdi-global-information';
 
 function trim({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -107,6 +114,22 @@ export class CancelBillingRequestDto {
 
 export class ReviewBillingRequestDto extends CancelBillingRequestDto {}
 
+export class GlobalInformationDto {
+  @Transform(upper)
+  @IsIn(SAT_GLOBAL_PERIODICITIES)
+  periodicity!: SatGlobalPeriodicity;
+
+  @Transform(upper)
+  @IsIn(SAT_GLOBAL_MONTHS)
+  months!: SatGlobalMonths;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(9999)
+  year!: number;
+}
+
 export class IssueCfdiDto {
   @Type(() => Number) @IsInt() @Min(1) expectedVersion!: number;
   @Transform(upper) @IsString() @Matches(/^[A-Z0-9]{3}$/) cfdiUse!: string;
@@ -118,6 +141,11 @@ export class IssueCfdiDto {
   @IsString()
   @Matches(/^\d+(\.\d{1,6})?$/)
   tipoCambio?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GlobalInformationDto)
+  globalInformation?: GlobalInformationDto;
 
   /** Server-owned reference to the stamped invoice being replaced. */
   @IsOptional()

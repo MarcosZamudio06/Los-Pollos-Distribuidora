@@ -10,6 +10,11 @@ import { toast } from "sonner";
 import {
   SAT_CFDI_USES,
   SAT_FISCAL_REGIMES,
+  deriveSatReceiverPersonType,
+  isCfdiUseCompatible,
+  isStructurallyValidFiscalRfc,
+  isValidSatCfdiUseCode,
+  isValidSatFiscalRegime,
 } from "../../../../../shared/fiscal-catalog";
 import {
   cleanCustomerNumber,
@@ -22,6 +27,7 @@ import {
   formatCreditDaysInput,
   formatCurrencyDisplay,
   formatMexicanPhone,
+  getCustomerFiscalCompatibilityError,
   hasCustomerFormErrors,
   normalizeCurrencyInput,
   toCustomerFormDraft,
@@ -131,6 +137,11 @@ const serverFiscalFieldMessages: Record<
   billingEmail: "El email de facturación es obligatorio y debe ser válido.",
 };
 
+const serverFiscalErrorMessages: Record<string, string> = {
+  CFDI_USE_REGIME_INCOMPATIBLE:
+    "El Uso CFDI seleccionado no es compatible con el régimen fiscal del receptor.",
+};
+
 function getServerFiscalFields(error: unknown) {
   if (!(error instanceof ApiClientError) || !error.payload) return [];
   if (
@@ -143,6 +154,13 @@ function getServerFiscalFields(error: unknown) {
     (field): field is keyof typeof serverFiscalFieldMessages =>
       field in serverFiscalFieldMessages,
   );
+}
+
+function getServerFiscalErrorMessage(error: unknown): string | null {
+  if (!(error instanceof ApiClientError) || !error.payload) return null;
+  if (typeof error.payload === "string") return null;
+  const code = error.payload.code;
+  return code ? (serverFiscalErrorMessages[code] ?? null) : null;
 }
 
 export function CustomerFormModal({
@@ -311,9 +329,10 @@ export function CustomerFormModal({
       }));
     }
     setSubmitError(
-      caughtError instanceof Error
-        ? caughtError.message
-        : "No se pudo guardar el cliente.",
+      getServerFiscalErrorMessage(caughtError) ??
+        (caughtError instanceof Error
+          ? caughtError.message
+          : "No se pudo guardar el cliente."),
     );
   }
 
@@ -366,6 +385,60 @@ export function CustomerFormModal({
   const creditLimitDisplay = creditLimitFocused
     ? draft.creditLimit
     : formatCurrencyDisplay(draft.creditLimit);
+
+  const normalizedTaxId = cleanTaxId(draft.taxId);
+  const receiverPersonType = isStructurallyValidFiscalRfc(normalizedTaxId)
+    ? deriveSatReceiverPersonType(normalizedTaxId)
+    : null;
+  const normalizedFiscalRegime = cleanFiscalCode(draft.fiscalRegime);
+  const normalizedFiscalUseCode = cleanFiscalCode(draft.fiscalUseCode);
+  const canFilterFiscalOptions = Boolean(
+    receiverPersonType &&
+    normalizedTaxId &&
+    isValidSatCfdiUseCode(normalizedFiscalUseCode) &&
+    isValidSatFiscalRegime(normalizedFiscalRegime),
+  );
+  const compatibleRegimeCodes = new Set(
+    canFilterFiscalOptions
+      ? receiverPersonType === "generic"
+        ? ["616"]
+        : SAT_FISCAL_REGIMES.filter((entry) =>
+            isCfdiUseCompatible({
+              cfdiUse: normalizedFiscalUseCode,
+              fiscalRegime: entry.code,
+              receiverPersonType,
+              receiverTaxId: normalizedTaxId,
+            }),
+          ).map((entry) => entry.code)
+      : SAT_FISCAL_REGIMES.map((entry) => entry.code),
+  );
+  const compatibleUseCodes = new Set(
+    canFilterFiscalOptions
+      ? receiverPersonType === "generic"
+        ? ["S01"]
+        : SAT_CFDI_USES.filter((entry) =>
+            isCfdiUseCompatible({
+              cfdiUse: entry.code,
+              fiscalRegime: normalizedFiscalRegime,
+              receiverPersonType,
+              receiverTaxId: normalizedTaxId,
+            }),
+          ).map((entry) => entry.code)
+      : SAT_CFDI_USES.map((entry) => entry.code),
+  );
+  const visibleFiscalRegimeOptions = fiscalRegimeOptions.filter(
+    (option) =>
+      !canFilterFiscalOptions ||
+      compatibleRegimeCodes.has(option.value) ||
+      option.value === normalizedFiscalRegime,
+  );
+  const visibleFiscalUseCodeOptions = fiscalUseCodeOptions.filter(
+    (option) =>
+      !canFilterFiscalOptions ||
+      compatibleUseCodes.has(option.value) ||
+      option.value === normalizedFiscalUseCode,
+  );
+  const fiscalCompatibilityError = getCustomerFiscalCompatibilityError(draft);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[rgba(17,24,21,0.58)] px-4 py-8 backdrop-blur-sm">
@@ -1143,7 +1216,7 @@ export function CustomerFormModal({
                 value={draft.fiscalRegime}
               >
                 <option value="">Selecciona un régimen</option>
-                {fiscalRegimeOptions.map((option) => (
+                {visibleFiscalRegimeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -1192,7 +1265,7 @@ export function CustomerFormModal({
                 value={draft.fiscalUseCode}
               >
                 <option value="">Selecciona un uso</option>
-                {fiscalUseCodeOptions.map((option) => (
+                {visibleFiscalUseCodeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -1204,6 +1277,14 @@ export function CustomerFormModal({
                   id={getErrorId("fiscalUseCode")}
                 >
                   {errors.fiscalUseCode}
+                </span>
+              )}
+              {!errors.fiscalUseCode && fiscalCompatibilityError && (
+                <span
+                  className="text-xs font-medium text-[var(--erp-danger)]"
+                  role="alert"
+                >
+                  {fiscalCompatibilityError}
                 </span>
               )}
             </label>

@@ -1066,3 +1066,19 @@ acoplar el arranque del ERP al PAC.
 - PostgreSQL multi-instancia, HTTP autenticado y ObjectStorage real:
   NOT_TESTED. Docker no pudo ejecutarse por `operation not permitted`, incluso
   tras solicitar ejecución fuera del sandbox.
+
+# CFDI-P1-04-GLOBAL-INVOICE
+
+## Objetivo
+
+Implementar el CFDI 4.0 global como intención explícita, persistir y validar
+`globalInformation`, y retirar el uso de `XAXX010101000 + G03` como receptor
+ordinario en pruebas genéricas.
+
+## Estado
+
+- [x] Distinguir factura nominativa de CFDI global sin inferencia por RFC.
+- [x] Validar receptor, PUE, Exportación 01, periodicidad, meses, año y fechas operativas.
+- [x] Persistir el snapshot global inmutable y mapearlo a Facturama.
+- [x] Mantener los fixtures de concurrencia/cancelación como receptores nominativos.
+- [ ] Ejecutar validación PostgreSQL desechable y quality gates finales.

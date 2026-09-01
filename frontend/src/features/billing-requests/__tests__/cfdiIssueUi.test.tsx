@@ -216,6 +216,8 @@ describe("native CFDI issue UI", () => {
     expect(html).toContain("KGM");
     expect(html).toContain("ObjetoImp");
     expect(html).toContain("Forma de pago");
+    expect(html).toContain("Tipo de factura");
+    expect(html).toContain("Global · Público en general");
     expect(html).toContain("Método de pago");
     expect(html).toContain("116.00");
     expect(html).not.toContain("Conciliación de factura externa");
@@ -508,6 +510,16 @@ describe("native CFDI issue UI", () => {
     ).toContain(
       "La solicitud cambió; actualiza la revisión antes de intentar de nuevo.",
     );
+    expect(
+      getCfdiIssueErrorDetails(
+        new ApiClientError("CFDI_USE_REGIME_INCOMPATIBLE", 422, {
+          code: "CFDI_USE_REGIME_INCOMPATIBLE",
+          message: "CFDI_USE_REGIME_INCOMPATIBLE",
+        }),
+      ),
+    ).toContain(
+      "El Uso CFDI seleccionado no es compatible con el régimen fiscal del receptor.",
+    );
   });
 
   it("keeps the issuance contract server-owned and sends the idempotency key", async () => {
@@ -555,6 +567,43 @@ describe("native CFDI issue UI", () => {
       }),
     );
     expect(options?.body).not.toContain("uuid");
+    fetchMock.mockRestore();
+  });
+
+  it("sends an explicit typed global period without client-owned receiver data", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: {} }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await billingRequestsService.issueCfdi(
+      "request-global",
+      {
+        expectedVersion: 2,
+        cfdiUse: "S01",
+        paymentMethod: "PUE",
+        paymentForm: "01",
+        exportCode: "01",
+        globalInformation: {
+          periodicity: "04",
+          months: "08",
+          year: 2026,
+        },
+      },
+      "access-token",
+      "global-key-1",
+    );
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.globalInformation).toEqual({
+      periodicity: "04",
+      months: "08",
+      year: 2026,
+    });
+    expect(body).not.toHaveProperty("receiver");
+    expect(body).not.toHaveProperty("taxId");
     fetchMock.mockRestore();
   });
 });

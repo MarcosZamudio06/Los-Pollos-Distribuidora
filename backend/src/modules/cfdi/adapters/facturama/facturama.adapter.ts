@@ -21,6 +21,11 @@ import type {
 import { FiscalProviderError } from '../../domain/fiscal-provider.port';
 import type { CfdiPaymentTaxSnapshot } from '../../domain/cfdi-document.types';
 import {
+  isGlobalMonthsCoherent,
+  isSatGlobalMonths,
+  isSatGlobalPeriodicity,
+} from '../../../../../../shared/cfdi-global-information';
+import {
   FISCAL_CREDENTIAL_RESOLVER,
   type FiscalCredentialResolver,
   type FiscalProviderCredential,
@@ -31,7 +36,10 @@ const FACTURAMA_MULTI_ISSUER_MODE = 'MULTI_ISSUER';
 const FACTURAMA_DOCUMENT_TYPE = 'issuedLite';
 const MAX_FACTURAMA_RESPONSE_BYTES = 16 * 1024 * 1024;
 const SAFE_CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const SAFE_PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+// Facturama documents Id as an opaque string and does not publish a charset
+// or maximum length. Keep a bounded request target without imposing a PAC
+// format; every URL use below must still encode this value as one path segment.
+const MAX_PROVIDER_DOCUMENT_ID_LENGTH = 4096;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -77,6 +85,11 @@ interface FacturamaIssuePayload {
   Currency: string;
   CurrencyExchangeRate?: string;
   Exportation: string;
+  GlobalInformation?: {
+    Periodicity: string;
+    Months: string;
+    Year: number;
+  };
   Issuer: {
     FiscalRegime: string;
     Rfc: string;
@@ -195,6 +208,14 @@ function stringValue(value: unknown): string | null {
     : null;
 }
 
+function hasProviderDocumentIdControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true;
+  }
+  return false;
+}
+
 function requiredString(
   value: unknown,
   operation: FiscalProviderOperation,
@@ -242,8 +263,13 @@ function providerDocumentId(
   operation: FiscalProviderOperation,
   correlationId: string,
 ): string {
-  const result = requiredString(value, operation, correlationId);
-  if (!SAFE_PROVIDER_ID.test(result)) {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_PROVIDER_DOCUMENT_ID_LENGTH ||
+    value.trim().length === 0 ||
+    hasProviderDocumentIdControlCharacters(value)
+  ) {
     throw new FiscalProviderError(
       'FISCAL_PROVIDER_RESPONSE_INVALID',
       operation,
@@ -252,7 +278,7 @@ function providerDocumentId(
       false,
     );
   }
-  return result;
+  return value;
 }
 
 function requiredUuid(
@@ -603,6 +629,38 @@ function buildIssuePayload(
   }
 
   const creditNote = snapshot.cfdiType === 'CREDIT_NOTE';
+  const globalInformation =
+    snapshot.cfdiType === 'INCOME' ? snapshot.globalInformation : undefined;
+  if (snapshot.cfdiType === 'INCOME') {
+    const genericReceiver = snapshot.receiver.taxId === 'XAXX010101000';
+    if (
+      (genericReceiver && !globalInformation) ||
+      (globalInformation &&
+        (!genericReceiver ||
+          snapshot.receiver.fiscalName.toUpperCase() !== 'PUBLICO EN GENERAL' ||
+          snapshot.receiver.fiscalRegime !== '616' ||
+          snapshot.receiver.fiscalUseCode !== 'S01' ||
+          snapshot.receiver.fiscalPostalCode !==
+            snapshot.issuer.fiscalPostalCode ||
+          snapshot.paymentMethodCode !== 'PUE' ||
+          snapshot.exportCode !== '01' ||
+          !isSatGlobalPeriodicity(globalInformation.periodicity) ||
+          !isSatGlobalMonths(globalInformation.months) ||
+          !isGlobalMonthsCoherent(
+            globalInformation.periodicity,
+            globalInformation.months,
+          ) ||
+          !Number.isInteger(globalInformation.year)))
+    ) {
+      throw new FiscalProviderError(
+        'FISCAL_PROVIDER_VALIDATION',
+        operation,
+        correlationId,
+        null,
+        false,
+      );
+    }
+  }
   let relations: FacturamaIssuePayload['Relations'];
   if (creditNote) {
     const firstType = snapshot.relationships[0]?.typeCode;
@@ -664,6 +722,15 @@ function buildIssuePayload(
       ? {}
       : { CurrencyExchangeRate: snapshot.exchangeRate }),
     Exportation: snapshot.exportCode,
+    ...(globalInformation
+      ? {
+          GlobalInformation: {
+            Periodicity: globalInformation.periodicity,
+            Months: globalInformation.months,
+            Year: globalInformation.year,
+          },
+        }
+      : {}),
     Issuer: {
       FiscalRegime: snapshot.issuer.fiscalRegime,
       Rfc: snapshot.issuer.taxId,

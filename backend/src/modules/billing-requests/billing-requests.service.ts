@@ -110,6 +110,7 @@ const detailInclude = {
       exportCode: true,
       paymentFormCode: true,
       paymentMethodCode: true,
+      globalInformationSnapshot: true,
       subtotal: true,
       discount: true,
       tax: true,

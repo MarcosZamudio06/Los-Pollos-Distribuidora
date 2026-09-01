@@ -264,6 +264,21 @@ export function InvoiceReconciliationPanel({
   const [exportCode, setExportCode] = useState(
     () => request.nativeInvoice?.exportCode ?? "01",
   );
+  const [invoiceMode, setInvoiceMode] = useState<"NOMINATIVE" | "GLOBAL">(() =>
+    request.nativeInvoice?.globalInformationSnapshot ? "GLOBAL" : "NOMINATIVE",
+  );
+  const [globalPeriodicity, setGlobalPeriodicity] = useState<
+    "01" | "02" | "03" | "04" | "05"
+  >(
+    () => request.nativeInvoice?.globalInformationSnapshot?.periodicity ?? "04",
+  );
+  const [globalMonths, setGlobalMonths] = useState(
+    () => request.nativeInvoice?.globalInformationSnapshot?.months ?? "",
+  );
+  const [globalYear, setGlobalYear] = useState(
+    () =>
+      request.nativeInvoice?.globalInformationSnapshot?.year.toString() ?? "",
+  );
   const [tipoCambio, setTipoCambio] = useState("");
   const [artifactType, setArtifactType] = useState<"XML" | "PDF" | null>(null);
   const [cancellationMotive, setCancellationMotive] =
@@ -340,6 +355,22 @@ export function InvoiceReconciliationPanel({
   const paymentConfigurationReady =
     (paymentMethod === "PUE" && paymentForm !== "99") ||
     (paymentMethod === "PPD" && paymentForm === "99");
+  const globalReceiverReady = Boolean(
+    review?.receiver?.taxId?.trim().toUpperCase() === "XAXX010101000" &&
+    review.receiver.fiscalName?.trim().toUpperCase() === "PUBLICO EN GENERAL" &&
+    review.receiver.fiscalRegime === "616" &&
+    review.receiver.fiscalPostalCode === review.issuer?.fiscalPostalCode,
+  );
+  const globalConfigurationReady =
+    invoiceMode === "NOMINATIVE"
+      ? review?.receiver?.taxId?.trim().toUpperCase() !== "XAXX010101000"
+      : globalReceiverReady &&
+        cfdiUse === "S01" &&
+        paymentMethod === "PUE" &&
+        exportCode === "01" &&
+        globalMonths !== "" &&
+        Number.isInteger(Number(globalYear)) &&
+        globalYear.length === 4;
   const requiresExchangeRate = Boolean(
     review?.currencyCode && review.currencyCode !== "MXN",
   );
@@ -347,6 +378,7 @@ export function InvoiceReconciliationPanel({
     !nativeInvoice &&
     status === "READY" &&
     Boolean(review?.profile.complete && cfdiUse) &&
+    globalConfigurationReady &&
     paymentConfigurationReady &&
     (!requiresExchangeRate || Number(tipoCambio) > 0);
   const canCancel = Boolean(
@@ -370,6 +402,17 @@ export function InvoiceReconciliationPanel({
       paymentMethod,
       paymentForm,
       exportCode,
+      ...(invoiceMode === "GLOBAL"
+        ? {
+            globalInformation: {
+              periodicity: globalPeriodicity,
+              months: globalMonths as NonNullable<
+                IssueCfdiInput["globalInformation"]
+              >["months"],
+              year: Number(globalYear),
+            },
+          }
+        : {}),
       ...(tipoCambio.trim() ? { tipoCambio: tipoCambio.trim() } : {}),
     };
     try {
@@ -598,10 +641,38 @@ export function InvoiceReconciliationPanel({
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <label className={fieldClass}>
+                    Tipo de factura
+                    <Select
+                      aria-label="Tipo de factura"
+                      disabled={Boolean(nativeInvoice) || issue.isPending}
+                      onChange={(event) => {
+                        const mode = event.target.value as
+                          "NOMINATIVE" | "GLOBAL";
+                        setInvoiceMode(mode);
+                        if (mode === "GLOBAL") {
+                          setCfdiUse("S01");
+                          setPaymentMethod("PUE");
+                          setExportCode("01");
+                          if (paymentForm === "99") setPaymentForm("03");
+                        }
+                      }}
+                      value={invoiceMode}
+                    >
+                      <option value="NOMINATIVE">Nominativa</option>
+                      <option value="GLOBAL">
+                        Global · Público en general
+                      </option>
+                    </Select>
+                  </label>
+                  <label className={fieldClass}>
                     UsoCFDI
                     <Select
                       aria-label="UsoCFDI"
-                      disabled={Boolean(nativeInvoice) || issue.isPending}
+                      disabled={
+                        Boolean(nativeInvoice) ||
+                        issue.isPending ||
+                        invoiceMode === "GLOBAL"
+                      }
                       onChange={(event) => setCfdiUse(event.target.value)}
                       value={cfdiUse}
                     >
@@ -632,7 +703,11 @@ export function InvoiceReconciliationPanel({
                     Método de pago
                     <Select
                       aria-label="Método de pago"
-                      disabled={Boolean(nativeInvoice) || issue.isPending}
+                      disabled={
+                        Boolean(nativeInvoice) ||
+                        issue.isPending ||
+                        invoiceMode === "GLOBAL"
+                      }
                       onChange={(event) => {
                         const value = event.target
                           .value as IssueCfdiInput["paymentMethod"];
@@ -651,7 +726,11 @@ export function InvoiceReconciliationPanel({
                     Exportación
                     <Select
                       aria-label="Exportación"
-                      disabled={Boolean(nativeInvoice) || issue.isPending}
+                      disabled={
+                        Boolean(nativeInvoice) ||
+                        issue.isPending ||
+                        invoiceMode === "GLOBAL"
+                      }
                       onChange={(event) => setExportCode(event.target.value)}
                       value={exportCode}
                     >
@@ -677,6 +756,78 @@ export function InvoiceReconciliationPanel({
                         value={tipoCambio}
                       />
                     </label>
+                  )}
+                  {invoiceMode === "GLOBAL" && (
+                    <>
+                      <label className={fieldClass}>
+                        Periodicidad global
+                        <Select
+                          aria-label="Periodicidad global"
+                          disabled={Boolean(nativeInvoice) || issue.isPending}
+                          onChange={(event) => {
+                            setGlobalPeriodicity(
+                              event.target.value as typeof globalPeriodicity,
+                            );
+                            setGlobalMonths("");
+                          }}
+                          value={globalPeriodicity}
+                        >
+                          <option value="01">01 · Diario</option>
+                          <option value="02">02 · Semanal</option>
+                          <option value="03">03 · Quincenal</option>
+                          <option value="04">04 · Mensual</option>
+                          <option value="05">05 · Bimestral</option>
+                        </Select>
+                      </label>
+                      <label className={fieldClass}>
+                        Mes o bimestre
+                        <Select
+                          aria-label="Mes o bimestre global"
+                          disabled={Boolean(nativeInvoice) || issue.isPending}
+                          onChange={(event) =>
+                            setGlobalMonths(event.target.value)
+                          }
+                          value={globalMonths}
+                        >
+                          <option value="">Seleccionar periodo</option>
+                          {(globalPeriodicity === "05"
+                            ? ["13", "14", "15", "16", "17", "18"]
+                            : [
+                                "01",
+                                "02",
+                                "03",
+                                "04",
+                                "05",
+                                "06",
+                                "07",
+                                "08",
+                                "09",
+                                "10",
+                                "11",
+                                "12",
+                              ]
+                          ).map((month) => (
+                            <option key={month} value={month}>
+                              {month}
+                            </option>
+                          ))}
+                        </Select>
+                      </label>
+                      <label className={fieldClass}>
+                        Año fiscal
+                        <Input
+                          aria-label="Año fiscal global"
+                          disabled={Boolean(nativeInvoice) || issue.isPending}
+                          inputMode="numeric"
+                          maxLength={4}
+                          onChange={(event) =>
+                            setGlobalYear(event.target.value)
+                          }
+                          placeholder="2026"
+                          value={globalYear}
+                        />
+                      </label>
+                    </>
                   )}
                 </div>
               </div>

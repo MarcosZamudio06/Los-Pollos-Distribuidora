@@ -301,7 +301,16 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
             OR: [
               {
                 status: FiscalOperationStatus.UNKNOWN,
-                OR: [{ nextRetryAt: null }, { nextRetryAt: { lte: now } }],
+                nextRetryAt: { lte: now },
+              },
+              {
+                status: FiscalOperationStatus.UNKNOWN,
+                nextRetryAt: null,
+                invoice: {
+                  fiscalOperationAttempts: {
+                    none: { operation: FiscalOperationType.RECOVERY },
+                  },
+                },
               },
               {
                 status: FiscalOperationStatus.PROCESSING,

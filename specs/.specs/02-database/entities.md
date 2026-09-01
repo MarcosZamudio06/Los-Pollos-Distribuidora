@@ -711,6 +711,13 @@ Validaciones:
 
 ### Invoice
 
+- `globalInformationSnapshot` JSONB nullable distingue el CFDI global de una
+  factura nominativa. Cuando existe contiene exactamente `periodicity`,
+  `months` y `year`, forma parte del hash fiscal y es inmutable.
+- Todo `Invoice NATIVE_CFDI INCOME` cuyo receptor sea `XAXX010101000` requiere
+  ese snapshot y el contrato `PUBLICO EN GENERAL` / `616` / `S01` / CP del
+  emisor / `PUE` / `01`. Un receptor nominativo debe mantenerlo nulo.
+
 - Registro de una factura emitida externamente, con emisor, moneda, serie, folio, UUID opcional, importes `Decimal(14,2)`, estado, versión, cancelación y sustitución.
 - Estados mínimos: `ACTIVE`, `CANCELLED`, `SUBSTITUTED`.
 - No contiene secretos, certificados, XML ni operaciones de timbrado.

@@ -1,6 +1,8 @@
 import type { Customer, CustomerFormValues } from "./types";
 import {
   CUSTOMER_FISCAL_PROFILE_FIELDS,
+  deriveSatReceiverPersonType,
+  isCfdiUseCompatible,
   isStructurallyValidFiscalRfc,
   isValidSatCfdiUseCode,
   isValidSatFiscalRegime,
@@ -239,6 +241,36 @@ function fiscalFieldRequiredMessage(field: CustomerFiscalProfileField) {
   return messages[field];
 }
 
+const FISCAL_COMPATIBILITY_MESSAGE =
+  "El Uso CFDI seleccionado no es compatible con el régimen fiscal del receptor.";
+
+export function getCustomerFiscalCompatibilityError(
+  draft: CustomerFormDraft,
+): string | null {
+  const taxId = cleanTaxId(draft.taxId);
+  const fiscalRegime = cleanFiscalCode(draft.fiscalRegime);
+  const fiscalUseCode = cleanFiscalCode(draft.fiscalUseCode);
+  if (
+    !taxId ||
+    !fiscalRegime ||
+    !fiscalUseCode ||
+    !isStructurallyValidFiscalRfc(taxId) ||
+    !isValidSatFiscalRegime(fiscalRegime) ||
+    !isValidSatCfdiUseCode(fiscalUseCode)
+  ) {
+    return null;
+  }
+
+  return isCfdiUseCompatible({
+    cfdiUse: fiscalUseCode,
+    fiscalRegime,
+    receiverPersonType: deriveSatReceiverPersonType(taxId),
+    receiverTaxId: taxId,
+  })
+    ? null
+    : FISCAL_COMPATIBILITY_MESSAGE;
+}
+
 export function validateCustomerField(
   field: CustomerFormField,
   draft: CustomerFormDraft,
@@ -371,9 +403,9 @@ export function validateCustomerField(
           ? fiscalFieldRequiredMessage("fiscalRegime")
           : null;
       }
-      return isValidSatFiscalRegime(value)
-        ? null
-        : "Selecciona un régimen fiscal del catálogo SAT.";
+      if (!isValidSatFiscalRegime(value))
+        return "Selecciona un régimen fiscal del catálogo SAT.";
+      return getCustomerFiscalCompatibilityError(draft);
     }
     case "fiscalUseCode": {
       const value = cleanFiscalCode(draft.fiscalUseCode);
@@ -382,9 +414,9 @@ export function validateCustomerField(
           ? fiscalFieldRequiredMessage("fiscalUseCode")
           : null;
       }
-      return isValidSatCfdiUseCode(value)
-        ? null
-        : "Selecciona un uso de CFDI del catálogo SAT.";
+      if (!isValidSatCfdiUseCode(value))
+        return "Selecciona un uso de CFDI del catálogo SAT.";
+      return getCustomerFiscalCompatibilityError(draft);
     }
     case "address": {
       const value = collapseSpaces(draft.address);
