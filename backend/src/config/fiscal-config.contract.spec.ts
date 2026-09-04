@@ -15,6 +15,9 @@ describe('fiscal production configuration contract', () => {
       'FISCAL_PROVIDER_ENVIRONMENT: ${FISCAL_PROVIDER_ENVIRONMENT:-PRODUCTION}',
     );
     expect(productionCompose).toContain(
+      'CFDI_FISCAL_TIME_ZONE: ${CFDI_FISCAL_TIME_ZONE:-America/Mexico_City}',
+    );
+    expect(productionCompose).toContain(
       'FACTURAMA_CREDENTIAL_REF: ${FACTURAMA_CREDENTIAL_REF:-}',
     );
     expect(productionCompose).not.toMatch(

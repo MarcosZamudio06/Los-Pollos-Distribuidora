@@ -1,5 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 import { assertAllowlistedFacturamaBaseUrl } from '../../../../config/fiscal-provider-url';
+import {
+  formatSatLocalDateTime,
+  isValidIanaTimeZone,
+} from '../../../../common/utils/sat-local-date-time';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type {
@@ -115,7 +119,7 @@ interface FacturamaPaymentRelatedDocument {
   Serie?: string;
   Folio?: string;
   Currency: string;
-  EquivalenceDocRel: string;
+  EquivalenceDocRel: string | 1;
   PaymentMethod: 'PPD';
   PartialityNumber: number;
   PreviousBalanceAmount: string;
@@ -444,6 +448,74 @@ function paymentTaxes(
   });
 }
 
+function paymentLocalDate(
+  paidAt: string,
+  fiscalTimeZone: string | undefined,
+  operation: FiscalProviderOperation,
+  correlationId: string,
+): string {
+  if (!fiscalTimeZone || !isValidIanaTimeZone(fiscalTimeZone)) {
+    throw new FiscalProviderError(
+      'FISCAL_PROVIDER_CONFIGURATION',
+      operation,
+      correlationId,
+      null,
+      false,
+    );
+  }
+  try {
+    return formatSatLocalDateTime(paidAt, fiscalTimeZone);
+  } catch {
+    throw new FiscalProviderError(
+      'FISCAL_PROVIDER_VALIDATION',
+      operation,
+      correlationId,
+      null,
+      false,
+    );
+  }
+}
+
+function paymentDocumentEquivalence(
+  documentCurrencyCode: string,
+  paymentCurrencyCode: string,
+  equivalenceDr: unknown,
+  operation: FiscalProviderOperation,
+  correlationId: string,
+): string | 1 {
+  const normalized = stringValue(equivalenceDr);
+  const isValidSatDecimal =
+    normalized !== null && /^\d{1,10}(?:\.\d{1,10})?$/.test(normalized);
+  if (
+    !isValidSatDecimal ||
+    !Number.isFinite(Number(normalized)) ||
+    Number(normalized) <= 0
+  ) {
+    throw new FiscalProviderError(
+      'FISCAL_PROVIDER_VALIDATION',
+      operation,
+      correlationId,
+      null,
+      false,
+    );
+  }
+
+  if (documentCurrencyCode === paymentCurrencyCode) {
+    if (Number(normalized) !== 1) {
+      throw new FiscalProviderError(
+        'FISCAL_PROVIDER_VALIDATION',
+        operation,
+        correlationId,
+        null,
+        false,
+      );
+    }
+    return 1;
+  }
+
+  return normalized;
+}
+
 function buildItem(
   concept: FiscalIssueCommand['snapshot']['concepts'][number],
   operation: FiscalProviderOperation,
@@ -509,6 +581,7 @@ function buildItem(
 function buildIssuePayload(
   command: FiscalIssueCommand,
   operation: FiscalProviderOperation,
+  fiscalTimeZone?: string,
 ): FacturamaIssuePayload | FacturamaPaymentReceiptPayload {
   const snapshot = command.snapshot;
   const correlationId = command.correlationId;
@@ -516,7 +589,8 @@ function buildIssuePayload(
   // `snapshot.issuedAt` is an unambiguous instant, while Facturama's optional
   // top-level Date is a local wall-clock. No issuer/expedition timezone exists
   // in this boundary, so omit it and let Facturama resolve it from the postal
-  // code. A payment complement's Date is a separate fiscal event and remains.
+  // code. A payment complement's Date is a separate fiscal event converted
+  // below through the explicitly configured fiscal timezone.
   if (!folio || folio.includes('|') || folio.length > 40) {
     throw new FiscalProviderError(
       'FISCAL_PROVIDER_CONFIGURATION',
@@ -548,7 +622,13 @@ function buildIssuePayload(
           ...(document.relatedSeries ? { Serie: document.relatedSeries } : {}),
           ...(document.relatedFolio ? { Folio: document.relatedFolio } : {}),
           Currency: document.documentCurrencyCode,
-          EquivalenceDocRel: document.equivalenceDr,
+          EquivalenceDocRel: paymentDocumentEquivalence(
+            document.documentCurrencyCode,
+            snapshot.payment.currencyCode,
+            document.equivalenceDr,
+            operation,
+            correlationId,
+          ),
           PaymentMethod: document.paymentMethodDr,
           PartialityNumber: document.partialityNumber,
           PreviousBalanceAmount: document.previousBalanceAmount,
@@ -591,7 +671,12 @@ function buildIssuePayload(
       Complemento: {
         Payments: [
           {
-            Date: snapshot.payment.paidAt,
+            Date: paymentLocalDate(
+              snapshot.payment.paidAt,
+              fiscalTimeZone,
+              operation,
+              correlationId,
+            ),
             PaymentForm: snapshot.payment.paymentFormCode,
             Amount: snapshot.payment.amount,
             Currency: snapshot.payment.currencyCode,
@@ -812,7 +897,15 @@ export class FacturamaAdapter implements FiscalProviderPort {
   async stamp(command: FiscalIssueCommand): Promise<FiscalStampResponse> {
     const operation = 'STAMP' as const;
     const correlationId = safeCorrelationId(command.correlationId, operation);
-    const payload = buildIssuePayload({ ...command, correlationId }, operation);
+    const fiscalTimeZone =
+      command.snapshot.cfdiType === 'PAYMENT_RECEIPT'
+        ? this.config.get<string>('CFDI_FISCAL_TIME_ZONE')?.trim()
+        : undefined;
+    const payload = buildIssuePayload(
+      { ...command, correlationId },
+      operation,
+      fiscalTimeZone,
+    );
     const response = await this.requestJson<FacturamaInvoiceResponse>(
       operation,
       correlationId,

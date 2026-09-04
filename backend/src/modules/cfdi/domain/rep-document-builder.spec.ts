@@ -185,4 +185,14 @@ describe('buildRepDocument', () => {
       }),
     ).toThrow('INVALID_PAYMENT_CONFIGURATION');
   });
+
+  it('rejects a payment economically later than the REP issue instant', () => {
+    expect(() =>
+      buildRepDocument({
+        ...input('10.00', [candidate('1', '10.00', '2026-08-01T00:00:00Z')]),
+        issuedAt: new Date('2026-08-23T10:00:00.000Z'),
+        paidAt: new Date('2026-08-23T10:00:00.001Z'),
+      }),
+    ).toThrow('REP_PAYMENT_DATE_AFTER_ISSUANCE');
+  });
 });

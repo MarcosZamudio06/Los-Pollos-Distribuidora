@@ -825,7 +825,8 @@ Relaciona una `LegalEntity` con la cuenta del proveedor sin guardar secretos:
 ### `FiscalFolioSequence`
 
 Asigna serie y folio deterministas en PostgreSQL antes de llamar al proveedor.
-La unicidad se acota por entidad legal, tipo de documento y serie. La identidad
+La secuencia es única por entidad legal y serie y se comparte entre CFDI I, E
+y P. El tipo de documento no crea contadores independientes. La identidad
 asignada es inmutable y sirve para reconciliar respuestas ambiguas.
 
 ### `Invoice` fiscal

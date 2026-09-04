@@ -243,16 +243,14 @@ export class CfdiIssuanceRepository {
 
             const sequence = await tx.fiscalFolioSequence.upsert({
               where: {
-                legalEntityId_cfdiType_series: {
+                legalEntityId_series: {
                   legalEntityId: snapshot.issuer.legalEntityId,
-                  cfdiType: CfdiDocumentType.INCOME,
                   series: snapshot.issuer.series,
                 },
               },
               update: { nextValue: { increment: 1 } },
               create: {
                 legalEntityId: snapshot.issuer.legalEntityId,
-                cfdiType: CfdiDocumentType.INCOME,
                 series: snapshot.issuer.series,
                 nextValue: 2,
               },

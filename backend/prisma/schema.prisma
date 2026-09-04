@@ -2282,7 +2282,7 @@ model Invoice {
   globalInformationSnapshot    Json?
   fiscalRelationships          Json?
   fiscalSnapshotHash           String?                     @db.VarChar(64)
-  fiscalUseCode                String?                     @db.VarChar(3)
+  fiscalUseCode                String?                     @db.VarChar(4)
   exportCode                   String?                     @db.VarChar(2)
   paymentFormCode              String?                     @db.VarChar(2)
   paymentMethodCode            String?                     @db.VarChar(3)
@@ -2331,7 +2331,7 @@ model Invoice {
   substitutedBy                Invoice?                    @relation("InvoiceSubstitution", fields: [substitutedByInvoiceId], references: [id])
   substitutes                  Invoice?                    @relation("InvoiceSubstitution")
   substitutionOfInvoice        Invoice?                    @relation("InvoiceNativeFiscalSubstitution", fields: [substitutionOfInvoiceId], references: [id], onDelete: Restrict)
-  nativeSubstitute              Invoice?                    @relation("InvoiceNativeFiscalSubstitution")
+  nativeSubstitute             Invoice?                    @relation("InvoiceNativeFiscalSubstitution")
   documents                    InvoiceSaleDocument[]
   concepts                     InvoiceConcept[]
   fiscalArtifacts              FiscalArtifact[]
@@ -2593,16 +2593,15 @@ model FiscalOperationAttempt {
 }
 
 model FiscalFolioSequence {
-  id            String           @id @default(cuid())
+  id            String      @id @default(cuid())
   legalEntityId String
-  cfdiType      CfdiDocumentType
-  series        String           @db.VarChar(10)
-  nextValue     BigInt           @default(1)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  legalEntity   LegalEntity      @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  series        String      @db.VarChar(10)
+  nextValue     BigInt      @default(1)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  legalEntity   LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
 
-  @@unique([legalEntityId, cfdiType, series])
+  @@unique([legalEntityId, series])
   @@index([legalEntityId, updatedAt])
 }
 

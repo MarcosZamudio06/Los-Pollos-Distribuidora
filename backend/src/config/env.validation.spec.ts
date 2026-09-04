@@ -11,6 +11,19 @@ describe('validateEnvironment', () => {
       validateEnvironment({ APP_TIMEZONE: 'Invalid/Timezone' }),
     ).toThrow('Invalid APP_TIMEZONE value');
   });
+
+  it('defaults and validates the explicit CFDI fiscal timezone', () => {
+    expect(validateEnvironment({}).CFDI_FISCAL_TIME_ZONE).toBe(
+      'America/Mexico_City',
+    );
+    expect(
+      validateEnvironment({ CFDI_FISCAL_TIME_ZONE: 'America/Cancun' })
+        .CFDI_FISCAL_TIME_ZONE,
+    ).toBe('America/Cancun');
+    expect(() =>
+      validateEnvironment({ CFDI_FISCAL_TIME_ZONE: 'Invalid/Timezone' }),
+    ).toThrow('Invalid CFDI_FISCAL_TIME_ZONE value');
+  });
   it('uses the repo default DATABASE_URL when none is provided', () => {
     expect(
       validateEnvironment({

@@ -1,5 +1,9 @@
 import { DEFAULT_DATABASE_URL } from './database.config';
 import { assertAllowlistedFacturamaBaseUrl } from './fiscal-provider-url';
+import {
+  DEFAULT_CFDI_FISCAL_TIME_ZONE,
+  isValidIanaTimeZone,
+} from '../common/utils/sat-local-date-time';
 
 type EnvironmentVariables = Record<string, string | undefined>;
 
@@ -204,6 +208,8 @@ export function validateEnvironment(env: EnvironmentVariables) {
   const parsedPort = Number(portValue);
   const nodeEnv = env.NODE_ENV?.trim() || 'development';
   const appTimezone = env.APP_TIMEZONE?.trim() || 'America/Mexico_City';
+  const cfdiFiscalTimeZone =
+    env.CFDI_FISCAL_TIME_ZONE?.trim() || DEFAULT_CFDI_FISCAL_TIME_ZONE;
   const absoluteSessionTtl = Number(
     env.AUTH_SESSION_ABSOLUTE_TTL_SECONDS?.trim() || 604800,
   );
@@ -332,6 +338,11 @@ export function validateEnvironment(env: EnvironmentVariables) {
     new Intl.DateTimeFormat('en-US', { timeZone: appTimezone }).format();
   } catch {
     throw new Error(`Invalid APP_TIMEZONE value: ${appTimezone}`);
+  }
+  if (!isValidIanaTimeZone(cfdiFiscalTimeZone)) {
+    throw new Error(
+      `Invalid CFDI_FISCAL_TIME_ZONE value: ${cfdiFiscalTimeZone}`,
+    );
   }
 
   if (Number.isNaN(parsedPort) || parsedPort <= 0) {
@@ -503,6 +514,7 @@ export function validateEnvironment(env: EnvironmentVariables) {
     DATABASE_SSL: databaseSsl,
     DATABASE_URL: env.DATABASE_URL?.trim() || DEFAULT_DATABASE_URL,
     CFDI_ENABLED: cfdiEnabled,
+    CFDI_FISCAL_TIME_ZONE: cfdiFiscalTimeZone,
     CFDI_REQUEST_TIMEOUT_MS: cfdiRequestTimeoutMs,
     CFDI_MAX_RETRIES: cfdiMaxRetries,
     FISCAL_PROVIDER: fiscalProvider,

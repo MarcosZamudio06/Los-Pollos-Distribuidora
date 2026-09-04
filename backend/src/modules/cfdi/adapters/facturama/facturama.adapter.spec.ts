@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { FiscalProviderError } from '../../domain/fiscal-provider.port';
 import type {
   CfdiCreditNoteSnapshot,
@@ -220,6 +221,7 @@ function config(overrides: Record<string, unknown> = {}) {
     FACTURAMA_CREDENTIAL_REF: 'secret://facturama/sandbox',
     FISCAL_PROVIDER: 'FACTURAMA',
     FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+    CFDI_FISCAL_TIME_ZONE: 'America/Mexico_City',
     CFDI_REQUEST_TIMEOUT_MS: 1_000,
     ...overrides,
   });
@@ -736,8 +738,10 @@ describe('FacturamaAdapter', () => {
       );
       expect(payload).not.toHaveProperty('PaymentForm');
       expect(payload).not.toHaveProperty('PaymentMethod');
-      expect(payload.Complemento.Payments[0]).toMatchObject({
-        Date: paymentReceiptSnapshot().payment.paidAt,
+      const payment = payload.Complemento.Payments[0];
+      const relatedDocument = payment.RelatedDocuments[0];
+      expect(payment).toMatchObject({
+        Date: '2026-08-23T03:00:00',
         PaymentForm: '03',
         Amount: '1500.00',
         Currency: 'MXN',
@@ -752,6 +756,13 @@ describe('FacturamaAdapter', () => {
           },
         ],
       });
+      expect(relatedDocument.EquivalenceDocRel).toBe(1);
+      expect(typeof relatedDocument.EquivalenceDocRel).toBe('number');
+      expect(
+        new Prisma.Decimal(relatedDocument.PreviousBalanceAmount)
+          .minus(relatedDocument.AmountPaid)
+          .equals(relatedDocument.ImpSaldoInsoluto),
+      ).toBe(true);
       return response(stampResponse());
     }) as unknown as typeof fetch;
     const adapter = new FacturamaAdapter(config(), resolver, fetcher);
@@ -765,6 +776,261 @@ describe('FacturamaAdapter', () => {
         snapshot: paymentReceiptSnapshot(),
       }),
     ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
+  it('canonicalizes same-currency USD equivalence to JSON number 1', async () => {
+    const fetcher = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(init?.body as string);
+      const relatedDocument =
+        payload.Complemento.Payments[0].RelatedDocuments[0];
+      expect(relatedDocument.EquivalenceDocRel).toBe(1);
+      expect(typeof relatedDocument.EquivalenceDocRel).toBe('number');
+      return response(stampResponse());
+    }) as unknown as typeof fetch;
+    const snapshot = paymentReceiptSnapshot();
+    const usdSnapshot = {
+      ...snapshot,
+      payment: {
+        ...snapshot.payment,
+        currencyCode: 'USD',
+        exchangeRateToMxn: '17.500000',
+        relatedDocuments: snapshot.payment.relatedDocuments.map((document) => ({
+          ...document,
+          documentCurrencyCode: 'USD',
+        })),
+      },
+    };
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-rep-usd-equivalence',
+        idempotencyKey: 'rep-usd-equivalence-idem',
+        series: 'P',
+        folio: '98',
+        snapshot: usdSnapshot,
+      }),
+    ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
+  it('keeps the protected REP payment and balances unchanged', async () => {
+    const fetcher = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(init?.body as string);
+      const payment = payload.Complemento.Payments[0];
+      const relatedDocument = payment.RelatedDocuments[0];
+      expect(payment.Amount).toBe('0.58');
+      expect(relatedDocument).toMatchObject({
+        EquivalenceDocRel: 1,
+        PreviousBalanceAmount: '1.16',
+        AmountPaid: '0.58',
+        ImpSaldoInsoluto: '0.58',
+      });
+      expect(
+        new Prisma.Decimal(relatedDocument.PreviousBalanceAmount)
+          .minus(relatedDocument.AmountPaid)
+          .equals(relatedDocument.ImpSaldoInsoluto),
+      ).toBe(true);
+      return response(stampResponse());
+    }) as unknown as typeof fetch;
+    const snapshot = paymentReceiptSnapshot();
+    const protectedRepSnapshot = {
+      ...snapshot,
+      payment: {
+        ...snapshot.payment,
+        amount: '0.58',
+        relatedDocuments: snapshot.payment.relatedDocuments.map((document) => ({
+          ...document,
+          previousBalanceAmount: '1.16',
+          amountPaid: '0.58',
+          remainingBalance: '0.58',
+        })),
+      },
+    };
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-rep-protected-balances',
+        idempotencyKey: 'rep-protected-balances-idem',
+        series: 'P',
+        folio: '99',
+        snapshot: protectedRepSnapshot,
+      }),
+    ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
+  it('rejects a non-unit same-currency equivalence before network I/O', async () => {
+    const fetcher = jest.fn() as unknown as typeof fetch;
+    const snapshot = paymentReceiptSnapshot();
+    const invalidSnapshot = {
+      ...snapshot,
+      payment: {
+        ...snapshot.payment,
+        relatedDocuments: snapshot.payment.relatedDocuments.map((document) => ({
+          ...document,
+          equivalenceDr: '0.999999',
+        })),
+      },
+    };
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-rep-invalid-equivalence',
+        idempotencyKey: 'rep-invalid-equivalence-idem',
+        series: 'P',
+        folio: '99',
+        snapshot: invalidSnapshot,
+      }),
+    ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_VALIDATION' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('preserves a positive different-currency equivalence', async () => {
+    const fetcher = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(init?.body as string);
+      expect(
+        payload.Complemento.Payments[0].RelatedDocuments[0].EquivalenceDocRel,
+      ).toBe('17.250000');
+      return response(stampResponse());
+    }) as unknown as typeof fetch;
+    const snapshot = paymentReceiptSnapshot();
+    const foreignDocumentSnapshot = {
+      ...snapshot,
+      payment: {
+        ...snapshot.payment,
+        relatedDocuments: snapshot.payment.relatedDocuments.map((document) => ({
+          ...document,
+          documentCurrencyCode: 'USD',
+          equivalenceDr: '17.250000',
+        })),
+      },
+    };
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-rep-foreign-equivalence',
+        idempotencyKey: 'rep-foreign-equivalence-idem',
+        series: 'P',
+        folio: '100',
+        snapshot: foreignDocumentSnapshot,
+      }),
+    ).resolves.toMatchObject({ outcome: 'STAMPED' });
+  });
+
+  it.each([undefined, '', '0', '-1', 'not-a-decimal'] as const)(
+    'rejects invalid different-currency equivalence %j before network I/O',
+    async (equivalenceDr) => {
+      const fetcher = jest.fn() as unknown as typeof fetch;
+      const snapshot = paymentReceiptSnapshot();
+      const invalidSnapshot = {
+        ...snapshot,
+        payment: {
+          ...snapshot.payment,
+          relatedDocuments: snapshot.payment.relatedDocuments.map(
+            (document) => ({
+              ...document,
+              documentCurrencyCode: 'USD',
+              equivalenceDr: equivalenceDr as unknown as string,
+            }),
+          ),
+        },
+      };
+      const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+
+      await expect(
+        adapter.stamp({
+          correlationId: 'corr-rep-invalid-foreign-equivalence',
+          idempotencyKey: 'rep-invalid-foreign-equivalence-idem',
+          series: 'P',
+          folio: '101',
+          snapshot: invalidSnapshot,
+        }),
+      ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_VALIDATION' });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['UTC', 'America/Mexico_City'] as const)(
+    'serializes REP FechaPago in configured fiscal time independently from host timezone %s',
+    async (hostTimezone) => {
+      const previousTimezone = process.env.TZ;
+      process.env.TZ = hostTimezone;
+      let paymentDate: string | undefined;
+      try {
+        const fetcher = jest.fn(
+          (_input: RequestInfo | URL, init?: RequestInit) => {
+            const payload = JSON.parse(init?.body as string);
+            paymentDate = payload.Complemento.Payments[0].Date;
+            return response(stampResponse());
+          },
+        ) as unknown as typeof fetch;
+        const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+        const repSnapshot = paymentReceiptSnapshot();
+
+        await adapter.stamp({
+          correlationId: `corr-rep-local-date-${hostTimezone.replaceAll('/', '-')}`,
+          idempotencyKey: 'rep-local-date-idem',
+          series: 'P',
+          folio: '95',
+          snapshot: {
+            ...repSnapshot,
+            payment: {
+              ...repSnapshot.payment,
+              paidAt: '2026-09-03T02:55:00.000Z',
+            },
+          },
+        });
+
+        expect(paymentDate).toBe('2026-09-02T20:55:00');
+        expect(paymentDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+        expect(paymentDate).not.toMatch(/Z|[+-]\d{2}:\d{2}|\.\d{3}/);
+      } finally {
+        if (previousTimezone === undefined) delete process.env.TZ;
+        else process.env.TZ = previousTimezone;
+      }
+    },
+  );
+
+  it('rejects an invalid fiscal timezone before network I/O', async () => {
+    const fetcher = jest.fn() as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(
+      config({ CFDI_FISCAL_TIME_ZONE: 'Invalid/Timezone' }),
+      resolver,
+      fetcher,
+    );
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-rep-invalid-timezone',
+        idempotencyKey: 'rep-invalid-timezone-idem',
+        series: 'P',
+        folio: '96',
+        snapshot: paymentReceiptSnapshot(),
+      }),
+    ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_CONFIGURATION' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid REP paidAt before network I/O', async () => {
+    const fetcher = jest.fn() as unknown as typeof fetch;
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    const repSnapshot = paymentReceiptSnapshot();
+
+    await expect(
+      adapter.stamp({
+        correlationId: 'corr-rep-invalid-paid-at',
+        idempotencyKey: 'rep-invalid-paid-at-idem',
+        series: 'P',
+        folio: '97',
+        snapshot: {
+          ...repSnapshot,
+          payment: { ...repSnapshot.payment, paidAt: 'not-an-instant' },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_VALIDATION' });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('maps Pagos 2.0 tax snapshots to RelatedDocuments and payment tax nodes', async () => {

@@ -764,7 +764,8 @@ referencias opacas a credenciales y emisor; jamás secretos.
 
 ### FiscalFolioSequence
 
-Asigna serie y folio deterministas por emisor y tipo antes del llamado PAC.
+Asigna serie y folio deterministas por emisor y serie antes del llamado PAC.
+CFDI I, E y P comparten el contador cuando usan la misma serie.
 
 ### Invoice e InvoiceConcept
 

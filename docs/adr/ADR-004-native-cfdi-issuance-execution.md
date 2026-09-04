@@ -14,16 +14,18 @@ a `FiscalProviderPort`. Una segunda transacción corta finaliza el resultado.
 
 La red NUNCA ocurre con locks PostgreSQL abiertos. Una raíz única por
 `sourceBillingRequestId`, una idempotencia fiscal global y la identidad
-`LegalEntity + tipo + serie + folio` impiden doble emisión concurrente.
+`LegalEntity + serie + folio` impiden doble emisión concurrente. La autoridad
+de folios es una secuencia PostgreSQL por `LegalEntity + serie`, compartida por
+CFDI I, E y P; el tipo no abre un contador independiente.
 
 ## Resultado por clase de fallo
 
-| Evidencia | Estado persistido | Saldo |
-| --- | --- | --- |
-| Respuesta timbrada completa | `STAMPED` / `SUCCEEDED` | Aplicado |
-| Rechazo definitivo 4xx | `FAILED` / `TERMINAL_FAILURE` | Reserva revertida |
-| Timeout, 5xx o respuesta incompleta | `UNKNOWN` / `UNKNOWN` | Reservado |
-| Éxito PAC con rollback de finalización | `UNKNOWN` recuperable | Reservado |
+| Evidencia                              | Estado persistido             | Saldo             |
+| -------------------------------------- | ----------------------------- | ----------------- |
+| Respuesta timbrada completa            | `STAMPED` / `SUCCEEDED`       | Aplicado          |
+| Rechazo definitivo 4xx                 | `FAILED` / `TERMINAL_FAILURE` | Reserva revertida |
+| Timeout, 5xx o respuesta incompleta    | `UNKNOWN` / `UNKNOWN`         | Reservado         |
+| Éxito PAC con rollback de finalización | `UNKNOWN` recuperable         | Reservado         |
 
 `UNKNOWN` nunca reenvía `STAMP`; solo una reconciliación posterior puede
 resolverlo. XML/PDF quedan como artefactos `PENDING` con referencia PAC y se

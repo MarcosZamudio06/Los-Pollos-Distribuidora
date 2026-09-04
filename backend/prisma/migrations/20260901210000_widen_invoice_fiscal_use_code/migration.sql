@@ -1,0 +1,1 @@
+ALTER TABLE "Invoice" ALTER COLUMN "fiscalUseCode" TYPE VARCHAR(4);

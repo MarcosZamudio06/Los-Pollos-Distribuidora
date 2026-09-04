@@ -2,6 +2,7 @@ import {
   BillingRequestStatus,
   CfdiDocumentType,
   CollectionStatus,
+  CostSnapshotSource,
   CreditStatus,
   CustomerType,
   FiscalCancellationStatus,
@@ -15,6 +16,8 @@ import {
   PaymentStatus,
   Prisma,
   PrismaClient,
+  ProductPresentationType,
+  ProductUnit,
   SaleChannel,
   SaleDocumentStatus,
   SaleDocumentType,
@@ -35,6 +38,10 @@ const decimal = (value: Prisma.Decimal.Value): Prisma.Decimal =>
 describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
   const runId = randomUUID().replaceAll('-', '').toUpperCase();
   const marker = `rep20-${runId}`;
+  const legalEntityTaxId = `REP010101${(BigInt(`0x${runId}`) % 36n ** 3n)
+    .toString(36)
+    .toUpperCase()
+    .padStart(3, '0')}`;
   const actor = { id: '', role: 'ADMIN' as const };
   let prisma: PrismaClient;
   let repository: RepIssuanceRepository;
@@ -43,6 +50,7 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
   let customerId: string;
   let locationId: string;
   let actorId: string;
+  let productId: string;
   let invoiceSequence = 0;
 
   beforeAll(async () => {
@@ -87,7 +95,7 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
     const legalEntity = await prisma.legalEntity.create({
       data: {
         legalName: `${marker} legal entity`,
-        taxId: `REP${runId.slice(0, 10)}`,
+        taxId: legalEntityTaxId,
         fiscalPostalCode: '64000',
         fiscalRegime: '601',
         cfdiEnabled: true,
@@ -129,6 +137,21 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
     });
     customerId = customer.id;
 
+    const product = await prisma.product.create({
+      data: {
+        name: `${marker} product`,
+        sku: marker,
+        presentationType: ProductPresentationType.KG,
+        salePrice: decimal(100),
+        purchaseCost: decimal(35),
+        unit: ProductUnit.KG,
+        satProductServiceCode: '50111500',
+        satUnitCode: 'ACT',
+        taxObjectCode: '01',
+      },
+    });
+    productId = product.id;
+
     repository = new RepIssuanceRepository(prisma as unknown as PrismaService);
   });
 
@@ -149,6 +172,8 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
         fiscalStatus: true,
         status: true,
         uuid: true,
+        folio: true,
+        fiscalUseCode: true,
         paymentMethodCode: true,
       },
     });
@@ -157,6 +182,8 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
       fiscalStatus: InvoiceFiscalStatus.STAMPED,
       status: InvoiceStatus.ACTIVE,
       uuid: fixture.invoiceUuids[0],
+      folio: fixture.invoices[0]?.folio,
+      fiscalUseCode: 'G03',
       paymentMethodCode: 'PPD',
     });
     let reservationObserved = false;
@@ -205,8 +232,12 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
     expect(detail.paymentReceipt.invoice).toMatchObject({
       cfdiType: CfdiDocumentType.PAYMENT_RECEIPT,
       fiscalStatus: InvoiceFiscalStatus.STAMPED,
+      fiscalUseCode: 'CP01',
     });
     expect(detail.paymentReceipt.invoice.total.toFixed(2)).toBe('0.00');
+    expect(BigInt(detail.paymentReceipt.invoice.folio)).toBe(
+      BigInt(sourceInvoice.folio) + 1n,
+    );
     expect(application).toMatchObject({
       relatedInvoiceId: fixture.invoiceIds[0],
       relatedUuid: fixture.invoiceUuids[0],
@@ -492,190 +523,273 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
       decimal(0),
     );
     const suffix = `${marker}-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
-    const sale = await prisma.sale.create({
-      data: {
-        saleNumber: suffix,
-        customerId,
-        userId: actorId,
-        locationId,
-        legalEntityId,
-        saleChannel: SaleChannel.COUNTER,
-        documentType: SaleDocumentType.SIMPLE_NOTE,
-        currencyCode: 'MXN',
-        subtotal: saleTotal,
-        discount: decimal(0),
-        tax: decimal(0),
-        total: saleTotal,
-        paymentType: SalePaymentType.CREDIT_SALE,
-        status: SaleStatus.CONFIRMED,
-      },
-    });
-    const accountReceivable = await prisma.accountReceivable.create({
-      data: {
-        customerId,
-        saleId: sale.id,
-        originalSaleId: sale.id,
-        originalAmount: saleTotal,
-        outstandingAmount: saleTotal,
-        saleDate: new Date('2026-08-23T00:00:00.000Z'),
-        dueDate: new Date('2026-09-22T00:00:00.000Z'),
-        paymentTermsDays: 30,
-        status: CollectionStatus.UNPAID,
-      },
-    });
-
-    const invoices: ScenarioInvoice[] = [];
-    for (const [index, total] of invoiceTotals.entries()) {
-      const saleDocument = await prisma.saleDocument.create({
+    return prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.create({
         data: {
-          saleId: sale.id,
+          saleNumber: suffix,
+          customerId,
+          userId: actorId,
+          locationId,
+          legalEntityId,
+          saleChannel: SaleChannel.COUNTER,
           documentType: SaleDocumentType.SIMPLE_NOTE,
-          operationalLocationId: locationId,
-          status: SaleDocumentStatus.ISSUED,
+          currencyCode: 'MXN',
+          subtotal: saleTotal,
+          discount: decimal(0),
+          tax: decimal(0),
+          total: saleTotal,
+          paymentType: SalePaymentType.CREDIT_SALE,
+          status: SaleStatus.CONFIRMED,
         },
       });
-      const billingRequest = await prisma.billingRequest.create({
+      const invoices: ScenarioInvoice[] = [];
+      for (const [index, requestedTotal] of invoiceTotals.entries()) {
+        const subtotal = decimal(requestedTotal);
+        const discount = decimal(0);
+        const taxableBase = subtotal.minus(discount);
+        const tax = decimal(0);
+        const total = taxableBase.plus(tax);
+        const saleItem = await tx.saleItem.create({
+          data: {
+            saleId: sale.id,
+            productId,
+            quantity: decimal(1),
+            quantityKg: decimal(1),
+            unit: ProductUnit.KG,
+            unitPrice: subtotal,
+            productNameSnapshot: `${marker} product`,
+            productSkuSnapshot: marker,
+            unitPriceSnapshot: subtotal,
+            quantitySnapshot: decimal(1),
+            subtotal,
+            discount,
+            taxableBase,
+            tax,
+            total,
+            unitCostSnapshot: decimal(35),
+            costSubtotalSnapshot: decimal(35),
+            costSnapshotSource: CostSnapshotSource.SALE_CONFIRMATION,
+          },
+        });
+        const saleDocument = await tx.saleDocument.create({
+          data: {
+            saleId: sale.id,
+            documentType: SaleDocumentType.SIMPLE_NOTE,
+            operationalLocationId: locationId,
+            status: SaleDocumentStatus.ISSUED,
+          },
+        });
+        const billingRequest = await tx.billingRequest.create({
+          data: {
+            customerId,
+            saleId: sale.id,
+            requestedByUserId: actorId,
+            reviewedByUserId: actorId,
+            reviewedAt: new Date(),
+            status: BillingRequestStatus.APPROVED,
+            reason: `${suffix}:invoice:${index}`,
+          },
+        });
+        const requestDocument = await tx.billingRequestSaleDocument.create({
+          data: {
+            billingRequestId: billingRequest.id,
+            saleDocumentId: saleDocument.id,
+            requestedSubtotal: taxableBase,
+            requestedTax: tax,
+            requestedTotal: total,
+            createdByUserId: actorId,
+          },
+        });
+        await tx.billingRequestSaleItem.create({
+          data: {
+            billingRequestSaleDocumentId: requestDocument.id,
+            saleItemId: saleItem.id,
+            requestedSubtotal: taxableBase,
+            requestedTax: tax,
+            requestedTotal: total,
+          },
+        });
+
+        invoiceSequence += 1;
+        const series = 'A';
+        const sequence = await tx.fiscalFolioSequence.upsert({
+          where: {
+            legalEntityId_series: { legalEntityId, series },
+          },
+          update: { nextValue: { increment: 1 } },
+          create: { legalEntityId, series, nextValue: 2 },
+          select: { nextValue: true },
+        });
+        const folio = (sequence.nextValue - 1n).toString();
+        const issuedAt = new Date(Date.UTC(2026, 7, 23, 8, index, 0));
+        const invoiceIsStamped =
+          options.invoiceFiscalStatus !== InvoiceFiscalStatus.READY;
+        const invoiceUuid = invoiceIsStamped
+          ? randomUUID().toUpperCase()
+          : null;
+        const invoice = await tx.invoice.create({
+          data: {
+            legalEntityId,
+            sourceBillingRequestId: billingRequest.id,
+            fiscalCertificateId: certificateId,
+            fiscalIdempotencyKey: `${suffix}:invoice:${invoiceSequence}`,
+            fiscalRequestHash: 'b'.repeat(64),
+            currencyCode: 'MXN',
+            exchangeRate: decimal(1),
+            series,
+            folio,
+            uuid: invoiceUuid,
+            origin: InvoiceOrigin.NATIVE_CFDI,
+            cfdiVersion: '4.0',
+            cfdiType: CfdiDocumentType.INCOME,
+            issuedAt,
+            stampedAt: invoiceIsStamped ? issuedAt : null,
+            tfdVersion: invoiceIsStamped ? '1.1' : null,
+            issuerSnapshot: {
+              legalEntityId,
+              legalName: `${marker} legal entity`,
+              taxId: legalEntityTaxId,
+              fiscalPostalCode: '64000',
+              fiscalRegime: '601',
+              series,
+              certificateSerialNumber: '30001000000500003416',
+              certificateFingerprint: 'a'.repeat(64),
+            },
+            receiverSnapshot: {
+              customerId,
+              fiscalName: `${marker} CUSTOMER SA DE CV`,
+              taxId: 'URE180429TM6',
+              fiscalPostalCode: '86991',
+              fiscalRegime: '601',
+              fiscalUseCode: 'G03',
+              billingEmail: `${marker}-billing@example.test`,
+            },
+            fiscalSnapshotHash: 'c'.repeat(64),
+            fiscalUseCode: 'G03',
+            exportCode: '01',
+            paymentFormCode: '99',
+            paymentMethodCode: options.invoicePaymentMethodCode ?? 'PPD',
+            certificateNumber: invoiceIsStamped ? '30001000000500003416' : null,
+            satCertificateNumber: invoiceIsStamped ? 'SAT-CERTIFICATE' : null,
+            certificationProviderTaxId: invoiceIsStamped
+              ? 'PAC010101AAA'
+              : null,
+            cfdiSeal: invoiceIsStamped ? 'cfdi-seal' : null,
+            satSeal: invoiceIsStamped ? 'sat-seal' : null,
+            fiscalStatus:
+              options.invoiceFiscalStatus ?? InvoiceFiscalStatus.STAMPED,
+            cancellationStatus: FiscalCancellationStatus.NOT_REQUESTED,
+            subtotal,
+            discount,
+            tax,
+            total,
+            status: InvoiceStatus.ACTIVE,
+            createdByUserId: actorId,
+          },
+        });
+        await tx.invoiceConcept.create({
+          data: {
+            invoiceId: invoice.id,
+            sourceSaleItemId: saleItem.id,
+            lineNumber: 1,
+            productServiceCode: '50111500',
+            description: 'REP PostgreSQL fixture',
+            quantity: decimal(1),
+            unitCode: 'ACT',
+            unitValue: subtotal,
+            amount: subtotal,
+            discount,
+            taxObjectCode: '01',
+            taxAmount: tax,
+            total,
+            snapshotHash: 'd'.repeat(64),
+          },
+        });
+        const invoiceSaleDocument = await tx.invoiceSaleDocument.create({
+          data: {
+            invoiceId: invoice.id,
+            saleDocumentId: saleDocument.id,
+            billingRequestSaleDocumentId: requestDocument.id,
+            subtotalApplied: taxableBase,
+            taxApplied: tax,
+            totalApplied: total,
+            createdByUserId: actorId,
+          },
+        });
+        await tx.invoiceSaleItemApplication.create({
+          data: {
+            invoiceSaleDocumentId: invoiceSaleDocument.id,
+            saleItemId: saleItem.id,
+            subtotalApplied: taxableBase,
+            taxApplied: tax,
+            totalApplied: total,
+            createdByUserId: actorId,
+          },
+        });
+
+        if (options.invoiceStatus === InvoiceStatus.CANCELLED) {
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              status: InvoiceStatus.CANCELLED,
+              cancellationStatus: FiscalCancellationStatus.ACCEPTED,
+              cancelledAt: new Date(),
+            },
+          });
+        }
+        invoices.push({
+          id: invoice.id,
+          uuid: invoiceUuid ?? '',
+          folio,
+          total: total.toFixed(2),
+        });
+      }
+
+      const accountReceivable = await tx.accountReceivable.create({
         data: {
           customerId,
           saleId: sale.id,
-          requestedByUserId: actorId,
-          reviewedByUserId: actorId,
-          reviewedAt: new Date(),
-          status: BillingRequestStatus.APPROVED,
-          reason: `${suffix}:invoice:${index}`,
+          originalSaleId: sale.id,
+          originalAmount: saleTotal,
+          outstandingAmount: saleTotal,
+          saleDate: new Date('2026-08-23T00:00:00.000Z'),
+          dueDate: new Date('2026-09-22T00:00:00.000Z'),
+          paymentTermsDays: 30,
+          status: CollectionStatus.UNPAID,
         },
       });
-      invoiceSequence += 1;
-      const issuedAt = new Date(Date.UTC(2026, 7, 23, 8, index, 0));
-      const invoiceIsStamped =
-        options.invoiceFiscalStatus !== InvoiceFiscalStatus.READY;
-      const invoiceUuid = invoiceIsStamped ? randomUUID().toUpperCase() : null;
-      const invoice = await prisma.invoice.create({
+      const payment = await tx.payment.create({
         data: {
-          legalEntityId,
-          sourceBillingRequestId: billingRequest.id,
-          fiscalCertificateId: certificateId,
-          fiscalIdempotencyKey: `${suffix}:invoice:${invoiceSequence}`,
-          fiscalRequestHash: 'b'.repeat(64),
+          accountReceivableId: accountReceivable.id,
+          saleId: sale.id,
+          customerId,
+          userId: actorId,
+          amount: decimal(options.paymentAmount ?? saleTotal),
           currencyCode: 'MXN',
-          exchangeRate: decimal(1),
-          series: 'A',
-          folio: `${invoiceSequence}`,
-          uuid: invoiceUuid,
-          origin: InvoiceOrigin.NATIVE_CFDI,
-          cfdiVersion: '4.0',
-          cfdiType: CfdiDocumentType.INCOME,
-          issuedAt,
-          stampedAt: invoiceIsStamped ? issuedAt : null,
-          tfdVersion: invoiceIsStamped ? '1.1' : null,
-          issuerSnapshot: {
-            legalEntityId,
-            legalName: `${marker} legal entity`,
-            taxId: `REP${runId.slice(0, 10)}`,
-            fiscalPostalCode: '64000',
-            fiscalRegime: '601',
-            series: 'A',
-            certificateSerialNumber: '30001000000500003416',
-            certificateFingerprint: 'a'.repeat(64),
-          },
-          receiverSnapshot: {
-            customerId,
-            fiscalName: `${marker} CUSTOMER SA DE CV`,
-            taxId: 'URE180429TM6',
-            fiscalPostalCode: '86991',
-            fiscalRegime: '601',
-            fiscalUseCode: 'G03',
-            billingEmail: `${marker}-billing@example.test`,
-          },
-          fiscalSnapshotHash: 'c'.repeat(64),
-          fiscalUseCode: 'G03',
-          exportCode: '01',
-          paymentFormCode: '99',
-          paymentMethodCode: options.invoicePaymentMethodCode ?? 'PPD',
-          certificateNumber: invoiceIsStamped ? '30001000000500003416' : null,
-          satCertificateNumber: invoiceIsStamped ? 'SAT-CERTIFICATE' : null,
-          certificationProviderTaxId: invoiceIsStamped ? 'PAC010101AAA' : null,
-          cfdiSeal: invoiceIsStamped ? 'cfdi-seal' : null,
-          satSeal: invoiceIsStamped ? 'sat-seal' : null,
-          fiscalStatus:
-            options.invoiceFiscalStatus ?? InvoiceFiscalStatus.STAMPED,
-          cancellationStatus:
-            options.invoiceStatus === InvoiceStatus.CANCELLED
-              ? FiscalCancellationStatus.ACCEPTED
-              : FiscalCancellationStatus.NOT_REQUESTED,
-          subtotal: decimal(total),
-          discount: decimal(0),
-          tax: decimal(0),
-          total: decimal(total),
-          status: options.invoiceStatus ?? InvoiceStatus.ACTIVE,
-          cancelledAt:
-            options.invoiceStatus === InvoiceStatus.CANCELLED
-              ? new Date()
-              : null,
-          createdByUserId: actorId,
+          exchangeRateToMxn: decimal(1),
+          fiscalPaymentFormCode:
+            options.paymentFormCode === undefined
+              ? '03'
+              : options.paymentFormCode,
+          paymentMethod: PaymentMethod.TRANSFER,
+          operationalLocationId: locationId,
+          status: options.paymentStatus ?? PaymentStatus.APPLIED,
+          paidAt: options.paymentPaidAt
+            ? new Date(options.paymentPaidAt)
+            : new Date('2026-08-24T10:00:00.000Z'),
         },
       });
-      await prisma.invoiceConcept.create({
-        data: {
-          invoiceId: invoice.id,
-          lineNumber: 1,
-          productServiceCode: '50111500',
-          description: 'REP PostgreSQL fixture',
-          quantity: decimal(1),
-          unitCode: 'ACT',
-          unitValue: decimal(total),
-          amount: decimal(total),
-          discount: decimal(0),
-          taxObjectCode: '01',
-          taxAmount: decimal(0),
-          total: decimal(total),
-          snapshotHash: 'd'.repeat(64),
-        },
-      });
-      await prisma.invoiceSaleDocument.create({
-        data: {
-          invoiceId: invoice.id,
-          saleDocumentId: saleDocument.id,
-          subtotalApplied: decimal(total),
-          taxApplied: decimal(0),
-          totalApplied: decimal(total),
-          createdByUserId: actorId,
-        },
-      });
-      invoices.push({ id: invoice.id, uuid: invoiceUuid ?? '', total });
-    }
 
-    const payment = await prisma.payment.create({
-      data: {
-        accountReceivableId: accountReceivable.id,
+      return {
         saleId: sale.id,
-        customerId,
-        userId: actorId,
-        amount: decimal(options.paymentAmount ?? saleTotal),
-        currencyCode: 'MXN',
-        exchangeRateToMxn: decimal(1),
-        fiscalPaymentFormCode:
-          options.paymentFormCode === undefined
-            ? '03'
-            : options.paymentFormCode,
-        paymentMethod: PaymentMethod.TRANSFER,
-        operationalLocationId: locationId,
-        status: options.paymentStatus ?? PaymentStatus.APPLIED,
-        paidAt: options.paymentPaidAt
-          ? new Date(options.paymentPaidAt)
-          : new Date('2026-08-24T10:00:00.000Z'),
-      },
+        accountReceivableId: accountReceivable.id,
+        paymentId: payment.id,
+        paymentPaidAt: payment.paidAt,
+        invoices,
+        invoiceIds: invoices.map((invoice) => invoice.id),
+        invoiceUuids: invoices.map((invoice) => invoice.uuid),
+      };
     });
-
-    return {
-      saleId: sale.id,
-      accountReceivableId: accountReceivable.id,
-      paymentId: payment.id,
-      paymentPaidAt: payment.paidAt,
-      invoices,
-      invoiceIds: invoices.map((invoice) => invoice.id),
-      invoiceUuids: invoices.map((invoice) => invoice.uuid),
-    };
   }
 
   async function createPayment(
@@ -715,6 +829,7 @@ interface ScenarioOptions {
 interface ScenarioInvoice {
   readonly id: string;
   readonly uuid: string;
+  readonly folio: string;
   readonly total: string;
 }
 

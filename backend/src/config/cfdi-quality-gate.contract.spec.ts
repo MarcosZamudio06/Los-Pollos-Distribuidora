@@ -48,6 +48,7 @@ describe('CFDI quality gate contract', () => {
     expect(workflow).toContain('environment: cfdi-sandbox');
     expect(workflow).toMatch(/CFDI_ENABLED:\s*["']true["']/);
     expect(workflow).toContain('FISCAL_PROVIDER_ENVIRONMENT: SANDBOX');
+    expect(workflow).toContain('CFDI_FISCAL_TIME_ZONE: America/Mexico_City');
     expect(workflow).toContain('https://apisandbox.facturama.mx');
     expect(workflow).not.toContain('FISCAL_PROVIDER_ENVIRONMENT: PRODUCTION');
     expect(workflow).not.toContain('https://api.facturama.mx');

@@ -225,10 +225,10 @@ describe('CFDI fiscal persistence contract', () => {
     const artifact = getBlock('model', 'FiscalArtifact');
 
     expect(sequence).toMatch(/legalEntityId\s+String/);
-    expect(sequence).toMatch(/cfdiType\s+CfdiDocumentType/);
+    expect(sequence).not.toMatch(/cfdiType\s+CfdiDocumentType/);
     expect(sequence).toMatch(/series\s+String/);
     expect(sequence).toMatch(/nextValue\s+BigInt\s+@default\(1\)/);
-    expect(sequence).toMatch(/@@unique\(\[legalEntityId, cfdiType, series\]\)/);
+    expect(sequence).toMatch(/@@unique\(\[legalEntityId, series\]\)/);
     expect(attempt).toMatch(/idempotencyKey\s+String\s+@unique/);
     expect(artifact).toMatch(/byteSize\s+BigInt\?/);
     expect(artifact).toMatch(/sha256\s+String\?/);

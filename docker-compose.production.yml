@@ -126,6 +126,7 @@ services:
       # Fiscal configuration is reference-only. Credential material belongs in
       # a Docker secret or external secret manager resolved by the adapter.
       CFDI_ENABLED: ${CFDI_ENABLED:-false}
+      CFDI_FISCAL_TIME_ZONE: ${CFDI_FISCAL_TIME_ZONE:-America/Mexico_City}
       FISCAL_PROVIDER: ${FISCAL_PROVIDER:-FACTURAMA}
       FISCAL_PROVIDER_ENVIRONMENT: ${FISCAL_PROVIDER_ENVIRONMENT:-PRODUCTION}
       CFDI_REQUEST_TIMEOUT_MS: ${CFDI_REQUEST_TIMEOUT_MS:-30000}

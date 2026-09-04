@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { createHash, randomUUID } from 'node:crypto';
 import { SaxesParser } from 'saxes';
@@ -28,10 +28,47 @@ import {
   type FiscalProviderPort,
 } from '../src/modules/cfdi/domain/fiscal-provider.port';
 import type { CfdiGlobalInformation } from '../../shared/cfdi-global-information';
+import { formatSatLocalDateTime } from '../src/common/utils/sat-local-date-time';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FACTURAMA_SANDBOX_STAMP_TEST_TIMEOUT_MS = 30_000;
+const MAX_SANDBOX_DIAGNOSTIC_BYTES = 32 * 1024;
+const MAX_SANDBOX_DIAGNOSTIC_ITEMS = 12;
+
+interface SafeProviderValidationSummary {
+  readonly httpStatus: number;
+  readonly providerValidationCode: string | null;
+  readonly rejectedFieldOrStructure: readonly string[];
+  readonly safeReason: readonly string[];
+  readonly responseType: string;
+}
+
+interface FacturamaRequestStructure {
+  readonly rootKeys: readonly string[];
+  readonly paymentKeys: readonly string[];
+  readonly relatedDocumentKeys: readonly string[];
+  readonly paymentTaxKeys: readonly string[];
+  readonly relatedDocumentTaxKeys: readonly string[];
+  readonly rootAbsent: Readonly<
+    Record<
+      'Items' | 'PaymentForm' | 'PaymentMethod' | 'Currency' | 'Date',
+      boolean
+    >
+  >;
+}
+
+interface ProtectedSandboxDiagnosticRecorder {
+  latestFailure?: SafeProviderValidationSummary;
+  latestRequest?: FacturamaRequestStructure;
+  stampRequests: number;
+  successfulStampRequests: number;
+}
+
+type ProtectedDiagnosticFetch = (
+  input: string | URL,
+  init?: RequestInit,
+) => Promise<Response>;
 
 interface ParsedXmlElement {
   readonly name: string;
@@ -78,6 +115,261 @@ const DEFAULT_RECEIVER = {
   fiscalPostalCode: '86991',
   fiscalUseCode: 'G03',
 } as const;
+
+describe('Facturama protected diagnostic sanitization', () => {
+  it('extracts validation metadata without retaining provider body or secrets', () => {
+    const rawBody = JSON.stringify({
+      Code: 'PaymentBinding20Validation',
+      ModelState: {
+        'Complemento.Payments[0].RelatedDocuments[0].Taxes[0].TaxObject': [
+          'Invalid tax object; Authorization: Bearer sensitive-token-value; password=super-secret; token=another-secret; CSD=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789; UUID=10B5554C-F56C-44F6-8E67-5A80A1F433C9; RFC=AAA010101AAA',
+        ],
+      },
+      diagnosticDump:
+        'raw-provider-body-should-never-appear-in-the-sanitized-summary',
+    });
+
+    const summary = sanitizeProviderValidationBody({
+      body: rawBody,
+      contentType: 'application/json; charset=utf-8',
+      httpStatus: 400,
+    });
+    const serialized = JSON.stringify(summary);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        httpStatus: 400,
+        providerValidationCode: 'PaymentBinding20Validation',
+        responseType: 'application/json',
+      }),
+    );
+    expect(summary.rejectedFieldOrStructure).toContain(
+      'Complemento.Payments[0].RelatedDocuments[0].Taxes[0].TaxObject',
+    );
+    expect(serialized).not.toContain(rawBody);
+    expect(serialized).not.toContain('Authorization');
+    expect(serialized).not.toContain('sensitive-token-value');
+    expect(serialized).not.toContain('super-secret');
+    expect(serialized).not.toContain('another-secret');
+    expect(serialized).not.toContain('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+    expect(serialized).not.toContain('10B5554C-F56C-44F6-8E67-5A80A1F433C9');
+    expect(serialized).not.toContain('AAA010101AAA');
+    expect(serialized).not.toContain(
+      'raw-provider-body-should-never-appear-in-the-sanitized-summary',
+    );
+  });
+
+  it('reports only request property names and root omissions', () => {
+    const structure = summarizeFacturamaRequestStructure(
+      JSON.stringify({
+        CfdiType: 'P',
+        NameId: 14,
+        ExpeditionPlace: '00000',
+        Serie: 'SBX',
+        Folio: '1',
+        Exportation: '01',
+        Issuer: { Rfc: 'AAA010101AAA' },
+        Receiver: { Rfc: 'XAXX010101000' },
+        Authorization: 'Basic should-not-be-reported',
+        Complemento: {
+          Payments: [
+            {
+              Date: '2026-09-02T12:00:00',
+              PaymentForm: '03',
+              Amount: '0.58',
+              Currency: 'MXN',
+              token: 'should-not-be-reported',
+              RelatedDocuments: [
+                {
+                  Uuid: '10B5554C-F56C-44F6-8E67-5A80A1F433C9',
+                  Taxes: [
+                    {
+                      Name: 'IVA',
+                      Base: '0.50',
+                      Rate: '0.16',
+                      Total: '0.08',
+                    },
+                  ],
+                },
+              ],
+              Taxes: [
+                {
+                  Name: 'IVA',
+                  Base: '0.50',
+                  Rate: '0.16',
+                  Total: '0.08',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(structure.rootKeys).toEqual([
+      'CfdiType',
+      'NameId',
+      'ExpeditionPlace',
+      'Serie',
+      'Folio',
+      'Exportation',
+      'Issuer',
+      'Receiver',
+      'Complemento',
+    ]);
+    expect(structure.paymentKeys).toEqual([
+      'Date',
+      'PaymentForm',
+      'Amount',
+      'Currency',
+      'RelatedDocuments',
+      'Taxes',
+    ]);
+    expect(structure.relatedDocumentKeys).toEqual(['Uuid', 'Taxes']);
+    expect(structure.paymentTaxKeys).toEqual(['Name', 'Base', 'Rate', 'Total']);
+    expect(structure.relatedDocumentTaxKeys).toEqual([
+      'Name',
+      'Base',
+      'Rate',
+      'Total',
+    ]);
+    expect(structure.rootAbsent).toEqual({
+      Items: true,
+      PaymentForm: true,
+      PaymentMethod: true,
+      Currency: true,
+      Date: true,
+    });
+    expect(JSON.stringify(structure)).not.toContain('AAA010101AAA');
+    expect(JSON.stringify(structure)).not.toContain(
+      '10B5554C-F56C-44F6-8E67-5A80A1F433C9',
+    );
+  });
+
+  it('does not retain a response body that exceeds the diagnostic limit', async () => {
+    const result = await readBoundedResponseBody(
+      new Response('sensitive'.repeat(32)),
+      32,
+    );
+
+    expect(result).toEqual({ kind: 'oversized' });
+    expect(JSON.stringify(result)).not.toContain('sensitive');
+  });
+
+  it('forwards the exact request and leaves the original response consumable', async () => {
+    const requestBody = JSON.stringify({
+      CfdiType: 'P',
+      Complemento: { Payments: [{}] },
+    });
+    const responseBody = JSON.stringify({
+      Code: 'PaymentBinding20Validation',
+      ModelState: { 'Complemento.Payments[0]': ['Invalid payment'] },
+    });
+    const requestInit: RequestInit = {
+      method: 'POST',
+      headers: { Authorization: 'Basic test-only-value' },
+      body: requestBody,
+    };
+    const providerResponse = new Response(responseBody, {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    });
+    let forwardedInput: string | URL | undefined;
+    let forwardedInit: RequestInit | undefined;
+    const recorder: ProtectedSandboxDiagnosticRecorder = {
+      stampRequests: 0,
+      successfulStampRequests: 0,
+    };
+    const diagnosticFetch = createProtectedDiagnosticFetch((input, init) => {
+      forwardedInput = input;
+      forwardedInit = init;
+      return Promise.resolve(providerResponse);
+    }, recorder);
+
+    const response = await diagnosticFetch(
+      'https://apisandbox.facturama.mx/api-lite/3/cfdis',
+      requestInit,
+    );
+
+    expect(forwardedInput).toBe(
+      'https://apisandbox.facturama.mx/api-lite/3/cfdis',
+    );
+    expect(forwardedInit).toBe(requestInit);
+    expect(response).toBe(providerResponse);
+    expect(await response.text()).toBe(responseBody);
+    expect(recorder.latestFailure).toEqual(
+      expect.objectContaining({
+        httpStatus: 400,
+        providerValidationCode: 'PaymentBinding20Validation',
+        rejectedFieldOrStructure: ['Complemento.Payments[0]'],
+      }),
+    );
+    expect(JSON.stringify(recorder)).not.toContain('Authorization');
+    expect(JSON.stringify(recorder)).not.toContain('test-only-value');
+  });
+});
+
+describe('Facturama protected REP fixture payment date', () => {
+  const protectedFixtureConfig = {
+    enabled: true,
+    credentialReference: 'github-actions://facturama-sandbox',
+    credentials: {
+      username: 'local-fixture-user',
+      password: 'local-fixture-password',
+    },
+    issuer: GLOBAL_SANDBOX_ISSUER,
+  } as const satisfies Extract<FacturamaSandboxStampConfig, { enabled: true }>;
+
+  it('uses the provided PAC instant independently from the host clock', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2099-01-01T00:00:00.000Z'));
+    try {
+      const origin = buildPpdFixture(protectedFixtureConfig);
+      const fixture = buildRepFixture(
+        origin,
+        '10B5554C-F56C-44F6-8E67-5A80A1F433C9',
+        '2026-09-02T12:34:56.789-06:00',
+      );
+      const relatedDocument = fixture.snapshot.payment.relatedDocuments[0];
+
+      expect(fixture.snapshot.payment.paidAt).toBe('2026-09-02T18:34:56.789Z');
+      expect(fixture.snapshot.payment.paymentFormCode).toBe('03');
+      expect(relatedDocument).toEqual(
+        expect.objectContaining({
+          documentCurrencyCode: 'MXN',
+          equivalenceDr: '1.000000',
+          paymentMethodDr: 'PPD',
+          previousBalanceAmount: '1.16',
+          amountPaid: '0.58',
+          remainingBalance: '0.58',
+          taxObjectCode: '02',
+          taxesSnapshot: [
+            {
+              taxCode: '002',
+              factorType: 'Tasa',
+              rateOrQuota: '0.160000',
+              base: '0.50',
+              amount: '0.08',
+            },
+          ],
+        }),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('rejects an invalid PAC payment instant', () => {
+    const origin = buildPpdFixture(protectedFixtureConfig);
+
+    expect(() =>
+      buildRepFixture(
+        origin,
+        '10B5554C-F56C-44F6-8E67-5A80A1F433C9',
+        'not-a-date',
+      ),
+    ).toThrow('Facturama Sandbox origin stamp returned an invalid timestamp');
+  });
+});
 
 describe('Facturama protected sandbox stamp contract', () => {
   it(
@@ -454,8 +746,18 @@ describe('Facturama protected sandbox REP 2.0 stamp contract', () => {
       const originFixture = buildPpdFixture(guarded);
       let lastSnapshot: CfdiProviderSnapshot = originFixture.snapshot;
       let moduleFixture: TestingModule | undefined;
+      const diagnosticRecorder: ProtectedSandboxDiagnosticRecorder = {
+        stampRequests: 0,
+        successfulStampRequests: 0,
+      };
       try {
-        moduleFixture = await buildModule(guarded);
+        moduleFixture = await buildModule(
+          guarded,
+          createProtectedDiagnosticFetch(
+            (input, init) => globalThis.fetch(input, init),
+            diagnosticRecorder,
+          ),
+        );
         const provider =
           moduleFixture.get<FiscalProviderPort>(FISCAL_PROVIDER_PORT);
         expect(provider).toBeInstanceOf(FacturamaAdapter);
@@ -473,7 +775,11 @@ describe('Facturama protected sandbox REP 2.0 stamp contract', () => {
           normalizeUuid(originStamp.uuid),
         );
 
-        const repFixture = buildRepFixture(originFixture, originStamp.uuid);
+        const repFixture = buildRepFixture(
+          originFixture,
+          originStamp.uuid,
+          originFixture.snapshot.issuedAt,
+        );
         lastSnapshot = repFixture.snapshot;
         const repStamp = await provider.stamp({
           correlationId: `facturama-sandbox-rep-stamp-${repFixture.folio}`,
@@ -519,8 +825,11 @@ describe('Facturama protected sandbox REP 2.0 stamp contract', () => {
         expect(payment?.attributes.FormaDePagoP).toBe(
           repFixture.snapshot.payment.paymentFormCode,
         );
-        expect(Date.parse(payment?.attributes.FechaPago ?? '')).toBe(
-          Date.parse(repFixture.snapshot.payment.paidAt),
+        expect(payment?.attributes.FechaPago).toBe(
+          formatSatLocalDateTime(
+            repFixture.snapshot.payment.paidAt,
+            'America/Mexico_City',
+          ),
         );
         expect(normalizeMoney(payment?.attributes.Monto)).toBe('0.58');
         expect(payment?.attributes.MonedaP).toBe('MXN');
@@ -528,7 +837,8 @@ describe('Facturama protected sandbox REP 2.0 stamp contract', () => {
         expect(normalizeUuid(relatedDocument?.attributes.IdDocumento)).toBe(
           normalizeUuid(originStamp.uuid),
         );
-        expect(relatedDocument?.attributes.MetodoDePagoDR).toBe('PPD');
+        expect(relatedDocument?.attributes.MetodoDePagoDR).toBeUndefined();
+        expect(relatedDocument?.attributes.EquivalenciaDR).toBe('1');
         expect(relatedDocument?.attributes.NumParcialidad).toBe('1');
         expect(normalizeMoney(relatedDocument?.attributes.ImpSaldoAnt)).toBe(
           '1.16',
@@ -582,6 +892,7 @@ describe('Facturama protected sandbox REP 2.0 stamp contract', () => {
           error,
           lastSnapshot,
           'FACTURAMA_SANDBOX_REP20_STAMP',
+          diagnosticRecorder,
         );
         throw error;
       } finally {
@@ -918,6 +1229,7 @@ describe('Facturama credit-note XML readback parser', () => {
 
 async function buildModule(
   config: Extract<FacturamaSandboxStampConfig, { enabled: true }>,
+  diagnosticFetch?: ProtectedDiagnosticFetch,
 ): Promise<TestingModule> {
   const resolver: FiscalCredentialResolver = {
     resolve: (reference, environment) => {
@@ -931,7 +1243,7 @@ async function buildModule(
     },
   };
 
-  return Test.createTestingModule({
+  const testingModule = Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({
         ignoreEnvFile: true,
@@ -940,6 +1252,7 @@ async function buildModule(
             CFDI_ENABLED: true,
             FISCAL_PROVIDER: 'FACTURAMA',
             FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+            CFDI_FISCAL_TIME_ZONE: 'America/Mexico_City',
             FACTURAMA_API_BASE_URL: FACTURAMA_SANDBOX_BASE_URL,
             FACTURAMA_API_MODE: 'MULTI_ISSUER',
             FACTURAMA_CREDENTIAL_REF: config.credentialReference,
@@ -952,8 +1265,24 @@ async function buildModule(
     ],
   })
     .overrideProvider(FISCAL_CREDENTIAL_RESOLVER)
-    .useValue(resolver)
-    .compile();
+    .useValue(resolver);
+
+  if (diagnosticFetch) {
+    testingModule.overrideProvider(FacturamaAdapter).useFactory({
+      inject: [ConfigService, FISCAL_CREDENTIAL_RESOLVER],
+      factory: (
+        configService: ConfigService,
+        credentialResolver: FiscalCredentialResolver,
+      ) =>
+        new FacturamaAdapter(
+          configService,
+          credentialResolver,
+          diagnosticFetch,
+        ),
+    });
+  }
+
+  return testingModule.compile();
 }
 
 function buildFixture(
@@ -1076,8 +1405,15 @@ function buildPpdFixture(
 function buildRepFixture(
   origin: ReturnType<typeof buildPpdFixture>,
   originalUuid: string,
+  paymentInstant: string,
 ): { readonly folio: string; readonly snapshot: CfdiPaymentReceiptSnapshot } {
-  const paymentPaidAt = new Date().toISOString();
+  const parsedPaymentInstant = Date.parse(paymentInstant);
+  if (Number.isNaN(parsedPaymentInstant)) {
+    throw new Error(
+      'Facturama Sandbox origin stamp returned an invalid timestamp',
+    );
+  }
+  const paymentPaidAt = new Date(parsedPaymentInstant).toISOString();
   const amountPaid = '0.58';
   const previousBalance = origin.snapshot.totals.total;
   const relatedDocument = {
@@ -1443,10 +1779,385 @@ function assertMoneyEquation(totals: {
   expect(subtotal.minus(discount).plus(tax).toFixed(2)).toBe(total.toFixed(2));
 }
 
+function createProtectedDiagnosticFetch(
+  fetcher: ProtectedDiagnosticFetch,
+  recorder: ProtectedSandboxDiagnosticRecorder,
+): ProtectedDiagnosticFetch {
+  return async (input, init) => {
+    const isStampRequest = isFacturamaStampRequest(input, init);
+    if (isStampRequest) {
+      recorder.stampRequests += 1;
+      if (typeof init?.body === 'string') {
+        recorder.latestRequest = summarizeFacturamaRequestStructure(init.body);
+      }
+    }
+
+    const response = await fetcher(input, init);
+    if (!isStampRequest) return response;
+    if (response.ok) {
+      recorder.successfulStampRequests += 1;
+      return response;
+    }
+
+    try {
+      recorder.latestFailure = await inspectProviderValidationResponse(
+        response.clone(),
+      );
+    } catch {
+      recorder.latestFailure = {
+        httpStatus: response.status,
+        providerValidationCode: null,
+        rejectedFieldOrStructure: [],
+        safeReason: ['provider_validation_diagnostic_unavailable'],
+        responseType: safeResponseType(response.headers.get('content-type')),
+      };
+    }
+    return response;
+  };
+}
+
+function isFacturamaStampRequest(
+  input: string | URL,
+  init: RequestInit | undefined,
+): boolean {
+  if ((init?.method ?? 'GET').toUpperCase() !== 'POST') return false;
+  try {
+    return new URL(input.toString()).pathname === '/api-lite/3/cfdis';
+  } catch {
+    return false;
+  }
+}
+
+async function inspectProviderValidationResponse(
+  response: Response,
+): Promise<SafeProviderValidationSummary> {
+  const responseType = safeResponseType(response.headers.get('content-type'));
+  const bounded = await readBoundedResponseBody(
+    response,
+    MAX_SANDBOX_DIAGNOSTIC_BYTES,
+  );
+  if (bounded.kind !== 'ok') {
+    return {
+      httpStatus: response.status,
+      providerValidationCode: null,
+      rejectedFieldOrStructure: [],
+      safeReason: [
+        bounded.kind === 'oversized'
+          ? 'provider_validation_response_exceeded_diagnostic_limit'
+          : 'provider_validation_response_was_empty',
+      ],
+      responseType,
+    };
+  }
+  return sanitizeProviderValidationBody({
+    body: bounded.body,
+    contentType: responseType,
+    httpStatus: response.status,
+  });
+}
+
+async function readBoundedResponseBody(
+  response: Response,
+  maximumBytes: number,
+): Promise<
+  | { readonly kind: 'ok'; readonly body: string }
+  | { readonly kind: 'empty' | 'oversized' }
+> {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
+    return { kind: 'oversized' };
+  }
+  if (!response.body) return { kind: 'empty' };
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    totalBytes += value.byteLength;
+    if (totalBytes > maximumBytes) {
+      await reader.cancel().catch(() => undefined);
+      return { kind: 'oversized' };
+    }
+    chunks.push(value);
+  }
+  if (totalBytes === 0) return { kind: 'empty' };
+  return {
+    kind: 'ok',
+    body: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString(
+      'utf8',
+    ),
+  };
+}
+
+function sanitizeProviderValidationBody(input: {
+  readonly body: string;
+  readonly contentType: string | null;
+  readonly httpStatus: number;
+}): SafeProviderValidationSummary {
+  const responseType = safeResponseType(input.contentType);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.body) as unknown;
+  } catch {
+    return {
+      httpStatus: input.httpStatus,
+      providerValidationCode: null,
+      rejectedFieldOrStructure: [],
+      safeReason: ['non_json_provider_validation_response'],
+      responseType,
+    };
+  }
+
+  const codes: string[] = [];
+  const fields: string[] = [];
+  const reasons: string[] = [];
+  collectProviderValidation(parsed, codes, fields, reasons, 0);
+  return {
+    httpStatus: input.httpStatus,
+    providerValidationCode: codes[0] ?? null,
+    rejectedFieldOrStructure: uniqueBounded(fields),
+    safeReason:
+      reasons.length > 0
+        ? uniqueBounded(reasons)
+        : ['provider_validation_details_unavailable'],
+    responseType,
+  };
+}
+
+function collectProviderValidation(
+  value: unknown,
+  codes: string[],
+  fields: string[],
+  reasons: string[],
+  depth: number,
+): void {
+  if (depth > 6 || value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const entry of value.slice(0, MAX_SANDBOX_DIAGNOSTIC_ITEMS)) {
+      collectProviderValidation(entry, codes, fields, reasons, depth + 1);
+    }
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    if (
+      ['code', 'errorcode', 'validationcode', 'name'].includes(normalizedKey)
+    ) {
+      const code = safeProviderCode(child);
+      if (code) codes.push(code);
+    }
+    if (['field', 'path', 'property', 'key'].includes(normalizedKey)) {
+      const field = safeProviderField(child);
+      if (field) fields.push(field);
+    }
+    if (
+      ['message', 'reason', 'description', 'exceptionmessage'].includes(
+        normalizedKey,
+      )
+    ) {
+      collectSafeReasons(child, reasons);
+    }
+    if (normalizedKey === 'modelstate') {
+      collectModelState(child, fields, reasons);
+    }
+    if (['errors', 'validationerrors', 'validations'].includes(normalizedKey)) {
+      collectValidationErrors(child, codes, fields, reasons, depth + 1);
+    }
+    collectProviderValidation(child, codes, fields, reasons, depth + 1);
+  }
+}
+
+function collectModelState(
+  value: unknown,
+  fields: string[],
+  reasons: string[],
+): void {
+  if (!isDiagnosticObject(value)) return;
+  for (const [key, child] of Object.entries(value).slice(
+    0,
+    MAX_SANDBOX_DIAGNOSTIC_ITEMS,
+  )) {
+    const field = safeProviderField(key);
+    if (field) fields.push(field);
+    collectSafeReasons(child, reasons);
+  }
+}
+
+function collectValidationErrors(
+  value: unknown,
+  codes: string[],
+  fields: string[],
+  reasons: string[],
+  depth: number,
+): void {
+  if (isDiagnosticObject(value)) {
+    for (const [key, child] of Object.entries(value).slice(
+      0,
+      MAX_SANDBOX_DIAGNOSTIC_ITEMS,
+    )) {
+      const field = safeProviderField(key);
+      if (field && !['errors', 'message'].includes(key.toLowerCase())) {
+        fields.push(field);
+      }
+      collectSafeReasons(child, reasons);
+    }
+  }
+  collectProviderValidation(value, codes, fields, reasons, depth + 1);
+}
+
+function collectSafeReasons(value: unknown, reasons: string[]): void {
+  const values = Array.isArray(value) ? value : [value];
+  for (const entry of values.slice(0, MAX_SANDBOX_DIAGNOSTIC_ITEMS)) {
+    if (typeof entry !== 'string') continue;
+    const reason = sanitizeProviderReason(entry);
+    if (reason) reasons.push(reason);
+  }
+}
+
+function sanitizeProviderReason(value: string): string | null {
+  const redacted = value
+    .replace(/\b(?:Bearer|Basic)\s+[^\s,;}\]]+/gi, '[credential-redacted]')
+    .replace(
+      /\b(?:authorization|password|token|secret|credential|certificate|certificado|csd|private[_ -]?key)\b\s*[:=]\s*[^,;}\]]+/gi,
+      '[sensitive-redacted]',
+    )
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      '[uuid-redacted]',
+    )
+    .replace(/\b[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}\b/gi, '[rfc-redacted]')
+    .replace(/https?:\/\/\S+/gi, '[url-redacted]')
+    .replace(/[A-Za-z0-9+/_=-]{32,}/g, '[long-value-redacted]')
+    .replace(
+      /\b(?:authorization|password|token|secret|credential|certificate|certificado|csd|private[_ -]?key)\b/gi,
+      '[sensitive-field]',
+    );
+  const sanitized = [...redacted]
+    .map((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 31 || codePoint === 127 ? ' ' : character;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!sanitized) return null;
+  return sanitized.slice(0, 240);
+}
+
+function safeProviderCode(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(trimmed) ||
+    /authorization|password|token|secret|credential|certificate|csd/i.test(
+      trimmed,
+    )
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+function safeProviderField(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (
+    !/^[A-Za-z_$][A-Za-z0-9_$.[\]/:-]{0,159}$/.test(trimmed) ||
+    /authorization|password|token|secret|credential|certificate|csd/i.test(
+      trimmed,
+    )
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+function uniqueBounded(values: readonly string[]): readonly string[] {
+  return [...new Set(values)].slice(0, MAX_SANDBOX_DIAGNOSTIC_ITEMS);
+}
+
+function safeResponseType(contentType: string | null): string {
+  const mimeType = contentType?.split(';')[0]?.trim().toLowerCase();
+  return mimeType && /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mimeType)
+    ? mimeType.slice(0, 80)
+    : 'unknown';
+}
+
+function summarizeFacturamaRequestStructure(
+  body: string,
+): FacturamaRequestStructure {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body) as unknown;
+  } catch {
+    parsed = {};
+  }
+  const root = isDiagnosticObject(parsed) ? parsed : {};
+  const complemento = objectChild(root, 'Complemento');
+  const payments = arrayChild(complemento, 'Payments');
+  const payment = isDiagnosticObject(payments[0]) ? payments[0] : {};
+  const relatedDocuments = arrayChild(payment, 'RelatedDocuments');
+  const relatedDocument = isDiagnosticObject(relatedDocuments[0])
+    ? relatedDocuments[0]
+    : {};
+  const paymentTaxes = arrayChild(payment, 'Taxes');
+  const paymentTax = isDiagnosticObject(paymentTaxes[0]) ? paymentTaxes[0] : {};
+  const relatedDocumentTaxes = arrayChild(relatedDocument, 'Taxes');
+  const relatedDocumentTax = isDiagnosticObject(relatedDocumentTaxes[0])
+    ? relatedDocumentTaxes[0]
+    : {};
+
+  return {
+    rootKeys: safeRequestKeys(root),
+    paymentKeys: safeRequestKeys(payment),
+    relatedDocumentKeys: safeRequestKeys(relatedDocument),
+    paymentTaxKeys: safeRequestKeys(paymentTax),
+    relatedDocumentTaxKeys: safeRequestKeys(relatedDocumentTax),
+    rootAbsent: {
+      Items: !Object.hasOwn(root, 'Items'),
+      PaymentForm: !Object.hasOwn(root, 'PaymentForm'),
+      PaymentMethod: !Object.hasOwn(root, 'PaymentMethod'),
+      Currency: !Object.hasOwn(root, 'Currency'),
+      Date: !Object.hasOwn(root, 'Date'),
+    },
+  };
+}
+
+function safeRequestKeys(value: Record<string, unknown>): readonly string[] {
+  return Object.keys(value)
+    .filter((key) => safeProviderField(key) !== null)
+    .slice(0, MAX_SANDBOX_DIAGNOSTIC_ITEMS);
+}
+
+function isDiagnosticObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function objectChild(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const child = value[key];
+  return isDiagnosticObject(child) ? child : {};
+}
+
+function arrayChild(
+  value: Record<string, unknown>,
+  key: string,
+): readonly unknown[] {
+  const child = value[key];
+  return Array.isArray(child) ? child : [];
+}
+
 function reportSandboxPacRejection(
   error: unknown,
   snapshot: CfdiProviderSnapshot,
   contract = 'FACTURAMA_SANDBOX_CREDIT_NOTE_STAMP',
+  diagnosticRecorder?: ProtectedSandboxDiagnosticRecorder,
 ): void {
   if (
     !(error instanceof FiscalProviderError) ||
@@ -1481,8 +2192,27 @@ function reportSandboxPacRejection(
         operation: error.operation,
         httpStatus: error.statusCode,
         code: error.code,
-        rejectedFieldOrStructure: 'unavailable_without_provider_body',
+        providerValidationCode:
+          diagnosticRecorder?.latestFailure?.providerValidationCode ?? null,
+        rejectedFieldOrStructure: diagnosticRecorder?.latestFailure
+          ?.rejectedFieldOrStructure ?? ['unavailable_without_provider_body'],
+        safeReason: diagnosticRecorder?.latestFailure?.safeReason ?? [
+          'provider_validation_details_unavailable',
+        ],
+        responseType:
+          diagnosticRecorder?.latestFailure?.responseType ?? 'unknown',
       },
+      requestStructure: diagnosticRecorder?.latestRequest,
+      protectedExecution: diagnosticRecorder
+        ? {
+            stampRequests: diagnosticRecorder.stampRequests,
+            sourceIncomeStampSucceeded:
+              diagnosticRecorder.successfulStampRequests >= 1,
+            repRejected:
+              diagnosticRecorder.stampRequests >= 2 &&
+              diagnosticRecorder.successfulStampRequests === 1,
+          }
+        : undefined,
       documentationExpectation,
       snapshot: summarizeSnapshot(snapshot),
     }),

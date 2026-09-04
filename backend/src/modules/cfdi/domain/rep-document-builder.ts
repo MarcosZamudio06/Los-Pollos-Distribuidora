@@ -228,6 +228,14 @@ function aggregateTaxSnapshots(
 }
 
 export function buildRepDocument(input: RepBuildInput): RepBuildResult {
+  const issuedAt = input.issuedAt.getTime();
+  const paidAt = input.paidAt.getTime();
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(paidAt)) {
+    throw new CfdiDomainError('INVALID_PAYMENT_CONFIGURATION');
+  }
+  if (paidAt > issuedAt) {
+    throw new CfdiDomainError('REP_PAYMENT_DATE_AFTER_ISSUANCE');
+  }
   if (!input.candidates.length) {
     throw new CfdiDomainError('REP_ORIGINAL_INVOICE_NOT_STAMPED');
   }

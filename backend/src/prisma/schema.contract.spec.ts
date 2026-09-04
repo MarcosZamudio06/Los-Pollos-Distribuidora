@@ -34,6 +34,14 @@ const cfdiFiscalDataModelMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260822120000_add_cfdi_fiscal_data_model/migration.sql',
 );
+const invoiceFiscalUseCodeWideningMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260901210000_widen_invoice_fiscal_use_code/migration.sql',
+);
+const invoiceNativeSnapshotPaymentFieldsMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260901220000_scope_invoice_native_payment_fields/migration.sql',
+);
 const dailyCloseDifferenceMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260724200000_add_daily_close_differences/migration.sql',
@@ -1033,6 +1041,81 @@ describe('Prisma schema contract', () => {
     expect(migrationSql).not.toMatch(
       /(?:ALTER|DROP)\s+TABLE\s+"InvoiceSaleItemApplication"/i,
     );
+  });
+
+  it('widens only Invoice fiscalUseCode to persist REP and ordinary SAT use codes', () => {
+    const invoice = getModelBlock('Invoice');
+    const migrationSql = readFileSync(
+      invoiceFiscalUseCodeWideningMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(invoice).toMatch(/fiscalUseCode\s+String\?\s+@db\.VarChar\(4\)/);
+    expect(migrationSql.trim()).toBe(
+      'ALTER TABLE "Invoice" ALTER COLUMN "fiscalUseCode" TYPE VARCHAR(4);',
+    );
+    expect(['G03', 'G02', 'S01', 'CP01']).toEqual(
+      expect.arrayOf(expect.stringMatching(/^[A-Z0-9]{3,4}$/)),
+    );
+  });
+
+  it('scopes native root payment fields by CFDI type without weakening provenance', () => {
+    const migrationSql = readFileSync(
+      invoiceNativeSnapshotPaymentFieldsMigrationSqlPath,
+      'utf8',
+    );
+    const normalizedSql = migrationSql.replace(/\s+/g, ' ');
+
+    expect(normalizedSql).toContain(
+      `"origin" = 'NATIVE_CFDI' AND "cfdiType" = 'PAYMENT_RECEIPT' AND ("paymentFormCode" IS NOT NULL OR "paymentMethodCode" IS NOT NULL)`,
+    );
+    expect(normalizedSql).toContain(
+      `"cfdiType" = 'INCOME' AND "sourceBillingRequestId" IS NOT NULL AND "sourceCreditAdjustmentId" IS NULL AND "paymentFormCode" IS NOT NULL AND "paymentMethodCode" IS NOT NULL`,
+    );
+    expect(normalizedSql).toContain(
+      `"cfdiType" = 'EXPENSE' AND "sourceBillingRequestId" IS NULL AND "sourceCreditAdjustmentId" IS NOT NULL AND "paymentFormCode" IS NOT NULL AND "paymentMethodCode" IS NOT NULL`,
+    );
+    expect(normalizedSql).toContain(
+      `"cfdiType" = 'PAYMENT_RECEIPT' AND "sourceBillingRequestId" IS NULL AND "sourceCreditAdjustmentId" IS NULL AND "paymentFormCode" IS NULL AND "paymentMethodCode" IS NULL`,
+    );
+    for (const commonInvariant of [
+      '"fiscalIdempotencyKey" IS NOT NULL',
+      `"fiscalRequestHash" ~ '^[0-9a-f]{64}$'`,
+      `"cfdiVersion" = '4.0'`,
+      '"issuedAt" IS NOT NULL',
+      '"issuerSnapshot" IS NOT NULL',
+      '"receiverSnapshot" IS NOT NULL',
+      `"fiscalSnapshotHash" ~ '^[0-9a-f]{64}$'`,
+      '"fiscalUseCode" IS NOT NULL',
+      '"exportCode" IS NOT NULL',
+      '"fiscalCertificateId" IS NOT NULL',
+      `"fiscalStatus" <> 'LEGACY'`,
+      `"cancellationStatus" <> 'NOT_APPLICABLE'`,
+    ]) {
+      expect(normalizedSql).toContain(commonInvariant);
+    }
+    expect(normalizedSql).toContain(
+      'ADD CONSTRAINT "Invoice_native_fiscal_snapshot_check" CHECK',
+    );
+    expect(normalizedSql).toContain(') NOT VALID;');
+    expect(normalizedSql).toContain(
+      'VALIDATE CONSTRAINT "Invoice_native_fiscal_snapshot_check";',
+    );
+    const preflightPosition = normalizedSql.indexOf('DO $$');
+    const dropPosition = normalizedSql.indexOf(
+      'DROP CONSTRAINT "Invoice_native_fiscal_snapshot_check";',
+    );
+    const addPosition = normalizedSql.indexOf(
+      'ADD CONSTRAINT "Invoice_native_fiscal_snapshot_check" CHECK',
+    );
+    const validatePosition = normalizedSql.indexOf(
+      'VALIDATE CONSTRAINT "Invoice_native_fiscal_snapshot_check";',
+    );
+    expect(preflightPosition).toBeGreaterThanOrEqual(0);
+    expect(dropPosition).toBeGreaterThan(preflightPosition);
+    expect(addPosition).toBeGreaterThan(dropPosition);
+    expect(validatePosition).toBeGreaterThan(addPosition);
+    expect(migrationSql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
   });
 
   it('persists SAT catalogs as versioned, checksum-validated data without seeding fiscal facts', () => {

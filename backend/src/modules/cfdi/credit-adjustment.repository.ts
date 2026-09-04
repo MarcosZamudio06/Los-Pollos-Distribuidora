@@ -803,16 +803,14 @@ export class CreditAdjustmentRepository {
             });
             const sequence = await tx.fiscalFolioSequence.upsert({
               where: {
-                legalEntityId_cfdiType_series: {
+                legalEntityId_series: {
                   legalEntityId: adjustment.legalEntityId,
-                  cfdiType: CfdiDocumentType.EXPENSE,
                   series: built.snapshot.issuer.series,
                 },
               },
               update: { nextValue: { increment: 1 } },
               create: {
                 legalEntityId: adjustment.legalEntityId,
-                cfdiType: CfdiDocumentType.EXPENSE,
                 series: built.snapshot.issuer.series,
                 nextValue: 2,
               },
