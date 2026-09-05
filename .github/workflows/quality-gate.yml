@@ -153,6 +153,10 @@ jobs:
       E2E_DATABASE_DISPOSABLE: "true"
       NODE_ENV: test
       OPENSSL_CONF: /dev/null
+      PHOTON_URL: http://127.0.0.1:2322
+      OSRM_URL: http://127.0.0.1:5000
+      VROOM_URL: http://127.0.0.1:3000
+      ROUTING_TIMEOUT_MS: 1000
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
