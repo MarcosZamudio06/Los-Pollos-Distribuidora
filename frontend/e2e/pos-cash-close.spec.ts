@@ -54,7 +54,11 @@ test("POS cash sale can close its shift and daily close through the real stack",
 
     // The browser gets the same device identity as the disposable terminal fixture.
     await page.addInitScript((deviceId) => {
-      window.localStorage.setItem("pollos-pos-device-id", deviceId);
+      (
+        globalThis as typeof globalThis & {
+          localStorage: { setItem(key: string, value: string): void };
+        }
+      ).localStorage.setItem("pollos-pos-device-id", deviceId);
     }, fixture.deviceId);
 
     await login(page);
