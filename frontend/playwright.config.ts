@@ -50,6 +50,11 @@ export default defineConfig({
         JWT_REFRESH_SECRET: randomBytes(32).toString("hex"),
         CFDI_ENABLED: "false",
         FISCAL_PROVIDER: "NONE",
+        // Auth/POS smokes do not exercise GIS; keep the required providers local.
+        PHOTON_URL: "http://127.0.0.1:2322",
+        OSRM_URL: "http://127.0.0.1:5000",
+        VROOM_URL: "http://127.0.0.1:3000",
+        ROUTING_TIMEOUT_MS: "1000",
       },
     },
     {

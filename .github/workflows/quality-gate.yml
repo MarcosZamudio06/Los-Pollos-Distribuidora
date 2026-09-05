@@ -130,7 +130,7 @@ jobs:
         run: npm --prefix backend run test:e2e -- --runInBand
 
   browser:
-    name: Chromium real-stack smoke
+    name: Chromium real-stack smoke and POS cash-close journey
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -194,6 +194,16 @@ jobs:
         run: npm --prefix backend run build
       - name: Run browser smoke with fresh NestJS and Vite servers
         run: npm run frontend:test:e2e:browser
+      - name: Generate fresh rerun-scoped disposable credentials
+        run: |
+          node <<'NODE'
+          const { randomBytes } = require('node:crypto');
+          const { appendFileSync } = require('node:fs');
+          const run = `ci-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-rerun`;
+          const password = randomBytes(24).toString('hex');
+          console.log(`::add-mask::${password}`);
+          appendFileSync(process.env.GITHUB_ENV, `E2E_RUN_ID=${run}\nE2E_ADMIN_EMAIL=browser-${run}@example.test\nE2E_ADMIN_PASSWORD=${password}\n`);
+          NODE
       - name: Rerun preparation against the same disposable database
         run: npm --prefix backend run browser:prepare
       - name: Rerun smoke against the same disposable database
