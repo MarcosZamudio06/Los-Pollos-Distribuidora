@@ -73,9 +73,13 @@ test("POS cash sale can close its shift and daily close through the real stack",
       { exact: true },
     );
     await expect(search).toBeVisible();
-    const posLocation = page.getByLabel("Ubicación operativa", { exact: true });
+    const posLocation = page.getByRole("combobox", {
+      name: "Ubicación operativa",
+      exact: true,
+    });
     await expect(posLocation).toBeVisible();
     await posLocation.selectOption(fixture.locationId);
+    await expect(posLocation).toHaveValue(fixture.locationId);
     await expect(page.getByText(/turno abierto/i)).toBeVisible();
 
     await search.fill(fixture.productSku);
