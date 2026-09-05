@@ -34,10 +34,8 @@ import {
   useUpdateSupplier,
 } from "./hooks";
 import type { Supplier, SupplierListFilters } from "./types";
-import {
-  TablePagination,
-  useTablePagination,
-} from "@/components/shared/table-pagination";
+import { TablePagination } from "@/components/shared/table-pagination";
+import { useTablePagination } from "@/components/shared/table-pagination-state";
 
 const filterLabelClass =
   "grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]";
@@ -64,7 +62,7 @@ export function SuppliersPage() {
   const createSupplier = useCreateSupplier();
   const updateSupplier = useUpdateSupplier(editingSupplier?.id ?? "");
   const deactivateSupplier = useDeactivateSupplier();
-  const items = suppliers.data ?? [];
+  const items = useMemo(() => suppliers.data ?? [], [suppliers.data]);
   const pagination = useTablePagination(items);
   const isAdmin = user?.role === "ADMIN";
   const isSaving = createSupplier.isPending || updateSupplier.isPending;

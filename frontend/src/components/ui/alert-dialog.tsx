@@ -2,8 +2,17 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-export const AlertDialog = AlertDialogPrimitive.Root;
-export const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
+export function AlertDialog(
+  props: ComponentProps<typeof AlertDialogPrimitive.Root>,
+) {
+  return <AlertDialogPrimitive.Root {...props} />;
+}
+
+export function AlertDialogTrigger(
+  props: ComponentProps<typeof AlertDialogPrimitive.Trigger>,
+) {
+  return <AlertDialogPrimitive.Trigger {...props} />;
+}
 
 export function AlertDialogPortal(
   props: ComponentProps<typeof AlertDialogPrimitive.Portal>,
@@ -96,5 +105,14 @@ export function AlertDialogDescription({
     />
   );
 }
-export const AlertDialogAction = AlertDialogPrimitive.Action;
-export const AlertDialogCancel = AlertDialogPrimitive.Cancel;
+export function AlertDialogAction(
+  props: ComponentProps<typeof AlertDialogPrimitive.Action>,
+) {
+  return <AlertDialogPrimitive.Action {...props} />;
+}
+
+export function AlertDialogCancel(
+  props: ComponentProps<typeof AlertDialogPrimitive.Cancel>,
+) {
+  return <AlertDialogPrimitive.Cancel {...props} />;
+}

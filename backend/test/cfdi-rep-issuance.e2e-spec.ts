@@ -7,6 +7,7 @@ import {
   CustomerType,
   FiscalCancellationStatus,
   FiscalOperationStatus,
+  InventoryMovementType,
   InvoiceFiscalStatus,
   InvoiceOrigin,
   InvoiceStatus,
@@ -14,6 +15,8 @@ import {
   PaymentInvoiceApplicationStatus,
   PaymentMethod,
   PaymentStatus,
+  PointOfSaleDailyCloseLineConcept,
+  PointOfSaleDailyCloseLineSection,
   Prisma,
   PrismaClient,
   ProductPresentationType,
@@ -24,7 +27,7 @@ import {
   SalePaymentType,
   SaleStatus,
 } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { PrismaService } from '../src/database/prisma.service';
 import { RepIssuanceRepository } from '../src/modules/cfdi/rep-issuance.repository';
@@ -34,6 +37,134 @@ import { assertDisposableE2eEnvironment } from './e2e-environment';
 
 const decimal = (value: Prisma.Decimal.Value): Prisma.Decimal =>
   new Prisma.Decimal(value);
+
+const operationalDomains = [
+  'Payment',
+  'AccountReceivable',
+  'Sale',
+  'SaleItem',
+  'CashShift',
+  'PointOfSaleDailyClose',
+  'PointOfSaleDailyCloseLine',
+  'RouteSettlement',
+  'InventoryBalance',
+  'InventoryMovement',
+] as const;
+
+type OperationalDomain = (typeof operationalDomains)[number];
+type CanonicalValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly CanonicalValue[]
+  | { readonly [key: string]: CanonicalValue };
+type OperationalSnapshot = Record<OperationalDomain, readonly CanonicalValue[]>;
+
+function canonicalize(value: unknown): CanonicalValue {
+  if (
+    value === null ||
+    typeof value === 'boolean' ||
+    typeof value === 'number' ||
+    typeof value === 'string'
+  ) {
+    return value;
+  }
+  if (typeof value === 'bigint') return value.toString();
+  if (value instanceof Date) return value.toISOString();
+  if (Prisma.Decimal.isDecimal(value)) return value.toFixed();
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalize(nested)]),
+    );
+  }
+  throw new Error(`Unsupported operational snapshot value: ${typeof value}`);
+}
+
+async function captureOperationalSnapshot(
+  prisma: PrismaClient,
+): Promise<OperationalSnapshot> {
+  const [
+    payments,
+    accountReceivables,
+    sales,
+    saleItems,
+    cashShifts,
+    dailyCloses,
+    dailyCloseLines,
+    routeSettlements,
+    inventoryBalances,
+    inventoryMovements,
+  ] = await Promise.all([
+    prisma.payment.findMany({ orderBy: { id: 'asc' } }),
+    prisma.accountReceivable.findMany({ orderBy: { id: 'asc' } }),
+    prisma.sale.findMany({ orderBy: { id: 'asc' } }),
+    prisma.saleItem.findMany({ orderBy: { id: 'asc' } }),
+    prisma.cashShift.findMany({ orderBy: { id: 'asc' } }),
+    prisma.pointOfSaleDailyClose.findMany({ orderBy: { id: 'asc' } }),
+    prisma.pointOfSaleDailyCloseLine.findMany({ orderBy: { id: 'asc' } }),
+    prisma.routeSettlement.findMany({ orderBy: { id: 'asc' } }),
+    prisma.inventoryBalance.findMany({ orderBy: { id: 'asc' } }),
+    prisma.inventoryMovement.findMany({ orderBy: { id: 'asc' } }),
+  ]);
+
+  return {
+    Payment: canonicalize(payments) as readonly CanonicalValue[],
+    AccountReceivable: canonicalize(
+      accountReceivables,
+    ) as readonly CanonicalValue[],
+    Sale: canonicalize(sales) as readonly CanonicalValue[],
+    SaleItem: canonicalize(saleItems) as readonly CanonicalValue[],
+    CashShift: canonicalize(cashShifts) as readonly CanonicalValue[],
+    PointOfSaleDailyClose: canonicalize(
+      dailyCloses,
+    ) as readonly CanonicalValue[],
+    PointOfSaleDailyCloseLine: canonicalize(
+      dailyCloseLines,
+    ) as readonly CanonicalValue[],
+    RouteSettlement: canonicalize(
+      routeSettlements,
+    ) as readonly CanonicalValue[],
+    InventoryBalance: canonicalize(
+      inventoryBalances,
+    ) as readonly CanonicalValue[],
+    InventoryMovement: canonicalize(
+      inventoryMovements,
+    ) as readonly CanonicalValue[],
+  };
+}
+
+function operationalSnapshotSummary(snapshot: OperationalSnapshot) {
+  return Object.fromEntries(
+    operationalDomains.map((domain) => {
+      const serialized = JSON.stringify(snapshot[domain]);
+      return [
+        domain,
+        {
+          count: snapshot[domain].length,
+          sha256: createHash('sha256').update(serialized).digest('hex'),
+        },
+      ];
+    }),
+  ) as Record<OperationalDomain, { count: number; sha256: string }>;
+}
+
+function expectOperationalSnapshotsEqual(
+  before: OperationalSnapshot,
+  after: OperationalSnapshot,
+): void {
+  const beforeSummary = operationalSnapshotSummary(before);
+  const afterSummary = operationalSnapshotSummary(after);
+  for (const domain of operationalDomains) {
+    expect({ domain, ...afterSummary[domain] }).toEqual({
+      domain,
+      ...beforeSummary[domain],
+    });
+  }
+}
 
 describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
   const runId = randomUUID().replaceAll('-', '').toUpperCase();
@@ -308,6 +439,9 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
       paymentAmount: '25.00',
       paymentPaidAt: '2026-08-27T10:00:00.000Z',
     });
+    await createOperationalSentinels(fixture);
+    const operationalBefore = await captureOperationalSnapshot(prisma);
+    const fiscalBefore = await captureFiscalCounts(fixture.paymentId);
     const provider = new FakeFiscalProvider({
       stamp: async (command) => {
         await new Promise((resolve) => setTimeout(resolve, 40));
@@ -403,6 +537,65 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
     expect(effectiveApplications[0]?.remainingBalance.toFixed(2)).toBe('75.00');
     expect(attempts).toBe(1);
     expect(roots).toHaveLength(1);
+
+    const fiscalAfter = await captureFiscalCounts(fixture.paymentId);
+    expect(fiscalAfter).toEqual({
+      paymentReceipts: fiscalBefore.paymentReceipts + 1,
+      paymentReceiptDetails: fiscalBefore.paymentReceiptDetails + 1,
+      effectiveApplications: fiscalBefore.effectiveApplications + 1,
+      paymentReceiptInvoices: fiscalBefore.paymentReceiptInvoices + 1,
+      succeededStampAttempts: fiscalBefore.succeededStampAttempts + 1,
+    });
+
+    const operationalAfter = await captureOperationalSnapshot(prisma);
+    expectOperationalSnapshotsEqual(operationalBefore, operationalAfter);
+    console.info(
+      JSON.stringify({
+        contract: 'REP_NON_INTERFERENCE',
+        operationalBefore: operationalSnapshotSummary(operationalBefore),
+        operationalAfter: operationalSnapshotSummary(operationalAfter),
+        fiscalBefore,
+        fiscalAfter,
+        providerStampCount: provider.calls.filter(
+          (call) => call.operation === 'stamp',
+        ).length,
+      }),
+    );
+  });
+
+  it('rejects a stale Payment version before creating fiscal state or stamping', async () => {
+    const fixture = await createScenario({
+      invoiceTotals: ['100.00'],
+      paymentAmount: '25.00',
+    });
+    const paymentBefore = canonicalize(
+      await prisma.payment.findUniqueOrThrow({
+        where: { id: fixture.paymentId },
+      }),
+    );
+    const fiscalBefore = await captureFiscalCounts(fixture.paymentId);
+    const provider = new FakeFiscalProvider();
+
+    await expect(
+      serviceFor(provider).issue(
+        fixture.paymentId,
+        { expectedVersion: 0 },
+        actor,
+        `${marker}:stale-version:${fixture.paymentId}`,
+      ),
+    ).rejects.toThrow('VERSION_CONFLICT');
+
+    expect(
+      provider.calls.filter((call) => call.operation === 'stamp'),
+    ).toHaveLength(0);
+    expect(await captureFiscalCounts(fixture.paymentId)).toEqual(fiscalBefore);
+    expect(
+      canonicalize(
+        await prisma.payment.findUniqueOrThrow({
+          where: { id: fixture.paymentId },
+        }),
+      ),
+    ).toEqual(paymentBefore);
   });
 
   it.each([
@@ -504,6 +697,181 @@ describe('CFDI REP 2.0 PostgreSQL runtime contract (e2e)', () => {
 
   function serviceFor(provider: FakeFiscalProvider): RepIssuanceService {
     return new RepIssuanceService(repository, provider);
+  }
+
+  async function createOperationalSentinels(scenario: Scenario) {
+    const suffix = `${marker}-sentinel-${randomUUID()
+      .replaceAll('-', '')
+      .slice(0, 12)}`;
+    const businessDate = new Date('2026-08-27T00:00:00.000Z');
+    return prisma.$transaction(async (tx) => {
+      const dailyClose = await tx.pointOfSaleDailyClose.create({
+        data: {
+          operationalLocationId: locationId,
+          businessDate,
+          openedByUserId: actorId,
+          terminalIdentifier: suffix,
+          initialCashFund: decimal('100.00'),
+          transferTotal: decimal('25.00'),
+        },
+      });
+      const terminal = await tx.cashTerminal.create({
+        data: {
+          operationalLocationId: locationId,
+          code: suffix,
+          name: `${suffix} terminal`,
+          deviceId: suffix,
+        },
+      });
+      const cashShift = await tx.cashShift.create({
+        data: {
+          terminalId: terminal.id,
+          operationalLocationId: locationId,
+          pointOfSaleDailyCloseId: dailyClose.id,
+          cashierUserId: actorId,
+          businessDate,
+          initialCashFund: decimal('100.00'),
+        },
+      });
+      await tx.pointOfSaleDailyCloseLine.create({
+        data: {
+          pointOfSaleDailyCloseId: dailyClose.id,
+          operationalLocationId: locationId,
+          section: PointOfSaleDailyCloseLineSection.INCOME,
+          conceptType: PointOfSaleDailyCloseLineConcept.TRANSFER_INCOME,
+          saleId: scenario.saleId,
+          amount: decimal('25.00'),
+          notes: `${suffix} daily-close sentinel`,
+          createdByUserId: actorId,
+        },
+      });
+      const routeStockLocation = await tx.operationalLocation.create({
+        data: {
+          name: `${suffix} route stock`,
+          code: `${suffix}-stock`,
+          type: OperationalLocationType.ROUTE_STOCK,
+          parentId: locationId,
+        },
+      });
+      const route = await tx.deliveryRoute.create({
+        data: {
+          name: `${suffix} route`,
+          driverId: actorId,
+          scheduledDate: businessDate,
+          originLocationId: locationId,
+          routeStockLocationId: routeStockLocation.id,
+        },
+      });
+      const routeSettlement = await tx.routeSettlement.create({
+        data: {
+          routeId: route.id,
+          driverId: actorId,
+          expectedTransferAmount: decimal('25.00'),
+          secondPassCollectionsAmount: decimal('25.00'),
+          routeCollectionsSummary: { sentinel: suffix },
+        },
+      });
+      await tx.inventoryBalance.create({
+        data: {
+          productId,
+          locationId,
+          quantityKg: decimal('50.000'),
+          reservedQuantityKg: decimal('5.000'),
+          minQuantityKg: decimal('10.000'),
+        },
+      });
+      await tx.inventoryMovement.create({
+        data: {
+          productId,
+          locationId,
+          userId: actorId,
+          type: InventoryMovementType.ADJUSTMENT,
+          quantity: decimal('50.000'),
+          quantityKg: decimal('50.000'),
+          quantityPieces: 0,
+          previousStock: decimal('0.000'),
+          newStock: decimal('50.000'),
+          previousQuantityKg: decimal('0.000'),
+          newQuantityKg: decimal('50.000'),
+          previousQuantityPieces: 0,
+          newQuantityPieces: 0,
+          reason: `${suffix} inventory sentinel`,
+          referenceType: 'REP_NON_INTERFERENCE_SENTINEL',
+          referenceId: scenario.saleId,
+          saleId: scenario.saleId,
+        },
+      });
+      await tx.sale.update({
+        where: { id: scenario.saleId },
+        data: {
+          routeId: route.id,
+          pointOfSaleDailyCloseId: dailyClose.id,
+          terminalId: terminal.id,
+          cashShiftId: cashShift.id,
+          cashierUserId: actorId,
+          businessDate,
+          registeredAt: new Date('2026-08-27T09:00:00.000Z'),
+        },
+      });
+      await tx.payment.update({
+        where: { id: scenario.paymentId },
+        data: {
+          collectedByUserId: actorId,
+          collectionPass: 1,
+          routeId: route.id,
+          routeSettlementId: routeSettlement.id,
+          pointOfSaleDailyCloseId: dailyClose.id,
+          cashShiftId: cashShift.id,
+          bankName: 'REP E2E SENTINEL BANK',
+          referenceNumber: suffix,
+          appliedDocumentId: scenario.accountReceivableId,
+          appliedDocumentType: 'ACCOUNT_RECEIVABLE',
+        },
+      });
+    });
+  }
+
+  async function captureFiscalCounts(paymentId: string) {
+    const [
+      paymentReceipts,
+      paymentReceiptDetails,
+      effectiveApplications,
+      paymentReceiptInvoices,
+      succeededStampAttempts,
+    ] = await Promise.all([
+      prisma.paymentReceipt.count({
+        where: { details: { some: { paymentId } } },
+      }),
+      prisma.paymentReceiptDetail.count({ where: { paymentId } }),
+      prisma.paymentInvoiceApplication.count({
+        where: {
+          paymentId,
+          status: PaymentInvoiceApplicationStatus.EFFECTIVE,
+        },
+      }),
+      prisma.invoice.count({
+        where: {
+          cfdiType: CfdiDocumentType.PAYMENT_RECEIPT,
+          paymentReceipt: { details: { some: { paymentId } } },
+        },
+      }),
+      prisma.fiscalOperationAttempt.count({
+        where: {
+          operation: 'STAMP',
+          status: FiscalOperationStatus.SUCCEEDED,
+          invoice: {
+            paymentReceipt: { details: { some: { paymentId } } },
+          },
+        },
+      }),
+    ]);
+    return {
+      paymentReceipts,
+      paymentReceiptDetails,
+      effectiveApplications,
+      paymentReceiptInvoices,
+      succeededStampAttempts,
+    };
   }
 
   async function receiptDetailFor(paymentId: string) {

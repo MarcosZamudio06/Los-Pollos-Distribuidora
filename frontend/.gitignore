@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Browser traces may contain test passwords and session cookies.
+test-results/
+playwright-report/

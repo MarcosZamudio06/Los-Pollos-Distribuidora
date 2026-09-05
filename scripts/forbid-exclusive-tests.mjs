@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 
-const roots = ["backend/src", "backend/test", "frontend/src"];
+const roots = ["backend/src", "backend/test", "frontend/src", "frontend/e2e"];
 const ignoredDirectories = new Set(["coverage", "dist", "node_modules"]);
 const testFilePattern = /(?:\.spec|\.test|\.e2e-spec)\.(?:js|jsx|ts|tsx)$/;
 const exclusivePattern =

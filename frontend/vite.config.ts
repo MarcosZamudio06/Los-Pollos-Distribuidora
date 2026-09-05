@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import {
   BUNDLE_BUDGET_KB,
   createBundleBudgetPlugin,
@@ -57,9 +57,13 @@ export default defineConfig({
     },
   },
   test: {
+    exclude: [...configDefaults.exclude, "e2e/**"],
     allowOnly: false,
     coverage: {
       exclude: [
+        "e2e/**",
+        "playwright.config.ts",
+        "vite.browser.config.ts",
         "src/**/*.test.{ts,tsx}",
         "src/**/__tests__/**",
         "src/main.tsx",

@@ -5,10 +5,8 @@ import {
   useInventoryMovements,
 } from "../hooks/useProducts";
 import { CatalogSelect } from "../../../components/shared/operational-catalogs";
-import {
-  TablePagination,
-  useTablePagination,
-} from "../../../components/shared/table-pagination";
+import { TablePagination } from "../../../components/shared/table-pagination";
+import { useTablePagination } from "../../../components/shared/table-pagination-state";
 
 const fieldClass =
   "h-11 w-full min-w-0 max-w-full rounded-xl border border-[var(--erp-border)] bg-[var(--erp-surface-elevated)] px-3 text-sm text-[var(--erp-foreground)] shadow-sm outline-none transition placeholder:text-[var(--erp-muted-foreground)] focus:border-[var(--erp-brand-gold)] focus:ring-4 focus:ring-[rgba(214,155,45,0.16)]";

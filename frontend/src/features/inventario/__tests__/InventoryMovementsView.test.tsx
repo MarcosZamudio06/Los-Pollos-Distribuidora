@@ -26,6 +26,9 @@ vi.mock("../components/AsyncState", () => ({
 
 vi.mock("../../../components/shared/table-pagination", () => ({
   TablePagination: () => null,
+}));
+
+vi.mock("../../../components/shared/table-pagination-state", () => ({
   useTablePagination: (items: unknown[]) => ({
     pageItems: items,
     page: 1,

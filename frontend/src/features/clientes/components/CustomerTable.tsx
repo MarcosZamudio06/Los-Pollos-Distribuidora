@@ -7,10 +7,8 @@ import {
   UserRound,
 } from "lucide-react";
 import type { Customer } from "../types";
-import {
-  TablePagination,
-  useTablePagination,
-} from "../../../components/shared/table-pagination";
+import { TablePagination } from "../../../components/shared/table-pagination";
+import { useTablePagination } from "../../../components/shared/table-pagination-state";
 import { formatMoney } from "../../../lib/money";
 
 function text(value: unknown) {

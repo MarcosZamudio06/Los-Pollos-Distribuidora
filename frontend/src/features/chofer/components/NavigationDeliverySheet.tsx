@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   BadgeDollarSign,
@@ -52,6 +52,20 @@ function statusLabel(route: DeliveryRouteDetail, target: DriverNavigationTarget)
 }
 
 export function NavigationDeliverySheet({
+  target,
+  ...props
+}: Props) {
+  const targetKey = target ? `${target.kind}:${target.id}` : "no-target";
+  return (
+    <NavigationDeliverySheetContent
+      key={targetKey}
+      target={target}
+      {...props}
+    />
+  );
+}
+
+function NavigationDeliverySheetContent({
   canStart = true,
   isMinimized: controlledIsMinimized,
   isStarting = false,
@@ -73,11 +87,6 @@ export function NavigationDeliverySheet({
     setInternalIsMinimized(nextValue);
     onMinimizedChange?.(nextValue);
   }
-
-  useEffect(() => {
-    setInternalIsMinimized(false);
-    onMinimizedChange?.(false);
-  }, [onMinimizedChange, target?.kind, target?.id]);
 
   if (!target) {
     return (

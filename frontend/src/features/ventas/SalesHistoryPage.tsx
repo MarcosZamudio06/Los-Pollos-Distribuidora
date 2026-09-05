@@ -25,10 +25,8 @@ import {
   Th,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import {
-  TablePagination,
-  useTablePagination,
-} from "@/components/shared/table-pagination";
+import { TablePagination } from "@/components/shared/table-pagination";
+import { useTablePagination } from "@/components/shared/table-pagination-state";
 import { usePurchaseLocations } from "../compras/hooks";
 import { useSales } from "./hooks";
 import {

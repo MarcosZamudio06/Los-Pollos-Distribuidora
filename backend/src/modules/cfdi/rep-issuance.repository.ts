@@ -618,20 +618,6 @@ export class RepIssuanceRepository {
                 lastFiscalAttemptAt: new Date(),
               },
             });
-            try {
-              await tx.payment.update({
-                where: { id: paymentId, version: dto.expectedVersion },
-                data: { version: { increment: 1 } },
-              });
-            } catch (error) {
-              if (
-                error instanceof Prisma.PrismaClientKnownRequestError &&
-                error.code === 'P2025'
-              ) {
-                throw new ConflictException('VERSION_CONFLICT');
-              }
-              throw error;
-            }
             await tx.billingAuditLog.create({
               data: {
                 actorUserId: actor.id,

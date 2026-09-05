@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Copy, Search, ShieldCheck, UserPlus } from "lucide-react";
 import { useAuth } from "../auth";
@@ -45,6 +45,51 @@ function authHeaders(token?: string | null): Record<string, string> {
   return token ? { authorization: `Bearer ${token}` } : {};
 }
 
+type EmployeeListQuery = {
+  locationId: string;
+  page: number;
+  roleId: string;
+  search: string;
+  status: string;
+};
+
+type EmployeeListData = {
+  employees: ListData;
+  locations: Location[];
+  roles: Role[];
+};
+
+async function fetchEmployeeListData(
+  query: EmployeeListQuery,
+  headers: Record<string, string>,
+): Promise<EmployeeListData> {
+  const params = new URLSearchParams({
+    page: String(query.page),
+    limit: "20",
+    status: query.status,
+  });
+  if (query.search) params.set("search", query.search);
+  if (query.roleId) params.set("roleId", query.roleId);
+  if (query.locationId)
+    params.set("operationalLocationId", query.locationId);
+  const [listed, roleResponse, locationResponse] = await Promise.all([
+    apiClient.get<Envelope<ListData>>(`/users?${params}`, { headers }),
+    apiClient.get<Envelope<Role[]>>("/roles", { headers }),
+    apiClient.get<Envelope<{ items: Location[] }>>(
+      "/locations?isActive=true&limit=100",
+      { headers },
+    ),
+  ]);
+
+  return {
+    employees: listed.data,
+    roles: roleResponse.data,
+    locations: locationResponse.data.items.filter((location) =>
+      usableLocationTypes.has(location.type),
+    ),
+  };
+}
+
 export function EmployeesPage() {
   const { accessToken, user } = useAuth();
   const [employees, setEmployees] = useState<ListData>({
@@ -60,6 +105,7 @@ export function EmployeesPage() {
   const [locationId, setLocationId] = useState("");
   const [status, setStatus] = useState("active");
   const [page, setPage] = useState(1);
+  const searchRef = useRef("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -92,32 +138,22 @@ export function EmployeesPage() {
   );
   const headers = useMemo(() => authHeaders(accessToken), [accessToken]);
 
+  const applyEmployeeListData = useCallback((data: EmployeeListData) => {
+    setEmployees(data.employees);
+    setRoles(data.roles);
+    setLocations(data.locations);
+  }, []);
+
+  function currentEmployeeQuery(): EmployeeListQuery {
+    return { locationId, page, roleId, search, status };
+  }
+
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: "20",
-        status,
-      });
-      if (search) params.set("search", search);
-      if (roleId) params.set("roleId", roleId);
-      if (locationId) params.set("operationalLocationId", locationId);
-      const [listed, roleResponse, locationResponse] = await Promise.all([
-        apiClient.get<Envelope<ListData>>(`/users?${params}`, { headers }),
-        apiClient.get<Envelope<Role[]>>("/roles", { headers }),
-        apiClient.get<Envelope<{ items: Location[] }>>(
-          "/locations?isActive=true&limit=100",
-          { headers },
-        ),
-      ]);
-      setEmployees(listed.data);
-      setRoles(roleResponse.data);
-      setLocations(
-        locationResponse.data.items.filter((location) =>
-          usableLocationTypes.has(location.type),
-        ),
+      applyEmployeeListData(
+        await fetchEmployeeListData(currentEmployeeQuery(), headers),
       );
     } catch (reason) {
       setError(
@@ -130,11 +166,54 @@ export function EmployeesPage() {
     }
   }
   useEffect(() => {
-    void load();
-  }, [accessToken, roleId, locationId, status, page]);
-  useEffect(() => {
+    let active = true;
+    fetchEmployeeListData(
+      { locationId, page, roleId, search: searchRef.current, status },
+      headers,
+    )
+      .then((data) => {
+        if (active) applyEmployeeListData(data);
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "No se pudo cargar la administración de empleados.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [applyEmployeeListData, headers, locationId, page, roleId, status]);
+
+  function prepareEmployeeReload() {
+    setLoading(true);
+    setError("");
+  }
+
+  function updateSearch(nextSearch: string) {
+    searchRef.current = nextSearch;
+    setSearch(nextSearch);
     setPage(1);
-  }, [search, roleId, locationId, status]);
+  }
+
+  function updateFilter(
+    setter: (value: string) => void,
+    nextValue: string,
+  ) {
+    prepareEmployeeReload();
+    setter(nextValue);
+    setPage(1);
+  }
+
+  function changePage(update: (current: number) => number) {
+    prepareEmployeeReload();
+    setPage(update);
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -223,7 +302,7 @@ export function EmployeesPage() {
                     className="pl-9"
                     placeholder="Buscar control, nombre, correo o teléfono"
                     value={search}
-                    onChange={(event) => setSearch(event.target.value)}
+                    onChange={(event) => updateSearch(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void load();
                     }}
@@ -231,7 +310,9 @@ export function EmployeesPage() {
                 </label>
                 <Select
                   value={locationId}
-                  onChange={(event) => setLocationId(event.target.value)}
+                  onChange={(event) =>
+                    updateFilter(setLocationId, event.target.value)
+                  }
                 >
                   <option value="">Todas las ubicaciones operativas</option>
                   {locations.map((location) => (
@@ -242,7 +323,9 @@ export function EmployeesPage() {
                 </Select>
                 <Select
                   value={roleId}
-                  onChange={(event) => setRoleId(event.target.value)}
+                  onChange={(event) =>
+                    updateFilter(setRoleId, event.target.value)
+                  }
                 >
                   <option value="">Todos los roles</option>
                   {roles.map((role) => (
@@ -253,7 +336,9 @@ export function EmployeesPage() {
                 </Select>
                 <Select
                   value={status}
-                  onChange={(event) => setStatus(event.target.value)}
+                  onChange={(event) =>
+                    updateFilter(setStatus, event.target.value)
+                  }
                 >
                   <option value="active">Activos</option>
                   <option value="inactive">Inactivos</option>
@@ -366,7 +451,7 @@ export function EmployeesPage() {
                     size="sm"
                     variant="secondary"
                     disabled={loading || page <= 1}
-                    onClick={() => setPage((current) => current - 1)}
+                    onClick={() => changePage((current) => current - 1)}
                   >
                     Anterior
                   </Button>
@@ -377,7 +462,7 @@ export function EmployeesPage() {
                       loading ||
                       page >= Math.ceil(employees.total / employees.limit)
                     }
-                    onClick={() => setPage((current) => current + 1)}
+                    onClick={() => changePage((current) => current + 1)}
                   >
                     Siguiente
                   </Button>

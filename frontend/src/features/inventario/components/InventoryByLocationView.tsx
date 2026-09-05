@@ -1,10 +1,8 @@
 import { AsyncState } from "./AsyncState";
 import { LowStockBadge } from "./LowStockBadge";
 import { useInventoryBalances } from "../hooks/useProducts";
-import {
-  TablePagination,
-  useTablePagination,
-} from "../../../components/shared/table-pagination";
+import { TablePagination } from "../../../components/shared/table-pagination";
+import { useTablePagination } from "../../../components/shared/table-pagination-state";
 
 const cellClass = "px-4 py-3 align-middle";
 

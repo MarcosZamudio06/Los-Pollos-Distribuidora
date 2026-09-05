@@ -1,27 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-export const TABLE_PAGE_SIZE = 10;
-
-export function useTablePagination<T>(items: readonly T[]) {
-  const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(items.length / TABLE_PAGE_SIZE));
-
-  useEffect(
-    () => setPage((current) => Math.min(current, pageCount)),
-    [pageCount],
-  );
-
-  return {
-    page,
-    pageCount,
-    pageItems: useMemo(
-      () => items.slice((page - 1) * TABLE_PAGE_SIZE, page * TABLE_PAGE_SIZE),
-      [items, page],
-    ),
-    setPage,
-  };
-}
+import { TABLE_PAGE_SIZE } from "./table-pagination-state";
 
 export function TablePagination({
   page,

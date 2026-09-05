@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -186,6 +186,45 @@ function authHeaders(token?: string | null): Record<string, string> {
   return token ? { authorization: `Bearer ${token}` } : {};
 }
 
+type AccessProfilesData = {
+  access: UserAccess | null;
+  audit: AuditData;
+  permissions: Permission[];
+  profiles: AccessProfile[];
+};
+
+async function fetchAccessProfilesData(
+  headers: Record<string, string>,
+  userId: string | null,
+): Promise<AccessProfilesData> {
+  const requests: [
+    Promise<{ data: AccessProfile[] }>,
+    Promise<{ data: Permission[] }>,
+    Promise<{ data: AuditData }>,
+  ] = [
+    apiClient.get<Envelope<AccessProfile[]>>("/roles", { headers }),
+    apiClient.get<Envelope<Permission[]>>("/permissions", { headers }),
+    apiClient.get<Envelope<AuditData>>(
+      "/access-control/audit-logs?limit=25",
+      { headers },
+    ),
+  ];
+  const [profileResponse, permissionResponse, auditResponse] =
+    await Promise.all(requests);
+  const accessResponse = userId
+    ? await apiClient.get<Envelope<UserAccess>>(`/users/${userId}/access`, {
+        headers,
+      })
+    : null;
+
+  return {
+    access: accessResponse?.data ?? null,
+    audit: auditResponse.data,
+    permissions: permissionResponse.data,
+    profiles: profileResponse.data,
+  };
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("es-MX", {
     dateStyle: "medium",
@@ -217,6 +256,7 @@ export function AccessProfilesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const selectedIdRef = useRef("");
 
   const headers = useMemo(() => authHeaders(accessToken), [accessToken]);
   const selectedProfile =
@@ -247,46 +287,29 @@ export function AccessProfilesPage() {
     PERMISSIONS.accessProfilesManage,
   );
 
+  const applyAccessProfilesData = useCallback((data: AccessProfilesData) => {
+    setProfiles(data.profiles);
+    setPermissions(data.permissions);
+    setAudit(data.audit);
+    const initialProfile =
+      data.profiles.find((profile) => profile.id === selectedIdRef.current) ??
+      data.profiles[0];
+    if (initialProfile) {
+      selectedIdRef.current = initialProfile.id;
+      setSelectedId(initialProfile.id);
+      setDraftKeys(
+        initialProfile.permissions.map((permission) => permission.key),
+      );
+    }
+    setAccess(data.access);
+    if (data.access) setNextUserRoleId(data.access.user.roleId);
+  }, []);
+
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const requests: [
-        Promise<{ data: AccessProfile[] }>,
-        Promise<{ data: Permission[] }>,
-        Promise<{ data: AuditData }>,
-      ] = [
-        apiClient.get<Envelope<AccessProfile[]>>("/roles", { headers }),
-        apiClient.get<Envelope<Permission[]>>("/permissions", { headers }),
-        apiClient.get<Envelope<AuditData>>(
-          "/access-control/audit-logs?limit=25",
-          { headers },
-        ),
-      ];
-      const [profileResponse, permissionResponse, auditResponse] =
-        await Promise.all(requests);
-      setProfiles(profileResponse.data);
-      setPermissions(permissionResponse.data);
-      setAudit(auditResponse.data);
-      const initialProfile =
-        profileResponse.data.find((profile) => profile.id === selectedId) ??
-        profileResponse.data[0];
-      if (initialProfile) {
-        setSelectedId(initialProfile.id);
-        setDraftKeys(
-          initialProfile.permissions.map((permission) => permission.key),
-        );
-      }
-      if (userId) {
-        const accessResponse = await apiClient.get<Envelope<UserAccess>>(
-          `/users/${userId}/access`,
-          { headers },
-        );
-        setAccess(accessResponse.data);
-        setNextUserRoleId(accessResponse.data.user.roleId);
-      } else {
-        setAccess(null);
-      }
+      applyAccessProfilesData(await fetchAccessProfilesData(headers, userId));
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -299,10 +322,29 @@ export function AccessProfilesPage() {
   }
 
   useEffect(() => {
-    void load();
-  }, [accessToken, userId]);
+    let active = true;
+    fetchAccessProfilesData(headers, userId)
+      .then((data) => {
+        if (active) applyAccessProfilesData(data);
+      })
+      .catch((caught: unknown) => {
+        if (active)
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "No se pudo cargar el control de acceso.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [applyAccessProfilesData, headers, userId]);
 
   function selectProfile(profile: AccessProfile) {
+    selectedIdRef.current = profile.id;
     setSelectedId(profile.id);
     setDraftKeys(profile.permissions.map((permission) => permission.key));
     setReason("");

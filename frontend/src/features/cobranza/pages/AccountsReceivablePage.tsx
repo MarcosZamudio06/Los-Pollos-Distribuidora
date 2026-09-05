@@ -25,10 +25,8 @@ import type {
   AgingStatus,
   CollectionStatus,
 } from "../types";
-import {
-  TablePagination,
-  useTablePagination,
-} from "../../../components/shared/table-pagination";
+import { TablePagination } from "../../../components/shared/table-pagination";
+import { useTablePagination } from "../../../components/shared/table-pagination-state";
 import { MiniAjaxSelect } from "../../../components/shared/operational-catalogs";
 
 function canAccessReceivables(role?: string | null) {

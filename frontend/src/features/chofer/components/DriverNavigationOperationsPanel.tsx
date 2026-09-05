@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft, ClipboardCheck, Maximize2, Minimize2, X } from "lucide-react";
 import { DeliveryOrderCard } from "../../rutas-reparto/components/DeliveryOrderCard";
 import type {
@@ -22,6 +22,13 @@ type Props = {
 };
 
 export function DriverNavigationOperationsPanel({
+  open,
+  ...props
+}: Props) {
+  return open ? <OpenDriverNavigationOperationsPanel {...props} /> : null;
+}
+
+function OpenDriverNavigationOperationsPanel({
   children,
   evidence,
   onCaptureEvidence,
@@ -30,17 +37,10 @@ export function DriverNavigationOperationsPanel({
   onIncident,
   onSecondPassCollect,
   onUpdateStatus,
-  open,
   order,
   route,
-}: Props) {
+}: Omit<Props, "open">) {
   const [isMinimized, setIsMinimized] = useState(false);
-
-  useEffect(() => {
-    if (!open) setIsMinimized(false);
-  }, [open]);
-
-  if (!open) return null;
 
   if (isMinimized) {
     return (

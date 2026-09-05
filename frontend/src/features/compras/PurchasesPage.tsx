@@ -29,10 +29,8 @@ import type { BadgeTone } from "@/components/ui";
 import { usePurchaseLocations, usePurchases, useSuppliers } from "./hooks";
 import { dateTime, money, purchaseStatusLabel } from "./purchaseLabels";
 import type { PurchaseStatus } from "./types";
-import {
-  TablePagination,
-  useTablePagination,
-} from "@/components/shared/table-pagination";
+import { TablePagination } from "@/components/shared/table-pagination";
+import { useTablePagination } from "@/components/shared/table-pagination-state";
 
 const filterLabelClass =
   "grid gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--erp-muted-foreground)]";

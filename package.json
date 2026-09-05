@@ -4,6 +4,7 @@
   "description": "TypeScript monorepo foundation for the chicken distributor system.",
   "private": true,
   "scripts": {
+    "frontend:test:e2e:browser": "npm --prefix frontend run test:e2e:browser --",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:lint": "npm --prefix frontend run lint",

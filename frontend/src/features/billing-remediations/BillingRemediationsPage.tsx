@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
-import { ApiClientError } from "@/lib/api";
 import { formatMoney } from "@/lib/money";
 import { useAuth } from "../auth";
 import { useBillingRemediations, useResolveBillingRemediation } from "./hooks";
@@ -17,6 +16,7 @@ import type {
   BillingRemediationItem,
   BillingRemediationStatus,
 } from "./types";
+import { getRemediationErrorDetails } from "./remediationError";
 
 const field =
   "h-11 w-full rounded-xl border border-[color:var(--erp-border)] bg-white px-3 text-sm font-semibold outline-none focus:border-[var(--erp-brand-gold)] focus:ring-2 focus:ring-[rgba(214,155,45,.18)]";
@@ -336,18 +336,6 @@ function RemediationContext({ item }: { item: BillingRemediationItem }) {
   );
 }
 
-export function getRemediationErrorDetails(error: unknown): string[] {
-  if (
-    !(error instanceof ApiClientError) ||
-    typeof error.payload !== "object" ||
-    !error.payload ||
-    !Array.isArray(error.payload.findings)
-  )
-    return [];
-  return error.payload.findings
-    .map((finding) => finding.message)
-    .filter(Boolean);
-}
 function parseFilters(params: URLSearchParams): BillingRemediationFilters {
   return {
     page: Number(params.get("page") || 1),

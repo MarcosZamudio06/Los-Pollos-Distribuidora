@@ -180,6 +180,8 @@ export function DailyClosePage() {
           : undefined;
         const initial = requested ?? data[0];
         if (initial) {
+          setTerminalsLoading(true);
+          setActivation(null);
           setLocationId(initial.operationalLocationId);
           setBusinessDate(initial.businessDate.slice(0, 10));
           await selectClose(initial, true);
@@ -211,16 +213,8 @@ export function DailyClosePage() {
   }, [selectClose, selected]);
 
   useEffect(() => {
-    if (!locationId) {
-      setTerminals([]);
-      setActivation(null);
-      setTerminalsLoading(false);
-      setOpeningCash((current) => ({ ...current, terminalId: "" }));
-      return;
-    }
+    if (!locationId) return;
     let active = true;
-    setTerminalsLoading(true);
-    setActivation(null);
     cashManagementService
       .listTerminals(locationId, deviceId, accessToken)
       .then((items) => {
@@ -247,6 +241,20 @@ export function DailyClosePage() {
       active = false;
     };
   }, [accessToken, deviceId, locationId, terminalRefreshKey]);
+
+  function changeLocation(nextLocationId: string) {
+    setLocationId(nextLocationId);
+    setTerminals([]);
+    setActivation(null);
+    setTerminalsLoading(Boolean(nextLocationId));
+    setOpeningCash((current) => ({ ...current, terminalId: "" }));
+  }
+
+  function refreshTerminals() {
+    setTerminalsLoading(true);
+    setActivation(null);
+    setTerminalRefreshKey((value) => value + 1);
+  }
 
   const requestTerminalActivation = async () => {
     if (!locationId || activationLoading) return;
@@ -711,7 +719,7 @@ export function DailyClosePage() {
             <Select
               aria-label="Ubicación operativa"
               disabled={locations.isLoading}
-              onChange={(event) => setLocationId(event.target.value)}
+              onChange={(event) => changeLocation(event.target.value)}
               value={locationId}
             >
               <option value="">
@@ -786,9 +794,7 @@ export function DailyClosePage() {
                         {activationLoading ? "Generando..." : "Generar código"}
                       </Button>
                       <Button
-                        onClick={() =>
-                          setTerminalRefreshKey((value) => value + 1)
-                        }
+                        onClick={refreshTerminals}
                         type="button"
                         variant="secondary"
                       >

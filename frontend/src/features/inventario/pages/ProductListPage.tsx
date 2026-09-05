@@ -34,10 +34,8 @@ import {
   type ProductFilters,
 } from "../hooks/useProducts";
 import type { InventoryBalance, Product } from "../types";
-import {
-  TablePagination,
-  useTablePagination,
-} from "../../../components/shared/table-pagination";
+import { TablePagination } from "../../../components/shared/table-pagination";
+import { useTablePagination } from "../../../components/shared/table-pagination-state";
 import { productFiscalProfileStatus } from "../../../../../shared/product-fiscal-catalog";
 
 function categoryName(product: Product) {

@@ -3,10 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@/lib/api";
-import {
-  BillingRemediationsPage,
-  getRemediationErrorDetails,
-} from "../BillingRemediationsPage";
+import { BillingRemediationsPage } from "../BillingRemediationsPage";
+import { getRemediationErrorDetails } from "../remediationError";
 import {
   billingRemediationsService,
   buildBillingRemediationsPath,

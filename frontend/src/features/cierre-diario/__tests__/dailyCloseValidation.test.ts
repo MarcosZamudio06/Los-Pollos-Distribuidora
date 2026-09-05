@@ -3,7 +3,7 @@ import { dailyCloseService } from "../dailyCloseService";
 import {
   validationDifferences,
   validationWarnings,
-} from "../DailyCloseValidationPanel";
+} from "../dailyCloseValidation";
 import type { DailyClose, DailyCloseValidationResult } from "../types";
 
 const close = {
