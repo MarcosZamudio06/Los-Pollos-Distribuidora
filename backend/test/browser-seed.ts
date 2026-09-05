@@ -9,6 +9,7 @@ import { readBrowserEnvironment } from './browser-environment';
 
 const BROWSER_POS_INITIAL_STOCK_PIECES = 5;
 const BROWSER_POS_SALE_PRICE = 12;
+const BROWSER_CEDIS_INITIAL_STOCK_PIECES = 10;
 
 function currentBusinessDate(now = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -69,11 +70,21 @@ export async function seedBrowserDatabase() {
         }
         const cedis = await tx.operationalLocation.upsert({
           where: { code: `BROWSER-${env.runId}-CEDIS` },
-          update: { isActive: true },
+          update: {
+            name: `Browser E2E ${env.runId} CEDIS`,
+            type: 'DISTRIBUTION_CENTER',
+            address: `Browser E2E ${env.runId} CEDIS address`,
+            latitude: 19.1738,
+            longitude: -96.1342,
+            isActive: true,
+          },
           create: {
             code: `BROWSER-${env.runId}-CEDIS`,
             name: `Browser E2E ${env.runId} CEDIS`,
             type: 'DISTRIBUTION_CENTER',
+            address: `Browser E2E ${env.runId} CEDIS address`,
+            latitude: 19.1738,
+            longitude: -96.1342,
             isActive: true,
           },
         });
@@ -83,6 +94,9 @@ export async function seedBrowserDatabase() {
             name: `Browser E2E ${env.runId} Branch`,
             type: 'BRANCH',
             parentId: cedis.id,
+            address: `Browser E2E ${env.runId} Branch address`,
+            latitude: 19.1761,
+            longitude: -96.1321,
             isActive: true,
           },
           create: {
@@ -90,6 +104,9 @@ export async function seedBrowserDatabase() {
             name: `Browser E2E ${env.runId} Branch`,
             type: 'BRANCH',
             parentId: cedis.id,
+            address: `Browser E2E ${env.runId} Branch address`,
+            latitude: 19.1761,
+            longitude: -96.1321,
             isActive: true,
           },
         });
@@ -106,6 +123,7 @@ export async function seedBrowserDatabase() {
             .padStart(12, '0')}`,
           roleId: role.id,
           operationalLocationId: location.id,
+          cedisLocationId: cedis.id,
           isActive: true,
           mustChangePassword: false,
         };
@@ -252,11 +270,226 @@ export async function seedBrowserDatabase() {
             initialCashOut: 0,
           },
         });
+
+        const cedisSupplyPrefix = `BROWSER-${env.runId}-CEDIS-SUPPLY`;
+        const cedisSupplyProductSku = `${cedisSupplyPrefix}-SKU`;
+        const cedisSupplyCycleId = `browser-${env.runId}-cedis-cycle`;
+        const cedisSupplyOpeningMovementId = `browser-${env.runId}-cedis-opening`;
+        const cedisDriverEmail = `browser-${env.runId}-driver@example.test`;
+        const cedisDriverControlNumber = `BROWSER-${env.runId}-DRIVER`;
+        const cedisDriverPhone = `+998${BigInt(
+          '0x' +
+            createHash('sha256')
+              .update(`${env.runId}:driver`)
+              .digest('hex')
+              .slice(0, 9),
+        )
+          .toString()
+          .padStart(12, '0')}`;
+        const cedisVehicleCode = `${cedisSupplyPrefix}-VEHICLE`;
+
+        const existingCedisCycle = await tx.branchSupplyCycle.findUnique({
+          where: { id: cedisSupplyCycleId },
+          select: { status: true, version: true },
+        });
+        if (existingCedisCycle) {
+          const existingTransfers = await tx.branchSupplyCycleTransfer.count({
+            where: { branchSupplyCycleId: cedisSupplyCycleId },
+          });
+          if (
+            existingTransfers > 0 ||
+            existingCedisCycle.status !== 'OPEN' ||
+            existingCedisCycle.version !== 1
+          ) {
+            throw new Error(
+              `Browser CEDIS fixture ${env.runId} was already used; provide a new E2E_RUN_ID before rerunning`,
+            );
+          }
+        }
+
+        const driverRole = await tx.role.upsert({
+          where: { name: 'DRIVER' },
+          update: {},
+          create: {
+            name: 'DRIVER',
+            description: 'Browser E2E logistics driver.',
+          },
+        });
+        await tx.user.upsert({
+          where: { email: cedisDriverEmail },
+          update: {
+            name: `Browser E2E ${env.runId} Driver`,
+            controlNumber: cedisDriverControlNumber,
+            phone: cedisDriverPhone,
+            passwordHash,
+            roleId: driverRole.id,
+            operationalLocationId: cedis.id,
+            cedisLocationId: cedis.id,
+            isActive: true,
+            mustChangePassword: false,
+          },
+          create: {
+            name: `Browser E2E ${env.runId} Driver`,
+            email: cedisDriverEmail,
+            controlNumber: cedisDriverControlNumber,
+            phone: cedisDriverPhone,
+            passwordHash,
+            roleId: driverRole.id,
+            operationalLocationId: cedis.id,
+            cedisLocationId: cedis.id,
+            isActive: true,
+            mustChangePassword: false,
+          },
+        });
+        await tx.vehicle.upsert({
+          where: { code: cedisVehicleCode },
+          update: {
+            displayName: `Browser E2E ${env.runId} supply vehicle`,
+            homeLocationId: cedis.id,
+            isActive: true,
+          },
+          create: {
+            code: cedisVehicleCode,
+            displayName: `Browser E2E ${env.runId} supply vehicle`,
+            homeLocationId: cedis.id,
+            isActive: true,
+          },
+        });
+        const cedisSupplyProduct = await tx.product.upsert({
+          where: { sku: cedisSupplyProductSku },
+          update: {
+            name: `Browser E2E ${env.runId} CEDIS supply product`,
+            presentationType: 'WHOLE',
+            salePrice: 60,
+            purchaseCost: 40,
+            unit: 'PIECE',
+            isActive: true,
+          },
+          create: {
+            name: `Browser E2E ${env.runId} CEDIS supply product`,
+            sku: cedisSupplyProductSku,
+            presentationType: 'WHOLE',
+            salePrice: 60,
+            purchaseCost: 40,
+            unit: 'PIECE',
+            isActive: true,
+          },
+        });
+        await tx.inventoryBalance.upsert({
+          where: {
+            productId_locationId: {
+              productId: cedisSupplyProduct.id,
+              locationId: cedis.id,
+            },
+          },
+          update: {
+            quantityKg: 0,
+            quantityPieces: BROWSER_CEDIS_INITIAL_STOCK_PIECES,
+            reservedQuantityKg: 0,
+            reservedQuantityPieces: 0,
+          },
+          create: {
+            productId: cedisSupplyProduct.id,
+            locationId: cedis.id,
+            quantityKg: 0,
+            quantityPieces: BROWSER_CEDIS_INITIAL_STOCK_PIECES,
+            reservedQuantityKg: 0,
+            reservedQuantityPieces: 0,
+          },
+        });
+        await tx.inventoryBalance.upsert({
+          where: {
+            productId_locationId: {
+              productId: cedisSupplyProduct.id,
+              locationId: location.id,
+            },
+          },
+          update: {
+            quantityKg: 0,
+            quantityPieces: 0,
+            reservedQuantityKg: 0,
+            reservedQuantityPieces: 0,
+          },
+          create: {
+            productId: cedisSupplyProduct.id,
+            locationId: location.id,
+            quantityKg: 0,
+            quantityPieces: 0,
+            reservedQuantityKg: 0,
+            reservedQuantityPieces: 0,
+          },
+        });
+        await tx.inventoryMovement.upsert({
+          where: { id: cedisSupplyOpeningMovementId },
+          update: {},
+          create: {
+            id: cedisSupplyOpeningMovementId,
+            productId: cedisSupplyProduct.id,
+            locationId: cedis.id,
+            userId: seededUser.id,
+            type: 'ADJUSTMENT',
+            quantity: BROWSER_CEDIS_INITIAL_STOCK_PIECES,
+            quantityKg: 0,
+            quantityPieces: BROWSER_CEDIS_INITIAL_STOCK_PIECES,
+            previousStock: 0,
+            newStock: BROWSER_CEDIS_INITIAL_STOCK_PIECES,
+            previousQuantityKg: 0,
+            newQuantityKg: 0,
+            previousQuantityPieces: 0,
+            newQuantityPieces: BROWSER_CEDIS_INITIAL_STOCK_PIECES,
+            reason: 'Browser E2E CEDIS opening stock',
+            referenceType: 'BROWSER_E2E_FIXTURE',
+            referenceId: env.runId,
+            createdAt: new Date(businessDate.getTime() - 12 * 60 * 60 * 1000),
+          },
+        });
+        await tx.branchSupplyCycle.upsert({
+          where: { id: cedisSupplyCycleId },
+          update: {
+            distributionCenterLocationId: cedis.id,
+            branchLocationId: location.id,
+            businessDate,
+            pointOfSaleDailyCloseId: dailyClose.id,
+            status: 'OPEN',
+            version: 1,
+            notes: `Browser E2E ${env.runId} CEDIS supply cycle`,
+            openedByUserId: seededUser.id,
+          },
+          create: {
+            id: cedisSupplyCycleId,
+            distributionCenterLocationId: cedis.id,
+            branchLocationId: location.id,
+            businessDate,
+            pointOfSaleDailyCloseId: dailyClose.id,
+            status: 'OPEN',
+            version: 1,
+            notes: `Browser E2E ${env.runId} CEDIS supply cycle`,
+            openedByUserId: seededUser.id,
+          },
+        });
+        await tx.branchSupplyCycleEvent.upsert({
+          where: {
+            idempotencyKey: `browser:${env.runId}:cedis-cycle-open`,
+          },
+          update: {},
+          create: {
+            branchSupplyCycleId: cedisSupplyCycleId,
+            type: 'OPENED',
+            cycleVersion: 1,
+            toStatus: 'OPEN',
+            actorUserId: seededUser.id,
+            payload: {
+              source: 'BROWSER_E2E_FIXTURE',
+              runId: env.runId,
+            },
+            idempotencyKey: `browser:${env.runId}:cedis-cycle-open`,
+          },
+        });
       },
       { timeout: 30_000 },
     );
     console.log(
-      `Browser seed ready: ${env.runId} (ADMIN, branch, POS terminal, open shift, product and opening inventory)`,
+      `Browser seed ready: ${env.runId} (ADMIN, CEDIS/branch, POS and CEDIS supply fixtures)`,
     );
   } finally {
     await prisma.$disconnect();
