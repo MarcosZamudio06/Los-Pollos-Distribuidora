@@ -254,7 +254,10 @@ test("POS cash sale can close its shift and daily close through the real stack",
       .getByRole("button", { name: "Cerrar jornada", exact: true })
       .click();
     expect((await dailyCloseResponse).status()).toBe(200);
-    await expect(page.getByText("Cerrado", { exact: true })).toBeVisible();
+    const currentCloseStatus = page
+      .getByRole("definition")
+      .filter({ hasText: /^Cerrado$/ });
+    await expect(currentCloseStatus).toHaveText("Cerrado");
 
     const after = await oracle.snapshot();
     expectDelta(before, after);
