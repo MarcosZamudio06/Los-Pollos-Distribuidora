@@ -62,7 +62,10 @@ test("POS cash sale can close its shift and daily close through the real stack",
     }, fixture.deviceId);
 
     await login(page);
-    await page.getByRole("link", { name: "Ventas POS", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "Accesos por rol" })
+      .getByRole("link", { name: "Ventas POS", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/sales$/);
 
     const search = page.getByLabel(
