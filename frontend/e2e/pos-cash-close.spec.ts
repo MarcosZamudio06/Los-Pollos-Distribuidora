@@ -238,7 +238,10 @@ test("POS cash sale can close its shift and daily close through the real stack",
         exact: true,
       }),
     ).toBeVisible();
-    const closeDialog = page.getByRole("dialog");
+    const closeDialog = page.getByRole("alertdialog", {
+      name: "Confirmar cierre de jornada",
+      exact: true,
+    });
     await expect(closeDialog).toContainText("Ventas: $12.00 (1)");
     await expect(closeDialog).toContainText("Diferencia de efectivo: $0.00");
     const dailyCloseResponse = page.waitForResponse(
