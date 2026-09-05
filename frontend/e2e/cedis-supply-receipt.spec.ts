@@ -215,7 +215,7 @@ test("CEDIS supply reserves stock and receives the exact quantity through the re
       .getByRole("button", { name: "Revisar antes de confirmar", exact: true })
       .click();
     const confirmationDialog = page.getByRole("dialog", {
-      name: "Confirmar suministro",
+      name: "Enviar producto",
       exact: true,
     });
     await expect(confirmationDialog).toBeVisible();
