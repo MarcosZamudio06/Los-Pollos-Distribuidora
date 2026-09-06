@@ -32,7 +32,33 @@ function expectNonInterference(
   before: BrowserCedisSnapshot,
   after: BrowserCedisSnapshot,
 ) {
-  expect(after.nonInterference).toEqual(before.nonInterference);
+  expect(after.nonInterference.sales).toEqual(before.nonInterference.sales);
+  expect(after.nonInterference.payments).toEqual(
+    before.nonInterference.payments,
+  );
+  expect(after.nonInterference.accountReceivables).toEqual(
+    before.nonInterference.accountReceivables,
+  );
+  expect(after.nonInterference.cashShifts).toEqual(
+    before.nonInterference.cashShifts,
+  );
+}
+
+function expectDailyCloseTransition(
+  previous: BrowserCedisSnapshot,
+  current: BrowserCedisSnapshot,
+  versionIncrement: number,
+) {
+  expect(previous.dailyCloseCount).toBe(1);
+  expect(current.dailyCloseCount).toBe(1);
+  expect(previous.dailyClose).not.toBeNull();
+  expect(current.dailyClose).toEqual({
+    id: previous.dailyClose!.id,
+    status: "DRAFT",
+    version: previous.dailyClose!.version + versionIncrement,
+    lastValidatedAt: null,
+    validatedSourceVersion: null,
+  });
 }
 
 function expectPendingSupply(
@@ -73,6 +99,7 @@ function expectPendingSupply(
   expect(pending.branchQuantityPieces).toBe(0);
   expect(pending.branchReservedQuantityPieces).toBe(0);
   expectNonInterference(before, pending);
+  expectDailyCloseTransition(before, pending, 0);
 }
 
 function expectConfirmedSupply(
@@ -107,6 +134,7 @@ function expectConfirmedSupply(
   expect(after.branchQuantityPieces).toBe(3);
   expect(after.branchReservedQuantityPieces).toBe(0);
   expectNonInterference(before, after);
+  expectDailyCloseTransition(pending, after, 1);
 }
 
 test("CEDIS supply reserves stock and receives the exact quantity through the real stack", async ({
@@ -135,6 +163,14 @@ test("CEDIS supply reserves stock and receives the exact quantity through the re
     expect(before.cycleEventCount).toBe(1);
     expect(before.openedEventCount).toBe(1);
     expect(before.transferStatus).toBeNull();
+    expect(before.dailyCloseCount).toBe(1);
+    expect(before.dailyClose).toEqual({
+      id: fixture.dailyCloseId,
+      status: "DRAFT",
+      version: expect.any(Number),
+      lastValidatedAt: null,
+      validatedSourceVersion: null,
+    });
 
     await login(page);
     const roleNavigation = page.getByRole("navigation", {
@@ -423,6 +459,7 @@ test("CEDIS supply reserves stock and receives the exact quantity through the re
     expect(reloaded.routeCount).toBe(after.routeCount);
     expect(reloaded.cycleEventCount).toBe(after.cycleEventCount);
     expectNonInterference(after, reloaded);
+    expectDailyCloseTransition(after, reloaded, 0);
 
     console.log(
       JSON.stringify({
@@ -451,6 +488,11 @@ test("CEDIS supply reserves stock and receives the exact quantity through the re
         surplusInDelta: after.surplusInCount - before.surplusInCount,
         finalTransferState: after.transferStatus,
         cycleEvents: after.cycleEventCount - before.cycleEventCount,
+        dailyClose: {
+          before: before.dailyClose,
+          pending: pending.dailyClose,
+          after: after.dailyClose,
+        },
         reloadDuplicateDeltas: {
           transfers: reloaded.transferCount - after.transferCount,
           receipts: reloaded.receiptCount - after.receiptCount,

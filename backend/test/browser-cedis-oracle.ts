@@ -31,6 +31,7 @@ export function browserCedisFixture(runId: string) {
     productSku: `${supplyPrefix}-SKU`,
     productName: `Browser E2E ${runId} CEDIS supply product`,
     cycleId: `browser-${runId}-cedis-cycle`,
+    dailyCloseId: `browser-${runId}-daily-close`,
     driverEmail: `browser-${runId}-driver@example.test`,
     driverName: `Browser E2E ${runId} Driver`,
     vehicleCode: `${supplyPrefix}-VEHICLE`,
@@ -59,6 +60,14 @@ type RawNonInterferenceRows = Array<{
   updatedAt: Date;
 }>;
 
+type DailyCloseSnapshot = {
+  id: string;
+  status: string;
+  version: number;
+  lastValidatedAt: string | null;
+  validatedSourceVersion: number | null;
+};
+
 export type BrowserCedisSnapshot = {
   cycleStatus: string;
   cycleVersion: number;
@@ -83,39 +92,35 @@ export type BrowserCedisSnapshot = {
   transferId: string | null;
   transferNumber: string | null;
   transferStatus: string | null;
+  dailyCloseCount: number;
+  dailyClose: DailyCloseSnapshot | null;
   nonInterference: {
     sales: NonInterferenceRows;
     payments: NonInterferenceRows;
     accountReceivables: NonInterferenceRows;
     cashShifts: NonInterferenceRows;
-    dailyCloses: NonInterferenceRows;
   };
 };
 
 async function nonInterferenceRows(prisma: PrismaClient) {
-  const [sales, payments, accountReceivables, cashShifts, dailyCloses] =
-    await Promise.all([
-      prisma.sale.findMany({
-        select: { id: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-      prisma.payment.findMany({
-        select: { id: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-      prisma.accountReceivable.findMany({
-        select: { id: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-      prisma.cashShift.findMany({
-        select: { id: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-      prisma.pointOfSaleDailyClose.findMany({
-        select: { id: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-    ]);
+  const [sales, payments, accountReceivables, cashShifts] = await Promise.all([
+    prisma.sale.findMany({
+      select: { id: true, updatedAt: true },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.payment.findMany({
+      select: { id: true, updatedAt: true },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.accountReceivable.findMany({
+      select: { id: true, updatedAt: true },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.cashShift.findMany({
+      select: { id: true, updatedAt: true },
+      orderBy: { id: 'asc' },
+    }),
+  ]);
   const normalize = (rows: RawNonInterferenceRows): NonInterferenceRows =>
     rows.map((row) => ({ id: row.id, updatedAt: row.updatedAt.toISOString() }));
   return {
@@ -123,7 +128,6 @@ async function nonInterferenceRows(prisma: PrismaClient) {
     payments: normalize(payments),
     accountReceivables: normalize(accountReceivables),
     cashShifts: normalize(cashShifts),
-    dailyCloses: normalize(dailyCloses),
   };
 }
 
@@ -216,6 +220,8 @@ export async function createBrowserCedisOracle() {
       movements,
       routeCount,
       events,
+      dailyCloseCount,
+      dailyClose,
       nonInterference,
     ] = await Promise.all([
       prisma.branchSupplyCycle.findUnique({
@@ -253,6 +259,24 @@ export async function createBrowserCedisOracle() {
       prisma.branchSupplyCycleEvent.findMany({
         where: { branchSupplyCycleId: resolvedFixture.cycleId },
         select: { type: true },
+      }),
+      prisma.pointOfSaleDailyClose.count({
+        where: {
+          operationalLocationId: resolvedFixture.branchId,
+          businessDate: new Date(
+            `${resolvedFixture.businessDate}T00:00:00.000Z`,
+          ),
+        },
+      }),
+      prisma.pointOfSaleDailyClose.findUnique({
+        where: { id: resolvedFixture.dailyCloseId },
+        select: {
+          id: true,
+          status: true,
+          version: true,
+          lastValidatedAt: true,
+          validatedSourceVersion: true,
+        },
       }),
       nonInterferenceRows(prisma),
     ]);
@@ -292,6 +316,13 @@ export async function createBrowserCedisOracle() {
       transferId: transfer?.id ?? null,
       transferNumber: transfer?.transferNumber ?? null,
       transferStatus: transfer?.status ?? null,
+      dailyCloseCount,
+      dailyClose: dailyClose
+        ? {
+            ...dailyClose,
+            lastValidatedAt: dailyClose.lastValidatedAt?.toISOString() ?? null,
+          }
+        : null,
       nonInterference,
     };
   }
