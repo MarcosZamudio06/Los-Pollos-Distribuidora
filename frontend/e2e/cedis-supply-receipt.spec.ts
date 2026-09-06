@@ -415,7 +415,10 @@ test("CEDIS supply reserves stock and receives the exact quantity through the re
       name: "Mostrar todas las recepciones",
       exact: true,
     });
-    await showAll.check();
+    await showAll.click();
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get("status") === "ALL",
+    );
     await expect(showAll).toBeChecked();
     const confirmedSupplyCard = page
       .getByRole("button")
