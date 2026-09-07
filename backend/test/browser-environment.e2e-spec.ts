@@ -15,6 +15,12 @@ describe('browser E2E safety boundary (no database connection)', () => {
       E2E_ADMIN_PASSWORD: 'only-for-disposable-tests-001',
       CFDI_ENABLED: 'false',
       FISCAL_PROVIDER: 'NONE',
+      OBJECT_STORAGE_BUCKET: 'delivery-evidence',
+      OBJECT_STORAGE_ENDPOINT: 'http://127.0.0.1:18333',
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: 'http://127.0.0.1:18333',
+      OBJECT_STORAGE_ACCESS_KEY_ID: 'browser-e2e-access',
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: 'browser-e2e-secret',
+      OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
     };
   });
   afterEach(() => {
@@ -26,6 +32,8 @@ describe('browser E2E safety boundary (no database connection)', () => {
       runId: 'foundation-001',
       baseURL: 'http://127.0.0.1:4173',
       backendURL: 'http://127.0.0.1:4100',
+      objectStorageEndpoint: 'http://127.0.0.1:18333',
+      objectStoragePublicEndpoint: 'http://127.0.0.1:18333',
     });
   });
 
@@ -36,6 +44,12 @@ describe('browser E2E safety boundary (no database connection)', () => {
     'E2E_RUN_ID',
     'E2E_ADMIN_EMAIL',
     'E2E_ADMIN_PASSWORD',
+    'OBJECT_STORAGE_BUCKET',
+    'OBJECT_STORAGE_ENDPOINT',
+    'OBJECT_STORAGE_PUBLIC_ENDPOINT',
+    'OBJECT_STORAGE_ACCESS_KEY_ID',
+    'OBJECT_STORAGE_SECRET_ACCESS_KEY',
+    'OBJECT_STORAGE_FORCE_PATH_STYLE',
   ])('rejects missing %s', (key) => {
     delete process.env[key];
     expect(() => readBrowserEnvironment()).toThrow();
@@ -55,6 +69,12 @@ describe('browser E2E safety boundary (no database connection)', () => {
     ['E2E_BASE_URL', 'http://localhost:4173'],
     ['E2E_BACKEND_PORT', '4100;echo unsafe'],
     ['E2E_BACKEND_PORT', '4173'],
+    ['OBJECT_STORAGE_BUCKET', 'Unsafe bucket'],
+    ['OBJECT_STORAGE_ENDPOINT', 'http://object-storage:8333'],
+    ['OBJECT_STORAGE_PUBLIC_ENDPOINT', 'https://objects.example.test'],
+    ['OBJECT_STORAGE_ACCESS_KEY_ID', 'short'],
+    ['OBJECT_STORAGE_SECRET_ACCESS_KEY', 'short'],
+    ['OBJECT_STORAGE_FORCE_PATH_STYLE', 'false'],
   ])('rejects unsafe %s=%s', (key, value) => {
     process.env[key] = value;
     expect(() => readBrowserEnvironment()).toThrow();

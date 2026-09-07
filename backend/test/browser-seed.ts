@@ -5,6 +5,10 @@ import {
   PERMISSION_DEFINITIONS,
   ROLE_PERMISSION_KEYS,
 } from '../src/common/authorization/permissions';
+import {
+  BROWSER_DRIVER_DESTINATION,
+  browserDriverFixture,
+} from './browser-driver-fixture';
 import { readBrowserEnvironment } from './browser-environment';
 
 const BROWSER_POS_INITIAL_STOCK_PIECES = 5;
@@ -315,6 +319,24 @@ export async function seedBrowserDatabase() {
             description: 'Browser E2E logistics driver.',
           },
         });
+        for (const definition of PERMISSION_DEFINITIONS) {
+          if (!ROLE_PERMISSION_KEYS.DRIVER.includes(definition.key)) continue;
+          const permission = await tx.permission.upsert({
+            where: { key: definition.key },
+            update: {},
+            create: definition,
+          });
+          await tx.rolePermission.upsert({
+            where: {
+              roleId_permissionId: {
+                roleId: driverRole.id,
+                permissionId: permission.id,
+              },
+            },
+            update: {},
+            create: { roleId: driverRole.id, permissionId: permission.id },
+          });
+        }
         await tx.user.upsert({
           where: { email: cedisDriverEmail },
           update: {
@@ -485,11 +507,324 @@ export async function seedBrowserDatabase() {
             idempotencyKey: `browser:${env.runId}:cedis-cycle-open`,
           },
         });
+
+        const driverFixture = browserDriverFixture(env.runId);
+        const existingDriverRoute = await tx.deliveryRoute.findUnique({
+          where: { id: driverFixture.routeId },
+          select: { status: true },
+        });
+        if (existingDriverRoute) {
+          throw new Error(
+            `Browser DRIVER fixture ${env.runId} was already used; provide a new E2E_RUN_ID before rerunning`,
+          );
+        }
+
+        const deliveryDriver = await tx.user.upsert({
+          where: { email: driverFixture.driverEmail },
+          update: {
+            name: driverFixture.driverName,
+            controlNumber: driverFixture.driverControlNumber,
+            phone: driverFixture.customerPhone.replace('+997', '+996'),
+            passwordHash,
+            roleId: driverRole.id,
+            operationalLocationId: cedis.id,
+            cedisLocationId: cedis.id,
+            isActive: true,
+            mustChangePassword: false,
+          },
+          create: {
+            name: driverFixture.driverName,
+            email: driverFixture.driverEmail,
+            controlNumber: driverFixture.driverControlNumber,
+            phone: driverFixture.customerPhone.replace('+997', '+996'),
+            passwordHash,
+            roleId: driverRole.id,
+            operationalLocationId: cedis.id,
+            cedisLocationId: cedis.id,
+            isActive: true,
+            mustChangePassword: false,
+          },
+        });
+        const routeStock = await tx.operationalLocation.upsert({
+          where: { code: driverFixture.routeStockCode },
+          update: {
+            name: `${driverFixture.routeName} stock`,
+            type: 'ROUTE_STOCK',
+            parentId: cedis.id,
+            address: driverFixture.deliveryAddress,
+            latitude: BROWSER_DRIVER_DESTINATION.latitude,
+            longitude: BROWSER_DRIVER_DESTINATION.longitude,
+            isActive: true,
+          },
+          create: {
+            code: driverFixture.routeStockCode,
+            name: `${driverFixture.routeName} stock`,
+            type: 'ROUTE_STOCK',
+            parentId: cedis.id,
+            address: driverFixture.deliveryAddress,
+            latitude: BROWSER_DRIVER_DESTINATION.latitude,
+            longitude: BROWSER_DRIVER_DESTINATION.longitude,
+            isActive: true,
+          },
+        });
+        const deliveryVehicle = await tx.vehicle.upsert({
+          where: { code: driverFixture.vehicleCode },
+          update: {
+            displayName: driverFixture.vehicleName,
+            homeLocationId: cedis.id,
+            isActive: true,
+          },
+          create: {
+            code: driverFixture.vehicleCode,
+            displayName: driverFixture.vehicleName,
+            homeLocationId: cedis.id,
+            isActive: true,
+          },
+        });
+        const deliveryCustomer = await tx.customer.upsert({
+          where: { customerNumber: driverFixture.customerNumber },
+          update: {
+            name: driverFixture.customerName,
+            phone: driverFixture.customerPhone,
+            address: driverFixture.deliveryAddress,
+            deliveryAddress: driverFixture.deliveryAddress,
+            customerType: 'RETAIL',
+            isActive: true,
+          },
+          create: {
+            customerNumber: driverFixture.customerNumber,
+            name: driverFixture.customerName,
+            phone: driverFixture.customerPhone,
+            address: driverFixture.deliveryAddress,
+            deliveryAddress: driverFixture.deliveryAddress,
+            customerType: 'RETAIL',
+            isActive: true,
+          },
+        });
+        const deliveryProduct = await tx.product.upsert({
+          where: { sku: driverFixture.productSku },
+          update: {
+            name: driverFixture.productName,
+            presentationType: 'WHOLE',
+            salePrice: driverFixture.saleTotal,
+            purchaseCost: 50,
+            unit: 'PIECE',
+            isActive: true,
+          },
+          create: {
+            name: driverFixture.productName,
+            sku: driverFixture.productSku,
+            presentationType: 'WHOLE',
+            salePrice: driverFixture.saleTotal,
+            purchaseCost: 50,
+            unit: 'PIECE',
+            isActive: true,
+          },
+        });
+        const deliveryRoute = await tx.deliveryRoute.create({
+          data: {
+            id: driverFixture.routeId,
+            name: driverFixture.routeName,
+            type: 'SALE_DELIVERY',
+            driverId: deliveryDriver.id,
+            vehicleId: deliveryVehicle.id,
+            status: 'IN_PROGRESS',
+            scheduledDate: businessDate,
+            originLocationId: cedis.id,
+            routeStockLocationId: routeStock.id,
+            startedAt: new Date(),
+          },
+        });
+        await tx.customer.update({
+          where: { id: deliveryCustomer.id },
+          data: { assignedRouteId: deliveryRoute.id },
+        });
+        await tx.inventoryBalance.upsert({
+          where: {
+            productId_locationId: {
+              productId: deliveryProduct.id,
+              locationId: routeStock.id,
+            },
+          },
+          update: {
+            quantityKg: 0,
+            quantityPieces: 0,
+            reservedQuantityKg: 0,
+            reservedQuantityPieces: 0,
+          },
+          create: {
+            productId: deliveryProduct.id,
+            locationId: routeStock.id,
+            quantityKg: 0,
+            quantityPieces: 0,
+            reservedQuantityKg: 0,
+            reservedQuantityPieces: 0,
+          },
+        });
+        await tx.inventoryMovement.create({
+          data: {
+            id: driverFixture.openingMovementId,
+            productId: deliveryProduct.id,
+            locationId: routeStock.id,
+            userId: seededUser.id,
+            type: 'ADJUSTMENT',
+            quantity: 1,
+            quantityKg: 0,
+            quantityPieces: 1,
+            previousStock: 0,
+            newStock: 1,
+            previousQuantityKg: 0,
+            newQuantityKg: 0,
+            previousQuantityPieces: 0,
+            newQuantityPieces: 1,
+            reason: 'Browser E2E DRIVER opening route stock',
+            referenceType: 'BROWSER_E2E_FIXTURE',
+            referenceId: env.runId,
+          },
+        });
+        const deliverySale = await tx.sale.create({
+          data: {
+            id: driverFixture.saleId,
+            saleNumber: driverFixture.saleNumber,
+            customerId: deliveryCustomer.id,
+            userId: seededUser.id,
+            locationId: routeStock.id,
+            saleChannel: 'ROUTE',
+            documentType: 'SIMPLE_NOTE',
+            routeId: deliveryRoute.id,
+            businessDate,
+            registeredAt: new Date(),
+            collectionStatus: 'PAID',
+            subtotal: driverFixture.saleTotal,
+            discount: 0,
+            tax: 0,
+            total: driverFixture.saleTotal,
+            paymentType: 'CASH_SALE',
+            status: 'CONFIRMED',
+          },
+        });
+        await tx.saleItem.create({
+          data: {
+            id: `browser-${env.runId}-delivery-sale-item`,
+            saleId: deliverySale.id,
+            productId: deliveryProduct.id,
+            quantity: 1,
+            quantityKg: 0,
+            quantityPieces: 1,
+            unit: 'PIECE',
+            unitPrice: driverFixture.saleTotal,
+            productNameSnapshot: driverFixture.productName,
+            productSkuSnapshot: driverFixture.productSku,
+            unitPriceSnapshot: driverFixture.saleTotal,
+            quantitySnapshot: 1,
+            subtotal: driverFixture.saleTotal,
+            discount: 0,
+            taxableBase: driverFixture.saleTotal,
+            tax: 0,
+            total: driverFixture.saleTotal,
+            unitCostSnapshot: 50,
+            costSubtotalSnapshot: 50,
+            costSnapshotSource: 'SALE_CONFIRMATION',
+          },
+        });
+        await tx.saleDocument.create({
+          data: {
+            id: `browser-${env.runId}-delivery-sale-document`,
+            saleId: deliverySale.id,
+            documentType: 'SIMPLE_NOTE',
+            operationalLocationId: routeStock.id,
+            status: 'ISSUED',
+            routeId: deliveryRoute.id,
+            customerSnapshot: {
+              id: deliveryCustomer.id,
+              name: driverFixture.customerName,
+            },
+            productSnapshot: [
+              {
+                id: deliveryProduct.id,
+                name: driverFixture.productName,
+                sku: driverFixture.productSku,
+              },
+            ],
+            priceSnapshot: { total: driverFixture.saleTotal },
+          },
+        });
+        await tx.inventoryMovement.create({
+          data: {
+            id: driverFixture.saleMovementId,
+            productId: deliveryProduct.id,
+            locationId: routeStock.id,
+            userId: seededUser.id,
+            type: 'SALE',
+            quantity: 1,
+            quantityKg: 0,
+            quantityPieces: 1,
+            previousStock: 1,
+            newStock: 0,
+            previousQuantityKg: 0,
+            newQuantityKg: 0,
+            previousQuantityPieces: 1,
+            newQuantityPieces: 0,
+            reason: 'Browser E2E DRIVER paid sale',
+            referenceType: 'SALE',
+            referenceId: deliverySale.id,
+            saleId: deliverySale.id,
+          },
+        });
+        const paymentPayloadHash = createHash('sha256')
+          .update(`${driverFixture.paymentId}:${driverFixture.saleTotal}`)
+          .digest('hex');
+        await tx.payment.create({
+          data: {
+            id: driverFixture.paymentId,
+            saleId: deliverySale.id,
+            customerId: deliveryCustomer.id,
+            userId: seededUser.id,
+            amount: driverFixture.saleTotal,
+            paymentMethod: 'CASH',
+            operationalLocationId: routeStock.id,
+            status: 'APPLIED',
+            paidAt: new Date(),
+            idempotencyKey: driverFixture.paymentIdempotencyKey,
+            idempotencyPayloadHash: paymentPayloadHash,
+          },
+        });
+        await tx.deliveryOrder.create({
+          data: {
+            id: driverFixture.orderId,
+            routeId: deliveryRoute.id,
+            saleId: deliverySale.id,
+            status: 'PENDING',
+            deliveryAddress: driverFixture.deliveryAddress,
+            latitude: BROWSER_DRIVER_DESTINATION.latitude,
+            longitude: BROWSER_DRIVER_DESTINATION.longitude,
+            stopSequence: 1,
+            legDistanceMeters: 0,
+            legDurationSeconds: 0,
+          },
+        });
+        await tx.$executeRaw`
+          INSERT INTO "VehiclePosition" (
+            "id", "clientEventId", "vehicleId", "routeId", "driverId",
+            "latitude", "longitude", "accuracyMeters", "recordedAt", "receivedAt"
+          ) VALUES (
+            ${driverFixture.positionId},
+            ${driverFixture.positionClientEventId},
+            ${deliveryVehicle.id},
+            ${deliveryRoute.id},
+            ${deliveryDriver.id},
+            ${BROWSER_DRIVER_DESTINATION.latitude},
+            ${BROWSER_DRIVER_DESTINATION.longitude},
+            ${10},
+            ${new Date()},
+            ${new Date()}
+          )
+        `;
       },
       { timeout: 30_000 },
     );
     console.log(
-      `Browser seed ready: ${env.runId} (ADMIN, CEDIS/branch, POS and CEDIS supply fixtures)`,
+      `Browser seed ready: ${env.runId} (ADMIN, CEDIS/branch, POS, CEDIS supply and DRIVER delivery fixtures)`,
     );
   } finally {
     await prisma.$disconnect();
