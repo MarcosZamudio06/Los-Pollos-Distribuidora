@@ -222,9 +222,9 @@ test("DRIVER completes one paid delivery with durable photo evidence through the
     const storageReadback = await storageReadbackResponse;
     expect(storageReadback.status()).toBe(200);
     expect(storageReadback.headers()["content-type"]).toMatch(/^image\//);
-    await expect(operations.getByText("Foto", { exact: true })).toBeVisible();
+    await expect(operationsPanel.getByText("Foto", { exact: true })).toBeVisible();
 
-    await operations
+    await operationsPanel
       .getByRole("button", { name: "Estado", exact: true })
       .click();
     const statusDialog = page.getByRole("dialog", {
