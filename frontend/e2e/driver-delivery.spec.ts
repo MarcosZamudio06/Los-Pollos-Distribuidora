@@ -42,12 +42,12 @@ function expectNoJourneySideEffects(
 
 test("DRIVER completes one paid delivery with durable photo evidence through the real stack", async ({
   browser,
+  context,
   page,
 }) => {
   const oracle = await createBrowserDriverOracle();
   const { fixture } = oracle;
   try {
-    await oracle.refreshPersistedPosition();
     const before = await oracle.snapshot();
     expect(before.routeOwnerId).toBe(fixture.driverId);
     expect(before.routeStatus).toBe("IN_PROGRESS");
@@ -61,11 +61,20 @@ test("DRIVER completes one paid delivery with durable photo evidence through the
     expect(before.paymentCount).toBe(1);
     expect(before.accountReceivableCount).toBe(0);
     expect(before.incidentCount).toBe(0);
-    expect(before.positionCount).toBe(1);
-    expect(before.positionAccuracyMeters).toBeLessThanOrEqual(100);
-    expect(Date.now() - Date.parse(before.positionRecordedAt!)).toBeLessThan(
-      60_000,
-    );
+    expect(before.positionCount).toBe(0);
+    expect(before.positionAccuracyMeters).toBeNull();
+    expect(before.positionRecordedAt).toBeNull();
+
+    const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173";
+    const geolocationAccuracy = 10;
+    await context.grantPermissions(["geolocation"], {
+      origin: new URL(baseURL).origin,
+    });
+    await context.setGeolocation({
+      latitude: fixture.latitude,
+      longitude: fixture.longitude,
+      accuracy: geolocationAccuracy,
+    });
 
     await loginAsDriver(page, fixture.driverEmail);
     const roleNavigation = page.getByRole("navigation", {
@@ -100,28 +109,85 @@ test("DRIVER completes one paid delivery with durable photo evidence through the
     await expect(page).toHaveURL(
       new RegExp(`/my-routes/${fixture.routeId}/navigation$`),
     );
+    const positionResponsePromise = page.waitForResponse(
+      apiResponse("/api/fleet/positions", "POST"),
+    );
     await page
       .getByRole("button", { name: "Iniciar navegación", exact: true })
       .click();
+    const positionResponse = await positionResponsePromise;
+    expect(positionResponse.status()).toBe(201);
+
+    const afterPosition = await oracle.snapshot();
+    expect(afterPosition.positionCount - before.positionCount).toBe(1);
+    expect(afterPosition.positionCount).toBe(1);
+    expect(afterPosition.positionRouteId).toBe(fixture.routeId);
+    expect(afterPosition.positionVehicleId).toBe(fixture.vehicleId);
+    expect(afterPosition.positionDriverId).toBe(fixture.driverId);
+    expect(afterPosition.positionLatitude).toBeCloseTo(fixture.latitude, 6);
+    expect(afterPosition.positionLongitude).toBeCloseTo(fixture.longitude, 6);
+    expect(afterPosition.positionAccuracyMeters).toBeLessThanOrEqual(100);
+    expect(afterPosition.positionRecordedAt).not.toBeNull();
+    expect(
+      Date.now() - Date.parse(afterPosition.positionRecordedAt!),
+    ).toBeLessThan(60_000);
+
+    const navigationStatus = page.getByRole("status", {
+      name: "Instrucción de navegación",
+      exact: true,
+    });
+    await expect(navigationStatus).toBeVisible();
+    await expect(navigationStatus).not.toContainText("Sin GPS");
+    await expect(navigationStatus).not.toContainText(
+      "Permiso de ubicación denegado",
+    );
+    await expect(
+      page.getByRole("button", {
+        name: "Iniciar navegación",
+        exact: true,
+      }),
+    ).toHaveCount(0);
     const openDelivery = page.getByRole("button", {
       name: "Abrir entrega",
       exact: true,
     });
     await expect(openDelivery).toBeEnabled();
+
+    console.log(
+      JSON.stringify({
+        browser: `Chromium ${browser.version()}`,
+        geolocationPermissionGranted: "YES",
+        browserContextGeolocationConfigured: "YES",
+        accuracy: geolocationAccuracy,
+        iniciarNavegacionClicked: true,
+        fleetPositionPostReached: true,
+        fleetPositionHttpStatus: positionResponse.status(),
+        vehiclePositionBefore: before.positionCount,
+        vehiclePositionDelta:
+          afterPosition.positionCount - before.positionCount,
+        persistedIdsCorrect:
+          afterPosition.positionRouteId === fixture.routeId &&
+          afterPosition.positionVehicleId === fixture.vehicleId &&
+          afterPosition.positionDriverId === fixture.driverId,
+        uiTrackingActive: true,
+        abrirEntregaEnabled: true,
+      }),
+    );
     await openDelivery.click();
 
-    const operations = page.getByRole("region", {
+    const operationsPanel = page.getByRole("region", {
       name: "Acciones operativas de la parada",
       exact: true,
     });
-    await expect(operations).toBeVisible();
+    await expect(operationsPanel).toBeVisible();
     await expect(
-      operations.getByRole("heading", {
+      operationsPanel.getByRole("heading", {
         name: fixture.customerName,
+        level: 2,
         exact: true,
       }),
     ).toBeVisible();
-    await operations
+    await operationsPanel
       .getByRole("button", { name: "Evidencia", exact: true })
       .click();
     const evidenceDialog = page.getByRole("dialog", {

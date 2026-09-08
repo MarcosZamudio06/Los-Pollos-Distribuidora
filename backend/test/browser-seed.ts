@@ -803,23 +803,6 @@ export async function seedBrowserDatabase() {
             legDurationSeconds: 0,
           },
         });
-        await tx.$executeRaw`
-          INSERT INTO "VehiclePosition" (
-            "id", "clientEventId", "vehicleId", "routeId", "driverId",
-            "latitude", "longitude", "accuracyMeters", "recordedAt", "receivedAt"
-          ) VALUES (
-            ${driverFixture.positionId},
-            ${driverFixture.positionClientEventId},
-            ${deliveryVehicle.id},
-            ${deliveryRoute.id},
-            ${deliveryDriver.id},
-            ${BROWSER_DRIVER_DESTINATION.latitude},
-            ${BROWSER_DRIVER_DESTINATION.longitude},
-            ${10},
-            ${new Date()},
-            ${new Date()}
-          )
-        `;
       },
       { timeout: 30_000 },
     );

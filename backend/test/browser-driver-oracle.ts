@@ -22,6 +22,13 @@ export type BrowserDriverSnapshot = {
   accountReceivableCount: number;
   incidentCount: number;
   positionCount: number;
+  positionId: string | null;
+  positionClientEventId: string | null;
+  positionVehicleId: string | null;
+  positionRouteId: string | null;
+  positionDriverId: string | null;
+  positionLatitude: number | null;
+  positionLongitude: number | null;
   positionAccuracyMeters: number | null;
   positionRecordedAt: string | null;
 };
@@ -95,21 +102,6 @@ export async function createBrowserDriverOracle() {
     vehicleId: vehicle.id,
   };
 
-  async function refreshPersistedPosition() {
-    const updated = await prisma.vehiclePosition.updateMany({
-      where: {
-        id: resolvedFixture.positionId,
-        routeId: resolvedFixture.routeId,
-        driverId: resolvedFixture.driverId,
-        vehicleId: resolvedFixture.vehicleId,
-      },
-      data: { recordedAt: new Date(), receivedAt: new Date() },
-    });
-    if (updated.count !== 1) {
-      throw new Error('Browser DRIVER persisted GPS fixture is missing');
-    }
-  }
-
   async function snapshot(): Promise<BrowserDriverSnapshot> {
     const [
       routeRow,
@@ -165,7 +157,17 @@ export async function createBrowserDriverOracle() {
           driverId: resolvedFixture.driverId,
           vehicleId: resolvedFixture.vehicleId,
         },
-        select: { accuracyMeters: true, recordedAt: true },
+        select: {
+          id: true,
+          clientEventId: true,
+          vehicleId: true,
+          routeId: true,
+          driverId: true,
+          latitude: true,
+          longitude: true,
+          accuracyMeters: true,
+          recordedAt: true,
+        },
         orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }],
       }),
     ]);
@@ -198,6 +200,19 @@ export async function createBrowserDriverOracle() {
       accountReceivableCount: receivables,
       incidentCount: incidents,
       positionCount: positions.length,
+      positionId: latestPosition?.id ?? null,
+      positionClientEventId: latestPosition?.clientEventId ?? null,
+      positionVehicleId: latestPosition?.vehicleId ?? null,
+      positionRouteId: latestPosition?.routeId ?? null,
+      positionDriverId: latestPosition?.driverId ?? null,
+      positionLatitude:
+        latestPosition?.latitude == null
+          ? null
+          : Number(latestPosition.latitude),
+      positionLongitude:
+        latestPosition?.longitude == null
+          ? null
+          : Number(latestPosition.longitude),
       positionAccuracyMeters:
         latestPosition?.accuracyMeters == null
           ? null
@@ -209,7 +224,6 @@ export async function createBrowserDriverOracle() {
   return {
     fixture: resolvedFixture,
     objectStorageOrigin: new URL(env.objectStoragePublicEndpoint).origin,
-    refreshPersistedPosition,
     snapshot,
     disconnect: () => prisma.$disconnect(),
   };

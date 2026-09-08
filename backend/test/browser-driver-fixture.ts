@@ -32,8 +32,6 @@ export function browserDriverFixture(runId: string) {
     orderId: `browser-${runId}-delivery-order`,
     paymentId: `browser-${runId}-sale-payment`,
     paymentIdempotencyKey: `browser:${runId}:sale-payment`,
-    positionClientEventId: `browser:${runId}:persisted-position`,
-    positionId: `browser-${runId}-vehicle-position`,
     productName: `Browser E2E ${runId} delivery product`,
     productSku: `${prefix}-SKU`,
     routeId: `browser-${runId}-delivery-route`,
