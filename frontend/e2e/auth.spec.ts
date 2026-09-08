@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Response } from "@playwright/test";
+import { browserAuthFixture } from "../../backend/test/browser-auth-fixture";
 
 const authResponse = (action: string) => (response: Response) =>
   new URL(response.url()).pathname === `/api/auth/${action}` &&
@@ -33,7 +34,7 @@ async function login(page: Page) {
   expect((await bootstrap).status()).toBe(401);
   await page
     .getByLabel("Correo", { exact: true })
-    .fill(process.env.E2E_ADMIN_EMAIL!);
+    .fill(browserAuthFixture(process.env.E2E_RUN_ID!).email);
   await page.getByLabel(/^Contraseña/).fill(process.env.E2E_ADMIN_PASSWORD!);
   const response = page.waitForResponse(authResponse("login"));
   await page.getByRole("button", { name: "Entrar al sistema" }).click();

@@ -11,6 +11,7 @@ import {
 } from './browser-driver-fixture';
 import { seedBrowserFleetFixture } from './browser-fleet-seed';
 import { readBrowserEnvironment } from './browser-environment';
+import { browserAuthFixture } from './browser-auth-fixture';
 
 const BROWSER_POS_INITIAL_STOCK_PIECES = 5;
 const BROWSER_POS_SALE_PRICE = 12;
@@ -137,6 +138,17 @@ export async function seedBrowserDatabase() {
           where: { email: env.email },
           create: user,
           update: user,
+        });
+
+        const authUser = {
+          ...user,
+          ...browserAuthFixture(env.runId),
+          phone: user.phone.replace('+999', '+993'),
+        };
+        await tx.user.upsert({
+          where: { email: authUser.email },
+          create: authUser,
+          update: authUser,
         });
 
         const businessDateValue = currentBusinessDate();
