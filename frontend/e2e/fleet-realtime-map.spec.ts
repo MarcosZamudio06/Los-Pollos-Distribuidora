@@ -111,20 +111,22 @@ function observeAdminRuntime(page: Page): AdminRuntimeEvidence {
   page.on("websocket", (socket) => {
     if (!isFleetSocketUrl(socket.url())) return;
     evidence.socketUrls.push(socket.url());
-    socket.on("framesent", (frame) => {
+    socket.on("framesent", (event) => {
+      const payload = event.payload;
       if (
-        typeof frame === "string" &&
-        frame.includes(`${FLEET_SOCKET_NAMESPACE},`)
+        typeof payload === "string" &&
+        payload.includes(`${FLEET_SOCKET_NAMESPACE},`)
       ) {
         evidence.socketNamespaces.add(FLEET_SOCKET_NAMESPACE);
       }
     });
-    socket.on("framereceived", (frame) => {
-      if (typeof frame !== "string") return;
-      if (frame.startsWith(`40${FLEET_SOCKET_NAMESPACE}`)) {
+    socket.on("framereceived", (event) => {
+      const payload = event.payload;
+      if (typeof payload !== "string") return;
+      if (payload.startsWith(`40${FLEET_SOCKET_NAMESPACE}`)) {
         evidence.socketNamespaces.add(FLEET_SOCKET_NAMESPACE);
       }
-      const positionEvent = parseSocketPositionEvent(frame);
+      const positionEvent = parseSocketPositionEvent(payload);
       if (positionEvent) evidence.positionEvents.push(positionEvent);
     });
   });
