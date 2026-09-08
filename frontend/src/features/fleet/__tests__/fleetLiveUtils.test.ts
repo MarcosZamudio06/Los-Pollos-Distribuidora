@@ -143,6 +143,8 @@ describe("fleet live data flow", () => {
 
   it("updates only the affected vehicle and rejects an old socket position", () => {
     const newer = {
+      id: "position-2",
+      clientEventId: "event-2",
       vehicleId: "vehicle-1",
       vehicleCode: "UNIDAD-01",
       routeId: "route-1",
@@ -150,10 +152,15 @@ describe("fleet live data flow", () => {
       originLocationId: "origin-1",
       latitude: 19.2,
       longitude: -96.1,
+      positionPoint: {
+        type: "Point" as const,
+        coordinates: [-96.1, 19.2] as [number, number],
+      },
       accuracyMeters: 5,
       speedKph: 25,
       headingDegrees: 200,
       recordedAt: "2026-08-12T16:02:00.000Z",
+      receivedAt: "2026-08-12T16:02:01.000Z",
     };
     const next = applyPositionUpdated(snapshot, newer);
     expect(next.items[0].position?.latitude).toBe(19.2);
@@ -328,6 +335,8 @@ describe("fleet live data flow", () => {
     const updated = applyPositionUpdated(
       { serverTime: "2026-08-12T16:00:00.000Z", items: controlledItems },
       {
+        id: "position-25",
+        clientEventId: "event-25",
         vehicleId: "vehicle-25",
         vehicleCode: "UNIDAD-25",
         routeId: "route-5",
@@ -335,10 +344,15 @@ describe("fleet live data flow", () => {
         originLocationId: "origin-1",
         latitude: 19.25,
         longitude: -96.05,
+        positionPoint: {
+          type: "Point" as const,
+          coordinates: [-96.05, 19.25] as [number, number],
+        },
         accuracyMeters: 5,
         speedKph: 30,
         headingDegrees: 180,
         recordedAt: "2026-08-12T16:00:10.000Z",
+        receivedAt: "2026-08-12T16:00:11.000Z",
       },
     );
     expect(updated.items).toHaveLength(50);

@@ -173,6 +173,8 @@ describe('FleetGateway', () => {
   it('emits position.updated to admin, origin, and route rooms', () => {
     const { emit, gateway, server } = createGateway();
     const payload = {
+      id: 'position-1',
+      clientEventId: 'event-1',
       vehicleId: 'vehicle-1',
       vehicleCode: 'UNIDAD-01',
       routeId: 'route-1',
@@ -180,10 +182,15 @@ describe('FleetGateway', () => {
       originLocationId: 'origin-1',
       latitude: 19.1738,
       longitude: -96.1342,
+      positionPoint: {
+        type: 'Point' as const,
+        coordinates: [-96.1342, 19.1738] as [number, number],
+      },
       accuracyMeters: 12.5,
       speedKph: 32.2,
       headingDegrees: 185,
       recordedAt: '2026-08-12T16:00:00.000Z',
+      receivedAt: '2026-08-12T16:00:01.000Z',
     };
 
     gateway.emitPositionUpdated(payload);

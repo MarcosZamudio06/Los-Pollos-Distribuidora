@@ -6,7 +6,14 @@ export const FLEET_INCIDENT_CREATED_EVENT = "fleet.incident.created" as const;
 export const FLEET_GEOFENCE_ENTERED_EVENT = "fleet.geofence.entered" as const;
 export const FLEET_GEOFENCE_EXITED_EVENT = "fleet.geofence.exited" as const;
 
+export type FleetPositionPoint = {
+  type: "Point";
+  coordinates: [number, number];
+};
+
 export type FleetPositionUpdated = {
+  id: string;
+  clientEventId: string;
   vehicleId: string;
   vehicleCode: string;
   routeId: string;
@@ -14,10 +21,12 @@ export type FleetPositionUpdated = {
   originLocationId: string | null;
   latitude: number;
   longitude: number;
+  positionPoint: FleetPositionPoint;
   accuracyMeters: number | null;
   speedKph: number | null;
   headingDegrees: number | null;
   recordedAt: string;
+  receivedAt: string;
 };
 
 export type FleetGeofenceEvent = {

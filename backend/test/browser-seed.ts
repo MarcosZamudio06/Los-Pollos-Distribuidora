@@ -9,6 +9,7 @@ import {
   BROWSER_DRIVER_DESTINATION,
   browserDriverFixture,
 } from './browser-driver-fixture';
+import { seedBrowserFleetFixture } from './browser-fleet-seed';
 import { readBrowserEnvironment } from './browser-environment';
 
 const BROWSER_POS_INITIAL_STOCK_PIECES = 5;
@@ -803,11 +804,21 @@ export async function seedBrowserDatabase() {
             legDurationSeconds: 0,
           },
         });
+
+        await seedBrowserFleetFixture({
+          tx,
+          adminUserId: seededUser.id,
+          businessDate,
+          cedisLocationId: cedis.id,
+          driverRoleId: driverRole.id,
+          passwordHash,
+          runId: env.runId,
+        });
       },
       { timeout: 30_000 },
     );
     console.log(
-      `Browser seed ready: ${env.runId} (ADMIN, CEDIS/branch, POS, CEDIS supply and DRIVER delivery fixtures)`,
+      `Browser seed ready: ${env.runId} (ADMIN, CEDIS/branch, POS, CEDIS supply, DRIVER delivery and Fleet realtime fixtures)`,
     );
   } finally {
     await prisma.$disconnect();

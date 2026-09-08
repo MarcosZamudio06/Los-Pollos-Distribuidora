@@ -26,6 +26,7 @@ import { FleetGateway } from './fleet.gateway';
 import { GeofenceService, type GeofenceTransition } from './geofence.service';
 import type {
   FleetGeofenceEventPayload,
+  FleetPositionPoint,
   FleetPositionUpdatedPayload,
 } from './fleet-realtime.types';
 
@@ -66,7 +67,7 @@ type PositionRow = {
   headingDegrees: DecimalLike;
   recordedAt: Date | string;
   receivedAt: Date | string;
-  positionPoint?: unknown;
+  positionPoint: unknown;
 };
 
 type LiveRow = {
@@ -828,6 +829,7 @@ export class FleetService {
           "driverId",
           "latitude",
           "longitude",
+          ST_AsGeoJSON("positionPoint")::json AS "positionPoint",
           "accuracyMeters",
           "speedKph",
           "headingDegrees",
@@ -863,6 +865,7 @@ export class FleetService {
           "driverId",
           "latitude",
           "longitude",
+          ST_AsGeoJSON("positionPoint")::json AS "positionPoint",
           "accuracyMeters",
           "speedKph",
           "headingDegrees",
@@ -900,6 +903,8 @@ export class FleetService {
     if (!this.fleetGateway) return;
 
     const payload: FleetPositionUpdatedPayload = {
+      id: row.id,
+      clientEventId: row.clientEventId,
       vehicleId: row.vehicleId,
       vehicleCode: route.vehicle?.code ?? '',
       routeId: row.routeId,
@@ -907,10 +912,12 @@ export class FleetService {
       originLocationId: route.originLocationId ?? null,
       latitude: this.toNumber(row.latitude),
       longitude: this.toNumber(row.longitude),
+      positionPoint: this.parsePositionPoint(row.positionPoint),
       accuracyMeters: this.toNumberOrNull(row.accuracyMeters),
       speedKph: this.toNumberOrNull(row.speedKph),
       headingDegrees: this.toNumberOrNull(row.headingDegrees),
       recordedAt: this.toIso(row.recordedAt),
+      receivedAt: this.toIso(row.receivedAt),
     };
 
     try {
@@ -1041,6 +1048,29 @@ export class FleetService {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
+  }
+
+  private parsePositionPoint(value: unknown): FleetPositionPoint {
+    const parsed = this.parseJsonObject(value);
+    const coordinates = parsed?.coordinates;
+    if (
+      parsed?.type !== 'Point' ||
+      !Array.isArray(coordinates) ||
+      coordinates.length !== 2
+    ) {
+      throw new Error('Persisted VehiclePosition positionPoint is invalid');
+    }
+
+    const longitude = Number(coordinates[0]);
+    const latitude = Number(coordinates[1]);
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+      throw new Error('Persisted VehiclePosition positionPoint is invalid');
+    }
+
+    return {
+      type: 'Point',
+      coordinates: [longitude, latitude],
+    };
   }
 
   private parseJsonArray(value: unknown): unknown[] {

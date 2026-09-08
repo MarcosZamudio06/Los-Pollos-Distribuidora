@@ -37,6 +37,10 @@ const positionRow = (overrides: Record<string, unknown> = {}) => ({
   accuracyMeters: 12.5,
   speedKph: 32.2,
   headingDegrees: 185,
+  positionPoint: {
+    type: 'Point',
+    coordinates: [-96.1342, 19.1738],
+  },
   recordedAt: new Date('2026-08-12T16:00:00.000Z'),
   receivedAt: new Date('2026-08-12T16:00:01.000Z'),
   ...overrides,
@@ -448,6 +452,8 @@ describe('FleetService', () => {
 
       expect(fleetGateway.emitPositionUpdated).toHaveBeenCalledTimes(1);
       expect(fleetGateway.emitPositionUpdated).toHaveBeenCalledWith({
+        id: 'position-1',
+        clientEventId: 'event-1',
         vehicleId: 'vehicle-1',
         vehicleCode: 'UNIDAD-01',
         routeId: 'route-1',
@@ -455,11 +461,19 @@ describe('FleetService', () => {
         originLocationId: 'origin-1',
         latitude: 19.1738,
         longitude: -96.1342,
+        positionPoint: {
+          type: 'Point',
+          coordinates: [-96.1342, 19.1738],
+        },
         accuracyMeters: 12.5,
         speedKph: 32.2,
         headingDegrees: 185,
         recordedAt: '2026-08-12T16:00:00.000Z',
+        receivedAt: '2026-08-12T16:00:01.000Z',
       });
+      expect(prisma.$queryRaw.mock.calls[0][0].sql).toContain(
+        'ST_AsGeoJSON("positionPoint")::json AS "positionPoint"',
+      );
       expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
         fleetGateway.emitPositionUpdated.mock.invocationCallOrder[0],
       );

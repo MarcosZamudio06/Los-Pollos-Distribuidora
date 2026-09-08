@@ -9,7 +9,14 @@ export const FLEET_GEOFENCE_EXITED_EVENT = 'fleet.geofence.exited' as const;
 
 export const FLEET_ADMIN_ROOM = 'fleet:admin' as const;
 
+export type FleetPositionPoint = {
+  type: 'Point';
+  coordinates: [number, number];
+};
+
 export type FleetPositionUpdatedPayload = {
+  id: string;
+  clientEventId: string;
   vehicleId: string;
   vehicleCode: string;
   routeId: string;
@@ -17,10 +24,12 @@ export type FleetPositionUpdatedPayload = {
   originLocationId: string | null;
   latitude: number;
   longitude: number;
+  positionPoint: FleetPositionPoint;
   accuracyMeters: number | null;
   speedKph: number | null;
   headingDegrees: number | null;
   recordedAt: string;
+  receivedAt: string;
 };
 
 export type FleetGeofenceEventPayload = {
