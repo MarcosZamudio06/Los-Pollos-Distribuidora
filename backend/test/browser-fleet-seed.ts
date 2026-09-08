@@ -331,7 +331,6 @@ export async function seedBrowserFleetFixture({
       "driverId",
       "latitude",
       "longitude",
-      "positionPoint",
       "accuracyMeters",
       "recordedAt"
     )
@@ -343,10 +342,6 @@ export async function seedBrowserFleetFixture({
       ${driver.id},
       ${fixture.positionA.latitude},
       ${fixture.positionA.longitude},
-      ST_SetSRID(
-        ST_MakePoint(${fixture.positionA.longitude}, ${fixture.positionA.latitude}),
-        4326
-      ),
       ${fixture.positionA.accuracyMeters},
       ${initialRecordedAt}
     )
