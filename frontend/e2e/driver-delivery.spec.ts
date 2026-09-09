@@ -302,7 +302,7 @@ test("DRIVER completes one paid delivery with durable photo evidence through the
       .getByRole("button", { name: "Confirmar término", exact: true })
       .click();
     expect((await completeRouteResponse).status()).toBe(200);
-    await expect(page.getByText("Completada", { exact: true })).toBeVisible();
+    await expect(routeSelector).toContainText("Completada");
 
     const completed = await oracle.snapshot();
     expect(completed.routeOwnerId).toBe(fixture.driverId);
