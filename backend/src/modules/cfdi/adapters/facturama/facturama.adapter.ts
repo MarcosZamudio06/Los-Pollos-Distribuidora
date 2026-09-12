@@ -14,6 +14,8 @@ import type {
   FiscalCancellationResponse,
   FiscalCancellationStatus,
   FiscalIssueCommand,
+  FiscalDocumentIdentityCommand,
+  FiscalDocumentMatch,
   FiscalProviderEnvironment,
   FiscalProviderOperation,
   FiscalProviderPort,
@@ -950,6 +952,112 @@ export class FacturamaAdapter implements FiscalProviderPort {
     return this.fetchStatus(command, 'STATUS');
   }
 
+  async findStampedDocument(
+    command: FiscalDocumentIdentityCommand,
+  ): Promise<FiscalDocumentMatch | null> {
+    const operation = 'STATUS' as const;
+    const correlationId = safeCorrelationId(command.correlationId, operation);
+    assertProviderKey(command.providerKey, operation, correlationId);
+    const issuerRfc = requiredString(
+      command.issuerRfc,
+      operation,
+      correlationId,
+    ).toUpperCase();
+    const folio = requiredString(command.folio, operation, correlationId);
+    if (
+      typeof command.series !== 'string' ||
+      command.series.length > 25 ||
+      folio.length > 40 ||
+      !/^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$/.test(issuerRfc)
+    ) {
+      throw new FiscalProviderError(
+        'FISCAL_PROVIDER_VALIDATION',
+        operation,
+        correlationId,
+      );
+    }
+    const query = new URLSearchParams({
+      type: FACTURAMA_DOCUMENT_TYPE,
+      status: 'all',
+      rfcIssuer: issuerRfc,
+      serie: command.series,
+      folio,
+    });
+    const seen = new Set<string>();
+    let match: FiscalDocumentMatch | null = null;
+    // 100 rows/page is documented. Bound recovery HTTP to three 5s requests;
+    // a full final page or shifting/repeated pages cannot prove uniqueness.
+    for (let page = 0; page < 3; page += 1) {
+      query.set('page', String(page));
+      const { body } = await this.requestJson<unknown>(
+        operation,
+        correlationId,
+        `/cfdi?${query.toString()}`,
+        { method: 'GET' },
+        5_000,
+      );
+      if (!Array.isArray(body) || body.length > 100) {
+        throw new FiscalProviderError(
+          'FISCAL_PROVIDER_RESPONSE_INVALID',
+          operation,
+          correlationId,
+        );
+      }
+      for (const item of body) {
+        if (
+          !isObject(item) ||
+          typeof item.RfcIssuer !== 'string' ||
+          !item.RfcIssuer.trim() ||
+          typeof item.Serie !== 'string' ||
+          typeof item.Folio !== 'string'
+        ) {
+          throw new FiscalProviderError(
+            'FISCAL_PROVIDER_RESPONSE_INVALID',
+            operation,
+            correlationId,
+          );
+        }
+        const id = providerDocumentId(item.Id, operation, correlationId);
+        if (seen.has(id)) {
+          throw new FiscalProviderError(
+            'FISCAL_PROVIDER_LOOKUP_INCOMPLETE',
+            operation,
+            correlationId,
+            null,
+            true,
+          );
+        }
+        seen.add(id);
+        // Remote filters may be fuzzy. Preserve series/folio including zeros.
+        if (
+          item.RfcIssuer.trim().toUpperCase() !== issuerRfc ||
+          item.Serie !== command.series ||
+          item.Folio !== folio
+        )
+          continue;
+        if (match) {
+          throw new FiscalProviderError(
+            'FISCAL_PROVIDER_LOOKUP_AMBIGUOUS',
+            operation,
+            correlationId,
+          );
+        }
+        match = {
+          providerDocumentId: id,
+          uuid: requiredUuid(item.Uuid, operation, correlationId),
+        };
+      }
+      if (body.length < 100) return match;
+    }
+    throw new FiscalProviderError(
+      'FISCAL_PROVIDER_LOOKUP_INCOMPLETE',
+      operation,
+      correlationId,
+      null,
+      true,
+    );
+  }
+
   private async fetchStatus(
     command: FiscalStatusCommand,
     operation: 'STATUS' | 'CANCELLATION_STATUS',
@@ -1265,6 +1373,7 @@ export class FacturamaAdapter implements FiscalProviderPort {
     correlationId: string,
     path: string,
     init: RequestInit,
+    timeoutLimitMs = Number.POSITIVE_INFINITY,
   ): Promise<FiscalHttpResult & { body: T }> {
     const { baseUrl, environment, timeoutMs, credentialRef } =
       this.configuration(operation, correlationId);
@@ -1276,7 +1385,10 @@ export class FacturamaAdapter implements FiscalProviderPort {
     );
     const url = new URL(path, `${baseUrl.replace(/\/$/, '')}/`);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      Math.min(timeoutMs, timeoutLimitMs),
+    );
     let response: Response;
     try {
       response = await (this.fetcher ?? globalThis.fetch)(url, {

@@ -58,6 +58,19 @@ export interface FiscalStatusCommand {
   readonly uuid?: string;
 }
 
+export interface FiscalDocumentIdentityCommand {
+  readonly correlationId: string;
+  readonly providerKey: FiscalProviderKey;
+  readonly issuerRfc: string;
+  readonly series: string;
+  readonly folio: string;
+}
+
+export interface FiscalDocumentMatch {
+  readonly providerDocumentId: string;
+  readonly uuid: string;
+}
+
 export interface FiscalArtifactCommand {
   readonly correlationId: string;
   readonly providerKey?: FiscalProviderKey;
@@ -128,6 +141,8 @@ export type FiscalProviderErrorCode =
   | 'FISCAL_PROVIDER_AUTHENTICATION'
   | 'FISCAL_PROVIDER_VALIDATION'
   | 'FISCAL_PROVIDER_NOT_FOUND'
+  | 'FISCAL_PROVIDER_LOOKUP_AMBIGUOUS'
+  | 'FISCAL_PROVIDER_LOOKUP_INCOMPLETE'
   | 'FISCAL_PROVIDER_TIMEOUT'
   | 'FISCAL_PROVIDER_UNAVAILABLE'
   | 'FISCAL_PROVIDER_RESPONSE_INVALID'
@@ -156,6 +171,12 @@ export interface FiscalProviderPort {
   stamp(command: FiscalIssueCommand): Promise<FiscalStampResponse>;
   cancel(command: FiscalCancelCommand): Promise<FiscalCancellationResponse>;
   getStatus(command: FiscalStatusCommand): Promise<FiscalStatusResponse>;
+  /** Optional read-only recovery. Return only an exact, unique identity match.
+   * Null is not proof of non-emission and must never authorize another stamp.
+   * Incomplete or ambiguous searches must fail closed. */
+  findStampedDocument?(
+    command: FiscalDocumentIdentityCommand,
+  ): Promise<FiscalDocumentMatch | null>;
   getXml(command: FiscalArtifactCommand): Promise<FiscalArtifactContent>;
   getPdf(command: FiscalArtifactCommand): Promise<FiscalArtifactContent>;
   getCancellationStatus(

@@ -57,7 +57,10 @@ function candidate() {
       fiscalStatus: 'UNKNOWN' as const,
       certificateNumber: null,
       fiscalCertificate: { serialNumber: 'CSD-CERT' },
-      issuerSnapshot: { certificateSerialNumber: 'CSD-CERT' },
+      issuerSnapshot: {
+        certificateSerialNumber: 'CSD-CERT',
+        taxId: 'EKU9003173C9',
+      },
       fiscalOperationAttempts: [],
       createdByUserId: 'admin-1',
       sourceCreditAdjustmentId: null,
@@ -134,6 +137,168 @@ function harness() {
 
 describe('StampReconciliationJob', () => {
   beforeEach(() => jest.resetAllMocks());
+
+  it('recovers a missing reference by immutable identity without another stamp', async () => {
+    const { job, tx, provider, artifacts } = harness();
+    const lookup = jest
+      .fn()
+      .mockResolvedValue({ providerDocumentId: 'provider-document-1', uuid });
+    const stamp = jest.fn();
+    Object.assign(provider, { findStampedDocument: lookup, stamp });
+    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
+      { ...candidate(), providerReference: null },
+    ]);
+    provider.getStatus.mockResolvedValueOnce(status());
+    await expect(job.reconcile()).resolves.toMatchObject({ recovered: 1 });
+    expect(lookup).toHaveBeenCalledWith({
+      correlationId: 'recovery-correlation-1',
+      providerKey: 'FACTURAMA',
+      issuerRfc: 'EKU9003173C9',
+      series: 'A',
+      folio: '1',
+    });
+    expect(tx.fiscalOperationAttempt.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'SUCCEEDED',
+          providerReference: 'provider-document-1',
+        }),
+      }),
+    );
+    expect(artifacts.persistStampedArtifacts).toHaveBeenCalled();
+    expect(stamp).toHaveBeenCalledTimes(0);
+  });
+
+  it('keeps an empty lookup UNKNOWN with bounded retries, not proof of non-emission', async () => {
+    const { job, tx, provider } = harness();
+    const stamp = jest.fn();
+    Object.assign(provider, {
+      findStampedDocument: jest.fn().mockResolvedValue(null),
+      stamp,
+    });
+    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
+      { ...candidate(), providerReference: null },
+    ]);
+    await expect(job.reconcile()).resolves.toMatchObject({
+      stillUnknown: 1,
+      recovered: 0,
+    });
+    expect(tx.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ fiscalStatus: 'UNKNOWN' }),
+      }),
+    );
+    expect(tx.fiscalOperationAttempt.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ nextRetryAt: expect.any(Date) }),
+      }),
+    );
+    expect(provider.getStatus).not.toHaveBeenCalled();
+    expect(stamp).toHaveBeenCalledTimes(0);
+  });
+
+  it('rejects a lookup UUID that disagrees with status', async () => {
+    const { job, tx, provider } = harness();
+    Object.assign(provider, {
+      findStampedDocument: jest.fn().mockResolvedValue({
+        providerDocumentId: 'provider-document-1',
+        uuid: '00000000-0000-4000-8000-000000000000',
+      }),
+    });
+    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
+      { ...candidate(), providerReference: null },
+    ]);
+    provider.getStatus.mockResolvedValueOnce(status());
+    await expect(job.reconcile()).resolves.toMatchObject({
+      stillUnknown: 1,
+      recovered: 0,
+    });
+    expect(tx.billingDataRemediation.upsert).toHaveBeenCalled();
+    expect(provider.getXml).not.toHaveBeenCalled();
+  });
+
+  it('retries an indeterminate status after finding a reference', async () => {
+    const { job, tx, provider } = harness();
+    Object.assign(provider, {
+      findStampedDocument: jest
+        .fn()
+        .mockResolvedValue({ providerDocumentId: 'provider-document-1', uuid }),
+    });
+    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
+      { ...candidate(), providerReference: null },
+    ]);
+    provider.getStatus.mockResolvedValueOnce(
+      status({ status: 'UNKNOWN', uuid: null }),
+    );
+    await expect(job.reconcile()).resolves.toMatchObject({
+      stillUnknown: 1,
+      recovered: 0,
+    });
+    expect(tx.billingDataRemediation.upsert).not.toHaveBeenCalled();
+    expect(tx.fiscalOperationAttempt.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ nextRetryAt: expect.any(Date) }),
+      }),
+    );
+  });
+
+  it.each([
+    'FISCAL_PROVIDER_LOOKUP_AMBIGUOUS',
+    'FISCAL_PROVIDER_RESPONSE_INVALID',
+  ] as const)(
+    'remediates unsafe lookups without invoking status or stamp: %s',
+    async (code) => {
+      const { job, tx, provider } = harness();
+      const stamp = jest.fn();
+      Object.assign(provider, {
+        stamp,
+        findStampedDocument: jest
+          .fn()
+          .mockRejectedValue(
+            new FiscalProviderError(code, 'STATUS', 'recovery-correlation-1'),
+          ),
+      });
+      tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+      tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
+        { ...candidate(), providerReference: null },
+      ]);
+      await expect(job.reconcile()).resolves.toMatchObject({
+        stillUnknown: 1,
+        recovered: 0,
+      });
+      expect(tx.billingDataRemediation.upsert).toHaveBeenCalled();
+      expect(provider.getStatus).not.toHaveBeenCalled();
+      expect(stamp).toHaveBeenCalledTimes(0);
+    },
+  );
+
+  it('remediates an empty lookup once its read-only retry budget is exhausted', async () => {
+    const { job, tx, provider, config } = harness();
+    Object.assign(provider, {
+      findStampedDocument: jest.fn().mockResolvedValue(null),
+    });
+    config.get.mockImplementation((key: string, fallback?: unknown) =>
+      key === 'CFDI_MAX_RETRIES' ? 0 : fallback,
+    );
+    tx.$queryRawUnsafe.mockResolvedValueOnce([{ acquired: true }]);
+    tx.fiscalOperationAttempt.findMany.mockResolvedValueOnce([
+      { ...candidate(), providerReference: null },
+    ]);
+    await expect(job.reconcile()).resolves.toMatchObject({
+      stillUnknown: 1,
+      recovered: 0,
+    });
+    expect(tx.billingDataRemediation.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.fiscalOperationAttempt.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'UNKNOWN', nextRetryAt: null }),
+      }),
+    );
+  });
 
   it('skips when another instance owns the PostgreSQL advisory lock', async () => {
     const { job, tx } = harness();
