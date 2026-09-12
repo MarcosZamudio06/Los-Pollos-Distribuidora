@@ -32,6 +32,13 @@ type ReceiverValidationResponse = {
   MatchFiscalRegime?: unknown;
 };
 
+type StampFailureDiagnostic = {
+  status: number;
+  body: string;
+};
+
+const PAC_ERROR_BODY_LIMIT = 512;
+
 const RECEIVER_SECRET_NAMES = [
   'FACTURAMA_SANDBOX_RECEIVER_RFC',
   'FACTURAMA_SANDBOX_RECEIVER_NAME',
@@ -133,8 +140,14 @@ function createSingleStampPostTransport(
   fetchImpl: typeof fetch,
   onSuccessfulStamp: (response: Response) => Promise<Response> = (response) =>
     Promise.resolve(response),
-): { fetch: typeof fetch; readonly stampPostCount: number } {
+  sensitiveValues: readonly string[] = [],
+): {
+  fetch: typeof fetch;
+  readonly stampPostCount: number;
+  readonly stampFailureDiagnostic: StampFailureDiagnostic | undefined;
+} {
   let stampPostCount = 0;
+  let stampFailureDiagnostic: StampFailureDiagnostic | undefined;
   const guardedFetch: typeof fetch = async (input, init) => {
     if (init?.method !== 'POST') return fetchImpl(input, init);
     if (stampPostCount > 0) {
@@ -143,7 +156,28 @@ function createSingleStampPostTransport(
     stampPostCount += 1;
 
     const response = await fetchImpl(input, init);
-    if (!response.ok) return response;
+    if (!response.ok) {
+      let body = '[unreadable PAC error body]';
+      try {
+        body = await response.clone().text();
+      } catch {
+        // Keep the bounded placeholder without exposing the original failure.
+      }
+      for (const value of sensitiveValues) {
+        if (value) body = body.split(value).join('[REDACTED]');
+      }
+      body = body
+        .replace(
+          /"(?:authorization|username|password)"\s*:\s*"[^"]*"/gi,
+          '"[REDACTED]":"[REDACTED]"',
+        )
+        .replace(/\b(?:basic|bearer)\s+[a-z0-9._~+/=-]+/gi, '[REDACTED]')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, PAC_ERROR_BODY_LIMIT);
+      stampFailureDiagnostic = { status: response.status, body };
+      return response;
+    }
     return onSuccessfulStamp(response);
   };
 
@@ -152,7 +186,14 @@ function createSingleStampPostTransport(
     get stampPostCount() {
       return stampPostCount;
     },
+    get stampFailureDiagnostic() {
+      return stampFailureDiagnostic;
+    },
   };
+}
+
+function stampFailureMessage(diagnostic: StampFailureDiagnostic): string {
+  return `FACTURAMA_STAMP_REJECTED: HTTP ${diagnostic.status}; body=${diagnostic.body}`;
 }
 
 describe('CFDI-001 recovery receiver preflight', () => {
@@ -272,6 +313,43 @@ describe('CFDI-001 recovery receiver preflight', () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(transport.stampPostCount).toBe(1);
   });
+
+  it('retains bounded sanitized diagnostics for a rejected stamp POST', async () => {
+    const username = 'diagnostic-user';
+    const password = 'diagnostic-password';
+    const authorization = 'Bearer diagnostic-token';
+    const transport = createSingleStampPostTransport(
+      jest.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            message: 'CFDI rejected',
+            username,
+            password,
+            Authorization: authorization,
+            detail: 'x'.repeat(1_000),
+          }),
+          { status: 422 },
+        ),
+      ) as unknown as typeof fetch,
+      undefined,
+      [username, password, authorization],
+    );
+
+    await transport.fetch(`${FACTURAMA_SANDBOX_BASE_URL}/api/cfdi`, {
+      method: 'POST',
+    });
+
+    expect(transport.stampFailureDiagnostic).toMatchObject({ status: 422 });
+    expect(transport.stampFailureDiagnostic?.body.length).toBeLessThanOrEqual(
+      512,
+    );
+    expect(transport.stampFailureDiagnostic?.body).not.toContain(username);
+    expect(transport.stampFailureDiagnostic?.body).not.toContain(password);
+    expect(transport.stampFailureDiagnostic?.body).not.toContain(authorization);
+    expect(transport.stampFailureDiagnostic?.body).not.toContain(
+      'Authorization',
+    );
+  });
 });
 
 /** Not selected by normal unit/e2e suites. No skipped PAC proof: guards fail. */
@@ -352,6 +430,7 @@ describe('CFDI-001 protected lost-response recovery', () => {
           'AbortError',
         );
       },
+      [guarded.credentials.username, guarded.credentials.password],
     );
     const provider = new FacturamaAdapter(
       config,
@@ -395,19 +474,35 @@ describe('CFDI-001 protected lost-response recovery', () => {
         config,
       );
       const issuance = new CfdiIssuanceService(repository, provider, artifacts);
-      const result = await issuance.issue(
-        fixture.billingRequestId,
-        {
-          expectedVersion: 1,
-          cfdiUse: receiver.fiscalUseCode,
-          paymentMethod: 'PUE',
-          paymentForm: '01',
-          exportCode: '01',
-        },
-        { id: prepared.actorUserId, role: 'ADMIN' },
-        prepared.idempotencyKey,
-      );
-      preparation.mockRestore();
+      let result: Awaited<ReturnType<CfdiIssuanceService['issue']>>;
+      try {
+        result = await issuance.issue(
+          fixture.billingRequestId,
+          {
+            expectedVersion: 1,
+            cfdiUse: receiver.fiscalUseCode,
+            paymentMethod: 'PUE',
+            paymentForm: '01',
+            exportCode: '01',
+          },
+          { id: prepared.actorUserId, role: 'ADMIN' },
+          prepared.idempotencyKey,
+        );
+      } catch (error) {
+        if (stampTransport.stampFailureDiagnostic) {
+          throw new Error(
+            stampFailureMessage(stampTransport.stampFailureDiagnostic),
+          );
+        }
+        throw error;
+      } finally {
+        preparation.mockRestore();
+      }
+      if (stampTransport.stampFailureDiagnostic) {
+        throw new Error(
+          stampFailureMessage(stampTransport.stampFailureDiagnostic),
+        );
+      }
       expect(result.fiscalStatus).toBe('UNKNOWN');
       expect(Boolean(oracle)).toBe(true);
       const initial = await observer.fiscalOperationAttempt.findUniqueOrThrow({

@@ -140,7 +140,9 @@ export async function seedFixture(
     : new Date('2026-08-30T18:00:00.000Z');
   const certificateSerial =
     options.sandbox?.certificateSerial ?? CERTIFICATE_SERIAL;
-  const certificateSubject = `CN=${marker}`;
+  const newCertificateSubject = options.sandbox
+    ? `CN=${options.sandbox.issuer.taxId}`
+    : `CN=${marker}`;
   const providerReference = `${marker}:provider-document`;
   const recoveryUuid = randomUUID().toUpperCase();
   const quantity = new Prisma.Decimal(2);
@@ -173,39 +175,66 @@ export async function seedFixture(
       operationalLocationId: location.id,
     },
   });
-  const legalEntity = options.sandbox
+  const initialLegalEntity = options.sandbox
     ? await prisma.legalEntity.upsert({
         where: { taxId: options.sandbox.issuer.taxId },
-        update: {},
+        update: {
+          legalName: options.sandbox.issuer.legalName,
+          fiscalPostalCode: options.sandbox.issuer.fiscalPostalCode,
+          fiscalRegime: options.sandbox.issuer.fiscalRegime,
+        },
         create: {
           ...options.sandbox.issuer,
-          cfdiEnabled: true,
-          defaultSeries: 'A',
-          certificateSerialNumber: certificateSerial,
-          certificateFingerprint: CERTIFICATE_FINGERPRINT,
-          certificateSubject,
-          certificateValidFrom: CERTIFICATE_VALID_FROM,
-          certificateValidTo: CERTIFICATE_VALID_TO,
+          cfdiEnabled: false,
         },
       })
     : await createFixtureLegalEntity(prisma, runId, marker);
-  const certificate = await prisma.fiscalCertificate.upsert({
-    where: {
-      legalEntityId_serialNumber: {
-        legalEntityId: legalEntity.id,
-        serialNumber: certificateSerial,
-      },
-    },
-    update: {},
-    create: {
-      legalEntityId: legalEntity.id,
+  const certificateKey = {
+    legalEntityId_serialNumber: {
+      legalEntityId: initialLegalEntity.id,
       serialNumber: certificateSerial,
-      fingerprintSha256: CERTIFICATE_FINGERPRINT,
-      subject: certificateSubject,
-      validFrom: CERTIFICATE_VALID_FROM,
-      validTo: CERTIFICATE_VALID_TO,
     },
+  };
+  let certificate = await prisma.fiscalCertificate.findUnique({
+    where: certificateKey,
   });
+  if (certificate) {
+    const metadataMatches =
+      certificate.fingerprintSha256 === CERTIFICATE_FINGERPRINT &&
+      certificate.validFrom.getTime() === CERTIFICATE_VALID_FROM.getTime() &&
+      certificate.validTo.getTime() === CERTIFICATE_VALID_TO.getTime();
+    if (!metadataMatches) {
+      throw new Error('CFDI_TEST_FIXTURE_CERTIFICATE_METADATA_MISMATCH');
+    }
+  } else {
+    certificate = await prisma.fiscalCertificate.create({
+      data: {
+        legalEntityId: initialLegalEntity.id,
+        serialNumber: certificateSerial,
+        fingerprintSha256: CERTIFICATE_FINGERPRINT,
+        subject: newCertificateSubject,
+        validFrom: CERTIFICATE_VALID_FROM,
+        validTo: CERTIFICATE_VALID_TO,
+      },
+    });
+  }
+  const legalEntity = options.sandbox
+    ? await prisma.legalEntity.update({
+        where: { id: initialLegalEntity.id },
+        data: {
+          legalName: options.sandbox.issuer.legalName,
+          fiscalPostalCode: options.sandbox.issuer.fiscalPostalCode,
+          fiscalRegime: options.sandbox.issuer.fiscalRegime,
+          cfdiEnabled: true,
+          defaultSeries: 'A',
+          certificateSerialNumber: certificate.serialNumber,
+          certificateFingerprint: certificate.fingerprintSha256,
+          certificateSubject: certificate.subject,
+          certificateValidFrom: certificate.validFrom,
+          certificateValidTo: certificate.validTo,
+        },
+      })
+    : initialLegalEntity;
   const customer = await prisma.customer.create({
     data: {
       customerNumber: marker,
