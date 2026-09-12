@@ -16,6 +16,264 @@ import type { ObjectStoragePort } from '../src/modules/object-storage/object-sto
 import { assertDisposableE2eEnvironment } from './e2e-environment';
 import { seedFixture } from './fixtures/cfdi-reconciliation.fixture';
 
+type RecoveryReceiver = {
+  taxId: string;
+  fiscalName: string;
+  fiscalPostalCode: string;
+  fiscalRegime: string;
+  fiscalUseCode: string;
+};
+
+type ReceiverValidationResponse = {
+  IsValid?: unknown;
+  ExistRfc?: unknown;
+  MatchName?: unknown;
+  MatchZipCode?: unknown;
+  MatchFiscalRegime?: unknown;
+};
+
+const RECEIVER_SECRET_NAMES = [
+  'FACTURAMA_SANDBOX_RECEIVER_RFC',
+  'FACTURAMA_SANDBOX_RECEIVER_NAME',
+  'FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME',
+  'FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE',
+  'FACTURAMA_SANDBOX_RECEIVER_CFDI_USE',
+] as const;
+
+function readRecoveryReceiver(
+  env: NodeJS.ProcessEnv = process.env,
+): RecoveryReceiver {
+  const missingSecrets = RECEIVER_SECRET_NAMES.filter(
+    (name) => !env[name]?.trim(),
+  );
+  if (missingSecrets.length > 0) {
+    throw new Error(
+      `Protected recovery requires receiver secrets: ${missingSecrets.join(', ')}`,
+    );
+  }
+
+  return {
+    taxId: env.FACTURAMA_SANDBOX_RECEIVER_RFC!.trim(),
+    fiscalName: env.FACTURAMA_SANDBOX_RECEIVER_NAME!.trim(),
+    fiscalRegime: env.FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME!.trim(),
+    fiscalPostalCode: env.FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE!.trim(),
+    fiscalUseCode: env.FACTURAMA_SANDBOX_RECEIVER_CFDI_USE!.trim(),
+  };
+}
+
+async function preflightRecoveryReceiver(
+  receiver: RecoveryReceiver,
+  credentials: { username: string; password: string },
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchImpl(
+      `${FACTURAMA_SANDBOX_BASE_URL}/api/customers/validate`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          Rfc: receiver.taxId,
+          Name: receiver.fiscalName,
+          ZipCode: receiver.fiscalPostalCode,
+          FiscalRegime: receiver.fiscalRegime,
+        }),
+        signal: AbortSignal.timeout(30_000),
+        redirect: 'error',
+      },
+    );
+  } catch {
+    throw new Error(
+      'CFDI_SANDBOX_RECEIVER_PREFLIGHT_FAILED: Facturama Sandbox validation request failed',
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `CFDI_SANDBOX_RECEIVER_PREFLIGHT_FAILED: Facturama Sandbox returned HTTP ${response.status}`,
+    );
+  }
+
+  let validation: ReceiverValidationResponse;
+  try {
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Invalid validation response');
+    }
+    validation = payload as ReceiverValidationResponse;
+  } catch {
+    throw new Error(
+      'CFDI_SANDBOX_RECEIVER_PREFLIGHT_FAILED: Facturama Sandbox returned an unreadable validation response',
+    );
+  }
+
+  const checks = {
+    IsValid: validation.IsValid,
+    ExistRfc: validation.ExistRfc,
+    MatchName: validation.MatchName,
+    MatchZipCode: validation.MatchZipCode,
+    MatchFiscalRegime: validation.MatchFiscalRegime,
+  };
+  const failedChecks = Object.entries(checks)
+    .filter(([, value]) => value !== true)
+    .map(([name]) => name);
+  if (failedChecks.length > 0) {
+    throw new Error(
+      `CFDI_SANDBOX_RECEIVER_INVALID: Facturama did not confirm ${failedChecks.join(', ')}`,
+    );
+  }
+}
+
+function createSingleStampPostTransport(
+  fetchImpl: typeof fetch,
+  onSuccessfulStamp: (response: Response) => Promise<Response> = (response) =>
+    Promise.resolve(response),
+): { fetch: typeof fetch; readonly stampPostCount: number } {
+  let stampPostCount = 0;
+  const guardedFetch: typeof fetch = async (input, init) => {
+    if (init?.method !== 'POST') return fetchImpl(input, init);
+    if (stampPostCount > 0) {
+      throw new Error('Second stamp POST forbidden');
+    }
+    stampPostCount += 1;
+
+    const response = await fetchImpl(input, init);
+    if (!response.ok) return response;
+    return onSuccessfulStamp(response);
+  };
+
+  return {
+    fetch: guardedFetch,
+    get stampPostCount() {
+      return stampPostCount;
+    },
+  };
+}
+
+describe('CFDI-001 recovery receiver preflight', () => {
+  const receiverEnvironment = {
+    FACTURAMA_SANDBOX_RECEIVER_RFC: 'TST010101AA1',
+    FACTURAMA_SANDBOX_RECEIVER_NAME: 'FACTURAMA TEST RECEIVER',
+    FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME: '601',
+    FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE: '01000',
+    FACTURAMA_SANDBOX_RECEIVER_CFDI_USE: 'G03',
+  };
+  const credentials = {
+    username: 'sandbox-test-user',
+    password: 'sandbox-test-password',
+  };
+  const validValidation = {
+    IsValid: true,
+    ExistRfc: true,
+    MatchName: true,
+    MatchZipCode: true,
+    MatchFiscalRegime: true,
+  };
+
+  function validationFetch(overrides: Record<string, boolean> = {}) {
+    return jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ ...validValidation, ...overrides }),
+    } as unknown as Response);
+  }
+
+  it('allows issue to continue only after a fully valid receiver response', async () => {
+    const receiver = readRecoveryReceiver(receiverEnvironment);
+    const fetchMock = validationFetch();
+    const issue = jest.fn().mockResolvedValue({ fiscalStatus: 'UNKNOWN' });
+
+    await preflightRecoveryReceiver(
+      receiver,
+      credentials,
+      fetchMock as unknown as typeof fetch,
+    );
+    await issue();
+
+    expect(issue).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${FACTURAMA_SANDBOX_BASE_URL}/api/customers/validate`);
+    expect(request.method).toBe('POST');
+    if (typeof request.body !== 'string') {
+      throw new Error('Facturama validation body must be JSON text');
+    }
+    expect(JSON.parse(request.body)).toEqual({
+      Rfc: receiver.taxId,
+      Name: receiver.fiscalName,
+      ZipCode: receiver.fiscalPostalCode,
+      FiscalRegime: receiver.fiscalRegime,
+    });
+    expect(receiver.fiscalUseCode).toBe('G03');
+  });
+
+  it.each([
+    'IsValid',
+    'ExistRfc',
+    'MatchName',
+    'MatchZipCode',
+    'MatchFiscalRegime',
+  ])('aborts before stamp when %s is not true', async (failedCheck) => {
+    const receiver = readRecoveryReceiver(receiverEnvironment);
+    const fetchMock = validationFetch({ [failedCheck]: false });
+    const stamp = jest.fn();
+
+    await expect(
+      (async () => {
+        await preflightRecoveryReceiver(
+          receiver,
+          credentials,
+          fetchMock as unknown as typeof fetch,
+        );
+        await stamp();
+      })(),
+    ).rejects.toThrow('CFDI_SANDBOX_RECEIVER_INVALID');
+
+    expect(stamp).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails on missing receiver secrets before making any PAC request', async () => {
+    const fetchMock = jest.fn();
+
+    await expect(
+      (async () => {
+        const receiver = readRecoveryReceiver({});
+        await preflightRecoveryReceiver(
+          receiver,
+          credentials,
+          fetchMock as unknown as typeof fetch,
+        );
+      })(),
+    ).rejects.toThrow('FACTURAMA_SANDBOX_RECEIVER_RFC');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks a second stamp POST before dispatching it', async () => {
+    const dispatch = jest.fn(
+      () => Promise.resolve({ ok: true }) as Promise<Response>,
+    );
+    const transport = createSingleStampPostTransport(
+      dispatch as unknown as typeof fetch,
+    );
+    const url = `${FACTURAMA_SANDBOX_BASE_URL}/api/cfdi`;
+
+    await transport.fetch(url, { method: 'POST' });
+    await expect(transport.fetch(url, { method: 'POST' })).rejects.toThrow(
+      'Second stamp POST forbidden',
+    );
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(transport.stampPostCount).toBe(1);
+  });
+});
+
 /** Not selected by normal unit/e2e suites. No skipped PAC proof: guards fail. */
 describe('CFDI-001 protected lost-response recovery', () => {
   it('recovers the same remote UUID/XML into PostgreSQL with exactly one stamp POST', async () => {
@@ -36,6 +294,12 @@ describe('CFDI-001 protected lost-response recovery', () => {
         'Recovery requires the Sandbox issuer CSD certificate serial (20 digits)',
       );
     }
+    const receiver = readRecoveryReceiver(process.env);
+    const realFetch = globalThis.fetch.bind(globalThis);
+    // The validation endpoint is read-only. Its successful response is required
+    // before database fixtures or the issuance service can create a CFDI.
+    await preflightRecoveryReceiver(receiver, guarded.credentials, realFetch);
+
     const db = new PrismaClient({
       datasources: { db: { url: process.env.E2E_DATABASE_URL } },
     });
@@ -57,21 +321,17 @@ describe('CFDI-001 protected lost-response recovery', () => {
       CFDI_MAX_RETRIES: 3,
     });
     const resolver = { resolve: () => Promise.resolve(guarded.credentials) };
-    let posts = 0;
     let oracle: { id: string; uuid: string; xml: Uint8Array } | undefined;
-    const realFetch = globalThis.fetch.bind(globalThis);
     const oracleAdapter = new FacturamaAdapter(config, resolver, realFetch);
-    const provider = new FacturamaAdapter(
-      config,
-      resolver,
-      async (input, init) => {
-        if (new URL(input).origin !== FACTURAMA_SANDBOX_BASE_URL)
+    const stampTransport = createSingleStampPostTransport(
+      (input, init) => {
+        const requestUrl =
+          input instanceof Request ? input.url : input.toString();
+        if (new URL(requestUrl).origin !== FACTURAMA_SANDBOX_BASE_URL)
           throw new Error('Sandbox only');
-        if (init?.method !== 'POST') return realFetch(input, init);
-        posts += 1;
-        if (posts !== 1) throw new Error('Second stamp POST forbidden');
-        const result = await realFetch(input, init);
-        if (!result.ok) return result;
+        return realFetch(input, init);
+      },
+      async (result) => {
         // The fault injector, not the application, consumes the successful PAC
         // response and captures its oracle. Nothing is forwarded or persisted.
         const body = (await result.json()) as {
@@ -93,6 +353,11 @@ describe('CFDI-001 protected lost-response recovery', () => {
         );
       },
     );
+    const provider = new FacturamaAdapter(
+      config,
+      resolver,
+      stampTransport.fetch,
+    );
     const objects = new Map<string, Buffer>();
     const storage: ObjectStoragePort = {
       isConfigured: () => true,
@@ -108,7 +373,11 @@ describe('CFDI-001 protected lost-response recovery', () => {
       await db.$connect();
       await observer.$connect();
       const fixture = await seedFixture(db, {
-        sandbox: { issuer: guarded.issuer, certificateSerial },
+        sandbox: {
+          issuer: guarded.issuer,
+          receiver,
+          certificateSerial,
+        },
       });
       const prepared = fixture.prepared!;
       const prisma = db as unknown as PrismaService;
@@ -130,7 +399,7 @@ describe('CFDI-001 protected lost-response recovery', () => {
         fixture.billingRequestId,
         {
           expectedVersion: 1,
-          cfdiUse: 'G03',
+          cfdiUse: receiver.fiscalUseCode,
           paymentMethod: 'PUE',
           paymentForm: '01',
           exportCode: '01',
@@ -256,7 +525,7 @@ describe('CFDI-001 protected lost-response recovery', () => {
       }
       expect(exhausted).toBe(true);
       expect(matches).toBe(1);
-      expect(posts).toBe(1);
+      expect(stampTransport.stampPostCount).toBe(1);
     } finally {
       await db.$disconnect();
       await observer.$disconnect();

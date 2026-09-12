@@ -119,6 +119,13 @@ export async function seedFixture(
         fiscalPostalCode: string;
         fiscalRegime: string;
       };
+      receiver: {
+        taxId: string;
+        fiscalName: string;
+        fiscalPostalCode: string;
+        fiscalRegime: string;
+        fiscalUseCode: string;
+      };
       certificateSerial: string;
     };
   } = {},
@@ -197,13 +204,12 @@ export async function seedFixture(
       customerType: CustomerType.RETAIL,
       creditStatus: CreditStatus.ACTIVE,
       requiresBilling: true,
-      fiscalName: options.sandbox
-        ? 'UNIVERSIDAD ROBOTICA ESPAÑOLA'
-        : 'RECEPTOR DE RECONCILIACION',
-      taxId: options.sandbox ? 'URE180429TM6' : `C2E${runId.slice(0, 10)}`,
-      fiscalPostalCode: options.sandbox ? '86991' : '64000',
-      fiscalRegime: '601',
-      fiscalUseCode: 'G03',
+      fiscalName:
+        options.sandbox?.receiver.fiscalName ?? 'RECEPTOR DE RECONCILIACION',
+      taxId: options.sandbox?.receiver.taxId ?? `C2E${runId.slice(0, 10)}`,
+      fiscalPostalCode: options.sandbox?.receiver.fiscalPostalCode ?? '64000',
+      fiscalRegime: options.sandbox?.receiver.fiscalRegime ?? '601',
+      fiscalUseCode: options.sandbox?.receiver.fiscalUseCode ?? 'G03',
       billingEmail: `${marker}-billing@example.test`,
     },
   });
@@ -334,12 +340,12 @@ export async function seedFixture(
           fiscalName: customer.fiscalName,
           taxId: customer.taxId,
           fiscalPostalCode: customer.fiscalPostalCode,
-          fiscalRegime: '601',
-          fiscalUseCode: 'G03',
+          fiscalRegime: customer.fiscalRegime,
+          fiscalUseCode: customer.fiscalUseCode,
           billingEmail: customer.billingEmail,
         },
         fiscalSnapshotHash: 'c'.repeat(64),
-        fiscalUseCode: 'G03',
+        fiscalUseCode: customer.fiscalUseCode,
         exportCode: '01',
         paymentFormCode: '01',
         paymentMethodCode: 'PUE',
