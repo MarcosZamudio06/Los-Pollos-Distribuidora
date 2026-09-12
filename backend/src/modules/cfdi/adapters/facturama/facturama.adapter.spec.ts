@@ -449,6 +449,23 @@ fiscalProviderContract('FacturamaAdapter', (scenario) => {
 });
 
 describe('FacturamaAdapter', () => {
+  it('forbids HTTP redirects that could replay the stamp POST', async () => {
+    const fetcher = jest.fn().mockResolvedValue(response(stampResponse()));
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    await adapter.stamp({
+      correlationId: 'corr-no-redirect',
+      idempotencyKey: 'stamp-no-redirect',
+      folio: '1',
+      series: 'A',
+      snapshot: snapshot(),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      redirect: 'error',
+    });
+  });
+
   it('rejects a historical operation addressed to a different provider', async () => {
     const fetcher = jest.fn() as unknown as typeof fetch;
     const adapter = new FacturamaAdapter(config(), resolver, fetcher);

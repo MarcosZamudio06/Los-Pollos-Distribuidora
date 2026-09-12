@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import { FacturamaAdapter } from '../src/modules/cfdi/adapters/facturama/facturama.adapter';
 
 import { assertDisposableE2eEnvironment } from './e2e-environment';
 import { seedFixture } from './fixtures/cfdi-reconciliation.fixture';
@@ -73,6 +75,99 @@ describe('CFDI reconciliation sandbox fixture (e2e)', () => {
     });
 
     expect(first.marker).not.toBe(second.marker);
+    for (const fixture of [first, second]) {
+      const prepared = fixture.prepared!;
+      const concept = prepared.snapshot!.concepts[0];
+      const sku = `CFDI-${fixture.marker.replace('cfdi-reconciliation-', '')}`;
+      expect(sku).toHaveLength(37);
+      expect(sku).toMatch(/^CFDI-[0-9A-F]{32}$/);
+      expect(concept.identificationNumber).toBe(sku);
+      const sourceItem = await prisma!.saleItem.findUniqueOrThrow({
+        where: { id: concept.sourceSaleItemId },
+        include: { product: true },
+      });
+      expect(sourceItem.productSkuSnapshot).toBe(sku);
+      expect(sourceItem.product.sku).toBe(sku);
+
+      // Inspect the exact adapter JSON; this transport never accesses a PAC.
+      const fetcher = jest.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+        const payload = JSON.parse(init!.body as string) as Record<
+          string,
+          unknown
+        >;
+        expect(payload).toMatchObject({
+          CfdiType: 'I',
+          ExpeditionPlace: sandbox.issuer.fiscalPostalCode,
+          Serie: 'A',
+          Folio: prepared.folio,
+          Currency: 'MXN',
+          PaymentMethod: 'PUE',
+          PaymentForm: '01',
+          Exportation: '01',
+          Issuer: {
+            Rfc: sandbox.issuer.taxId,
+            Name: sandbox.issuer.legalName,
+            FiscalRegime: '601',
+          },
+          Receiver: {
+            Rfc: sandbox.receiver.taxId,
+            Name: sandbox.receiver.fiscalName,
+            FiscalRegime: '601',
+            TaxZipCode: '64000',
+            CfdiUse: 'G03',
+          },
+          Items: [
+            {
+              ProductCode: '10101504',
+              IdentificationNumber: sku,
+              Description: sourceItem.product.name,
+              Quantity: '2.000000',
+              UnitCode: 'H87',
+              UnitPrice: '50.00',
+              Subtotal: '100.00',
+              Discount: '0.00',
+              TaxObject: '02',
+              Total: '116.00',
+              Taxes: [
+                {
+                  Name: 'IVA',
+                  Base: '100.00',
+                  Rate: '0.160000',
+                  Total: '16.00',
+                  IsRetention: false,
+                },
+              ],
+            },
+          ],
+        });
+        expect(prepared.folio).toMatch(/^[0-9A-F]{32}$/);
+        return Promise.resolve(new Response('{}', { status: 400 }));
+      });
+      const adapter = new FacturamaAdapter(
+        new ConfigService({
+          FACTURAMA_API_BASE_URL: 'https://apisandbox.facturama.mx',
+          FACTURAMA_API_MODE: 'MULTI_ISSUER',
+          FACTURAMA_CREDENTIAL_REF: 'fixture-only',
+          FISCAL_PROVIDER_ENVIRONMENT: 'SANDBOX',
+          FISCAL_PROVIDER: 'FACTURAMA',
+        }),
+        {
+          resolve: () =>
+            Promise.resolve({ username: 'fixture', password: 'fixture' }),
+        },
+        fetcher,
+      );
+      await expect(
+        adapter.stamp({
+          correlationId: prepared.correlationId,
+          idempotencyKey: prepared.idempotencyKey,
+          folio: prepared.folio,
+          series: prepared.series,
+          snapshot: prepared.snapshot!,
+        }),
+      ).rejects.toMatchObject({ code: 'FISCAL_PROVIDER_VALIDATION' });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
     expect(firstInvoice.legalEntityId).toBe(secondInvoice.legalEntityId);
     expect(firstInvoice.fiscalCertificateId).toBe(
       secondInvoice.fiscalCertificateId,

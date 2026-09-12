@@ -135,6 +135,7 @@ export async function seedFixture(
 ): Promise<Fixture> {
   const runId = randomUUID().replaceAll('-', '').toUpperCase();
   const marker = `cfdi-reconciliation-${runId}`;
+  const productSku = `CFDI-${runId}`;
   const issuedAt = options.sandbox
     ? new Date()
     : new Date('2026-08-30T18:00:00.000Z');
@@ -254,7 +255,7 @@ export async function seedFixture(
   const product = await prisma.product.create({
     data: {
       name: `${marker} product`,
-      sku: marker,
+      sku: productSku,
       presentationType: ProductPresentationType.KG,
       salePrice: unitValue,
       purchaseCost: new Prisma.Decimal(35),
@@ -401,7 +402,7 @@ export async function seedFixture(
             lineNumber: 1,
             sourceSaleItemId: saleItem.id,
             productServiceCode: '10101504',
-            identificationNumber: marker,
+            identificationNumber: productSku,
             description: product.name,
             quantity,
             unitCode: 'H87',
@@ -604,7 +605,7 @@ export async function seedFixture(
                   sourceSaleItemId: saleItem.id,
                   sourceProductId: product.id,
                   productServiceCode: '10101504',
-                  identificationNumber: marker,
+                  identificationNumber: productSku,
                   description: product.name,
                   quantity: quantity.toFixed(6),
                   unitCode: 'H87',

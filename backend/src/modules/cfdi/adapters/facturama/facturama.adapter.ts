@@ -912,7 +912,8 @@ export class FacturamaAdapter implements FiscalProviderPort {
       operation,
       correlationId,
       '/api-lite/3/cfdis',
-      { method: 'POST', body: JSON.stringify(payload) },
+      // A 307/308 must not silently replay a non-idempotent stamp request.
+      { method: 'POST', body: JSON.stringify(payload), redirect: 'error' },
     );
     return this.normalizeStamp(response.body, correlationId);
   }
