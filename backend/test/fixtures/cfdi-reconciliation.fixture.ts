@@ -28,6 +28,9 @@ import type { PreparedCfdiIssuance } from '../../src/modules/cfdi/cfdi-issuance.
 import type { CfdiDocumentSnapshot } from '../../src/modules/cfdi/domain/cfdi-document.types';
 
 const CERTIFICATE_SERIAL = '30001000000500003416';
+const CERTIFICATE_FINGERPRINT = 'a'.repeat(64);
+const CERTIFICATE_VALID_FROM = new Date('2025-01-01T00:00:00.000Z');
+const CERTIFICATE_VALID_TO = new Date('2030-01-01T00:00:00.000Z');
 const RFC_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const RFC_PREFIX_SPACE = 26n ** 3n;
 const RFC_SUFFIX_SPACE = 36n ** 3n;
@@ -91,10 +94,10 @@ async function createFixtureLegalEntity(
           cfdiEnabled: true,
           defaultSeries: 'A',
           certificateSerialNumber: CERTIFICATE_SERIAL,
-          certificateFingerprint: 'a'.repeat(64),
+          certificateFingerprint: CERTIFICATE_FINGERPRINT,
           certificateSubject: `CN=${marker}`,
-          certificateValidFrom: new Date('2025-01-01T00:00:00.000Z'),
-          certificateValidTo: new Date('2030-01-01T00:00:00.000Z'),
+          certificateValidFrom: CERTIFICATE_VALID_FROM,
+          certificateValidTo: CERTIFICATE_VALID_TO,
         },
       });
     } catch (error) {
@@ -137,6 +140,7 @@ export async function seedFixture(
     : new Date('2026-08-30T18:00:00.000Z');
   const certificateSerial =
     options.sandbox?.certificateSerial ?? CERTIFICATE_SERIAL;
+  const certificateSubject = `CN=${marker}`;
   const providerReference = `${marker}:provider-document`;
   const recoveryUuid = randomUUID().toUpperCase();
   const quantity = new Prisma.Decimal(2);
@@ -177,6 +181,11 @@ export async function seedFixture(
           ...options.sandbox.issuer,
           cfdiEnabled: true,
           defaultSeries: 'A',
+          certificateSerialNumber: certificateSerial,
+          certificateFingerprint: CERTIFICATE_FINGERPRINT,
+          certificateSubject,
+          certificateValidFrom: CERTIFICATE_VALID_FROM,
+          certificateValidTo: CERTIFICATE_VALID_TO,
         },
       })
     : await createFixtureLegalEntity(prisma, runId, marker);
@@ -191,10 +200,10 @@ export async function seedFixture(
     create: {
       legalEntityId: legalEntity.id,
       serialNumber: certificateSerial,
-      fingerprintSha256: 'a'.repeat(64),
-      subject: `CN=${marker}`,
-      validFrom: new Date('2025-01-01T00:00:00.000Z'),
-      validTo: new Date('2030-01-01T00:00:00.000Z'),
+      fingerprintSha256: CERTIFICATE_FINGERPRINT,
+      subject: certificateSubject,
+      validFrom: CERTIFICATE_VALID_FROM,
+      validTo: CERTIFICATE_VALID_TO,
     },
   });
   const customer = await prisma.customer.create({
@@ -333,7 +342,7 @@ export async function seedFixture(
           fiscalRegime: options.sandbox?.issuer.fiscalRegime ?? '601',
           series: 'A',
           certificateSerialNumber: certificateSerial,
-          certificateFingerprint: 'a'.repeat(64),
+          certificateFingerprint: CERTIFICATE_FINGERPRINT,
         },
         receiverSnapshot: {
           customerId: customer.id,
