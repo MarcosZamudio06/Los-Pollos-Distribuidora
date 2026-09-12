@@ -131,13 +131,17 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
       - name: Install backend dependencies without changing the lockfile
-        run: corepack pnpm --dir backend install --frozen-lockfile
+        run: npm ci --prefix backend
       - name: Prepare disposable PostgreSQL
+        working-directory: backend
         run: |
-          corepack pnpm --dir backend exec prisma generate
-          corepack pnpm --dir backend exec prisma migrate deploy
+          npm exec -- prisma generate
+          npm exec -- prisma migrate deploy
       - name: Lose one real PAC response and reconcile without a second POST
+        working-directory: backend
         env:
           RUN_FACTURAMA_SANDBOX_STAMP: "true"
           RUN_FACTURAMA_SANDBOX_RECOVERY: "true"
@@ -153,4 +157,4 @@ jobs:
           FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE }}
           FACTURAMA_SANDBOX_RECEIVER_CFDI_USE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_CFDI_USE }}
           FACTURAMA_SANDBOX_CERTIFICATE_SERIAL: ${{ secrets.FACTURAMA_SANDBOX_CERTIFICATE_SERIAL }}
-        run: corepack pnpm --dir backend exec jest --config ./test/jest-facturama-recovery.json --runInBand
+        run: npm exec -- jest --config ./test/jest-facturama-recovery.json --runInBand
