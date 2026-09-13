@@ -287,6 +287,131 @@ function contractResponse(scenario: FiscalProviderContractScenario) {
   };
 }
 
+describe('Facturama missing-reference lookup', () => {
+  const command = {
+    correlationId: 'recovery-lookup',
+    providerKey: 'FACTURAMA',
+    issuerRfc: 'EKU9003173C9',
+    series: 'A',
+    folio: '0001-X',
+  };
+  const row = {
+    Id: 'remote-1',
+    RfcIssuer: command.issuerRfc,
+    Serie: 'A',
+    Folio: command.folio,
+    Uuid: '215CEC43-7E57-44AC-9D63-B54BBC4745BD',
+  };
+
+  it('uses string identity filters, includes cancelled documents and returns an exact match', async () => {
+    const fetcher = jest.fn().mockResolvedValue(response([row]));
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    await expect(adapter.findStampedDocument(command)).resolves.toEqual({
+      providerDocumentId: row.Id,
+      uuid: row.Uuid,
+    });
+    const url = new URL(requestUrl(fetcher.mock.calls[0][0] as URL));
+    expect(url.pathname).toBe('/cfdi');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      type: 'issuedLite',
+      status: 'all',
+      rfcIssuer: command.issuerRfc,
+      serie: 'A',
+      folio: '0001-X',
+      page: '0',
+    });
+    expect(
+      fetcher.mock.calls.every(
+        (call: [URL, RequestInit]) => call[1].method === 'GET',
+      ),
+    ).toBe(true);
+    expect(adapter.capabilities.providerSideIdempotency).toBe(false);
+  });
+
+  it.each([
+    { ...row, RfcIssuer: 'EKU9003173C90' },
+    { ...row, Serie: 'B' },
+    { ...row, Folio: '1-X' },
+  ])(
+    'never trusts fuzzy matches from the remote filters: %j',
+    async (other) => {
+      const adapter = new FacturamaAdapter(
+        config(),
+        resolver,
+        jest.fn().mockResolvedValue(response([other])),
+      );
+      await expect(adapter.findStampedDocument(command)).resolves.toBeNull();
+    },
+  );
+
+  it('rejects two matching remote documents instead of taking the first', async () => {
+    const adapter = new FacturamaAdapter(
+      config(),
+      resolver,
+      jest.fn().mockResolvedValue(response([row, { ...row, Id: 'remote-2' }])),
+    );
+    await expect(adapter.findStampedDocument(command)).rejects.toMatchObject({
+      code: 'FISCAL_PROVIDER_LOOKUP_AMBIGUOUS',
+      retryable: false,
+    });
+  });
+
+  it('checks later pages before accepting a match', async () => {
+    const page = Array.from({ length: 100 }, (_, i) => ({
+      ...row,
+      Id: `other-${i}`,
+      Serie: 'B',
+    }));
+    page[0] = row;
+    const fetcher = jest
+      .fn()
+      .mockResolvedValueOnce(response(page))
+      .mockResolvedValueOnce(response([{ ...row, Id: 'remote-2' }]));
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    await expect(adapter.findStampedDocument(command)).rejects.toMatchObject({
+      code: 'FISCAL_PROVIDER_LOOKUP_AMBIGUOUS',
+    });
+    expect(
+      new URL(requestUrl(fetcher.mock.calls[1][0] as URL)).searchParams.get(
+        'page',
+      ),
+    ).toBe('1');
+  });
+
+  it.each([
+    {},
+    [{ ...row, RfcIssuer: undefined }],
+    [{ ...row, Uuid: 'invalid' }],
+  ])('fails closed on incomplete responses', async (body) => {
+    const adapter = new FacturamaAdapter(
+      config(),
+      resolver,
+      jest.fn().mockResolvedValue(response(body)),
+    );
+    await expect(adapter.findStampedDocument(command)).rejects.toMatchObject({
+      code: 'FISCAL_PROVIDER_RESPONSE_INVALID',
+    });
+  });
+
+  it('does not accept a match from an incomplete/repeating pagination', async () => {
+    const page = Array.from({ length: 100 }, (_, i) => ({
+      ...row,
+      Id: `other-${i}`,
+      Serie: 'B',
+    }));
+    page[0] = row;
+    const fetcher = jest
+      .fn()
+      .mockImplementation(() => Promise.resolve(response(page)));
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    await expect(adapter.findStampedDocument(command)).rejects.toMatchObject({
+      code: 'FISCAL_PROVIDER_LOOKUP_INCOMPLETE',
+      retryable: true,
+    });
+    expect(fetcher.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});
+
 fiscalProviderContract('FacturamaAdapter', (scenario) => {
   const fetcher = jest.fn(() =>
     response(contractResponse(scenario)),
@@ -324,6 +449,23 @@ fiscalProviderContract('FacturamaAdapter', (scenario) => {
 });
 
 describe('FacturamaAdapter', () => {
+  it('forbids HTTP redirects that could replay the stamp POST', async () => {
+    const fetcher = jest.fn().mockResolvedValue(response(stampResponse()));
+    const adapter = new FacturamaAdapter(config(), resolver, fetcher);
+    await adapter.stamp({
+      correlationId: 'corr-no-redirect',
+      idempotencyKey: 'stamp-no-redirect',
+      folio: '1',
+      series: 'A',
+      snapshot: snapshot(),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      redirect: 'error',
+    });
+  });
+
   it('rejects a historical operation addressed to a different provider', async () => {
     const fetcher = jest.fn() as unknown as typeof fetch;
     const adapter = new FacturamaAdapter(config(), resolver, fetcher);
