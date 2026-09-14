@@ -80,7 +80,91 @@ export type ProductionBootstrapClient = {
 export type ProductionBootstrapEnv = {
   NODE_ENV?: string;
   SEED_ADMIN_PASSWORD?: string;
+  SEED_CEDIS_NAME?: string;
+  SEED_CEDIS_CODE?: string;
+  SEED_LOCATION_NAME?: string;
+  SEED_LOCATION_CODE?: string;
+  SEED_ADMIN_NAME?: string;
+  SEED_ADMIN_EMAIL?: string;
+  SEED_ADMIN_CONTROL_NUMBER?: string;
+  SEED_ADMIN_PHONE?: string;
 };
+
+function resolveBootstrapValue(
+  value: string | undefined,
+  variableName: string,
+  defaultValue: string,
+): string {
+  if (value === undefined) return defaultValue;
+
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    throw new Error(`${variableName} must not be blank`);
+  }
+
+  return normalizedValue;
+}
+
+function resolveProductionBootstrapIdentity(env: ProductionBootstrapEnv) {
+  const distributionCenter = {
+    ...productionDistributionCenter,
+    name: resolveBootstrapValue(
+      env.SEED_CEDIS_NAME,
+      'SEED_CEDIS_NAME',
+      productionDistributionCenter.name,
+    ),
+    code: resolveBootstrapValue(
+      env.SEED_CEDIS_CODE,
+      'SEED_CEDIS_CODE',
+      productionDistributionCenter.code,
+    ),
+  };
+  const location = {
+    ...productionLocation,
+    name: resolveBootstrapValue(
+      env.SEED_LOCATION_NAME,
+      'SEED_LOCATION_NAME',
+      productionLocation.name,
+    ),
+    code: resolveBootstrapValue(
+      env.SEED_LOCATION_CODE,
+      'SEED_LOCATION_CODE',
+      productionLocation.code,
+    ),
+  };
+  const admin = {
+    ...productionAdmin,
+    name: resolveBootstrapValue(
+      env.SEED_ADMIN_NAME,
+      'SEED_ADMIN_NAME',
+      productionAdmin.name,
+    ),
+    email: resolveBootstrapValue(
+      env.SEED_ADMIN_EMAIL,
+      'SEED_ADMIN_EMAIL',
+      productionAdmin.email,
+    ),
+    controlNumber: resolveBootstrapValue(
+      env.SEED_ADMIN_CONTROL_NUMBER,
+      'SEED_ADMIN_CONTROL_NUMBER',
+      productionAdmin.controlNumber,
+    ),
+    phone: resolveBootstrapValue(
+      env.SEED_ADMIN_PHONE,
+      'SEED_ADMIN_PHONE',
+      productionAdmin.phone,
+    ),
+  };
+
+  if (distributionCenter.code === location.code) {
+    throw new Error('SEED_CEDIS_CODE and SEED_LOCATION_CODE must be different');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(admin.email)) {
+    throw new Error('SEED_ADMIN_EMAIL must be a valid email address');
+  }
+
+  return { distributionCenter, location, admin };
+}
 
 type ProductionBootstrapDependencies = {
   hashPassword?: (password: string, rounds: number) => Promise<string>;
@@ -123,6 +207,11 @@ export async function bootstrapProduction(
     throw new Error('SEED_ADMIN_PASSWORD must be at least 10 characters long');
   }
 
+  const {
+    distributionCenter,
+    location,
+    admin: adminIdentity,
+  } = resolveProductionBootstrapIdentity(env);
   const hashPassword = dependencies.hashPassword ?? bcrypt.hash;
   const passwordHash = await hashPassword(env.SEED_ADMIN_PASSWORD, 12);
 
@@ -167,28 +256,28 @@ export async function bootstrapProduction(
   }
 
   await prisma.operationalLocation.upsert({
-    where: { code: productionDistributionCenter.code },
-    update: productionDistributionCenter,
-    create: productionDistributionCenter,
+    where: { code: distributionCenter.code },
+    update: distributionCenter,
+    create: distributionCenter,
   });
 
   await prisma.operationalLocation.upsert({
-    where: { code: productionLocation.code },
+    where: { code: location.code },
     update: {
-      ...productionLocation,
-      parent: { connect: { code: productionDistributionCenter.code } },
+      ...location,
+      parent: { connect: { code: distributionCenter.code } },
     },
     create: {
-      ...productionLocation,
-      parent: { connect: { code: productionDistributionCenter.code } },
+      ...location,
+      parent: { connect: { code: distributionCenter.code } },
     },
   });
 
   const adminUpdate: Prisma.UserUpdateInput = {
-    name: productionAdmin.name,
-    isActive: productionAdmin.isActive,
+    name: adminIdentity.name,
+    isActive: adminIdentity.isActive,
     role: { connect: { name: 'ADMIN' } },
-    operationalLocation: { connect: { code: productionLocation.code } },
+    operationalLocation: { connect: { code: location.code } },
   };
 
   if (options.rotateAdminPassword) {
@@ -200,13 +289,13 @@ export async function bootstrapProduction(
   }
 
   const admin = await prisma.user.upsert({
-    where: { email: productionAdmin.email },
+    where: { email: adminIdentity.email },
     update: adminUpdate,
     create: {
-      ...productionAdmin,
+      ...adminIdentity,
       passwordHash,
       role: { connect: { name: 'ADMIN' } },
-      operationalLocation: { connect: { code: productionLocation.code } },
+      operationalLocation: { connect: { code: location.code } },
     },
   });
 

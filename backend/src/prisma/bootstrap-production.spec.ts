@@ -180,8 +180,12 @@ describe('Production bootstrap contract', () => {
     expect(userUpsert).toHaveBeenCalledTimes(1);
     expect(userUpsert.mock.calls[0]?.[0]).toMatchObject({
       where: { email: 'admin@pollos.local' },
+      update: { name: 'System Administrator' },
       create: {
+        name: 'System Administrator',
         email: 'admin@pollos.local',
+        controlNumber: 'EPDP-000001',
+        phone: '+520000000001',
         passwordHash: 'hashed-production-secret',
         role: { connect: { name: 'ADMIN' } },
         operationalLocation: { connect: { code: 'MAIN' } },
@@ -191,12 +195,151 @@ describe('Production bootstrap contract', () => {
       { code: 'MAIN-CEDIS' },
       { code: 'MAIN' },
     ]);
+    expect(locationUpsert.mock.calls[0]?.[0]).toMatchObject({
+      where: { code: 'MAIN-CEDIS' },
+      create: { name: 'Main Distribution Center', code: 'MAIN-CEDIS' },
+      update: { name: 'Main Distribution Center', code: 'MAIN-CEDIS' },
+    });
+    expect(locationUpsert.mock.calls[1]?.[0]).toMatchObject({
+      where: { code: 'MAIN' },
+      create: {
+        name: 'Main Location',
+        code: 'MAIN',
+        parent: { connect: { code: 'MAIN-CEDIS' } },
+      },
+      update: {
+        name: 'Main Location',
+        code: 'MAIN',
+        parent: { connect: { code: 'MAIN-CEDIS' } },
+      },
+    });
     expect(rolePermissionCreateMany.mock.calls).toEqual(
       expect.arrayContaining([
         [expect.objectContaining({ skipDuplicates: true })],
       ]),
     );
   });
+
+  it('uses custom production bootstrap identity values', async () => {
+    const { client, locationUpsert, userUpsert } = createClient();
+    const hashPassword = jest.fn().mockResolvedValue('custom-admin-hash');
+
+    await bootstrapProduction(
+      client,
+      {
+        ...productionEnv,
+        SEED_CEDIS_NAME: 'Acme Distribution Center',
+        SEED_CEDIS_CODE: 'ACME-CEDIS',
+        SEED_LOCATION_NAME: 'Acme Branch',
+        SEED_LOCATION_CODE: 'ACME-BRANCH',
+        SEED_ADMIN_NAME: 'Acme Administrator',
+        SEED_ADMIN_EMAIL: 'admin@acme.example',
+        SEED_ADMIN_CONTROL_NUMBER: 'ACME-000001',
+        SEED_ADMIN_PHONE: '+5215550102030',
+      },
+      { hashPassword },
+    );
+
+    expect(hashPassword).toHaveBeenCalledWith('production-secret', 12);
+    expect(locationUpsert.mock.calls[0]?.[0]).toMatchObject({
+      where: { code: 'ACME-CEDIS' },
+      create: { name: 'Acme Distribution Center', code: 'ACME-CEDIS' },
+      update: { name: 'Acme Distribution Center', code: 'ACME-CEDIS' },
+    });
+    expect(locationUpsert.mock.calls[1]?.[0]).toMatchObject({
+      where: { code: 'ACME-BRANCH' },
+      create: {
+        name: 'Acme Branch',
+        code: 'ACME-BRANCH',
+        parent: { connect: { code: 'ACME-CEDIS' } },
+      },
+      update: {
+        name: 'Acme Branch',
+        code: 'ACME-BRANCH',
+        parent: { connect: { code: 'ACME-CEDIS' } },
+      },
+    });
+    expect(userUpsert.mock.calls[0]?.[0]).toMatchObject({
+      where: { email: 'admin@acme.example' },
+      update: { name: 'Acme Administrator' },
+      create: {
+        name: 'Acme Administrator',
+        email: 'admin@acme.example',
+        controlNumber: 'ACME-000001',
+        phone: '+5215550102030',
+        passwordHash: 'custom-admin-hash',
+        role: { connect: { name: 'ADMIN' } },
+        operationalLocation: { connect: { code: 'ACME-BRANCH' } },
+      },
+    });
+  });
+
+  it.each([
+    {
+      env: { SEED_CEDIS_NAME: '   ' },
+      expectedError: 'SEED_CEDIS_NAME must not be blank',
+    },
+    {
+      env: { SEED_CEDIS_CODE: '' },
+      expectedError: 'SEED_CEDIS_CODE must not be blank',
+    },
+    {
+      env: { SEED_LOCATION_NAME: '   ' },
+      expectedError: 'SEED_LOCATION_NAME must not be blank',
+    },
+    {
+      env: { SEED_LOCATION_CODE: '' },
+      expectedError: 'SEED_LOCATION_CODE must not be blank',
+    },
+    {
+      env: { SEED_ADMIN_NAME: '   ' },
+      expectedError: 'SEED_ADMIN_NAME must not be blank',
+    },
+    {
+      env: { SEED_ADMIN_EMAIL: '' },
+      expectedError: 'SEED_ADMIN_EMAIL must not be blank',
+    },
+    {
+      env: { SEED_ADMIN_CONTROL_NUMBER: '   ' },
+      expectedError: 'SEED_ADMIN_CONTROL_NUMBER must not be blank',
+    },
+    {
+      env: { SEED_ADMIN_PHONE: '' },
+      expectedError: 'SEED_ADMIN_PHONE must not be blank',
+    },
+    {
+      env: {
+        SEED_CEDIS_CODE: 'DUPLICATE',
+        SEED_LOCATION_CODE: 'DUPLICATE',
+      },
+      expectedError: 'SEED_CEDIS_CODE and SEED_LOCATION_CODE must be different',
+    },
+    {
+      env: { SEED_ADMIN_EMAIL: 'not-an-email' },
+      expectedError: 'SEED_ADMIN_EMAIL must be a valid email address',
+    },
+  ])(
+    'rejects invalid bootstrap identity before hashing or writes: $expectedError',
+    async ({ env, expectedError }) => {
+      const { client, roleUpsert, locationUpsert, userUpsert } = createClient();
+      const hashPassword = jest.fn().mockResolvedValue('unused-hash');
+
+      await expect(
+        bootstrapProduction(
+          client,
+          { ...productionEnv, ...env },
+          {
+            hashPassword,
+          },
+        ),
+      ).rejects.toThrow(expectedError);
+
+      expect(hashPassword).not.toHaveBeenCalled();
+      expect(roleUpsert).not.toHaveBeenCalled();
+      expect(locationUpsert).not.toHaveBeenCalled();
+      expect(userUpsert).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not change password or session state during a normal rerun', async () => {
     const { client, userUpsert, authSessionUpdateMany } = createClient();
@@ -270,11 +413,37 @@ describe('Production bootstrap contract', () => {
     const backendStart = compose.indexOf('\n  backend:');
     const frontendStart = compose.indexOf('\n  frontend:');
     const backendSection = compose.slice(backendStart, frontendStart);
+    const bootstrapStart = compose.indexOf('\n  bootstrap:');
+    const bootstrapSection = compose.slice(bootstrapStart, backendStart);
 
     expect(compose).toContain('  bootstrap:');
     expect(compose).toContain('profiles: ["migration"]');
     expect(compose).toContain('command: npm run bootstrap:production');
     expect(compose).toContain('SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}');
+    expect(bootstrapSection).toContain(
+      'SEED_CEDIS_NAME: "${SEED_CEDIS_NAME-Main Distribution Center}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_CEDIS_CODE: "${SEED_CEDIS_CODE-MAIN-CEDIS}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_LOCATION_NAME: "${SEED_LOCATION_NAME-Main Location}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_LOCATION_CODE: "${SEED_LOCATION_CODE-MAIN}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_ADMIN_NAME: "${SEED_ADMIN_NAME-System Administrator}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL-admin@pollos.local}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_ADMIN_CONTROL_NUMBER: "${SEED_ADMIN_CONTROL_NUMBER-EPDP-000001}"',
+    );
+    expect(bootstrapSection).toContain(
+      'SEED_ADMIN_PHONE: "${SEED_ADMIN_PHONE-+520000000001}"',
+    );
     expect(compose).not.toContain(
       'SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD is required for production bootstrap}',
     );
@@ -285,12 +454,28 @@ describe('Production bootstrap contract', () => {
     expect(compose).not.toContain(
       'command: npm run bootstrap:production --rotate-admin-password',
     );
-    expect(backendSection).not.toContain('SEED_ADMIN_PASSWORD');
+    for (const variable of [
+      'SEED_ADMIN_PASSWORD',
+      'SEED_CEDIS_NAME',
+      'SEED_CEDIS_CODE',
+      'SEED_LOCATION_NAME',
+      'SEED_LOCATION_CODE',
+      'SEED_ADMIN_NAME',
+      'SEED_ADMIN_EMAIL',
+      'SEED_ADMIN_CONTROL_NUMBER',
+      'SEED_ADMIN_PHONE',
+    ]) {
+      expect(backendSection).not.toContain(variable);
+    }
   });
 
   it('documents the safe deployment path, verifiable postconditions, and explicit rerun rotation', () => {
     const envExample = readFileSync(
       resolve(__dirname, '../../../.env.example'),
+      'utf8',
+    );
+    const productionEnvExample = readFileSync(
+      resolve(__dirname, '../../../.env.production.example'),
       'utf8',
     );
     const runbook = readFileSync(
@@ -300,6 +485,16 @@ describe('Production bootstrap contract', () => {
 
     expect(envExample).toContain('SEED_ADMIN_PASSWORD=\n');
     expect(envExample).not.toMatch(/SEED_ADMIN_PASSWORD=\S+/);
+    for (const example of [envExample, productionEnvExample]) {
+      expect(example).toContain('SEED_CEDIS_NAME=Main Distribution Center');
+      expect(example).toContain('SEED_CEDIS_CODE=MAIN-CEDIS');
+      expect(example).toContain('SEED_LOCATION_NAME=Main Location');
+      expect(example).toContain('SEED_LOCATION_CODE=MAIN');
+      expect(example).toContain('SEED_ADMIN_NAME=System Administrator');
+      expect(example).toContain('SEED_ADMIN_EMAIL=admin@pollos.local');
+      expect(example).toContain('SEED_ADMIN_CONTROL_NUMBER=EPDP-000001');
+      expect(example).toContain('SEED_ADMIN_PHONE=+520000000001');
+    }
     expect(runbook).toContain('at least 10 characters');
     expect(runbook).toContain('read -r -s');
     expect(runbook).toContain(

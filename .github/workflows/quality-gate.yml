@@ -291,6 +291,41 @@ jobs:
       - name: Build frontend image
         run: docker build --build-arg OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.test --file docker/frontend/Dockerfile --tag pollos-frontend:ci .
 
+  isolation:
+    name: Multi-company real-stack isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install backend dependencies
+        run: pnpm --dir backend install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --dir backend --config.verify-deps-before-run=false exec prisma generate --schema prisma/schema.prisma
+
+      - name: Build the shared production backend image once
+        run: docker build --file docker/backend/Dockerfile --tag pollos-backend:mte-isolation .
+
+      - name: Run disposable TENANT_A and TENANT_B isolation gate
+        env:
+          MTE_BACKEND_IMAGE: pollos-backend:mte-isolation
+        run: bash scripts/multi-company/test-two-company-isolation.sh
+
   security:
     name: Dependency and secret scan
     runs-on: ubuntu-latest
@@ -317,6 +352,12 @@ jobs:
       - name: Test fiscal asset policy
         run: node --test scripts/validate-fiscal-assets.test.mjs
 
+      - name: Test tenant manifest and tenantctl contracts
+        run: |
+          node --test \
+            scripts/multi-company/tenantctl.test.mjs \
+            scripts/multi-company/validate-company-manifest.test.mjs
+
       - name: Reject versioned fiscal secrets and production XML
         run: git ls-files -z | node scripts/validate-fiscal-assets.mjs --files-from-stdin
 
@@ -330,7 +371,7 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, database, browser, docker, security]
+    needs: [quality, database, browser, docker, security, isolation]
     runs-on: ubuntu-latest
     steps:
       - name: Require every quality check
@@ -338,6 +379,7 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
           DOCKER_RESULT: ${{ needs.docker.result }}
+          ISOLATION_RESULT: ${{ needs.isolation.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
         run: |
@@ -345,4 +387,5 @@ jobs:
           test "$DATABASE_RESULT" = "success"
           test "$BROWSER_RESULT" = "success"
           test "$DOCKER_RESULT" = "success"
+          test "$ISOLATION_RESULT" = "success"
           test "$SECURITY_RESULT" = "success"

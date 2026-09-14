@@ -95,6 +95,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-pollo_distribucion}?sslmode=disable
       NODE_ENV: production
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_CEDIS_NAME: "${SEED_CEDIS_NAME-Main Distribution Center}"
+      SEED_CEDIS_CODE: "${SEED_CEDIS_CODE-MAIN-CEDIS}"
+      SEED_LOCATION_NAME: "${SEED_LOCATION_NAME-Main Location}"
+      SEED_LOCATION_CODE: "${SEED_LOCATION_CODE-MAIN}"
+      SEED_ADMIN_NAME: "${SEED_ADMIN_NAME-System Administrator}"
+      SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL-admin@pollos.local}"
+      SEED_ADMIN_CONTROL_NUMBER: "${SEED_ADMIN_CONTROL_NUMBER-EPDP-000001}"
+      SEED_ADMIN_PHONE: "${SEED_ADMIN_PHONE-+520000000001}"
     command: npm run bootstrap:production
     restart: "no"
     depends_on:
