@@ -577,12 +577,15 @@ describe('CfdiIssuanceRepository finalization', () => {
     expect(tx.fiscalArtifact.createMany).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps applications reserved for UNKNOWN and reverses them only for terminal failure', async () => {
+  it('keeps commercial applications for UNKNOWN and terminal failure', async () => {
     const unknown = harness();
     await unknown.repository.finalizeFailure(prepared, 'UNKNOWN', {
       code: 'FISCAL_PROVIDER_TIMEOUT',
       statusCode: null,
     });
+    expect(
+      unknown.tx.invoiceSaleItemApplication.updateMany,
+    ).not.toHaveBeenCalled();
     expect(unknown.tx.invoiceSaleDocument.updateMany).not.toHaveBeenCalled();
     expect(unknown.tx.invoice.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -597,11 +600,24 @@ describe('CfdiIssuanceRepository finalization', () => {
     });
     expect(
       terminal.tx.invoiceSaleItemApplication.updateMany,
-    ).toHaveBeenCalled();
-    expect(terminal.tx.invoiceSaleDocument.updateMany).toHaveBeenCalled();
+    ).not.toHaveBeenCalled();
+    expect(terminal.tx.invoiceSaleDocument.updateMany).not.toHaveBeenCalled();
     expect(terminal.tx.invoice.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ fiscalStatus: 'FAILED' }),
+      }),
+    );
+    expect(
+      terminal.tx.invoice.update.mock.calls[0]?.[0]?.data,
+    ).not.toHaveProperty('status');
+    expect(terminal.tx.fiscalOperationAttempt.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'TERMINAL_FAILURE',
+          httpStatus: 400,
+          errorCode: 'FISCAL_PROVIDER_VALIDATION',
+          errorMessage: 'FISCAL_PROVIDER_VALIDATION',
+        }),
       }),
     );
   });

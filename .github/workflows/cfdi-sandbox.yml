@@ -11,6 +11,7 @@ on:
         options:
           - read
           - stamp
+          - recovery
 
 permissions:
   contents: read
@@ -34,7 +35,7 @@ env:
 jobs:
   provider-read-contract:
     name: Protected Facturama sandbox read contract
-    if: ${{ inputs.contract != 'stamp' }}
+    if: ${{ inputs.contract == 'read' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: cfdi-sandbox
@@ -99,3 +100,61 @@ jobs:
           FACTURAMA_SANDBOX_RECEIVER_CFDI_USE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_CFDI_USE }}
           OPENSSL_CONF: /dev/null
         run: npm exec -- jest --config ./test/jest-facturama-sandbox-stamp.json --runInBand --runTestsByPath test/facturama-sandbox-stamp.protected.spec.ts
+
+  provider-recovery-contract:
+    name: Protected lost-response recovery (one sandbox CFDI)
+    if: ${{ inputs.contract == 'recovery' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: cfdi-sandbox
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: cfdi_test
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: cfdi_recovery_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cfdi_test -d cfdi_recovery_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://cfdi_test:disposable-ci-only@localhost:5432/cfdi_recovery_test
+      E2E_DATABASE_URL: postgresql://cfdi_test:disposable-ci-only@localhost:5432/cfdi_recovery_test
+      E2E_DATABASE_DISPOSABLE: "true"
+      OPENSSL_CONF: /dev/null
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies without changing the lockfile
+        run: npm ci --prefix backend
+      - name: Prepare disposable PostgreSQL
+        working-directory: backend
+        run: |
+          npm exec -- prisma generate
+          npm exec -- prisma migrate deploy
+      - name: Lose one real PAC response and reconcile without a second POST
+        working-directory: backend
+        env:
+          RUN_FACTURAMA_SANDBOX_STAMP: "true"
+          RUN_FACTURAMA_SANDBOX_RECOVERY: "true"
+          FACTURAMA_SANDBOX_USERNAME: ${{ secrets.FACTURAMA_SANDBOX_USERNAME }}
+          FACTURAMA_SANDBOX_PASSWORD: ${{ secrets.FACTURAMA_SANDBOX_PASSWORD }}
+          FACTURAMA_SANDBOX_ISSUER_RFC: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_RFC }}
+          FACTURAMA_SANDBOX_ISSUER_NAME: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_NAME }}
+          FACTURAMA_SANDBOX_ISSUER_FISCAL_REGIME: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_FISCAL_REGIME }}
+          FACTURAMA_SANDBOX_ISSUER_POSTAL_CODE: ${{ secrets.FACTURAMA_SANDBOX_ISSUER_POSTAL_CODE }}
+          FACTURAMA_SANDBOX_RECEIVER_RFC: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_RFC }}
+          FACTURAMA_SANDBOX_RECEIVER_NAME: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_NAME }}
+          FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_FISCAL_REGIME }}
+          FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_POSTAL_CODE }}
+          FACTURAMA_SANDBOX_RECEIVER_CFDI_USE: ${{ secrets.FACTURAMA_SANDBOX_RECEIVER_CFDI_USE }}
+          FACTURAMA_SANDBOX_CERTIFICATE_SERIAL: ${{ secrets.FACTURAMA_SANDBOX_CERTIFICATE_SERIAL }}
+        run: npm exec -- jest --config ./test/jest-facturama-recovery.json --runInBand

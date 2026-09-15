@@ -104,6 +104,40 @@ function buildInput(): CfdiDocumentBuildInput {
 describe('CfdiDocumentBuilder', () => {
   const builder = new CfdiDocumentBuilder();
 
+  it('preserves an absent optional identification as null', () => {
+    const input = buildInput();
+    input.documents[0].items[0].source.productSkuSnapshot = null;
+    expect(builder.build(input).concepts[0].identificationNumber).toBeNull();
+  });
+
+  it.each(['A', 'A'.repeat(50), 'POLLO-1', '  POLLO-1  '])(
+    'preserves a valid product identification after trimming: %s',
+    (sku) => {
+      const input = buildInput();
+      input.documents[0].items[0].source.productSkuSnapshot = sku;
+      expect(builder.build(input).concepts[0].identificationNumber).toBe(
+        sku.trim(),
+      );
+    },
+  );
+
+  it.each([
+    ['A'.repeat(51), 'TOO_LONG'],
+    ['POLLO|1', 'FORBIDDEN_CHARACTER'],
+    ['   ', 'EMPTY'],
+    ['', 'EMPTY'],
+  ])('rejects invalid product identification: %s', (sku, reason) => {
+    const input = buildInput();
+    input.documents[0].items[0].source.productSkuSnapshot = sku;
+    expect(() => builder.build(input)).toThrow(
+      expect.objectContaining({
+        name: 'CfdiDomainError',
+        code: 'INVALID_PRODUCT_IDENTIFICATION_NUMBER',
+        details: { productId: 'product-1', saleItemId: 'sale-item-1', reason },
+      }),
+    );
+  });
+
   it('builds a deeply immutable, normalized snapshot using Prisma.Decimal', () => {
     const snapshot = builder.build(buildInput());
 

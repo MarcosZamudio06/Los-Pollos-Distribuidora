@@ -371,7 +371,13 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
     candidate: ClaimedCandidate,
     now: Date,
   ): Promise<ReconciliationOutcome> {
-    if (!candidate.providerReference) {
+    let providerReference = candidate.providerReference;
+    let discoveredUuid: string | undefined;
+    const issuerRfc = jsonField(candidate.invoice.issuerSnapshot, 'taxId');
+    if (
+      !providerReference &&
+      (!this.provider.findStampedDocument || !issuerRfc)
+    ) {
       await this.finishUnknown(
         candidate,
         {
@@ -386,10 +392,33 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
 
     let status: FiscalStatusResponse;
     try {
+      if (!providerReference) {
+        const match = await this.provider.findStampedDocument!({
+          correlationId: candidate.recoveryCorrelationId,
+          providerKey: candidate.providerKey,
+          issuerRfc: issuerRfc!,
+          series: candidate.invoice.series ?? '',
+          folio: candidate.invoice.folio,
+        });
+        if (!match) {
+          await this.finishUnknown(
+            candidate,
+            {
+              code: 'CFDI_RECONCILIATION_LOOKUP_EMPTY',
+              retryable: true,
+              remediation: false,
+            },
+            now,
+          );
+          return 'still-unknown';
+        }
+        providerReference = match.providerDocumentId;
+        discoveredUuid = match.uuid;
+      }
       status = await this.provider.getStatus({
         correlationId: candidate.recoveryCorrelationId,
         providerKey: candidate.providerKey,
-        providerDocumentId: candidate.providerReference,
+        providerDocumentId: providerReference,
         uuid: candidate.invoice.uuid ?? undefined,
       });
     } catch (error) {
@@ -440,12 +469,31 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
       return 'still-unknown';
     }
 
+    if (
+      discoveredUuid &&
+      (normalized(discoveredUuid) !== normalized(statusUuid) ||
+        status.providerDocumentId !== providerReference ||
+        status.provider !== candidate.providerKey ||
+        status.status !== 'ACTIVE')
+    ) {
+      await this.finishUnknown(
+        candidate,
+        {
+          code: 'CFDI_RECONCILIATION_LOOKUP_STATUS_MISMATCH',
+          retryable: false,
+          remediation: true,
+        },
+        now,
+      );
+      return 'still-unknown';
+    }
+
     let xml: FiscalArtifactContent;
     try {
       xml = await this.provider.getXml({
         correlationId: candidate.recoveryCorrelationId,
         providerKey: candidate.providerKey,
-        providerDocumentId: candidate.providerReference,
+        providerDocumentId: providerReference,
       });
     } catch (error) {
       await this.finishUnknown(
@@ -488,7 +536,7 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
       pdf = await this.provider.getPdf({
         correlationId: candidate.recoveryCorrelationId,
         providerKey: candidate.providerKey,
-        providerDocumentId: candidate.providerReference,
+        providerDocumentId: providerReference,
       });
     } catch {
       // A missing PDF is an artifact inconsistency, not a reason to lose a
@@ -500,7 +548,7 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
     const response: FiscalStampResponse = {
       correlationId: candidate.recoveryCorrelationId,
       provider: status.provider,
-      providerDocumentId: candidate.providerReference,
+      providerDocumentId: providerReference,
       outcome: 'STAMPED',
       uuid: normalized(tfd.uuid),
       issuedAt:
@@ -511,11 +559,11 @@ export class StampReconciliationJob implements OnApplicationBootstrap {
       tfd,
       xmlReference: {
         artifactType: 'XML',
-        providerDocumentId: candidate.providerReference,
+        providerDocumentId: providerReference,
       },
       pdfReference: {
         artifactType: 'PDF',
-        providerDocumentId: candidate.providerReference,
+        providerDocumentId: providerReference,
       },
     };
 

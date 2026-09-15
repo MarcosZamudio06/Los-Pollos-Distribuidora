@@ -646,13 +646,31 @@ export class CfdiDocumentBuilder {
       saleItemId: item.saleItemId,
     });
 
+    const identificationNumber = item.source.productSkuSnapshot?.trim() ?? null;
+    if (identificationNumber !== null) {
+      const reason = !identificationNumber.length
+        ? 'EMPTY'
+        : identificationNumber.length > 50
+          ? 'TOO_LONG'
+          : identificationNumber.includes('|')
+            ? 'FORBIDDEN_CHARACTER'
+            : undefined;
+      if (reason) {
+        throw new CfdiDomainError('INVALID_PRODUCT_IDENTIFICATION_NUMBER', {
+          productId: item.source.productId,
+          saleItemId: item.saleItemId,
+          reason,
+        });
+      }
+    }
+
     const conceptWithoutHash = {
       lineNumber,
       sourceBillingRequestItemId: item.id,
       sourceSaleItemId: item.saleItemId,
       sourceProductId: item.source.productId,
       productServiceCode: profile.satProductServiceCode,
-      identificationNumber: item.source.productSkuSnapshot,
+      identificationNumber,
       description: item.source.productNameSnapshot,
       quantity: decimalString(allocatedQuantity),
       unitCode: profile.satUnitCode,

@@ -579,27 +579,6 @@ export class CfdiIssuanceRepository {
         async (tx) => {
           await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${prepared.invoiceId} FOR UPDATE`;
           await tx.$queryRaw`SELECT "id" FROM "FiscalOperationAttempt" WHERE "id" = ${prepared.attemptId} FOR UPDATE`;
-          if (!unknown) {
-            await tx.invoiceSaleItemApplication.updateMany({
-              where: {
-                invoiceSaleDocument: { invoiceId: prepared.invoiceId },
-                reversedAt: null,
-              },
-              data: {
-                reversedAt: completedAt,
-                reversedByUserId: prepared.actorUserId,
-                reversalReason: failure.code,
-              },
-            });
-            await tx.invoiceSaleDocument.updateMany({
-              where: { invoiceId: prepared.invoiceId, reversedAt: null },
-              data: {
-                reversedAt: completedAt,
-                reversedByUserId: prepared.actorUserId,
-                reversalReason: failure.code,
-              },
-            });
-          }
           await tx.invoice.update({
             where: { id: prepared.invoiceId },
             data: {
