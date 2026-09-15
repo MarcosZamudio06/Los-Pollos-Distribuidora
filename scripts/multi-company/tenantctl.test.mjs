@@ -17,10 +17,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import {
-  main,
-  parseTenantctlArgs,
-} from "./tenantctl.mjs";
+import { main, parseTenantctlArgs } from "./tenantctl.mjs";
 import { validateCompanyManifest } from "./validate-company-manifest.mjs";
 
 const REPOSITORY_ROOT = resolve(
@@ -33,7 +30,7 @@ const MANIFEST_PATH = resolve(
 );
 const SECRET_MARKER = "tenantctl-secret-must-never-be-printed";
 const BACKUP_KEY_PATTERN_FOR_TEST =
-  /^postgres\/[0-9]{4}\/[0-9]{2}\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.dump$/u;
+  /^recovery-sets\/[a-z0-9]+(?:-[a-z0-9]+)*\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z-[0-9]+-[0-9]+\.manifest\.json$/u;
 
 const RESOLVED_SECRETS = {
   database: "db-password_123456",
@@ -166,13 +163,11 @@ function makeComposeConfig(environment, company, mutate) {
           "?sslmode=disable",
         JWT_ACCESS_SECRET: environment.JWT_ACCESS_SECRET,
         JWT_REFRESH_SECRET: environment.JWT_REFRESH_SECRET,
-        OBJECT_STORAGE_ACCESS_KEY_ID:
-          environment.OBJECT_STORAGE_ACCESS_KEY_ID,
+        OBJECT_STORAGE_ACCESS_KEY_ID: environment.OBJECT_STORAGE_ACCESS_KEY_ID,
         OBJECT_STORAGE_SECRET_ACCESS_KEY:
           environment.OBJECT_STORAGE_SECRET_ACCESS_KEY,
         OBJECT_STORAGE_BUCKET: "delivery-evidence",
-        OBJECT_STORAGE_PUBLIC_ENDPOINT:
-          "https://" + company.objectStorageHost,
+        OBJECT_STORAGE_PUBLIC_ENDPOINT: "https://" + company.objectStorageHost,
         CORS_ORIGIN: "https://" + company.erpHost,
         MAP_DATA_VERSION: "mexico-260812",
         TRUST_PROXY_HOPS: "1",
@@ -225,7 +220,7 @@ function makeComposeConfig(environment, company, mutate) {
       },
     };
   }
-  return typeof mutate === "function" ? mutate(config) ?? config : config;
+  return typeof mutate === "function" ? (mutate(config) ?? config) : config;
 }
 
 function makeStream() {
@@ -248,12 +243,13 @@ function createHarness(options = {}) {
   let resolverPath = join(temporaryDirectory, "secret-resolver");
   let envFilePath = join(temporaryDirectory, "company.env");
   const configDirectory = join(temporaryDirectory, "tenant-configs");
-  const companyManifest = options.manifest ?? JSON.parse(
-    readFileSync(MANIFEST_PATH, "utf8"),
-  );
+  const companyManifest =
+    options.manifest ?? JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
   const company =
     options.company ??
-    companyManifest.companies.find((candidate) => candidate.slug === "company-north");
+    companyManifest.companies.find(
+      (candidate) => candidate.slug === "company-north",
+    );
   const outputDirectory = join(realpathSync(temporaryDirectory), company.slug);
   const outputEnvFilePath = join(outputDirectory, ".env.production");
   const outputCaddyFilePath = join(outputDirectory, "Caddyfile.production");
@@ -379,19 +375,49 @@ function createHarness(options = {}) {
 
     if (executable === "bash") {
       assert.equal(spawnOptions.shell, false);
-      const isRestore = args[0].endsWith("restore-postgres-from-b2.sh");
+      const isRestore = args[0].endsWith("restore-company-recovery-set.sh");
+      const isCreateRecoverySet = args[0].endsWith(
+        "create-company-recovery-set.sh",
+      );
+      assert.ok(
+        isRestore || isCreateRecoverySet,
+        "backup operations use company recovery sets",
+      );
       const tenant = companyManifest.companies.find(
         (candidate) =>
           "tenant_" + candidate.slug.replaceAll("-", "_") ===
           spawnOptions.env.BACKUP_POSTGRES_DATABASE,
       );
       assert.ok(tenant, "backup runner must name one manifest tenant database");
-      assert.equal(spawnOptions.env.BACKUP_COMPOSE_PROJECT_NAME, "tenantctl-" + tenant.slug);
+      assert.equal(
+        spawnOptions.env.BACKUP_COMPOSE_PROJECT_NAME,
+        "tenantctl-" + tenant.slug,
+      );
       assert.equal(spawnOptions.env.DOCKER_CONTEXT, tenant.slug + "-prod");
       assert.equal(spawnOptions.env.BACKUP_S3_BUCKET, tenant.backupBucket);
-      const tenantSecrets = options.secretValuesByCompany?.[tenant.slug] ?? secretValues;
-      assert.equal(spawnOptions.env.BACKUP_S3_ACCESS_KEY_ID, tenantSecrets.backup.accessKeyId);
-      assert.equal(spawnOptions.env.BACKUP_S3_SECRET_ACCESS_KEY, tenantSecrets.backup.secretAccessKey);
+      const tenantSecrets =
+        options.secretValuesByCompany?.[tenant.slug] ?? secretValues;
+      assert.equal(
+        spawnOptions.env.BACKUP_S3_ACCESS_KEY_ID,
+        tenantSecrets.backup.accessKeyId,
+      );
+      assert.equal(
+        spawnOptions.env.BACKUP_S3_SECRET_ACCESS_KEY,
+        tenantSecrets.backup.secretAccessKey,
+      );
+      assert.equal(spawnOptions.env.COMPANY_SLUG, tenant.slug);
+      assert.equal(
+        spawnOptions.env.OBJECT_STORAGE_ACCESS_KEY_ID,
+        tenantSecrets.objectStorage.accessKeyId,
+      );
+      assert.equal(
+        spawnOptions.env.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+        tenantSecrets.objectStorage.secretAccessKey,
+      );
+      assert.equal(
+        spawnOptions.env.BACKUP_COMPOSE_ENV_FILE,
+        realpathSync(join(configDirectory, tenant.slug, ".env.production")),
+      );
       const operation = isRestore ? "restore-drill" : "backup";
       tenantEvents.push({ tenant: tenant.slug, operation });
       events.push(operation);
@@ -400,10 +426,15 @@ function createHarness(options = {}) {
           spawnOptions.env.RESTORE_DATABASE_NAME,
           spawnOptions.env.RESTORE_PRODUCTION_DATABASE_NAME,
         );
-        assert.match(spawnOptions.env.RESTORE_DATABASE_NAME, /_restore_drill$/u);
+        assert.match(
+          spawnOptions.env.RESTORE_DATABASE_NAME,
+          /_restore_drill$/u,
+        );
         assert.equal(
           spawnOptions.env.RESTORE_RESULT_DIR,
-          "/var/lib/pollos-distribuidor/" + tenant.slug + "/postgres-backups/restore-drills",
+          "/var/lib/pollos-distribuidor/" +
+            tenant.slug +
+            "/postgres-backups/restore-drills",
         );
       }
       if (operationTimesOut(operation, tenant)) {
@@ -412,12 +443,12 @@ function createHarness(options = {}) {
       if (operationFails(operation, tenant)) {
         return { status: 1, stdout: SECRET_MARKER, stderr: SECRET_MARKER };
       }
-      const key = "postgres/2026/09/2026-09-13T00-00-00Z.dump";
+      const key = `recovery-sets/${tenant.slug}/2026-09-13T00-00-00Z-123-456.manifest.json`;
       return {
         status: 0,
         stdout: isRestore
-          ? `Restore drill passed for ${spawnOptions.env.RESTORE_DATABASE_NAME} using ${key}.\n`
-          : `PostgreSQL backup validated: ${key}\n`,
+          ? `Company restore rehearsal passed for ${spawnOptions.env.RESTORE_DATABASE_NAME} using ${spawnOptions.env.RESTORE_RECOVERY_SET_KEY}.\n`
+          : `Company recovery set validated: ${key}\n`,
         stderr: SECRET_MARKER,
       };
     }
@@ -425,7 +456,10 @@ function createHarness(options = {}) {
     assert.equal(executable, "docker");
     assert.equal(spawnOptions.shell, false);
     const selectedCompany = companyForCompose(args);
-    assert.deepEqual(args.slice(0, 2), ["--context", selectedCompany.slug + "-prod"]);
+    assert.deepEqual(args.slice(0, 2), [
+      "--context",
+      selectedCompany.slug + "-prod",
+    ]);
     assert.ok(args.includes("--project-name"));
     assert.ok(args.includes("tenantctl-" + selectedCompany.slug));
     assert.ok(args.includes("--project-directory"));
@@ -441,11 +475,15 @@ function createHarness(options = {}) {
         ),
     );
     assert.ok(args.includes("--file"));
-    assert.ok(args.includes(resolve(REPOSITORY_ROOT, "docker-compose.production.yml")));
+    assert.ok(
+      args.includes(resolve(REPOSITORY_ROOT, "docker-compose.production.yml")),
+    );
 
     if (args.includes("config")) {
       const selectedEnvFile = args[args.indexOf("--env-file") + 1];
-      events.push(selectedEnvFile === outputEnvFilePath ? "config-generated" : "config");
+      events.push(
+        selectedEnvFile === outputEnvFilePath ? "config-generated" : "config",
+      );
       tenantEvents.push({ tenant: selectedCompany.slug, operation: "config" });
       if (
         operationFails("config", selectedCompany) ||
@@ -455,11 +493,14 @@ function createHarness(options = {}) {
         return { status: 1, stdout: SECRET_MARKER, stderr: SECRET_MARKER };
       }
       const envFileValues = Object.create(null);
-      for (const line of readFileSync(selectedEnvFile, "utf8").split(/\r?\n/u)) {
+      for (const line of readFileSync(selectedEnvFile, "utf8").split(
+        /\r?\n/u,
+      )) {
         const separatorIndex = line.indexOf("=");
         if (separatorIndex > 0) {
-          envFileValues[line.slice(0, separatorIndex)] =
-            line.slice(separatorIndex + 1);
+          envFileValues[line.slice(0, separatorIndex)] = line.slice(
+            separatorIndex + 1,
+          );
         }
       }
       const fakeConfig = makeComposeConfig(
@@ -523,7 +564,8 @@ function createHarness(options = {}) {
               Service,
               State: "running",
               Health:
-                operationFails("readiness", selectedCompany) && Service === "backend"
+                operationFails("readiness", selectedCompany) &&
+                Service === "backend"
                   ? "unhealthy"
                   : "healthy",
               Name: SECRET_MARKER,
@@ -916,13 +958,7 @@ test("tenantctl parser requires a ticket and a second confirmation for sensitive
     /Missing required option: --reason/u,
   );
   assert.throws(
-    () =>
-      parseTenantctlArgs([
-        ...provision,
-        "--apply",
-        "--reason",
-        "MTE-007",
-      ]),
+    () => parseTenantctlArgs([...provision, "--apply", "--reason", "MTE-007"]),
     /requires explicit --confirm/u,
   );
   assert.throws(
@@ -976,10 +1012,7 @@ test("checked-in two-company manifest satisfies the shared contract", () => {
 test("list returns only safe tenant inventory fields without resolving credentials", (t) => {
   const harness = createHarness();
   t.after(harness.cleanup);
-  assert.equal(
-    harness.run(["list", "--manifest", harness.manifestPath]),
-    0,
-  );
+  assert.equal(harness.run(["list", "--manifest", harness.manifestPath]), 0);
   const result = JSON.parse(harness.stdout.text);
   assert.equal(result.command, "list");
   assert.equal(result.status, "succeeded");
@@ -999,7 +1032,11 @@ test("list returns only safe tenant inventory fields without resolving credentia
     .map((line) => JSON.parse(line));
   assert.equal(auditRecords.length, 4);
   assert.ok(auditRecords.every((record) => record.command === "list"));
-  assert.ok(auditRecords.every((record) => record.result === "started" || record.result === "succeeded"));
+  assert.ok(
+    auditRecords.every(
+      (record) => record.result === "started" || record.result === "succeeded",
+    ),
+  );
 });
 
 test("tenant commands append correlated secret-free JSONL audit records outside the repository", (t) => {
@@ -1028,7 +1065,11 @@ test("tenant commands append correlated secret-free JSONL audit records outside 
     assert.equal(record.operator, "test-operator");
     assert.equal(record.command, "status");
     assert.equal(record.runId, result.runId);
-    assert.ok(["development", "staging", "production"].includes(record.targetEnvironment));
+    assert.ok(
+      ["development", "staging", "production"].includes(
+        record.targetEnvironment,
+      ),
+    );
     assert.equal(record.timestamp, new Date(1000).toISOString());
     assert.equal(typeof record.durationMs, "number");
     assert.equal(Object.hasOwn(record, "reason"), false);
@@ -1061,7 +1102,10 @@ test("tenant commands append correlated secret-free JSONL audit records outside 
     assert.equal(contents.includes(secret), false);
   }
   assert.equal(statSync(harness.auditLogPath).mode & 0o077, 0);
-  assert.equal(relative(REPOSITORY_ROOT, harness.auditLogPath).startsWith(".."), true);
+  assert.equal(
+    relative(REPOSITORY_ROOT, harness.auditLogPath).startsWith(".."),
+    true,
+  );
 });
 
 test("sensitive failure audit contains only the ticket reference and result", (t) => {
@@ -1114,7 +1158,10 @@ test("missing operator identity and an in-repository audit path fail before tena
     ),
     1,
   );
-  assert.match(inRepository.stderr.text, /audit log is unavailable or insecure/u);
+  assert.match(
+    inRepository.stderr.text,
+    /audit log is unavailable or insecure/u,
+  );
   assert.equal(inRepository.calls.length, 0);
   assert.equal(existsSync(dirname(inRepositoryLog)), false);
 });
@@ -1126,10 +1173,7 @@ test("audit writes preserve individual partial-batch outcomes", (t) => {
   });
   t.after(harness.cleanup);
 
-  assert.equal(
-    harness.run(batchArguments(harness, "backup", ["--apply"])),
-    1,
-  );
+  assert.equal(harness.run(batchArguments(harness, "backup", ["--apply"])), 1);
   const result = lastJson(harness.stdout);
   const records = readFileSync(harness.auditLogPath, "utf8")
     .trim()
@@ -1151,15 +1195,24 @@ test("audit writes preserve individual partial-batch outcomes", (t) => {
   );
   assert.ok(records.every((record) => record.runId === result.runId));
   assert.ok(records.every((record) => record.reason === "MTE-007"));
-  assert.equal(readFileSync(harness.auditLogPath, "utf8").includes(SECRET_MARKER), false);
+  assert.equal(
+    readFileSync(harness.auditLogPath, "utf8").includes(SECRET_MARKER),
+    false,
+  );
 });
 
 test("audit rejects symlink and group/world-readable log files before tenant work", (t) => {
   const harness = createHarness();
   t.after(harness.cleanup);
   const privateTarget = join(harness.temporaryDirectory, "private-audit.jsonl");
-  const symlinkedLog = join(harness.temporaryDirectory, "symlinked-audit.jsonl");
-  const permissiveLog = join(harness.temporaryDirectory, "permissive-audit.jsonl");
+  const symlinkedLog = join(
+    harness.temporaryDirectory,
+    "symlinked-audit.jsonl",
+  );
+  const permissiveLog = join(
+    harness.temporaryDirectory,
+    "permissive-audit.jsonl",
+  );
   writeFileSync(privateTarget, "existing\n", { mode: 0o600 });
   symlinkSync(privateTarget, symlinkedLog);
   writeFileSync(permissiveLog, "existing\n", { mode: 0o600 });
@@ -1221,7 +1274,9 @@ test("validate resolves external refs and checks digest-pinned Compose without l
     Object.keys(request.secretRefs).sort(),
     ["database", "jwtAccess", "jwtRefresh", "objectStorage"].sort(),
   );
-  const composeCall = harness.calls.find((call) => call.executable === "docker");
+  const composeCall = harness.calls.find(
+    (call) => call.executable === "docker",
+  );
   assert.ok(composeCall.args.includes("--profile"));
   assert.ok(composeCall.args.includes("migration"));
   assert.ok(composeCall.args.includes("config"));
@@ -1279,17 +1334,41 @@ test("provision prepares isolated artifacts and orders validation, migration, bo
   assert.equal(statSync(harness.outputDirectory).mode & 0o777, 0o700);
   assert.match(generatedEnv, /POSTGRES_DB=tenant_company_north/u);
   assert.match(generatedEnv, /BACKUP_S3_BUCKET=company-north-backups/u);
-  assert.match(generatedEnv, /BACKUP_COMPOSE_PROJECT_NAME=tenantctl-company-north/u);
-  assert.match(generatedEnv, /BACKUP_LOCAL_DIR=\/var\/lib\/pollos-distribuidor\/company-north\/postgres-backups/u);
-  assert.match(generatedEnv, /BACKUP_S3_CREDENTIAL_REF=vault:\/\/production\/company-north\/backup/u);
-  assert.match(generatedEnv, /FACTURAMA_CREDENTIAL_REF=docker-secret:\/\/company-north-pac/u);
-  assert.match(generatedEnv, /CSD_CREDENTIAL_REF=vault:\/\/production\/company-north\/csd/u);
+  assert.match(
+    generatedEnv,
+    /BACKUP_COMPOSE_PROJECT_NAME=tenantctl-company-north/u,
+  );
+  assert.match(
+    generatedEnv,
+    /BACKUP_LOCAL_DIR=\/var\/lib\/pollos-distribuidor\/company-north\/postgres-backups/u,
+  );
+  assert.match(
+    generatedEnv,
+    /BACKUP_S3_CREDENTIAL_REF=vault:\/\/production\/company-north\/backup/u,
+  );
+  assert.match(
+    generatedEnv,
+    /FACTURAMA_CREDENTIAL_REF=docker-secret:\/\/company-north-pac/u,
+  );
+  assert.match(
+    generatedEnv,
+    /CSD_CREDENTIAL_REF=vault:\/\/production\/company-north\/csd/u,
+  );
   assert.match(generatedEnv, /CORS_ORIGIN=https:\/\/erp\.north\.example/u);
-  assert.match(generatedEnv, /OBJECT_STORAGE_PUBLIC_ENDPOINT=https:\/\/objects\.north\.example/u);
-  assert.doesNotMatch(generatedEnv, /DATABASE_URL|POSTGRES_PASSWORD|JWT_ACCESS_SECRET|JWT_REFRESH_SECRET|OBJECT_STORAGE_ACCESS_KEY_ID|SEED_ADMIN_PASSWORD/u);
+  assert.match(
+    generatedEnv,
+    /OBJECT_STORAGE_PUBLIC_ENDPOINT=https:\/\/objects\.north\.example/u,
+  );
+  assert.doesNotMatch(
+    generatedEnv,
+    /DATABASE_URL|POSTGRES_PASSWORD|JWT_ACCESS_SECRET|JWT_REFRESH_SECRET|OBJECT_STORAGE_ACCESS_KEY_ID|SEED_ADMIN_PASSWORD/u,
+  );
   assert.match(generatedCaddy, /https:\/\/erp\.north\.example/u);
   assert.match(generatedCaddy, /https:\/\/objects\.north\.example/u);
-  assert.doesNotMatch(generatedCaddy, /erp\.example\.com|objects\.example\.com/u);
+  assert.doesNotMatch(
+    generatedCaddy,
+    /erp\.example\.com|objects\.example\.com/u,
+  );
   for (const value of [
     RESOLVED_SECRETS.database,
     RESOLVED_SECRETS.jwtAccess,
@@ -1304,9 +1383,7 @@ test("provision prepares isolated artifacts and orders validation, migration, bo
     (call) => call.executable === "docker",
   );
   assert.ok(dockerCalls.every((call) => call.args.includes("--context")));
-  assert.ok(
-    dockerCalls.every((call) => call.args.includes("--project-name")),
-  );
+  assert.ok(dockerCalls.every((call) => call.args.includes("--project-name")));
   const pullCall = dockerCalls.find((call) => call.args.includes("pull"));
   assert.ok(pullCall.args.includes("--profile"));
   assert.ok(pullCall.args.includes("migration"));
@@ -1349,6 +1426,81 @@ test("provision prepares isolated artifacts and orders validation, migration, bo
   assert.doesNotMatch(harness.stdout.text, new RegExp(SECRET_MARKER));
 });
 
+test("renders isolated A/B ERP, Object Storage, CSP and HTTP routes with one frontend digest", (t) => {
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+  const companyA = manifest.companies[0];
+  const companyB = manifest.companies[1];
+  const harnessA = createHarness({ manifest, company: companyA });
+  const harnessB = createHarness({ manifest, company: companyB });
+  t.after(harnessA.cleanup);
+  t.after(harnessB.cleanup);
+
+  for (const harness of [harnessA, harnessB]) {
+    assert.equal(
+      harness.run(baseArguments(harness, "provision", ["--apply"])),
+      0,
+      harness.stderr.text,
+    );
+  }
+
+  const caddyA = readFileSync(harnessA.outputCaddyFilePath, "utf8");
+  const caddyB = readFileSync(harnessB.outputCaddyFilePath, "utf8");
+  for (const [caddy, company, other] of [
+    [caddyA, companyA, companyB],
+    [caddyB, companyB, companyA],
+  ]) {
+    assert.ok(caddy.includes("https://" + company.erpHost));
+    assert.ok(caddy.includes("https://" + company.objectStorageHost));
+    assert.ok(
+      caddy.includes(
+        "img-src 'self' data: blob: https://" + company.objectStorageHost + ";",
+      ),
+    );
+    assert.ok(
+      !caddy.includes(company.erpHost === other.erpHost ? "" : other.erpHost),
+    );
+    assert.ok(
+      !caddy.includes(
+        company.objectStorageHost === other.objectStorageHost
+          ? ""
+          : other.objectStorageHost,
+      ),
+    );
+    assert.equal(
+      (caddy.match(/^\s*>Content-Security-Policy /gm) ?? []).length,
+      1,
+    );
+    assert.equal(
+      (caddy.match(/header_down -Content-Security-Policy/g) ?? []).length,
+      1,
+    );
+    assert.ok(caddy.includes("reverse_proxy 127.0.0.1:3000"));
+    assert.ok(caddy.includes("reverse_proxy 127.0.0.1:8333"));
+  }
+
+  const frontendDigestA = readFileSync(
+    harnessA.outputEnvFilePath,
+    "utf8",
+  ).match(/^FRONTEND_IMAGE=(.+)$/mu)?.[1];
+  const frontendDigestB = readFileSync(
+    harnessB.outputEnvFilePath,
+    "utf8",
+  ).match(/^FRONTEND_IMAGE=(.+)$/mu)?.[1];
+  assert.ok(frontendDigestA?.includes("@sha256:"));
+  assert.equal(frontendDigestA, frontendDigestB);
+  const frontendGateway = readFileSync(
+    resolve(REPOSITORY_ROOT, "docker/frontend/Dockerfile"),
+    "utf8",
+  );
+  assert.match(frontendGateway, /location \/api\/socket\.io \{/u);
+  assert.match(
+    frontendGateway,
+    /proxy_pass http:\/\/backend:4000\/api\/socket\.io;/u,
+  );
+  assert.match(frontendGateway, /proxy_set_header Upgrade \$http_upgrade;/u);
+  assert.match(frontendGateway, /proxy_set_header Connection "upgrade";/u);
+});
+
 test("tenant output must stay outside the repository and use a tenant-specific directory", (t) => {
   const harness = createHarness();
   t.after(harness.cleanup);
@@ -1366,14 +1518,15 @@ test("generated tenant config replacement requires an explicit flag and preserve
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
   const harness = createHarness({ manifest });
   t.after(harness.cleanup);
-  const provisionArgs = () =>
-    baseArguments(harness, "provision", ["--apply"]);
+  const provisionArgs = () => baseArguments(harness, "provision", ["--apply"]);
 
   assert.equal(harness.run(provisionArgs()), 0);
   const originalCaddy = readFileSync(harness.outputCaddyFilePath, "utf8");
 
   manifest.companies[0].erpHost = "erp.north-updated.example";
-  writeFileSync(harness.manifestPath, JSON.stringify(manifest), { mode: 0o600 });
+  writeFileSync(harness.manifestPath, JSON.stringify(manifest), {
+    mode: 0o600,
+  });
   writeFileSync(
     harness.envFilePath,
     makeExternalConfig(harness.company) + "\n",
@@ -1385,18 +1538,27 @@ test("generated tenant config replacement requires an explicit flag and preserve
   assert.equal(harness.run(provisionArgs()), 1);
   assert.deepEqual(harness.events, ["resolver", "config", "caddy-validate"]);
   assert.match(harness.stderr.text, /pass --replace-generated-config/);
-  assert.equal(readFileSync(harness.outputCaddyFilePath, "utf8"), originalCaddy);
+  assert.equal(
+    readFileSync(harness.outputCaddyFilePath, "utf8"),
+    originalCaddy,
+  );
 
   harness.events.length = 0;
   harness.calls.length = 0;
   harness.stderr.text = "";
   assert.equal(
     harness.run(
-      baseArguments(harness, "provision", ["--apply", "--replace-generated-config"]),
+      baseArguments(harness, "provision", [
+        "--apply",
+        "--replace-generated-config",
+      ]),
     ),
     0,
   );
-  assert.notEqual(readFileSync(harness.outputCaddyFilePath, "utf8"), originalCaddy);
+  assert.notEqual(
+    readFileSync(harness.outputCaddyFilePath, "utf8"),
+    originalCaddy,
+  );
   assert.ok(
     readdirSync(harness.outputDirectory).some((name) =>
       name.startsWith(".tenantctl-rollback-"),
@@ -1539,7 +1701,8 @@ test("migrate and bootstrap always use the selected tenant database", (t) => {
       assert.equal(call.options.env.POSTGRES_DB, "tenant_company_north");
     }
     assert.ok(harness.events.includes("migrate"));
-    if (command === "bootstrap") assert.ok(harness.events.includes("bootstrap"));
+    if (command === "bootstrap")
+      assert.ok(harness.events.includes("bootstrap"));
   }
 });
 
@@ -1573,16 +1736,17 @@ test("two tenants derive different database and Compose project identities", (t)
     0,
     south.stderr.text,
   );
-  const northDockerCall = north.calls.find((call) => call.executable === "docker");
-  const southDockerCall = south.calls.find((call) => call.executable === "docker");
+  const northDockerCall = north.calls.find(
+    (call) => call.executable === "docker",
+  );
+  const southDockerCall = south.calls.find(
+    (call) => call.executable === "docker",
+  );
   assert.ok(northDockerCall.args.includes("tenantctl-company-north"));
   assert.ok(southDockerCall.args.includes("tenantctl-company-south"));
   assert.equal(northDockerCall.options.env.POSTGRES_DB, "tenant_company_north");
   assert.equal(southDockerCall.options.env.POSTGRES_DB, "tenant_company_south");
-  assert.notEqual(
-    northDockerCall.args[1],
-    southDockerCall.args[1],
-  );
+  assert.notEqual(northDockerCall.args[1], southDockerCall.args[1]);
 });
 
 test("readiness failure blocks smoke and secret output remains suppressed", (t) => {
@@ -1628,9 +1792,13 @@ test("smoke failure is reported and does not trigger destructive rollback", (t) 
   ]);
   assert.match(harness.stderr.text, /Production tenant smoke check failed/u);
   assert.doesNotMatch(harness.stderr.text, new RegExp(SECRET_MARKER));
-  const dockerCalls = harness.calls.filter((call) => call.executable === "docker");
+  const dockerCalls = harness.calls.filter(
+    (call) => call.executable === "docker",
+  );
   assert.equal(
-    dockerCalls.some((call) => call.args.includes("down") || call.args.includes("volume")),
+    dockerCalls.some(
+      (call) => call.args.includes("down") || call.args.includes("volume"),
+    ),
     false,
   );
 });
@@ -1638,7 +1806,10 @@ test("smoke failure is reported and does not trigger destructive rollback", (t) 
 test("bootstrap always aborts before bootstrap when migration fails", (t) => {
   const harness = createHarness({ failOperation: "migrate" });
   t.after(harness.cleanup);
-  assert.equal(harness.run(baseArguments(harness, "bootstrap", ["--apply"])), 1);
+  assert.equal(
+    harness.run(baseArguments(harness, "bootstrap", ["--apply"])),
+    1,
+  );
   assert.deepEqual(harness.events, ["resolver", "config", "migrate"]);
   assert.match(harness.stderr.text, /Production migration failed/);
   assert.doesNotMatch(harness.stderr.text, new RegExp(SECRET_MARKER));
@@ -1661,10 +1832,7 @@ test("provision aborts after migration or bootstrap failure", (t) => {
     "pull",
     "migrate",
   ]);
-  assert.doesNotMatch(
-    migrationFailure.stderr.text,
-    new RegExp(SECRET_MARKER),
-  );
+  assert.doesNotMatch(migrationFailure.stderr.text, new RegExp(SECRET_MARKER));
 
   const bootstrapFailure = createHarness({ failOperation: "bootstrap" });
   t.after(bootstrapFailure.cleanup);
@@ -1683,10 +1851,7 @@ test("provision aborts after migration or bootstrap failure", (t) => {
     "migrate",
     "bootstrap",
   ]);
-  assert.doesNotMatch(
-    bootstrapFailure.stderr.text,
-    new RegExp(SECRET_MARKER),
-  );
+  assert.doesNotMatch(bootstrapFailure.stderr.text, new RegExp(SECRET_MARKER));
 });
 
 test("status reads Compose status and emits a structured allowlisted projection", (t) => {
@@ -1704,7 +1869,9 @@ test("status reads Compose status and emits a structured allowlisted projection"
     { service: "backend", state: "running", health: "healthy" },
   );
   assert.deepEqual(
-    result.results[0].services.find((service) => service.service === "postgres"),
+    result.results[0].services.find(
+      (service) => service.service === "postgres",
+    ),
     { service: "postgres", state: "running", health: "healthy" },
   );
   assert.doesNotMatch(harness.stdout.text, new RegExp(SECRET_MARKER));
@@ -1829,10 +1996,7 @@ test("batch migration fails before mutation when a tenant release differs from t
     { mode: 0o600 },
   );
 
-  assert.equal(
-    harness.run(batchArguments(harness, "migrate", ["--apply"])),
-    1,
-  );
+  assert.equal(harness.run(batchArguments(harness, "migrate", ["--apply"])), 1);
   const result = lastJson(harness.stdout);
   assert.equal(result.results[1].tenant, "company-south");
   assert.equal(result.results[1].status, "failed");
@@ -1879,10 +2043,7 @@ test("failed canary blocks batch mutation and leaves every other tenant untouche
   assert.equal(evidence.status, "failed");
   const operationCountAfterCanary = harness.calls.length;
 
-  assert.equal(
-    harness.run(batchArguments(harness, "migrate", ["--apply"])),
-    1,
-  );
+  assert.equal(harness.run(batchArguments(harness, "migrate", ["--apply"])), 1);
   const batch = lastJson(harness.stdout);
   assert.equal(batch.errorCode, "canary_required");
   assert.equal(batch.results[1].tenant, "company-south");
@@ -1909,10 +2070,7 @@ test("partial migration preserves completed tenants and never auto-rolls back", 
     harness.stdout.text + harness.stderr.text,
   );
 
-  assert.equal(
-    harness.run(batchArguments(harness, "migrate", ["--apply"])),
-    1,
-  );
+  assert.equal(harness.run(batchArguments(harness, "migrate", ["--apply"])), 1);
   const result = lastJson(harness.stdout);
   assert.equal(result.status, "failed");
   assert.deepEqual(
@@ -2025,10 +2183,7 @@ test("backup batch reports partial failure and only continues when opted in", (t
     failOperation: "backup:company-north",
   });
   t.after(harness.cleanup);
-  assert.equal(
-    harness.run(batchArguments(harness, "backup", ["--apply"])),
-    1,
-  );
+  assert.equal(harness.run(batchArguments(harness, "backup", ["--apply"])), 1);
   const result = lastJson(harness.stdout);
   assert.deepEqual(
     result.results.map((row) => [row.tenant, row.database, row.status]),
@@ -2065,7 +2220,9 @@ test("backup batch reports partial failure and only continues when opted in", (t
     ],
   );
   assert.deepEqual(
-    continuingHarness.tenantEvents.filter((event) => event.operation === "backup"),
+    continuingHarness.tenantEvents.filter(
+      (event) => event.operation === "backup",
+    ),
     [
       { tenant: "company-north", operation: "backup" },
       { tenant: "company-south", operation: "backup" },
@@ -2121,14 +2278,22 @@ test("backup and restore-drill use isolated tenant namespaces and temporary data
   );
   const backupResult = lastJson(backupHarness.stdout);
   assert.deepEqual(
-    backupResult.results.map((row) => [row.tenant, row.database, row.backupNamespace]),
+    backupResult.results.map((row) => [
+      row.tenant,
+      row.database,
+      row.backupNamespace,
+    ]),
     [
       ["company-north", "tenant_company_north", "company-north-backups"],
       ["company-south", "tenant_company_south", "company-south-backups"],
     ],
   );
   assert.ok(backupResult.results.every((row) => row.status === "succeeded"));
-  assert.ok(backupResult.results.every((row) => BACKUP_KEY_PATTERN_FOR_TEST.test(row.backupKey)));
+  assert.ok(
+    backupResult.results.every((row) =>
+      BACKUP_KEY_PATTERN_FOR_TEST.test(row.backupKey),
+    ),
+  );
   assert.deepEqual(
     backupHarness.tenantEvents.filter((event) => event.operation === "backup"),
     [
@@ -2161,7 +2326,9 @@ test("backup and restore-drill use isolated tenant namespaces and temporary data
     2,
   );
   assert.deepEqual(
-    restoreHarness.tenantEvents.filter((event) => event.operation === "restore-drill"),
+    restoreHarness.tenantEvents.filter(
+      (event) => event.operation === "restore-drill",
+    ),
     [
       { tenant: "company-north", operation: "restore-drill" },
       { tenant: "company-south", operation: "restore-drill" },
@@ -2216,10 +2383,7 @@ test("database secrets incompatible with Compose URL construction fail closed", 
   };
   const harness = createHarness({ secretValues });
   t.after(harness.cleanup);
-  assert.equal(
-    harness.run(baseArguments(harness, "migrate", ["--apply"])),
-    1,
-  );
+  assert.equal(harness.run(baseArguments(harness, "migrate", ["--apply"])), 1);
   assert.deepEqual(harness.events, ["resolver"]);
   const result = lastJson(harness.stdout);
   assert.equal(result.results[0].status, "failed");
@@ -2266,8 +2430,7 @@ test("relative company map paths fail before external secret resolution", (t) =>
     makeExternalConfig(harness.company).replace(
       "MAP_DATA_DIR=/srv/pollos/maps",
       "MAP_DATA_DIR=relative/maps",
-    ) +
-      "\n",
+    ) + "\n",
     { mode: 0o600 },
   );
   assert.equal(harness.run(baseArguments(harness, "validate")), 1);
@@ -2306,8 +2469,7 @@ test("missing manifest references and target mismatch fail closed", (t) => {
     makeExternalConfig(mismatchHarness.company).replace(
       mismatchHarness.company.deploymentHostRef,
       "host://production/another-company",
-    ) +
-      "\n",
+    ) + "\n",
     { mode: 0o600 },
   );
   assert.equal(
@@ -2347,9 +2509,7 @@ test("mutable images and company-domain mismatch stop before any mutation", (t) 
   });
   t.after(domainHarness.cleanup);
   assert.equal(
-    domainHarness.run(
-      baseArguments(domainHarness, "provision", ["--apply"]),
-    ),
+    domainHarness.run(baseArguments(domainHarness, "provision", ["--apply"])),
     1,
   );
   assert.deepEqual(domainHarness.events, ["resolver", "config"]);
@@ -2388,9 +2548,15 @@ test("help is read-only and advertises the tenant operations", (t) => {
 });
 
 test("tenantctl shell entrypoint is executable and delegates to the Node CLI", () => {
-  const launcherPath = resolve(REPOSITORY_ROOT, "scripts/multi-company/tenantctl");
+  const launcherPath = resolve(
+    REPOSITORY_ROOT,
+    "scripts/multi-company/tenantctl",
+  );
   const launcher = readFileSync(launcherPath, "utf8");
   assert.notEqual(statSync(launcherPath).mode & 0o111, 0);
   assert.match(launcher, /^#!\/bin\/sh/u);
-  assert.match(launcher, /exec node "\$SCRIPT_DIRECTORY\/tenantctl\.mjs" "\$@"/u);
+  assert.match(
+    launcher,
+    /exec node "\$SCRIPT_DIRECTORY\/tenantctl\.mjs" "\$@"/u,
+  );
 });

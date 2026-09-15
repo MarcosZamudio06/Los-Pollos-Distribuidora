@@ -80,6 +80,22 @@ RESTORE_DATABASE_URL=postgresql://user:password@postgres:5432/pollo_distribucion
 - Los límites HTTP deben ser enteros positivos y probarse con la carga real de
   terminales POS antes de liberar producción.
 
+## Configuración externa por empresa (MTE)
+
+- Cada empresa consume un archivo de entorno privado y referencias de secretos
+  propios. `TENANT_SLUG` identifica el despliegue/control plane; no es una
+  columna, claim JWT, parámetro API ni selector de base de datos.
+- PostgreSQL, JWT access/refresh, Object Storage, respaldo y PAC usan límites y
+  credenciales independientes por empresa. Los valores secretos no se
+  escriben en el manifest, las imágenes, GitHub artifacts ni logs.
+- `OBJECT_STORAGE_PUBLIC_ORIGIN` es un argumento de build del frontend, no una
+  configuración por ejecución. El artefacto frontend se construye una vez; el
+  Caddy de cada empresa elimina el CSP upstream y emite el CSP autoritativo con
+  su Object Storage host. No se debilitan las demás directivas.
+- `SEED_CEDIS_CODE` y las demás variables `SEED_*` conservan su contrato actual
+  de bootstrap. La suite multiempresa obtiene el CEDIS desde `SEED_CEDIS_CODE`;
+  el MTE no agrega asignaciones ni defaults de negocio al bootstrap.
+
 ## CFDI 4.0 nativo — configuración segura
 
 ```env

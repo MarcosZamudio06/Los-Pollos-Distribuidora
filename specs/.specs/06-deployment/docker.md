@@ -48,7 +48,7 @@ Debe:
 - Iniciar aplicación.
 
 No debe ejecutar migraciones al arrancar. El mismo artefacto de imagen se usa
-en un job único y explícito que ejecuta `pnpm run migrate:deploy` antes de
+en un job único y explícito que ejecuta `npm run migrate:deploy` antes de
 desplegar nuevas réplicas.
 
 ## Frontend Dockerfile
@@ -93,3 +93,24 @@ docker compose -f docker-compose.production.yml --profile migration run --rm boo
 docker compose -f docker-compose.production.yml up -d \
   postgres photon osrm vroom tileserver backend frontend
 ```
+
+## Compose por empresa (MTE)
+
+La configuración de producción conserva un proyecto Compose independiente por
+empresa; cada proyecto aísla red y volúmenes sin cambiar los servicios de
+negocio. El frontend y el backend usan los mismos digests inmutables en todos
+los proyectos. El despliegue por empresa usa `up --no-build` y nunca construye
+una imagen por slug.
+
+El Caddy del proyecto/host publica solo los dominios de esa empresa. Para el
+ERP enruta HTTP y el upgrade de `/api/socket.io` a su frontend; el frontend
+mantiene el proxy interno existente hacia su backend. Para Object Storage
+preserva `Host`, path y query de URLs firmadas. En el dominio ERP, Caddy elimina
+el `Content-Security-Policy` recibido de Nginx y emite exactamente uno con el
+Object Storage host de esa empresa. Las demás directivas CSP conservan los
+valores aprobados; el frontend no se reconstruye por empresa.
+
+En los harnesses MTE que mantengan servicios Compose iniciados con `run
+--detach`, se debe pasar `--use-aliases` para preservar el DNS de servicio
+requerido por los contenedores persistentes. No se cambia el bootstrap
+productivo para acomodar fixtures de prueba.

@@ -11,7 +11,7 @@ UNUSED_IMAGE="ghcr.io/example/mte-isolation-unused@sha256:0000000000000000000000
 export OPENSSL_CONF="${OPENSSL_CONF:-/dev/null}"
 
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
-  echo "Docker Compose v2 is required for the MTE-005 disposable isolation gate." >&2
+  echo "Docker Compose v2 is required for the MTE-007 disposable isolation gate." >&2
   exit 1
 fi
 if ! docker image inspect "$BACKEND_IMAGE" >/dev/null 2>&1; then
@@ -44,10 +44,10 @@ OBJECT_STORAGE_ACCESS_KEY_ID_A="$(random_hex 24)"
 OBJECT_STORAGE_ACCESS_KEY_ID_B="$(random_hex 24)"
 OBJECT_STORAGE_SECRET_ACCESS_KEY_A="$(random_hex 48)"
 OBJECT_STORAGE_SECRET_ACCESS_KEY_B="$(random_hex 48)"
-CEDIS_CODE_A="mte-$RUN_ID-a-cedis"
-CEDIS_CODE_B="mte-$RUN_ID-b-cedis"
-LOCATION_CODE_A="mte-$RUN_ID-a-branch"
-LOCATION_CODE_B="mte-$RUN_ID-b-branch"
+SEED_CEDIS_CODE_A="mte-$RUN_ID-a-cedis"
+SEED_CEDIS_CODE_B="mte-$RUN_ID-b-cedis"
+SEED_LOCATION_CODE_A="mte-$RUN_ID-a-branch"
+SEED_LOCATION_CODE_B="mte-$RUN_ID-b-branch"
 OBJECT_STORAGE_BUCKET_A="mte-isolation-a-$RUN_ID"
 OBJECT_STORAGE_BUCKET_B="mte-isolation-b-$RUN_ID"
 
@@ -142,6 +142,7 @@ start_service() {
   local container_id
 
   if ! compose "$project" "$env_file" run \
+    --use-aliases \
     --detach \
     --no-deps \
     --publish "127.0.0.1::${container_port}" \
@@ -230,7 +231,7 @@ snapshot_tenant_b() {
   sql="$(cat <<SQL
 SELECT json_build_object(
   'admin', (SELECT json_build_object('email', "email", 'name', "name", 'controlNumber', "controlNumber", 'mustChangePassword', "mustChangePassword") FROM "User" WHERE "email" = '$ADMIN_EMAIL'),
-  'locations', (SELECT json_agg(json_build_object('code', "code", 'name', "name", 'parentId', "parentId", 'type', "type") ORDER BY "code") FROM "OperationalLocation" WHERE "code" IN ('$CEDIS_CODE_B', '$LOCATION_CODE_B')),
+  'locations', (SELECT json_agg(json_build_object('code', "code", 'name', "name", 'parentId', "parentId", 'type', "type") ORDER BY "code") FROM "OperationalLocation" WHERE "code" IN ('$SEED_CEDIS_CODE_B', '$SEED_LOCATION_CODE_B')),
   'roles', (SELECT json_agg(json_build_object('name', "name", 'description', "description") ORDER BY "name") FROM "Role"),
   'users', (SELECT COUNT(*) FROM "User")
 )::text;
@@ -324,11 +325,11 @@ trap cleanup EXIT INT TERM
 write_tenant_env A "$ENV_A" \
   "$POSTGRES_PASSWORD_A" "$JWT_ACCESS_SECRET_A" "$JWT_REFRESH_SECRET_A" \
   "$OBJECT_STORAGE_ACCESS_KEY_ID_A" "$OBJECT_STORAGE_SECRET_ACCESS_KEY_A" \
-  "$BOOTSTRAP_PASSWORD_A" "$CEDIS_CODE_A" "$LOCATION_CODE_A"
+  "$BOOTSTRAP_PASSWORD_A" "$SEED_CEDIS_CODE_A" "$SEED_LOCATION_CODE_A"
 write_tenant_env B "$ENV_B" \
   "$POSTGRES_PASSWORD_B" "$JWT_ACCESS_SECRET_B" "$JWT_REFRESH_SECRET_B" \
   "$OBJECT_STORAGE_ACCESS_KEY_ID_B" "$OBJECT_STORAGE_SECRET_ACCESS_KEY_B" \
-  "$BOOTSTRAP_PASSWORD_B" "$CEDIS_CODE_B" "$LOCATION_CODE_B"
+  "$BOOTSTRAP_PASSWORD_B" "$SEED_CEDIS_CODE_B" "$SEED_LOCATION_CODE_B"
 
 run_logged "TENANT_A production Compose validation" compose "$PROJECT_A" "$ENV_A" config --quiet
 run_logged "TENANT_B production Compose validation" compose "$PROJECT_B" "$ENV_B" config --quiet
@@ -396,6 +397,16 @@ echo "Starting two separate production backend containers from the same backend 
 BACKEND_A_CONTAINER="$(start_service "$PROJECT_A" "$ENV_A" backend 4000)"
 BACKEND_B_CONTAINER="$(start_service "$PROJECT_B" "$ENV_B" backend 4000)"
 [[ "$BACKEND_A_CONTAINER" != "$BACKEND_B_CONTAINER" ]]
+BACKEND_IMAGE_DIGEST="$(docker image inspect --format '{{.Id}}' "$BACKEND_IMAGE")"
+BACKEND_A_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$BACKEND_A_CONTAINER")"
+BACKEND_B_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$BACKEND_B_CONTAINER")"
+if [[ ! "$BACKEND_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ||
+  "$BACKEND_A_IMAGE_ID" != "$BACKEND_IMAGE_DIGEST" ||
+  "$BACKEND_B_IMAGE_ID" != "$BACKEND_IMAGE_DIGEST" ]]; then
+  echo "Tenant backends did not start from one immutable image identity." >&2
+  exit 1
+fi
+echo "PASS: both company backends use image digest $BACKEND_IMAGE_DIGEST."
 wait_healthy "$BACKEND_A_CONTAINER" 'TENANT_A backend' 180
 wait_healthy "$BACKEND_B_CONTAINER" 'TENANT_B backend' 180
 BACKEND_PORT_A="$(host_port "$BACKEND_A_CONTAINER" 4000)"
@@ -425,15 +436,14 @@ export MTE_TENANT_A_BOOTSTRAP_PASSWORD="$BOOTSTRAP_PASSWORD_A"
 export MTE_TENANT_B_BOOTSTRAP_PASSWORD="$BOOTSTRAP_PASSWORD_B"
 export MTE_TENANT_A_ADMIN_PASSWORD="$ADMIN_PASSWORD_A"
 export MTE_TENANT_B_ADMIN_PASSWORD="$ADMIN_PASSWORD_B"
-export MTE_TENANT_A_CEDIS_CODE="$CEDIS_CODE_A"
-export MTE_TENANT_B_CEDIS_CODE="$CEDIS_CODE_B"
-export MTE_TENANT_A_LOCATION_CODE="$LOCATION_CODE_A"
-export MTE_TENANT_B_LOCATION_CODE="$LOCATION_CODE_B"
+export MTE_TENANT_A_SEED_CEDIS_CODE="$SEED_CEDIS_CODE_A"
+export MTE_TENANT_B_SEED_CEDIS_CODE="$SEED_CEDIS_CODE_B"
+export MTE_TENANT_A_SEED_LOCATION_CODE="$SEED_LOCATION_CODE_A"
+export MTE_TENANT_B_SEED_LOCATION_CODE="$SEED_LOCATION_CODE_B"
 
-echo "Running the MTE-005 real PostgreSQL and cross-data-plane contract suite."
-run_logged "MTE-005 tenant isolation integration tests" \
-  pnpm --dir "$ROOT_DIR/backend" \
-  --config.verify-deps-before-run=false exec jest \
+echo "Running the MTE-007 real PostgreSQL and cross-data-plane contract suite."
+run_logged "MTE-007 tenant isolation integration tests" \
+  npm --prefix "$ROOT_DIR/backend" exec -- jest \
   --config test/jest-multi-company-isolation.json \
   --runInBand
 

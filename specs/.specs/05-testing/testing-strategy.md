@@ -599,3 +599,42 @@ ObjectStorage y evidencia del sandbox Facturama.
   PR, `main`, `npm test` o el `test:e2e` normal.
 - Backend/frontend typecheck, Docker build, dependency audit, gitleaks y los
   thresholds preexistentes siguen siendo requisitos; CFDI no reduce ningún gate.
+
+## Aislamiento multiempresa y evidencia de release (MTE-000 a MTE-007)
+
+La suite MTE es adicional a los quality gates existentes; no los sustituye ni
+reduce. El harness real A/B debe mantener dos PostgreSQL/PostGIS, dos Object
+Storage, dos secretos JWT access/refresh y el mismo digest de backend en ambas
+empresas. Los datos de bootstrap se obtienen de las variables `SEED_*`
+existentes, incluido `SEED_CEDIS_CODE`; las aserciones se limitan a las
+asignaciones de bootstrap ya contractuales. No se modifica el bootstrap
+productivo para acomodar fixtures.
+
+La matriz mínima de aislamiento negativo verifica:
+
+- access token y refresh token emitidos por A rechazados en B;
+- handshake/eventos Socket.IO de A no autenticados ni entregados por B;
+- URLs firmadas y objetos A inaccesibles con las credenciales y el endpoint B;
+- PAC fake independiente por empresa, sin acceso al PAC real, con secretos,
+  intentos y artefactos fiscales persistidos solo en la base de la empresa que
+  los originó.
+
+La aceptación de Caddy genera y contrasta configuraciones A/B para host ERP,
+host Object Storage, header CSP, proxy HTTP y upgrade Socket.IO. Caddy elimina
+el CSP upstream de Nginx, establece exactamente un CSP que permite el host
+Object Storage de su empresa y conserva todas las demás directivas aprobadas.
+Una sola imagen frontend/digest sirve ambas empresas sin rebuild por tenant.
+
+La evidencia MTE-007 debe incluir: dual-company real stack; Auth, POS, CEDIS,
+DRIVER/fleet y payments; CFDI solo con fake PAC; regresión single-company;
+browser smoke real; rehearsal de backup/restore completo y digest rollback por
+empresa. Las pruebas cross-company no usan PAC real ni API mocks para demostrar
+la frontera de datos.
+
+Un recovery-set rehearsal valida slug de empresa, release digests, schema
+state, timestamps, tamaños y checksums de PostgreSQL/PostGIS y Object Storage.
+El restore opera en un target desechable, verifica PostGIS, evidencia de
+delivery, artefactos fiscales y objetos referenciados, y rechaza mismatch,
+manifest/archivo ausente o corrupción antes de mutar el destino. `COMPLETED`
+requiere resultado ejecutado y reproducible; scripts, contratos estáticos o
+tests unitarios por sí solos no lo prueban.

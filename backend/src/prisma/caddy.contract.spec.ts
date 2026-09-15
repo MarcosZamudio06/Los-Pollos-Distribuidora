@@ -35,7 +35,24 @@ describe('production Caddy contract', () => {
       expect(caddyfile).not.toContain(forbiddenUpstream);
     }
 
-    expect(activeConfig).not.toMatch(/\b(?:rewrite|uri|handle_path)\b/);
+    expect(activeConfig).not.toMatch(/^\s*(?:rewrite|uri|handle_path)\b/m);
+  });
+
+  it('replaces the upstream CSP with the tenant Object Storage host only', () => {
+    const caddyfile = readFileSync(caddyfilePath, 'utf8');
+    const cspHeaders = caddyfile.match(/Content-Security-Policy/g) ?? [];
+    const emittedPolicy = caddyfile.match(
+      /^\s*>Content-Security-Policy "([^"]+)"$/m,
+    );
+
+    expect(
+      caddyfile.match(/header_down -Content-Security-Policy/g),
+    ).toHaveLength(1);
+    expect(caddyfile.match(/^\s*>Content-Security-Policy /gm)).toHaveLength(1);
+    expect(cspHeaders).toHaveLength(2);
+    expect(emittedPolicy?.[1]).toBe(
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__OBJECT_STORAGE_CSP_HOST__; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';",
+    );
   });
 
   it('keeps the forwarded HTTPS scheme through the frontend Nginx gateway', () => {
@@ -48,6 +65,16 @@ describe('production Caddy contract', () => {
     ).toHaveLength(3);
     expect(frontendDockerfile).not.toContain(
       'proxy_set_header X-Forwarded-Proto $scheme;',
+    );
+    expect(frontendDockerfile).toContain('location /api/socket.io {');
+    expect(frontendDockerfile).toContain(
+      'proxy_pass http://backend:4000/api/socket.io;',
+    );
+    expect(frontendDockerfile).toContain(
+      'proxy_set_header Upgrade $http_upgrade;',
+    );
+    expect(frontendDockerfile).toContain(
+      'proxy_set_header Connection "upgrade";',
     );
   });
 });

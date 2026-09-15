@@ -1,7 +1,16 @@
 import { ConfigService } from '@nestjs/config';
-import { PrismaClient } from '@prisma/client';
+import {
+  CfdiDocumentType,
+  FiscalArtifactStatus,
+  FiscalArtifactType,
+  InvoiceFiscalStatus,
+  InvoiceOrigin,
+  PrismaClient,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { ObjectStorageService } from '../src/modules/object-storage/object-storage.service';
+import { FakeFiscalProvider } from '../src/modules/cfdi/testing/fake-fiscal-provider';
+import type { FiscalIssueCommand } from '../src/modules/cfdi/domain/fiscal-provider.port';
 
 type TenantName = 'A' | 'B';
 
@@ -15,11 +24,19 @@ type TenantPlane = {
   storageSecretAccessKey: string;
   bootstrapPassword: string;
   adminPassword: string;
-  cedisCode: string;
-  locationCode: string;
+  seedCedisCode: string;
+  seedLocationCode: string;
 };
 
 type ApiLogin = { data?: { accessToken?: unknown } };
+type TenantFiscalFixture = {
+  providerKey: string;
+  invoiceId: string;
+  uuid: string;
+  storageKey: string;
+  sha256: string;
+  fakeProvider: FakeFiscalProvider;
+};
 
 function requiredEnvironmentValue(key: string): string {
   const value = process.env[key]?.trim();
@@ -41,12 +58,10 @@ function readTenantPlane(name: TenantName): TenantPlane {
     storageSecretAccessKey: requiredEnvironmentValue(
       `${prefix}_OBJECT_STORAGE_SECRET_ACCESS_KEY`,
     ),
-    bootstrapPassword: requiredEnvironmentValue(
-      `${prefix}_BOOTSTRAP_PASSWORD`,
-    ),
+    bootstrapPassword: requiredEnvironmentValue(`${prefix}_BOOTSTRAP_PASSWORD`),
     adminPassword: requiredEnvironmentValue(`${prefix}_ADMIN_PASSWORD`),
-    cedisCode: requiredEnvironmentValue(`${prefix}_CEDIS_CODE`),
-    locationCode: requiredEnvironmentValue(`${prefix}_LOCATION_CODE`),
+    seedCedisCode: requiredEnvironmentValue(`${prefix}_SEED_CEDIS_CODE`),
+    seedLocationCode: requiredEnvironmentValue(`${prefix}_SEED_LOCATION_CODE`),
   };
 }
 
@@ -79,6 +94,8 @@ let cedisIdA = '';
 let saleIdA = '';
 let vehicleIdA = '';
 let driverEmailA = '';
+let fiscalFixtureA: TenantFiscalFixture;
+let fiscalFixtureB: TenantFiscalFixture;
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   try {
@@ -115,12 +132,106 @@ async function login(
   return token;
 }
 
+async function loginWithRefreshCookie(plane: TenantPlane): Promise<{
+  accessToken: string;
+  refreshCookie: string;
+}> {
+  const response = await request(`${plane.apiUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: adminEmail, password: plane.adminPassword }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Tenant ${plane.name} refresh-cookie login failed: ${response.status}`,
+    );
+  }
+  const payload = (await response.json()) as ApiLogin;
+  const accessToken = payload.data?.accessToken;
+  const setCookie = response.headers.get('set-cookie') ?? '';
+  const refreshToken = /(?:^|[,;]\s*)refresh_token=([^;,\s]+)/u.exec(
+    setCookie,
+  )?.[1];
+  if (typeof accessToken !== 'string' || !refreshToken) {
+    throw new Error(`Tenant ${plane.name} did not issue a refresh cookie`);
+  }
+  return { accessToken, refreshCookie: `refresh_token=${refreshToken}` };
+}
+
+async function openFleetSocketNamespace(
+  plane: TenantPlane,
+  token: string,
+): Promise<{ url: URL; sid: string; packets: string[] }> {
+  const url = new URL('/api/socket.io/', plane.apiUrl);
+  url.searchParams.set('EIO', '4');
+  url.searchParams.set('transport', 'polling');
+  url.searchParams.set('t', `${Date.now()}-${plane.name}`);
+  const openResponse = await request(url.toString(), {
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!openResponse.ok) {
+    throw new Error(`Tenant ${plane.name} Socket.IO engine did not open`);
+  }
+  const openPacket = (await openResponse.text()).split('\u001e')[0] ?? '';
+  if (!openPacket.startsWith('0')) {
+    throw new Error(
+      `Tenant ${plane.name} Socket.IO engine returned an invalid opening packet`,
+    );
+  }
+  const sid = (JSON.parse(openPacket.slice(1)) as { sid?: unknown }).sid;
+  if (typeof sid !== 'string' || !sid) {
+    throw new Error(
+      `Tenant ${plane.name} Socket.IO engine omitted its session id`,
+    );
+  }
+  url.searchParams.set('sid', sid);
+  const connectResponse = await request(url.toString(), {
+    method: 'POST',
+    headers: { 'content-type': 'text/plain;charset=UTF-8' },
+    body: `40/fleet,${JSON.stringify({ token })}`,
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!connectResponse.ok) {
+    throw new Error(`Tenant ${plane.name} Socket.IO namespace request failed`);
+  }
+  const pollResponse = await request(url.toString(), {
+    signal: AbortSignal.timeout(5_000),
+  });
+  const packets = pollResponse.ok
+    ? (await pollResponse.text()).split('\u001e')
+    : [`HTTP ${pollResponse.status}`];
+  return { url, sid, packets };
+}
+
+async function pollFleetSocket(session: {
+  url: URL;
+  sid: string;
+}): Promise<string[]> {
+  const response = await request(session.url.toString(), {
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) return [`HTTP ${response.status}`];
+  return (await response.text()).split('\u001e');
+}
+
+async function closeFleetSocket(session: {
+  url: URL;
+  sid: string;
+}): Promise<void> {
+  try {
+    await request(session.url.toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain;charset=UTF-8' },
+      body: '41/fleet,\u001e1',
+      signal: AbortSignal.timeout(2_000),
+    });
+  } catch {
+    // A rejected tenant socket may already be closed by the gateway.
+  }
+}
+
 async function changeInitialAdminPassword(plane: TenantPlane): Promise<string> {
-  const initialToken = await login(
-    plane,
-    adminEmail,
-    plane.bootstrapPassword,
-  );
+  const initialToken = await login(plane, adminEmail, plane.bootstrapPassword);
   const response = await request(`${plane.apiUrl}/api/auth/change-password`, {
     method: 'POST',
     headers: {
@@ -167,11 +278,11 @@ async function createAOnlyFixtures(customerId: string) {
   }
   const [cedis, branch] = await Promise.all([
     prismaA.operationalLocation.findUnique({
-      where: { code: tenantA.cedisCode },
+      where: { code: tenantA.seedCedisCode },
       select: { id: true },
     }),
     prismaA.operationalLocation.findUnique({
-      where: { code: tenantA.locationCode },
+      where: { code: tenantA.seedLocationCode },
       select: { id: true },
     }),
   ]);
@@ -287,7 +398,6 @@ async function createAOnlyFixtures(customerId: string) {
       stopSequence: 1,
     },
   });
-
 }
 
 function createObjectStorageService(plane: TenantPlane): ObjectStorageService {
@@ -307,6 +417,90 @@ function createObjectStorageService(plane: TenantPlane): ObjectStorageService {
     },
   } as ConfigService;
   return new ObjectStorageService(config);
+}
+
+async function createFakeFiscalFixture(
+  plane: TenantPlane,
+  prisma: PrismaClient,
+  actorId: string,
+): Promise<TenantFiscalFixture> {
+  const fakeProvider = new FakeFiscalProvider({
+    providerKey: `FAKE_MTE_${plane.name}`,
+  });
+  const issuedAt = new Date().toISOString();
+  const command = {
+    correlationId: `${prefix}-${plane.name}-fake-pac`,
+    idempotencyKey: `${prefix}-${plane.name}-fake-cfdi`,
+    folio: `${runId}-${plane.name}`,
+    snapshot: { issuedAt },
+  } as unknown as FiscalIssueCommand;
+  const stamp = await fakeProvider.stamp(command);
+  const xml = await fakeProvider.getXml({
+    correlationId: command.correlationId,
+    providerKey: fakeProvider.providerKey,
+    providerDocumentId: stamp.providerDocumentId,
+  });
+  const storageKey = `${prefix}/fake-fiscal.xml`;
+  const bytes = Buffer.from(xml.content);
+  const storage = createObjectStorageService(plane);
+  await storage.putObject({
+    key: storageKey,
+    body: bytes,
+    contentType: xml.contentType,
+  });
+
+  const legalEntity = await prisma.legalEntity.create({
+    data: {
+      legalName: `Tenant ${plane.name} ${runId} fake fiscal issuer`,
+      taxId: `MTE${plane.name}${runId}`,
+      fiscalPostalCode: '64000',
+      fiscalRegime: '601',
+      cfdiEnabled: true,
+      defaultSeries: 'MTE',
+    },
+    select: { id: true },
+  });
+  const invoiceId = `${prefix}-${plane.name.toLowerCase()}-fake-invoice`;
+  await prisma.invoice.create({
+    data: {
+      id: invoiceId,
+      legalEntityId: legalEntity.id,
+      currencyCode: 'MXN',
+      series: 'MTE',
+      folio: `${runId}-${plane.name}`,
+      uuid: stamp.uuid,
+      origin: InvoiceOrigin.NATIVE_CFDI,
+      cfdiVersion: '4.0',
+      cfdiType: CfdiDocumentType.INCOME,
+      issuedAt: new Date(issuedAt),
+      stampedAt: new Date(stamp.stampedAt),
+      fiscalStatus: InvoiceFiscalStatus.STAMPED,
+      subtotal: 10,
+      total: 10,
+      createdByUserId: actorId,
+    },
+  });
+  await prisma.fiscalArtifact.create({
+    data: {
+      invoiceId,
+      type: FiscalArtifactType.XML,
+      status: FiscalArtifactStatus.AVAILABLE,
+      storageKey,
+      mimeType: xml.contentType,
+      byteSize: BigInt(bytes.byteLength),
+      sha256: xml.sha256,
+      providerHash: stamp.providerDocumentId,
+      storedAt: new Date(),
+    },
+  });
+  return {
+    providerKey: fakeProvider.providerKey,
+    invoiceId,
+    uuid: stamp.uuid,
+    storageKey,
+    sha256: xml.sha256,
+    fakeProvider,
+  };
 }
 
 beforeAll(async () => {
@@ -354,6 +548,10 @@ beforeAll(async () => {
   if (!adminA || !adminB) {
     throw new Error('Both bootstrapped administrator records are required');
   }
+  [fiscalFixtureA, fiscalFixtureB] = await Promise.all([
+    createFakeFiscalFixture(tenantA, prismaA, adminA.id),
+    createFakeFiscalFixture(tenantB, prismaB, adminB.id),
+  ]);
   const [customerA, customerB, productA, productB] = await Promise.all([
     prismaA.customer.create({
       data: {
@@ -408,7 +606,7 @@ afterAll(async () => {
   await Promise.all([prismaA.$disconnect(), prismaB.$disconnect()]);
 });
 
-describe('MTE-005 real two-company data-plane isolation', () => {
+describe('MTE-007 real two-company data-plane isolation', () => {
   it('allows the same email in independent databases', async () => {
     const [userA, userB] = await Promise.all([
       prismaA.user.findUnique({ where: { email: adminEmail } }),
@@ -563,6 +761,81 @@ describe('MTE-005 real two-company data-plane isolation', () => {
     expect(responseA.status).toBe(200);
     expect(responseB.status).toBe(200);
     expect(crossTenantResponse.status).toBe(401);
+  });
+
+  it('rejects an A refresh cookie at B while each tenant refreshes its own session', async () => {
+    const [sessionA, sessionB] = await Promise.all([
+      loginWithRefreshCookie(tenantA),
+      loginWithRefreshCookie(tenantB),
+    ]);
+    const [refreshA, refreshB, crossTenantRefresh] = await Promise.all([
+      request(`${tenantA.apiUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { cookie: sessionA.refreshCookie },
+      }),
+      request(`${tenantB.apiUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { cookie: sessionB.refreshCookie },
+      }),
+      request(`${tenantB.apiUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { cookie: sessionA.refreshCookie },
+      }),
+    ]);
+    expect(refreshA.status).toBe(200);
+    expect(refreshB.status).toBe(200);
+    expect(crossTenantRefresh.status).toBe(401);
+  });
+
+  it('rejects A access tokens on B Socket.IO while keeping the A socket connected', async () => {
+    const socketA = await openFleetSocketNamespace(tenantA, adminTokenA);
+    expect(
+      socketA.packets.some((packet) => packet.startsWith('40/fleet,')),
+    ).toBe(true);
+    const socketB = await openFleetSocketNamespace(tenantB, adminTokenA);
+    const firstPackets = socketB.packets;
+    const secondPackets = firstPackets.some(
+      (packet) => packet.startsWith('41/fleet,') || packet === '1',
+    )
+      ? firstPackets
+      : [...firstPackets, ...(await pollFleetSocket(socketB))];
+    expect(
+      secondPackets.some(
+        (packet) =>
+          packet.startsWith('41/fleet,') ||
+          packet === '1' ||
+          packet.startsWith('HTTP 400'),
+      ),
+    ).toBe(true);
+    await closeFleetSocket(socketA);
+  });
+
+  it('keeps fake PAC artifacts and provider state within each company', async () => {
+    expect(fiscalFixtureA.providerKey).toBe('FAKE_MTE_A');
+    expect(fiscalFixtureB.providerKey).toBe('FAKE_MTE_B');
+    expect(fiscalFixtureA.fakeProvider.calls).toHaveLength(2);
+    expect(fiscalFixtureB.fakeProvider.calls).toHaveLength(2);
+    expect(fiscalFixtureA.uuid).not.toBe(fiscalFixtureB.uuid);
+
+    const [invoiceA, invoiceB, artifactInB] = await Promise.all([
+      prismaA.invoice.findUnique({
+        where: { id: fiscalFixtureA.invoiceId },
+        include: { fiscalArtifacts: true },
+      }),
+      prismaB.invoice.findUnique({
+        where: { id: fiscalFixtureB.invoiceId },
+        include: { fiscalArtifacts: true },
+      }),
+      prismaB.fiscalArtifact.findUnique({
+        where: { storageKey: fiscalFixtureA.storageKey },
+      }),
+    ]);
+    expect(invoiceA?.uuid).toBe(fiscalFixtureA.uuid);
+    expect(invoiceA?.fiscalArtifacts).toHaveLength(1);
+    expect(invoiceA?.fiscalArtifacts[0]?.sha256).toBe(fiscalFixtureA.sha256);
+    expect(invoiceB?.uuid).toBe(fiscalFixtureB.uuid);
+    expect(invoiceB?.fiscalArtifacts).toHaveLength(1);
+    expect(artifactInB).toBeNull();
   });
 
   it('cannot consume A signed object through B Object Storage', async () => {

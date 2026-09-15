@@ -112,8 +112,8 @@ const IMMUTABLE_IMAGE_PATTERN =
 const DOCKER_CONTEXT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}(?![\s\S])/;
 const URL_SAFE_DATABASE_PASSWORD_PATTERN = /^[A-Za-z0-9._~-]+(?![\s\S])/;
 const BACKUP_REGION_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*(?![\s\S])/;
-const BACKUP_KEY_PATTERN =
-  /^postgres\/[0-9]{4}\/[0-9]{2}\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.dump(?![\s\S])/;
+const COMPANY_RECOVERY_SET_KEY_PATTERN =
+  /^recovery-sets\/[a-z0-9]+(?:-[a-z0-9]+)*\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z-[0-9]+-[0-9]+\.manifest\.json(?![\s\S])/;
 const PAC_DOCKER_SECRET_PATTERN =
   /^docker-secret:\/\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?![\s\S])/;
 const REQUIRED_COMPOSE_SERVICES = [
@@ -290,7 +290,9 @@ export function parseTenantctlArgs(argv) {
     parsed.companySlug !== undefined &&
     !/^[a-z0-9]+(?:-[a-z0-9]+)*(?![\s\S])/.test(parsed.companySlug)
   ) {
-    throw new TenantctlUsageError("--company must be a lowercase DNS-safe slug.");
+    throw new TenantctlUsageError(
+      "--company must be a lowercase DNS-safe slug.",
+    );
   }
   if (
     parsed.operator !== undefined &&
@@ -310,11 +312,10 @@ export function parseTenantctlArgs(argv) {
       "--reason must be a ticket reference such as MTE-007; free-form text is not recorded.",
     );
   }
-  if (
-    parsed.auditLogPath !== undefined &&
-    !isAbsolute(parsed.auditLogPath)
-  ) {
-    throw new TenantctlUsageError("--audit-log must be an absolute external path.");
+  if (parsed.auditLogPath !== undefined && !isAbsolute(parsed.auditLogPath)) {
+    throw new TenantctlUsageError(
+      "--audit-log must be an absolute external path.",
+    );
   }
 
   if (command === "list") {
@@ -400,12 +401,16 @@ export function parseTenantctlArgs(argv) {
   } else {
     const companySlug = requireOption(parsed, "companySlug");
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*(?![\s\S])/.test(companySlug)) {
-      throw new TenantctlUsageError("--company must be a lowercase DNS-safe slug.");
+      throw new TenantctlUsageError(
+        "--company must be a lowercase DNS-safe slug.",
+      );
     }
     requireOption(parsed, "envFilePath");
     const resolverPath = requireOption(parsed, "resolverPath");
     if (!isAbsolute(resolverPath)) {
-      throw new TenantctlUsageError("--resolver must be an absolute executable path.");
+      throw new TenantctlUsageError(
+        "--resolver must be an absolute executable path.",
+      );
     }
     if (parsed.envDirectory) {
       throw new TenantctlUsageError(
@@ -431,9 +436,14 @@ export function parseTenantctlArgs(argv) {
       throw new TenantctlUsageError("--output-dir must be an absolute path.");
     }
   } else if (parsed.outputDirectory) {
-    throw new TenantctlUsageError("--output-dir is only supported by provision.");
+    throw new TenantctlUsageError(
+      "--output-dir is only supported by provision.",
+    );
   }
-  if (parsed.replaceGeneratedConfig && (command !== "provision" || !parsed.apply)) {
+  if (
+    parsed.replaceGeneratedConfig &&
+    (command !== "provision" || !parsed.apply)
+  ) {
     throw new TenantctlUsageError(
       "--replace-generated-config requires provision --apply.",
     );
@@ -524,8 +534,7 @@ function resolveAuditOperator(options, deps) {
 }
 
 function createAuditWriter(options, deps) {
-  const configuredPath =
-    options.auditLogPath ?? deps.env.TENANTCTL_AUDIT_LOG;
+  const configuredPath = options.auditLogPath ?? deps.env.TENANTCTL_AUDIT_LOG;
   const homeDirectory = deps.env.HOME || homedir();
   const requestedPath =
     configuredPath || join(homeDirectory, ".tenantctl", "audit.jsonl");
@@ -655,7 +664,7 @@ function writeAuditEvents(deps, events) {
     const targetEnvironment =
       typeof event.tenant === "object" && event.tenant?.environment
         ? event.tenant.environment
-        : company?.environment ?? null;
+        : (company?.environment ?? null);
     if (
       typeof tenantSlug !== "string" ||
       !AUDITABLE_RESULTS.has(event.result)
@@ -763,7 +772,9 @@ function resolveExternalDirectory(inputPath, deps) {
     realPath = deps.realpath(suppliedPath);
     info = deps.stat(realPath);
   } catch {
-    throw new TenantctlError("The external tenant config directory is unavailable.");
+    throw new TenantctlError(
+      "The external tenant config directory is unavailable.",
+    );
   }
   if (suppliedInfo.isSymbolicLink() || !info.isDirectory()) {
     throw new TenantctlError(
@@ -870,13 +881,20 @@ function readTenantManifest(manifestPath, deps) {
   return manifest;
 }
 
-function readCompanyManifest(manifestPath, deps, companySlug, validatedManifest) {
+function readCompanyManifest(
+  manifestPath,
+  deps,
+  companySlug,
+  validatedManifest,
+) {
   const manifest = validatedManifest ?? readTenantManifest(manifestPath, deps);
   const company = manifest.companies.find(
     (candidate) => candidate.slug === companySlug,
   );
   if (!company) {
-    throw new TenantctlError("The selected company is missing from the manifest.");
+    throw new TenantctlError(
+      "The selected company is missing from the manifest.",
+    );
   }
   return { manifest, company };
 }
@@ -920,9 +938,15 @@ function buildTenantDatabaseName(companySlug) {
 
 function assertConfiguredValue(config, key, expected) {
   const existing = config[key];
-  if (typeof existing === "string" && existing.length > 0 && existing !== expected) {
+  if (
+    typeof existing === "string" &&
+    existing.length > 0 &&
+    existing !== expected
+  ) {
     throw new TenantctlError(
-      "External config value does not match the selected tenant at " + key + ".",
+      "External config value does not match the selected tenant at " +
+        key +
+        ".",
     );
   }
 }
@@ -955,12 +979,15 @@ function validateBackupSettings(config) {
     typeof config.BACKUP_S3_REGION !== "string" ||
     !BACKUP_REGION_PATTERN.test(config.BACKUP_S3_REGION)
   ) {
-    throw new TenantctlError("BACKUP_S3_REGION is required and must be a region token.");
+    throw new TenantctlError(
+      "BACKUP_S3_REGION is required and must be a region token.",
+    );
   }
 }
 
 function parsePacDockerSecretName(reference) {
-  const match = typeof reference === "string" && reference.match(PAC_DOCKER_SECRET_PATTERN);
+  const match =
+    typeof reference === "string" && reference.match(PAC_DOCKER_SECRET_PATTERN);
   return match?.[1];
 }
 
@@ -1031,10 +1058,8 @@ function buildTenantEnvironment(company, externalConfig, options, deps) {
       POSTGRES_USER: "postgres",
       POSTGRES_DB: databaseName,
       CORS_ORIGIN: "https://" + company.erpHost,
-      OBJECT_STORAGE_PUBLIC_ENDPOINT:
-        "https://" + company.objectStorageHost,
-      OBJECT_STORAGE_PUBLIC_ORIGIN:
-        "https://" + company.objectStorageHost,
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: "https://" + company.objectStorageHost,
+      OBJECT_STORAGE_PUBLIC_ORIGIN: "https://" + company.objectStorageHost,
       BACKUP_S3_BUCKET: backupBucket,
       BACKUP_S3_CREDENTIAL_REF: backupRef,
       BACKUP_COMPOSE_PROJECT_NAME: projectName,
@@ -1095,9 +1120,7 @@ function buildTenantEnvironment(company, externalConfig, options, deps) {
     const backupRef = requireTenantReference(company, "backup");
     const backupBucket = company.backupBucket;
     if (typeof backupBucket !== "string" || backupBucket.length === 0) {
-      throw new TenantctlError(
-        "The selected company is missing backupBucket.",
-      );
+      throw new TenantctlError("The selected company is missing backupBucket.");
     }
     validateBackupSettings(externalConfig);
     const backupValues = {
@@ -1106,9 +1129,7 @@ function buildTenantEnvironment(company, externalConfig, options, deps) {
       BACKUP_S3_CREDENTIAL_REF: backupRef,
       BACKUP_COMPOSE_PROJECT_NAME: "tenantctl-" + company.slug,
       BACKUP_LOCAL_DIR:
-        "/var/lib/pollos-distribuidor/" +
-        company.slug +
-        "/postgres-backups",
+        "/var/lib/pollos-distribuidor/" + company.slug + "/postgres-backups",
     };
     for (const [key, value] of Object.entries(backupValues)) {
       assertConfiguredValue(externalConfig, key, value);
@@ -1141,14 +1162,23 @@ function renderTenantEnvironment(values) {
   );
 }
 
-function replaceCaddyHost(template, placeholder, host) {
+function replaceCaddyValue(template, placeholder, replacement, description) {
   const occurrences = template.split(placeholder).length - 1;
   if (occurrences !== 1) {
     throw new TenantctlError(
-      "Caddy production template must contain one " + placeholder + " site address.",
+      "Caddy production template must contain one " + description + ".",
     );
   }
-  return template.replace(placeholder, "https://" + host);
+  return template.replace(placeholder, replacement);
+}
+
+function replaceCaddyHost(template, placeholder, host) {
+  return replaceCaddyValue(
+    template,
+    placeholder,
+    "https://" + host,
+    placeholder + " site address",
+  );
 }
 
 function renderTenantCaddyfile(template, company) {
@@ -1157,10 +1187,16 @@ function renderTenantCaddyfile(template, company) {
     "https://erp.example.com",
     company.erpHost,
   );
-  return replaceCaddyHost(
+  const withObjectStorageHost = replaceCaddyHost(
     withErpHost,
     "https://objects.example.com",
     company.objectStorageHost,
+  );
+  return replaceCaddyValue(
+    withObjectStorageHost,
+    "__OBJECT_STORAGE_CSP_HOST__",
+    company.objectStorageHost,
+    "Object Storage CSP host marker",
   );
 }
 
@@ -1187,9 +1223,17 @@ function validateTenantCaddyfile(contents, deps) {
   }
 }
 
-function resolveTenantOutputDirectory(inputPath, company, repositoryRoot, deps, create) {
+function resolveTenantOutputDirectory(
+  inputPath,
+  company,
+  repositoryRoot,
+  deps,
+  create,
+) {
   if (typeof inputPath !== "string" || !isAbsolute(inputPath)) {
-    throw new TenantctlError("The tenant output directory must be an absolute path.");
+    throw new TenantctlError(
+      "The tenant output directory must be an absolute path.",
+    );
   }
   const requested = resolve(inputPath);
   if (basename(requested) !== company.slug) {
@@ -1218,7 +1262,9 @@ function resolveTenantOutputDirectory(inputPath, company, repositoryRoot, deps, 
     try {
       deps.mkdir(outputPath, { mode: 0o700 });
     } catch {
-      throw new TenantctlError("The tenant output directory could not be created.");
+      throw new TenantctlError(
+        "The tenant output directory could not be created.",
+      );
     }
     info = pathInfoOrUndefined(outputPath, deps);
   }
@@ -1312,7 +1358,10 @@ function writeTenantArtifacts(outputPath, files, replaceExisting, deps) {
     if (existing.get(fileName) === contents) continue;
     const temporaryPath = join(
       outputPath,
-      ".tenantctl-" + fileName.replace(/[^A-Za-z0-9.-]/gu, "-") + "-" + randomUUID(),
+      ".tenantctl-" +
+        fileName.replace(/[^A-Za-z0-9.-]/gu, "-") +
+        "-" +
+        randomUUID(),
     );
     try {
       deps.writeFile(temporaryPath, contents, {
@@ -1355,7 +1404,10 @@ function runCaptured(executable, args, options, deps, operationLabel) {
       stdio: ["pipe", "pipe", "pipe"],
       ...(timeoutMs === undefined
         ? {}
-        : { timeout: Math.max(1, Math.floor(timeoutMs)), killSignal: "SIGTERM" }),
+        : {
+            timeout: Math.max(1, Math.floor(timeoutMs)),
+            killSignal: "SIGTERM",
+          }),
     });
   } catch (error) {
     if (error?.code === "ETIMEDOUT") {
@@ -1380,7 +1432,7 @@ function runCaptured(executable, args, options, deps, operationLabel) {
   }
   return typeof result.stdout === "string"
     ? result.stdout
-    : result.stdout?.toString("utf8") ?? "";
+    : (result.stdout?.toString("utf8") ?? "");
 }
 
 function assertExternalReference(company, purpose) {
@@ -1441,7 +1493,8 @@ function validateResolverResponse(stdout, requiredPurposes) {
           "The external resolver returned incomplete credentials.",
         );
       }
-      const prefix = purpose === "objectStorage" ? "OBJECT_STORAGE" : "BACKUP_S3";
+      const prefix =
+        purpose === "objectStorage" ? "OBJECT_STORAGE" : "BACKUP_S3";
       resolved[prefix + "_ACCESS_KEY_ID"] = credentials.accessKeyId;
       resolved[prefix + "_SECRET_ACCESS_KEY"] = credentials.secretAccessKey;
     } else if (typeof secrets[purpose] === "string") {
@@ -1608,11 +1661,7 @@ function ensureSecretMatches(
   variableName,
   resolvedValue,
 ) {
-  const composeValue = getEnvironmentValue(
-    services,
-    serviceName,
-    variableName,
-  );
+  const composeValue = getEnvironmentValue(services, serviceName, variableName);
   if (composeValue !== resolvedValue) {
     throw new TenantctlError(
       "Compose did not receive the resolved " +
@@ -1828,11 +1877,7 @@ function validateComposeConfig(
   requireResolvedValue(services, "backend", "MAP_DATA_VERSION");
   requireResolvedValue(services, "backend", "TRUST_PROXY_HOPS");
 
-  const cfdiEnabled = getEnvironmentValue(
-    services,
-    "backend",
-    "CFDI_ENABLED",
-  );
+  const cfdiEnabled = getEnvironmentValue(services, "backend", "CFDI_ENABLED");
   if (
     typeof cfdiEnabled !== "string" ||
     cfdiEnabled.toLowerCase() !== tenantSettings.cfdiEnabled
@@ -2014,7 +2059,7 @@ function printDryRun(command, companySlug, runId, deps) {
     "Dry run for tenant " + companySlug + " (runId " + runId + "):\n",
   );
   getProvisionPlan(command).forEach((step, index) => {
-    deps.stdout.write((index + 1) + ". " + step + "\n");
+    deps.stdout.write(index + 1 + ". " + step + "\n");
   });
   deps.stdout.write(
     "No mutating Docker Compose command was executed; resolved values were suppressed.\n",
@@ -2061,8 +2106,7 @@ function prepareContext(options, deps, validatedManifest) {
   }
 
   if (
-    externalConfig.TENANTCTL_DEPLOYMENT_HOST_REF !==
-    company.deploymentHostRef
+    externalConfig.TENANTCTL_DEPLOYMENT_HOST_REF !== company.deploymentHostRef
   ) {
     throw new TenantctlError(
       "TENANTCTL_DEPLOYMENT_HOST_REF must match the selected manifest company.",
@@ -2120,13 +2164,10 @@ function prepareContext(options, deps, validatedManifest) {
       ([name]) => !name.startsWith("BACKUP_S3_"),
     ),
   );
-  const dockerEnvironment = buildDockerEnvironment(
-    deps.env,
-    {
-      ...tenantSettings.composeEnvironment,
-      ...composeSecretEnvironment,
-    },
-  );
+  const dockerEnvironment = buildDockerEnvironment(deps.env, {
+    ...tenantSettings.composeEnvironment,
+    ...composeSecretEnvironment,
+  });
   const composeFile = deps.realpath(deps.composeFile);
   const composeFiles = [composeFile];
   if (tenantSettings.cfdiEnabled === "true") {
@@ -2223,36 +2264,24 @@ function prepareContext(options, deps, validatedManifest) {
 }
 
 function invokeMigration(context) {
-  invokeCompose(
-    context,
-    ["run", "--rm", "migrate"],
-    {
-      profile: "migration",
-      label: "Production migration",
-    },
-  );
+  invokeCompose(context, ["run", "--rm", "migrate"], {
+    profile: "migration",
+    label: "Production migration",
+  });
 }
 
 function invokeBootstrap(context) {
-  invokeCompose(
-    context,
-    ["run", "--rm", "--no-deps", "bootstrap"],
-    {
-      profile: "migration",
-      label: "Production bootstrap",
-    },
-  );
+  invokeCompose(context, ["run", "--rm", "--no-deps", "bootstrap"], {
+    profile: "migration",
+    label: "Production bootstrap",
+  });
 }
 
 function invokeProvision(context) {
-  invokeCompose(
-    context,
-    ["pull"],
-    {
-      profile: "migration",
-      label: "Production image pull",
-    },
-  );
+  invokeCompose(context, ["pull"], {
+    profile: "migration",
+    label: "Production image pull",
+  });
   invokeMigration(context);
   invokeBootstrap(context);
   invokeCompose(
@@ -2303,7 +2332,9 @@ function invokeSmokeCheck(context) {
 }
 
 function getTenantConfigPath(company, options, envDirectory) {
-  return options.envFilePath ?? join(envDirectory, company.slug, ".env.production");
+  return (
+    options.envFilePath ?? join(envDirectory, company.slug, ".env.production")
+  );
 }
 
 function createCompanyFingerprint(company) {
@@ -2324,7 +2355,9 @@ function getCanaryStatePath(envDirectory, deps, createDirectory = false) {
     try {
       deps.mkdir(stateDirectory, { mode: 0o700 });
     } catch {
-      throw new TenantctlError("Canary state directory could not be created safely.");
+      throw new TenantctlError(
+        "Canary state directory could not be created safely.",
+      );
     }
     directoryInfo = pathInfoOrUndefined(stateDirectory, deps);
   }
@@ -2359,7 +2392,9 @@ function readCanaryEvidence(envDirectory, deps) {
   try {
     evidence = JSON.parse(deps.readFile(statePath, "utf8"));
   } catch {
-    throw new TenantctlError("Canary evidence is unreadable; batch migration is blocked.");
+    throw new TenantctlError(
+      "Canary evidence is unreadable; batch migration is blocked.",
+    );
   }
   if (
     !isRecord(evidence) ||
@@ -2371,15 +2406,16 @@ function readCanaryEvidence(envDirectory, deps) {
     !/^[a-f0-9]{64}(?![\s\S])/.test(evidence.companyFingerprint ?? "") ||
     typeof evidence.completedAt !== "string"
   ) {
-    throw new TenantctlError("Canary evidence is invalid; batch migration is blocked.");
+    throw new TenantctlError(
+      "Canary evidence is invalid; batch migration is blocked.",
+    );
   }
   return evidence;
 }
 
 function writeCanaryEvidence(envDirectory, evidence, deps) {
   const statePath = getCanaryStatePath(envDirectory, deps, true);
-  const temporaryPath =
-    statePath + "." + randomUUID() + ".tmp";
+  const temporaryPath = statePath + "." + randomUUID() + ".tmp";
   try {
     deps.writeFile(temporaryPath, JSON.stringify(evidence, null, 2) + "\n", {
       mode: 0o600,
@@ -2435,14 +2471,20 @@ function buildBackupScriptEnvironment(prepared, deps, runId, restoreDatabase) {
     "/var/tmp/pollos-distribuidor/" + company.slug + "/postgres-restore";
   const environment = {
     ...buildDockerEnvironment(deps.env, {}),
+    ...tenantSettings.composeEnvironment,
+    ...secretEnvironment,
     DOCKER_CONTEXT: context.dockerContext,
     BACKUP_DOCKER_BIN: "docker",
     BACKUP_COMPOSE_FILE: context.composeFile,
+    BACKUP_COMPOSE_ENV_FILE: context.envFilePath,
     BACKUP_COMPOSE_PROJECT_NAME: context.projectName,
+    BACKUP_UPLOAD_NETWORK: context.projectName + "_app_network",
     BACKUP_POSTGRES_SERVICE: "postgres",
     BACKUP_POSTGRES_USER: "postgres",
     BACKUP_POSTGRES_DATABASE: tenantSettings.databaseName,
     BACKUP_POSTGRES_PASSWORD: secretEnvironment.POSTGRES_PASSWORD,
+    BACKUP_BACKEND_IMAGE_DIGEST: generated.BACKEND_IMAGE,
+    BACKUP_FRONTEND_IMAGE_DIGEST: generated.FRONTEND_IMAGE,
     BACKUP_S3_ENDPOINT: generated.BACKUP_S3_ENDPOINT,
     BACKUP_S3_REGION: generated.BACKUP_S3_REGION,
     BACKUP_S3_BUCKET: company.backupBucket,
@@ -2451,6 +2493,17 @@ function buildBackupScriptEnvironment(prepared, deps, runId, restoreDatabase) {
     BACKUP_LOCAL_DIR: backupDirectory,
     BACKUP_FAILURE_DIR: join(backupDirectory, "failed"),
     BACKUP_RESULT_DIR: join(backupDirectory, "results"),
+    COMPANY_SLUG: company.slug,
+    OBJECT_STORAGE_BUCKET: generated.OBJECT_STORAGE_BUCKET,
+    OBJECT_STORAGE_ENDPOINT:
+      generated.OBJECT_STORAGE_ENDPOINT ?? "http://object-storage:8333",
+    OBJECT_STORAGE_ACCESS_KEY_ID:
+      secretEnvironment.OBJECT_STORAGE_ACCESS_KEY_ID,
+    OBJECT_STORAGE_SECRET_ACCESS_KEY:
+      secretEnvironment.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    OBJECT_STORAGE_REGION: generated.OBJECT_STORAGE_REGION ?? "us-east-1",
+    COMPANY_RECOVERY_RESULT_DIR: join(backupDirectory, "company-recovery"),
+    COMPANY_RECOVERY_LOCAL_DIR: join(backupDirectory, "company-recovery-sets"),
   };
   if (restoreDatabase) {
     if (
@@ -2466,6 +2519,11 @@ function buildBackupScriptEnvironment(prepared, deps, runId, restoreDatabase) {
     environment.RESTORE_LOCAL_DIR = restoreDirectory;
     environment.RESTORE_FAILURE_DIR = join(restoreDirectory, "failed");
     environment.RESTORE_RESULT_DIR = join(backupDirectory, "restore-drills");
+    environment.RESTORE_OBJECT_STORAGE_TARGET_DISPOSABLE = "true";
+    environment.RESTORE_OBJECT_STORAGE_LOCAL_DIR = join(
+      restoreDirectory,
+      "object-storage",
+    );
   }
   if (typeof runId !== "string" || runId.length === 0) {
     throw new TenantctlError("An operation correlation id is required.");
@@ -2476,7 +2534,12 @@ function buildBackupScriptEnvironment(prepared, deps, runId, restoreDatabase) {
 function invokeBackup(prepared, deps, runId) {
   const output = runCaptured(
     "bash",
-    [resolve(deps.repositoryRoot, "scripts/database/backup-postgres-to-b2.sh")],
+    [
+      resolve(
+        deps.repositoryRoot,
+        "scripts/database/create-company-recovery-set.sh",
+      ),
+    ],
     {
       env: buildBackupScriptEnvironment(prepared, deps, runId),
       deadlineAt: prepared.context.deadlineAt,
@@ -2485,11 +2548,15 @@ function invokeBackup(prepared, deps, runId) {
     "PostgreSQL backup",
   );
   const match = output.match(
-    /^PostgreSQL backup validated: (postgres\/[0-9]{4}\/[0-9]{2}\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.dump)\s*$/m,
+    /^Company recovery set validated: (recovery-sets\/[a-z0-9]+(?:-[a-z0-9]+)*\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z-[0-9]+-[0-9]+\.manifest\.json)\s*$/m,
   );
-  if (!match || !BACKUP_KEY_PATTERN.test(match[1])) {
+  if (
+    !match ||
+    !COMPANY_RECOVERY_SET_KEY_PATTERN.test(match[1]) ||
+    !match[1].startsWith(`recovery-sets/${prepared.company.slug}/`)
+  ) {
     throw new TenantctlError(
-      "The existing backup script did not report a validated tenant backup.",
+      "The company recovery-set script did not report a validated tenant recovery set.",
     );
   }
   return match[1];
@@ -2497,34 +2564,38 @@ function invokeBackup(prepared, deps, runId) {
 
 function invokeRestoreDrill(prepared, deps, runId) {
   const restoreDatabase = buildRestoreDatabaseName(prepared.company, runId);
+  const recoverySetKey = invokeBackup(prepared, deps, runId);
+  const environment = buildBackupScriptEnvironment(
+    prepared,
+    deps,
+    runId,
+    restoreDatabase,
+  );
+  environment.RESTORE_RECOVERY_SET_KEY = recoverySetKey;
   const output = runCaptured(
     "bash",
-    [resolve(deps.repositoryRoot, "scripts/database/restore-postgres-from-b2.sh")],
-    {
-      env: buildBackupScriptEnvironment(
-        prepared,
-        deps,
-        runId,
-        restoreDatabase,
+    [
+      resolve(
+        deps.repositoryRoot,
+        "scripts/database/restore-company-recovery-set.sh",
       ),
+    ],
+    {
+      env: environment,
       deadlineAt: prepared.context.deadlineAt,
     },
     deps,
-    "PostgreSQL restore drill",
+    "Company recovery-set restore rehearsal",
   );
   const match = output.match(
-    /^Restore drill passed for ([A-Za-z0-9_]+) using (postgres\/[0-9]{4}\/[0-9]{2}\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.dump)\.$/m,
+    /^Company restore rehearsal passed for ([A-Za-z0-9_]+) using (recovery-sets\/[a-z0-9]+(?:-[a-z0-9]+)*\/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z-[0-9]+-[0-9]+\.manifest\.json)\.$/m,
   );
-  if (
-    !match ||
-    match[1] !== restoreDatabase ||
-    !BACKUP_KEY_PATTERN.test(match[2])
-  ) {
+  if (!match || match[1] !== restoreDatabase || match[2] !== recoverySetKey) {
     throw new TenantctlError(
-      "The existing restore script did not report a passed tenant restore drill.",
+      "The company recovery-set script did not report a passed tenant restore rehearsal.",
     );
   }
-  return { backupKey: match[2], restoreDatabase };
+  return { backupKey: recoverySetKey, restoreDatabase };
 }
 
 function makeTenantResult(runId, command, company, fields = {}) {
@@ -2537,17 +2608,27 @@ function makeTenantResult(runId, command, company, fields = {}) {
   };
 }
 
-function emitOperationalResult(command, runId, startedAt, results, deps, options = {}) {
-  const failed = results.some((result) => result.status === "failed" || result.status === "timed_out");
+function emitOperationalResult(
+  command,
+  runId,
+  startedAt,
+  results,
+  deps,
+  options = {},
+) {
+  const failed = results.some(
+    (result) => result.status === "failed" || result.status === "timed_out",
+  );
   const completedAt = deps.now();
   const response = {
     runId,
     command,
-    status: failed || options.errorCode
-      ? "failed"
-      : options.planned
-        ? "planned"
-        : "succeeded",
+    status:
+      failed || options.errorCode
+        ? "failed"
+        : options.planned
+          ? "planned"
+          : "succeeded",
     startedAt: new Date(startedAt).toISOString(),
     completedAt: new Date(completedAt).toISOString(),
     durationMs: Math.max(0, completedAt - startedAt),
@@ -2618,8 +2699,7 @@ function executePreparedOperationalCommand(
             : "Run the existing production migration service with the pinned backend image."
           : options.command === "backup"
             ? "Run the existing PostgreSQL backup script with this tenant's database and backup bucket."
-            : "Run the existing restore script into a run-scoped temporary _restore_drill database."
-    ;
+            : "Run the existing restore script into a run-scoped temporary _restore_drill database.";
     fields.releaseFingerprint = prepared.releaseFingerprint;
     if (options.command === "backup" || options.command === "restore-drill") {
       fields.backupNamespace = company.backupBucket;
@@ -2749,7 +2829,9 @@ function createListResponse(options, manifest, runId, startedAt, deps) {
       (company) => company.slug === options.companySlug,
     );
     if (companies.length === 0) {
-      throw new TenantctlError("The selected company is missing from the manifest.");
+      throw new TenantctlError(
+        "The selected company is missing from the manifest.",
+      );
     }
   }
   const completedAt = deps.now();
@@ -2822,7 +2904,12 @@ function runOperationalSequence(
     const company = companies[index];
     if (!options.companySlug && company.status !== "active") {
       results.push(
-        makeSkippedTenantResult(runId, options.command, company, "tenant_not_active"),
+        makeSkippedTenantResult(
+          runId,
+          options.command,
+          company,
+          "tenant_not_active",
+        ),
       );
       continue;
     }
@@ -2925,7 +3012,8 @@ function runProductionBatchMigrate(
   deps,
 ) {
   const productionTenants = manifest.companies.filter(
-    (company) => company.environment === "production" && company.status === "active",
+    (company) =>
+      company.environment === "production" && company.status === "active",
   );
   let evidence;
   let canaryCompany;
@@ -3103,10 +3191,10 @@ function runProductionBatchMigrate(
             },
             deps,
           ),
-      );
-    } catch (error) {
-      if (error instanceof TenantctlAuditError) throw error;
-      outcomes.set(
+        );
+      } catch (error) {
+        if (error instanceof TenantctlAuditError) throw error;
+        outcomes.set(
           company.slug,
           makeOperationFailure(
             runId,
@@ -3142,12 +3230,7 @@ function runProductionBatchMigrate(
     }
     return (
       outcomes.get(company.slug) ??
-      makeSkippedTenantResult(
-        runId,
-        options.command,
-        company,
-        "not_attempted",
-      )
+      makeSkippedTenantResult(runId, options.command, company, "not_attempted")
     );
   });
   return emitOperationalResult(
@@ -3173,13 +3256,7 @@ function runOperationalCommand(options, deps, manifest) {
   if (options.command === "list") {
     let response;
     try {
-      response = createListResponse(
-        options,
-        manifest,
-        runId,
-        startedAt,
-        deps,
-      );
+      response = createListResponse(options, manifest, runId, startedAt, deps);
     } catch (error) {
       if (options.companySlug) {
         writeTenantAuditEvent(
@@ -3223,14 +3300,9 @@ function runOperationalCommand(options, deps, manifest) {
       { slug: options.companySlug, environment: null },
       "failed",
     );
-    return emitOperationalResult(
-      options.command,
-      runId,
-      startedAt,
-      [],
-      deps,
-      { errorCode: "tenant_not_found" },
-    );
+    return emitOperationalResult(options.command, runId, startedAt, [], deps, {
+      errorCode: "tenant_not_found",
+    });
   }
 
   let envDirectory;
@@ -3286,8 +3358,10 @@ function runSingleTenantCommand(options, deps, manifest) {
   const company = manifest.companies.find(
     (candidate) => candidate.slug === options.companySlug,
   );
-  const auditTenant =
-    company ?? { slug: options.companySlug, environment: null };
+  const auditTenant = company ?? {
+    slug: options.companySlug,
+    environment: null,
+  };
   const startedAt = deps.now();
   writeTenantAuditEvent(deps, auditTenant, "started");
 

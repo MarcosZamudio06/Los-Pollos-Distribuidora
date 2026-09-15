@@ -1,9 +1,19 @@
 # MTE-000: Multi-company silo architecture
 
-**Status:** Proposed  
-**Decision type:** Architecture Decision Record (ADR)  
-**Audited baseline:** `b58ae875f102b7ea6940bf8c3d2bbe010233f071`  
-**Scope:** Architecture and delivery plan only; no implementation is authorized by this document.
+**Status:** Accepted
+
+**Decision type:** Architecture Decision Record (ADR)
+**Audited baseline:** `b58ae875f102b7ea6940bf8c3d2bbe010233f071`
+**Scope:** Authorize MTE-001 through MTE-007 only. MTE-100, tenant identifiers in the ERP, and tenant-aware Prisma are explicitly out of scope.
+
+**Acceptance record:** Accepted for the isolated data-plane architecture and
+the per-company infrastructure and operations implied by this work, following
+the explicit authorization in `TASK MTE-AUD-REMEDIATION`. The canonical
+deployment and testing specs were checked and updated with this ADR. No
+contradiction was found with the audited single-company application contracts.
+Acceptance does not authorize storing or resolving private CSD material in the
+ERP; production CFDI remains blocked until its separate custody requirements
+are approved and verified.
 
 ## Decision summary
 
@@ -195,8 +205,10 @@ records inside only their company database.
 
 ## Exact implementation surface for MTE-001 through MTE-007
 
-These paths are the proposed future implementation boundary. MTE-000 creates
-only this ADR.
+These paths define the MTE implementation boundary. They do not authorize
+changes to the audited ERP domain, schema, APIs, or business services. MTE work
+may proceed only against the canonical deployment and testing specs updated
+with this ADR.
 
 ### Files to create
 
@@ -278,10 +290,11 @@ separate scope decision.
 | **MTE-006 — Build once and promote independently** | Add protected per-company deployment, canary, audit, concurrency, and digest rollback using the existing release artifacts. | MTE-003, MTE-004, MTE-005 |
 | **MTE-007 — Prove isolation and pilot rollout** | Run the dual-company real-stack suite, legacy regression, pilot onboarding, rollback rehearsal, and acceptance sign-off. | MTE-001 through MTE-006 |
 
-No implementation task may begin until MTE-000 is approved and the relevant
-canonical deployment/testing specs are updated. There is no MTE task in the
-audited `action.md` baseline, so this ADR is planning input, not implementation
-authority.
+MTE-000 is accepted and the canonical deployment/testing specs now define the
+MTE contracts. There is no MTE task in the audited `action.md` baseline; this
+ADR is the architecture authority for MTE-001 through MTE-007. No MTE task may
+be reported `COMPLETED` without reproducible, executed evidence for its
+acceptance criteria.
 
 ## Mandatory tests by phase
 
@@ -314,8 +327,9 @@ authority.
   and CSP origins never cross.
 - Generate a signed Object Storage URL in each data plane and verify A succeeds
   only against A while B succeeds only against B.
-- Prove Caddy removes the frontend image's baked CSP and emits exactly the
-  company CSP, without weakening the remaining directives.
+- Prove Caddy removes the frontend image's baked CSP and emits exactly one CSP
+  with the tenant's Object Storage host, without weakening the remaining
+  directives.
 - Re-run HTTP and Socket.IO proxy upgrade contracts.
 
 ### MTE-004
@@ -340,6 +354,9 @@ authority.
 - Attempt to restore A as B and require a fail-closed result before mutation.
 - Corrupt/miss one archive, manifest, or object and require failure with no
   production overwrite.
+- Verify the disposable target's PostgreSQL/PostGIS, schema state, delivery
+  evidence, fiscal artifacts, and referenced Object Storage bytes before
+  accepting the recovery set.
 - Measure and record RPO/RTO from a real restore drill for each pilot company.
 
 ### MTE-006
@@ -349,8 +366,10 @@ authority.
 - Prove GitHub Environment approvals and credentials for A cannot deploy B.
 - Prove per-company deployment concurrency prevents overlapping migrations.
 - Fail a canary deployment and verify the other company remains unchanged.
-- Roll back one company to its prior compatible digests without changing the
-  other company.
+- Require `deploy-company.yml` to select exactly one protected GitHub
+  Environment, perform no build, and run its canary before promotion.
+- Roll back one company explicitly to its prior schema-compatible digests
+  without changing the other company or initiating a global rollback.
 
 ### MTE-007
 
@@ -426,6 +445,18 @@ MTE is accepted only when all of the following are true:
 6. **Pilot abort:** route the pilot domain back to its previous isolated stack;
    other companies and the legacy installation remain unchanged.
 
+## Acceptance and unresolved gates
+
+The accepted architecture preserves one company per production data plane,
+uses the same immutable release artifacts across companies, and keeps company
+selection outside the ERP. The task authorization accepts the per-company
+infrastructure and operations required by that topology. The CSD private-key
+custody model remains unresolved and is not needed for fake-PAC isolation or
+this architecture decision; no MTE work may enable production CFDI or introduce
+CSD bytes until that separate gate is approved. This is a bounded residual
+risk, not a reason to add tenant-aware business logic or delay the silo
+architecture.
+
 ## Assumptions that are incorrect or require confirmation
 
 1. **“The current frontend image is already reusable under arbitrary company
@@ -456,6 +487,6 @@ MTE is accepted only when all of the following are true:
 
 ## Approval gate
 
-Approve this ADR only if the business accepts the infrastructure cost of one
-production data plane per company and confirms the CSD custody model. Approval
-authorizes planning MTE-001 through MTE-007; it does not authorize code changes.
+Accepted through `TASK MTE-AUD-REMEDIATION` for the MTE-001 through MTE-007
+scope. This acceptance does not authorize MTE-100, cross-company runtime
+selection, or production CFDI with unresolved CSD custody.

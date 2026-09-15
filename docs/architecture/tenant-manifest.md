@@ -114,10 +114,11 @@ non-secret configuration and should be retained until the deployment is
 accepted.
 
 tenantctl renders and validates the tenant Caddy file but does not install or
-reload it. The current Caddy template only substitutes the example site hosts;
-it does not yet replace the frontend image's baked Content-Security-Policy.
-Do not route a second production domain to a reused frontend digest until the
-MTE-003 edge-CSP contract is implemented and verified.
+reload it. The production Caddy template removes the upstream Nginx
+Content-Security-Policy and emits one tenant-specific policy while preserving
+the existing directives. Static A/B generation and proxy-contract tests pass.
+Live tenant-SNI HTTP and Socket.IO verification is still required before
+treating the edge contract as operationally proven.
 
 ## Manifest contract
 
