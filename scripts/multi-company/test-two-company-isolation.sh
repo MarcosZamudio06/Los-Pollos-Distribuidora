@@ -201,6 +201,49 @@ wait_healthy() {
   return 1
 }
 
+wait_postgres_tcp_ready() {
+  local container="$1"
+  local label="$2"
+  local timeout_seconds="$3"
+  local running
+
+  for ((attempt = 0; attempt < timeout_seconds; attempt++)); do
+    if docker exec "$container" \
+      pg_isready \
+      -h 127.0.0.1 \
+      -p 5432 \
+      -U postgres \
+      -d mte_isolation >/dev/null 2>&1 &&
+      docker exec "$container" \
+        psql \
+        -h 127.0.0.1 \
+        -X -A -t \
+        -v ON_ERROR_STOP=1 \
+        -U postgres \
+        -d mte_isolation \
+        -c 'SELECT 1;' >/dev/null 2>&1; then
+      return 0
+    fi
+
+    running="$(
+      docker inspect \
+        --format '{{.State.Running}}' \
+        "$container" 2>/dev/null || true
+    )"
+
+    if [[ "$running" != 'true' ]]; then
+      echo "FAILED: $label exited before TCP readiness." >&2
+      docker logs "$container" >&2 || true
+      return 1
+    fi
+
+    sleep 1
+  done
+
+  echo "FAILED: timeout waiting for $label TCP readiness." >&2
+  return 1
+}
+
 set_env_value() {
   local env_file="$1"
   local key="$2"
@@ -215,15 +258,29 @@ set_env_value() {
 postgres_query() {
   local container="$1"
   local sql="$2"
-  docker exec "$container" psql -X -A -t -v ON_ERROR_STOP=1 \
-    -U postgres -d mte_isolation -c "$sql"
+
+  docker exec "$container" \
+    psql \
+    -h 127.0.0.1 \
+    -X -A -t \
+    -v ON_ERROR_STOP=1 \
+    -U postgres \
+    -d mte_isolation \
+    -c "$sql"
 }
 
 check_postgres_sentinel() {
   local result
   result="$(postgres_query "$PG_B_CONTAINER" \
-    "SELECT COUNT(*)::text || '|' || COALESCE((SELECT \"value\" FROM public.mte005_migration_sentinel WHERE id = 1), 'missing') || '|' || (to_regclass('public.\"_prisma_migrations\"') IS NULL)::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';")"
-  [[ "$result" == '1|untouched|true' ]]
+    "SELECT COALESCE(
+       (SELECT value
+        FROM mte_probe.migration_sentinel
+        WHERE id = 1),
+       'missing'
+     ) || '|' ||
+     (to_regclass('public.\"_prisma_migrations\"') IS NULL)::text;")"
+
+  [[ "$result" == 'untouched|true' ]]
 }
 
 snapshot_tenant_b() {
@@ -342,6 +399,15 @@ STORAGE_B_CONTAINER="$(start_service "$PROJECT_B" "$ENV_B" object-storage 8333)"
 [[ "$PG_A_CONTAINER" != "$PG_B_CONTAINER" && "$STORAGE_A_CONTAINER" != "$STORAGE_B_CONTAINER" ]]
 wait_healthy "$PG_A_CONTAINER" 'TENANT_A PostgreSQL' 90
 wait_healthy "$PG_B_CONTAINER" 'TENANT_B PostgreSQL' 90
+wait_postgres_tcp_ready \
+  "$PG_A_CONTAINER" \
+  'TENANT_A PostgreSQL' \
+  90
+
+wait_postgres_tcp_ready \
+  "$PG_B_CONTAINER" \
+  'TENANT_B PostgreSQL' \
+  90
 wait_healthy "$STORAGE_A_CONTAINER" 'TENANT_A Object Storage' 120
 wait_healthy "$STORAGE_B_CONTAINER" 'TENANT_B Object Storage' 120
 
@@ -355,7 +421,13 @@ set_env_value "$ENV_B" OBJECT_STORAGE_PUBLIC_ENDPOINT "http://127.0.0.1:$STORAGE
 # A private marker proves a migration against A leaves pre-existing B state alone.
 run_logged "Create TENANT_B migration sentinel" docker exec "$PG_B_CONTAINER" \
   psql -X -v ON_ERROR_STOP=1 -U postgres -d mte_isolation \
-  -c "CREATE TABLE public.mte005_migration_sentinel (id integer PRIMARY KEY, value text NOT NULL); INSERT INTO public.mte005_migration_sentinel (id, value) VALUES (1, 'untouched');"
+  -c "CREATE SCHEMA mte_probe;
+CREATE TABLE mte_probe.migration_sentinel (
+  id integer PRIMARY KEY,
+  value text NOT NULL
+);
+INSERT INTO mte_probe.migration_sentinel (id, value)
+VALUES (1, 'untouched');"
 if ! check_postgres_sentinel; then
   echo "TENANT_B migration sentinel was not established." >&2
   exit 1
@@ -444,7 +516,7 @@ export MTE_TENANT_B_SEED_LOCATION_CODE="$SEED_LOCATION_CODE_B"
 echo "Running the MTE-007 real PostgreSQL and cross-data-plane contract suite."
 run_logged "MTE-007 tenant isolation integration tests" \
   npm --prefix "$ROOT_DIR/backend" exec -- jest \
-  --config test/jest-multi-company-isolation.json \
+  --config "$ROOT_DIR/backend/test/jest-multi-company-isolation.json" \
   --runInBand
 
 echo "PASS: TENANT_A and TENANT_B use separate PostgreSQL/PostGIS clusters, Object Storage containers and backend processes."

@@ -65,3 +65,26 @@ test("recovery set records immutable releases, schema, timestamps, sizes and che
   assert.match(create, /backup-postgres-to-b2\.sh/u);
   assert.match(create, /BACKUP_RETENTION_DISABLED=true/u);
 });
+
+test("postgres backup component manifest records its deterministic manifest key", () => {
+  const backup = read("scripts/database/backup-postgres-to-b2.sh");
+  assert.match(
+    backup,
+    /"manifest_key": "\$manifest_key"/u,
+  );
+});
+
+test("object restore does not pass unsupported only-show-errors to bucket create or remove", () => {
+  const restore = read("scripts/database/restore-object-storage-from-b2.sh");
+
+  const commands = restore.replace(/\\\r?\n/gu, " ");
+  assert.doesNotMatch(
+    commands,
+    /\bs3 mb\b[^\n;&|]*--only-show-errors\b/u,
+  );
+
+  assert.doesNotMatch(
+    commands,
+    /\bs3 rb\b[^\n;&|]*--only-show-errors\b/u,
+  );
+});

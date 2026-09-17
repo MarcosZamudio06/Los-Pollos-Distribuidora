@@ -70,7 +70,7 @@ cleanup() {
     if ! run_target_aws s3 rm "s3://$RESTORE_OBJECT_STORAGE_TARGET_BUCKET" \
       --recursive --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors >/dev/null 2>&1 ||
       ! run_target_aws s3 rb "s3://$RESTORE_OBJECT_STORAGE_TARGET_BUCKET" \
-        --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors >/dev/null 2>&1; then
+        --endpoint-url "$OBJECT_STORAGE_ENDPOINT" >/dev/null 2>&1; then
       echo "Disposable Object Storage cleanup failed for company $COMPANY_SLUG." >&2
       status=1
     fi
@@ -159,7 +159,7 @@ if [[ "$bucket_exists" == "yes" ]]; then
   exit 2
 fi
 run_target_aws s3 mb "s3://$RESTORE_OBJECT_STORAGE_TARGET_BUCKET" \
-  --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors >/dev/null
+  --endpoint-url "$OBJECT_STORAGE_ENDPOINT" >/dev/null
 created_target=1
 run_target_aws s3 sync /backup/data "s3://$RESTORE_OBJECT_STORAGE_TARGET_BUCKET" \
   --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors

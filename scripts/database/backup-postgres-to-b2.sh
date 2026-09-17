@@ -158,6 +158,7 @@ cat > "$manifest_file" <<EOF
 {
   "format": "postgresql-custom",
   "key": "$key",
+  "manifest_key": "$manifest_key",
   "created_at": "$created_at",
   "database": "$BACKUP_POSTGRES_DATABASE",
   "size_bytes": $dump_size,

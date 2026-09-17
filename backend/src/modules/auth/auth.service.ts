@@ -29,6 +29,28 @@ const DEFAULT_ABSOLUTE_TTL_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_IDLE_TTL_SECONDS = 24 * 60 * 60;
 const DEFAULT_LAST_USED_AT_UPDATE_THRESHOLD_SECONDS = 5 * 60;
 
+function isTokenPayload(payload: unknown): payload is TokenPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'sub' in payload &&
+    typeof payload.sub === 'string' &&
+    'email' in payload &&
+    typeof payload.email === 'string' &&
+    'role' in payload &&
+    typeof payload.role === 'string' &&
+    'type' in payload &&
+    (payload.type === 'access' || payload.type === 'refresh') &&
+    'sessionId' in payload &&
+    typeof payload.sessionId === 'string' &&
+    'sessionVersion' in payload &&
+    typeof payload.sessionVersion === 'number' &&
+    (!('tokenVersion' in payload) ||
+      payload.tokenVersion === undefined ||
+      typeof payload.tokenVersion === 'number')
+  );
+}
+
 type UserRecord = {
   id: string;
   name: string;
@@ -435,11 +457,14 @@ export class AuthService {
     expectedType: TokenPayload['type'],
   ): Promise<TokenPayload> {
     try {
-      const payload = await this.jwtService.verifyAsync<TokenPayload>(token, {
+      const payload: unknown = await this.jwtService.verifyAsync<
+        Record<string, unknown>
+      >(token, {
         secret: this.getSecret(expectedType),
       });
 
       if (
+        !isTokenPayload(payload) ||
         payload.type !== expectedType ||
         !payload.sessionId ||
         !Number.isInteger(payload.sessionVersion) ||

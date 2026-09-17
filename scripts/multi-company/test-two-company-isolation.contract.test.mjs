@@ -52,8 +52,9 @@ test("CEDIS fixture identity comes from the existing SEED_CEDIS_CODE contract", 
     /async function createAOnlyFixtures[\s\S]*?\n\}/u,
   )?.[0];
   assert.ok(fixtureSetup);
-  assert.ok(fixtureSetup.includes("cedis.id !== admin.cedisLocationId"));
   assert.ok(fixtureSetup.includes("branch.id !== admin.operationalLocationId"));
+  assert.ok(fixtureSetup.includes("branch.parentId !== cedis.id"));
+  assert.ok(!fixtureSetup.includes("admin.cedisLocationId"));
   assert.ok(!fixtureSetup.includes("admin.id !=="));
 });
 

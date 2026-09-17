@@ -271,29 +271,45 @@ async function authorizedRequest(
 async function createAOnlyFixtures(customerId: string) {
   const admin = await prismaA.user.findUnique({
     where: { email: adminEmail },
-    select: { id: true, operationalLocationId: true, cedisLocationId: true },
+    select: {
+      id: true,
+      operationalLocationId: true,
+    },
   });
-  if (!admin?.cedisLocationId) {
+
+  if (!admin?.operationalLocationId) {
     throw new Error('Tenant A bootstrap fixture is incomplete');
   }
+
   const [cedis, branch] = await Promise.all([
     prismaA.operationalLocation.findUnique({
       where: { code: tenantA.seedCedisCode },
-      select: { id: true },
+      select: {
+        id: true,
+        type: true,
+      },
     }),
     prismaA.operationalLocation.findUnique({
       where: { code: tenantA.seedLocationCode },
-      select: { id: true },
+      select: {
+        id: true,
+        parentId: true,
+        type: true,
+      },
     }),
   ]);
+
   if (
     !cedis ||
     !branch ||
-    cedis.id !== admin.cedisLocationId ||
-    branch.id !== admin.operationalLocationId
+    cedis.type !== 'DISTRIBUTION_CENTER' ||
+    branch.type !== 'BRANCH' ||
+    branch.id !== admin.operationalLocationId ||
+    branch.parentId !== cedis.id
   ) {
     throw new Error('Tenant A bootstrap locations do not match their manifest');
   }
+
   cedisIdA = cedis.id;
 
   const routeStock = await prismaA.operationalLocation.create({
@@ -452,31 +468,97 @@ async function createFakeFiscalFixture(
   const legalEntity = await prisma.legalEntity.create({
     data: {
       legalName: `Tenant ${plane.name} ${runId} fake fiscal issuer`,
-      taxId: `MTE${plane.name}${runId}`,
+      taxId: plane.name === 'A' ? 'MTA010101AA1' : 'MTB010101BB2',
       fiscalPostalCode: '64000',
       fiscalRegime: '601',
       cfdiEnabled: true,
       defaultSeries: 'MTE',
+      certificateSerialNumber:
+        plane.name === 'A' ? '30001000000500003416' : '30001000000500003417',
+      certificateFingerprint: `MTE-${plane.name}-${runId}`,
+      certificateSubject: `CN=MTE Tenant ${plane.name}`,
+      certificateValidFrom: new Date('2026-01-01T00:00:00.000Z'),
+      certificateValidTo: new Date('2030-01-01T00:00:00.000Z'),
     },
     select: { id: true },
   });
+  const fiscalCertificate = await prisma.fiscalCertificate.create({
+    data: {
+      legalEntityId: legalEntity.id,
+      serialNumber:
+        plane.name === 'A' ? '30001000000500003416' : '30001000000500003417',
+      fingerprintSha256: plane.name === 'A' ? 'a'.repeat(64) : 'b'.repeat(64),
+      subject: `CN=MTE Tenant ${plane.name}`,
+      issuer: 'MTE TEST CA',
+      validFrom: new Date('2026-01-01T00:00:00.000Z'),
+      validTo: new Date('2030-01-01T00:00:00.000Z'),
+    },
+    select: {
+      id: true,
+      serialNumber: true,
+    },
+  });
   const invoiceId = `${prefix}-${plane.name.toLowerCase()}-fake-invoice`;
+
   await prisma.invoice.create({
     data: {
       id: invoiceId,
       legalEntityId: legalEntity.id,
+
       currencyCode: 'MXN',
       series: 'MTE',
       folio: `${runId}-${plane.name}`,
       uuid: stamp.uuid,
+
       origin: InvoiceOrigin.NATIVE_CFDI,
       cfdiVersion: '4.0',
-      cfdiType: CfdiDocumentType.INCOME,
+      cfdiType: CfdiDocumentType.PAYMENT_RECEIPT,
+
       issuedAt: new Date(issuedAt),
       stampedAt: new Date(stamp.stampedAt),
+
+      fiscalCertificateId: fiscalCertificate.id,
+      fiscalIdempotencyKey: command.idempotencyKey,
+
+      fiscalRequestHash: plane.name === 'A' ? 'c'.repeat(64) : 'd'.repeat(64),
+
+      issuerSnapshot: {
+        taxId: plane.name === 'A' ? 'MTA010101AA1' : 'MTB010101BB2',
+        name: `Tenant ${plane.name} MTE issuer`,
+        fiscalRegime: '601',
+        postalCode: '64000',
+      },
+
+      receiverSnapshot: {
+        fiscalName: `MTE TENANT ${plane.name} CUSTOMER SA DE CV`,
+        taxId: 'URE180429TM6',
+        fiscalPostalCode: '64000',
+        fiscalRegime: '601',
+        fiscalUseCode: 'CP01',
+      },
+
+      fiscalSnapshotHash: plane.name === 'A' ? 'e'.repeat(64) : 'f'.repeat(64),
+
+      fiscalUseCode: 'CP01',
+      exportCode: '01',
+
+      // PAYMENT_RECEIPT intentionally keeps root payment fields null.
+      paymentFormCode: null,
+      paymentMethodCode: null,
+
+      tfdVersion: '1.1',
+      certificateNumber: fiscalCertificate.serialNumber,
+      satCertificateNumber: '00001000000500000001',
+      certificationProviderTaxId: 'AAA010101AAA',
+      cfdiSeal: `FAKE-CFDI-SEAL-${plane.name}`,
+      satSeal: `FAKE-SAT-SEAL-${plane.name}`,
+
       fiscalStatus: InvoiceFiscalStatus.STAMPED,
-      subtotal: 10,
-      total: 10,
+      cancellationStatus: 'NOT_REQUESTED',
+
+      subtotal: 0,
+      total: 0,
+
       createdByUserId: actorId,
     },
   });
@@ -817,7 +899,7 @@ describe('MTE-007 real two-company data-plane isolation', () => {
     expect(fiscalFixtureB.fakeProvider.calls).toHaveLength(2);
     expect(fiscalFixtureA.uuid).not.toBe(fiscalFixtureB.uuid);
 
-    const [invoiceA, invoiceB, artifactInB] = await Promise.all([
+    const [invoiceA, invoiceB, artifactFromAInB] = await Promise.all([
       prismaA.invoice.findUnique({
         where: { id: fiscalFixtureA.invoiceId },
         include: { fiscalArtifacts: true },
@@ -826,8 +908,10 @@ describe('MTE-007 real two-company data-plane isolation', () => {
         where: { id: fiscalFixtureB.invoiceId },
         include: { fiscalArtifacts: true },
       }),
-      prismaB.fiscalArtifact.findUnique({
-        where: { storageKey: fiscalFixtureA.storageKey },
+      prismaB.fiscalArtifact.findFirst({
+        where: {
+          invoiceId: fiscalFixtureA.invoiceId,
+        },
       }),
     ]);
     expect(invoiceA?.uuid).toBe(fiscalFixtureA.uuid);
@@ -835,7 +919,7 @@ describe('MTE-007 real two-company data-plane isolation', () => {
     expect(invoiceA?.fiscalArtifacts[0]?.sha256).toBe(fiscalFixtureA.sha256);
     expect(invoiceB?.uuid).toBe(fiscalFixtureB.uuid);
     expect(invoiceB?.fiscalArtifacts).toHaveLength(1);
-    expect(artifactInB).toBeNull();
+    expect(artifactFromAInB).toBeNull();
   });
 
   it('cannot consume A signed object through B Object Storage', async () => {
