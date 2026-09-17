@@ -205,7 +205,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
       - name: Generate Prisma Client
-        run: npm --prefix backend exec -- prisma generate --schema backend/prisma/schema.prisma
+        run: npm --prefix backend exec -- prisma generate --schema "$GITHUB_WORKSPACE/backend/prisma/schema.prisma"
       - name: Check browser safety boundary
         run: npm --prefix backend run test:e2e -- --runInBand --runTestsByPath test/browser-environment.e2e-spec.ts
       - name: Install Chromium and system dependencies
@@ -291,6 +291,38 @@ jobs:
       - name: Build frontend image
         run: docker build --build-arg OBJECT_STORAGE_PUBLIC_ORIGIN=https://objects.example.test --file docker/frontend/Dockerfile --tag pollos-frontend:ci .
 
+  isolation:
+    name: Multi-company real-stack isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Generate Prisma Client
+        run: npm --prefix backend exec -- prisma generate --schema backend/prisma/schema.prisma
+
+      - name: Verify two-company harness contract
+        run: node --test scripts/multi-company/test-two-company-isolation.contract.test.mjs
+
+      - name: Build the shared production backend image once
+        run: docker build --file docker/backend/Dockerfile --tag pollos-backend:mte-isolation .
+
+      - name: Run disposable TENANT_A and TENANT_B isolation gate
+        env:
+          MTE_BACKEND_IMAGE: pollos-backend:mte-isolation
+        run: bash scripts/multi-company/test-two-company-isolation.sh
+
   security:
     name: Dependency and secret scan
     runs-on: ubuntu-latest
@@ -317,6 +349,21 @@ jobs:
       - name: Test fiscal asset policy
         run: node --test scripts/validate-fiscal-assets.test.mjs
 
+      - name: Test tenant manifest and tenantctl contracts
+        run: |
+          node --test \
+            scripts/multi-company/tenantctl.test.mjs \
+            scripts/multi-company/validate-company-manifest.test.mjs
+
+      - name: Test tenant deploy workflow contracts
+        run: node --test scripts/multi-company/deploy-company.contract.test.mjs
+
+      - name: Test company recovery set contracts
+        run: |
+          node --test \
+            scripts/database/company-recovery-manifest.test.mjs \
+            scripts/database/company-recovery-scripts.contract.test.mjs
+
       - name: Reject versioned fiscal secrets and production XML
         run: git ls-files -z | node scripts/validate-fiscal-assets.mjs --files-from-stdin
 
@@ -330,7 +377,7 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, database, browser, docker, security]
+    needs: [quality, database, browser, docker, security, isolation]
     runs-on: ubuntu-latest
     steps:
       - name: Require every quality check
@@ -338,6 +385,7 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
           DOCKER_RESULT: ${{ needs.docker.result }}
+          ISOLATION_RESULT: ${{ needs.isolation.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
         run: |
@@ -345,4 +393,5 @@ jobs:
           test "$DATABASE_RESULT" = "success"
           test "$BROWSER_RESULT" = "success"
           test "$DOCKER_RESULT" = "success"
+          test "$ISOLATION_RESULT" = "success"
           test "$SECURITY_RESULT" = "success"

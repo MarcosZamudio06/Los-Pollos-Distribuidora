@@ -152,10 +152,10 @@ function createService(user = createUser()) {
       signedPayloads.set(token, payload);
       return token;
     }),
-    verifyAsync: jest.fn((token: string) => {
+    verifyAsync: jest.fn((token: string): Promise<unknown> => {
       const payload = signedPayloads.get(token);
       if (!payload) throw new Error('invalid signature');
-      return payload;
+      return Promise.resolve(payload);
     }),
   };
 
@@ -366,6 +366,26 @@ describe('AuthService persistent sessions', () => {
       service.verifyPassword('user-1', 'wrong-password'),
     ).rejects.toThrow('Invalid credentials');
     expect(state.session).toBeNull();
+  });
+
+  it('rejects a signed payload with a non-string email even for an active session', async () => {
+    const { jwtService, service, state } = createService();
+    const login = await service.login({
+      email: 'dev.admin@pollos.local',
+      password: 'valid-password',
+    });
+    jwtService.verifyAsync.mockResolvedValueOnce({
+      sub: 'user-1',
+      email: 42,
+      role: 'ADMIN',
+      type: 'access',
+      sessionId: state.session?.id,
+      sessionVersion: 0,
+    });
+
+    await expect(
+      service.verifyAccessToken(login.accessToken),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects tokens that do not reference a persistent session', async () => {

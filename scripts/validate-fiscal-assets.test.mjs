@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -54,6 +57,21 @@ test("rejects raw Facturama secrets in deployment configuration", () => {
     validateDeploymentSecretReferences(
       ".github/workflows/safe.yml",
       "FACTURAMA_PASSWORD: ${{ secrets.FACTURAMA_SANDBOX_PASSWORD }}",
+    ),
+    [],
+  );
+});
+
+test("accepts the optional tenant PAC Compose secret overlay", () => {
+  const overlayPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "../docker/multi-company/docker-compose.cfdi.yml",
+  );
+  const overlay = readFileSync(overlayPath, "utf8");
+  assert.deepEqual(
+    validateDeploymentSecretReferences(
+      "docker-compose.production.tenant.yml",
+      overlay,
     ),
     [],
   );

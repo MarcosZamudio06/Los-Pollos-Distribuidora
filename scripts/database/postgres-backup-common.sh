@@ -91,13 +91,19 @@ backup_check_disk_space() {
 }
 
 backup_compose() {
+  local -a compose_options=()
   if [[ -n "${BACKUP_COMPOSE_PROJECT_NAME:-}" ]]; then
-    "$BACKUP_DOCKER_BIN" compose -p "$BACKUP_COMPOSE_PROJECT_NAME" \
-      -f "$BACKUP_COMPOSE_FILE" "$@"
-    return
+    compose_options+=(--project-name "$BACKUP_COMPOSE_PROJECT_NAME")
   fi
-
-  "$BACKUP_DOCKER_BIN" compose -f "$BACKUP_COMPOSE_FILE" "$@"
+  if [[ -n "${BACKUP_COMPOSE_ENV_FILE:-}" ]]; then
+    if [[ ! -f "$BACKUP_COMPOSE_ENV_FILE" || -L "$BACKUP_COMPOSE_ENV_FILE" ]]; then
+      printf '%s\n' 'BACKUP_COMPOSE_ENV_FILE must be a non-symlink regular file.' >&2
+      return 2
+    fi
+    compose_options+=(--env-file "$BACKUP_COMPOSE_ENV_FILE")
+  fi
+  "$BACKUP_DOCKER_BIN" compose "${compose_options[@]}" \
+    -f "$BACKUP_COMPOSE_FILE" "$@"
 }
 
 backup_compose_pg() {

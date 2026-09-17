@@ -119,6 +119,7 @@ if ! backup_compose_pg pg_isready -U "$BACKUP_POSTGRES_USER" -d "$BACKUP_POSTGRE
 fi
 
 timestamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 year=${timestamp:0:4}
 month=${timestamp:5:2}
 key="postgres/$year/$month/$timestamp.dump"
@@ -157,7 +158,8 @@ cat > "$manifest_file" <<EOF
 {
   "format": "postgresql-custom",
   "key": "$key",
-  "created_at": "$timestamp",
+  "manifest_key": "$manifest_key",
+  "created_at": "$created_at",
   "database": "$BACKUP_POSTGRES_DATABASE",
   "size_bytes": $dump_size,
   "sha256": "$dump_sha256"
@@ -218,6 +220,11 @@ if [[ "$verified_size" != "$dump_size" || "$verified_sha256" != "$dump_sha256" ]
   exit 1
 fi
 
+retention_status=applied
+if [[ "${BACKUP_RETENTION_DISABLED:-false}" == "true" ]]; then
+  # A company recovery-set manifest owns the lifecycle of paired data archives.
+  retention_status=deferred_to_company_recovery_set
+else
 BACKUP_STAGE=retention-list
 object_list="$temp_dir/object-list.json"
 backup_aws_cli_dir "$temp_dir" rw s3api list-objects-v2 \
@@ -249,6 +256,7 @@ while IFS= read -r old_key; do
     "${s3_endpoint_args[@]}" \
     --only-show-errors >/dev/null
 done < "$delete_list"
+fi
 
 result_file="$BACKUP_RESULT_DIR/$timestamp.json"
 validated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -257,11 +265,11 @@ cat > "$result_file" <<EOF
   "status": "validated",
   "key": "$key",
   "manifest_key": "$manifest_key",
-  "created_at": "$timestamp",
+  "created_at": "$created_at",
   "validated_at": "$validated_at",
   "size_bytes": $dump_size,
   "sha256": "$dump_sha256",
-  "retention": "applied"
+  "retention": "$retention_status"
 }
 EOF
 

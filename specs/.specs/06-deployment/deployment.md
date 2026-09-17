@@ -113,3 +113,34 @@ Los cambios de esquema productivos siguen expand/contract:
 
 No se permiten renames, drops, backfills masivos ni índices bloqueantes en la
 misma release que introduce código dependiente del nuevo esquema.
+
+## Silo multiempresa (MTE-000 a MTE-007)
+
+La ruta single-company actual permanece como valor predeterminado. Una empresa
+en producción corresponde a un data plane independiente: VM/proyecto/cuenta,
+red Compose, PostgreSQL/PostGIS, Object Storage, secretos, dominios y respaldos
+propios. La selección ocurre por DNS y el Caddy de esa empresa antes de llegar
+al backend; no se añade un selector de empresa a API, JWT, Prisma ni al dominio.
+
+La promoción multiempresa debe cumplir estos límites:
+
+- Un workflow y una GitHub Environment por empresa y por ejecución, con
+  aprobaciones y credenciales limitadas a esa empresa.
+- El artefacto de release debe fijar digests inmutables para backend,
+  frontend y servicios GIS. El deploy no construye imágenes ni cambia digests.
+- El canary de la empresa objetivo es obligatorio antes de promover sus
+  servicios. Una falla detiene solo ese despliegue.
+- La concurrencia se serializa por slug de empresa. El rollback es explícito,
+  usa digests previos compatibles con el schema actual y nunca inicia un
+  rollback global.
+- Un recovery set completo identifica slug, release digests, schema/migraciones,
+  timestamp, tamaño y checksum de PostgreSQL/PostGIS y Object Storage. El
+  restore usa un target desechable y rechaza identidad distinta antes de
+  mutarlo; no ejecuta downgrade de migraciones.
+- El restore verifica PostGIS, schema state, evidencia de delivery, artefactos
+  fiscales y los objetos referenciados antes de aceptar el resultado. Falta o
+  corrupción de manifest, archive o checksum implica fallo cerrado.
+
+La evidencia de restauración y rollback se registra por empresa. No se marca
+ninguna MTE como `COMPLETED` por la existencia de scripts o pruebas estáticas:
+se requiere una ejecución reproducible del gate aplicable.

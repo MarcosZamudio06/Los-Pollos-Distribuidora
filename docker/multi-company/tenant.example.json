@@ -1,0 +1,44 @@
+{
+  "companies": [
+    {
+      "slug": "company-north",
+      "backupBucket": "company-north-backups",
+      "displayName": "Company North",
+      "erpHost": "erp.north.example",
+      "objectStorageHost": "objects.north.example",
+      "environment": "production",
+      "deploymentHostRef": "host://production/company-north",
+      "status": "planned",
+      "secretRefs": {
+        "database": "vault://production/company-north/database-password",
+        "jwtAccess": "vault://production/company-north/jwt-access",
+        "jwtRefresh": "vault://production/company-north/jwt-refresh",
+        "objectStorage": "vault://production/company-north/object-storage",
+        "backup": "vault://production/company-north/backup",
+        "pac": "docker-secret://company-north-pac",
+        "csd": "vault://production/company-north/csd",
+        "bootstrapAdmin": "vault://production/company-north/bootstrap-admin"
+      }
+    },
+    {
+      "slug": "company-south",
+      "backupBucket": "company-south-backups",
+      "displayName": "Company South",
+      "erpHost": "erp.south.example",
+      "objectStorageHost": "objects.south.example",
+      "environment": "production",
+      "deploymentHostRef": "host://production/company-south",
+      "status": "planned",
+      "secretRefs": {
+        "database": "vault://production/company-south/database-password",
+        "jwtAccess": "vault://production/company-south/jwt-access",
+        "jwtRefresh": "vault://production/company-south/jwt-refresh",
+        "objectStorage": "vault://production/company-south/object-storage",
+        "backup": "vault://production/company-south/backup",
+        "pac": "docker-secret://company-south-pac",
+        "csd": "vault://production/company-south/csd",
+        "bootstrapAdmin": "vault://production/company-south/bootstrap-admin"
+      }
+    }
+  ]
+}

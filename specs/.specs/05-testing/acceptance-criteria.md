@@ -545,3 +545,37 @@ Estos criterios alinean QA con el MVP vigente: inventario por ubicación operati
   código interno estable.
 - Gitleaks y el validador de assets fiscales no encuentran secretos, llaves,
   certificados privados ni XML productivo versionado.
+
+## Silo multiempresa (MTE-000 a MTE-007)
+
+- Dadas dos empresas A y B, cuando se inicia el harness real, entonces cada una
+  usa PostgreSQL/PostGIS, Object Storage y secretos JWT independientes y ambas
+  ejecutan el mismo digest inmutable de backend.
+- Dado un access token o refresh token emitido por A, cuando se presenta en B,
+  entonces B lo rechaza; el handshake y los eventos Socket.IO también quedan
+  aislados por backend.
+- Dada una configuración Caddy A/B, cuando se renderiza cada tenant, entonces
+  sus hosts ERP y Object Storage no se cruzan, el proxy preserva HTTP y el
+  upgrade Socket.IO y el ERP recibe exactamente un CSP con su Object Storage
+  host, sin debilitar otras directivas.
+- Dado un artefacto frontend, cuando se despliega en A y B, entonces se usa el
+  mismo digest sin rebuild por empresa.
+- Dado un PAC fake configurado para A, cuando A persiste una operación fiscal,
+  entonces B no recibe credenciales, intentos ni artefactos; ninguna prueba de
+  aislamiento llama a un PAC real.
+- Dado un recovery set A, cuando se restaura en un target desechable A, entonces
+  PostgreSQL/PostGIS, schema state, delivery evidence, fiscal artifacts y
+  Object Storage se verifican por checksum; al solicitar target B, el proceso
+  rechaza el mismatch antes de mutar el destino.
+- Dado un manifest, archive u object ausente/corrupto, cuando se intenta
+  restaurar, entonces el proceso falla cerrado sin modificar datos existentes.
+- Dado un deploy para empresa A, cuando corre `deploy-company.yml`, entonces
+  usa solo la GitHub Environment y credenciales A, hace canary obligatorio,
+  despliega solo digests, no construye imágenes y serializa concurrencia por A.
+- Dado un fallo del canary A, cuando se activa rollback explícito, entonces
+  vuelve solo a los digests previos compatibles de A y B permanece sin cambios.
+- Dado el deploy single-company sin variables MTE, cuando se ejecutan la
+  regresión backend y browser smoke, entonces la configuración y los contratos
+  single-company existentes permanecen compatibles.
+- La MTE asociada solo se marca `COMPLETED` después de ejecutar y conservar la
+  evidencia real correspondiente; los contratos estáticos no bastan.

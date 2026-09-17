@@ -1,0 +1,9 @@
+services:
+  backend:
+    secrets:
+      - source: pac_secret
+        target: ${FACTURAMA_DOCKER_SECRET_NAME:?FACTURAMA_DOCKER_SECRET_NAME is required}
+
+secrets:
+  pac_secret:
+    file: ${FACTURAMA_SECRET_FILE:?FACTURAMA_SECRET_FILE is required}

@@ -1,0 +1,166 @@
+name: Deploy one company
+
+on:
+  workflow_dispatch:
+    inputs:
+      company_slug:
+        description: Existing company slug and protected GitHub Environment suffix
+        required: true
+        type: string
+      backend_digest:
+        description: Immutable backend image reference ending in @sha256:<64 hex>
+        required: true
+        type: string
+      frontend_digest:
+        description: Immutable frontend image reference ending in @sha256:<64 hex>
+        required: true
+        type: string
+      previous_backend_digest:
+        description: Exact backend digest currently deployed and authorized for rollback
+        required: true
+        type: string
+      previous_frontend_digest:
+        description: Exact frontend digest currently deployed and authorized for rollback
+        required: true
+        type: string
+      previous_schema_compatible:
+        description: Confirm that the previous release is compatible with the post-canary schema
+        required: true
+        type: boolean
+        default: false
+      change_reference:
+        description: Change or release ticket identifier
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  validate-environment:
+    name: Validate protected tenant environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate tenant slug and pre-existing required-reviewer rule
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_API_URL: ${{ github.api_url }}
+          COMPANY_SLUG: ${{ inputs.company_slug }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ ! "$COMPANY_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+            echo "company_slug must be a lowercase DNS-safe slug." >&2
+            exit 1
+          fi
+          environment="company-$COMPANY_SLUG"
+          response="$RUNNER_TEMP/company-environment.json"
+          curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GH_API_URL/repos/$GH_REPOSITORY/environments/$environment" \
+            --output "$response"
+          node - "$response" <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const environment = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          const protectedByReview = Array.isArray(environment.protection_rules)
+            && environment.protection_rules.some((rule) =>
+              rule.type === 'required_reviewers'
+              && Array.isArray(rule.reviewers)
+              && rule.reviewers.length > 0,
+            );
+          if (!protectedByReview) {
+            throw new Error('The existing tenant environment must require at least one reviewer.');
+          }
+          NODE
+
+  deploy:
+    name: Canary and deploy ${{ inputs.company_slug }}
+    needs: validate-environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: company-${{ inputs.company_slug }}
+    concurrency:
+      group: deploy-company-${{ inputs.company_slug }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out deployment helper
+        uses: actions/checkout@v6
+
+      - name: Validate immutable candidate and explicit rollback digests
+        env:
+          COMPANY_SLUG: ${{ inputs.company_slug }}
+          BACKEND_DIGEST: ${{ inputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ inputs.frontend_digest }}
+          PREVIOUS_BACKEND_DIGEST: ${{ inputs.previous_backend_digest }}
+          PREVIOUS_FRONTEND_DIGEST: ${{ inputs.previous_frontend_digest }}
+          PREVIOUS_SCHEMA_COMPATIBLE: ${{ inputs.previous_schema_compatible }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$COMPANY_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
+          [[ "$PREVIOUS_SCHEMA_COMPATIBLE" == "true" ]]
+          [[ "$CHANGE_REFERENCE" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$ ]]
+          for image in "$BACKEND_DIGEST" "$FRONTEND_DIGEST" \
+            "$PREVIOUS_BACKEND_DIGEST" "$PREVIOUS_FRONTEND_DIGEST"; do
+            [[ "$image" =~ ^[a-z0-9.-]+(/[a-z0-9._-]+)+@sha256:[a-f0-9]{64}$ ]]
+          done
+          [[ "${BACKEND_DIGEST%@*}" == "${PREVIOUS_BACKEND_DIGEST%@*}" ]]
+          [[ "${FRONTEND_DIGEST%@*}" == "${PREVIOUS_FRONTEND_DIGEST%@*}" ]]
+
+      - name: Run tenant-scoped candidate canary and digest deployment
+        env:
+          COMPANY_SLUG: ${{ inputs.company_slug }}
+          BACKEND_DIGEST: ${{ inputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ inputs.frontend_digest }}
+          PREVIOUS_BACKEND_DIGEST: ${{ inputs.previous_backend_digest }}
+          PREVIOUS_FRONTEND_DIGEST: ${{ inputs.previous_frontend_digest }}
+          PREVIOUS_SCHEMA_COMPATIBLE: ${{ inputs.previous_schema_compatible }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          TENANT_DEPLOY_HOST: ${{ vars.TENANT_DEPLOY_HOST }}
+          TENANT_DEPLOY_USER: ${{ vars.TENANT_DEPLOY_USER }}
+          TENANT_DEPLOY_ROOT: ${{ vars.TENANT_DEPLOY_ROOT }}
+          TENANT_DEPLOY_SSH_KEY: ${{ secrets.TENANT_DEPLOY_SSH_KEY }}
+          TENANT_DEPLOY_KNOWN_HOSTS: ${{ secrets.TENANT_DEPLOY_KNOWN_HOSTS }}
+          TENANT_REGISTRY_USER: ${{ secrets.TENANT_REGISTRY_USER }}
+          TENANT_REGISTRY_TOKEN: ${{ secrets.TENANT_REGISTRY_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for value in "$TENANT_DEPLOY_HOST" "$TENANT_DEPLOY_USER" \
+            "$TENANT_DEPLOY_ROOT" "$TENANT_DEPLOY_SSH_KEY" \
+            "$TENANT_DEPLOY_KNOWN_HOSTS" "$TENANT_REGISTRY_USER" \
+            "$TENANT_REGISTRY_TOKEN"; do
+            [[ -n "$value" ]]
+          done
+          [[ "$TENANT_DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "$TENANT_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$TENANT_DEPLOY_ROOT" =~ ^/[A-Za-z0-9_./-]+$ ]]
+          [[ "$TENANT_DEPLOY_ROOT" != *".."* ]]
+          [[ "$TENANT_REGISTRY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+
+          ssh_dir="$RUNNER_TEMP/tenant-ssh"
+          mkdir -m 700 "$ssh_dir"
+          key_file="$ssh_dir/id_ed25519"
+          known_hosts_file="$ssh_dir/known_hosts"
+          printf '%s\n' "$TENANT_DEPLOY_SSH_KEY" > "$key_file"
+          printf '%s\n' "$TENANT_DEPLOY_KNOWN_HOSTS" > "$known_hosts_file"
+          chmod 600 "$key_file" "$known_hosts_file"
+          target="$TENANT_DEPLOY_USER@$TENANT_DEPLOY_HOST"
+          ssh_options=(-i "$key_file" -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts_file")
+
+          printf '%s' "$TENANT_REGISTRY_TOKEN" | ssh "${ssh_options[@]}" "$target" \
+            "docker login ghcr.io --username '$TENANT_REGISTRY_USER' --password-stdin" \
+            >/dev/null
+          ssh "${ssh_options[@]}" "$target" bash -s -- \
+            "$COMPANY_SLUG" "$TENANT_DEPLOY_ROOT" "$BACKEND_DIGEST" \
+            "$FRONTEND_DIGEST" "$PREVIOUS_BACKEND_DIGEST" \
+            "$PREVIOUS_FRONTEND_DIGEST" "$PREVIOUS_SCHEMA_COMPATIBLE" \
+            "$CHANGE_REFERENCE" < scripts/multi-company/deploy-company-remote.sh

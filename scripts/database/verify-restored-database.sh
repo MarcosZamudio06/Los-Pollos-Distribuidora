@@ -48,8 +48,11 @@ BEGIN
   IF to_regclass('public."Sale"') IS NULL
      OR to_regclass('public."InventoryMovement"') IS NULL
      OR to_regclass('public."Payment"') IS NULL
-     OR to_regclass('public."CashMovement"') IS NULL THEN
-    RAISE EXCEPTION 'Restored database is missing critical ERP/POS tables';
+     OR to_regclass('public."CashMovement"') IS NULL
+     OR to_regclass('public."DeliveryEvidence"') IS NULL
+     OR to_regclass('public."Invoice"') IS NULL
+     OR to_regclass('public."FiscalArtifact"') IS NULL THEN
+    RAISE EXCEPTION 'Restored database is missing critical ERP, delivery-evidence, or fiscal-artifact tables';
   END IF;
 END $$;
 
@@ -62,6 +65,9 @@ UNION ALL
 SELECT 'Payment', count(*) FROM "Payment"
 UNION ALL
 SELECT 'CashMovement', count(*) FROM "CashMovement";
+SELECT 'DeliveryEvidence', count(*) FROM "DeliveryEvidence";
+SELECT 'Invoice', count(*) FROM "Invoice";
+SELECT 'FiscalArtifact', count(*) FROM "FiscalArtifact";
 SQL
 
 printf '%s\n' "Restore verification passed for $database_name."

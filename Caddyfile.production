@@ -13,9 +13,16 @@
 }
 
 https://erp.example.com {
+	header {
+		# Defer the set until after the upstream response. Header.Set replaces
+		# every upstream value, so the browser receives exactly one policy.
+		>Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__OBJECT_STORAGE_CSP_HOST__; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+	}
 	reverse_proxy 127.0.0.1:3000 {
 		# Preserve the public Host used by the browser and by the ERP origin.
 		header_up Host {http.request.host}
+		# Nginx's image-level CSP may name another tenant's Object Storage host.
+		header_down -Content-Security-Policy
 		# reverse_proxy sets/augments X-Forwarded-For and X-Forwarded-Proto.
 		# The frontend Nginx proxy passes those values to the backend.
 	}
