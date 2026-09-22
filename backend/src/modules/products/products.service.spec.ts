@@ -10,6 +10,7 @@ import {
   ProductUnit,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { buildProductQrPayload } from '../../../../shared/product-qr';
 import { ProductsService } from './products.service';
 
 type ProductRecord = {
@@ -158,6 +159,29 @@ describe('ProductsService', () => {
     expect(result).not.toHaveProperty('stock');
   });
 
+  it('creates products with trimmed Code128-style barcodes without restricting the symbology', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findUnique.mockResolvedValue(null);
+    prisma.product.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(createProduct(data as Partial<ProductRecord>)),
+    );
+
+    const result = await service.create({
+      name: 'Producto con código',
+      barcode: '  AbC-128/42  ',
+      presentationType: ProductPresentationType.CUT,
+      salePrice: 120,
+      purchaseCost: 90,
+      minStock: 0,
+      unit: ProductUnit.KG,
+    });
+
+    expect(prisma.product.create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ barcode: 'AbC-128/42' }),
+    );
+    expect(result).toEqual(expect.objectContaining({ barcode: 'AbC-128/42' }));
+  });
+
   it('normalizes blank optional category and description fields before inserting', async () => {
     const { service, prisma } = createService();
     prisma.product.findUnique.mockResolvedValue(null);
@@ -169,6 +193,7 @@ describe('ProductsService', () => {
       service.create({
         name: 'Producto sin categoría',
         sku: '',
+        barcode: '   ',
         description: '   ',
         categoryId: '   ',
         presentationType: ProductPresentationType.CUT,
@@ -183,6 +208,7 @@ describe('ProductsService', () => {
     expect(prisma.product.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         sku: null,
+        barcode: null,
         description: null,
         categoryId: null,
       }),
@@ -272,7 +298,10 @@ describe('ProductsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     prisma.product.findUnique.mockResolvedValueOnce(null);
-    prisma.product.create.mockRejectedValueOnce({ code: 'P2002' });
+    prisma.product.create.mockRejectedValueOnce({
+      code: 'P2002',
+      meta: { target: ['sku'] },
+    });
 
     await expect(
       service.create({
@@ -285,6 +314,82 @@ describe('ProductsService', () => {
         unit: ProductUnit.KG,
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('enforces unique barcode and maps barcode races to a barcode conflict', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findUnique.mockResolvedValueOnce(
+      createProduct({
+        id: 'other-product',
+        barcode: 'ABC-128',
+      }),
+    );
+
+    await expect(
+      service.create({
+        name: 'Producto duplicado',
+        barcode: ' ABC-128 ',
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 0,
+        unit: ProductUnit.KG,
+      }),
+    ).rejects.toMatchObject({
+      response: { message: 'Barcode is already registered' },
+    });
+
+    prisma.product.findUnique.mockResolvedValueOnce(null);
+    prisma.product.create.mockRejectedValueOnce({
+      code: 'P2002',
+      meta: { target: ['barcode'] },
+    });
+
+    await expect(
+      service.create({
+        name: 'Producto carrera',
+        barcode: 'RACE-128',
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 0,
+        unit: ProductUnit.KG,
+      }),
+    ).rejects.toMatchObject({
+      response: { message: 'Barcode is already registered' },
+    });
+  });
+
+  it('updates and clears a barcode without changing the SKU uniqueness path', async () => {
+    const { service, prisma } = createService();
+    const currentProduct = createProduct({ barcode: 'OLD-128' });
+    prisma.product.findFirst.mockResolvedValue(currentProduct);
+    prisma.product.findUnique.mockResolvedValue(null);
+    prisma.product.update.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(
+        createProduct({
+          ...currentProduct,
+          ...(data as Partial<ProductRecord>),
+        }),
+      ),
+    );
+
+    await expect(
+      service.update('product-1', { barcode: ' NEW-UPC-42 ' }),
+    ).resolves.toEqual(expect.objectContaining({ barcode: 'NEW-UPC-42' }));
+
+    expect(prisma.product.update).toHaveBeenCalledWith({
+      where: { id: 'product-1' },
+      data: { barcode: 'NEW-UPC-42' },
+      include: expect.any(Object),
+    });
+
+    await service.update('product-1', { barcode: '   ' });
+    expect(prisma.product.update).toHaveBeenLastCalledWith({
+      where: { id: 'product-1' },
+      data: { barcode: null },
+      include: expect.any(Object),
+    });
   });
 
   it('lists products with optional operational-location balance and low-stock guard', async () => {
@@ -732,6 +837,127 @@ describe('ProductsService', () => {
         barcode: '7501234567890',
       }),
     ]);
+  });
+
+  it('resolves a valid product QR by exact id before barcode, SKU, and name', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findFirst.mockResolvedValue(
+      createProduct({ id: 'cm123456', barcode: 'QR-BARCODE' }),
+    );
+
+    const result = await service.findAll(
+      { search: buildProductQrPayload('cm123456'), isActive: true },
+      { role: 'SELLER' },
+    );
+
+    expect(prisma.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'cm123456' }),
+      }),
+    );
+    expect(prisma.product.findFirst).toHaveBeenCalledTimes(1);
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 'cm123456', barcode: 'QR-BARCODE' }),
+    ]);
+  });
+
+  it('does not return a product for a valid QR when the exact id is missing or inactive', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findFirst.mockResolvedValue(null);
+    prisma.product.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.findAll(
+        { search: buildProductQrPayload('missing-product'), isActive: true },
+        { role: 'SELLER' },
+      ),
+    ).resolves.toEqual({ items: [] });
+
+    expect(prisma.product.findFirst).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'missing-product',
+          isActive: true,
+        }),
+      }),
+    );
+
+    prisma.product.findFirst.mockReset();
+    prisma.product.findMany.mockReset();
+    prisma.product.findFirst.mockResolvedValue(null);
+    prisma.product.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.findAll(
+        { search: buildProductQrPayload('inactive-product'), isActive: true },
+        { role: 'SELLER' },
+      ),
+    ).resolves.toEqual({ items: [] });
+    expect(prisma.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'inactive-product',
+          isActive: true,
+        }),
+      }),
+    );
+  });
+
+  it('keeps location and inventory scopes on QR resolution', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findFirst.mockResolvedValue(
+      createProduct({ id: 'cm123456' }),
+    );
+
+    await service.findAll(
+      {
+        search: buildProductQrPayload('cm123456'),
+        isActive: true,
+        locationId: 'branch-1',
+        requireInventoryBalance: true,
+      },
+      {
+        role: 'WAREHOUSE',
+        permissions: [],
+        operationalLocationId: 'cedis-1',
+      },
+    );
+
+    expect(prisma.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          isActive: true,
+          inventoryBalances: {
+            some: {
+              locationId: 'branch-1',
+              location: {
+                isActive: true,
+                OR: [
+                  { id: 'cedis-1' },
+                  { parentId: 'cedis-1', type: 'BRANCH', isActive: true },
+                ],
+              },
+            },
+          },
+          id: 'cm123456',
+        },
+        include: expect.objectContaining({
+          inventoryBalances: expect.objectContaining({
+            where: expect.objectContaining({
+              locationId: 'branch-1',
+              location: expect.objectContaining({
+                isActive: true,
+                OR: [
+                  { id: 'cedis-1' },
+                  { parentId: 'cedis-1', type: 'BRANCH', isActive: true },
+                ],
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it('falls back from exact SKU to partial name search in the documented order', async () => {

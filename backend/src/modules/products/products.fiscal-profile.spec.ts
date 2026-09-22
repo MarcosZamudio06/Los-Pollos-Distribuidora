@@ -179,6 +179,7 @@ describe('Product fiscal profile', () => {
   it('validates structural codes at the DTO boundary while keeping fiscal fields optional', async () => {
     const valid = plainToInstance(CreateProductDto, {
       ...commercialProductDto(),
+      barcode: '  AbC-128/42  ',
       satProductServiceCode: ' 10101500 ',
       satUnitCode: ' kgm ',
       taxObjectCode: '02',
@@ -190,6 +191,14 @@ describe('Product fiscal profile', () => {
     expect(valid.satProductServiceCode).toBe('10101500');
     expect(valid.satUnitCode).toBe('KGM');
     expect(valid.defaultFactorType).toBe('Tasa');
+    expect(valid.barcode).toBe('AbC-128/42');
+
+    const emptyBarcode = plainToInstance(CreateProductDto, {
+      ...commercialProductDto(),
+      barcode: '   ',
+    });
+    expect(await validate(emptyBarcode)).toEqual([]);
+    expect(emptyBarcode.barcode).toBeNull();
 
     const invalid = plainToInstance(CreateProductDto, {
       ...commercialProductDto(),

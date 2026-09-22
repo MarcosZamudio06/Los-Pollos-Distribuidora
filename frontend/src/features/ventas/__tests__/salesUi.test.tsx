@@ -17,6 +17,7 @@ import { ProductResultsTable } from "../pos/ProductResultsTable";
 import { SaleDetailPage } from "../SaleDetailPage";
 import { SalesHistoryPage } from "../SalesHistoryPage";
 import { SalesPosPage } from "../SalesPosPage";
+import { buildProductQrPayload } from "../../../../../shared/product-qr";
 import type {
   SaleDetail,
   SalePaymentInput,
@@ -1820,6 +1821,78 @@ describe("TASK-055 sales UI behavior", () => {
     }
   });
 
+  it("agrega e incrementa el producto cuando el lector entrega su payload QR", async () => {
+    mockState.locations = {
+      data: [
+        { id: "loc-counter", name: "Mostrador", code: "MOST", type: "BRANCH" },
+      ],
+      error: null,
+      isLoading: false,
+    };
+    mockState.products = {
+      data: [
+        {
+          id: "prod-qr",
+          name: "Pollo QR",
+          sku: "QR-001",
+          barcode: "7501234567899",
+          presentationType: "WHOLE",
+          unit: "PIECE",
+          salePrice: 92,
+          inventoryBalance: {
+            locationId: "loc-counter",
+            quantityKg: 0,
+            quantityPieces: 8,
+          },
+        },
+      ],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const { container, root } = await renderDom(
+      <MemoryRouter initialEntries={["/sales"]}>
+        <SalesPosPage />
+      </MemoryRouter>,
+    );
+    try {
+      const locationSelect = getSelectByLabelText(
+        container,
+        "Ubicación operativa",
+      );
+      await act(async () => {
+        locationSelect.value = "loc-counter";
+        locationSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      const search = container.querySelector(
+        "#pos-product-search",
+      ) as HTMLInputElement;
+      const payload = buildProductQrPayload("prod-qr");
+      await act(async () => {
+        for (let index = 0; index < 2; index += 1) {
+          changeInput(search, payload);
+          search.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+          );
+        }
+      });
+
+      expect(
+        (
+          container.querySelector(
+            'input[aria-label="Piezas capturadas de Pollo QR"]',
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("2");
+      expect(container.textContent).toContain("Incrementado: Pollo QR (2 piezas)");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("selecciona un producto por kilogramo repetido y solicita capturar el peso sin alterar la cantidad", async () => {
     mockState.locations = {
       data: [
@@ -3612,10 +3685,12 @@ describe("TASK-055 sales UI behavior", () => {
       customerName: "Pollería San José",
       locationName: "Sucursal Centro",
       payments: [{ amount: 500, paymentMethod: "CASH" }],
+      saleNumber: "V-000123",
       sellerName: "Juan Pérez",
       paymentType: "CREDIT_SALE",
       subtotal: 1912.5,
       discount: 0,
+      tax: 306,
       total: 1912.5,
       items: [
         {
@@ -3704,19 +3779,40 @@ describe("TASK-055 sales UI behavior", () => {
     );
 
     expect(simple).toContain("NOTA DE VENTA");
+    expect(simple).toContain("Sucursal Centro");
+    expect(simple).toContain("V-000123");
+    expect(simple).toContain("Pollo entero");
+    expect(simple).toContain("Impuestos");
+    expect(simple).toContain("$1,912.50");
     expect(simple).toContain("Gracias por su compra");
     expect(simple).toContain("receipt-format-simple");
     expect(splitSimple).toContain("Pago: Efectivo · Tarjeta");
     expect(largeWithoutTaxId).toContain("DATOS DEL CLIENTE");
+    expect(largeWithoutTaxId).toContain("Sucursal Centro");
+    expect(largeWithoutTaxId).toContain("V-000123");
+    expect(largeWithoutTaxId).toContain("Pollo entero");
+    expect(largeWithoutTaxId).toContain("Impuestos");
+    expect(largeWithoutTaxId).toContain("$1,912.50");
     expect(largeWithoutTaxId).toContain("Crédito a 7 días");
     expect(largeWithoutTaxId).not.toContain("RFC:");
     expect(largeWithTaxId).toContain("RFC:");
     expect(largeWithTaxId).toContain("XAXX010101000");
     expect(internal).toContain("RECIBO INTERNO");
+    expect(internal).toContain("Sucursal Centro");
+    expect(internal).toContain("V-000123");
+    expect(internal).toContain("Pollo entero");
+    expect(internal).toContain("Impuestos");
+    expect(internal).toContain("$1,912.50");
     expect(internal).toContain("Entregó");
     expect(internal).toContain("Autorizó");
     expect(internal).toContain("DOCUMENTO DE CONTROL INTERNO");
+    expect(internal).toContain("NO VÁLIDO COMO COMPROBANTE FISCAL");
     expect(scale).toContain("TICKET DE BÁSCULA");
+    expect(scale).toContain("Sucursal Centro");
+    expect(scale).toContain("BAS-001");
+    expect(scale).toContain("Pollo entero");
+    expect(scale).toContain("Impuestos");
+    expect(scale).toContain("$1,062.50");
     expect(scale).toContain("Peso bruto");
     expect(scale).toContain("26.2 kg");
     expect(scale).toContain("Peso tara");
@@ -3725,6 +3821,13 @@ describe("TASK-055 sales UI behavior", () => {
     expect(scale).toContain("María López");
     expect(scale).toContain("receipt-format-scale");
     expect(scale).not.toContain("Gracias por su compra");
+
+    for (const html of [simple, largeWithoutTaxId, internal, scale]) {
+      expect(html).not.toContain("El Pollo de Los Pollos");
+      expect(html).not.toContain(
+        "477123481_10232415903693976_8230121272963336539_n.svg",
+      );
+    }
   });
 
   it("no sustituye un pago inicial de cero por el total en un recibo interno de crédito", () => {

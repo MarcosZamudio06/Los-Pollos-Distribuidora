@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { productService } from "../services/productService";
-import type { Product } from "../types";
+import type { Product, ProductFormValues } from "../types";
 
 const apiClient = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
+  patch: vi.fn(),
 }));
 
 vi.mock("../../../lib/api", () => ({ apiClient }));
@@ -76,6 +78,37 @@ const invalidFractionalPieceProduct: Product = {
 describe("productService canonical product responses", () => {
   afterEach(() => {
     apiClient.get.mockReset();
+    apiClient.post.mockReset();
+    apiClient.patch.mockReset();
+  });
+
+  it("serializes barcode on product create and edit requests", async () => {
+    const values = {
+      name: "Pechuga de pollo",
+      sku: "PECH-001",
+      barcode: "AbC-128/42",
+      description: "Pechuga por kilogramo",
+      categoryId: "category-1",
+      presentationType: "CUT",
+      salePrice: 120,
+      purchaseCost: 90,
+      minStock: 10,
+      unit: "KG",
+    } satisfies ProductFormValues;
+    apiClient.post.mockResolvedValue({ data: { id: "product-1" } });
+    apiClient.patch.mockResolvedValue({ data: { id: "product-1" } });
+
+    await productService.createProduct(values, "token");
+    await productService.updateProduct("product-1", values, "token");
+
+    expect(apiClient.post).toHaveBeenCalledWith("/products", {
+      body: values,
+      headers: { authorization: "Bearer token" },
+    });
+    expect(apiClient.patch).toHaveBeenCalledWith("/products/product-1", {
+      body: values,
+      headers: { authorization: "Bearer token" },
+    });
   });
 
   it("preserves generic catalog responses without operational validation", async () => {

@@ -56,6 +56,7 @@ import { OperationalBar } from "./pos/OperationalBar";
 import { ProductResultsTable } from "./pos/ProductResultsTable";
 import { RecentSalesModal } from "./pos/RecentSalesModal";
 import { ScanCommandBar } from "./pos/ScanCommandBar";
+import { findProductByLookup } from "./pos/productLookup";
 import type {
   CartItem,
   CreateSaleResponse,
@@ -87,23 +88,6 @@ function canAccessPos(role?: string | null) {
 function asNumber(value: string | number | null | undefined) {
   const numericValue = Number(value ?? 0);
   return Number.isFinite(numericValue) ? numericValue : 0;
-}
-
-function findProductByLookup(products: ProductOption[], value: string) {
-  const normalizedValue = value.trim().toLowerCase();
-  if (!normalizedValue) return undefined;
-
-  return (
-    products.find(
-      (product) => product.barcode?.trim().toLowerCase() === normalizedValue,
-    ) ??
-    products.find(
-      (product) => product.sku?.trim().toLowerCase() === normalizedValue,
-    ) ??
-    products.find(
-      (product) => product.name.trim().toLowerCase() === normalizedValue,
-    )
-  );
 }
 
 function productToOption(product: Product, locationId: string): ProductOption {
@@ -886,7 +870,7 @@ export function SalesPosPage() {
   );
 
   function handleProductSearchSubmit(value: string) {
-    const normalizedValue = value.trim().toLowerCase();
+    const normalizedValue = value.trim();
     if (!normalizedValue) return;
     startPosMeasurement("scan-feedback");
     const match = findProductByLookup(productOptions, normalizedValue);

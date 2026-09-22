@@ -54,6 +54,7 @@ Controlar productos, existencias por ubicación operativa, ajustes, mermas y tra
 - `LOCATION_NOT_AUTHORIZED` responde `403 Forbidden`; `PRODUCT_INACTIVE` y `UNIT_MISMATCH` responden `400 Bad Request`.
 - Los códigos fiscales de producto se normalizan y validan en backend; el frontend no es autoridad y no convierte unidades operativas a claves SAT.
 - Un producto comercial puede permanecer sin perfil fiscal, pero queda elegible para CFDI solo cuando los seis campos están completos y válidos; el código estable de bloqueo es `CFDI_PRODUCT_PROFILE_INCOMPLETE`.
+- El contrato versionado de QR de producto vive en `specs/modules/product-qr/spec.md`; el payload se deriva de `Product.id` y nunca se persiste como imagen, blob o base64.
 
 ## Permisos
 
@@ -74,6 +75,7 @@ Los ciclos CEDIS se definen en `specs/modules/branch-supply-cycles/spec.md` y `s
 ## UI
 
 - Catálogo de productos.
+- El catálogo permite generar bajo demanda la etiqueta QR de un producto existente, sin agregar campos persistidos al producto.
 - Presentación semántica visible por producto.
 - Stock por ubicación.
 - Traspasos.
