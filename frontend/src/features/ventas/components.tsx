@@ -41,6 +41,7 @@ import {
   paymentMethodLabel,
   paymentTypeLabel,
 } from "./saleLabels";
+import { requestBrowserPrint } from "./printing/posPrinter";
 
 type ProductSearchProps = {
   error: unknown;
@@ -1508,6 +1509,7 @@ type TicketModalProps = {
   isProvisional?: boolean;
   isLoading: boolean;
   onClose: () => void;
+  onPrint?: (data?: TicketData) => void | Promise<void>;
   ticket?: TicketData;
 };
 
@@ -1519,7 +1521,12 @@ type SaleRegisteredScreenProps = {
   onRetryPrint: () => void;
   saleNumber: string;
   total: number | string;
-  printStatus?: "loading" | "ready" | "error" | "unavailable";
+  printStatus?:
+    | "loading"
+    | "ready"
+    | "error"
+    | "print-error"
+    | "unavailable";
 };
 
 export function SaleRegisteredScreen({
@@ -1605,6 +1612,15 @@ export function SaleRegisteredScreen({
             >
               Error de impresión. No se pudo consultar el documento; puedes
               reimprimir o usar la impresión provisional.
+            </p>
+          )}
+          {printStatus === "print-error" && (
+            <p
+              className="rounded-xl border border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] p-3 text-sm font-bold text-[var(--pos-red)]"
+              role="alert"
+            >
+              No se pudo imprimir el documento. La venta permanece registrada;
+              puedes reintentar sin duplicarla.
             </p>
           )}
           {printStatus === "unavailable" && (
@@ -2160,6 +2176,7 @@ export function TicketModal({
   isLoading,
   isProvisional = false,
   onClose,
+  onPrint,
   ticket,
 }: TicketModalProps) {
   const portalReady = useSyncExternalStore(
@@ -2182,7 +2199,13 @@ export function TicketModal({
         <div className="ticket-actions sticky top-0 z-10 flex justify-end gap-5 border-b border-[#ececec] bg-white/95 px-6 py-4 backdrop-blur sm:px-10">
           <button
             className="text-sm font-bold text-[#292929] transition hover:text-black"
-            onClick={() => window.print()}
+            onClick={() => {
+              if (onPrint) {
+                void onPrint(data ?? undefined);
+                return;
+              }
+              requestBrowserPrint();
+            }}
             type="button"
           >
             Imprimir

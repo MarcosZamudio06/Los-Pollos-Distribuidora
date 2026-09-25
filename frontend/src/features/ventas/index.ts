@@ -12,3 +12,26 @@ export {
   SaleSummary,
   TicketModal,
 } from "./components";
+export {
+  createBrowserPosPrinter,
+  createLocalAgentPosPrinter,
+  createPosPrinterRuntime,
+  createPrintJob,
+  PosPrinter,
+  PosPrinterError,
+  PosPrinterStatus,
+  posPrinterStatusLabel,
+  requestBrowserPrint,
+} from "./printing/posPrinter";
+export type {
+  LocalAgentPort,
+  PrintJob,
+  PrintJobItem,
+  PrintJobPayload,
+  PrintJobPayment,
+  PrintJobScaleTicket,
+  PrintResult,
+  PosPrinterAdapter,
+  PosPrinterDependencies,
+  PosPrinterStatus as PosPrinterStatusType,
+} from "./printing/posPrinter";

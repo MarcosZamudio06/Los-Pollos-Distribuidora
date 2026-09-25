@@ -263,3 +263,32 @@ La consulta y reapertura de documentos debe ocurrir dentro de la misma venta, si
 - Después de registrar una venta, la confirmación permanece visible hasta una acción explícita del cajero. Debe conservar folio, total y cliente, y ofrecer `Reimprimir`, `Nueva venta`, `Ir al historial` y `Cerrar ventana`.
 - Antes de confirmar, el dock y carrito deben mantener visible cliente, sucursal, productos, kilos, piezas, subtotal, descuento autorizado, total, pagos, saldo pendiente de la venta, saldo histórico del cliente cuando exista, documento, folio, canal, solicitud administrativa y motivo de autorización cuando aplique. `F8` registra directamente desde el estado listo, sin una segunda pantalla de revisión.
 - `Nueva venta` debe solicitar confirmación si existe captura. El envío se protege contra doble clic y conserva la clave de idempotencia para reintentos después de error; una incertidumbre de red debe verificarse con esa misma clave antes de reintentar.
+
+## Arquitectura de impresión POS
+
+La impresión se abstrae mediante `PosPrinter`, con los modos `BROWSER` y
+`LOCAL_AGENT`. `BROWSER` conserva `window.print()` como fallback. `LOCAL_AGENT`
+solo recibe trabajos documentales normalizados a través de un puerto local; React
+no se acopla a USB, WebUSB, ESC/POS, USB/LAN, corte, ancho de papel o modelos
+específicos.
+
+El contrato mínimo de `PrintJob` contiene `jobId`, `documentId`, `documentType`,
+`templateVersion`, `printerProfile` y `payload` documental. El payload es una
+lista blanca sin HTML arbitrario, secretos ni credenciales. La reimpresión debe
+usar el `SaleDocument` exacto y sus snapshots; no puede completar el trabajo
+consultando el cliente, producto, precio o venta actuales.
+
+La ausencia o falla del agente debe degradar a `BROWSER` sin reintentar la
+venta. Si ambos caminos fallan, la venta, pagos, inventario y folio permanecen
+sin cambios y se informa un error de impresión reintentable.
+
+La cabecera del POS expone únicamente estos estados verificables:
+
+- `Impresora no configurada`: no existe un agente local configurado.
+- `Impresora disponible`: el agente respondió explícitamente disponible.
+- `Impresora sin conexión`: el agente existe pero su healthcheck falló o reportó
+  desconexión.
+
+No se simula disponibilidad de hardware. Drivers, perfiles 58/80 mm y
+diagnóstico físico requieren requisitos de terminal aprobados en una fase
+posterior.
