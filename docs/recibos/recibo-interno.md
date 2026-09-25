@@ -1,11 +1,10 @@
 ┌────────────────────────────────────────────────────┐
-│ LOGO El Pollo de Los Pollos │
 │ RECIBO INTERNO │
-│ NO VÁLIDO COMO COMPROBANTE FISCAL │
-├────────────────────────────────────────────────────┤
+│ Sucursal / ubicación operativa │
 │ Folio: RI-000078 │
 │ Fecha: 17/07/2026 18:35 │
-│ Sucursal: Centro │
+│ Vendedor: Juan Pérez │
+│ NO VÁLIDO COMO COMPROBANTE FISCAL │
 ├────────────────────────────────────────────────────┤
 │ TIPO DE MOVIMIENTO │
 │ Entrega de efectivo │

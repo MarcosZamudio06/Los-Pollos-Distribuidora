@@ -1,9 +1,9 @@
 ┌──────────────────────────────────────────────────────────────┐
-│ LOGO El Pollo de Los Pollos │
-│ Dirección, teléfono y sucursal │
-├──────────────────────────────────────────────────────────────┤
-│ NOTA DE VENTA Folio: NG-000045 │
+│ NOTA DE VENTA │
+│ Sucursal / ubicación operativa │
+│ Folio: NG-000045 │
 │ Fecha: 17/07/2026 Hora: 18:35 │
+│ Vendedor: Juan Pérez │
 ├──────────────────────────────────────────────────────────────┤
 │ DATOS DEL CLIENTE │
 │ Nombre: Pollería San José │

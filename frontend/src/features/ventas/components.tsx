@@ -41,6 +41,7 @@ import {
   paymentMethodLabel,
   paymentTypeLabel,
 } from "./saleLabels";
+import { requestBrowserPrint } from "./printing/posPrinter";
 
 type ProductSearchProps = {
   error: unknown;
@@ -1508,6 +1509,7 @@ type TicketModalProps = {
   isProvisional?: boolean;
   isLoading: boolean;
   onClose: () => void;
+  onPrint?: (data?: TicketData) => void | Promise<void>;
   ticket?: TicketData;
 };
 
@@ -1519,7 +1521,12 @@ type SaleRegisteredScreenProps = {
   onRetryPrint: () => void;
   saleNumber: string;
   total: number | string;
-  printStatus?: "loading" | "ready" | "error" | "unavailable";
+  printStatus?:
+    | "loading"
+    | "ready"
+    | "error"
+    | "print-error"
+    | "unavailable";
 };
 
 export function SaleRegisteredScreen({
@@ -1607,6 +1614,15 @@ export function SaleRegisteredScreen({
               reimprimir o usar la impresión provisional.
             </p>
           )}
+          {printStatus === "print-error" && (
+            <p
+              className="rounded-xl border border-[rgba(182,42,34,0.22)] bg-[rgba(182,42,34,0.08)] p-3 text-sm font-bold text-[var(--pos-red)]"
+              role="alert"
+            >
+              No se pudo imprimir el documento. La venta permanece registrada;
+              puedes reintentar sin duplicarla.
+            </p>
+          )}
           {printStatus === "unavailable" && (
             <p
               className="rounded-xl border border-[rgba(233,167,47,0.35)] bg-[rgba(233,167,47,0.14)] p-3 text-sm font-bold text-[#7d5a12]"
@@ -1671,6 +1687,62 @@ function receiptNumber(data: TicketData) {
     data.saleNumber ??
     data.ticketId ??
     "Venta confirmada"
+  );
+}
+
+function receiptLocation(data: TicketData) {
+  return data.locationName ?? data.locationId ?? "Ubicación operativa";
+}
+
+type ReceiptHeaderProps = {
+  data: TicketData;
+  title: string;
+  subtitle?: ReactNode;
+  centered?: boolean;
+  folio?: string;
+  date?: string | null;
+  sellerName?: string | null;
+  sellerLabel?: string;
+  folioLabel?: string;
+  dateLabel?: string;
+};
+
+function ReceiptHeader({
+  centered = false,
+  data,
+  date,
+  dateLabel = "Fecha",
+  folio,
+  folioLabel = "Folio",
+  sellerLabel = "Vendedor",
+  sellerName,
+  subtitle,
+  title,
+}: ReceiptHeaderProps) {
+  return (
+    <header
+      className={`receipt-header${centered ? " receipt-header-centered" : ""}`}
+    >
+      <div className="receipt-header-title">
+        <h2>{title}</h2>
+        <span>{receiptLocation(data)}</span>
+        {subtitle && <span>{subtitle}</span>}
+      </div>
+      <dl className="receipt-header-meta">
+        <div>
+          <dt>{folioLabel}</dt>
+          <dd>{folio ?? receiptNumber(data)}</dd>
+        </div>
+        <div>
+          <dt>{dateLabel}</dt>
+          <dd>{receiptDate(date ?? data.createdAt)}</dd>
+        </div>
+        <div>
+          <dt>{sellerLabel}</dt>
+          <dd>{sellerName ?? data.sellerName ?? "—"}</dd>
+        </div>
+      </dl>
+    </header>
   );
 }
 
@@ -1761,6 +1833,12 @@ function ReceiptTotals({
         <dt>Descuento</dt>
         <dd>{toMoney(data.discount)}</dd>
       </div>
+      {data.tax !== undefined && data.tax !== null && (
+        <div>
+          <dt>Impuestos</dt>
+          <dd>{toMoney(data.tax)}</dd>
+        </div>
+      )}
       <div className="receipt-grand-total">
         <dt>TOTAL</dt>
         <dd>{toMoney(data.total)}</dd>
@@ -1821,25 +1899,8 @@ function SimpleNote({ data }: { data: TicketData }) {
   const paid = receiptPaid(data);
   return (
     <div className="receipt-document receipt-format-simple">
-      <header className="receipt-brand receipt-brand-centered">
-        <img
-          alt="El Pollo de Los Pollos"
-          src="/477123481_10232415903693976_8230121272963336539_n.svg"
-        />
-        <strong>El Pollo de Los Pollos</strong>
-        <span>{data.locationName ?? data.locationId ?? "Punto de venta"}</span>
-      </header>
+      <ReceiptHeader centered data={data} title="NOTA DE VENTA" />
       <section className="receipt-section">
-        <h2>NOTA DE VENTA</h2>
-        <p>
-          <b>Folio:</b> {receiptNumber(data)}
-        </p>
-        <p>
-          <b>Fecha:</b> {receiptDate(data.createdAt)}
-        </p>
-        <p>
-          <b>Vendedor:</b> {data.sellerName ?? "—"}
-        </p>
         <p>
           <b>Cliente:</b> {data.customerName ?? "Público general"}
         </p>
@@ -1869,29 +1930,7 @@ function SimpleNote({ data }: { data: TicketData }) {
 function LargeNote({ data }: { data: TicketData }) {
   return (
     <div className="receipt-document receipt-format-large">
-      <header className="receipt-brand">
-        <img
-          alt="El Pollo de Los Pollos"
-          src="/477123481_10232415903693976_8230121272963336539_n.svg"
-        />
-        <div>
-          <strong>El Pollo de Los Pollos</strong>
-          <span>
-            {data.locationName ?? data.locationId ?? "Punto de venta"}
-          </span>
-        </div>
-      </header>
-      <section className="receipt-title-row">
-        <div>
-          <h2>NOTA DE VENTA</h2>
-          <p>
-            <b>Fecha:</b> {receiptDate(data.createdAt)}
-          </p>
-        </div>
-        <p>
-          <b>Folio:</b> {receiptNumber(data)}
-        </p>
-      </section>
+      <ReceiptHeader data={data} title="NOTA DE VENTA" />
       <section className="receipt-section">
         <h3>DATOS DEL CLIENTE</h3>
         <p>
@@ -1940,34 +1979,29 @@ function InternalReceipt({ data }: { data: TicketData }) {
   const outstanding = receiptOutstanding(data, paid);
   return (
     <div className="receipt-document receipt-format-internal">
-      <header className="receipt-brand">
-        <img
-          alt="El Pollo de Los Pollos"
-          src="/477123481_10232415903693976_8230121272963336539_n.svg"
-        />
-        <div>
-          <strong>El Pollo de Los Pollos</strong>
-          <h2>RECIBO INTERNO</h2>
-          <span>NO VÁLIDO COMO COMPROBANTE FISCAL</span>
-        </div>
-      </header>
-      <section className="receipt-section">
-        <p>
-          <b>Folio:</b> {receiptNumber(data)}
-        </p>
-        <p>
-          <b>Fecha:</b> {receiptDate(data.createdAt)}
-        </p>
-        <p>
-          <b>Sucursal:</b> {data.locationName ?? data.locationId ?? "—"}
-        </p>
-      </section>
+      <ReceiptHeader
+        data={data}
+        subtitle="NO VÁLIDO COMO COMPROBANTE FISCAL"
+        title="RECIBO INTERNO"
+      />
+      {data.items?.length ? <ReceiptItems data={data} detailed /> : null}
       <section className="receipt-section">
         <h3>TIPO DE MOVIMIENTO</h3>
         <strong>Registro interno de venta</strong>
         <p>
           <b>Se recibió de:</b> {data.customerName ?? "Público general"}
         </p>
+        <p>
+          <b>Subtotal:</b> {toMoney(data.subtotal)}
+        </p>
+        <p>
+          <b>Descuento:</b> {toMoney(data.discount)}
+        </p>
+        {data.tax !== undefined && data.tax !== null && (
+          <p>
+            <b>Impuestos:</b> {toMoney(data.tax)}
+          </p>
+        )}
         <p>
           <b>Total de venta:</b> {toMoney(data.total)}
         </p>
@@ -2044,23 +2078,16 @@ function ScaleTicket({ data }: { data: TicketData }) {
 
   return (
     <div className="receipt-document receipt-format-scale">
-      <header className="receipt-brand receipt-brand-centered">
-        <img
-          alt="El Pollo de Los Pollos"
-          src="/477123481_10232415903693976_8230121272963336539_n.svg"
-        />
-        <strong>El Pollo de Los Pollos</strong>
-        <span>{data.locationName ?? data.locationId ?? "Punto de venta"}</span>
-      </header>
+      <ReceiptHeader
+        centered
+        data={data}
+        date={scale?.capturedAt ?? data.createdAt}
+        folio={scale?.physicalFolio ?? receiptNumber(data)}
+        sellerLabel="Operador"
+        sellerName={scale?.operatorName ?? data.sellerName}
+        title="TICKET DE BÁSCULA"
+      />
       <section className="receipt-section">
-        <h2>TICKET DE BÁSCULA</h2>
-        <p>
-          <b>Folio de báscula:</b> {scale?.physicalFolio ?? receiptNumber(data)}
-        </p>
-        <p>
-          <b>Fecha y hora:</b>{" "}
-          {receiptDate(scale?.capturedAt ?? data.createdAt)}
-        </p>
         <p>
           <b>Producto:</b> {productName}
         </p>
@@ -2082,6 +2109,24 @@ function ScaleTicket({ data }: { data: TicketData }) {
           <dt>Piezas</dt>
           <dd>{scaleQuantity(pieceCount, "pzas")}</dd>
         </div>
+        {data.subtotal !== undefined && data.subtotal !== null && (
+          <div>
+            <dt>Subtotal</dt>
+            <dd>{toMoney(data.subtotal)}</dd>
+          </div>
+        )}
+        {data.discount !== undefined && data.discount !== null && (
+          <div>
+            <dt>Descuento</dt>
+            <dd>{toMoney(data.discount)}</dd>
+          </div>
+        )}
+        {data.tax !== undefined && data.tax !== null && (
+          <div>
+            <dt>Impuestos</dt>
+            <dd>{toMoney(data.tax)}</dd>
+          </div>
+        )}
         <div>
           <dt>{priceLabel}</dt>
           <dd>{toMoney(scale?.unitPrice ?? data.items?.[0]?.unitPrice)}</dd>
@@ -2091,14 +2136,22 @@ function ScaleTicket({ data }: { data: TicketData }) {
           <dd>{toMoney(amount)}</dd>
         </div>
       </dl>
-      <section className="receipt-section">
-        <p>
-          <b>Operador:</b> {scale?.operatorName ?? data.sellerName ?? "—"}
-        </p>
-        <p>
-          <b>Punto de venta:</b> {data.locationName ?? data.locationId ?? "—"}
-        </p>
-      </section>
+      {(data.paymentMethod || data.payments?.length) && (
+        <dl className="receipt-payment">
+          <div>
+            <dt>Pago: {receiptPaymentMethods(data)}</dt>
+            <dd>{toMoney(receiptPaid(data))}</dd>
+          </div>
+        </dl>
+      )}
+      <ReceiptCashEvidence data={data} />
+      {data.outstanding !== undefined && data.outstanding !== null && (
+        <section className="receipt-section">
+          <p>
+            <b>Saldo pendiente:</b> {toMoney(data.outstanding)}
+          </p>
+        </section>
+      )}
       <section className="receipt-signatures">
         <span>Firma o validación: ________________</span>
       </section>
@@ -2123,6 +2176,7 @@ export function TicketModal({
   isLoading,
   isProvisional = false,
   onClose,
+  onPrint,
   ticket,
 }: TicketModalProps) {
   const portalReady = useSyncExternalStore(
@@ -2145,7 +2199,13 @@ export function TicketModal({
         <div className="ticket-actions sticky top-0 z-10 flex justify-end gap-5 border-b border-[#ececec] bg-white/95 px-6 py-4 backdrop-blur sm:px-10">
           <button
             className="text-sm font-bold text-[#292929] transition hover:text-black"
-            onClick={() => window.print()}
+            onClick={() => {
+              if (onPrint) {
+                void onPrint(data ?? undefined);
+                return;
+              }
+              requestBrowserPrint();
+            }}
             type="button"
           >
             Imprimir

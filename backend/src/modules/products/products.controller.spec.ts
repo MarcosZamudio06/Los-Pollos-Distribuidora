@@ -183,6 +183,7 @@ describe('ProductsController API', () => {
       .send({
         name: 'Pechuga de pollo',
         sku: 'PECH-001',
+        barcode: '  Code128-01  ',
         presentationType: ProductPresentationType.CUT,
         salePrice: 120,
         purchaseCost: 90,
@@ -202,6 +203,7 @@ describe('ProductsController API', () => {
     expect(productsService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Pechuga de pollo',
+        barcode: 'Code128-01',
         presentationType: ProductPresentationType.CUT,
         salePrice: 120,
         unit: ProductUnit.KG,
@@ -275,6 +277,16 @@ describe('ProductsController API', () => {
       .expect(400);
 
     expect(productsService.update).not.toHaveBeenCalled();
+
+    await request(app.getHttpServer())
+      .patch('/api/products/product-1')
+      .set('Authorization', 'Bearer warehouse-token')
+      .send({ barcode: '  UPC-A-42  ' })
+      .expect(200);
+
+    expect(productsService.update).toHaveBeenCalledWith('product-1', {
+      barcode: 'UPC-A-42',
+    });
 
     await request(app.getHttpServer())
       .patch('/api/products/product-1')

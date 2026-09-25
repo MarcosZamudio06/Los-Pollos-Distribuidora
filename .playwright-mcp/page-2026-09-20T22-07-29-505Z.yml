@@ -1,0 +1,482 @@
+- generic [ref=f6e2]:
+  - generic [ref=f6e8]:
+    - banner [ref=f6e9]:
+      - generic [ref=f6e10]:
+        - link "ERP Plataforma operativa" [ref=f6e11] [cursor=pointer]:
+          - /url: "#landing-top"
+          - generic [ref=f6e16]: ERP
+          - generic [ref=f6e17]: Plataforma operativa
+        - generic [ref=f6e18]:
+          - link "Solicitar demostración" [ref=f6e19] [cursor=pointer]:
+            - /url: "#demo"
+          - button "Abrir menú" [ref=f6e20] [cursor=pointer]
+    - main [ref=f6e22]:
+      - region [ref=f6e23]:
+        - generic [ref=f6e25]:
+          - generic [ref=f6e27]:
+            - paragraph [ref=f6e28]: Plataforma operativa · multiempresa
+            - heading "Todo tu negocio. Una sola plataforma." [level=1] [ref=f6e30]:
+              - text: Todo tu negocio.
+              - generic [ref=f6e31]: Una sola plataforma.
+            - paragraph [ref=f6e32]: Conecta ventas, inventario, compras, cobranza, sucursales, distribución y fiscalidad en una operación que todos pueden entender.
+            - generic [ref=f6e33]:
+              - link "Solicitar demostración" [ref=f6e34] [cursor=pointer]:
+                - /url: "#demo"
+                - text: Solicitar demostración
+                - generic [aria-hidden] [ref=f6e35]: ↗
+              - link "Explorar funcionalidades" [ref=f6e36] [cursor=pointer]:
+                - /url: "#features"
+            - generic "Principios de la plataforma" [ref=f6e40]:
+              - generic [ref=f6e41]: Datos por ubicación
+              - generic [ref=f6e45]: Acceso por rol
+              - generic [ref=f6e49]: Visibilidad operativa
+          - generic [ref=f6e52]:
+            - generic [ref=f6e53]:
+              - generic [ref=f6e54]: Vista de operación
+              - generic [ref=f6e55]: Demo / interfaz pendiente
+            - generic [ref=f6e56]:
+              - generic [ref=f6e61]: dashboard / operación
+              - figure [ref=f6e62]:
+                - img "Captura del dashboard principal del ERP — captura pendiente" [ref=f6e63]:
+                  - generic [ref=f6e69]: Captura del Dashboard
+                  - generic [ref=f6e70]: Captura pendiente
+              - generic [ref=f6e71]:
+                - generic [ref=f6e72]: Una lectura común para equipos distintos.
+                - generic [ref=f6e73]: Captura real próximamente
+        - generic "Áreas conectadas" [ref=f6e74]:
+          - generic [ref=f6e75]: Comercial
+          - generic [ref=f6e77]: Operaciones
+          - generic [ref=f6e79]: Distribución
+          - generic [ref=f6e81]: Gestión
+          - generic [ref=f6e83]: Fiscal
+      - region [ref=f6e84]:
+        - generic [ref=f6e85]:
+          - generic [ref=f6e87]:
+            - paragraph [ref=f6e88]: La plataforma
+            - heading "Un ERP para toda la operación" [level=2] [ref=f6e89]
+            - paragraph [ref=f6e90]: No es una colección de pantallas aisladas. Es una forma común de trabajar, medir y responder en cada área de la empresa.
+          - generic [ref=f6e91]:
+            - generic [ref=f6e92]:
+              - generic [ref=f6e93]: señal operativa
+              - paragraph [ref=f6e96]: ERP
+              - heading "Una fuente de control." [level=3] [ref=f6e97]
+              - paragraph [ref=f6e98]: La información de cada movimiento llega al equipo que la necesita.
+            - generic [ref=f6e99]:
+              - generic [ref=f6e100]: Comercial
+              - paragraph [ref=f6e106]: Convierte cada venta en una señal útil para el resto del negocio.
+              - generic [ref=f6e107]:
+                - generic [ref=f6e108]: Ventas POS
+                - generic [ref=f6e109]: Clientes y crédito
+                - generic [ref=f6e110]: Políticas comerciales
+                - generic [ref=f6e111]: Cobranza
+            - generic [ref=f6e112]:
+              - generic [ref=f6e113]: Operaciones
+              - paragraph [ref=f6e126]: Mueve producto con una ubicación y una historia detrás.
+              - generic [ref=f6e127]:
+                - generic [ref=f6e128]: Inventario por ubicación
+                - generic [ref=f6e129]: Compras
+                - generic [ref=f6e130]: CEDIS y sucursales
+                - generic [ref=f6e131]: Transferencias
+            - generic [ref=f6e132]:
+              - generic [ref=f6e133]: Distribución
+              - paragraph [ref=f6e140]: Del pedido confirmado a la entrega documentada.
+              - generic [ref=f6e141]:
+                - generic [ref=f6e142]: Rutas y pedidos
+                - generic [ref=f6e143]: GPS de ruta activa
+                - generic [ref=f6e144]: Evidencias
+                - generic [ref=f6e145]: Liquidación
+            - generic [ref=f6e146]:
+              - generic [ref=f6e147]: Gestión
+              - paragraph [ref=f6e153]: Un tablero común para decidir sin perseguir datos.
+              - generic [ref=f6e154]:
+                - generic [ref=f6e155]: Dashboard y reportes
+                - generic [ref=f6e156]: Caja y cierres
+                - generic [ref=f6e157]: Empleados
+                - generic [ref=f6e158]: Roles y permisos
+            - generic [ref=f6e159]:
+              - generic [ref=f6e160]: Fiscal
+              - paragraph [ref=f6e166]: La operación comercial y la responsabilidad fiscal, conectadas.
+              - generic [ref=f6e167]:
+                - generic [ref=f6e168]: Solicitudes
+                - generic [ref=f6e169]: CFDI
+                - generic [ref=f6e170]: XML y PDF
+                - generic [ref=f6e171]: Conciliación y remediación
+      - region [ref=f6e172]:
+        - generic [ref=f6e173]:
+          - generic [ref=f6e174]:
+            - generic [ref=f6e175]:
+              - paragraph [ref=f6e176]: Comercial / POS
+              - heading "Vende rápido. Mantén el control." [level=2] [ref=f6e177]
+              - paragraph [ref=f6e178]: "Una caja pensada para capturar con velocidad y confirmar con contexto: producto, cliente, ubicación, documento y cobro en el mismo flujo."
+            - list [ref=f6e180]:
+              - listitem [ref=f6e181]:
+                - generic [ref=f6e184]:
+                  - strong [ref=f6e185]: Búsqueda rápida
+                  - generic [ref=f6e186]: Código de barras, SKU, nombre y QR del producto.
+              - listitem [ref=f6e187]:
+                - generic [ref=f6e195]:
+                  - strong [ref=f6e196]: Venta por unidad real
+                  - generic [ref=f6e197]: Kilos, piezas y equivalencias aplicables por producto.
+              - listitem [ref=f6e198]:
+                - generic [ref=f6e203]:
+                  - strong [ref=f6e204]: Cobro conectado
+                  - generic [ref=f6e205]: Contado, crédito, pagos y cartera con reglas claras.
+              - listitem [ref=f6e206]:
+                - generic [ref=f6e211]:
+                  - strong [ref=f6e212]: Inventario en contexto
+                  - generic [ref=f6e213]: Existencia y disponibilidad de la ubicación que vende.
+          - generic [ref=f6e214]:
+            - generic [ref=f6e215]:
+              - generic [ref=f6e216]: caja / venta
+              - generic [ref=f6e220]: interfaz de demostración
+            - generic [ref=f6e221]:
+              - figure [ref=f6e222]:
+                - img "Captura del punto de venta del ERP — captura pendiente" [ref=f6e223]:
+                  - generic [ref=f6e229]: Captura del POS
+                  - generic [ref=f6e230]: Captura pendiente
+              - generic [ref=f6e231]:
+                - generic [ref=f6e232]: Ticket imprimible / historial
+                - generic [ref=f6e235]: sin datos reales
+      - region [ref=f6e236]:
+        - generic [ref=f6e237]:
+          - generic [ref=f6e239]:
+            - paragraph [ref=f6e240]: Operación / Inventario
+            - heading "Inventario donde realmente sucede" [level=2] [ref=f6e241]
+            - paragraph [ref=f6e242]: La existencia no vive en un número global. Vive en la sucursal, el CEDIS, el almacén o la ruta donde realmente está.
+          - generic [ref=f6e243]:
+            - list [ref=f6e245]:
+              - listitem [ref=f6e246]:
+                - generic [ref=f6e258]:
+                  - strong [ref=f6e259]: Saldos por ubicación
+                  - generic [ref=f6e260]: Existencias, mínimos y movimientos consultables por ubicación.
+              - listitem [ref=f6e261]:
+                - generic [ref=f6e266]:
+                  - strong [ref=f6e267]: Movimiento con historia
+                  - generic [ref=f6e268]: Entradas, salidas, ajustes y traspasos con trazabilidad.
+              - listitem [ref=f6e269]:
+                - generic [ref=f6e276]:
+                  - strong [ref=f6e277]: CEDIS conectado
+                  - generic [ref=f6e278]: Suministros, recepciones, devoluciones y conciliación.
+              - listitem [ref=f6e279]:
+                - generic [ref=f6e285]:
+                  - strong [ref=f6e286]: Unidades que respetan el negocio
+                  - generic [ref=f6e287]: Kilos, piezas y equivalencias sin sumar dimensiones dos veces.
+            - generic [ref=f6e288]:
+              - generic [ref=f6e289]:
+                - figure [ref=f6e290]:
+                  - img "Captura del inventario por ubicación — captura pendiente" [ref=f6e291]:
+                    - generic [ref=f6e297]: Captura de Inventario
+                    - generic [ref=f6e298]: Captura pendiente
+                - paragraph [ref=f6e299]: Inventario / ubicación operativa
+              - generic [ref=f6e300]:
+                - figure [ref=f6e301]:
+                  - img "Captura del ciclo de suministro CEDIS — captura pendiente" [ref=f6e302]:
+                    - generic [ref=f6e308]: Captura de CEDIS
+                    - generic [ref=f6e309]: Captura pendiente
+                - paragraph [ref=f6e310]: CEDIS / recepción y conciliación
+      - region [ref=f6e311]:
+        - generic [ref=f6e312]:
+          - generic [ref=f6e313]:
+            - generic [ref=f6e314]:
+              - paragraph [ref=f6e315]: Distribución / Flota
+              - heading "De la venta a la entrega, sin perder visibilidad" [level=2] [ref=f6e316]
+              - paragraph [ref=f6e317]: Planifica, asigna, sigue y liquida el reparto con la misma trazabilidad que esperas de una operación comercial.
+            - list [ref=f6e319]:
+              - listitem [ref=f6e320]:
+                - generic [ref=f6e326]:
+                  - strong [ref=f6e327]: Planeación y optimización
+                  - generic [ref=f6e328]: Secuencia de paradas y recorrido aprobado para cada ruta.
+              - listitem [ref=f6e329]:
+                - generic [ref=f6e333]:
+                  - strong [ref=f6e334]: Seguimiento de flota
+                  - generic [ref=f6e335]: Posiciones de la ruta activa, unidades y estado operativo.
+              - listitem [ref=f6e336]:
+                - generic [ref=f6e341]:
+                  - strong [ref=f6e342]: Contexto geográfico
+                  - generic [ref=f6e343]: Zonas, geocercas e incidencias como parte del registro.
+              - listitem [ref=f6e344]:
+                - generic [ref=f6e351]:
+                  - strong [ref=f6e352]: Entrega comprobable
+                  - generic [ref=f6e353]: Evidencias, devoluciones, cobros y liquidación de ruta.
+            - paragraph [ref=f6e354]: La plataforma no anuncia tráfico en vivo ni calcula rutas en el navegador.
+          - generic [ref=f6e357]:
+            - generic [ref=f6e358]:
+              - generic [ref=f6e359]:
+                - generic [ref=f6e360]: ruta planificada
+                - generic [ref=f6e365]: secuencia aprobada
+              - figure [ref=f6e366]:
+                - img "Captura del planeador de rutas — captura pendiente" [ref=f6e367]:
+                  - generic [ref=f6e373]: Captura del Planeador de rutas
+                  - generic [ref=f6e374]: Captura pendiente
+            - generic [ref=f6e375]:
+              - generic [ref=f6e376]:
+                - generic [ref=f6e377]: flota operativa
+                - generic [ref=f6e383]: GPS / incidencias / zonas
+              - figure [ref=f6e384]:
+                - img "Captura del monitoreo de flota — captura pendiente" [ref=f6e385]:
+                  - generic [ref=f6e391]: Captura de Flota
+                  - generic [ref=f6e392]: Captura pendiente
+      - region [ref=f6e393]:
+        - generic [ref=f6e394]:
+          - generic [ref=f6e395]:
+            - figure [ref=f6e399]:
+              - img "Captura de la experiencia para repartidores — captura pendiente" [ref=f6e400]:
+                - generic [ref=f6e406]: Captura de Reparto
+                - generic [ref=f6e407]: Captura pendiente
+            - paragraph [ref=f6e409]: Experiencia web para repartidores
+          - generic [ref=f6e410]:
+            - generic [ref=f6e411]:
+              - paragraph [ref=f6e412]: Experiencia para repartidores
+              - heading "La operación también cabe en la ruta" [level=2] [ref=f6e413]
+              - paragraph [ref=f6e414]: "Una experiencia enfocada en la ruta del día: qué sigue, qué se entregó y qué necesita atención."
+            - list [ref=f6e416]:
+              - listitem [ref=f6e417]:
+                - generic [ref=f6e421]:
+                  - strong [ref=f6e422]: Trabajo claro
+                  - generic [ref=f6e423]: Rutas asignadas, orden aprobado y paradas pendientes.
+              - listitem [ref=f6e424]:
+                - generic [ref=f6e429]:
+                  - strong [ref=f6e430]: GPS contextual
+                  - generic [ref=f6e431]: Ubicación de la ruta activa desde el navegador autenticado.
+              - listitem [ref=f6e432]:
+                - generic [ref=f6e437]:
+                  - strong [ref=f6e438]: Entrega documentada
+                  - generic [ref=f6e439]: Foto de entrega y otros tipos de evidencia permitidos.
+              - listitem [ref=f6e440]:
+                - generic [ref=f6e445]:
+                  - strong [ref=f6e446]: Cobranza en ruta
+                  - generic [ref=f6e447]: Cobros permitidos, saldos e incidencias de la jornada.
+            - paragraph [ref=f6e448]: La navegación se apoya en la ruta aprobada. No se presenta como una app nativa, ni se promete operación offline.
+      - region [ref=f6e449]:
+        - generic [ref=f6e450]:
+          - generic [ref=f6e451]:
+            - generic [ref=f6e452]:
+              - paragraph [ref=f6e453]: Cobranza / Finanzas operativas
+              - heading "El dinero también necesita contexto" [level=2] [ref=f6e454]
+              - paragraph [ref=f6e455]: Cartera, pagos, caja y liquidaciones se leen como parte de la misma operación, sin esconder diferencias ni mezclar responsabilidades.
+            - list [ref=f6e457]:
+              - listitem [ref=f6e458]:
+                - generic [ref=f6e463]:
+                  - strong [ref=f6e464]: Cuentas por cobrar
+                  - generic [ref=f6e465]: Saldos pendientes, vencidos y estado de crédito por cliente.
+              - listitem [ref=f6e466]:
+                - generic [ref=f6e471]:
+                  - strong [ref=f6e472]: Cobranza trazable
+                  - generic [ref=f6e473]: Pagos y abonos aplicados a una cuenta, con su referencia.
+              - listitem [ref=f6e474]:
+                - generic [ref=f6e479]:
+                  - strong [ref=f6e480]: Caja operativa
+                  - generic [ref=f6e481]: Efectivo, métodos de pago, turnos y cierres por ubicación.
+              - listitem [ref=f6e482]:
+                - generic [ref=f6e487]:
+                  - strong [ref=f6e488]: Liquidación de ruta
+                  - generic [ref=f6e489]: Cobros, devoluciones, incidencias y diferencias por ruta.
+          - generic [ref=f6e490]:
+            - generic [ref=f6e492]:
+              - text: DEMO / NO ES INFORMACIÓN REAL
+              - paragraph [ref=f6e493]: Control financiero operativo
+            - generic [ref=f6e498]:
+              - generic [ref=f6e499]:
+                - generic [ref=f6e501]:
+                  - strong [ref=f6e502]: Cuenta por cobrar
+                  - generic [ref=f6e503]: Saldo pendiente
+                - generic [ref=f6e504]: Seguimiento
+              - generic [ref=f6e505]:
+                - generic [ref=f6e507]:
+                  - strong [ref=f6e508]: Pago registrado
+                  - generic [ref=f6e509]: Aplicado a una cuenta
+                - generic [ref=f6e510]: Trazable
+              - generic [ref=f6e511]:
+                - generic [ref=f6e513]:
+                  - strong [ref=f6e514]: Caja / turno
+                  - generic [ref=f6e515]: Corte operativo
+                - generic [ref=f6e516]: Revisable
+              - generic [ref=f6e517]:
+                - generic [ref=f6e519]:
+                  - strong [ref=f6e520]: Ruta
+                  - generic [ref=f6e521]: Cobros y diferencias
+                - generic [ref=f6e522]: Liquidable
+            - generic [ref=f6e523]:
+              - generic [ref=f6e524]: Sin métricas inventadas
+              - generic [ref=f6e525]: Con evidencia operativa
+      - region [ref=f6e526]:
+        - generic [ref=f6e527]:
+          - generic [ref=f6e528]:
+            - generic [ref=f6e529]:
+              - generic [ref=f6e530]:
+                - generic [ref=f6e531]: fiscal / control
+                - generic [ref=f6e536]: flujo de demostración
+              - figure [ref=f6e537]:
+                - img "Captura del flujo de facturación y CFDI — captura pendiente" [ref=f6e538]:
+                  - generic [ref=f6e544]: Captura de Facturación
+                  - generic [ref=f6e545]: Captura pendiente
+            - generic [aria-hidden] [ref=f6e546]:
+              - generic [ref=f6e547]: XML
+              - generic [ref=f6e551]: Acceso controlado
+              - generic [ref=f6e555]: Trazabilidad
+          - generic [ref=f6e560]:
+            - generic [ref=f6e561]:
+              - paragraph [ref=f6e562]: Facturación / CFDI
+              - heading "Operación comercial y fiscal conectadas" [level=2] [ref=f6e563]
+              - paragraph [ref=f6e564]: La emisión fiscal tiene su propio ciclo, permisos y evidencia; no altera la fuente comercial, monetaria ni de inventario.
+            - list [ref=f6e566]:
+              - listitem [ref=f6e567]:
+                - generic [ref=f6e572]:
+                  - strong [ref=f6e573]: Solicitudes administrativas
+                  - generic [ref=f6e574]: Relaciones y solicitudes de facturación desde la operación.
+              - listitem [ref=f6e575]:
+                - generic [ref=f6e581]:
+                  - strong [ref=f6e582]: CFDI con ciclo propio
+                  - generic [ref=f6e583]: Emisión nativa, estados fiscales y operaciones coordinadas.
+              - listitem [ref=f6e584]:
+                - generic [ref=f6e589]:
+                  - strong [ref=f6e590]: Documentos protegidos
+                  - generic [ref=f6e591]: Artefactos XML y PDF publicados con acceso controlado.
+              - listitem [ref=f6e592]:
+                - generic [ref=f6e598]:
+                  - strong [ref=f6e599]: Trazabilidad fiscal
+                  - generic [ref=f6e600]: Conciliación, auditoría y remediaciones para casos pendientes.
+            - paragraph [ref=f6e601]: La emisión depende de la configuración fiscal y del proveedor habilitado para cada operación. No se promete compatibilidad universal con cualquier PAC.
+      - region [ref=f6e602]:
+        - generic [ref=f6e603]:
+          - generic [ref=f6e605]:
+            - paragraph [ref=f6e606]: Arquitectura / Multiempresa
+            - heading "Una plataforma preparada para crecer contigo" [level=2] [ref=f6e607]
+            - paragraph [ref=f6e608]: La arquitectura actual prepara el crecimiento repitiendo una unidad completa por empresa, no mezclando registros en una misma base de datos.
+          - generic [ref=f6e609]:
+            - generic [ref=f6e610]:
+              - paragraph [ref=f6e611]: aislamiento por despliegue
+              - paragraph [ref=f6e612]: Cada compañía puede operar con su propio entorno, datos, archivos, credenciales, dominio y respaldo. El acceso permanece dentro de su propio plano.
+            - generic [ref=f6e613]:
+              - article [ref=f6e615]:
+                - generic [ref=f6e616]:
+                  - heading "Empresa A" [level=3] [ref=f6e618]
+                  - generic [ref=f6e619]: plano independiente
+                - generic [ref=f6e620]:
+                  - generic [ref=f6e621]: Datos
+                  - generic [ref=f6e626]: Archivos
+                  - generic [ref=f6e629]: Credenciales
+                  - generic [ref=f6e633]: Dominio + TLS
+                  - generic [ref=f6e639]: Backups
+              - article [ref=f6e648]:
+                - generic [ref=f6e649]:
+                  - heading "Empresa B" [level=3] [ref=f6e651]
+                  - generic [ref=f6e652]: plano independiente
+                - generic [ref=f6e653]:
+                  - generic [ref=f6e654]: Datos
+                  - generic [ref=f6e659]: Archivos
+                  - generic [ref=f6e662]: Credenciales
+                  - generic [ref=f6e666]: Dominio + TLS
+                  - generic [ref=f6e672]: Backups
+            - paragraph [ref=f6e676]: "El aislamiento ocurre fuera del modelo de negocio: no se presenta un selector de empresa dentro de la misma sesión ni un SUPERADMIN dentro del ERP."
+      - region [ref=f6e677]:
+        - generic [ref=f6e678]:
+          - generic [ref=f6e680]:
+            - paragraph [ref=f6e681]: Confianza operacional
+            - heading "Control para operar con claridad" [level=2] [ref=f6e682]
+            - paragraph [ref=f6e683]: "Seguridad no es una etiqueta comercial: es una suma de límites, responsabilidades y evidencia operacional."
+          - generic [ref=f6e684]:
+            - article [ref=f6e686]:
+              - heading "Autenticación" [level=3] [ref=f6e692]
+              - paragraph [ref=f6e693]: Sesiones y autenticación como puerta de entrada al ERP.
+            - article [ref=f6e695]:
+              - heading "Acceso por rol" [level=3] [ref=f6e700]
+              - paragraph [ref=f6e701]: Roles y permisos para separar responsabilidades operativas.
+            - article [ref=f6e703]:
+              - heading "Alcance por ubicación" [level=3] [ref=f6e708]
+              - paragraph [ref=f6e709]: Las ubicaciones limitan lo que cada equipo puede consultar y operar.
+            - article [ref=f6e711]:
+              - heading "Auditoría" [level=3] [ref=f6e717]
+              - paragraph [ref=f6e718]: Eventos y operaciones críticas conservan una historia revisable.
+            - article [ref=f6e720]:
+              - heading "HTTPS / TLS" [level=3] [ref=f6e725]
+              - paragraph [ref=f6e726]: TLS en el borde y dominios independientes por empresa.
+            - article [ref=f6e728]:
+              - heading "Continuidad" [level=3] [ref=f6e735]
+              - paragraph [ref=f6e736]: Backups y recuperación se consideran parte del plano de cada empresa.
+      - region [ref=f6e737]:
+        - generic [ref=f6e738]:
+          - generic [ref=f6e739]:
+            - generic [ref=f6e740]:
+              - paragraph [ref=f6e741]: Preguntas frecuentes
+              - heading "Antes de hablar de una demo" [level=2] [ref=f6e742]
+              - paragraph [ref=f6e743]: Respuestas concretas sobre lo que el producto hace hoy y los límites que preferimos dejar claros.
+            - paragraph [ref=f6e744]: ¿No encuentras tu caso? La demostración puede partir de tu operación real y sus reglas, no de una presentación genérica.
+          - generic [ref=f6e745]:
+            - group [ref=f6e746]:
+              - generic "¿El ERP puede utilizarse en varias sucursales?" [ref=f6e747] [cursor=pointer]
+            - group [ref=f6e751]:
+              - generic "¿Puedo controlar ventas e inventario por ubicación?" [ref=f6e752] [cursor=pointer]
+            - group [ref=f6e756]:
+              - generic "¿Cuenta con herramientas para reparto?" [ref=f6e757] [cursor=pointer]
+            - group [ref=f6e761]:
+              - generic "¿Puede manejar ventas a crédito?" [ref=f6e762] [cursor=pointer]
+            - group [ref=f6e766]:
+              - generic "¿Está preparado para varias empresas?" [ref=f6e767] [cursor=pointer]
+            - group [ref=f6e771]:
+              - generic "¿Incluye facturación?" [ref=f6e772] [cursor=pointer]
+      - region [ref=f6e776]:
+        - generic [ref=f6e778]:
+          - generic [ref=f6e779]:
+            - paragraph [ref=f6e780]: Siguiente conversación
+            - heading "Convierte tu operación en un sistema conectado." [level=2] [ref=f6e781]
+            - paragraph [ref=f6e782]: Ventas, inventario, sucursales, cobranza, distribución y administración trabajando sobre una misma plataforma.
+            - generic [ref=f6e783]:
+              - generic [ref=f6e784]: Configurable
+              - generic [ref=f6e785]: Multiempresa
+              - generic [ref=f6e786]: Operación real
+            - link "Ingresar al ERP" [ref=f6e787] [cursor=pointer]:
+              - /url: /login
+          - generic [ref=f6e791]:
+            - generic [ref=f6e792]:
+              - text: DEMO REQUEST / PREPARADO
+              - paragraph [ref=f6e793]: Cuéntanos dónde empieza tu operación.
+            - generic [ref=f6e794]:
+              - generic [ref=f6e795]:
+                - generic [ref=f6e796]: Nombre
+                - textbox "Nombre" [ref=f6e801]:
+                  - /placeholder: Tu nombre
+              - generic [ref=f6e802]:
+                - generic [ref=f6e803]: Correo de trabajo
+                - textbox "Correo de trabajo" [ref=f6e808]:
+                  - /placeholder: tu@empresa.com
+              - button "Solicitar demostración" [ref=f6e809]
+            - paragraph [ref=f6e813]: ERP no envía estos datos todavía. La integración queda preparada para una futura conexión con el servicio comercial.
+    - contentinfo [ref=f6e814]:
+      - generic [ref=f6e815]:
+        - generic [ref=f6e816]:
+          - generic [ref=f6e817]:
+            - link "ERP" [ref=f6e818] [cursor=pointer]:
+              - /url: "#landing-top"
+            - paragraph [ref=f6e824]: Una vista clara para cada parte de tu operación.
+          - navigation "Navegación de pie de página" [ref=f6e825]:
+            - generic [ref=f6e826]:
+              - paragraph [ref=f6e827]: Producto
+              - link "La plataforma" [ref=f6e828] [cursor=pointer]:
+                - /url: "#product"
+              - link "Funcionalidades" [ref=f6e829] [cursor=pointer]:
+                - /url: "#features"
+              - link "Operación" [ref=f6e830] [cursor=pointer]:
+                - /url: "#operation"
+            - generic [ref=f6e831]:
+              - paragraph [ref=f6e832]: Confianza
+              - link "Seguridad" [ref=f6e833] [cursor=pointer]:
+                - /url: "#security"
+              - link "Preguntas frecuentes" [ref=f6e834] [cursor=pointer]:
+                - /url: "#faq"
+              - link "Contacto" [ref=f6e835] [cursor=pointer]:
+                - /url: "#demo"
+            - generic [ref=f6e836]:
+              - paragraph [ref=f6e837]: Legal
+              - generic "Pendiente de configurar" [ref=f6e838]: Aviso de privacidad
+              - generic "Pendiente de configurar" [ref=f6e839]: Términos
+            - generic [ref=f6e840]:
+              - paragraph [ref=f6e841]: Acceso
+              - link "Ingresar al ERP" [ref=f6e842] [cursor=pointer]:
+                - /url: /login
+              - link "Solicitar demostración" [ref=f6e843] [cursor=pointer]:
+                - /url: "#demo"
+        - generic [ref=f6e844]:
+          - generic [ref=f6e845]: © 2026 ERP
+          - generic [ref=f6e846]: Plataforma empresarial configurable
+  - region "Notifications alt+T"
