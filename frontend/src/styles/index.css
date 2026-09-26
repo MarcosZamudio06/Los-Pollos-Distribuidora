@@ -128,6 +128,28 @@
     color: #171717;
   }
 
+  .receipt-header-simple .receipt-header-meta {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+
+  .receipt-header-simple .receipt-header-meta > div {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.5rem;
+  }
+
+  .receipt-header-simple .receipt-header-meta > div:first-child dd,
+  .receipt-header-simple .receipt-header-meta > div:nth-child(2) dd {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .receipt-header-simple .receipt-header-meta > div:last-child dd {
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
   .receipt-section h2 {
     color: #171717;
     font-size: 1.1rem;

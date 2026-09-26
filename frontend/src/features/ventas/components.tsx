@@ -1701,6 +1701,7 @@ type ReceiptHeaderProps = {
   title: string;
   subtitle?: ReactNode;
   centered?: boolean;
+  simpleNote?: boolean;
   folio?: string;
   date?: string | null;
   sellerName?: string | null;
@@ -1716,6 +1717,7 @@ function ReceiptHeader({
   dateLabel = "Fecha",
   folio,
   folioLabel = "Folio",
+  simpleNote = false,
   sellerLabel = "Vendedor",
   sellerName,
   subtitle,
@@ -1723,7 +1725,7 @@ function ReceiptHeader({
 }: ReceiptHeaderProps) {
   return (
     <header
-      className={`receipt-header${centered ? " receipt-header-centered" : ""}`}
+      className={`receipt-header${centered ? " receipt-header-centered" : ""}${simpleNote ? " receipt-header-simple" : ""}`}
     >
       <div className="receipt-header-title">
         <h2>{title}</h2>
@@ -1905,7 +1907,7 @@ function SimpleNote({ data }: { data: TicketData }) {
   const paid = receiptPaid(data);
   return (
     <div className="receipt-document receipt-format-simple">
-      <ReceiptHeader centered data={data} title="NOTA DE VENTA" />
+      <ReceiptHeader centered data={data} simpleNote title="NOTA DE VENTA" />
       <section className="receipt-section">
         <p>
           <b>Cliente:</b> {data.customerName ?? "Público general"}

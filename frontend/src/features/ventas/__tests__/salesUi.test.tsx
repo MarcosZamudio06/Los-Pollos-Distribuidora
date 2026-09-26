@@ -3727,6 +3727,75 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("ticket-print-content");
   });
 
+  it("mantiene legible la cabecera de SIMPLE_NOTE en 72 mm y separa los datos de pago", () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          createdAt: "2026-07-17T18:35:00.000Z",
+          documentType: "SIMPLE_NOTE",
+          locationCode: "SUC-VER",
+          locationName: "Veracruz",
+          payments: [
+            {
+              amount: 50,
+              paymentMethod: "CASH",
+              cashTendered: 60,
+              changeGiven: 10,
+            } as NonNullable<TicketData["payments"]>[number] & {
+              cashTendered: number;
+              changeGiven: number;
+            },
+          ],
+          saleNumber: "SALE-000005",
+          sellerName: "Andrea Snapshot",
+          total: 50,
+        }}
+      />,
+    );
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    const simple = wrapper.querySelector(
+      ".receipt-document.receipt-format-simple",
+    );
+    const metadata = Array.from(
+      simple?.querySelectorAll(".receipt-header-meta > div") ?? [],
+    );
+    const [folio, date, seller] = metadata;
+    const payment = simple?.querySelector(
+      ".receipt-payment:not(.receipt-cash-evidence) > div",
+    );
+    const cashRows = simple?.querySelectorAll(
+      ".receipt-cash-evidence .receipt-cash-row",
+    );
+
+    expect(simple).toBeTruthy();
+    expect(
+      simple?.querySelector(".receipt-header.receipt-header-simple"),
+    ).toBeTruthy();
+    expect(
+      simple?.querySelector(".receipt-header-title > span")?.textContent,
+    ).toBe("Veracruz · SUC-VER");
+    expect(folio?.querySelector("dt")?.textContent).toBe("Folio");
+    expect(folio?.querySelector("dd")?.textContent).toBe("SALE-000005");
+    expect(date?.querySelector("dt")?.textContent).toBe("Fecha");
+    expect(date?.querySelector("dd")?.textContent?.trim()).not.toBe("");
+    expect(seller?.querySelector("dt")?.textContent).toBe("Vendedor");
+    expect(seller?.querySelector("dd")?.textContent).toBe("Andrea Snapshot");
+    expect(payment?.children).toHaveLength(2);
+    expect(payment?.querySelector("dt")?.textContent).toBe("Pago: Efectivo");
+    expect(payment?.querySelector("dd")?.textContent).toBe("$50.00");
+    expect(cashRows).toHaveLength(2);
+    expect(cashRows?.[0]?.querySelector("dt")?.textContent).toBe(
+      "Efectivo entregado",
+    );
+    expect(cashRows?.[0]?.querySelector("dd")?.textContent).toBe("$60.00");
+    expect(cashRows?.[1]?.querySelector("dt")?.textContent).toBe("Cambio");
+    expect(cashRows?.[1]?.querySelector("dd")?.textContent).toBe("$10.00");
+  });
+
   it("muestra efectivo entregado y cambio persistidos sin inventar valores para pagos históricos", () => {
     const html = renderToStaticMarkup(
       <TicketModal
