@@ -191,7 +191,7 @@ describe('Product fiscal profile', () => {
     expect(valid.satProductServiceCode).toBe('10101500');
     expect(valid.satUnitCode).toBe('KGM');
     expect(valid.defaultFactorType).toBe('Tasa');
-    expect(valid.barcode).toBe('AbC-128/42');
+    expect(valid.barcode).toBe('ABC-128/42');
 
     const emptyBarcode = plainToInstance(CreateProductDto, {
       ...commercialProductDto(),

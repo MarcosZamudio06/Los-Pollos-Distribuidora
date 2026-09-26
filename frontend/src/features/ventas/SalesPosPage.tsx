@@ -422,6 +422,8 @@ export function SalesPosPage() {
   const [billingRequestReason, setBillingRequestReason] = useState("");
   const [billingRequestNotes, setBillingRequestNotes] = useState("");
   const [showAdvancedSaleFields, setShowAdvancedSaleFields] = useState(false);
+  const [dismissForcedSaleOptions, setDismissForcedSaleOptions] =
+    useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
   const [overrideEnabled, setOverrideEnabled] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
@@ -455,6 +457,7 @@ export function SalesPosPage() {
   const [printError, setPrintError] = useState(false);
   const [pendingSale, setPendingSale] = useState<PendingSale | null>(null);
   const pageRef = useRef<HTMLElement>(null);
+  const saleOptionsRef = useRef<HTMLDetailsElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
   const conditionPanelRef = useRef<HTMLElement>(null);
@@ -548,6 +551,32 @@ export function SalesPosPage() {
       ),
     [isAdmin, paymentType, selectedCustomer],
   );
+  const forceSaleOptionsOpen = Boolean(
+    canOverrideCredit || requiresAdministrativeInvoice,
+  );
+
+  useEffect(() => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const options = saleOptionsRef.current;
+      if (
+        !options ||
+        !options.open ||
+        !(event.target instanceof Node) ||
+        options.contains(event.target)
+      ) {
+        return;
+      }
+
+      options.open = false;
+      setShowAdvancedSaleFields(false);
+      if (forceSaleOptionsOpen) setDismissForcedSaleOptions(true);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [forceSaleOptionsOpen]);
+
   const creditOptions = useMemo(
     () => ({ isAdmin, overrideEnabled, overrideReason }),
     [isAdmin, overrideEnabled, overrideReason],
@@ -1502,16 +1531,20 @@ export function SalesPosPage() {
         </div>
 
         <details
-          className="absolute inset-x-3 top-[60px] z-40 sm:inset-x-auto sm:right-3"
-          onToggle={(event) =>
-            setShowAdvancedSaleFields(event.currentTarget.open)
-          }
+          className="absolute inset-x-3 top-[60px] z-50 sm:inset-x-auto sm:right-3"
+          onToggle={(event) => {
+            const isOpen = event.currentTarget.open;
+            setShowAdvancedSaleFields(isOpen);
+            if (isOpen) setDismissForcedSaleOptions(false);
+            else if (forceSaleOptionsOpen) setDismissForcedSaleOptions(true);
+          }}
           open={
             showAdvancedSaleFields ||
-            Boolean(canOverrideCredit || requiresAdministrativeInvoice)
+            (forceSaleOptionsOpen && !dismissForcedSaleOptions)
           }
+          ref={saleOptionsRef}
         >
-          <summary className="flex h-11 w-full cursor-pointer list-none items-center justify-center gap-2 border border-[var(--pos-steel)] bg-white px-3 text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)] transition hover:text-[var(--pos-ink)] sm:w-auto sm:justify-start">
+          <summary className="relative z-10 flex h-11 w-full cursor-pointer list-none items-center justify-center gap-2 border border-[var(--pos-steel)] bg-white px-3 text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)] transition hover:text-[var(--pos-ink)] sm:w-auto sm:justify-start">
             <Settings2 aria-hidden="true" className="size-4 shrink-0" />
             Opciones de venta
           </summary>

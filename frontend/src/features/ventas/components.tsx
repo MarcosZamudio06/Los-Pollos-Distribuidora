@@ -1543,21 +1543,21 @@ export function SaleRegisteredScreen({
     <aside
       aria-labelledby="sale-registered-title"
       aria-modal="true"
-      className="fixed inset-0 z-30 grid place-items-center bg-[rgba(23,33,30,0.62)] p-4 sm:p-6"
+      className="fixed inset-0 z-[70] grid place-items-center bg-[rgba(23,33,30,0.62)] p-4 backdrop-blur-sm sm:p-6"
       role="dialog"
     >
       <section className="w-full max-w-xl overflow-hidden rounded-[1.75rem] border border-[var(--pos-steel)] bg-white shadow-[0_28px_80px_rgba(23,33,30,0.28)]">
-        <header className="bg-[var(--pos-ink)] p-6 text-white sm:p-8">
+        <header className="border-b border-[var(--pos-steel)] bg-white p-6 text-[var(--pos-ink)] sm:p-8">
           <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--pos-amber)]">
             Resultado de la operación
           </p>
           <h2
-            className="mt-2 font-[var(--pos-display)] text-3xl font-bold uppercase tracking-[-0.03em]"
+            className="mt-2 font-[var(--pos-display)] text-3xl font-bold uppercase tracking-[-0.03em] text-[var(--pos-ink)]"
             id="sale-registered-title"
           >
             Venta registrada
           </h2>
-          <p className="mt-2 text-sm text-white/70">
+          <p className="mt-2 text-sm text-[var(--pos-muted)]">
             La venta quedó confirmada. Puedes imprimir el comprobante interno o
             continuar con la siguiente operación.
           </p>
@@ -1691,7 +1691,9 @@ function receiptNumber(data: TicketData) {
 }
 
 function receiptLocation(data: TicketData) {
-  return data.locationName ?? data.locationId ?? "Ubicación operativa";
+  const name = data.locationName?.trim() || "Ubicación operativa";
+  const code = data.locationCode?.trim();
+  return code ? `${name} · ${code}` : name;
 }
 
 type ReceiptHeaderProps = {
@@ -1882,13 +1884,17 @@ function ReceiptCashEvidence({ data }: { data: TicketData }) {
     ) ?? [];
   if (cashPayments.length === 0) return null;
   return (
-    <dl className="receipt-payment">
+    <dl className="receipt-payment receipt-cash-evidence">
       {cashPayments.map((payment, index) => (
-        <div key={`cash-evidence-${index}`}>
-          <dt>Efectivo entregado</dt>
-          <dd>{toMoney(payment.cashTendered)}</dd>
-          <dt>Cambio</dt>
-          <dd>{toMoney(payment.changeGiven)}</dd>
+        <div className="receipt-cash-payment" key={`cash-evidence-${index}`}>
+          <div className="receipt-cash-row">
+            <dt>Efectivo entregado</dt>
+            <dd>{toMoney(payment.cashTendered)}</dd>
+          </div>
+          <div className="receipt-cash-row">
+            <dt>Cambio</dt>
+            <dd>{toMoney(payment.changeGiven)}</dd>
+          </div>
         </div>
       ))}
     </dl>
@@ -2084,7 +2090,7 @@ function ScaleTicket({ data }: { data: TicketData }) {
         date={scale?.capturedAt ?? data.createdAt}
         folio={scale?.physicalFolio ?? receiptNumber(data)}
         sellerLabel="Operador"
-        sellerName={scale?.operatorName ?? data.sellerName}
+        sellerName={scale?.operatorName ?? "—"}
         title="TICKET DE BÁSCULA"
       />
       <section className="receipt-section">

@@ -39,6 +39,13 @@ function normalizeOptionalText({ value }: TransformFnParams): unknown {
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeOptionalBarcode({ value }: TransformFnParams): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function normalizeOptionalFactorType({ value }: TransformFnParams): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== 'string') return value;
@@ -83,7 +90,7 @@ export class CreateProductDto {
   sku?: string;
 
   @IsOptional()
-  @Transform(normalizeOptionalText)
+  @Transform(normalizeOptionalBarcode)
   @IsString()
   barcode?: string | null;
 

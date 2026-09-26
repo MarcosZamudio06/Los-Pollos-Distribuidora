@@ -8,6 +8,7 @@ import { CancelSaleDialog } from "../CancelSaleDialog";
 import {
   ConfirmSaleButton,
   CustomerSelector,
+  SaleRegisteredScreen,
   SaleSummary,
   TicketModal,
 } from "../components";
@@ -523,6 +524,83 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("Listo · F2");
     expect(html).toContain("Agrega productos");
     expect(html).toContain("Resolución no compatible");
+  });
+
+  it("cierra las opciones de venta y la captura de pagos al hacer clic afuera", async () => {
+    const { container, root } = await renderDom(
+      <MemoryRouter initialEntries={["/sales"]}>
+        <SalesPosPage />
+      </MemoryRouter>,
+    );
+
+    try {
+      const saleOptions = Array.from(
+        container.querySelectorAll<HTMLDetailsElement>("details"),
+      ).find((details) =>
+        details.querySelector("summary")?.textContent?.includes("Opciones de venta"),
+      );
+      const saleOptionsButton = saleOptions?.querySelector("summary");
+      expect(saleOptions).toBeTruthy();
+      expect(saleOptionsButton?.className).toContain("relative");
+      expect(saleOptionsButton?.className).toContain("z-10");
+      expect(saleOptions?.className).toContain("z-50");
+
+      await act(async () => {
+        saleOptionsButton?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true }),
+        );
+      });
+      expect(saleOptions?.open).toBe(true);
+
+      await act(async () => {
+        document.body.dispatchEvent(
+          new Event("pointerdown", { bubbles: true }),
+        );
+      });
+      expect(saleOptions?.open).toBe(false);
+
+      await openPaymentCapture(container);
+      expect(
+        container.querySelector('[aria-label="Captura de pagos"]'),
+      ).toBeTruthy();
+
+      await act(async () => {
+        document.body.dispatchEvent(
+          new Event("pointerdown", { bubbles: true }),
+        );
+      });
+      expect(
+        container.querySelector('[aria-label="Captura de pagos"]'),
+      ).toBeNull();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("difumina el fondo de la confirmación y conserva su encabezado blanco", () => {
+    const html = renderToStaticMarkup(
+      <SaleRegisteredScreen
+        customerName="Público general"
+        onClose={() => undefined}
+        onNewSale={() => undefined}
+        onOpenHistory={() => undefined}
+        onRetryPrint={() => undefined}
+        saleNumber="SALE-00004"
+        total={25.5}
+      />,
+    );
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const dialog = wrapper.querySelector('[role="dialog"]');
+    const header = dialog?.querySelector("header");
+
+    expect(dialog?.className).toContain("z-[70]");
+    expect(dialog?.className).toContain("backdrop-blur-sm");
+    expect(header?.className).toContain("bg-white");
+    expect(header?.className).not.toContain("bg-[var(--pos-ink)]");
   });
 
   it("abre ventas recientes en un modal descendente sin salir del POS", async () => {
@@ -3673,17 +3751,58 @@ describe("TASK-055 sales UI behavior", () => {
       />,
     );
 
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const cashRows = wrapper.querySelectorAll(".receipt-cash-row");
+
     expect(html).toContain("Efectivo entregado");
     expect(html).toContain("$200.00");
     expect(html).toContain("Cambio");
     expect(html).toContain("$12.50");
+    expect(cashRows).toHaveLength(2);
+    cashRows.forEach((row) => {
+      expect(row.querySelector("dt")).toBeTruthy();
+      expect(row.querySelector("dd")).toBeTruthy();
+      expect(row.children).toHaveLength(2);
+    });
+  });
+
+  it("mantiene importes largos de efectivo en filas alineadas", () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          documentType: "SIMPLE_NOTE",
+          payments: [
+            {
+              amount: 78.78,
+              paymentMethod: "CASH",
+              cashTendered: 12345678.9,
+              changeGiven: 12345600.12,
+            } as NonNullable<TicketData["payments"]>[number] & {
+              cashTendered: number;
+              changeGiven: number;
+            },
+          ],
+        }}
+      />,
+    );
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    expect(wrapper.querySelectorAll(".receipt-cash-row")).toHaveLength(2);
+    expect(html).toContain("$12,345,678.90");
+    expect(html).toContain("$12,345,600.12");
   });
 
   it("renderiza los cuatro formatos documentales con sus prioridades y oculta un RFC inexistente", () => {
     const baseTicket: TicketData = {
       createdAt: "2026-07-17T18:35:00.000Z",
       customerName: "Pollería San José",
-      locationName: "Sucursal Centro",
+      locationName: "Veracruz",
+      locationCode: "SUC-VER",
       payments: [{ amount: 500, paymentMethod: "CASH" }],
       saleNumber: "V-000123",
       sellerName: "Juan Pérez",
@@ -3779,7 +3898,8 @@ describe("TASK-055 sales UI behavior", () => {
     );
 
     expect(simple).toContain("NOTA DE VENTA");
-    expect(simple).toContain("Sucursal Centro");
+    expect(simple).toContain("Veracruz");
+    expect(simple).toContain("SUC-VER");
     expect(simple).toContain("V-000123");
     expect(simple).toContain("Pollo entero");
     expect(simple).toContain("Impuestos");
@@ -3788,7 +3908,7 @@ describe("TASK-055 sales UI behavior", () => {
     expect(simple).toContain("receipt-format-simple");
     expect(splitSimple).toContain("Pago: Efectivo · Tarjeta");
     expect(largeWithoutTaxId).toContain("DATOS DEL CLIENTE");
-    expect(largeWithoutTaxId).toContain("Sucursal Centro");
+    expect(largeWithoutTaxId).toContain("Veracruz");
     expect(largeWithoutTaxId).toContain("V-000123");
     expect(largeWithoutTaxId).toContain("Pollo entero");
     expect(largeWithoutTaxId).toContain("Impuestos");
@@ -3798,7 +3918,7 @@ describe("TASK-055 sales UI behavior", () => {
     expect(largeWithTaxId).toContain("RFC:");
     expect(largeWithTaxId).toContain("XAXX010101000");
     expect(internal).toContain("RECIBO INTERNO");
-    expect(internal).toContain("Sucursal Centro");
+    expect(internal).toContain("Veracruz");
     expect(internal).toContain("V-000123");
     expect(internal).toContain("Pollo entero");
     expect(internal).toContain("Impuestos");
@@ -3808,7 +3928,7 @@ describe("TASK-055 sales UI behavior", () => {
     expect(internal).toContain("DOCUMENTO DE CONTROL INTERNO");
     expect(internal).toContain("NO VÁLIDO COMO COMPROBANTE FISCAL");
     expect(scale).toContain("TICKET DE BÁSCULA");
-    expect(scale).toContain("Sucursal Centro");
+    expect(scale).toContain("Veracruz");
     expect(scale).toContain("BAS-001");
     expect(scale).toContain("Pollo entero");
     expect(scale).toContain("Impuestos");
@@ -3828,6 +3948,22 @@ describe("TASK-055 sales UI behavior", () => {
         "477123481_10232415903693976_8230121272963336539_n.svg",
       );
     }
+  });
+
+  it("uses a human location fallback and never prints an internal location ID", () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          documentType: "SIMPLE_NOTE",
+          locationId: "cmswfm7ca0005p90j158hyi3j",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Ubicación operativa");
+    expect(html).not.toContain("cmswfm7ca0005p90j158hyi3j");
   });
 
   it("no sustituye un pago inicial de cero por el total en un recibo interno de crédito", () => {

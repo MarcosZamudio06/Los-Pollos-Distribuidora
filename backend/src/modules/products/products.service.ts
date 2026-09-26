@@ -4,11 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type {
-  EquivalentStatus,
+import {
   Prisma,
-  ProductPresentationType,
-  ProductUnit,
+  type EquivalentStatus,
+  type ProductPresentationType,
+  type ProductUnit,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PERMISSIONS } from '../../common/authorization/permissions';
@@ -199,13 +199,22 @@ export class ProductsService {
       if (exactQrProduct) {
         products = [exactQrProduct];
       } else {
-        const exactBarcode = (await this.prisma.product.findFirst({
-          where: {
-            ...where,
-            barcode: { equals: search, mode: 'insensitive' },
-          },
-          include,
-        })) as ProductRecord | null;
+        const barcodeMatches = await this.prisma.$queryRaw<
+          Array<{ id: string }>
+        >(Prisma.sql`
+          SELECT "id"
+          FROM "Product"
+          WHERE "barcode" IS NOT NULL
+            AND BTRIM("barcode") <> ''
+            AND LOWER(BTRIM("barcode")) = LOWER(BTRIM(${search}))
+          LIMIT 1
+        `);
+        const exactBarcode = barcodeMatches[0]
+          ? ((await this.prisma.product.findFirst({
+              where: { ...where, id: barcodeMatches[0].id },
+              include,
+            })) as ProductRecord | null)
+          : null;
 
         if (exactBarcode) {
           products = [exactBarcode];
@@ -817,12 +826,22 @@ export class ProductsService {
       return;
     }
 
-    const existingProduct = await this.prisma.product.findUnique({
-      where: { barcode },
-      select: { id: true },
-    });
+    const currentProductFilter = currentProductId
+      ? Prisma.sql`AND "id" <> ${currentProductId}`
+      : Prisma.empty;
+    const existingProducts = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >(Prisma.sql`
+      SELECT "id"
+      FROM "Product"
+      WHERE "barcode" IS NOT NULL
+        AND BTRIM("barcode") <> ''
+        AND LOWER(BTRIM("barcode")) = LOWER(BTRIM(${barcode}))
+        ${currentProductFilter}
+      LIMIT 1
+    `);
 
-    if (existingProduct && existingProduct.id !== currentProductId) {
+    if (existingProducts.length > 0) {
       throw new ConflictException('Barcode is already registered');
     }
   }
@@ -844,7 +863,16 @@ export class ProductsService {
   private normalizeBarcode(
     barcode?: string | null,
   ): string | null | undefined {
-    return this.normalizeOptionalText(barcode);
+    if (barcode === undefined) {
+      return undefined;
+    }
+
+    if (barcode === null) {
+      return null;
+    }
+
+    const normalizedBarcode = barcode.trim().toUpperCase();
+    return normalizedBarcode.length > 0 ? normalizedBarcode : null;
   }
 
   private normalizeOptionalText(
@@ -989,10 +1017,10 @@ export class ProductsService {
     if (!this.isUniqueConstraintError(error)) return;
 
     const target = this.uniqueConstraintTarget(error);
-    if (target.includes('barcode')) {
+    if (target.some((field) => field.toLowerCase().includes('barcode'))) {
       throw new ConflictException('Barcode is already registered');
     }
-    if (target.includes('sku')) {
+    if (target.some((field) => field.toLowerCase().includes('sku'))) {
       throw new ConflictException('SKU is already registered');
     }
 

@@ -43,6 +43,7 @@ type ProductRecord = {
 };
 
 type MockPrisma = {
+  $queryRaw: jest.Mock;
   product: {
     findMany: jest.Mock;
     findUnique: jest.Mock;
@@ -85,6 +86,7 @@ function createProduct(overrides: Partial<ProductRecord> = {}): ProductRecord {
 
 function createPrisma(): MockPrisma {
   return {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     product: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -159,9 +161,8 @@ describe('ProductsService', () => {
     expect(result).not.toHaveProperty('stock');
   });
 
-  it('creates products with trimmed Code128-style barcodes without restricting the symbology', async () => {
+  it('stores trimmed Code128-style barcodes in canonical uppercase without restricting the symbology', async () => {
     const { service, prisma } = createService();
-    prisma.product.findUnique.mockResolvedValue(null);
     prisma.product.create.mockImplementation(({ data }: { data: unknown }) =>
       Promise.resolve(createProduct(data as Partial<ProductRecord>)),
     );
@@ -177,9 +178,12 @@ describe('ProductsService', () => {
     });
 
     expect(prisma.product.create.mock.calls[0][0].data).toEqual(
-      expect.objectContaining({ barcode: 'AbC-128/42' }),
+      expect.objectContaining({ barcode: 'ABC-128/42' }),
     );
-    expect(result).toEqual(expect.objectContaining({ barcode: 'AbC-128/42' }));
+    expect(result).toEqual(expect.objectContaining({ barcode: 'ABC-128/42' }));
+    const barcodeQuery = prisma.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(barcodeQuery.sql).toContain('LOWER(BTRIM("barcode"))');
+    expect(barcodeQuery.values).toContain('ABC-128/42');
   });
 
   it('normalizes blank optional category and description fields before inserting', async () => {
@@ -205,6 +209,7 @@ describe('ProductsService', () => {
     ).resolves.toEqual(expect.objectContaining({ categoryId: null }));
 
     expect(prisma.category.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
     expect(prisma.product.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         sku: null,
@@ -318,12 +323,7 @@ describe('ProductsService', () => {
 
   it('enforces unique barcode and maps barcode races to a barcode conflict', async () => {
     const { service, prisma } = createService();
-    prisma.product.findUnique.mockResolvedValueOnce(
-      createProduct({
-        id: 'other-product',
-        barcode: 'ABC-128',
-      }),
-    );
+    prisma.$queryRaw.mockResolvedValueOnce([{ id: 'other-product' }]);
 
     await expect(
       service.create({
@@ -339,7 +339,6 @@ describe('ProductsService', () => {
       response: { message: 'Barcode is already registered' },
     });
 
-    prisma.product.findUnique.mockResolvedValueOnce(null);
     prisma.product.create.mockRejectedValueOnce({
       code: 'P2002',
       meta: { target: ['barcode'] },
@@ -358,6 +357,89 @@ describe('ProductsService', () => {
     ).rejects.toMatchObject({
       response: { message: 'Barcode is already registered' },
     });
+  });
+
+  it('maps the functional barcode index race to the barcode business conflict', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findUnique.mockResolvedValueOnce(null);
+    prisma.product.create.mockRejectedValueOnce({
+      code: 'P2002',
+      meta: { target: 'Product_barcode_lower_key' },
+    });
+
+    await expect(
+      service.create({
+        name: 'Producto carrera con SKU',
+        sku: 'PRODUCT-001',
+        barcode: 'case-001',
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 0,
+        unit: ProductUnit.KG,
+      }),
+    ).rejects.toMatchObject({
+      response: { message: 'Barcode is already registered' },
+    });
+  });
+
+  it('rejects a case-variant barcode when updating another product', async () => {
+    const { service, prisma } = createService();
+    prisma.product.findFirst.mockResolvedValueOnce(
+      createProduct({ id: 'product-2' }),
+    );
+    prisma.$queryRaw.mockResolvedValueOnce([{ id: 'product-1' }]);
+
+    await expect(
+      service.update('product-2', { barcode: ' abc-9 ' }),
+    ).rejects.toMatchObject({
+      response: { message: 'Barcode is already registered' },
+    });
+    const barcodeQuery = prisma.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(barcodeQuery.values).toContain('ABC-9');
+    expect(barcodeQuery.values).toContain('product-2');
+    expect(prisma.product.update).not.toHaveBeenCalled();
+  });
+
+  it('allows multiple products with an empty barcode to persist as null', async () => {
+    const { service, prisma } = createService();
+    prisma.product.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(createProduct(data as Partial<ProductRecord>)),
+    );
+
+    const createWithoutBarcode = (name: string, barcode: string | null) =>
+      service.create({
+        name,
+        barcode,
+        presentationType: ProductPresentationType.CUT,
+        salePrice: 120,
+        purchaseCost: 90,
+        minStock: 0,
+        unit: ProductUnit.KG,
+      });
+
+    await expect(
+      Promise.all([
+        createWithoutBarcode('Producto sin código 1', '   '),
+        createWithoutBarcode('Producto sin código 2', null),
+      ]),
+    ).resolves.toEqual([
+      expect.objectContaining({ barcode: null }),
+      expect.objectContaining({ barcode: null }),
+    ]);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(prisma.product.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({ barcode: null }),
+      }),
+    );
+    expect(prisma.product.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({ barcode: null }),
+      }),
+    );
   });
 
   it('updates and clears a barcode without changing the SKU uniqueness path', async () => {
@@ -814,6 +896,7 @@ describe('ProductsService', () => {
 
   it('returns the barcode and prioritizes an exact barcode match for POS searches', async () => {
     const { service, prisma } = createService();
+    prisma.$queryRaw.mockResolvedValueOnce([{ id: 'barcode-product' }]);
     prisma.product.findFirst.mockResolvedValue(
       createProduct({ id: 'barcode-product', barcode: '7501234567890' }),
     );
@@ -823,11 +906,13 @@ describe('ProductsService', () => {
       { role: 'SELLER' },
     );
 
+    expect(prisma.$queryRaw).toHaveBeenCalled();
+    const barcodeQuery = prisma.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(barcodeQuery.sql).toContain('LOWER(BTRIM("barcode"))');
+    expect(barcodeQuery.values).toContain('7501234567890');
     expect(prisma.product.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          barcode: { equals: '7501234567890', mode: 'insensitive' },
-        }),
+        where: expect.objectContaining({ id: 'barcode-product' }),
       }),
     );
     expect(prisma.product.findMany).not.toHaveBeenCalled();
@@ -936,6 +1021,21 @@ describe('ProductsService', () => {
                 OR: [
                   { id: 'cedis-1' },
                   { parentId: 'cedis-1', type: 'BRANCH', isActive: true },
+                  {
+                    type: 'ROUTE_STOCK',
+                    routeStockFor: {
+                      originLocation: {
+                        OR: [
+                          { id: 'cedis-1' },
+                          {
+                            parentId: 'cedis-1',
+                            type: 'BRANCH',
+                            isActive: true,
+                          },
+                        ],
+                      },
+                    },
+                  },
                 ],
               },
             },
@@ -951,6 +1051,21 @@ describe('ProductsService', () => {
                 OR: [
                   { id: 'cedis-1' },
                   { parentId: 'cedis-1', type: 'BRANCH', isActive: true },
+                  {
+                    type: 'ROUTE_STOCK',
+                    routeStockFor: {
+                      originLocation: {
+                        OR: [
+                          { id: 'cedis-1' },
+                          {
+                            parentId: 'cedis-1',
+                            type: 'BRANCH',
+                            isActive: true,
+                          },
+                        ],
+                      },
+                    },
+                  },
                 ],
               }),
             }),
@@ -962,9 +1077,10 @@ describe('ProductsService', () => {
 
   it('falls back from exact SKU to partial name search in the documented order', async () => {
     const { service, prisma } = createService();
-    prisma.product.findFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(createProduct({ sku: 'PECH-001' }));
+    prisma.$queryRaw.mockResolvedValueOnce([]);
+    prisma.product.findFirst.mockResolvedValueOnce(
+      createProduct({ sku: 'PECH-001' }),
+    );
 
     const skuResult = await service.findAll(
       { search: 'PECH-001', isActive: true },
@@ -972,20 +1088,27 @@ describe('ProductsService', () => {
     );
 
     expect(prisma.product.findFirst).toHaveBeenNthCalledWith(
-      2,
+      1,
       expect.objectContaining({
         where: expect.objectContaining({
           sku: { equals: 'PECH-001', mode: 'insensitive' },
         }),
       }),
     );
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.product.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
     expect(skuResult.items).toEqual([
       expect.objectContaining({ sku: 'PECH-001' }),
     ]);
 
+    prisma.$queryRaw.mockReset().mockResolvedValueOnce([]);
     prisma.product.findFirst.mockReset();
-    prisma.product.findFirst.mockResolvedValue(null);
-    prisma.product.findMany.mockResolvedValue([createProduct()]);
+    prisma.product.findFirst.mockResolvedValueOnce(null);
+    prisma.product.findMany.mockReset();
+    prisma.product.findMany.mockResolvedValueOnce([createProduct()]);
 
     const nameResult = await service.findAll(
       { search: 'pechuga', isActive: true },
@@ -1002,6 +1125,11 @@ describe('ProductsService', () => {
     expect(nameResult.items).toEqual([
       expect.objectContaining({ name: 'Pechuga de pollo' }),
     ]);
+    const [barcodeLookupOrder] = prisma.$queryRaw.mock.invocationCallOrder;
+    const [skuLookupOrder] = prisma.product.findFirst.mock.invocationCallOrder;
+    const [nameLookupOrder] = prisma.product.findMany.mock.invocationCallOrder;
+    expect(barcodeLookupOrder).toBeLessThan(skuLookupOrder);
+    expect(skuLookupOrder).toBeLessThan(nameLookupOrder);
   });
 
   it('omits purchase cost from product reads for SELLER', async () => {

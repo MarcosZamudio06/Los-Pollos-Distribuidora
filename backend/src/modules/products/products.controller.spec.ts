@@ -203,7 +203,7 @@ describe('ProductsController API', () => {
     expect(productsService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Pechuga de pollo',
-        barcode: 'Code128-01',
+        barcode: 'CODE128-01',
         presentationType: ProductPresentationType.CUT,
         salePrice: 120,
         unit: ProductUnit.KG,

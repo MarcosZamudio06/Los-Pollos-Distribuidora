@@ -661,6 +661,29 @@ function PaymentSummary({
         ?.focus();
   }, [firstPaymentMethod, isOpen, payments.length]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const paymentSummary = paymentEntryRef.current?.closest(
+        '[aria-label="Resumen de pago"]',
+      );
+      if (
+        !paymentSummary ||
+        !(event.target instanceof Node) ||
+        paymentSummary.contains(event.target)
+      ) {
+        return;
+      }
+
+      setIsOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [isOpen]);
+
   const openPanel = () => {
     if (payments.length === 0 && total.isPositive())
       onPaymentsChange([

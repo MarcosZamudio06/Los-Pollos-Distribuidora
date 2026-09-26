@@ -18,6 +18,14 @@ const productBarcodeMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260724190000_add_product_barcode/migration.sql',
 );
+const productBarcodeUniquenessMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260926130000_product_barcode_case_insensitive_unique/migration.sql',
+);
+const saleDocumentOperationalSnapshotsMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260926131000_sale_document_operational_snapshots/migration.sql',
+);
 const productFiscalProfileMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260822100000_add_product_fiscal_profile/migration.sql',
@@ -941,15 +949,45 @@ describe('Prisma schema contract', () => {
 
   it('keeps the product barcode field synchronized with its database migration', () => {
     const product = getModelBlock('Product');
-    const migrationSql = readFileSync(productBarcodeMigrationSqlPath, 'utf8');
+    const columnMigrationSql = readFileSync(
+      productBarcodeMigrationSqlPath,
+      'utf8',
+    );
+    const uniquenessMigrationSql = readFileSync(
+      productBarcodeUniquenessMigrationSqlPath,
+      'utf8',
+    );
 
-    expect(product).toMatch(/barcode\s+String\?\s+@unique/);
-    expect(migrationSql).toContain(
+    expect(product).toMatch(/barcode\s+String\?/);
+    expect(product).not.toMatch(/barcode\s+String\?\s+@unique/);
+    expect(columnMigrationSql).toContain(
       'ALTER TABLE "Product" ADD COLUMN "barcode" TEXT',
     );
-    expect(migrationSql).toContain(
+    expect(columnMigrationSql).toContain(
       'CREATE UNIQUE INDEX "Product_barcode_key" ON "Product"("barcode")',
     );
+    expect(uniquenessMigrationSql).toContain('LOWER(BTRIM("barcode"))');
+    expect(uniquenessMigrationSql).toContain(
+      'CREATE UNIQUE INDEX "Product_barcode_lower_key"',
+    );
+    expect(uniquenessMigrationSql).toContain(
+      'DROP INDEX IF EXISTS "Product_barcode_key"',
+    );
+    expect(uniquenessMigrationSql).toContain('case/whitespace collisions exist');
+    expect(uniquenessMigrationSql).toContain('No Product rows were changed');
+  });
+
+  it('adds nullable immutable operational snapshots to sale documents', () => {
+    const saleDocument = getModelBlock('SaleDocument');
+    const migrationSql = readFileSync(
+      saleDocumentOperationalSnapshotsMigrationSqlPath,
+      'utf8',
+    );
+
+    expect(saleDocument).toMatch(/locationSnapshot\s+Json\?/);
+    expect(saleDocument).toMatch(/sellerSnapshot\s+Json\?/);
+    expect(migrationSql).toContain('ADD COLUMN "locationSnapshot" JSONB');
+    expect(migrationSql).toContain('ADD COLUMN "sellerSnapshot" JSONB');
   });
 
   it('keeps the nullable Product fiscal profile synchronized with an additive migration', () => {
