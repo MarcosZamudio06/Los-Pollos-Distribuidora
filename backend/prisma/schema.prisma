@@ -530,6 +530,7 @@ model User {
   updatedCommercialPolicies       CommercialPolicy[]              @relation("CommercialPolicyUpdatedBy")
   createdOperationalConfigs       OperationalConfig[]             @relation("OperationalConfigCreatedBy")
   updatedOperationalConfigs       OperationalConfig[]             @relation("OperationalConfigUpdatedBy")
+  updatedCompanyBrandings         CompanyBranding[]               @relation("CompanyBrandingUpdatedBy")
   deliveryRoutes                  DeliveryRoute[]                 @relation("DeliveryRouteDriver")
   completedLogisticsStops         DeliveryRoute[]                 @relation("DeliveryRouteLogisticsStopCompletedBy")
   vehiclePositions                VehiclePosition[]               @relation("VehiclePositionDriver")
@@ -1319,6 +1320,19 @@ model OperationalConfig {
   updatedBy       User                 @relation("OperationalConfigUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([key, scope, locationId, isActive])
+}
+
+model CompanyBranding {
+  id              Int      @id @default(1)
+  displayName     String   @db.VarChar(80)
+  shortName       String?  @db.VarChar(32)
+  logoObjectKey   String?  @db.VarChar(512)
+  logoMimeType    String?  @db.VarChar(32)
+  version         Int      @default(1)
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  updatedBy       User     @relation("CompanyBrandingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: Restrict)
 }
 
 model Vehicle {

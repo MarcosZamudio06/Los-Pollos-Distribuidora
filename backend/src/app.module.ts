@@ -38,6 +38,7 @@ import { CashManagementModule } from './modules/cash-management/cash-management.
 import { HealthModule } from './modules/health/health.module';
 import { LegalEntitiesModule } from './modules/legal-entities/legal-entities.module';
 import { CfdiModule } from './modules/cfdi/cfdi.module';
+import { BrandingModule } from './modules/branding/branding.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { CfdiModule } from './modules/cfdi/cfdi.module';
     BillingModule,
     LegalEntitiesModule,
     CfdiModule,
+    BrandingModule,
   ],
   controllers: [],
   providers: [

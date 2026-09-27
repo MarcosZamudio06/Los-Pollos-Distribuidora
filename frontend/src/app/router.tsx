@@ -12,6 +12,7 @@ import {
   AccountsReceivablePage,
   BillingReportableNotesPage,
   BillingRemediationsPage,
+  BrandingSettingsPage,
   BillingRequestDetailPage,
   BillingRequestsPage,
   CedisBranchCreatePage,
@@ -353,6 +354,14 @@ export function AppRouter() {
               element={
                 <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
                   <EmployeesPage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/admin/branding"
+              element={
+                <RoleRoute roles={ROUTE_ACCESS_ROLES.admin}>
+                  <BrandingSettingsPage />
                 </RoleRoute>
               }
             />

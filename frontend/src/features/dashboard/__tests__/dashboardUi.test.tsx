@@ -4,6 +4,11 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "../DashboardPage";
+import { BrandingProvider } from "../../branding/BrandingProvider";
+import {
+  BRANDING_QUERY_KEY,
+  DEFAULT_BRANDING,
+} from "../../branding/brandingHooks";
 import type { DashboardReport } from "../../reportes";
 
 const dashboardData: DashboardReport = {
@@ -85,12 +90,15 @@ function renderDashboard() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  queryClient.setQueryData(BRANDING_QUERY_KEY, DEFAULT_BRANDING);
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
+      <BrandingProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </BrandingProvider>
     </QueryClientProvider>,
   );
 }
@@ -110,6 +118,7 @@ describe("UI-004 role-aware executive dashboard", () => {
     const html = renderDashboard();
 
     expect(html).toContain("Dashboard Ejecutivo");
+    expect(html).toContain("ERP");
     expect(html).toContain("Ventas del día");
     expect(html).toContain("Inventario crítico");
     expect(html).toContain("Sucursal Norte");

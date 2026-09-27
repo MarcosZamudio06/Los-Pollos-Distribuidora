@@ -26,6 +26,10 @@ const saleDocumentOperationalSnapshotsMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260926131000_sale_document_operational_snapshots/migration.sql',
 );
+const companyBrandingMigrationSqlPath = resolve(
+  __dirname,
+  '../../prisma/migrations/20260926140000_add_company_branding/migration.sql',
+);
 const productFiscalProfileMigrationSqlPath = resolve(
   __dirname,
   '../../prisma/migrations/20260822100000_add_product_fiscal_profile/migration.sql',
@@ -217,6 +221,7 @@ describe('Prisma schema contract', () => {
       'DiscountAuthorization',
       'BillingPolicy',
       'OperationalConfig',
+      'CompanyBranding',
       'Vehicle',
       'VehiclePosition',
       'DeliveryZone',
@@ -273,7 +278,7 @@ describe('Prisma schema contract', () => {
     ];
 
     expect(modelNames).toEqual(expect.arrayContaining(requiredModels));
-    expect(modelNames).toHaveLength(83);
+    expect(modelNames).toHaveLength(84);
     expect(modelNames).not.toContain('PaymentAllocation');
     expect(modelNames).not.toContain('CFDI');
     expect(getModelBlock('Product')).not.toMatch(/\bstock\b/);
@@ -988,6 +993,29 @@ describe('Prisma schema contract', () => {
     expect(saleDocument).toMatch(/sellerSnapshot\s+Json\?/);
     expect(migrationSql).toContain('ADD COLUMN "locationSnapshot" JSONB');
     expect(migrationSql).toContain('ADD COLUMN "sellerSnapshot" JSONB');
+  });
+
+  it('persists branding as a singleton per database without tenant identity', () => {
+    const branding = getModelBlock('CompanyBranding');
+    const migrationSql = readFileSync(companyBrandingMigrationSqlPath, 'utf8');
+
+    for (const field of [
+      'displayName',
+      'shortName',
+      'logoObjectKey',
+      'logoMimeType',
+      'version',
+      'updatedByUserId',
+      'createdAt',
+      'updatedAt',
+    ]) {
+      expect(branding).toMatch(new RegExp("\\b" + field + "\\b"));
+    }
+    expect(branding).not.toMatch(/companyId/i);
+    expect(migrationSql).toContain('CompanyBranding_singleton_check');
+    expect(migrationSql).toContain('CHECK ("id" = 1)');
+    expect(migrationSql).toContain('"updatedByUserId"');
+    expect(migrationSql).not.toMatch(/companyId/i);
   });
 
   it('keeps the nullable Product fiscal profile synchronized with an additive migration', () => {

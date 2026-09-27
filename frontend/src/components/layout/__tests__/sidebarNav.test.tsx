@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "../Sidebar";
+import { BrandingProvider } from "../../../features/branding/BrandingProvider";
 import { NAVIGATION_ITEMS } from "../navigation";
 import { ROUTE_ACCESS_ROLES } from "../routeAccess";
 import {
@@ -18,6 +20,30 @@ const mockAuth = vi.hoisted(() => ({
     role: "ADMIN",
   },
 }));
+
+const configuredBranding = {
+  displayName: "Northstar Logistics",
+  shortName: "Northstar",
+  logoUrl: "https://objects.example.test/logo",
+  logoMimeType: "image/png",
+  hasLogo: true,
+  version: 1,
+};
+
+function renderSidebar(path: string) {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(["company-branding"], configuredBranding);
+
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <BrandingProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Sidebar />
+        </MemoryRouter>
+      </BrandingProvider>
+    </QueryClientProvider>,
+  );
+}
 
 vi.mock("../../../features/auth", () => ({
   useAuth: () => mockAuth,
@@ -104,6 +130,7 @@ describe("role navigation", () => {
       "/fleet/vehicles",
       "/daily-close",
       "/reports",
+      "/admin/branding",
       "/admin/employees",
       "/admin/cash-terminals",
     ]);
@@ -209,14 +236,10 @@ describe("role navigation", () => {
   });
 
   it("renderiza cerrar sesión abajo sin botón interno de cerrar", () => {
-    const html = renderToStaticMarkup(
-      <MemoryRouter initialEntries={["/sales/history"]}>
-        <Sidebar />
-      </MemoryRouter>,
-    );
+    const html = renderSidebar("/sales/history");
 
-    expect(html).toContain("El Pollo");
-    expect(html).toContain("Pollos Distribuidora");
+    expect(html).toContain("Northstar Logistics");
+    expect(html).toContain("Northstar");
     expect(html).toContain("CEDIS");
     expect(html).toContain("Cerrar sesión");
     expect(html).not.toContain("Cerrar menú lateral");
