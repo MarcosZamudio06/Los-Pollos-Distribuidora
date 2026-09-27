@@ -232,6 +232,7 @@ export type TicketData = {
   customerCreditDays?: number | null;
   locationId?: string;
   locationName?: string;
+  locationCode?: string | null;
   items?: Array<{
     product?: string;
     productName?: string;

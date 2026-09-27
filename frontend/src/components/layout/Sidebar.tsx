@@ -4,6 +4,8 @@ import { LogOut } from "lucide-react";
 import { preloadRoute } from "../../app/routeLoaders";
 import { Avatar, AvatarFallback, Badge, ScrollArea, Separator } from "../ui";
 import { useAuth } from "../../features/auth";
+import { BrandingLogo } from "../../features/branding/BrandingLogo";
+import { useBranding } from "../../features/branding/brandingHooks";
 import { cn } from "../../lib/utils";
 import {
   getActiveSidebarItemKey,
@@ -27,7 +29,7 @@ const sectionLabels: Record<NavigationItem["section"], string> = {
 
 function getInitials(name?: string | null) {
   if (!name) {
-    return "PD";
+    return "U";
   }
 
   return name
@@ -60,6 +62,7 @@ export function Sidebar({
   variant = "desktop",
 }: SidebarProps) {
   const { user } = useAuth();
+  const { branding } = useBranding();
   const location = useLocation();
   const shouldReduceMotion = useReducedMotion();
   const activeKey = getActiveSidebarItemKey(location.pathname);
@@ -98,21 +101,16 @@ export function Sidebar({
           onClick={onNavigate}
           to="/"
         >
-          <img
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full object-contain"
-            src="/logo-circular-colored.svg"
-          />
+          <BrandingLogo />
         </Link>
 
         {expanded && (
           <div className="min-w-0 flex-1 pt-1">
             <p className="truncate text-base font-black tracking-[-0.03em]">
-              El Pollo
+              {branding.displayName}
             </p>
             <p className="mt-1 truncate text-xs font-semibold uppercase tracking-[0.22em] text-[var(--erp-brand-gold-soft)]">
-              Pollos Distribuidora
+              {branding.shortName ?? "Sistema ERP"}
             </p>
           </div>
         )}

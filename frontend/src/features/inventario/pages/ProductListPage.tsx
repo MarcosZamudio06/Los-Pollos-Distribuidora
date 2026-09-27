@@ -4,6 +4,7 @@ import {
   MapPin,
   Package,
   Pencil,
+  QrCode,
   Search,
   Settings2,
   ShieldCheck,
@@ -27,6 +28,7 @@ import {
 import { InventoryTransferView } from "../components/InventoryTransferView";
 import { LowStockBadge } from "../components/LowStockBadge";
 import { ProductFormModal } from "../components/ProductFormModal";
+import { ProductQrModal } from "../components/ProductQrModal";
 import {
   useInventoryCategories,
   useInventoryLocations,
@@ -121,6 +123,7 @@ export function ProductListPage() {
     user?.permissions?.includes("costs.read") ?? false;
   const [filters, setFilters] = useState<ProductFilters>({});
   const [editingProduct, setEditingProduct] = useState<Product | null>();
+  const [qrProduct, setQrProduct] = useState<Product | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(
     null,
   );
@@ -535,8 +538,20 @@ export function ProductListPage() {
                             {canManage ? (
                               <div className="flex flex-wrap gap-2">
                                 <button
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-info)] transition hover:bg-[rgba(47,111,115,0.08)]"
+                                  onClick={() => setQrProduct(product)}
+                                  type="button"
+                                >
+                                  <QrCode
+                                    className="h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
+                                  Generar QR
+                                </button>
+                                <button
                                   className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-danger)] transition hover:bg-[rgba(157,45,36,0.08)]"
                                   onClick={() => setEditingProduct(product)}
+                                  type="button"
                                 >
                                   <Pencil
                                     className="h-3.5 w-3.5"
@@ -547,6 +562,7 @@ export function ProductListPage() {
                                 <button
                                   className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-info)] transition hover:bg-[rgba(47,111,115,0.08)]"
                                   onClick={() => setAdjustingProduct(product)}
+                                  type="button"
                                 >
                                   <Settings2
                                     className="h-3.5 w-3.5"
@@ -556,9 +572,17 @@ export function ProductListPage() {
                                 </button>
                               </div>
                             ) : (
-                              <span className="text-[var(--erp-muted-foreground)]">
-                                Solo lectura
-                              </span>
+                              <button
+                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--erp-border)] px-3 py-1.5 text-xs font-semibold text-[var(--erp-info)] transition hover:bg-[rgba(47,111,115,0.08)]"
+                                onClick={() => setQrProduct(product)}
+                                type="button"
+                              >
+                                <QrCode
+                                  className="h-3.5 w-3.5"
+                                  aria-hidden="true"
+                                />
+                                Generar QR
+                              </button>
                             )}
                           </td>
                         </tr>
@@ -645,6 +669,12 @@ export function ProductListPage() {
           productId={adjustingProduct.id}
           locationId={filters.locationId}
           onClose={() => setAdjustingProduct(null)}
+        />
+      )}
+      {qrProduct && (
+        <ProductQrModal
+          onClose={() => setQrProduct(null)}
+          product={qrProduct}
         />
       )}
     </main>

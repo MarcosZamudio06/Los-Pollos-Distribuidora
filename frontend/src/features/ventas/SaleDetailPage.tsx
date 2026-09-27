@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import { TicketModal } from "./components";
 import { CancelSaleDialog } from "./CancelSaleDialog";
 import { DriverRouteMap } from "../rutas-reparto/components/DriverRouteMap";
 import { useSale, useSaleDocuments, useSaleTicket } from "./hooks";
+import { createPrintJob, createPosPrinterRuntime } from "./printing/posPrinter";
 import {
   collectionStatusLabel,
   dateTime,
@@ -45,6 +46,7 @@ import type { BadgeTone } from "@/components/ui";
 import type { SaleDetail, SaleDocument, TicketData } from "./types";
 import { BillingRequestStatusBadge } from "../billing-requests";
 import type { BillingRequestStatus } from "../billing-requests/types";
+import { toast } from "sonner";
 
 function saleStatusTone(status?: string | null): BadgeTone {
   if (status === "CONFIRMED") return "green";
@@ -134,6 +136,7 @@ type SaleDetailViewProps = {
   documents: SaleDetailAsyncState<{ items?: SaleDocument[] }>;
   onCloseCancelDialog: () => void;
   onCloseTicket: () => void;
+  onPrintTicket: (data?: TicketData) => void | Promise<void>;
   onShowCancelDialog: () => void;
   onShowTicket: (documentId: string) => void;
   sale: SaleDetailAsyncState<SaleDetail>;
@@ -152,6 +155,20 @@ export function SaleDetailPage() {
   const ticket = useSaleTicket(saleId, documentId);
   const [showTicket, setShowTicket] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const posPrinter = useMemo(() => createPosPrinterRuntime(), []);
+
+  async function handleTicketPrint(data?: TicketData) {
+    if (!data) return;
+    try {
+      await posPrinter.print(
+        createPrintJob(data, { documentId: data.ticketId }),
+      );
+    } catch {
+      toast.warning(
+        "No se pudo imprimir. La venta permanece registrada y puede reintentarse.",
+      );
+    }
+  }
   const canCancel = user?.role === "ADMIN" && sale.data?.status === "CONFIRMED";
 
   return (
@@ -163,6 +180,7 @@ export function SaleDetailPage() {
         setShowTicket(false);
         setDocumentId(undefined);
       }}
+      onPrintTicket={handleTicketPrint}
       onShowCancelDialog={() => setShowCancelDialog(true)}
       onShowTicket={(nextDocumentId) => {
         setDocumentId(nextDocumentId);
@@ -182,6 +200,7 @@ export function SaleDetailView({
   documents,
   onCloseCancelDialog,
   onCloseTicket,
+  onPrintTicket,
   onShowCancelDialog,
   onShowTicket,
   sale,
@@ -651,6 +670,7 @@ export function SaleDetailView({
         <TicketModal
           isLoading={ticket.isLoading}
           onClose={onCloseTicket}
+          onPrint={onPrintTicket}
           ticket={ticket.data ?? undefined}
         />
       )}

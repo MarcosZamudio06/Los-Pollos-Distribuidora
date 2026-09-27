@@ -86,6 +86,10 @@ const employeesRoute = createLazyRoute(
   () => import("../features/employees"),
   "EmployeesPage",
 );
+const brandingRoute = createLazyRoute(
+  () => import("../features/branding"),
+  "BrandingSettingsPage",
+);
 const deliveryRoutesRoute = createLazyRoute(
   () => import("../features/rutas-reparto"),
   "DeliveryRoutesPage",
@@ -201,6 +205,7 @@ export const SuppliersPage = suppliersRoute.Component;
 export const ReportsPage = reportsRoute.Component;
 export const ProductListPage = productListRoute.Component;
 export const EmployeesPage = employeesRoute.Component;
+export const BrandingSettingsPage = brandingRoute.Component;
 export const DeliveryRoutesPage = deliveryRoutesRoute.Component;
 export const MyRoutesPage = myRoutesRoute.Component;
 export const DriverNavigationPage = driverNavigationRoute.Component;
@@ -255,6 +260,7 @@ const navigationPreloaders: Partial<
   "daily-close": dailyCloseRoute.preload,
   reports: reportsRoute.preload,
   employees: employeesRoute.preload,
+  branding: brandingRoute.preload,
   "cash-terminals": posTerminalsRoute.preload,
 };
 

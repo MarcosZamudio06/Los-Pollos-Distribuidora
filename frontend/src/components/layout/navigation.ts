@@ -9,6 +9,7 @@ import {
   History,
   Home,
   MapPinned,
+  Palette,
   RadioTower,
   Package,
   Route,
@@ -53,6 +54,7 @@ export type NavigationItemKey =
   | "reports"
   | "daily-close"
   | "employees"
+  | "branding"
   | "cash-terminals";
 
 export type NavigationItem = {
@@ -335,6 +337,17 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: "Reportes",
     section: "financial",
     to: "/reports",
+  },
+  {
+    activePaths: ["/admin/branding"],
+    allowedRoles: ROUTE_ACCESS_ROLES.admin,
+    routeAccessKey: "admin",
+    description: "Personaliza el nombre y el logo del ERP",
+    icon: Palette,
+    key: "branding",
+    label: "Identidad del ERP",
+    section: "admin",
+    to: "/admin/branding",
   },
   {
     activePaths: ["/admin/employees"],

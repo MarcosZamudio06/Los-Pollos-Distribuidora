@@ -8,6 +8,7 @@ import { CancelSaleDialog } from "../CancelSaleDialog";
 import {
   ConfirmSaleButton,
   CustomerSelector,
+  SaleRegisteredScreen,
   SaleSummary,
   TicketModal,
 } from "../components";
@@ -17,6 +18,7 @@ import { ProductResultsTable } from "../pos/ProductResultsTable";
 import { SaleDetailPage } from "../SaleDetailPage";
 import { SalesHistoryPage } from "../SalesHistoryPage";
 import { SalesPosPage } from "../SalesPosPage";
+import { buildProductQrPayload } from "../../../../../shared/product-qr";
 import type {
   SaleDetail,
   SalePaymentInput,
@@ -522,6 +524,83 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("Listo · F2");
     expect(html).toContain("Agrega productos");
     expect(html).toContain("Resolución no compatible");
+  });
+
+  it("cierra las opciones de venta y la captura de pagos al hacer clic afuera", async () => {
+    const { container, root } = await renderDom(
+      <MemoryRouter initialEntries={["/sales"]}>
+        <SalesPosPage />
+      </MemoryRouter>,
+    );
+
+    try {
+      const saleOptions = Array.from(
+        container.querySelectorAll<HTMLDetailsElement>("details"),
+      ).find((details) =>
+        details.querySelector("summary")?.textContent?.includes("Opciones de venta"),
+      );
+      const saleOptionsButton = saleOptions?.querySelector("summary");
+      expect(saleOptions).toBeTruthy();
+      expect(saleOptionsButton?.className).toContain("relative");
+      expect(saleOptionsButton?.className).toContain("z-10");
+      expect(saleOptions?.className).toContain("z-50");
+
+      await act(async () => {
+        saleOptionsButton?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true }),
+        );
+      });
+      expect(saleOptions?.open).toBe(true);
+
+      await act(async () => {
+        document.body.dispatchEvent(
+          new Event("pointerdown", { bubbles: true }),
+        );
+      });
+      expect(saleOptions?.open).toBe(false);
+
+      await openPaymentCapture(container);
+      expect(
+        container.querySelector('[aria-label="Captura de pagos"]'),
+      ).toBeTruthy();
+
+      await act(async () => {
+        document.body.dispatchEvent(
+          new Event("pointerdown", { bubbles: true }),
+        );
+      });
+      expect(
+        container.querySelector('[aria-label="Captura de pagos"]'),
+      ).toBeNull();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("difumina el fondo de la confirmación y conserva su encabezado blanco", () => {
+    const html = renderToStaticMarkup(
+      <SaleRegisteredScreen
+        customerName="Público general"
+        onClose={() => undefined}
+        onNewSale={() => undefined}
+        onOpenHistory={() => undefined}
+        onRetryPrint={() => undefined}
+        saleNumber="SALE-00004"
+        total={25.5}
+      />,
+    );
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const dialog = wrapper.querySelector('[role="dialog"]');
+    const header = dialog?.querySelector("header");
+
+    expect(dialog?.className).toContain("z-[70]");
+    expect(dialog?.className).toContain("backdrop-blur-sm");
+    expect(header?.className).toContain("bg-white");
+    expect(header?.className).not.toContain("bg-[var(--pos-ink)]");
   });
 
   it("abre ventas recientes en un modal descendente sin salir del POS", async () => {
@@ -1812,6 +1891,78 @@ describe("TASK-055 sales UI behavior", () => {
       expect(
         container.querySelector(".pos-cart-row-added")?.textContent,
       ).toContain("Pollo entero");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("agrega e incrementa el producto cuando el lector entrega su payload QR", async () => {
+    mockState.locations = {
+      data: [
+        { id: "loc-counter", name: "Mostrador", code: "MOST", type: "BRANCH" },
+      ],
+      error: null,
+      isLoading: false,
+    };
+    mockState.products = {
+      data: [
+        {
+          id: "prod-qr",
+          name: "Pollo QR",
+          sku: "QR-001",
+          barcode: "7501234567899",
+          presentationType: "WHOLE",
+          unit: "PIECE",
+          salePrice: 92,
+          inventoryBalance: {
+            locationId: "loc-counter",
+            quantityKg: 0,
+            quantityPieces: 8,
+          },
+        },
+      ],
+      error: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const { container, root } = await renderDom(
+      <MemoryRouter initialEntries={["/sales"]}>
+        <SalesPosPage />
+      </MemoryRouter>,
+    );
+    try {
+      const locationSelect = getSelectByLabelText(
+        container,
+        "Ubicación operativa",
+      );
+      await act(async () => {
+        locationSelect.value = "loc-counter";
+        locationSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      const search = container.querySelector(
+        "#pos-product-search",
+      ) as HTMLInputElement;
+      const payload = buildProductQrPayload("prod-qr");
+      await act(async () => {
+        for (let index = 0; index < 2; index += 1) {
+          changeInput(search, payload);
+          search.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+          );
+        }
+      });
+
+      expect(
+        (
+          container.querySelector(
+            'input[aria-label="Piezas capturadas de Pollo QR"]',
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("2");
+      expect(container.textContent).toContain("Incrementado: Pollo QR (2 piezas)");
     } finally {
       await act(async () => {
         root.unmount();
@@ -3576,6 +3727,75 @@ describe("TASK-055 sales UI behavior", () => {
     expect(html).toContain("ticket-print-content");
   });
 
+  it("mantiene legible la cabecera de SIMPLE_NOTE en 72 mm y separa los datos de pago", () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          createdAt: "2026-07-17T18:35:00.000Z",
+          documentType: "SIMPLE_NOTE",
+          locationCode: "SUC-VER",
+          locationName: "Veracruz",
+          payments: [
+            {
+              amount: 50,
+              paymentMethod: "CASH",
+              cashTendered: 60,
+              changeGiven: 10,
+            } as NonNullable<TicketData["payments"]>[number] & {
+              cashTendered: number;
+              changeGiven: number;
+            },
+          ],
+          saleNumber: "SALE-000005",
+          sellerName: "Andrea Snapshot",
+          total: 50,
+        }}
+      />,
+    );
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    const simple = wrapper.querySelector(
+      ".receipt-document.receipt-format-simple",
+    );
+    const metadata = Array.from(
+      simple?.querySelectorAll(".receipt-header-meta > div") ?? [],
+    );
+    const [folio, date, seller] = metadata;
+    const payment = simple?.querySelector(
+      ".receipt-payment:not(.receipt-cash-evidence) > div",
+    );
+    const cashRows = simple?.querySelectorAll(
+      ".receipt-cash-evidence .receipt-cash-row",
+    );
+
+    expect(simple).toBeTruthy();
+    expect(
+      simple?.querySelector(".receipt-header.receipt-header-simple"),
+    ).toBeTruthy();
+    expect(
+      simple?.querySelector(".receipt-header-title > span")?.textContent,
+    ).toBe("Veracruz · SUC-VER");
+    expect(folio?.querySelector("dt")?.textContent).toBe("Folio");
+    expect(folio?.querySelector("dd")?.textContent).toBe("SALE-000005");
+    expect(date?.querySelector("dt")?.textContent).toBe("Fecha");
+    expect(date?.querySelector("dd")?.textContent?.trim()).not.toBe("");
+    expect(seller?.querySelector("dt")?.textContent).toBe("Vendedor");
+    expect(seller?.querySelector("dd")?.textContent).toBe("Andrea Snapshot");
+    expect(payment?.children).toHaveLength(2);
+    expect(payment?.querySelector("dt")?.textContent).toBe("Pago: Efectivo");
+    expect(payment?.querySelector("dd")?.textContent).toBe("$50.00");
+    expect(cashRows).toHaveLength(2);
+    expect(cashRows?.[0]?.querySelector("dt")?.textContent).toBe(
+      "Efectivo entregado",
+    );
+    expect(cashRows?.[0]?.querySelector("dd")?.textContent).toBe("$60.00");
+    expect(cashRows?.[1]?.querySelector("dt")?.textContent).toBe("Cambio");
+    expect(cashRows?.[1]?.querySelector("dd")?.textContent).toBe("$10.00");
+  });
+
   it("muestra efectivo entregado y cambio persistidos sin inventar valores para pagos históricos", () => {
     const html = renderToStaticMarkup(
       <TicketModal
@@ -3600,22 +3820,65 @@ describe("TASK-055 sales UI behavior", () => {
       />,
     );
 
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const cashRows = wrapper.querySelectorAll(".receipt-cash-row");
+
     expect(html).toContain("Efectivo entregado");
     expect(html).toContain("$200.00");
     expect(html).toContain("Cambio");
     expect(html).toContain("$12.50");
+    expect(cashRows).toHaveLength(2);
+    cashRows.forEach((row) => {
+      expect(row.querySelector("dt")).toBeTruthy();
+      expect(row.querySelector("dd")).toBeTruthy();
+      expect(row.children).toHaveLength(2);
+    });
+  });
+
+  it("mantiene importes largos de efectivo en filas alineadas", () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          documentType: "SIMPLE_NOTE",
+          payments: [
+            {
+              amount: 78.78,
+              paymentMethod: "CASH",
+              cashTendered: 12345678.9,
+              changeGiven: 12345600.12,
+            } as NonNullable<TicketData["payments"]>[number] & {
+              cashTendered: number;
+              changeGiven: number;
+            },
+          ],
+        }}
+      />,
+    );
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    expect(wrapper.querySelectorAll(".receipt-cash-row")).toHaveLength(2);
+    expect(html).toContain("$12,345,678.90");
+    expect(html).toContain("$12,345,600.12");
   });
 
   it("renderiza los cuatro formatos documentales con sus prioridades y oculta un RFC inexistente", () => {
     const baseTicket: TicketData = {
       createdAt: "2026-07-17T18:35:00.000Z",
       customerName: "Pollería San José",
-      locationName: "Sucursal Centro",
+      locationName: "Veracruz",
+      locationCode: "SUC-VER",
       payments: [{ amount: 500, paymentMethod: "CASH" }],
+      saleNumber: "V-000123",
       sellerName: "Juan Pérez",
       paymentType: "CREDIT_SALE",
       subtotal: 1912.5,
       discount: 0,
+      tax: 306,
       total: 1912.5,
       items: [
         {
@@ -3704,19 +3967,41 @@ describe("TASK-055 sales UI behavior", () => {
     );
 
     expect(simple).toContain("NOTA DE VENTA");
+    expect(simple).toContain("Veracruz");
+    expect(simple).toContain("SUC-VER");
+    expect(simple).toContain("V-000123");
+    expect(simple).toContain("Pollo entero");
+    expect(simple).toContain("Impuestos");
+    expect(simple).toContain("$1,912.50");
     expect(simple).toContain("Gracias por su compra");
     expect(simple).toContain("receipt-format-simple");
     expect(splitSimple).toContain("Pago: Efectivo · Tarjeta");
     expect(largeWithoutTaxId).toContain("DATOS DEL CLIENTE");
+    expect(largeWithoutTaxId).toContain("Veracruz");
+    expect(largeWithoutTaxId).toContain("V-000123");
+    expect(largeWithoutTaxId).toContain("Pollo entero");
+    expect(largeWithoutTaxId).toContain("Impuestos");
+    expect(largeWithoutTaxId).toContain("$1,912.50");
     expect(largeWithoutTaxId).toContain("Crédito a 7 días");
     expect(largeWithoutTaxId).not.toContain("RFC:");
     expect(largeWithTaxId).toContain("RFC:");
     expect(largeWithTaxId).toContain("XAXX010101000");
     expect(internal).toContain("RECIBO INTERNO");
+    expect(internal).toContain("Veracruz");
+    expect(internal).toContain("V-000123");
+    expect(internal).toContain("Pollo entero");
+    expect(internal).toContain("Impuestos");
+    expect(internal).toContain("$1,912.50");
     expect(internal).toContain("Entregó");
     expect(internal).toContain("Autorizó");
     expect(internal).toContain("DOCUMENTO DE CONTROL INTERNO");
+    expect(internal).toContain("NO VÁLIDO COMO COMPROBANTE FISCAL");
     expect(scale).toContain("TICKET DE BÁSCULA");
+    expect(scale).toContain("Veracruz");
+    expect(scale).toContain("BAS-001");
+    expect(scale).toContain("Pollo entero");
+    expect(scale).toContain("Impuestos");
+    expect(scale).toContain("$1,062.50");
     expect(scale).toContain("Peso bruto");
     expect(scale).toContain("26.2 kg");
     expect(scale).toContain("Peso tara");
@@ -3725,6 +4010,29 @@ describe("TASK-055 sales UI behavior", () => {
     expect(scale).toContain("María López");
     expect(scale).toContain("receipt-format-scale");
     expect(scale).not.toContain("Gracias por su compra");
+
+    for (const html of [simple, largeWithoutTaxId, internal, scale]) {
+      expect(html).not.toContain("El Pollo de Los Pollos");
+      expect(html).not.toContain(
+        "477123481_10232415903693976_8230121272963336539_n.svg",
+      );
+    }
+  });
+
+  it("uses a human location fallback and never prints an internal location ID", () => {
+    const html = renderToStaticMarkup(
+      <TicketModal
+        isLoading={false}
+        onClose={() => undefined}
+        ticket={{
+          documentType: "SIMPLE_NOTE",
+          locationId: "cmswfm7ca0005p90j158hyi3j",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Ubicación operativa");
+    expect(html).not.toContain("cmswfm7ca0005p90j158hyi3j");
   });
 
   it("no sustituye un pago inicial de cero por el total en un recibo interno de crédito", () => {

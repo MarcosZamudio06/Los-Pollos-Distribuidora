@@ -53,6 +53,23 @@ npm --prefix frontend run lint
 npm --prefix frontend run preview
 ```
 
+Public landing:
+
+```bash
+npm run landing:dev
+npm run landing:build
+npm run landing:lint
+npm run landing:test
+```
+
+The applications are intentionally separate:
+
+- `frontend/` — authenticated ERP application.
+- `landing/` — public commercial site.
+
+Set `landing/.env` from `landing/.env.example` to configure `VITE_ERP_APP_URL`,
+the ERP origin used by the landing's “Ingresar al ERP” links.
+
 Backend:
 
 ```bash

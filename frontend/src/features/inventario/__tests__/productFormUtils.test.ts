@@ -15,6 +15,7 @@ function commercialDraft(
   return {
     name: "Pechuga de pollo",
     sku: "PECH-001",
+    barcode: "",
     description: "Pechuga por kilogramo",
     categoryId: "",
     presentationType: "CUT",
@@ -47,6 +48,7 @@ describe("product fiscal profile form", () => {
     expect(toProductFormValues(draft)).toEqual(
       expect.objectContaining({
         unit: "KG",
+        barcode: null,
         satProductServiceCode: null,
         satUnitCode: null,
         taxObjectCode: null,
@@ -55,6 +57,25 @@ describe("product fiscal profile form", () => {
         defaultRateOrQuota: null,
       }),
     );
+  });
+
+  it("keeps barcode optional for create and editable for existing products", () => {
+    const createDraft = toProductFormDraft();
+    expect(createDraft.barcode).toBe("");
+    expect(toProductFormValues(createDraft).barcode).toBeNull();
+
+    const editDraft = toProductFormDraft({
+      id: "product-1",
+      name: "Pechuga de pollo",
+      barcode: "  AbC-128/42  ",
+      salePrice: 120,
+      unit: "KG",
+      isActive: true,
+    });
+
+    expect(editDraft.barcode).toBe("AbC-128/42");
+    expect(toProductFormValues(editDraft).barcode).toBe("AbC-128/42");
+    expect(hasProductFormErrors(validateProductForm(editDraft))).toBe(false);
   });
 
   it("round-trips a complete fiscal profile without changing the operational unit", () => {

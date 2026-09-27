@@ -247,6 +247,8 @@ type SaleDocumentListRecord = Record<string, unknown> & {
   customerSnapshot?: Record<string, unknown> | null;
   productSnapshot?: Record<string, unknown> | null;
   priceSnapshot?: Record<string, unknown> | null;
+  locationSnapshot?: Record<string, unknown> | null;
+  sellerSnapshot?: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -266,7 +268,6 @@ type SaleDocumentPrintRecord = SaleDocumentListRecord & {
     pieceCount?: number | null;
     unitPrice?: DecimalLike;
     amount?: DecimalLike;
-    capturedBy?: { name: string } | null;
   }>;
 };
 
@@ -605,7 +606,6 @@ export class SalesService {
           },
         },
         scaleTicketReferences: {
-          include: { capturedBy: { select: { name: true } } },
           orderBy: { capturedAt: 'desc' },
         },
       },
@@ -917,6 +917,10 @@ export class SalesService {
             },
             include: { items: true },
           });
+          const sellerSnapshot = await tx.user.findUnique({
+            where: { id: currentUser.id },
+            select: { id: true, name: true },
+          });
           if (!legalEntityMapping) {
             await tx.billingDataRemediation.upsert({
               where: {
@@ -967,6 +971,15 @@ export class SalesService {
             collectedByUserId: sale.collectedByUserId ?? null,
             routeId: sale.routeId ?? null,
             printTemplateVersion: 1,
+            locationSnapshot: {
+              id: location.id,
+              code: location.code,
+              name: location.name,
+            } as Prisma.InputJsonValue,
+            sellerSnapshot: {
+              id: sellerSnapshot?.id ?? currentUser.id,
+              name: sellerSnapshot?.name ?? null,
+            } as Prisma.InputJsonValue,
             ...(customer
               ? {
                   customerSnapshot: this.buildCustomerSnapshot(
@@ -3248,6 +3261,8 @@ export class SalesService {
     const customer = this.snapshotRecord(document.customerSnapshot);
     const product = this.snapshotRecord(document.productSnapshot);
     const price = this.snapshotRecord(document.priceSnapshot);
+    const location = this.snapshotRecord(document.locationSnapshot);
+    const seller = this.snapshotRecord(document.sellerSnapshot);
     const items = Array.isArray(product?.items) ? product.items : [];
     const firstItem = this.snapshotRecord(items[0]);
     const scaleReference = document.scaleTicketReferences?.[0] ?? null;
@@ -3268,6 +3283,10 @@ export class SalesService {
       customerTaxId: this.snapshotString(customer, 'taxId'),
       customerCreditDays: this.snapshotNumber(customer, 'paymentTermsDays'),
       locationId: document.operationalLocationId ?? null,
+      locationName:
+        this.snapshotString(location, 'name')?.trim() || 'Ubicación operativa',
+      locationCode: this.snapshotString(location, 'code')?.trim() || null,
+      sellerName: this.snapshotString(seller, 'name')?.trim() || '—',
       items: items.map((item) => {
         const snapshot = this.snapshotRecord(item);
         return {
@@ -3324,7 +3343,7 @@ export class SalesService {
               pieceCount: scaleReference.pieceCount ?? null,
               unitPrice: this.decimalToString(scaleReference.unitPrice),
               amount: this.decimalToString(scaleReference.amount),
-              operatorName: scaleReference.capturedBy?.name ?? null,
+              operatorName: null,
             }
           : null,
       legend: 'Comprobante interno sin validez fiscal',
@@ -3372,6 +3391,8 @@ export class SalesService {
       customerSnapshot: document.customerSnapshot ?? null,
       productSnapshot: document.productSnapshot ?? null,
       priceSnapshot: document.priceSnapshot ?? null,
+      locationSnapshot: document.locationSnapshot ?? null,
+      sellerSnapshot: document.sellerSnapshot ?? null,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
     };

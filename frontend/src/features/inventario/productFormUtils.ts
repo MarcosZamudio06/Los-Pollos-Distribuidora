@@ -24,6 +24,7 @@ export type ProductFormDraft = Omit<
   | "purchaseCost"
   | "minStock"
   | "unit"
+  | "barcode"
   | "pieceWeightEquivalent"
   | "equivalentPolicyStatus"
   | "satProductServiceCode"
@@ -38,6 +39,7 @@ export type ProductFormDraft = Omit<
   purchaseCost: string;
   minStock: string;
   unit: OperationalUnit | "";
+  barcode: string;
   pieceWeightEquivalent: string;
   equivalentPolicyStatus: EquivalentPolicyStatus | "";
   satProductServiceCode: string;
@@ -51,6 +53,7 @@ export type ProductFormDraft = Omit<
 export type ProductFormField =
   | "name"
   | "sku"
+  | "barcode"
   | "description"
   | "categoryId"
   | "presentationType"
@@ -93,6 +96,10 @@ export function collapseSpaces(value: string) {
 
 export function cleanSku(value: string) {
   return value.toUpperCase().replace(SKU_ALLOWED, "");
+}
+
+export function normalizeBarcode(value: string) {
+  return value.trim();
 }
 
 export function normalizeDecimalInput(value: string, maxDecimals: number) {
@@ -190,6 +197,7 @@ export function toProductFormDraft(product?: Product | null): ProductFormDraft {
   return {
     name: collapseSpaces(product?.name ?? ""),
     sku: cleanSku(product?.sku ?? ""),
+    barcode: normalizeBarcode(product?.barcode ?? ""),
     description: collapseSpaces(product?.description ?? ""),
     categoryId: collapseSpaces(product?.categoryId ?? ""),
     presentationType: normalizeProductPresentation(
@@ -224,6 +232,7 @@ export function toProductFormValues(
   return {
     name: collapseSpaces(draft.name),
     sku: cleanSku(draft.sku).trim(),
+    barcode: normalizeBarcode(draft.barcode) || null,
     description: collapseSpaces(draft.description),
     categoryId: collapseSpaces(draft.categoryId),
     presentationType: draft.presentationType || "KG",
@@ -275,6 +284,8 @@ export function validateProductField(
         ? null
         : "El SKU solo permite letras, números y guiones.";
     }
+    case "barcode":
+      return null;
     case "description": {
       const value = collapseSpaces(draft.description);
       return value.length > 500
@@ -375,6 +386,7 @@ export function validateProductForm(draft: ProductFormDraft) {
   const fields: ProductFormField[] = [
     "name",
     "sku",
+    "barcode",
     "description",
     "categoryId",
     "presentationType",

@@ -1,13 +1,11 @@
 ┌────────────────────────────────┐
-│ LOGO EMPRESA │
-│ El Pollo de Los Pollos │
 │ TICKET DE BÁSCULA │
-├────────────────────────────────┤
-│ Folio báscula: TB-000328 │
+│ Sucursal / ubicación operativa │
+│ Folio: TB-000328 │
 │ Fecha: 17/07/2026 18:35 │
-│ Sucursal: Mercado Central │
+│ Vendedor / operador: Carlos Gómez │
+├────────────────────────────────┤
 │ Báscula: BAS-02 │
-│ Operador: Carlos Gómez │
 ├────────────────────────────────┤
 │ Producto: Pollo entero │
 │ Unidad: Kilogramos │

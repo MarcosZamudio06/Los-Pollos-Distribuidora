@@ -36,6 +36,7 @@ type MockPrisma = {
   $queryRawUnsafe: jest.Mock;
   $executeRawUnsafe: jest.Mock;
   product: { findMany: jest.Mock };
+  user: { findUnique: jest.Mock };
   customer: { findUnique: jest.Mock };
   commercialPolicy: { findFirst: jest.Mock };
   discountAuthorization: { findFirst: jest.Mock; updateMany: jest.Mock };
@@ -94,6 +95,7 @@ function createPrisma(): MockPrisma {
     $queryRawUnsafe: jest.fn(),
     $executeRawUnsafe: jest.fn(),
     product: { findMany: jest.fn() },
+    user: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
     commercialPolicy: { findFirst: jest.fn() },
     discountAuthorization: { findFirst: jest.fn(), updateMany: jest.fn() },
@@ -198,9 +200,16 @@ function mockHappyPath(
   prisma.operationalLocation.findUnique.mockResolvedValue({
     id: 'loc-1',
     name: 'Counter',
+    code: 'SUC-CTR',
     type: 'BRANCH',
     isActive: true,
   });
+  prisma.user.findUnique.mockImplementation(({ where }) =>
+    Promise.resolve({
+      id: where.id,
+      name: where.id === 'seller-1' ? 'Seller One' : 'Admin User',
+    }),
+  );
   prisma.cashShift.findUnique.mockResolvedValue({
     id: 'shift-1',
     terminalId: 'terminal-1',
@@ -757,6 +766,12 @@ describe('SalesService', () => {
     });
     expect(prisma.saleDocument.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
+        locationSnapshot: {
+          id: 'loc-1',
+          code: 'SUC-CTR',
+          name: 'Counter',
+        },
+        sellerSnapshot: { id: 'seller-1', name: 'Seller One' },
         productSnapshot: expect.objectContaining({
           items: [
             expect.objectContaining({
@@ -1544,6 +1559,12 @@ describe('SalesService', () => {
         taxId: 'XAXX010101000',
         paymentTermsDays: 15,
       },
+      locationSnapshot: {
+        id: 'loc-1',
+        code: 'SUC-VER',
+        name: 'Veracruz',
+      },
+      sellerSnapshot: { id: 'seller-1', name: 'Runtime Audit Seller' },
       productSnapshot: {
         items: [
           {
@@ -1592,6 +1613,9 @@ describe('SalesService', () => {
       customerPhone: '229 000 0000',
       customerTaxId: 'XAXX010101000',
       customerCreditDays: 15,
+      locationName: 'Veracruz',
+      locationCode: 'SUC-VER',
+      sellerName: 'Runtime Audit Seller',
       subtotal: '250',
       discount: '10',
       total: '240',
@@ -1610,6 +1634,48 @@ describe('SalesService', () => {
         }),
       ],
     });
+    const printInclude = prisma.saleDocument.findFirst.mock.calls[0][0].include;
+    expect(printInclude).not.toHaveProperty('operationalLocation');
+    expect(printInclude).not.toHaveProperty('customer');
+    expect(printInclude).not.toHaveProperty('product');
+    expect(printInclude.scaleTicketReferences).not.toHaveProperty('include');
+    expect(prisma.customer.findUnique).not.toHaveBeenCalled();
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.operationalLocation.findUnique).not.toHaveBeenCalled();
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it('uses safe human fallbacks for historical documents without operational snapshots', async () => {
+    const { service, prisma } = createService();
+    prisma.saleDocument.findFirst.mockResolvedValue({
+      id: 'doc-historical-1',
+      saleId: 'sale-historical-1',
+      documentType: SaleDocumentType.SIMPLE_NOTE,
+      operationalLocationId: 'internal-location-id',
+      physicalFolio: 'N-OLD-1',
+      status: SaleDocumentStatus.ISSUED,
+      requiresAdministrativeInvoice: false,
+      printTemplateVersion: 1,
+      customerSnapshot: null,
+      productSnapshot: { items: [] },
+      priceSnapshot: { subtotal: 0, total: 0, paid: 0, outstanding: 0 },
+      createdAt: now,
+      updatedAt: now,
+      scaleTicketReferences: [],
+    });
+
+    const ticket = await service.getDocumentPrint(
+      'sale-historical-1',
+      'doc-historical-1',
+      { id: 'seller-1', role: 'SELLER' },
+    );
+
+    expect(ticket).toMatchObject({
+      locationName: 'Ubicación operativa',
+      locationCode: null,
+      sellerName: '—',
+    });
+    expect(ticket.locationName).not.toBe('internal-location-id');
   });
 
   it('returns every applied persisted payment when printing a split-payment sale document', async () => {
@@ -1863,7 +1929,6 @@ describe('SalesService', () => {
           unitPrice: decimal('42.5'),
           amount: decimal('1062.5'),
           product: { name: 'Whole chicken', unit: ProductUnit.KG },
-          capturedBy: { name: 'Scale Operator' },
         },
       ],
       payments: [],
@@ -1908,7 +1973,7 @@ describe('SalesService', () => {
           pieceCount: 14,
           unitPrice: '42.50',
           amount: '1062.50',
-          operatorName: 'Scale Operator',
+          operatorName: null,
         },
       }),
     );

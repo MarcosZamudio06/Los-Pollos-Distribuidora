@@ -34,6 +34,7 @@ Registrar ventas de contado, crédito, abonadas y atrasadas con inventario por u
 
 - La venta debe conservar `saleChannel`, `documentType` y ubicación operativa.
 - No vender sin stock suficiente.
+- La búsqueda POS resuelve, en este orden, payload QR ERP válido por `Product.id` exacto, código de barras exacto, SKU exacto y nombre parcial. La resolución QR conserva actividad, ubicación, inventario y permisos.
 - Un `SELLER` solo puede crear ventas desde su ubicación operativa asignada; `ADMIN` puede crear ventas desde cualquier ubicación activa compatible.
 - La ubicación de descuento debe ser compatible con el canal: `COUNTER` acepta `BRANCH`, `MIXED` o `EXTERNAL_POINT_OF_SALE`; `EXTERNAL_POINT_OF_SALE` solo acepta `EXTERNAL_POINT_OF_SALE`; `ROUTE` solo acepta `ROUTE_STOCK`; `INSTITUTIONAL` y `WHOLESALE` solo aceptan `BRANCH` o `MIXED`.
 - Si `saleChannel=ROUTE`, la venta debe descontar inventario exclusivamente desde `ROUTE_STOCK`.
@@ -69,6 +70,7 @@ Las rutas exactas deben definirse en `specs/.specs/03-api/sales-api.md` y `specs
 ## UI
 
 - POS rápido.
+- `pos-product-search` acepta `ERP:PRODUCT:1:<productId>` de lectores USB/HID y reutiliza el mismo flujo de agregado e incremento del carrito que barcode.
 - Libreta documental.
 - Ticket interno.
 - Solicitud administrativa interna.

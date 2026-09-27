@@ -56,8 +56,8 @@ export function configureHttpApplication(
 
   if (swaggerEnabled && nodeEnv !== 'production') {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Pollos Distribuidor API')
-      .setDescription('Backend bootstrap for the Pollos Distribuidor system')
+      .setTitle('ERP API')
+      .setDescription('Backend API for the ERP application')
       .setVersion('1.0.0')
       .addBearerAuth()
       .build();

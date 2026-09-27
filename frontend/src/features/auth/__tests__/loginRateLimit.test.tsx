@@ -2,8 +2,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "../../../lib/api";
+import { BrandingProvider } from "../../branding/BrandingProvider";
+import { DEFAULT_BRANDING } from "../../branding/brandingHooks";
 import type { AuthContextValue } from "../authContext";
 import { LoginPage } from "../pages/LoginPage";
 import { useAuth } from "../useAuth";
@@ -30,12 +33,18 @@ function renderLogin(login: AuthContextValue["login"]) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(["company-branding"], DEFAULT_BRANDING);
 
   act(() => {
     root.render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>,
+      <QueryClientProvider client={queryClient}>
+        <BrandingProvider>
+          <MemoryRouter>
+            <LoginPage />
+          </MemoryRouter>
+        </BrandingProvider>
+      </QueryClientProvider>,
     );
   });
 

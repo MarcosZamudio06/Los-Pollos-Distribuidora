@@ -14,6 +14,8 @@ import {
   getLoginErrorPresentation,
 } from "../loginError";
 import { useAuth } from "../useAuth";
+import { BrandingLogo } from "../../branding/BrandingLogo";
+import { useBranding } from "../../branding/brandingHooks";
 
 type LocationState = {
   from?: {
@@ -23,6 +25,7 @@ type LocationState = {
 
 export function LoginPage() {
   const { error, isAuthenticated, login } = useAuth();
+  const { branding } = useBranding();
   const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -98,6 +101,21 @@ export function LoginPage() {
           <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-[rgba(214,155,45,0.16)] blur-3xl" />
           <div className="relative flex h-full max-w-xl flex-col justify-between">
             <div>
+              <div className="mb-10 flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl border border-white/15 bg-white/10 p-2">
+                  <BrandingLogo />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-black text-white">
+                    {branding.displayName}
+                  </p>
+                  {branding.shortName && (
+                    <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+                      {branding.shortName}
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--erp-brand-gold-soft)]">
                 <ShieldCheck className="h-4 w-4" />
                 Acceso operativo
@@ -116,9 +134,14 @@ export function LoginPage() {
         <div className="relative flex items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
           <div className="w-full max-w-[28rem]">
             <div className="mb-8 lg:hidden">
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--erp-danger)]">
-                Pollos Distribuidora
-              </p>
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl border border-[color:var(--erp-border)] bg-[var(--erp-charcoal)] p-2">
+                  <BrandingLogo />
+                </div>
+                <p className="truncate text-lg font-black text-[var(--erp-foreground)]">
+                  {branding.displayName}
+                </p>
+              </div>
               <h1 className="mt-3 text-4xl font-black leading-none tracking-[-0.06em] text-[var(--erp-foreground)]">
                 Acceso operativo
               </h1>

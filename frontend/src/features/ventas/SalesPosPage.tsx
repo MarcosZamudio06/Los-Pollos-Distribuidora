@@ -56,6 +56,15 @@ import { OperationalBar } from "./pos/OperationalBar";
 import { ProductResultsTable } from "./pos/ProductResultsTable";
 import { RecentSalesModal } from "./pos/RecentSalesModal";
 import { ScanCommandBar } from "./pos/ScanCommandBar";
+import { findProductByLookup } from "./pos/productLookup";
+import { PrinterStatusIndicator } from "./printing/PrinterStatusIndicator";
+import {
+  createPrintJob,
+  createPosPrinterRuntime,
+  PosPrinterStatus,
+  requestBrowserPrint,
+  type PosPrinterStatus as PosPrinterStatusType,
+} from "./printing/posPrinter";
 import type {
   CartItem,
   CreateSaleResponse,
@@ -87,23 +96,6 @@ function canAccessPos(role?: string | null) {
 function asNumber(value: string | number | null | undefined) {
   const numericValue = Number(value ?? 0);
   return Number.isFinite(numericValue) ? numericValue : 0;
-}
-
-function findProductByLookup(products: ProductOption[], value: string) {
-  const normalizedValue = value.trim().toLowerCase();
-  if (!normalizedValue) return undefined;
-
-  return (
-    products.find(
-      (product) => product.barcode?.trim().toLowerCase() === normalizedValue,
-    ) ??
-    products.find(
-      (product) => product.sku?.trim().toLowerCase() === normalizedValue,
-    ) ??
-    products.find(
-      (product) => product.name.trim().toLowerCase() === normalizedValue,
-    )
-  );
 }
 
 function productToOption(product: Product, locationId: string): ProductOption {
@@ -430,6 +422,8 @@ export function SalesPosPage() {
   const [billingRequestReason, setBillingRequestReason] = useState("");
   const [billingRequestNotes, setBillingRequestNotes] = useState("");
   const [showAdvancedSaleFields, setShowAdvancedSaleFields] = useState(false);
+  const [dismissForcedSaleOptions, setDismissForcedSaleOptions] =
+    useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
   const [overrideEnabled, setOverrideEnabled] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
@@ -457,8 +451,13 @@ export function SalesPosPage() {
     null,
   );
   const [showTicket, setShowTicket] = useState(false);
+  const [printerStatus, setPrinterStatus] = useState<PosPrinterStatusType>(
+    PosPrinterStatus.NOT_CONFIGURED,
+  );
+  const [printError, setPrintError] = useState(false);
   const [pendingSale, setPendingSale] = useState<PendingSale | null>(null);
   const pageRef = useRef<HTMLElement>(null);
+  const saleOptionsRef = useRef<HTMLDetailsElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
   const conditionPanelRef = useRef<HTMLElement>(null);
@@ -510,6 +509,7 @@ export function SalesPosPage() {
   const products = useProducts(productFilters);
   const customers = useCustomers({ isActive: "true", search: customerSearch });
   const createSale = useCreateSale();
+  const posPrinter = useMemo(() => createPosPrinterRuntime(), []);
   const ticket = useSaleTicket(
     confirmedSale?.saleId,
     confirmedSale?.documentId,
@@ -551,6 +551,32 @@ export function SalesPosPage() {
       ),
     [isAdmin, paymentType, selectedCustomer],
   );
+  const forceSaleOptionsOpen = Boolean(
+    canOverrideCredit || requiresAdministrativeInvoice,
+  );
+
+  useEffect(() => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const options = saleOptionsRef.current;
+      if (
+        !options ||
+        !options.open ||
+        !(event.target instanceof Node) ||
+        options.contains(event.target)
+      ) {
+        return;
+      }
+
+      options.open = false;
+      setShowAdvancedSaleFields(false);
+      if (forceSaleOptionsOpen) setDismissForcedSaleOptions(true);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [forceSaleOptionsOpen]);
+
   const creditOptions = useMemo(
     () => ({ isAdmin, overrideEnabled, overrideReason }),
     [isAdmin, overrideEnabled, overrideReason],
@@ -648,6 +674,16 @@ export function SalesPosPage() {
   useEffect(() => {
     if (ticket.data || ticket.error) finishPosMeasurement("print");
   }, [ticket.data, ticket.error]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void posPrinter.getStatus().then((status) => {
+      if (!cancelled) setPrinterStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [posPrinter]);
 
   const commitCart = useCallback((nextCart: CartItem[]) => {
     cartRef.current = nextCart;
@@ -886,7 +922,7 @@ export function SalesPosPage() {
   );
 
   function handleProductSearchSubmit(value: string) {
-    const normalizedValue = value.trim().toLowerCase();
+    const normalizedValue = value.trim();
     if (!normalizedValue) return;
     startPosMeasurement("scan-feedback");
     const match = findProductByLookup(productOptions, normalizedValue);
@@ -929,6 +965,7 @@ export function SalesPosPage() {
   function clearConfirmedSale() {
     setShowTicket(false);
     setConfirmedSale(null);
+    setPrintError(false);
   }
 
   function closeRegisteredSale() {
@@ -1080,6 +1117,7 @@ export function SalesPosPage() {
         customerName: sale?.customerName ?? pendingSale.customerName,
         total: Money.from(sale?.total ?? pendingSale.total).toString(),
       });
+      setPrintError(false);
       setShowTicket(false);
       clearSaleDraft();
       setPendingSale(null);
@@ -1108,7 +1146,54 @@ export function SalesPosPage() {
     }
   }
 
+  async function handleTicketPrint(
+    data: TicketData | undefined,
+    fromSaleDocument: boolean,
+  ) {
+    setPrintError(false);
+    if (!data) {
+      setPrintError(true);
+      toast.warning("El documento aún no está disponible para imprimir.");
+      return;
+    }
+
+    try {
+      if (!fromSaleDocument) {
+        requestBrowserPrint();
+        return;
+      }
+
+      let job;
+      try {
+        job = createPrintJob(data, {
+          documentId: confirmedSale?.documentId ?? data.ticketId,
+        });
+      } catch {
+        requestBrowserPrint();
+        toast.warning(
+          "El trabajo normalizado no estaba disponible; se abrió la impresión del navegador.",
+        );
+        return;
+      }
+
+      const result = await posPrinter.print(job);
+      if (result.usedFallback) {
+        setPrinterStatus(await posPrinter.getStatus());
+        toast.warning(
+          "El agente local no respondió; se abrió la impresión del navegador.",
+        );
+      }
+    } catch {
+      setPrintError(true);
+      setPrinterStatus(await posPrinter.getStatus());
+      toast.warning(
+        "No se pudo imprimir. La venta permanece registrada y puede reintentarse.",
+      );
+    }
+  }
+
   function handleRetryPrint() {
+    setPrintError(false);
     startPosMeasurement("print");
     setShowTicket(true);
     if (confirmedSale?.documentId) void ticket.refetch();
@@ -1216,7 +1301,9 @@ export function SalesPosPage() {
     pendingSale?.customer?.creditSummary?.outstandingAmount;
   const ticketLoading = Boolean(ticket.isLoading || ticket.isFetching);
   const printStatus = confirmedSale
-    ? ticketLoading
+    ? printError
+      ? "print-error"
+      : ticketLoading
       ? "loading"
       : ticket.data
         ? "ready"
@@ -1316,6 +1403,7 @@ export function SalesPosPage() {
               {isOnline ? "En línea" : "Sin conexión"}
             </span>
           </span>
+          <PrinterStatusIndicator status={printerStatus} />
           <button
             aria-label={
               scanSoundEnabled
@@ -1382,7 +1470,7 @@ export function SalesPosPage() {
             </p>
           )}
           <p className="sr-only">
-            Impresora: no configurada. Báscula: captura manual.
+            {`Impresora: ${printerStatus === PosPrinterStatus.AVAILABLE ? "disponible" : printerStatus === PosPrinterStatus.OFFLINE ? "sin conexión" : "no configurada"}. Báscula: captura manual.`}
           </p>
         </OperationalBar>
 
@@ -1443,16 +1531,20 @@ export function SalesPosPage() {
         </div>
 
         <details
-          className="absolute inset-x-3 top-[60px] z-40 sm:inset-x-auto sm:right-3"
-          onToggle={(event) =>
-            setShowAdvancedSaleFields(event.currentTarget.open)
-          }
+          className="absolute inset-x-3 top-[60px] z-50 sm:inset-x-auto sm:right-3"
+          onToggle={(event) => {
+            const isOpen = event.currentTarget.open;
+            setShowAdvancedSaleFields(isOpen);
+            if (isOpen) setDismissForcedSaleOptions(false);
+            else if (forceSaleOptionsOpen) setDismissForcedSaleOptions(true);
+          }}
           open={
             showAdvancedSaleFields ||
-            Boolean(canOverrideCredit || requiresAdministrativeInvoice)
+            (forceSaleOptionsOpen && !dismissForcedSaleOptions)
           }
+          ref={saleOptionsRef}
         >
-          <summary className="flex h-11 w-full cursor-pointer list-none items-center justify-center gap-2 border border-[var(--pos-steel)] bg-white px-3 text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)] transition hover:text-[var(--pos-ink)] sm:w-auto sm:justify-start">
+          <summary className="relative z-10 flex h-11 w-full cursor-pointer list-none items-center justify-center gap-2 border border-[var(--pos-steel)] bg-white px-3 text-xs font-bold text-[var(--pos-muted)] shadow-[0_8px_18px_rgba(23,33,30,0.10)] transition hover:text-[var(--pos-ink)] sm:w-auto sm:justify-start">
             <Settings2 aria-hidden="true" className="size-4 shrink-0" />
             Opciones de venta
           </summary>
@@ -1646,6 +1738,9 @@ export function SalesPosPage() {
           isLoading={ticketLoading}
           isProvisional={!ticketLoading && !ticket.data}
           onClose={() => setShowTicket(false)}
+          onPrint={(data) =>
+            handleTicketPrint(data, Boolean(ticket.data))
+          }
           ticket={ticket.data}
         />
       )}

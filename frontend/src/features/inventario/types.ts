@@ -337,6 +337,7 @@ export function isCanonicalProduct(value: unknown): value is Product {
 export type ProductFormValues = {
   name: string;
   sku: string;
+  barcode: string | null;
   description: string;
   categoryId: string;
   presentationType: ProductPresentation;

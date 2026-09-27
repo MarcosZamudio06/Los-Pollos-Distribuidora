@@ -4,16 +4,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type {
-  EquivalentStatus,
+import {
   Prisma,
-  ProductPresentationType,
-  ProductUnit,
+  type EquivalentStatus,
+  type ProductPresentationType,
+  type ProductUnit,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { toInventoryBalanceAvailability } from '../inventory/inventory-balance.service';
+import { parseProductQrPayload } from '../../../../shared/product-qr';
 import {
   CreateProductDto,
   GetProductQueryDto,
@@ -154,6 +155,10 @@ type ProductMutationDto = CreateProductDto | UpdateProductDto;
 type ProductReadActor = Pick<AuthenticatedUser, 'role' | 'permissions'> &
   Partial<Pick<AuthenticatedUser, 'operationalLocationId'>>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -183,37 +188,58 @@ export class ProductsService {
     let products: ProductRecord[];
 
     if (search) {
-      const exactBarcode = (await this.prisma.product.findFirst({
-        where: {
-          ...where,
-          barcode: { equals: search, mode: 'insensitive' },
-        },
-        include,
-      })) as ProductRecord | null;
+      const qrProductId = parseProductQrPayload(search);
+      const exactQrProduct = qrProductId
+        ? ((await this.prisma.product.findFirst({
+            where: { ...where, id: qrProductId },
+            include,
+          })) as ProductRecord | null)
+        : null;
 
-      if (exactBarcode) {
-        products = [exactBarcode];
+      if (exactQrProduct) {
+        products = [exactQrProduct];
       } else {
-        const exactSku = (await this.prisma.product.findFirst({
-          where: {
-            ...where,
-            sku: { equals: search, mode: 'insensitive' },
-          },
-          include,
-        })) as ProductRecord | null;
+        const barcodeMatches = await this.prisma.$queryRaw<
+          Array<{ id: string }>
+        >(Prisma.sql`
+          SELECT "id"
+          FROM "Product"
+          WHERE "barcode" IS NOT NULL
+            AND BTRIM("barcode") <> ''
+            AND LOWER(BTRIM("barcode")) = LOWER(BTRIM(${search}))
+          LIMIT 1
+        `);
+        const exactBarcode = barcodeMatches[0]
+          ? ((await this.prisma.product.findFirst({
+              where: { ...where, id: barcodeMatches[0].id },
+              include,
+            })) as ProductRecord | null)
+          : null;
 
-        if (exactSku) {
-          products = [exactSku];
+        if (exactBarcode) {
+          products = [exactBarcode];
         } else {
-          products = await this.prisma.product.findMany({
+          const exactSku = (await this.prisma.product.findFirst({
             where: {
               ...where,
-              name: { contains: search, mode: 'insensitive' },
+              sku: { equals: search, mode: 'insensitive' },
             },
             include,
-            orderBy: { name: 'asc' },
-            ...this.buildPagination(query),
-          });
+          })) as ProductRecord | null;
+
+          if (exactSku) {
+            products = [exactSku];
+          } else {
+            products = await this.prisma.product.findMany({
+              where: {
+                ...where,
+                name: { contains: search, mode: 'insensitive' },
+              },
+              include,
+              orderBy: { name: 'asc' },
+              ...this.buildPagination(query),
+            });
+          }
         }
       }
     } else {
@@ -292,10 +318,12 @@ export class ProductsService {
     this.assertValidCommercialData(dto);
     this.assertValidFiscalProfile(dto);
     const sku = this.normalizeSku(dto.sku);
+    const barcode = this.normalizeBarcode(dto.barcode);
     const description = this.normalizeOptionalText(dto.description);
     const categoryId = this.normalizeOptionalText(dto.categoryId);
     const fiscalProfile = this.normalizeFiscalProfile(dto);
     await this.assertSkuAvailable(sku);
+    await this.assertBarcodeAvailable(barcode);
     await this.assertCategoryExists(categoryId);
 
     const product = (await this.prisma.product
@@ -303,6 +331,7 @@ export class ProductsService {
         data: {
           name: dto.name,
           sku,
+          barcode,
           description: description ?? null,
           categoryId: categoryId ?? null,
           presentationType: dto.presentationType,
@@ -323,7 +352,7 @@ export class ProductsService {
         include: PRODUCT_INCLUDE,
       })
       .catch((error: unknown) => {
-        this.throwDuplicateSkuConflict(error);
+        this.throwDuplicateProductConflict(error, { sku, barcode });
         throw error;
       })) as ProductRecord;
 
@@ -335,12 +364,17 @@ export class ProductsService {
     this.assertValidCommercialData(dto);
     this.assertValidFiscalProfile(dto);
     const sku = this.normalizeSku(dto.sku);
+    const barcode = this.normalizeBarcode(dto.barcode);
     const description = this.normalizeOptionalText(dto.description);
     const categoryId = this.normalizeOptionalText(dto.categoryId);
     const fiscalProfile = this.normalizeFiscalProfile(dto);
 
     if (sku !== undefined) {
       await this.assertSkuAvailable(sku, id);
+    }
+
+    if (barcode !== undefined) {
+      await this.assertBarcodeAvailable(barcode, id);
     }
 
     await this.assertCategoryExists(categoryId);
@@ -351,6 +385,7 @@ export class ProductsService {
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.sku !== undefined ? { sku } : {}),
+          ...(dto.barcode !== undefined ? { barcode } : {}),
           ...(dto.description !== undefined
             ? { description: description ?? null }
             : {}),
@@ -397,7 +432,7 @@ export class ProductsService {
         include: PRODUCT_INCLUDE,
       })
       .catch((error: unknown) => {
-        this.throwDuplicateSkuConflict(error);
+        this.throwDuplicateProductConflict(error, { sku, barcode });
         throw error;
       })) as ProductRecord;
 
@@ -783,6 +818,34 @@ export class ProductsService {
     }
   }
 
+  private async assertBarcodeAvailable(
+    barcode: string | null | undefined,
+    currentProductId?: string,
+  ): Promise<void> {
+    if (barcode === undefined || barcode === null) {
+      return;
+    }
+
+    const currentProductFilter = currentProductId
+      ? Prisma.sql`AND "id" <> ${currentProductId}`
+      : Prisma.empty;
+    const existingProducts = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >(Prisma.sql`
+      SELECT "id"
+      FROM "Product"
+      WHERE "barcode" IS NOT NULL
+        AND BTRIM("barcode") <> ''
+        AND LOWER(BTRIM("barcode")) = LOWER(BTRIM(${barcode}))
+        ${currentProductFilter}
+      LIMIT 1
+    `);
+
+    if (existingProducts.length > 0) {
+      throw new ConflictException('Barcode is already registered');
+    }
+  }
+
   private normalizeSku(sku?: string | null): string | null | undefined {
     if (sku === undefined) {
       return undefined;
@@ -795,6 +858,21 @@ export class ProductsService {
     const normalizedSku = sku.trim().toUpperCase();
 
     return normalizedSku.length > 0 ? normalizedSku : null;
+  }
+
+  private normalizeBarcode(
+    barcode?: string | null,
+  ): string | null | undefined {
+    if (barcode === undefined) {
+      return undefined;
+    }
+
+    if (barcode === null) {
+      return null;
+    }
+
+    const normalizedBarcode = barcode.trim().toUpperCase();
+    return normalizedBarcode.length > 0 ? normalizedBarcode : null;
   }
 
   private normalizeOptionalText(
@@ -929,18 +1007,48 @@ export class ProductsService {
     return Number.isFinite(numberValue) ? numberValue : null;
   }
 
-  private throwDuplicateSkuConflict(error: unknown): void {
-    if (this.isUniqueConstraintError(error)) {
+  private throwDuplicateProductConflict(
+    error: unknown,
+    fields: {
+      sku?: string | null;
+      barcode?: string | null;
+    },
+  ): void {
+    if (!this.isUniqueConstraintError(error)) return;
+
+    const target = this.uniqueConstraintTarget(error);
+    if (target.some((field) => field.toLowerCase().includes('barcode'))) {
+      throw new ConflictException('Barcode is already registered');
+    }
+    if (target.some((field) => field.toLowerCase().includes('sku'))) {
       throw new ConflictException('SKU is already registered');
     }
+
+    if (fields.barcode !== undefined && fields.barcode !== null) {
+      if (fields.sku === undefined || fields.sku === null) {
+        throw new ConflictException('Barcode is already registered');
+      }
+    }
+    if (fields.sku !== undefined && fields.sku !== null) {
+      if (fields.barcode === undefined || fields.barcode === null) {
+        throw new ConflictException('SKU is already registered');
+      }
+    }
+
+    throw new ConflictException('Product unique field is already registered');
+  }
+
+  private uniqueConstraintTarget(error: unknown): string[] {
+    if (!isRecord(error) || !isRecord(error.meta)) return [];
+
+    const target = error.meta.target;
+    if (typeof target === 'string') return [target];
+    if (!Array.isArray(target)) return [];
+
+    return target.filter((field): field is string => typeof field === 'string');
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'P2002'
-    );
+    return isRecord(error) && error.code === 'P2002';
   }
 }

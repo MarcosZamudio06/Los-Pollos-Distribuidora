@@ -1,13 +1,10 @@
 ┌────────────────────────────────┐
-│ LOGO EMPRESA │
-│ El Pollo de Los Pollos │
-│ Sucursal / Punto de venta │
-│ Dirección y teléfono │
-├────────────────────────────────┤
 │ NOTA DE VENTA │
+│ Sucursal / ubicación operativa │
 │ Folio: NS-000123 │
 │ Fecha: 17/07/2026 18:35 │
 │ Vendedor: Juan Pérez │
+├────────────────────────────────┤
 │ Cliente: Público general │
 ├────────────────────────────────┤
 │ CANT PRODUCTO IMPORTE│

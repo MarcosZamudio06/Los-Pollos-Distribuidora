@@ -23,6 +23,7 @@ import {
   formatDecimalDisplay,
   hasProductFormErrors,
   normalizeCurrencyInput,
+  normalizeBarcode,
   normalizeDecimalInput,
   toProductFormDraft,
   toProductFormValues,
@@ -264,13 +265,22 @@ export function ProductFormModal({ product, onClose }: Props) {
     markTouched(field, nextDraft);
   }
 
-  function blurSkuField() {
+function blurSkuField() {
     const nextDraft = {
       ...draft,
       sku: cleanSku(draft.sku).trim(),
     } as ProductFormDraft;
     setDraft(nextDraft);
     markTouched("sku", nextDraft);
+  }
+
+  function blurBarcodeField() {
+    const nextDraft = {
+      ...draft,
+      barcode: normalizeBarcode(draft.barcode),
+    } as ProductFormDraft;
+    setDraft(nextDraft);
+    markTouched("barcode", nextDraft);
   }
 
   function blurFiscalCodeField(
@@ -309,6 +319,7 @@ export function ProductFormModal({ product, onClose }: Props) {
     setTouched({
       name: true,
       sku: true,
+      barcode: true,
       description: true,
       categoryId: true,
       presentationType: true,
@@ -337,6 +348,7 @@ export function ProductFormModal({ product, onClose }: Props) {
       ...draft,
       name: sanitizeText(draft.name),
       sku: cleanSku(draft.sku).trim(),
+      barcode: normalizeBarcode(draft.barcode),
       description: sanitizeText(draft.description),
       categoryId: sanitizeText(draft.categoryId),
       salePrice: normalizeCurrencyInput(draft.salePrice),
@@ -490,6 +502,47 @@ export function ProductFormModal({ product, onClose }: Props) {
               )}
             </label>
           </div>
+
+          <label
+            className="grid gap-2 text-sm font-semibold md:max-w-sm"
+            htmlFor={getFieldId("barcode")}
+          >
+            Código de barras
+            <Input
+              aria-describedby={mergeDescribedBy(
+                "barcode",
+                Boolean(errors.barcode),
+                true,
+              )}
+              aria-invalid={Boolean(errors.barcode)}
+              autoComplete="off"
+              className={inputClass(
+                Boolean(errors.barcode),
+                Boolean(touched.barcode && draft.barcode && !errors.barcode),
+              )}
+              id={getFieldId("barcode")}
+              onBlur={blurBarcodeField}
+              onChange={(event) =>
+                setDraftField("barcode", event.target.value)
+              }
+              placeholder="7501234567890 o ABC-128"
+              value={draft.barcode}
+            />
+            <span
+              className="text-xs text-[var(--erp-muted-foreground)]"
+              id={getHelpId("barcode")}
+            >
+              Opcional. Acepta captura manual, pegado y lectores USB/HID.
+            </span>
+            {errors.barcode && (
+              <span
+                className="text-xs font-medium text-[var(--erp-danger)]"
+                id={getErrorId("barcode")}
+              >
+                {errors.barcode}
+              </span>
+            )}
+          </label>
 
           {product ? (
             <label

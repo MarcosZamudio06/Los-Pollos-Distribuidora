@@ -1,0 +1,6 @@
+- generic [ref=f5e2]:
+  - status [ref=f5e3]:
+    - generic [ref=f5e4]:
+      - paragraph [ref=f5e6]: Cargando módulo…
+      - paragraph [ref=f5e7]: Preparando la vista solicitada.
+  - region "Notifications alt+T"

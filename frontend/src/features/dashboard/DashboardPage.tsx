@@ -62,6 +62,7 @@ import {
   useOperationalCatalog,
 } from "../../components/shared/operational-catalogs";
 import { CedisDashboardNotifications } from "./CedisDashboardNotifications";
+import { useBranding } from "../branding/brandingHooks";
 
 const numberFormatter = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 2,
@@ -890,6 +891,7 @@ function DashboardContent({
 
 export function DashboardPage() {
   const { user } = useAuth();
+  const { branding } = useBranding();
   const [filters, setFilters] = useState<DashboardReportFilters>({});
   const dashboard = useDashboardReport(filters);
   const role = getKnownRole(user?.role);
@@ -909,7 +911,7 @@ export function DashboardPage() {
               <h1 className="mt-3 max-w-3xl text-4xl font-black tracking-[-0.07em] text-[var(--erp-foreground)] sm:text-5xl">
                 {isDriver
                   ? "Operación diaria de reparto"
-                  : "El Pollo de los Pollos"}
+                  : branding.displayName}
               </h1>
             </div>
             <div className="rounded-[1.35rem] border border-[color:var(--erp-border)] bg-[var(--erp-surface-muted)]/90 p-4 backdrop-blur">

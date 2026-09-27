@@ -156,7 +156,7 @@ export class BillingReportExporter {
       useStyles: true,
       useSharedStrings: true,
     });
-    workbook.creator = 'Pollos Distribuidora';
+    workbook.creator = 'ERP';
     workbook.created = metadata.generatedAt;
     const headerRowNumber = 4 + CONTROL_TOTALS.length + 2;
     const sheet = workbook.addWorksheet('Notas facturables', {

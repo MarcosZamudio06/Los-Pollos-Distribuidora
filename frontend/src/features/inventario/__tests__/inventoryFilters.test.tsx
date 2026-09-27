@@ -24,7 +24,11 @@ const mockState = vi.hoisted(() => ({
     isLoading: false,
     refetch: vi.fn(),
   },
-  products: { data: [], error: null, isLoading: false },
+  products: {
+    data: [] as Array<Record<string, unknown>>,
+    error: null,
+    isLoading: false,
+  },
   productFilters: {} as ProductFilters,
 }));
 
@@ -59,6 +63,11 @@ vi.mock("../components/BranchReturnsView", () => ({
   BranchReturnsView: () => null,
 }));
 
+vi.mock("qrcode", () => ({
+  toDataURL: vi.fn().mockResolvedValue("data:image/png;base64,transient"),
+  toString: vi.fn().mockResolvedValue("<svg></svg>"),
+}));
+
 describe("Filtros del inventario", () => {
   let root: Root | undefined;
 
@@ -78,6 +87,7 @@ describe("Filtros del inventario", () => {
       isLoading: false,
       refetch: vi.fn(),
     };
+    mockState.products = { data: [], error: null, isLoading: false };
     mockState.productFilters = {};
   });
 
@@ -170,6 +180,28 @@ describe("Filtros del inventario", () => {
       locationId: undefined,
       lowStock: undefined,
     });
+  });
+
+  it("muestra la acción Generar QR para productos existentes", () => {
+    mockState.products = {
+      data: [
+        {
+          id: "cm123456",
+          name: "Pechuga de pollo",
+          sku: "PECH-001",
+          barcode: "7501234567890",
+          salePrice: 120,
+          unit: "KG",
+          isActive: true,
+        },
+      ],
+      error: null,
+      isLoading: false,
+    };
+
+    const html = renderToStaticMarkup(<ProductListPage />);
+
+    expect(html).toContain("Generar QR");
   });
 
   it("muestra errores de catálogos y permite reintentar ambas cargas", async () => {
