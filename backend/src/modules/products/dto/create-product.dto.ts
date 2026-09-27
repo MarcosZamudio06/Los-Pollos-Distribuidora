@@ -32,13 +32,6 @@ function normalizeOptionalCode({ value }: TransformFnParams): unknown {
   return normalized.length > 0 ? normalized : null;
 }
 
-function normalizeOptionalText({ value }: TransformFnParams): unknown {
-  if (value === null || value === undefined) return value;
-  if (typeof value !== 'string') return value;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
 function normalizeOptionalBarcode({ value }: TransformFnParams): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== 'string') return value;
