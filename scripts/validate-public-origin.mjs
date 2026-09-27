@@ -25,15 +25,29 @@ if (!validOrigin) {
 
 if (production) {
   const hostname = url.hostname.toLowerCase();
+  // Require canonical DNS labels, not IP literals, local names or trailing dots.
+  const publicHostname =
+    hostname.length <= 253 &&
+    hostname.includes(".") &&
+    hostname
+      .split(".")
+      .every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
   const reservedHostname =
+    !publicHostname ||
     isIP(hostname) !== 0 ||
-    hostname === "localhost" ||
-    hostname === "example.com" ||
-    hostname.endsWith(".example.com") ||
-    hostname.endsWith(".example.test") ||
-    hostname.endsWith(".test") ||
-    hostname.endsWith(".invalid") ||
-    hostname.endsWith(".localhost");
+    [
+      "localhost",
+      "local",
+      "test",
+      "invalid",
+      "example",
+      "example.com",
+      "example.net",
+      "example.org",
+      "arpa",
+    ].some(
+      (reserved) => hostname === reserved || hostname.endsWith(`.${reserved}`),
+    );
 
   if (url.protocol !== "https:" || reservedHostname) {
     console.error(

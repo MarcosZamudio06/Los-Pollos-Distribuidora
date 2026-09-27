@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const repositoryRoot = resolve(__dirname, '../../..');
 const productionCompose = readFileSync(
@@ -40,6 +41,131 @@ function serviceBlock(compose: string, service: string): string {
 }
 
 describe('production release contract', () => {
+  const validate = (origin?: string) =>
+    spawnSync(
+      process.execPath,
+      [
+        resolve(repositoryRoot, 'scripts/validate-public-origin.mjs'),
+        ...(origin === undefined ? [] : [origin, '--production']),
+      ],
+      { encoding: 'utf8', env: { ...process.env, OPENSSL_CONF: '/dev/null' } },
+    );
+
+  it.each([undefined, '', '   '])('rejects missing origin %p', (origin) => {
+    expect(validate(origin).status).toBe(1);
+  });
+
+  it.each([
+    'http://objects.pollos.mx',
+    'https://localhost',
+    'https://a.localhost',
+    'https://127.0.0.1',
+    'https://[::1]',
+    'https://example.com',
+    'https://example.org',
+    'https://a.example.net',
+    'https://a.example',
+    'https://a.test',
+    'https://a.invalid',
+    'https://localhost.',
+    'https://example.com.',
+    'https://internal',
+    'https://a.local',
+    'https://*.pollos.mx',
+    'https://objects.pollos.mx/',
+    'https://objects.pollos.mx/path',
+    'https://objects.pollos.mx?x=1',
+    'https://objects.pollos.mx#x',
+    'https://user:pass@objects.pollos.mx',
+    'https://bad_host.pollos.mx',
+  ])('rejects unsafe production origin %s', (origin) => {
+    expect(validate(origin).status).toBe(1);
+  });
+
+  // Syntax-only fixtures, never deployment defaults or proof of domain approval.
+  it.each(['https://objects.pollos.mx', 'https://objects.pollos.mx:8443'])(
+    'accepts explicit HTTPS origin %s',
+    (origin) => {
+      expect(validate(origin).status).toBe(0);
+    },
+  );
+
+  it('executes the workflow preflight fail-closed with actionable configuration guidance', () => {
+    const block = releaseWorkflow
+      .split('      - name: Validate approved frontend public origin\n')[1]
+      .split('\n      - name:')[0];
+    const script = block.split('        run: |\n')[1];
+    expect(script).toBeDefined();
+    expect(releaseWorkflow.indexOf(block)).toBeLessThan(
+      releaseWorkflow.indexOf('      - name: Set up Buildx'),
+    );
+    for (const origin of [
+      '',
+      '   ',
+      'http://objects.pollos.mx',
+      'https://example.org',
+      'https://objects.pollos.mx',
+    ]) {
+      const result = spawnSync(
+        '/bin/bash',
+        ['-e', '-u', '-o', 'pipefail', '-c', script],
+        {
+          cwd: repositoryRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            OPENSSL_CONF: '/dev/null',
+            OBJECT_STORAGE_PUBLIC_ORIGIN: origin,
+          },
+        },
+      );
+      expect(result.status).toBe(
+        origin === 'https://objects.pollos.mx' ? 0 : 1,
+      );
+      if (!origin.trim()) {
+        expect(result.stdout + result.stderr).toContain(
+          'GitHub Actions Repository Variable OBJECT_STORAGE_PUBLIC_ORIGIN',
+        );
+        expect(result.stdout + result.stderr).toContain(
+          'Settings > Secrets and variables > Actions > Variables',
+        );
+      }
+    }
+  });
+
+  it('carries the approved build argument into the final frontend CSP', () => {
+    const dockerfile = readFileSync(
+      resolve(repositoryRoot, 'docker/frontend/Dockerfile'),
+      'utf8',
+    );
+    expect(releaseWorkflow).toContain(
+      'REQUIRE_APPROVED_OBJECT_STORAGE_ORIGIN=true',
+    );
+    expect(dockerfile).toContain(
+      'node /app/scripts/validate-public-origin.mjs "${OBJECT_STORAGE_PUBLIC_ORIGIN}" --production',
+    );
+    const runtime = dockerfile.split('FROM nginx:')[1];
+    expect(runtime).toContain('\nARG OBJECT_STORAGE_PUBLIC_ORIGIN\n');
+    const render = runtime
+      .slice(runtime.indexOf("RUN printf '%s\\n'"))
+      .split(' > /etc/nginx/conf.d/default.conf')[0]
+      .replace(/^RUN /, '');
+    const origin = 'https://objects.pollos.mx:8443';
+    const result = spawnSync('/bin/sh', ['-eu', '-c', render], {
+      encoding: 'utf8',
+      env: { OBJECT_STORAGE_PUBLIC_ORIGIN: origin },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`img-src 'self' data: blob: ${origin};`);
+    expect(result.stdout).not.toContain('${OBJECT_STORAGE_PUBLIC_ORIGIN}');
+    const caddy = readFileSync(
+      resolve(repositoryRoot, 'Caddyfile.production'),
+      'utf8',
+    );
+    expect(caddy).toContain('>Content-Security-Policy');
+    expect(caddy).toContain('header_down -Content-Security-Policy');
+  });
+
   it('publishes only after the quality gate with minimum GHCR permissions', () => {
     expect(releaseWorkflow).toContain('workflow_run:');
     expect(releaseWorkflow).toContain('workflows: [Quality Gate]');

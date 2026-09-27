@@ -61,6 +61,42 @@ placeholder hostname. Keep that value aligned with Caddy and
 `OBJECT_STORAGE_PUBLIC_ENDPOINT`; changing it after the image is built would
 leave the CSP stale. This is public configuration, not a secret.
 
+### Required operator configuration
+
+Before the first release, open the **GitHub repository** and navigate to
+**Settings > Secrets and variables > Actions > Variables > New repository variable**.
+Set the name to `OBJECT_STORAGE_PUBLIC_ORIGIN` and the value to the actual,
+operator-approved public HTTPS origin of Object Storage. Save the variable.
+Do not create an Actions secret or an environment-scoped variable instead:
+this workflow reads `vars.OBJECT_STORAGE_PUBLIC_ORIGIN` and declares no environment.
+Setting a VPS environment file or editing `.env.production.example` does not
+configure GitHub Actions.
+
+Accepted format: `https://` followed by a lowercase fully qualified DNS hostname
+and, optionally, a non-default port. Use the canonical URL origin: no trailing
+slash, path, credentials, query, fragment, whitespace, wildcard, or explicit
+default port `:443`. HTTP, IP literals (including IPv6), single-label names,
+trailing-dot names, local/reserved names and example domains are rejected.
+Validation checks syntax, not DNS ownership, TLS reachability or operator approval;
+the operator must verify those separately. There is deliberately no default value.
+
+The workflow passes this value as a Docker build argument, validates it again
+in production mode, and embeds it in the final Nginx image's `img-src` CSP.
+Caddy replaces that upstream CSP: the deployed `Caddyfile.production` must also
+replace `__OBJECT_STORAGE_CSP_HOST__` with the approved host (and port if needed),
+keeping its `https://` prefix. Align it with the origin of
+`OBJECT_STORAGE_PUBLIC_ENDPOINT` and the deployed Object Storage site. Never
+deploy the unchanged template. For company silos, the generated company Caddy
+policy must use that company's approved origin.
+
+After saving the variable, rerun the failed **Release Images** job for the
+validated commit. If workflow/code changes are needed, merge them through
+**Quality Gate** first: a rerun checks out the original validated SHA, not newer
+code. Verify all five digests were published and download the release artifact.
+A missing variable is `BLOCKED_EXTERNAL_CONFIG`, not a completed release.
+Changing this build-time origin requires a new image; changing only the VPS
+environment cannot update the image's CSP. Deploy by digest, never by tag.
+
 ## Image contract
 
 `docker-compose.production.yml` has no `build` sections. These services must

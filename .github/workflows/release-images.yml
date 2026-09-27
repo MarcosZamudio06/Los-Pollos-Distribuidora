@@ -37,7 +37,14 @@ jobs:
           fetch-depth: 1
 
       - name: Validate approved frontend public origin
-        run: node scripts/validate-public-origin.mjs "$OBJECT_STORAGE_PUBLIC_ORIGIN" --production
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${OBJECT_STORAGE_PUBLIC_ORIGIN//[[:space:]]/}" ]]; then
+            echo "::error title=Missing release configuration::Configure the GitHub Actions Repository Variable OBJECT_STORAGE_PUBLIC_ORIGIN in Settings > Secrets and variables > Actions > Variables > New repository variable. Use the approved HTTPS Object Storage origin only (no path or trailing slash). See docs/runbooks/production-release.md."
+            exit 1
+          fi
+          node scripts/validate-public-origin.mjs "$OBJECT_STORAGE_PUBLIC_ORIGIN" --production
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
