@@ -119,6 +119,31 @@ test("the mandatory CI gate executes the real disposable disaster-recovery harne
   }
 });
 
+test("the disposable fiscal fixture includes the complete active sale application chain", () => {
+  const seed = read("scripts/database/dr-disposable-seed.sql");
+  for (const table of [
+    '"Customer"',
+    '"SaleItem"',
+    '"SaleDocument"',
+    '"BillingRequest"',
+    '"BillingRequestSaleDocument"',
+    '"BillingRequestSaleItem"',
+    '"Invoice"',
+    '"InvoiceSaleDocument"',
+    '"InvoiceSaleItemApplication"',
+    '"FiscalArtifact"',
+  ]) {
+    assert.match(seed, new RegExp(`INSERT INTO ${table}`, "u"));
+  }
+  assert.match(seed, /BEGIN;[\s\S]*COMMIT;/u);
+  assert.match(seed, /status, "requestedAt", "reviewedAt", "reviewedByUserId", "updatedAt"\) VALUES[\s\S]*'APPROVED'/u);
+  assert.match(seed, /status, "createdByUserId", "updatedAt"\) VALUES[\s\S]*'ACTIVE'/u);
+  assert.match(seed, /'dr-billing-document', 'dr-billing-request', 'dr-sale-document'/u);
+  assert.match(seed, /'dr-invoice-document', 'dr-invoice', 'dr-sale-document', 'dr-billing-document'/u);
+  assert.match(seed, /'dr-invoice-item', 'dr-invoice-document', 'dr-sale-item'/u);
+  assert.match(seed, /'dr-fiscal-artifact', 'dr-invoice', 'PDF', 'AVAILABLE'/u);
+});
+
 test("recovery set records immutable releases, schema, timestamps, sizes and checksums", () => {
   const helper = read("scripts/database/company-recovery-manifest.mjs");
   const create = read("scripts/database/create-company-recovery-set.sh");
