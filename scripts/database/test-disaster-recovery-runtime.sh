@@ -3,6 +3,8 @@ set -Eeuo pipefail
 umask 077
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+# shellcheck source=postgres-backup-common.sh
+source "$ROOT/scripts/database/postgres-backup-common.sh"
 COMPOSE_FILE="$ROOT/scripts/database/dr-disposable.compose.yml"
 REPLACEMENT_COMPOSE_FILE="$ROOT/scripts/database/dr-replacement.compose.yml"
 DOCKER=${BACKUP_DOCKER_BIN:-docker}
@@ -39,26 +41,17 @@ PY
 aws_source() {
   AWS_ACCESS_KEY_ID=dr-source-access AWS_SECRET_ACCESS_KEY=dr-source-secret \
     AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true \
-    "$DOCKER" run --rm --network "${PROJECT}_app_network" \
-      -v "$WORK:/backup:rw" -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
-      -e AWS_DEFAULT_REGION -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$WORK" rw "${PROJECT}_app_network" '' "$@"
 }
 aws_backup() {
   AWS_ACCESS_KEY_ID=dr-backup-access AWS_SECRET_ACCESS_KEY=dr-backup-secret \
     AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true \
-    "$DOCKER" run --rm --network "${PROJECT}_app_network" \
-      -v "$WORK:/backup:rw" -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
-      -e AWS_DEFAULT_REGION -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$WORK" rw "${PROJECT}_app_network" '' "$@"
 }
 aws_replacement() {
   AWS_ACCESS_KEY_ID=dr-replacement-access AWS_SECRET_ACCESS_KEY=dr-replacement-secret \
     AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true \
-    "$DOCKER" run --rm --network "${REPLACEMENT_PROJECT}_app_network" \
-      -v "$WORK:/backup:rw" -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
-      -e AWS_DEFAULT_REGION -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$WORK" rw "${REPLACEMENT_PROJECT}_app_network" '' "$@"
 }
 cleanup() {
   local status=$?

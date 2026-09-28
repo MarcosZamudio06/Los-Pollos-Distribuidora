@@ -88,11 +88,7 @@ run_target_aws() {
   AWS_SECRET_ACCESS_KEY="$RESTORE_OBJECT_STORAGE_SECRET_ACCESS_KEY" \
   AWS_DEFAULT_REGION="$OBJECT_STORAGE_REGION" \
   AWS_EC2_METADATA_DISABLED=true \
-    "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
-      -v "$work_dir:/backup:rw" \
-      -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
-      -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$work_dir" rw "$BACKUP_UPLOAD_NETWORK" '' "$@"
 }
 
 run_target_aws_script() {
@@ -100,11 +96,7 @@ run_target_aws_script() {
   AWS_SECRET_ACCESS_KEY="$RESTORE_OBJECT_STORAGE_SECRET_ACCESS_KEY" \
   AWS_DEFAULT_REGION="$OBJECT_STORAGE_REGION" \
   AWS_EC2_METADATA_DISABLED=true \
-    "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
-      -v "$work_dir:/backup:rw" \
-      -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
-      -e AWS_EC2_METADATA_DISABLED --entrypoint /bin/sh \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$work_dir" rw "$BACKUP_UPLOAD_NETWORK" /bin/sh "$@"
 }
 
 write_cleanup_result() {

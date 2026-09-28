@@ -156,11 +156,7 @@ backup_object_storage_cli_dir() {
   AWS_SECRET_ACCESS_KEY="$OBJECT_STORAGE_SECRET_ACCESS_KEY" \
   AWS_DEFAULT_REGION="$OBJECT_STORAGE_REGION" \
   AWS_EC2_METADATA_DISABLED=true \
-    "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
-      -v "$directory:/backup:$mode" \
-      -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
-      -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$directory" "$mode" "$BACKUP_UPLOAD_NETWORK" '' "$@"
 }
 
 backup_assert_object_storage_ready() {
@@ -177,32 +173,39 @@ backup_aws_cli_dir() {
   local mode=$2
   shift 2
 
-  if [[ -n "${BACKUP_UPLOAD_NETWORK:-}" ]]; then
-    AWS_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY_ID" \
-    AWS_SECRET_ACCESS_KEY="$BACKUP_S3_SECRET_ACCESS_KEY" \
-    AWS_DEFAULT_REGION="$BACKUP_S3_REGION" \
-    AWS_EC2_METADATA_DISABLED=true \
-      "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
-        -v "$directory:/backup:$mode" \
-        -e AWS_ACCESS_KEY_ID \
-        -e AWS_SECRET_ACCESS_KEY \
-        -e AWS_DEFAULT_REGION \
-        -e AWS_EC2_METADATA_DISABLED \
-        "$BACKUP_UPLOAD_IMAGE" "$@"
-    return
-  fi
-
   AWS_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY_ID" \
   AWS_SECRET_ACCESS_KEY="$BACKUP_S3_SECRET_ACCESS_KEY" \
   AWS_DEFAULT_REGION="$BACKUP_S3_REGION" \
   AWS_EC2_METADATA_DISABLED=true \
-    "$BACKUP_DOCKER_BIN" run --rm \
-      -v "$directory:/backup:$mode" \
-      -e AWS_ACCESS_KEY_ID \
-      -e AWS_SECRET_ACCESS_KEY \
-      -e AWS_DEFAULT_REGION \
-      -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+    backup_aws_cli_run_dir "$directory" "$mode" "${BACKUP_UPLOAD_NETWORK:-}" '' "$@"
+}
+
+backup_aws_cli_run_dir() {
+  local directory=$1
+  local mode=$2
+  local network=$3
+  local entrypoint=$4
+  local -a options=(--rm)
+  shift 4
+
+  case "$mode" in
+    rw)
+      # Docker writes into the host's private staging directory as its owner.
+      options+=(--user "$(id -u):$(id -g)" -e HOME=/tmp)
+      ;;
+    ro) ;;
+    *) printf 'Unsupported AWS CLI bind-mount mode: %s\n' "$mode" >&2; return 2 ;;
+  esac
+  if [[ -n "$network" ]]; then
+    options+=(--network "$network")
+  fi
+  options+=(-v "$directory:/backup:$mode")
+  if [[ -n "$entrypoint" ]]; then
+    options+=(--entrypoint "$entrypoint")
+  fi
+  "$BACKUP_DOCKER_BIN" run "${options[@]}" \
+    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
+    -e AWS_EC2_METADATA_DISABLED "$BACKUP_UPLOAD_IMAGE" "$@"
 }
 
 backup_s3_args() {

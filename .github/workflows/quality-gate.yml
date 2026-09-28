@@ -404,9 +404,12 @@ jobs:
             scripts/database/recovery-storage-reference-verifier.test.mjs \
             scripts/database/company-recovery-orchestration.contract.test.mjs \
             scripts/database/production-recovery-backup.contract.test.mjs
+          bash scripts/database/aws-cli-bind-mount.contract.test.sh
           OPENSSL_CONF=/dev/null bash scripts/database/test-company-recovery-orchestration.sh
           bash scripts/database/test-scoped-postgres-restore-key.sh
           for script in \
+            scripts/database/postgres-backup-common.sh \
+            scripts/database/aws-cli-bind-mount.contract.test.sh \
             scripts/database/run-production-recovery-set-backup.sh \
             scripts/database/create-company-recovery-set.sh \
             scripts/database/preflight-object-storage-backup-space.sh \
@@ -416,6 +419,7 @@ jobs:
             scripts/database/restore-postgres-from-b2.sh \
             scripts/database/restore-object-storage-from-b2.sh \
             scripts/database/restore-company-recovery-set.sh \
+            scripts/database/restore-company-production-replacement.sh \
             scripts/database/test-disaster-recovery-runtime.sh \
             scripts/database/test-scoped-postgres-restore-key.sh; do
             bash -n "$script"

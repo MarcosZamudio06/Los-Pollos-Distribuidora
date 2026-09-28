@@ -6,6 +6,19 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "../..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
+test("disposable and replacement AWS wrappers use the shared bind-mount runner", () => {
+  for (const file of [
+    "scripts/database/test-disaster-recovery-runtime.sh",
+    "scripts/database/restore-object-storage-from-b2.sh",
+    "scripts/database/restore-company-production-replacement.sh",
+  ]) {
+    const script = read(file);
+    assert.match(script, /backup_aws_cli_run_dir/u, file);
+    assert.doesNotMatch(script, /"\$(?:DOCKER|BACKUP_DOCKER_BIN)" run --rm/u, file);
+    assert.doesNotMatch(script, /\b(?:sudo|chmod\s+(?:-R\s+)?777)\b/u, file);
+  }
+});
+
 test("company restore verifies identity and every artifact before creating disposable targets", () => {
   const restore = read("scripts/database/restore-company-recovery-set.sh");
   const identity = restore.indexOf("verify-identity");
@@ -76,7 +89,7 @@ test("cross-checks actual restored rows against the disposable Object Storage bu
   assert.match(verifier, /EXPECTED_SHA256_MISMATCH/u);
   assert.match(verifier, /EXPECTED_SIZE_MISMATCH/u);
   assert.match(verifier, /MIME_TYPE_MISMATCH/u);
-  assert.match(restore, /--entrypoint \/bin\/sh/u);
+  assert.match(restore, /backup_aws_cli_run_dir[^\n]*\/bin\/sh/u);
 
   assert.match(companyRestore, /RESTORE_DEFER_TARGET_CLEANUP=true/u);
   assert.match(companyRestore, /RESTORE_REQUIRE_STORAGE_REFERENCE_CHECK=true/u);

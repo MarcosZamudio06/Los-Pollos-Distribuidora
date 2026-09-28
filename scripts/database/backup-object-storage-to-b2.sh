@@ -157,6 +157,10 @@ OBJECT_STORAGE_STAGE=export-objects
 mkdir -p "$stage_dir/data"
 run_object_storage_aws s3 sync "s3://$OBJECT_STORAGE_BUCKET" /backup/data \
   --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors
+if find "$stage_dir/data" ! -user "$(id -u)" -print -quit | grep -q .; then
+  echo 'Object Storage export contains files not owned by the host backup user.' >&2
+  exit 1
+fi
 if find "$stage_dir/data" -type l -print -quit | grep -q .; then
   echo "Object Storage export contains an unsupported symbolic link." >&2
   exit 1
