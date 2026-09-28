@@ -14,6 +14,25 @@ started=0
 
 compose() { "$DOCKER" compose --project-name "$PROJECT" -f "$COMPOSE_FILE" "$@"; }
 pg() { compose exec -T postgres "$@"; }
+wait_for_host_postgres() {
+  python3 - "$1" <<'PY'
+import socket
+import sys
+import time
+
+port = int(sys.argv[1])
+deadline = time.monotonic() + 75
+while (remaining := deadline - time.monotonic()) > 0:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=min(1, remaining)):
+            sys.exit(0)
+    except OSError:
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(0.25, remaining))
+sys.exit(1)
+PY
+}
 aws_source() {
   AWS_ACCESS_KEY_ID=dr-source-access AWS_SECRET_ACCESS_KEY=dr-source-secret \
     AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true \
@@ -89,6 +108,13 @@ started=1
 compose up -d --wait --wait-timeout 180
 port=$(compose port postgres 5432 | sed -E 's/^.*:([0-9]+)$/\1/')
 [[ "$port" =~ ^[0-9]+$ ]] || { echo 'Disposable PostgreSQL port was not published.' >&2; exit 1; }
+if ! wait_for_host_postgres "$port"; then
+  echo 'Disposable PostgreSQL published port was not reachable within 75 seconds.' >&2
+  compose ps || true
+  compose port postgres 5432 || true
+  compose logs --tail=100 postgres || true
+  exit 1
+fi
 DATABASE_URL="postgresql://postgres:dr-disposable-only@127.0.0.1:$port/dr_fixture" \
   npm --prefix "$ROOT/backend" exec -- prisma migrate deploy \
     --schema "$ROOT/backend/prisma/schema.prisma"

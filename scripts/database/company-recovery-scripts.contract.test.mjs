@@ -119,6 +119,23 @@ test("the mandatory CI gate executes the real disposable disaster-recovery harne
   }
 });
 
+test("disposable DR waits for the published host PostgreSQL socket before Prisma", () => {
+  const harness = read("scripts/database/test-disaster-recovery-runtime.sh");
+  const publish = harness.indexOf("port=$(compose port postgres 5432");
+  const readiness = harness.indexOf('if ! wait_for_host_postgres "$port"; then');
+  const migrate = harness.indexOf("prisma migrate deploy");
+
+  assert.ok(publish >= 0, "the PostgreSQL port must come from Compose");
+  assert.ok(readiness > publish, "host readiness must follow port discovery");
+  assert.ok(migrate > readiness, "Prisma must run only after host readiness");
+  assert.match(harness, /socket\.create_connection\(\("127\.0\.0\.1", port\), timeout=/u);
+  assert.match(harness, /time\.monotonic\(\) \+ (?:60|75|90)/u);
+  assert.match(harness, /except OSError:/u);
+  assert.match(harness, /time\.sleep\(min\(0\.25, remaining\)\)/u);
+  assert.match(harness, /compose ps[\s\S]*compose port postgres 5432[\s\S]*compose logs --tail=100 postgres/u);
+  assert.doesNotMatch(harness, /\bsleep 10\b/u);
+});
+
 test("the disposable fiscal fixture includes the complete active sale application chain", () => {
   const seed = read("scripts/database/dr-disposable-seed.sql");
   for (const table of [
