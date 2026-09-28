@@ -1,10 +1,15 @@
-# PostgreSQL/PostGIS backup and restore drill
+# PostgreSQL/PostGIS backup component
 
-This runbook protects the local PostGIS database used by the Architecture A
-single-host deployment. PostgreSQL remains private inside Docker; the backup
-job runs on the host, enters the running `postgres` service with
-`docker compose exec`, and sends the completed archive to Backblaze B2 through
-its S3-compatible API.
+This document describes the PostgreSQL component used by the coordinated
+recovery-set workflow. It is not a standalone Disaster Recovery schedule and a
+PostgreSQL-only result does not prove that Object Storage can be recovered.
+Production automation must use
+[`production-recovery-set-backup.md`](production-recovery-set-backup.md).
+For full-set verification and Disaster Recovery boundaries, use the
+[`multi-company backup and Disaster Recovery runbook`](multi-company-backup-restore.md).
+PostgreSQL remains private inside Docker; the component enters the healthy
+`postgres` service with `docker compose exec` and sends the archive to
+Backblaze B2 through its S3-compatible API.
 
 The implementation uses a digest-pinned AWS CLI container
 (`amazon/aws-cli@sha256:cd11f6e909d42f066a03e15f072853fcc19f033e343cb83b2d553e2082cbb5a7`)
@@ -30,6 +35,7 @@ BACKUP_S3_SECRET_ACCESS_KEY=<backup-application-key>
 BACKUP_RETENTION_DAILY=14
 BACKUP_RETENTION_WEEKLY=8
 BACKUP_RETENTION_MONTHLY=6
+BACKUP_FAILED_KEEP_COUNT=1
 BACKUP_MIN_FREE_BYTES=1073741824
 BACKUP_RPO_HOURS=24
 BACKUP_RTO_MINUTES=60
@@ -44,15 +50,11 @@ The scripts never print these values or put them in an image.
 estimate. Increase it to at least twice the largest expected compressed dump
 when the verification download is enabled (the default behavior).
 
-## Backup behavior
+## Component behavior
 
-Run from the repository root after the production Postgres service is healthy:
-
-```bash
-./scripts/database/backup-postgres-to-b2.sh
-```
-
-The script:
+`create-company-recovery-set.sh` invokes the PostgreSQL component only after
+preflighting the tenant's PostgreSQL/Object Storage services and pausing the
+backend write path. The component:
 
 1. checks required B2 variables, the Docker Compose file, service health, and
    available disk space;
@@ -62,11 +64,13 @@ The script:
 4. uploads the dump and a checksum manifest to B2;
 5. verifies both remote objects with `head-object`, downloads the dump again,
    and compares byte size and SHA-256;
-6. applies retention only after that validation; and
+6. in standalone PostgreSQL mode, applies PostgreSQL-only retention after that
+   validation. Recovery-set mode disables this component retention and lets
+   the complete-set coordinator manage the paired lifecycle; and
 7. records a non-secret local result under the backup result directory and
    deletes temporary files only after successful validation.
 
-The deterministic object layout is:
+The standalone deterministic object layout is:
 
 ```text
 postgres/YYYY/MM/YYYY-MM-DDTHH-MM-SSZ.dump
@@ -74,10 +78,12 @@ postgres/YYYY/MM/YYYY-MM-DDTHH-MM-SSZ.manifest.json
 ```
 
 The manifest contains the key, archive format, database name, byte size, and
-SHA-256. It does not contain endpoints or credentials. If upload or validation
-fails, the newest failed dump is retained under the configured local `failed`
-directory for diagnosis; older failed dumps are removed so a broken remote
-does not fill the VPS disk.
+SHA-256. It does not contain endpoints or credentials. Recovery-set mode uses
+`postgres/<company-slug>/YYYY/MM/<timestamp>-<run-id>.dump` and records the
+company slug in the component manifest to prevent cross-company key
+collisions. If upload or validation fails, `BACKUP_FAILED_KEEP_COUNT` bounds
+failed PostgreSQL and Object Storage evidence under their local `failed`
+directories.
 
 ## Retention policy
 
@@ -90,42 +96,29 @@ unrecognized objects are left untouched.
 The defaults are 14 daily, 8 weekly, and 6 monthly windows. Set the variables
 explicitly for the required RPO and compliance policy. A retention failure
 returns a failed job even though the already-validated newest backup remains
-in B2.
+in B2. For recovery-set mode, see
+[`production-recovery-set-backup.md`](production-recovery-set-backup.md): the
+paired coordinator retains whole sets and deletes unreferenced components only
+after validating all recognized recovery manifests in the bucket.
 
-## Automatic execution with systemd
+## Deprecated PostgreSQL-only automation
 
-This repository provides templates under `docs/runbooks/systemd/`. Install
-them on the VPS without adding cron to the backend container:
-
-```bash
-sudo install -m 0644 docs/runbooks/systemd/pollos-distribuidor-postgres-backup.service \
-  /etc/systemd/system/pollos-distribuidor-postgres-backup.service
-sudo install -m 0644 docs/runbooks/systemd/pollos-distribuidor-postgres-backup.timer \
-  /etc/systemd/system/pollos-distribuidor-postgres-backup.timer
-sudo systemctl daemon-reload
-sudo systemctl enable --now pollos-distribuidor-postgres-backup.timer
-sudo systemctl start pollos-distribuidor-postgres-backup.service
-sudo systemctl status pollos-distribuidor-postgres-backup.timer
-```
-
-The templates assume the repository is deployed at
-`/opt/pollos-distribuidor`, and that `/etc/pollos-distribuidor/production.env`
-contains the normal Compose runtime variables while
-`postgres-backup.env` contains only the backup variables. Adapt those paths
-before enabling the timer. Inspect failures with:
-
-```bash
-sudo journalctl -u pollos-distribuidor-postgres-backup.service -n 100 --no-pager
-```
-
-The timer is daily at 02:30 with a 30-minute randomized delay. Change the
-timer cadence if the configured `BACKUP_RPO_HOURS` requires a shorter interval.
+The former `pollos-distribuidor-postgres-backup.timer` and matching service
+were removed because they could create a fresh database dump while leaving
+Object Storage at another point in time. If they were installed on a VPS,
+disable and remove them as part of deploying the complete recovery-set units;
+the migration commands are in
+[`production-recovery-set-backup.md`](production-recovery-set-backup.md).
+Do not enable the old 24-hour timer as a compatibility path.
 
 ## Manual verification of the latest valid backup
 
-The safest check is a restore drill, not only an object listing. To inspect
-the latest object and its checksum without changing a database, use the
-restore script with a drill-only target:
+The safest PostgreSQL component check is a restore drill, not only an object
+listing. This check verifies only the database component and is not a
+substitute for the disposable full recovery-set drill in the
+[multi-company recovery runbook](multi-company-backup-restore.md). To inspect
+the latest database object without changing the production database, use a
+drill-only target:
 
 ```bash
 RESTORE_DATABASE_NAME=pollo_distribucion_restore_drill \
@@ -148,29 +141,29 @@ successful drill.
 
 ## Emergency restoration
 
-An emergency restore is a separate, reviewed incident procedure. Do not point
-the restore-drill script at production and do not use `--clean` against the
-production database.
+Emergency recovery requires an incident/change owner to approve the affected
+company, target, downtime window, and rollback plan. The repository's restore
+scripts enforce disposable targets; they are not the production import path.
+The incident-gated replacement-host process and current production-restore
+tooling boundary are documented in the
+[`multi-company backup and Disaster Recovery runbook`](multi-company-backup-restore.md).
 
-1. Stop application writes and put the frontend/backend into maintenance.
-2. Confirm the selected B2 object and manifest checksum using a read-only
-   operator key.
-3. Take a final pre-restore snapshot if the damaged database is still
-   readable.
-4. Restore into a newly created production database with `pg_restore` from
-   the verified custom archive, using `--no-owner --no-acl --exit-on-error`.
-5. Run Prisma migration/status checks and the same PostGIS/critical-table
-   verification before switching `DATABASE_URL`.
-6. Deploy/restart the one-shot migration and backend sequence only after the
-   restored schema is reviewed, then run application readiness and business
-   smoke checks.
-7. Preserve the archive, manifest, command output, and incident result for the
-   retention period.
-
-The production database name must never be supplied as
-`RESTORE_DATABASE_NAME`; the drill guard is intentionally stricter than an
-emergency procedure. Emergency restoration requires an administrator to
-confirm the target database and change window.
+1. Quiesce/contain writes and public routing for this company. This Compose
+   stack has no built-in maintenance page; do not imply that stopping the API
+   leaves a maintenance page active.
+2. Select and verify the company-matched complete recovery set, not a standalone
+   PostgreSQL component. If the damaged database remains readable, take a
+   separate pre-restore snapshot without modifying it.
+3. Run a disposable restore drill first. The component-only drill below does
+   not validate Object Storage or DB-to-object references.
+4. Continue only with a separately reviewed DBA import into a new isolated
+   replacement database. Do not restore over the active production database,
+   invoke this drill with a production `RESTORE_DATABASE_NAME`, or use `--clean`.
+5. Verify Prisma/schema compatibility, PostGIS, critical tables, and the
+   complete-set storage-reference checks before starting the application.
+6. Start services and switch only this company's routing after readiness and
+   business smoke checks pass. Preserve the old data target and sanitized
+   incident evidence until recovery is accepted.
 
 ## Credential rotation
 
@@ -178,14 +171,16 @@ confirm the target database and change window.
    minimum permissions.
 2. Update the root-only `postgres-backup.env` file atomically, without
    committing or echoing it.
-3. Run one manual backup and a restore drill with the replacement key.
+3. Run one coordinated recovery-set backup and a disposable full recovery-set
+   drill with the replacement key.
 4. Confirm the new object and result JSON, then revoke the old key in B2.
 5. Record the rotation date and next review date without recording the secret.
 
 ## RPO/RTO
 
-`BACKUP_RPO_HOURS` and `BACKUP_RTO_MINUTES` are explicit operational targets,
-not automatic guarantees. The effective RPO is the timer interval plus its
-delay and the time since the last validated upload. The effective RTO includes
-B2 download, archive restore, Prisma compatibility checks, and application
-readiness. Review the targets after measuring a real dump and restore drill.
+`BACKUP_RPO_HOURS` and `BACKUP_RTO_MINUTES` apply to the complete company
+recovery workflow, not this PostgreSQL component alone. The production
+recovery-set runbook defines the schedule envelope and uses the same RPO as the
+monitor threshold. The RTO includes B2 download, both component restores,
+Prisma compatibility checks, and application readiness; measure it with
+disposable full recovery-set drills.

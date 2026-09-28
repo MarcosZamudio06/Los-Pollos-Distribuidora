@@ -19,6 +19,7 @@ BACKUP_S3_ENDPOINT=${BACKUP_S3_ENDPOINT%/}
 COMPANY_SLUG=${COMPANY_SLUG:-${TENANT_SLUG:-}}
 OBJECT_STORAGE_BUCKET=${OBJECT_STORAGE_BUCKET:-}
 OBJECT_STORAGE_ENDPOINT=${OBJECT_STORAGE_ENDPOINT:-}
+OBJECT_STORAGE_SERVICE=${OBJECT_STORAGE_SERVICE:-object-storage}
 OBJECT_STORAGE_REGION=${OBJECT_STORAGE_REGION:-us-east-1}
 OBJECT_STORAGE_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY_ID:-}
 OBJECT_STORAGE_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_ACCESS_KEY:-}
@@ -26,6 +27,7 @@ OBJECT_STORAGE_BACKUP_LOCAL_DIR=${OBJECT_STORAGE_BACKUP_LOCAL_DIR:-${BACKUP_LOCA
 OBJECT_STORAGE_FAILURE_DIR=${OBJECT_STORAGE_FAILURE_DIR:-$OBJECT_STORAGE_BACKUP_LOCAL_DIR/failed}
 OBJECT_STORAGE_RESULT_DIR=${OBJECT_STORAGE_RESULT_DIR:-$OBJECT_STORAGE_BACKUP_LOCAL_DIR/results}
 OBJECT_STORAGE_MIN_FREE_BYTES=${OBJECT_STORAGE_MIN_FREE_BYTES:-1073741824}
+BACKUP_FAILED_KEEP_COUNT=${BACKUP_FAILED_KEEP_COUNT:-1}
 
 backup_require_env COMPANY_SLUG OBJECT_STORAGE_BUCKET OBJECT_STORAGE_ENDPOINT \
   OBJECT_STORAGE_ACCESS_KEY_ID OBJECT_STORAGE_SECRET_ACCESS_KEY \
@@ -43,6 +45,13 @@ if [[ "$OBJECT_STORAGE_BUCKET" == "$BACKUP_S3_BUCKET" ||
 fi
 backup_validate_s3_env
 backup_validate_positive_integer OBJECT_STORAGE_MIN_FREE_BYTES "$OBJECT_STORAGE_MIN_FREE_BYTES"
+backup_validate_positive_integer BACKUP_FAILED_KEEP_COUNT "$BACKUP_FAILED_KEEP_COUNT"
+if [[ "$OBJECT_STORAGE_BACKUP_LOCAL_DIR" == "/" ||
+  "$OBJECT_STORAGE_FAILURE_DIR" == "/" ||
+  "$OBJECT_STORAGE_RESULT_DIR" == "/" ]]; then
+  printf '%s\n' 'Object Storage backup directories cannot be filesystem root.' >&2
+  exit 2
+fi
 mkdir -p "$OBJECT_STORAGE_BACKUP_LOCAL_DIR" "$OBJECT_STORAGE_RESULT_DIR" "$OBJECT_STORAGE_FAILURE_DIR"
 backup_check_disk_space "$OBJECT_STORAGE_BACKUP_LOCAL_DIR" "$OBJECT_STORAGE_MIN_FREE_BYTES"
 
@@ -57,29 +66,94 @@ archive_file="$stage_dir/objects.tar.gz"
 manifest_file="$stage_dir/objects.manifest.json"
 checksum_file="$stage_dir/objects.manifest.json.sha256"
 remote_copy="$stage_dir/objects.remote.tar.gz"
+OBJECT_STORAGE_STAGE=preflight
+
+prune_failed_attempts() {
+  local keep_count=$BACKUP_FAILED_KEEP_COUNT
+  local -a failure_records=()
+  local -a failure_archives=()
+  local item
+  local index
+  if [[ ! "$keep_count" =~ ^[1-9][0-9]*$ ]]; then
+    keep_count=1
+  fi
+  while IFS= read -r item; do failure_records+=("$item"); done < <(
+    find "$OBJECT_STORAGE_FAILURE_DIR" -maxdepth 1 -type f \
+      -name '*.failure.json' -print 2>/dev/null | sort -r
+  )
+  for ((index = keep_count; index < ${#failure_records[@]}; index++)); do
+    rm -f -- "${failure_records[index]}" \
+      "${failure_records[index]%.failure.json}.tar.gz.failed" 2>/dev/null || true
+  done
+  while IFS= read -r item; do failure_archives+=("$item"); done < <(
+    find "$OBJECT_STORAGE_FAILURE_DIR" -maxdepth 1 -type f \
+      -name '*.tar.gz.failed' -print 2>/dev/null | sort -r
+  )
+  for ((index = keep_count; index < ${#failure_archives[@]}; index++)); do
+    rm -f -- "${failure_archives[index]}" 2>/dev/null || true
+  done
+}
 
 cleanup() {
   local status=$?
-  if (( status != 0 )) && [[ -s "$archive_file" ]]; then
-    cp -- "$archive_file" "$OBJECT_STORAGE_FAILURE_DIR/$timestamp-$run_suffix.tar.gz.failed" 2>/dev/null || true
+  local finished_at
+  local failure_record
+  trap - EXIT
+  if (( status != 0 )); then
+    local preserved=0
+    finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [[ -s "$archive_file" ]] &&
+      cp -- "$archive_file" "$OBJECT_STORAGE_FAILURE_DIR/$timestamp-$run_suffix.tar.gz.failed" 2>/dev/null; then
+      preserved=1
+      chmod 600 "$OBJECT_STORAGE_FAILURE_DIR/$timestamp-$run_suffix.tar.gz.failed" 2>/dev/null || true
+    fi
+    failure_record="$OBJECT_STORAGE_FAILURE_DIR/$timestamp-$run_suffix.failure.json"
+    python3 - "$OBJECT_STORAGE_FAILURE_DIR/$timestamp-$run_suffix.failure.json" \
+      "$COMPANY_SLUG" "$timestamp" "$finished_at" "$OBJECT_STORAGE_STAGE" \
+      "$status" "$preserved" <<'PY' 2>/dev/null || true
+import json
+import os
+import sys
+
+path, company, started, finished, stage, exit_code, archive_preserved = sys.argv[1:]
+payload = {
+    "company_slug": company,
+    "started_at": started,
+    "finished_at": finished,
+    "failure_stage": stage,
+    "exit_code": int(exit_code),
+    "archive_preserved": archive_preserved == "1",
+}
+temporary = path + ".tmp"
+descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
+    handle.write("\n")
+os.replace(temporary, path)
+os.chmod(path, 0o600)
+PY
+    rm -f -- "$failure_record.tmp" 2>/dev/null || true
+    prune_failed_attempts
   fi
-  rm -rf -- "$stage_dir"
+  if [[ -n "$stage_dir" && -d "$stage_dir" ]]; then
+    rm -rf -- "$stage_dir"
+  fi
   exit "$status"
 }
 trap cleanup EXIT
 
 run_object_storage_aws() {
-  AWS_ACCESS_KEY_ID="$OBJECT_STORAGE_ACCESS_KEY_ID" \
-  AWS_SECRET_ACCESS_KEY="$OBJECT_STORAGE_SECRET_ACCESS_KEY" \
-  AWS_DEFAULT_REGION="$OBJECT_STORAGE_REGION" \
-  AWS_EC2_METADATA_DISABLED=true \
-    "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
-      -v "$stage_dir:/backup:rw" \
-      -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
-      -e AWS_EC2_METADATA_DISABLED \
-      "$BACKUP_UPLOAD_IMAGE" "$@"
+  backup_object_storage_cli_dir "$stage_dir" rw "$@"
 }
 
+backup_assert_object_storage_ready
+
+OBJECT_STORAGE_STAGE=space-preflight
+bash "$SCRIPT_DIR/preflight-object-storage-backup-space.sh" \
+  "$OBJECT_STORAGE_BACKUP_LOCAL_DIR" "$OBJECT_STORAGE_MIN_FREE_BYTES" \
+  "$BACKUP_UPLOAD_NETWORK" "$BACKUP_UPLOAD_IMAGE" "$BACKUP_DOCKER_BIN"
+
+OBJECT_STORAGE_STAGE=export-objects
 mkdir -p "$stage_dir/data"
 run_object_storage_aws s3 sync "s3://$OBJECT_STORAGE_BUCKET" /backup/data \
   --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors
@@ -87,6 +161,7 @@ if find "$stage_dir/data" -type l -print -quit | grep -q .; then
   echo "Object Storage export contains an unsupported symbolic link." >&2
   exit 1
 fi
+OBJECT_STORAGE_STAGE=archive-objects
 tar -czf "$archive_file" -C "$stage_dir/data" .
 size_bytes=$(backup_file_size "$archive_file")
 if [[ ! "$size_bytes" =~ ^[1-9][0-9]*$ ]]; then
@@ -96,9 +171,11 @@ fi
 sha256=$(backup_sha256 "$archive_file")
 created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+OBJECT_STORAGE_STAGE=upload-archive
 backup_aws_cli_dir "$stage_dir" ro s3 cp \
   /backup/objects.tar.gz "s3://$BACKUP_S3_BUCKET/$key" \
   --endpoint-url "$BACKUP_S3_ENDPOINT" --only-show-errors >/dev/null
+OBJECT_STORAGE_STAGE=verify-remote-archive
 remote_size=$(backup_aws_cli_dir "$stage_dir" ro s3api head-object \
   --bucket "$BACKUP_S3_BUCKET" --key "$key" \
   --endpoint-url "$BACKUP_S3_ENDPOINT" --query ContentLength --output text | tr -d '[:space:]')
@@ -115,6 +192,7 @@ if [[ "$(backup_file_size "$remote_copy")" != "$size_bytes" ||
   exit 1
 fi
 
+OBJECT_STORAGE_STAGE=upload-component-manifests
 python3 - "$manifest_file" "$COMPANY_SLUG" "$OBJECT_STORAGE_BUCKET" \
   "$key" "$manifest_key" "$created_at" "$size_bytes" "$sha256" <<'PY'
 import json
@@ -167,4 +245,5 @@ with open(path, "w", encoding="utf-8") as handle:
     handle.write("\n")
 PY
 chmod 600 "$result_file"
+OBJECT_STORAGE_STAGE=validated
 printf 'Object Storage backup validated: %s\n' "$key"

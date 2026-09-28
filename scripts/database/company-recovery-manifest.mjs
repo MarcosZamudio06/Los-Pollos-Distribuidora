@@ -79,7 +79,21 @@ function validateComponentManifest({ kind, value, companySlug, database }) {
     if (value.format !== "postgresql-custom") {
       fail("RECOVERY_SET_DATABASE_MANIFEST_MISMATCH");
     }
-    validateComponentKey(value.key, "postgres", ".dump");
+    const legacyKeyPattern =
+      /^postgres\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.dump$/u;
+    const scopedKeyPattern = new RegExp(
+      `^postgres/${companySlug}/\\d{4}/\\d{2}/\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}Z-\\d+-\\d+\\.dump$`,
+      "u",
+    );
+    if (!legacyKeyPattern.test(value.key ?? "") && !scopedKeyPattern.test(value.key ?? "")) {
+      fail("RECOVERY_SET_COMPONENT_KEY_INVALID");
+    }
+    if (
+      (scopedKeyPattern.test(value.key) && value.company_slug !== companySlug) ||
+      (value.company_slug !== undefined && value.company_slug !== companySlug)
+    ) {
+      fail("RECOVERY_SET_DATABASE_MANIFEST_MISMATCH");
+    }
     if (
       value.manifest_key !== value.key.replace(/\.dump$/u, ".manifest.json") ||
       value.database !== database
@@ -101,6 +115,32 @@ function validateComponentManifest({ kind, value, companySlug, database }) {
     }
   }
   return value;
+}
+
+export function verifyPostgresComponentManifest({
+  manifestRaw,
+  companySlug,
+  database,
+  expectedManifestKey,
+  requireCompanySlug = false,
+}) {
+  const value = parseJson(
+    manifestRaw,
+    "RECOVERY_SET_COMPONENT_MANIFEST_INVALID",
+  );
+  const verified = validateComponentManifest({
+    kind: "postgresql",
+    value,
+    companySlug,
+    database: database ?? value.database,
+  });
+  if (
+    (requireCompanySlug && verified.company_slug !== companySlug) ||
+    (expectedManifestKey && verified.manifest_key !== expectedManifestKey)
+  ) {
+    fail("RECOVERY_SET_DATABASE_MANIFEST_MISMATCH");
+  }
+  return verified;
 }
 
 function normalizeSchemaState(value) {
@@ -135,10 +175,76 @@ function normalizeSchemaState(value) {
   return migrations;
 }
 
+function normalizeRecoveryPoint(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail("RECOVERY_SET_WRITE_BARRIER_MISSING");
+  }
+  const timestampFields = [
+    "quiesce_requested_at",
+    "write_barrier_at",
+    "capture_started_at",
+    "capture_finished_at",
+    "write_barrier_released_at",
+  ];
+  const times = Object.fromEntries(
+    timestampFields.map((field) => {
+      const time = Date.parse(value[field]);
+      if (!Number.isFinite(time)) fail("RECOVERY_SET_WRITE_BARRIER_INVALID");
+      return [field, time];
+    }),
+  );
+  if (
+    value.method !== "backend-quiesce" ||
+    typeof value.backend_service !== "string" ||
+    !/^[a-zA-Z0-9_-]+$/u.test(value.backend_service) ||
+    typeof value.backend_was_running !== "boolean" ||
+    (value.backend_was_running && !validTimestamp(value.writes_resumed_at)) ||
+    (!value.backend_was_running && value.writes_resumed_at !== null)
+  ) {
+    fail("RECOVERY_SET_WRITE_BARRIER_INVALID");
+  }
+  if (
+    times.quiesce_requested_at > times.write_barrier_at ||
+    times.write_barrier_at !== times.capture_started_at ||
+    times.capture_started_at > times.capture_finished_at ||
+    times.capture_finished_at > times.write_barrier_released_at ||
+    (value.writes_resumed_at &&
+      Date.parse(value.writes_resumed_at) !== times.write_barrier_released_at)
+  ) {
+    fail("RECOVERY_SET_WRITE_BARRIER_ORDER_INVALID");
+  }
+  return {
+    method: value.method,
+    backend_service: value.backend_service,
+    backend_was_running: value.backend_was_running,
+    ...Object.fromEntries(
+      timestampFields.map((field) => [
+        field,
+        new Date(times[field]).toISOString(),
+      ]),
+    ),
+    writes_resumed_at: value.writes_resumed_at
+      ? new Date(value.writes_resumed_at).toISOString()
+      : null,
+  };
+}
+
+function assertComponentsWithinRecoveryPoint(recoveryPoint, postgres, objects) {
+  const barrierStart = Date.parse(recoveryPoint.write_barrier_at);
+  const barrierEnd = Date.parse(recoveryPoint.capture_finished_at);
+  const componentTimes = [postgres.created_at, objects.created_at].map(
+    (timestamp) => Date.parse(timestamp),
+  );
+  if (componentTimes.some((time) => time < barrierStart || time > barrierEnd)) {
+    fail("RECOVERY_SET_COMPONENT_OUTSIDE_WRITE_BARRIER");
+  }
+}
+
 export function buildCompanyRecoveryManifest(input) {
   validateSlug(input.companySlug);
   validateImageDigest(input.backendDigest);
   validateImageDigest(input.frontendDigest);
+  const recoveryPoint = normalizeRecoveryPoint(input.recoveryPoint);
   if (
     typeof input.database !== "string" ||
     !/^[A-Za-z0-9_]+$/u.test(input.database)
@@ -157,6 +263,11 @@ export function buildCompanyRecoveryManifest(input) {
     companySlug: input.companySlug,
     database: input.database,
   });
+  assertComponentsWithinRecoveryPoint(
+    recoveryPoint,
+    postgresManifest,
+    objectManifest,
+  );
   const schemaMigrations = normalizeSchemaState(input.schemaState);
   if (
     typeof input.postgresManifestRaw !== "string" ||
@@ -184,6 +295,7 @@ export function buildCompanyRecoveryManifest(input) {
       sha256: sha256(schemaPayload),
       migrations: schemaMigrations,
     },
+    recovery_point: recoveryPoint,
     postgresql: {
       database: input.database,
       key: postgresManifest.key,
@@ -234,6 +346,9 @@ export function verifyCompanyRecoveryIdentity({
     !validTimestamp(manifest.validated_at)
   ) {
     fail("RECOVERY_SET_TIMESTAMP_INVALID");
+  }
+  if (manifest.recovery_point !== undefined) {
+    normalizeRecoveryPoint(manifest.recovery_point);
   }
   return manifest;
 }
@@ -291,7 +406,7 @@ function verifyFile(path, expectedSize, expectedSha, missingCode, corruptCode) {
     fail(corruptCode);
 }
 
-export function verifyCompanyRecoverySet(input) {
+export function verifyCompanyRecoverySetManifests(input) {
   const manifest = verifyCompanyRecoveryIdentity(input);
   validateImageDigest(manifest.release_digests?.backend);
   validateImageDigest(manifest.release_digests?.frontend);
@@ -302,16 +417,27 @@ export function verifyCompanyRecoverySet(input) {
   if (sha256(JSON.stringify(migrations)) !== manifest.schema_state?.sha256) {
     fail("RECOVERY_SET_SCHEMA_CHECKSUM_INVALID");
   }
+  const recoveryPoint = manifest.recovery_point
+    ? normalizeRecoveryPoint(manifest.recovery_point)
+    : null;
 
+  const postgresManifest = input.postgresManifest ?? parseJson(
+    input.postgresManifestRaw ?? "",
+    "RECOVERY_SET_COMPONENT_MANIFEST_INVALID",
+  );
+  const objectManifestValue = input.objectManifest ?? parseJson(
+    input.objectManifestRaw ?? "",
+    "RECOVERY_SET_COMPONENT_MANIFEST_INVALID",
+  );
   const dbManifest = validateComponentManifest({
     kind: "postgresql",
-    value: input.postgresManifest,
+    value: postgresManifest,
     companySlug: manifest.company_slug,
     database: manifest.postgresql?.database,
   });
-  const objectManifest = validateComponentManifest({
+  const verifiedObjectManifest = validateComponentManifest({
     kind: "object-storage",
-    value: input.objectManifest,
+    value: objectManifestValue,
     companySlug: manifest.company_slug,
     database: manifest.postgresql?.database,
   });
@@ -325,17 +451,31 @@ export function verifyCompanyRecoverySet(input) {
   }
   if (
     dbManifest.key !== manifest.postgresql.key ||
+    dbManifest.manifest_key !== manifest.postgresql.manifest_key ||
     dbManifest.size_bytes !== manifest.postgresql.size_bytes ||
     dbManifest.sha256 !== manifest.postgresql.sha256 ||
     dbManifest.created_at !== manifest.postgresql.created_at ||
-    objectManifest.key !== manifest.object_storage.key ||
-    objectManifest.size_bytes !== manifest.object_storage.size_bytes ||
-    objectManifest.sha256 !== manifest.object_storage.sha256 ||
-    objectManifest.created_at !== manifest.object_storage.created_at ||
-    objectManifest.source_bucket !== manifest.object_storage.source_bucket
+    verifiedObjectManifest.key !== manifest.object_storage.key ||
+    verifiedObjectManifest.manifest_key !== manifest.object_storage.manifest_key ||
+    verifiedObjectManifest.size_bytes !== manifest.object_storage.size_bytes ||
+    verifiedObjectManifest.sha256 !== manifest.object_storage.sha256 ||
+    verifiedObjectManifest.created_at !== manifest.object_storage.created_at ||
+    verifiedObjectManifest.source_bucket !== manifest.object_storage.source_bucket
   ) {
     fail("RECOVERY_SET_COMPONENT_MISMATCH");
   }
+  if (recoveryPoint) {
+    assertComponentsWithinRecoveryPoint(
+      recoveryPoint,
+      dbManifest,
+      verifiedObjectManifest,
+    );
+  }
+  return manifest;
+}
+
+export function verifyCompanyRecoverySet(input) {
+  const manifest = verifyCompanyRecoverySetManifests(input);
   verifyFile(
     input.postgresPath,
     manifest.postgresql.size_bytes,
@@ -388,12 +528,17 @@ function cli() {
       options["object-manifest"],
       "RECOVERY_SET_COMPONENT_MANIFEST_MISSING",
     );
+    const recoveryPoint = readJsonFile(
+      options["recovery-point"],
+      "RECOVERY_SET_WRITE_BARRIER_MISSING",
+    );
     const manifest = buildCompanyRecoveryManifest({
       companySlug: options["company-slug"],
       database: options.database,
       backendDigest: options["backend-digest"],
       frontendDigest: options["frontend-digest"],
       schemaState: schemaState.value,
+      recoveryPoint: recoveryPoint.value,
       postgresManifest: postgresManifest.value,
       postgresManifestRaw: postgresManifest.raw,
       postgresManifestSha256: sha256(postgresManifest.raw),

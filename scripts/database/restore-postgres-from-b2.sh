@@ -26,10 +26,13 @@ RESTORE_DATABASE_URL=${RESTORE_DATABASE_URL:-}
 RESTORE_DATABASE_NAME=${RESTORE_DATABASE_NAME:-}
 RESTORE_PRODUCTION_DATABASE_NAME=${RESTORE_PRODUCTION_DATABASE_NAME:-$BACKUP_POSTGRES_DATABASE}
 RESTORE_BACKUP_KEY=${RESTORE_BACKUP_KEY:-}
+COMPANY_SLUG=${COMPANY_SLUG:-${TENANT_SLUG:-}}
 RESTORE_LOCAL_DIR=${RESTORE_LOCAL_DIR:-/var/tmp/pollos-distribuidor/postgres-restore}
 RESTORE_FAILURE_DIR=${RESTORE_FAILURE_DIR:-$RESTORE_LOCAL_DIR/failed}
 RESTORE_RESULT_DIR=${RESTORE_RESULT_DIR:-/var/lib/pollos-distribuidor/postgres-backups/restore-drills}
 RESTORE_MIN_FREE_BYTES=${RESTORE_MIN_FREE_BYTES:-1073741824}
+RESTORE_DEFER_TARGET_CLEANUP=${RESTORE_DEFER_TARGET_CLEANUP:-false}
+RESTORE_TARGET_CREATED_MARKER_FILE=${RESTORE_TARGET_CREATED_MARKER_FILE:-}
 
 temp_dir=
 dump_file=
@@ -138,6 +141,14 @@ backup_validate_database_name BACKUP_POSTGRES_USER "$BACKUP_POSTGRES_USER"
 backup_validate_database_name BACKUP_POSTGRES_DATABASE "$BACKUP_POSTGRES_DATABASE"
 backup_validate_database_name RESTORE_PRODUCTION_DATABASE_NAME "$RESTORE_PRODUCTION_DATABASE_NAME"
 backup_validate_positive_integer RESTORE_MIN_FREE_BYTES "$RESTORE_MIN_FREE_BYTES"
+case "$RESTORE_DEFER_TARGET_CLEANUP" in
+  true|false) ;;
+  *) printf '%s\n' 'RESTORE_DEFER_TARGET_CLEANUP must be true or false.' >&2; exit 2 ;;
+esac
+if [[ "$RESTORE_DEFER_TARGET_CLEANUP" == true && -z "$RESTORE_TARGET_CREATED_MARKER_FILE" ]]; then
+  printf '%s\n' 'RESTORE_TARGET_CREATED_MARKER_FILE is required when cleanup is deferred.' >&2
+  exit 2
+fi
 
 if [[ -n "$RESTORE_DATABASE_URL" ]]; then
   database_url_without_query=${RESTORE_DATABASE_URL%%\?*}
@@ -168,9 +179,15 @@ if [[ "$RESTORE_DATABASE_NAME" != *_restore_drill ]]; then
   exit 2
 fi
 
-if [[ -n "$RESTORE_BACKUP_KEY" && ! "$RESTORE_BACKUP_KEY" =~ ^postgres/[0-9]{4}/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.dump$ ]]; then
-  printf '%s\n' 'RESTORE_BACKUP_KEY is not a valid deterministic PostgreSQL backup key.' >&2
-  exit 2
+if [[ -n "$RESTORE_BACKUP_KEY" ]]; then
+  legacy_key_pattern='^postgres/[0-9]{4}/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.dump$'
+  scoped_key_pattern="^postgres/$COMPANY_SLUG/[0-9]{4}/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z-[0-9]+-[0-9]+\.dump$"
+  if [[ ! "$RESTORE_BACKUP_KEY" =~ $legacy_key_pattern ]] &&
+    { [[ ! "$COMPANY_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] ||
+      [[ ! "$RESTORE_BACKUP_KEY" =~ $scoped_key_pattern ]]; }; then
+    printf '%s\n' 'RESTORE_BACKUP_KEY is not a valid company-scoped PostgreSQL backup key.' >&2
+    exit 2
+  fi
 fi
 
 if [[ ! -f "$BACKUP_COMPOSE_FILE" ]]; then
@@ -330,6 +347,24 @@ production_exists_after=$(backup_compose_pg psql \
   --command="SELECT 1 FROM pg_database WHERE datname = '$RESTORE_PRODUCTION_DATABASE_NAME';" | tr -d '[:space:]')
 if [[ "$production_exists_after" != "1" ]]; then
   backup_die
+fi
+
+if [[ "$RESTORE_DEFER_TARGET_CLEANUP" == true ]]; then
+  if [[ -e "$RESTORE_TARGET_CREATED_MARKER_FILE" || -L "$RESTORE_TARGET_CREATED_MARKER_FILE" ]]; then
+    printf '%s\n' 'Restore target ownership marker already exists.' >&2
+    exit 1
+  fi
+  printf '%s\n' "$RESTORE_DATABASE_NAME" > "$RESTORE_TARGET_CREATED_MARKER_FILE"
+  chmod 600 "$RESTORE_TARGET_CREATED_MARKER_FILE"
+  result_status=passed
+  cleanup_status=deferred-to-company-recovery-set
+  write_result none
+  # The parent full-set drill owns final cleanup after Object Storage
+  # cross-validation. The marker lets its EXIT trap clean up after signals.
+  target_created=0
+  printf 'PostgreSQL restore rehearsal passed for %s; database retained for recovery-set cross-validation.\n' \
+    "$RESTORE_DATABASE_NAME"
+  exit 0
 fi
 
 result_status=passed

@@ -15,7 +15,7 @@ const productionCompose = readFileSync(
   'utf8',
 );
 const environmentExample = readFileSync(
-  resolve(repositoryRoot, '.env.example'),
+  resolve(repositoryRoot, '.env.production.example'),
   'utf8',
 );
 const monitorScript = readFileSync(
@@ -33,6 +33,20 @@ const monitorTimer = readFileSync(
   resolve(
     repositoryRoot,
     'docs/runbooks/systemd/pollos-distribuidor-monitor.timer',
+  ),
+  'utf8',
+);
+const recoveryBackupService = readFileSync(
+  resolve(
+    repositoryRoot,
+    'docs/runbooks/systemd/pollos-distribuidor-recovery-set-backup.service',
+  ),
+  'utf8',
+);
+const recoveryBackupTimer = readFileSync(
+  resolve(
+    repositoryRoot,
+    'docs/runbooks/systemd/pollos-distribuidor-recovery-set-backup.timer',
   ),
   'utf8',
 );
@@ -125,7 +139,20 @@ describe('production health and monitoring contract', () => {
       'MONITOR_MEMORY_CRITICAL_PERCENT',
       'MONITOR_CPU_WARN_PERCENT',
       'MONITOR_CPU_WARN_DURATION_SECONDS',
-      'MONITOR_BACKUP_MAX_AGE_HOURS',
+      'BACKUP_RPO_HOURS',
+      'BACKUP_FAILED_KEEP_COUNT',
+      'BACKUP_MIN_FREE_BYTES',
+      'OBJECT_STORAGE_MIN_FREE_BYTES',
+      'MONITOR_BACKUP_RPO_WARNING_LEAD_HOURS',
+      'MONITOR_BACKUP_SCHEDULE_MAX_AGE_MINUTES',
+      'MONITOR_BACKUP_LOCAL_PATH',
+      'MONITOR_BACKUP_DISK_WARN_MULTIPLIER',
+      'MONITOR_BACKUP_FAILED_WARN_COUNT',
+      'MONITOR_BACKUP_FAILED_WINDOW_DAYS',
+      'MONITOR_RECOVERY_SET_MODE',
+      'MONITOR_RECOVERY_SET_RESULT_ROOT',
+      'MONITOR_TENANT_MANIFEST_PATH',
+      'MONITOR_LOCAL_DEPLOYMENT_HOST_REF',
       'MONITOR_GIS_MAX_AGE_DAYS',
       'MONITOR_ALERT_WEBHOOK_URL',
     ]) {
@@ -151,7 +178,44 @@ describe('production health and monitoring contract', () => {
     expect(monitorService).toContain('Type=oneshot');
     expect(monitorService).toContain('monitor-production.py');
     expect(monitorService).toContain('docker.service');
-    expect(monitorTimer).toContain('OnUnitActiveSec=5min');
+    expect(monitorTimer).toContain('OnCalendar=*-*-* *:00/5:00 UTC');
+    expect(monitorTimer).toContain('OnBootSec=2min');
+    expect(monitorTimer).toContain('Persistent=true');
     expect(monitorTimer).toContain('Unit=pollos-distribuidor-monitor.service');
+  });
+
+  it('keeps the RPO warning envelope aligned with the complete recovery timer', () => {
+    const calendar = recoveryBackupTimer.match(
+      /^OnCalendar=\*-\*-\* (\d{2}),(\d{2}):00:00 UTC$/m,
+    );
+    const randomizedDelayMinutes = recoveryBackupTimer.match(
+      /^RandomizedDelaySec=(\d+)m$/m,
+    );
+    const accuracyMinutes = recoveryBackupTimer.match(/^AccuracySec=(\d+)min$/m);
+    const timeoutHours = recoveryBackupService.match(/^TimeoutStartSec=(\d+)h$/m);
+    const configuredEnvelopeMinutes = environmentExample.match(
+      /^MONITOR_BACKUP_SCHEDULE_MAX_AGE_MINUTES=(\d+)$/m,
+    );
+
+    expect(calendar).not.toBeNull();
+    expect(randomizedDelayMinutes).not.toBeNull();
+    expect(accuracyMinutes).not.toBeNull();
+    expect(timeoutHours).not.toBeNull();
+    expect(configuredEnvelopeMinutes).not.toBeNull();
+
+    const [firstRunHour, secondRunHour] = calendar!.slice(1).map(Number);
+    const scheduledIntervalMinutes = (secondRunHour - firstRunHour) * 60;
+    const maximumFinishIntervalMinutes =
+      scheduledIntervalMinutes +
+      Number(randomizedDelayMinutes![1]) +
+      Number(accuracyMinutes![1]) +
+      Number(timeoutHours![1]) * 60;
+
+    expect(maximumFinishIntervalMinutes).toBe(
+      Number(configuredEnvelopeMinutes![1]),
+    );
+    expect(recoveryBackupTimer).toContain('Persistent=true');
+    expect(environmentExample).toContain('BACKUP_RPO_HOURS=24');
+    expect(maximumFinishIntervalMinutes).toBeLessThan(24 * 60);
   });
 });

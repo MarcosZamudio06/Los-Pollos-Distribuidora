@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Pollos Distribuidor complete recovery-set backups twice daily
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00 UTC
+RandomizedDelaySec=30m
+AccuracySec=1min
+Persistent=true
+Unit=pollos-distribuidor-recovery-set-backup.service
+
+[Install]
+WantedBy=timers.target

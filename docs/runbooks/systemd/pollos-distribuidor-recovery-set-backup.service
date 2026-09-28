@@ -1,0 +1,18 @@
+[Unit]
+Description=Pollos Distribuidor complete company recovery-set backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+WorkingDirectory=/opt/pollos-distribuidor
+EnvironmentFile=/etc/pollos-distribuidor/production.env
+EnvironmentFile=-/etc/pollos-distribuidor/postgres-backup.env
+EnvironmentFile=/etc/pollos-distribuidor/recovery-set-backup.env
+ExecStart=/opt/pollos-distribuidor/scripts/database/run-production-recovery-set-backup.sh
+TimeoutStartSec=8h
+TimeoutStopSec=3min
+PrivateTmp=true

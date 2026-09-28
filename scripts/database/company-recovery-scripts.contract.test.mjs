@@ -33,7 +33,9 @@ test("company restore verifies identity and every artifact before creating dispo
     restore,
     /RESTORE_MIN_FREE_BYTES=\$\{RESTORE_MIN_FREE_BYTES:-1048576\}/u,
   );
-  assert.match(restore, /write_rehearsal_result\s+failed/u);
+  assert.match(restore, /restore_status=failed/u);
+  assert.ok(restore.includes("if (( result_written == 0 ));"));
+  assert.ok(restore.includes("if ! write_rehearsal_result; then"));
   assert.match(restore, /"failure_stage"/u);
 });
 
@@ -45,6 +47,76 @@ test("object restore accepts only regular files and directories from a verified 
     restore,
     /checksum_file=\$\{RESTORE_OBJECT_STORAGE_CHECKSUM_FILE:-\$work_dir\/object-manifest\.sha256\}/u,
   );
+});
+
+test("cross-checks actual restored rows against the disposable Object Storage bucket", () => {
+  const schema = read("backend/prisma/schema.prisma");
+  const restore = read("scripts/database/restore-object-storage-from-b2.sh");
+  const companyRestore = read("scripts/database/restore-company-recovery-set.sh");
+  const verifier = read("scripts/database/recovery-storage-reference-verifier.mjs");
+
+  assert.match(schema, /model CompanyBranding \{[\s\S]*?logoObjectKey\s+String\?[\s\S]*?logoMimeType\s+String\?/u);
+  assert.match(schema, /model DeliveryEvidence \{[\s\S]*?storageKey\s+String\?[\s\S]*?mimeType\s+String\?[\s\S]*?sha256\s+String\?[\s\S]*?sizeBytes\s+Int\?/u);
+  assert.match(schema, /model FiscalArtifact \{[\s\S]*?status\s+FiscalArtifactStatus[\s\S]*?storageKey\s+String[\s\S]*?mimeType\s+String[\s\S]*?byteSize\s+BigInt\?[\s\S]*?sha256\s+String\?/u);
+  assert.match(restore, /FROM "DeliveryEvidence"[\s\S]*?"storageKey" IS NOT NULL/u);
+  assert.match(restore, /FROM "FiscalArtifact"[\s\S]*?"status" = 'AVAILABLE'/u);
+  assert.match(restore, /FROM "CompanyBranding"[\s\S]*?"logoObjectKey" IS NOT NULL/u);
+  assert.match(restore, /'logoMimeType', "logoMimeType"/u);
+  assert.match(restore, /'sizeBytes', "sizeBytes"/u);
+  assert.match(restore, /'byteSize', "byteSize"::text/u);
+
+  const archiveDiff = restore.indexOf("diff -r -- \"$work_dir/data\" \"$work_dir/verify\"");
+  const databaseQuery = restore.indexOf('FROM "DeliveryEvidence"');
+  const verifierRun = restore.indexOf('recovery-storage-reference-verifier.mjs" verify');
+  assert.ok(archiveDiff >= 0 && databaseQuery > archiveDiff && verifierRun > databaseQuery);
+  assert.match(restore, /--bucket "\$RESTORE_OBJECT_STORAGE_TARGET_BUCKET"/u);
+  assert.match(restore, /--dbname="\$RESTORE_DATABASE_NAME"/u);
+  assert.match(restore, /RESTORE_DATABASE_NAME.*_restore_drill/u);
+  assert.match(restore, /RESTORE_OBJECT_STORAGE_TARGET_DISPOSABLE.*true/u);
+  assert.match(verifier, /EXPECTED_SHA256_MISMATCH/u);
+  assert.match(verifier, /EXPECTED_SIZE_MISMATCH/u);
+  assert.match(verifier, /MIME_TYPE_MISMATCH/u);
+  assert.match(restore, /--entrypoint \/bin\/sh/u);
+
+  assert.match(companyRestore, /RESTORE_DEFER_TARGET_CLEANUP=true/u);
+  assert.match(companyRestore, /RESTORE_REQUIRE_STORAGE_REFERENCE_CHECK=true/u);
+  assert.match(companyRestore, /reference_checks\.get\("delivery_evidence"/u);
+  assert.match(companyRestore, /reference_checks\.get\("fiscal_artifacts"/u);
+  assert.match(companyRestore, /reference_checks\.get\("company_branding"/u);
+  assert.match(companyRestore, /"storage_reference_failure_codes": reference_result\.get\("failure_codes", \[\]\)/u);
+  assert.doesNotMatch(companyRestore, /"checks":\s*\[/u);
+
+  const workflow = read(".github/workflows/quality-gate.yml");
+  assert.ok(workflow.includes("scripts/database/recovery-storage-reference-verifier.test.mjs"));
+});
+
+test("PostgreSQL drill can defer disposable database cleanup only for parent cross-validation", () => {
+  const restore = read("scripts/database/restore-postgres-from-b2.sh");
+
+  assert.match(restore, /RESTORE_DEFER_TARGET_CLEANUP=\$\{RESTORE_DEFER_TARGET_CLEANUP:-false\}/u);
+  assert.match(restore, /RESTORE_TARGET_CREATED_MARKER_FILE is required/u);
+  assert.match(restore, /RESTORE_DATABASE_NAME.*_restore_drill/u);
+  assert.match(restore, /target_created=0[\s\S]*parent full-set drill owns final cleanup/u);
+  assert.match(restore, /postgres\/\$COMPANY_SLUG\//u,
+    "the drill must accept company-scoped backup keys created by the recovery-set coordinator");
+});
+
+test("the mandatory CI gate executes the real disposable disaster-recovery harness", () => {
+  const workflow = read(".github/workflows/quality-gate.yml");
+  const harness = read("scripts/database/test-disaster-recovery-runtime.sh");
+  assert.match(workflow, /needs: \[[^\]]*disaster-recovery\]/u);
+  assert.match(workflow, /bash scripts\/database\/test-disaster-recovery-runtime\.sh/u);
+  assert.match(workflow, /systemd-analyze verify/u);
+  for (const required of [
+    "prisma migrate deploy",
+    "create-company-recovery-set.sh",
+    "restore-company-recovery-set.sh",
+    "restore-object-storage-from-b2.sh",
+    "corruption_cases_rejected",
+    "compose down --volumes",
+  ]) {
+    assert.ok(harness.includes(required), `DR runtime harness is missing ${required}`);
+  }
 });
 
 test("recovery set records immutable releases, schema, timestamps, sizes and checksums", () => {

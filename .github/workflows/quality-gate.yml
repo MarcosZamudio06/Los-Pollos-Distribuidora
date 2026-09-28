@@ -323,6 +323,43 @@ jobs:
           MTE_BACKEND_IMAGE: pollos-backend:mte-isolation
         run: bash scripts/multi-company/test-two-company-isolation.sh
 
+  disaster-recovery:
+    name: Disposable Disaster Recovery runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+      - name: Verify recovery and monitoring systemd units on Linux
+        run: |
+          command -v systemd-analyze
+          sudo test ! -e /opt/pollos-distribuidor
+          sudo ln -s "$GITHUB_WORKSPACE" /opt/pollos-distribuidor
+          systemd-analyze verify \
+            docs/runbooks/systemd/*.service \
+            docs/runbooks/systemd/*.timer
+      - name: Run real disposable PostgreSQL and dual-S3 recovery
+        env:
+          DR_EVIDENCE_DIR: ${{ runner.temp }}/dr-evidence
+        run: |
+          mkdir -p "$DR_EVIDENCE_DIR"
+          bash scripts/database/test-disaster-recovery-runtime.sh
+      - name: Upload Disaster Recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: disaster-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dr-evidence/*.json
+          if-no-files-found: warn
+
   security:
     name: Dependency and secret scan
     runs-on: ubuntu-latest
@@ -362,7 +399,30 @@ jobs:
         run: |
           node --test \
             scripts/database/company-recovery-manifest.test.mjs \
-            scripts/database/company-recovery-scripts.contract.test.mjs
+            scripts/database/company-recovery-retention.test.mjs \
+            scripts/database/company-recovery-scripts.contract.test.mjs \
+            scripts/database/recovery-storage-reference-verifier.test.mjs \
+            scripts/database/company-recovery-orchestration.contract.test.mjs \
+            scripts/database/production-recovery-backup.contract.test.mjs
+          OPENSSL_CONF=/dev/null bash scripts/database/test-company-recovery-orchestration.sh
+          bash scripts/database/test-scoped-postgres-restore-key.sh
+          for script in \
+            scripts/database/run-production-recovery-set-backup.sh \
+            scripts/database/create-company-recovery-set.sh \
+            scripts/database/preflight-object-storage-backup-space.sh \
+            scripts/database/apply-company-recovery-retention.sh \
+            scripts/database/backup-postgres-to-b2.sh \
+            scripts/database/backup-object-storage-to-b2.sh \
+            scripts/database/restore-postgres-from-b2.sh \
+            scripts/database/restore-object-storage-from-b2.sh \
+            scripts/database/restore-company-recovery-set.sh \
+            scripts/database/test-disaster-recovery-runtime.sh \
+            scripts/database/test-scoped-postgres-restore-key.sh; do
+            bash -n "$script"
+          done
+
+      - name: Test production recovery-set monitor contracts
+        run: python3 scripts/monitoring/test-monitor-production.py
 
       - name: Reject versioned fiscal secrets and production XML
         run: git ls-files -z | node scripts/validate-fiscal-assets.mjs --files-from-stdin
@@ -377,7 +437,7 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, database, browser, docker, security, isolation]
+    needs: [quality, database, browser, docker, security, isolation, disaster-recovery]
     runs-on: ubuntu-latest
     steps:
       - name: Require every quality check
@@ -388,6 +448,7 @@ jobs:
           ISOLATION_RESULT: ${{ needs.isolation.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
+          DISASTER_RECOVERY_RESULT: ${{ needs['disaster-recovery'].result }}
         run: |
           test "$QUALITY_RESULT" = "success"
           test "$DATABASE_RESULT" = "success"
@@ -395,3 +456,4 @@ jobs:
           test "$DOCKER_RESULT" = "success"
           test "$ISOLATION_RESULT" = "success"
           test "$SECURITY_RESULT" = "success"
+          test "$DISASTER_RECOVERY_RESULT" = "success"

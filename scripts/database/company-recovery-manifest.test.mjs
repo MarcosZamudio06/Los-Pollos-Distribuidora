@@ -9,6 +9,7 @@ import {
   verifyCompanyRecoveryIdentity,
   verifyCompanyObjectManifest,
   verifyCompanyRecoverySet,
+  verifyPostgresComponentManifest,
 } from "./company-recovery-manifest.mjs";
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -17,6 +18,17 @@ const migration = {
   migration_name: "20260913000000_mte_fixture",
   checksum: "b".repeat(64),
   finished_at: "2026-09-13T12:00:00.000Z",
+};
+const recoveryPoint = {
+  method: "backend-quiesce",
+  backend_service: "backend",
+  backend_was_running: true,
+  quiesce_requested_at: "2026-09-13T11:59:00.000Z",
+  write_barrier_at: "2026-09-13T12:00:00.000Z",
+  capture_started_at: "2026-09-13T12:00:00.000Z",
+  capture_finished_at: "2026-09-13T12:02:00.000Z",
+  write_barrier_released_at: "2026-09-13T12:03:00.000Z",
+  writes_resumed_at: "2026-09-13T12:03:00.000Z",
 };
 
 function componentManifests() {
@@ -53,6 +65,7 @@ function manifestFixture() {
     backendDigest: digest,
     frontendDigest: `sha256:${"e".repeat(64)}`,
     schemaState: [migration],
+    recoveryPoint,
     postgresManifest: components.pg,
     postgresManifestRaw: components.pgRaw,
     postgresManifestSha256: sha256(components.pgRaw),
@@ -71,6 +84,11 @@ test("company recovery set records tenant, release, schema, timestamps, sizes an
   assert.equal(manifest.company_slug, "acme");
   assert.equal(manifest.release_digests.backend, digest);
   assert.equal(manifest.schema_state.migration_count, 1);
+  assert.equal(manifest.recovery_point.method, "backend-quiesce");
+  assert.equal(
+    manifest.recovery_point.write_barrier_at,
+    recoveryPoint.write_barrier_at,
+  );
   assert.equal(
     manifest.schema_state.migrations[0].migration_name,
     migration.migration_name,
@@ -80,6 +98,91 @@ test("company recovery set records tenant, release, schema, timestamps, sizes an
   assert.ok(Date.parse(manifest.created_at));
   assert.ok(Date.parse(manifest.postgresql.created_at));
   assert.ok(Date.parse(manifest.object_storage.created_at));
+});
+
+test("recovery PostgreSQL component manifests are company-scoped and collision-resistant", () => {
+  const key = "postgres/acme/2026/09/2026-09-13T12-00-00Z-123-456.dump";
+  const manifest = {
+    format: "postgresql-custom",
+    key,
+    manifest_key: key.replace(/\.dump$/u, ".manifest.json"),
+    created_at: "2026-09-13T12:00:00.000Z",
+    database: "tenant_acme",
+    company_slug: "acme",
+    size_bytes: 1,
+    sha256: sha256("x"),
+  };
+  const verified = verifyPostgresComponentManifest({
+    manifestRaw: JSON.stringify(manifest),
+    companySlug: "acme",
+    expectedManifestKey: manifest.manifest_key,
+    requireCompanySlug: true,
+  });
+  assert.equal(verified.company_slug, "acme");
+  assert.throws(() => verifyPostgresComponentManifest({
+    manifestRaw: JSON.stringify({ ...manifest, company_slug: "beta" }),
+    companySlug: "acme",
+    requireCompanySlug: true,
+  }), /RECOVERY_SET_DATABASE_MANIFEST_MISMATCH/u);
+});
+
+test("recovery manifest rejects a missing or incorrectly ordered write barrier", () => {
+  const components = componentManifests();
+  const input = {
+    companySlug: "acme",
+    database: "tenant_acme",
+    backendDigest: digest,
+    frontendDigest: digest,
+    schemaState: [migration],
+    postgresManifest: components.pg,
+    postgresManifestRaw: components.pgRaw,
+    postgresManifestSha256: sha256(components.pgRaw),
+    objectManifest: components.objects,
+    objectManifestRaw: components.objectRaw,
+    objectManifestSha256: sha256(components.objectRaw),
+  };
+  assert.throws(
+    () => buildCompanyRecoveryManifest(input),
+    /RECOVERY_SET_WRITE_BARRIER_MISSING/u,
+  );
+  assert.throws(
+    () =>
+      buildCompanyRecoveryManifest({
+        ...input,
+        recoveryPoint: {
+          ...recoveryPoint,
+          capture_finished_at: "2026-09-13T11:59:00.000Z",
+        },
+      }),
+    /RECOVERY_SET_WRITE_BARRIER_ORDER_INVALID/u,
+  );
+});
+
+test("recovery verifier rejects component snapshots outside the coordinated write barrier", () => {
+  const components = componentManifests();
+  const lateObjects = {
+    ...components.objects,
+    created_at: "2026-09-13T12:03:00.000Z",
+  };
+  const lateObjectRaw = JSON.stringify(lateObjects);
+  assert.throws(
+    () =>
+      buildCompanyRecoveryManifest({
+        companySlug: "acme",
+        database: "tenant_acme",
+        backendDigest: digest,
+        frontendDigest: digest,
+        schemaState: [migration],
+        recoveryPoint,
+        postgresManifest: components.pg,
+        postgresManifestRaw: components.pgRaw,
+        postgresManifestSha256: sha256(components.pgRaw),
+        objectManifest: lateObjects,
+        objectManifestRaw: lateObjectRaw,
+        objectManifestSha256: sha256(lateObjectRaw),
+      }),
+    /RECOVERY_SET_COMPONENT_OUTSIDE_WRITE_BARRIER/u,
+  );
 });
 
 test("different-company recovery sets are rejected before artifact access", () => {

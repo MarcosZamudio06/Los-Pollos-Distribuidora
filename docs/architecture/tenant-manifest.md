@@ -292,8 +292,8 @@ provision multiple production companies on one Docker daemon.
 | migrate (batch) | Requires a successful matching canary; preflights all active production tenants, checks the same release digest set, then migrates sequentially in manifest order. The canary tenant is not migrated twice. |
 | bootstrap | Runs migration first, then the existing production bootstrap service. It does not rotate the admin password. |
 | status | Reads only Docker Compose service state and health; it does not query ERP tables. Batch status selects active tenants. |
-| backup | Runs the existing PostgreSQL-to-B2 script with the selected tenant database, unique bucket, and local result directory. |
-| restore-drill | Runs the existing guarded PostgreSQL restore script into a unique temporary `_restore_drill` database; the script verifies and removes that target. |
+| backup | Creates a coordinated PostgreSQL/PostGIS plus Object Storage recovery set for the selected tenant; only its backend is temporarily stopped while both components are captured and verified. |
+| restore-drill | Creates a fresh coordinated recovery set, then restores PostgreSQL and Object Storage to disposable drill targets and removes them after verification. |
 
 Sensitive commands (`provision`, `migrate`, `backup`, `restore-drill`, and
 `bootstrap`) require `--apply --reason <ticket-id> --confirm` to execute.
@@ -324,14 +324,14 @@ per tenant deployment target. Database passwords must use URL-safe characters
 because the current Compose file embeds POSTGRES_PASSWORD in its internal
 database URL without encoding.
 
-The existing PostgreSQL backup scripts use host filesystem paths and Docker
-bind mounts. Run backup/restore-drill on the tenant deployment host with a
-Docker context whose paths are available to both the script and daemon; do not
-assume a remote context can access the operator machine's files. Tenantctl
-isolates local paths by slug and S3 buckets by manifest, but cannot prove that
-a remote bind mount is shared correctly. These commands back up PostgreSQL
-only, not Object Storage, and therefore do not create a complete company
-recovery set.
+The recovery-set scripts use host filesystem paths and Docker bind mounts. Run
+backup/restore-drill on the tenant deployment host with a Docker context whose
+paths are available to both the script and daemon; do not assume a remote
+context can access the operator machine's files. Tenantctl isolates local
+paths by slug and backup buckets by manifest, but cannot prove that a remote
+bind mount is shared correctly. See
+`docs/runbooks/multi-company-backup-restore.md` for the maintenance window,
+consistency checks, and restore-drill procedure.
 
 ## Rollback
 
@@ -386,10 +386,14 @@ previous healthy target until provisioning and the smoke check pass.
 5. **Data rollback:** never downgrade Prisma migrations. Restore a matching
    company recovery set into a new isolated target, verify company identity,
    checksums, schema status, PostgreSQL/PostGIS, and Object Storage, then switch
-   only that company's routing. Existing backup scripts cover PostgreSQL only;
-   until the paired recovery-set workflow in MTE-005 exists and is rehearsed, a
-   complete production data rollback is **not available**. A PostgreSQL dump is
-   not a complete company recovery point.
+   only that company's routing. The current recovery-set workflow pairs
+   PostgreSQL/PostGIS with Object Storage and validates disposable restores and
+   storage references. Production-target imports remain incident-gated: the
+   repository's restore scripts intentionally accept only disposable targets,
+   so do not repurpose them for production. Follow the
+   [backup and Disaster Recovery runbook](../runbooks/multi-company-backup-restore.md)
+   and use only a separately reviewed import procedure on replacement
+   resources. A PostgreSQL-only dump is not a complete company recovery point.
 6. **First-time disposable tenant:** removing containers/volumes is a
    destructive operator action and requires explicit approval plus proof that
    no company data must be retained. `tenantctl` intentionally has no cleanup

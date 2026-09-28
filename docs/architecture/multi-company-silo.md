@@ -50,7 +50,7 @@ application tenant-aware.
 | CFDI/PAC | PAC credentials are resolved from an opaque Docker-secret reference; fiscal records and certificate metadata live in PostgreSQL. The production Compose file does not mount a fiscal secret. | Add deployment-only secret wiring per company. Do not change issuance, reconciliation, or provider business logic. |
 | CSD | The schema stores certificate metadata, not private CSD bytes; the audited runtime has no local CSD-private-key resolver. | Do not invent a CSD storage path. If a future provider flow requires local CSD bytes, design a separate secret-backed adapter before enabling it. |
 | GIS | PostgreSQL already uses PostGIS. Photon, OSRM, VROOM, and TileServer are runtime services backed by map datasets. | Keep the first production silo fully company-local. Reuse image and dataset versions, not writable runtime state. Sharing GIS is a later cost optimization, not an MTE prerequisite. |
-| Backups | Current automation backs up PostgreSQL to S3/B2 and can run a guarded restore drill. It does not create a coordinated PostgreSQL plus Object Storage recovery set. | Add company identity and Object Storage recovery evidence before claiming complete company recovery. |
+| Backups | Production automation creates validated, company-scoped PostgreSQL/PostGIS plus Object Storage recovery sets with a backend write barrier, end-to-end checksums, retention, and disposable cross-reference drills. | Keep production imports incident-gated and use the [backup and Disaster Recovery runbook](../runbooks/multi-company-backup-restore.md); do not use disposable restore scripts against production. |
 | GitHub Actions | Release Images publishes immutable backend/frontend/GIS image digests once after the quality gate. | Promote the same release set to N company environments; never rebuild per company. |
 | WebSockets | Socket.IO authenticates against the local `AuthService` and joins unprefixed in-process rooms. Session-revocation fan-out is also in memory. | Room names are safe only because each company has a separate backend process. Keep one backend replica per company in this phase. |
 
@@ -185,13 +185,34 @@ records inside only their company database.
   directory, retention policy execution, and restore target.
 - A complete recovery point contains PostgreSQL, Object Storage, release
   digests, schema/migration status, checksums, timestamps, and company identity.
-- Until application-level coordinated snapshots exist, create the recovery set
-  in a maintenance window with writes stopped. A PostgreSQL-only dump is not a
-  complete company backup because database rows reference Object Storage keys.
+- `scripts/database/create-company-recovery-set.sh` creates the coordinated
+  recovery point by checking PostgreSQL and Object Storage readiness, then
+  stopping only the tenant's `backend` Compose service for both component
+  backups. PostgreSQL, Object Storage, frontend, and Caddy remain running. The
+  backend is restored to its previous running/stopped state before a complete
+  recovery-set manifest is published as validated.
+- The write barrier starts only after the backend has stopped gracefully and
+  remains active while both component archives/manifests are uploaded and
+  remotely read back with checksum/size verification. It is released after the
+  backend is restored to its prior state and healthy; only then is the complete
+  recovery-set manifest published as validated. The Nest backend handles
+  SIGTERM shutdown hooks; the backup coordinator requires a zero exit code and
+  aborts capture if shutdown is forced or the service remains running. An
+  EXIT/signal cleanup restores a
+  previously running backend and waits for health. If the backend was already
+  stopped, that state is preserved. The temporary API outage is the write
+  quiesce; Caddy does not currently serve a maintenance page during it.
+- A PostgreSQL-only dump is not a complete company backup because database
+  rows reference Object Storage keys.
+- The coordinator emits private, non-secret local diagnostics on failure and
+  never emits a validated recovery-set manifest when either component fails.
 - Restore tooling must fail closed when the manifest company slug does not
   match the requested target.
 - An emergency restore is company-local and must never overwrite another
   company's database, bucket, volumes, or DNS.
+- The disposable restore scripts are not a production import mechanism. An
+  incident must use an explicitly approved replacement-target procedure; see
+  `docs/runbooks/multi-company-backup-restore.md` for the required hold point.
 
 ## Alternatives considered
 

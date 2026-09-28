@@ -116,6 +116,62 @@ backup_compose_pg() {
   backup_compose exec -T "$BACKUP_POSTGRES_SERVICE" "$@"
 }
 
+backup_compose_service_health() {
+  local service=$1
+  local container_ids
+  local container_count
+  local health_status
+
+  container_ids=$(backup_compose ps -q "$service")
+  container_count=$(printf '%s\n' "$container_ids" | awk 'NF { count++ } END { print count + 0 }')
+  if [[ "$container_count" != 1 ]]; then
+    printf 'Expected exactly one running %s service container.\n' "$service" >&2
+    return 1
+  fi
+
+  health_status=$("$BACKUP_DOCKER_BIN" inspect --format '{{.State.Health.Status}}' "$container_ids")
+  if [[ "$health_status" != healthy ]]; then
+    printf 'Compose service %s is not healthy.\n' "$service" >&2
+    return 1
+  fi
+}
+
+backup_object_storage_cli() {
+  AWS_ACCESS_KEY_ID="$OBJECT_STORAGE_ACCESS_KEY_ID" \
+  AWS_SECRET_ACCESS_KEY="$OBJECT_STORAGE_SECRET_ACCESS_KEY" \
+  AWS_DEFAULT_REGION="$OBJECT_STORAGE_REGION" \
+  AWS_EC2_METADATA_DISABLED=true \
+    "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
+      -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
+      -e AWS_EC2_METADATA_DISABLED \
+      "$BACKUP_UPLOAD_IMAGE" "$@"
+}
+
+backup_object_storage_cli_dir() {
+  local directory=$1
+  local mode=$2
+  shift 2
+
+  AWS_ACCESS_KEY_ID="$OBJECT_STORAGE_ACCESS_KEY_ID" \
+  AWS_SECRET_ACCESS_KEY="$OBJECT_STORAGE_SECRET_ACCESS_KEY" \
+  AWS_DEFAULT_REGION="$OBJECT_STORAGE_REGION" \
+  AWS_EC2_METADATA_DISABLED=true \
+    "$BACKUP_DOCKER_BIN" run --rm --network "$BACKUP_UPLOAD_NETWORK" \
+      -v "$directory:/backup:$mode" \
+      -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
+      -e AWS_EC2_METADATA_DISABLED \
+      "$BACKUP_UPLOAD_IMAGE" "$@"
+}
+
+backup_assert_object_storage_ready() {
+  local service=${OBJECT_STORAGE_SERVICE:-object-storage}
+  local endpoint=${OBJECT_STORAGE_ENDPOINT%/}
+
+  backup_compose_service_health "$service"
+  backup_object_storage_cli s3api head-bucket \
+    --bucket "$OBJECT_STORAGE_BUCKET" --endpoint-url "$endpoint" --only-show-errors >/dev/null
+}
+
 backup_aws_cli_dir() {
   local directory=$1
   local mode=$2

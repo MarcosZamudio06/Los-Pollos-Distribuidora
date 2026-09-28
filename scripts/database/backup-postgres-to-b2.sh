@@ -14,6 +14,8 @@ BACKUP_POSTGRES_SERVICE=${BACKUP_POSTGRES_SERVICE:-postgres}
 BACKUP_POSTGRES_USER=${BACKUP_POSTGRES_USER:-${POSTGRES_USER:-postgres}}
 BACKUP_POSTGRES_DATABASE=${BACKUP_POSTGRES_DATABASE:-${POSTGRES_DB:-pollo_distribucion}}
 BACKUP_POSTGRES_PASSWORD=${BACKUP_POSTGRES_PASSWORD:-${POSTGRES_PASSWORD:-}}
+BACKUP_RECOVERY_SET_MODE=${BACKUP_RECOVERY_SET_MODE:-false}
+COMPANY_SLUG=${COMPANY_SLUG:-${TENANT_SLUG:-}}
 BACKUP_UPLOAD_IMAGE=${BACKUP_UPLOAD_IMAGE:-amazon/aws-cli@sha256:cd11f6e909d42f066a03e15f072853fcc19f033e343cb83b2d553e2082cbb5a7}
 BACKUP_LOCAL_DIR=${BACKUP_LOCAL_DIR:-/var/lib/pollos-distribuidor/postgres-backups}
 BACKUP_FAILURE_DIR=${BACKUP_FAILURE_DIR:-$BACKUP_LOCAL_DIR/failed}
@@ -91,6 +93,15 @@ backup_validate_positive_integer BACKUP_FAILED_KEEP_COUNT "$BACKUP_FAILED_KEEP_C
 backup_validate_non_negative_integer BACKUP_RETENTION_DAILY "$BACKUP_RETENTION_DAILY"
 backup_validate_non_negative_integer BACKUP_RETENTION_WEEKLY "$BACKUP_RETENTION_WEEKLY"
 backup_validate_non_negative_integer BACKUP_RETENTION_MONTHLY "$BACKUP_RETENTION_MONTHLY"
+if [[ "$BACKUP_RECOVERY_SET_MODE" != true && "$BACKUP_RECOVERY_SET_MODE" != false ]]; then
+  printf '%s\n' 'BACKUP_RECOVERY_SET_MODE must be true or false.' >&2
+  exit 2
+fi
+if [[ "$BACKUP_RECOVERY_SET_MODE" == true &&
+  ! "$COMPANY_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  printf '%s\n' 'Recovery-set PostgreSQL backups require a valid company slug.' >&2
+  exit 2
+fi
 
 if [[ "$BACKUP_LOCAL_DIR" == "/" || "$BACKUP_FAILURE_DIR" == "/" || "$BACKUP_RESULT_DIR" == "/" ]]; then
   printf '%s\n' 'Backup directories cannot be filesystem root.' >&2
@@ -117,12 +128,20 @@ fi
 if ! backup_compose_pg pg_isready -U "$BACKUP_POSTGRES_USER" -d "$BACKUP_POSTGRES_DATABASE" >/dev/null; then
   backup_die
 fi
+if ! backup_compose_service_health "$BACKUP_POSTGRES_SERVICE"; then
+  backup_die
+fi
 
 timestamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+run_suffix="$$-$RANDOM"
 created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 year=${timestamp:0:4}
 month=${timestamp:5:2}
-key="postgres/$year/$month/$timestamp.dump"
+if [[ "$BACKUP_RECOVERY_SET_MODE" == true ]]; then
+  key="postgres/$COMPANY_SLUG/$year/$month/$timestamp-$run_suffix.dump"
+else
+  key="postgres/$year/$month/$timestamp.dump"
+fi
 manifest_key="${key%.dump}.manifest.json"
 
 temp_dir=$(mktemp -d "$BACKUP_LOCAL_DIR/.tmp.XXXXXX")
@@ -154,17 +173,28 @@ if ! backup_compose_pg pg_restore --list < "$dump_file" >/dev/null; then
 fi
 
 dump_sha256=$(backup_sha256 "$dump_file")
-cat > "$manifest_file" <<EOF
-{
-  "format": "postgresql-custom",
-  "key": "$key",
-  "manifest_key": "$manifest_key",
-  "created_at": "$created_at",
-  "database": "$BACKUP_POSTGRES_DATABASE",
-  "size_bytes": $dump_size,
-  "sha256": "$dump_sha256"
+python3 - "$manifest_file" "$key" "$manifest_key" "$created_at" \
+  "$BACKUP_POSTGRES_DATABASE" "$dump_size" "$dump_sha256" \
+  "$COMPANY_SLUG" "$BACKUP_RECOVERY_SET_MODE" <<'PY'
+import json
+import sys
+
+path, key, manifest_key, created_at, database, size, checksum, company, recovery_mode = sys.argv[1:]
+payload = {
+    "format": "postgresql-custom",
+    "key": key,
+    "manifest_key": manifest_key,
+    "created_at": created_at,
+    "database": database,
+    "size_bytes": int(size),
+    "sha256": checksum,
 }
-EOF
+if recovery_mode == "true":
+    payload["company_slug"] = company
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
+    handle.write("\n")
+PY
 
 s3_endpoint_args=(--endpoint-url "$BACKUP_S3_ENDPOINT")
 

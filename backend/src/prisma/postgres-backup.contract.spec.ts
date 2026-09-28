@@ -29,14 +29,21 @@ const backupRunbook = readFileSync(
 const systemdService = readFileSync(
   resolve(
     repositoryRoot,
-    'docs/runbooks/systemd/pollos-distribuidor-postgres-backup.service',
+    'docs/runbooks/systemd/pollos-distribuidor-recovery-set-backup.service',
   ),
   'utf8',
 );
 const systemdTimer = readFileSync(
   resolve(
     repositoryRoot,
-    'docs/runbooks/systemd/pollos-distribuidor-postgres-backup.timer',
+    'docs/runbooks/systemd/pollos-distribuidor-recovery-set-backup.timer',
+  ),
+  'utf8',
+);
+const recoveryBackupDispatcher = readFileSync(
+  resolve(
+    repositoryRoot,
+    'scripts/database/run-production-recovery-set-backup.sh',
   ),
   'utf8',
 );
@@ -81,7 +88,8 @@ describe('PostgreSQL/PostGIS B2 backup contract', () => {
     expect(backupScript).toContain('pg_restore --list');
     expect(backupScript).toContain('head-object');
     expect(backupScript).toContain('backup_sha256');
-    expect(backupScript).toContain('"database": "$BACKUP_POSTGRES_DATABASE"');
+    expect(backupScript).toContain('"$BACKUP_POSTGRES_DATABASE" "$dump_size"');
+    expect(backupScript).toContain('"database": database');
     expect(backupScript).toContain('backup_check_disk_space');
     expect(backupScript).toContain('postgres/$year/$month/$timestamp.dump');
     expect(backupScript).toContain('select-postgres-backup-retention.py');
@@ -120,14 +128,22 @@ describe('PostgreSQL/PostGIS B2 backup contract', () => {
     expect(verifyScript).toContain('_restore_drill');
   });
 
-  it('uses a host systemd timer rather than a backend-container cron', () => {
+  it('schedules complete recovery sets on the host rather than PostgreSQL-only cron', () => {
     expect(systemdService).toContain(
-      'ExecStart=/opt/pollos-distribuidor/scripts/database/backup-postgres-to-b2.sh',
+      'ExecStart=/opt/pollos-distribuidor/scripts/database/run-production-recovery-set-backup.sh',
     );
     expect(systemdService).toContain(
-      'EnvironmentFile=/etc/pollos-distribuidor/postgres-backup.env',
+      'EnvironmentFile=/etc/pollos-distribuidor/production.env',
     );
-    expect(systemdTimer).toContain('OnCalendar=*-*-* 02:30:00');
+    expect(systemdService).toContain('Requires=docker.service');
+    expect(systemdService).toContain('TimeoutStartSec=8h');
+    expect(systemdTimer).toContain('OnCalendar=*-*-* 00,12:00:00');
+    expect(systemdTimer).toContain('RandomizedDelaySec=30m');
+    expect(systemdTimer).toContain('Persistent=true');
+    expect(recoveryBackupDispatcher).toContain('create-company-recovery-set.sh');
+    expect(recoveryBackupDispatcher).toContain('tenantctl.mjs');
+    expect(recoveryBackupDispatcher).toContain('flock');
+    expect(systemdService).not.toContain('backup-postgres-to-b2.sh');
     expect(systemdTimer).not.toContain('cron');
   });
 
