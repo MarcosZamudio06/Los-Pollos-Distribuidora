@@ -6,10 +6,10 @@ set -eu
 database_url_without_query=${RESTORE_DATABASE_URL%%\?*}
 database_name=${database_url_without_query##*/}
 
-case "$database_name" in
-  *_restore_drill) ;;
+case "${RESTORE_TARGET_CLASS:-drill}:$database_name" in
+  drill:*_restore_drill|replacement:*_replacement) ;;
   *)
-    printf '%s\n' "Refusing to inspect a database not suffixed with _restore_drill." >&2
+    printf '%s\n' "Refusing to inspect a database outside its explicit restore target class." >&2
     exit 1
     ;;
 esac

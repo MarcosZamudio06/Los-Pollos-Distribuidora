@@ -11,7 +11,7 @@ For timer configuration and the full systemd environment contract, see [Producti
 | Restore drill | A new database whose name ends in `_restore_drill` and a generated `mte-restore-<company>-...` Object Storage bucket | Repeatable, auditable, and cleaned up by the drill scripts. Use this for routine verification. |
 | Emergency production recovery | A replacement host and newly provisioned, company-isolated production resources | Only after an incident/change owner explicitly opens a recovery window and approves the target and cutover. Never point a drill at production. |
 
-**Production restore limitation:** this repository provides disposable restore scripts, not a production-target restore command. `restore-company-recovery-set.sh`, `restore-postgres-from-b2.sh`, and `restore-object-storage-from-b2.sh` intentionally enforce disposable targets and/or cleanup. Do not bypass those guards or repurpose them for production. The emergency procedure below is a gated operator checklist; the database/object import executor must be separately reviewed and approved for the replacement target. If that approved executor is not available, stop before importing data or routing traffic. Do not improvise a destructive command during an incident.
+**Replacement restore is separate from drills and cutover.** `restore-company-production-replacement.sh` imports a selected complete set into a new, isolated replacement PostgreSQL database and Object Storage bucket. It never drops a database, deletes bucket contents, or changes routing. The `_restore_drill` scripts still use disposable targets and cleanup; never use them for replacement recovery.
 
 ## Disposable runtime drill
 
@@ -266,10 +266,39 @@ This is a separate incident path, not a restore drill. A destructive action agai
 3. Provision a replacement VPS, Docker/Compose, the approved immutable application images, company-specific Caddy/TLS/DNS configuration, and the external root-only configuration/secrets. Do not depend on old VPS-local archives, result files, container layers, or secrets.
 4. Build a new isolated company deployment with fresh PostgreSQL and Object Storage targets. Confirm the target database/bucket/Compose project are new and belong only to this company. Keep ERP backend and public routing disabled.
 5. Run a disposable full-set restore drill against the selected recovery point where the supported single-company selected-key path is available. The current multi-company `tenantctl restore-drill` always creates and drills a fresh set; it has no option to select an older key, so do not claim that it validates a chosen historical set. Confirm archive SHA-256/size, schema/release compatibility, PostgreSQL/PostGIS, Object Storage, storage references, and disposable-target cleanup.
-6. **Hold point:** the repository has no production-target import command. Continue only with a separately reviewed DBA/Object Storage restore executor that imports into the newly created replacement database and bucket, never the existing production target. The approved change must specify exact keys, commands, credentials source, target names, validation, and rollback; do not use `--clean`, `s3 sync --delete`, wildcard deletion, or any drill script to bypass its guards. If no approved executor exists, stop and escalate rather than claiming successful DR.
-7. Before opening traffic, verify the restored company identity; Prisma migration/schema compatibility against the set's recorded schema and image digests; PostGIS and critical tables; every applicable DB storage reference/object/SHA-256/size/MIME check; backend/frontend/Caddy health; and business smoke checks. Keep the restored application on the same isolated company boundary.
-8. Route only that company's DNS/Caddy/configuration to the replacement services after sign-off. Resume writes only after health and smoke checks pass. Keep the old host/volumes or damaged resources isolated and unchanged until the incident owner accepts the recovery and rollback plan.
+6. Run `scripts/database/restore-company-production-replacement.sh` first without arguments for a no-mutation preflight, then with `--apply` and the exact confirmation token after incident approval. See the separate replacement procedure below. It refuses existing or original targets, incompatible release/schema fingerprints, invalid/corrupt sets, and missing confirmation before target mutation. A failed import retains new targets for analysis and leaves routing closed.
+7. Accept only its `READY_FOR_CUTOVER` evidence after PostGIS, critical tables, exact migration history, object SHA-256/size/MIME/reference checks, replacement health, and approved isolated smoke script pass. The external smoke script must check backend/frontend/Caddy and business behavior without opening public routing or writing to old resources. A data-only smoke is insufficient for a real incident.
+8. **Separate cutover hold point:** the restore command does not change DNS, Caddy, or application routing. After explicit incident-owner approval of the evidence and rollback plan, a separate deployment/change procedure routes only that company to the replacement services. Resume writes only after health and smoke checks pass. Keep the old host/volumes or damaged resources isolated and unchanged until the incident owner accepts the recovery and rollback plan.
 9. Preserve the incident timeline, selected set key, result JSON, sanitized command outcomes, measured RPO/RTO, cleanup state, and approvals. Do not attach secrets, raw environment files, or credential-bearing logs.
+
+### Replacement production import (new infrastructure only)
+
+Use a new Compose project whose name ends in `-replacement`, a database ending in `_replacement`, and a new bucket named `mte-replacement-<company>-<YYYYMMDDHHMMSS>-<unique-number>`. The new project/network and Object Storage endpoint must differ from the original deployment. Keep the replacement backend/public ingress closed until the import and isolated smoke finish. The target PostgreSQL service and Object Storage server may exist, but the target database and bucket must **not** exist.
+
+The protected replacement Compose env file must contain exactly one each of `RECOVERY_TARGET_ROLE=replacement`, `RECOVERY_COMPANY_SLUG=<company>`, and `RECOVERY_HOST_REF=<replacement-host-ref>`. The executor rejects missing, duplicate, or mismatched markers; the host reference must differ from the declared original host reference.
+
+Load credentials from root-only external secret management, never from command-line arguments or Git. Set the following in that protected process environment:
+
+| Group | Required variables |
+| --- | --- |
+| Selection and approval | `COMPANY_SLUG`, `RESTORE_RECOVERY_SET_KEY`, `RESTORE_INCIDENT_REF`, `RESTORE_INCIDENT_DECLARED_AT` (UTC), `RESTORE_CONFIRMATION` for apply only |
+| Original identity | `RESTORE_PRODUCTION_DATABASE_NAME`, `RESTORE_PRODUCTION_BUCKET`, `RESTORE_PRODUCTION_S3_ENDPOINT`, `RESTORE_PRODUCTION_COMPOSE_PROJECT`, `RESTORE_ORIGINAL_HOST_REF` |
+| New identity | `RESTORE_REPLACEMENT_DATABASE_NAME`, `RESTORE_REPLACEMENT_BUCKET`, `RESTORE_REPLACEMENT_COMPOSE_PROJECT`, `RESTORE_REPLACEMENT_HOST_REF`, `RESTORE_REPLACEMENT_COMPOSE_FILE`, `RESTORE_REPLACEMENT_COMPOSE_ENV_FILE`, `RESTORE_REPLACEMENT_NETWORK`, `RESTORE_REPLACEMENT_POSTGRES_PASSWORD`, `RESTORE_REPLACEMENT_S3_ENDPOINT`, `RESTORE_REPLACEMENT_S3_REGION`, `RESTORE_REPLACEMENT_S3_ACCESS_KEY_ID`, `RESTORE_REPLACEMENT_S3_SECRET_ACCESS_KEY` |
+| Backup source | `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`; optional `BACKUP_UPLOAD_NETWORK` only when it belongs to the replacement host |
+| Compatibility and smoke | `RESTORE_APPROVED_BACKEND_DIGEST`, `RESTORE_APPROVED_FRONTEND_DIGEST`, `RESTORE_APPROVED_SCHEMA_SHA256`, `RESTORE_HEALTH_SMOKE_SCRIPT`, `RESTORE_HEALTH_SMOKE_SHA256`, `RESTORE_TRAFFIC_CLOSED_SCRIPT`, `RESTORE_TRAFFIC_CLOSED_SHA256` |
+
+The approved digests/schema SHA and script SHA-256 values must come from the immutable replacement release/change record, **not** merely be copied from the recovery manifest to make the check pass. The smoke and closed-traffic scripts must be approved, executable, non-symlink local files. The closed-traffic script must inspect the actual DNS/Caddy/ingress boundary, not merely return success; it runs before mutation and again before ready-for-cutover. The smoke script runs only after data verification and must validate the isolated app. Never let either script change routing or write to original resources. The operator is responsible for verifying the actual deployed images match the approved digests.
+
+```bash
+bash scripts/database/restore-company-production-replacement.sh
+# Expect: PREFLIGHT_PASSED_NO_MUTATION; inspect the selected set and target identities.
+# After change-owner approval, set RESTORE_CONFIRMATION to the exact value below
+# through protected configuration, not a shell history entry:
+# RESTORE:<company>:<incident-ref>:<replacement-compose-project>
+bash scripts/database/restore-company-production-replacement.sh --apply
+```
+
+The result JSON defaults to `RESTORE_LOCAL_DIR/<timestamp>-<pid>.json` (or `RESTORE_RESULT_FILE`). It records stage timestamps, source recovery point, observed RPO, partial RTO through ready-for-cutover, checks, and `READY_FOR_CUTOVER` or `FAILED`; it omits endpoints and secrets. Protect it as incident evidence. A failure never cleans the new targets automatically: inspect them before any separately approved cleanup. The script does not provide a cutover command.
 
 ### Total VPS loss checklist
 

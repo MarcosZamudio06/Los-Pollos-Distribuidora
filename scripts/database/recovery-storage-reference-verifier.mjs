@@ -118,6 +118,7 @@ function validateIdentity(input, result) {
   const sourceDatabase = recoverySet?.postgresql?.database;
   const targetBucket = input.targetBucket;
   const sourceBucket = recoverySet?.object_storage?.source_bucket;
+  const targetMode = input.targetMode ?? "drill";
 
   const failures = [];
   if (typeof company !== "string" || !COMPANY_PATTERN.test(company)) {
@@ -129,7 +130,11 @@ function validateIdentity(input, result) {
   if (
     typeof restoreDatabase !== "string" ||
     !DATABASE_PATTERN.test(restoreDatabase) ||
-    !restoreDatabase.endsWith("_restore_drill") ||
+    (targetMode === "drill"
+      ? !restoreDatabase.endsWith("_restore_drill")
+      : targetMode === "replacement"
+        ? !restoreDatabase.endsWith("_replacement")
+        : true) ||
     restoreDatabase === productionDatabase ||
     restoreDatabase === sourceDatabase
   ) {
@@ -144,8 +149,13 @@ function validateIdentity(input, result) {
   }
   if (
     typeof targetBucket !== "string" ||
-    !/^mte-restore-[a-z0-9]+(?:-[a-z0-9]+)*-\d{14}-\d+$/u.test(targetBucket) ||
-    !targetBucket.startsWith(`mte-restore-${company}-`)
+    (targetMode === "drill"
+      ? !/^mte-restore-[a-z0-9]+(?:-[a-z0-9]+)*-\d{14}-\d+$/u.test(targetBucket) ||
+        !targetBucket.startsWith(`mte-restore-${company}-`)
+      : targetMode === "replacement"
+        ? !/^mte-replacement-[a-z0-9]+(?:-[a-z0-9]+)*-\d{14}-\d+$/u.test(targetBucket) ||
+          !targetBucket.startsWith(`mte-replacement-${company}-`)
+        : true)
   ) {
     failures.push("RESTORE_BUCKET_NOT_COMPANY_DISPOSABLE");
   }
@@ -418,6 +428,7 @@ async function runVerify(args) {
     restoredObjectsDir: requireArg(args, "restored-objects-dir"),
     references,
     headObjects,
+    targetMode: args["target-mode"] ?? "drill",
   });
   const outputPath = requireArg(args, "result");
   writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });

@@ -69,6 +69,32 @@ test("fails when a persisted storageKey is absent from the restored disposable b
   assert.ok(result.failure_codes.includes("OBJECT_FILE_MISSING"));
 });
 
+test("accepts only explicitly named new replacement targets in replacement mode", async () => {
+  const { input } = fixture({
+    targetMode: "replacement",
+    restoreDatabase: "company_north_replacement",
+    targetBucket: "mte-replacement-company-north-20260927120000-4321",
+  });
+  const passed = await verifyRecoveryStorageReferences(input);
+  assert.equal(passed.status, "passed");
+
+  const originalDatabase = await verifyRecoveryStorageReferences({
+    ...input,
+    restoreDatabase: "company_north",
+  });
+  assert.equal(originalDatabase.status, "failed");
+  const originalBucket = await verifyRecoveryStorageReferences({
+    ...input,
+    targetBucket: "company-north-production",
+  });
+  assert.equal(originalBucket.status, "failed");
+  const drillOnly = await verifyRecoveryStorageReferences({
+    ...input,
+    targetMode: "drill",
+  });
+  assert.equal(drillOnly.status, "failed");
+});
+
 test("detects restored object bytes corrupted after the recovery archive was verified", async () => {
   const { body, objectPath, input } = fixture();
   const corrupted = Buffer.from(body);
