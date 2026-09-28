@@ -404,6 +404,10 @@ function planHeadChecks(args) {
 }
 
 async function runVerify(args) {
+  const targetMode = args.get("target-mode") ?? "drill";
+  if (targetMode !== "drill" && targetMode !== "replacement") {
+    throw new Error("TARGET_MODE_INVALID");
+  }
   const recoverySet = readJson(requireArg(args, "recovery-set"), "RECOVERY_SET_MANIFEST_INVALID");
   const references = readJson(requireArg(args, "references"), "DATABASE_REFERENCE_DATA_INVALID");
   const records = referenceRecords(references);
@@ -428,7 +432,7 @@ async function runVerify(args) {
     restoredObjectsDir: requireArg(args, "restored-objects-dir"),
     references,
     headObjects,
-    targetMode: args["target-mode"] ?? "drill",
+    targetMode,
   });
   const outputPath = requireArg(args, "result");
   writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });

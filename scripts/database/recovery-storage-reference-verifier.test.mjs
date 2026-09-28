@@ -58,6 +58,88 @@ afterEach(() => {
   }
 });
 
+function runVerifyCli(input, root, targetMode) {
+  const recoverySetFile = join(root, "cli-recovery-set.json");
+  const referencesFile = join(root, "cli-references.json");
+  const headDirectory = join(root, "cli-heads");
+  const resultFile = join(root, "cli-result.json");
+  mkdirSync(headDirectory, { recursive: true });
+  writeFileSync(recoverySetFile, JSON.stringify(input.recoverySet));
+  writeFileSync(referencesFile, JSON.stringify(input.references));
+  input.headObjects.forEach((head, index) => {
+    writeFileSync(join(headDirectory, `${index}.status`), `${head.status}\n`);
+    if (head.metadata !== null) {
+      writeFileSync(join(headDirectory, `${index}.json`), JSON.stringify(head.metadata));
+    }
+  });
+
+  const args = [
+    new URL("./recovery-storage-reference-verifier.mjs", import.meta.url).pathname,
+    "verify",
+    "--expected-company", input.expectedCompany,
+    "--recovery-set", recoverySetFile,
+    "--restore-database", input.restoreDatabase,
+    "--production-database", input.productionDatabase,
+    "--target-bucket", input.targetBucket,
+    "--restored-objects-dir", input.restoredObjectsDir,
+    "--references", referencesFile,
+    "--head-directory", headDirectory,
+    "--result", resultFile,
+  ];
+  if (targetMode !== undefined) args.push("--target-mode", targetMode);
+  const run = spawnSync(process.execPath, args, { encoding: "utf8" });
+  return { ...run, result: run.status === 2 ? null : JSON.parse(readFileSync(resultFile, "utf8")) };
+}
+
+test("CLI accepts replacement targets only when target-mode is replacement", () => {
+  const { input, root } = fixture({
+    restoreDatabase: "company_north_replacement",
+    targetBucket: "mte-replacement-company-north-20260927120000-4321",
+  });
+  const run = runVerifyCli(input, root, "replacement");
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.result.status, "passed");
+});
+
+test("CLI defaults to drill when target-mode is absent", () => {
+  const { input, root } = fixture();
+  const run = runVerifyCli(input, root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.result.status, "passed");
+});
+
+test("CLI drill mode rejects replacement targets", () => {
+  const { input, root } = fixture({
+    restoreDatabase: "company_north_replacement",
+    targetBucket: "mte-replacement-company-north-20260927120000-4321",
+  });
+  const run = runVerifyCli(input, root, "drill");
+  assert.equal(run.status, 1);
+  assert.ok(run.result.failure_codes.includes("RESTORE_DATABASE_NOT_DISPOSABLE"));
+  assert.ok(run.result.failure_codes.includes("RESTORE_BUCKET_NOT_COMPANY_DISPOSABLE"));
+});
+
+test("CLI rejects an invalid target-mode explicitly", () => {
+  const { input, root } = fixture();
+  const run = runVerifyCli(input, root, "invalid");
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /TARGET_MODE_INVALID/u);
+});
+
+test("CLI replacement mode never accepts production database or bucket", () => {
+  const { input, root } = fixture({
+    restoreDatabase: "company_north_replacement",
+    targetBucket: "mte-replacement-company-north-20260927120000-4321",
+  });
+  const databaseRun = runVerifyCli({ ...input, restoreDatabase: input.productionDatabase }, root, "replacement");
+  assert.equal(databaseRun.status, 1);
+  assert.ok(databaseRun.result.failure_codes.includes("RESTORE_DATABASE_NOT_DISPOSABLE"));
+
+  const bucketRun = runVerifyCli({ ...input, targetBucket: input.recoverySet.object_storage.source_bucket }, root, "replacement");
+  assert.equal(bucketRun.status, 1);
+  assert.ok(bucketRun.result.failure_codes.includes("RESTORE_BUCKET_NOT_COMPANY_DISPOSABLE"));
+});
+
 test("fails when a persisted storageKey is absent from the restored disposable bucket", async () => {
   const { objectPath, input } = fixture();
   rmSync(objectPath);
