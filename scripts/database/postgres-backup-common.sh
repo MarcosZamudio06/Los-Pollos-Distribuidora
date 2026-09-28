@@ -169,7 +169,7 @@ backup_assert_object_storage_ready() {
 
   backup_compose_service_health "$service"
   backup_object_storage_cli s3api head-bucket \
-    --bucket "$OBJECT_STORAGE_BUCKET" --endpoint-url "$endpoint" --only-show-errors >/dev/null
+    --bucket "$OBJECT_STORAGE_BUCKET" --endpoint-url "$endpoint" >/dev/null
 }
 
 backup_aws_cli_dir() {

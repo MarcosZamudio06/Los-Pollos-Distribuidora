@@ -88,6 +88,10 @@ if [[ "$1" == run ]]; then
     esac
   done
   root=${mount%%:/backup:*}; cmd=$1; sub=$2
+  if [[ "$cmd" == s3api ]] && contains --only-show-errors "$@"; then
+    printf 'Unsupported high-level s3 option passed to s3api.\n' >&2
+    exit 64
+  fi
   if [[ "$cmd $sub" == 's3api head-bucket' ]]; then
     record object-head-bucket
     [[ "${FAKE_FAIL:-}" != object-head ]] || exit 38

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
@@ -201,4 +201,23 @@ test("object restore does not pass unsupported only-show-errors to bucket create
     commands,
     /\bs3 rb\b[^\n;&|]*--only-show-errors\b/u,
   );
+});
+
+test("s3api commands exclude high-level flags without rejecting s3 transfers", () => {
+  const scriptDir = resolve(root, "scripts/database");
+  const incompatible = (source) => source
+    .replace(/\\\r?\n/gu, " ")
+    .split(/[\n;&|]/u)
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .filter((line) => /\bs3api\s+[a-z][a-z0-9-]*\b/u.test(line))
+    .filter((line) => /--only-show-errors\b/u.test(line));
+
+  for (const file of readdirSync(scriptDir).filter((name) => name.endsWith(".sh"))) {
+    assert.deepEqual(incompatible(read(`scripts/database/${file}`)), [], file);
+  }
+  assert.deepEqual(incompatible([
+    "aws s3 cp x y --only-show-errors",
+    "aws s3 sync x y --only-show-errors",
+    "aws s3 rm x --only-show-errors",
+  ].join("\n")), []);
 });
