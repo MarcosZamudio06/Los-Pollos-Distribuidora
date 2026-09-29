@@ -83,3 +83,41 @@ test("disposable cleanup reports test and cleanup outcomes independently", () =>
   assert.match(cleanup, /exit "\$exit_status"/u);
   assert.doesNotMatch(cleanup, /targets_removed[^\n]*\$\(\[\[ "\$status" == 0 \]\]/u);
 });
+
+test("disposable recovery phases isolate exactly one result per create run", () => {
+  const runtime = read("scripts/database/test-disaster-recovery-runtime.sh");
+  const primary = runtime.indexOf('COMPANY_RECOVERY_RESULT_DIR="$primary_result_dir"');
+  const drill = runtime.indexOf('COMPANY_RECOVERY_RESULT_DIR="$WORK/restore-results"');
+  const broken = runtime.indexOf('COMPANY_RECOVERY_RESULT_DIR="$broken_result_dir"');
+
+  assert.match(runtime, /RECOVERY_CREATE_RESULT_DIR="\$WORK\/recovery-results"/u);
+  assert.match(runtime, /primary_result_dir="\$RECOVERY_CREATE_RESULT_DIR\/primary"/u);
+  assert.match(runtime, /broken_result_dir="\$RECOVERY_CREATE_RESULT_DIR\/broken-reference"/u);
+  assert.ok(primary >= 0 && drill > primary && broken > drill);
+  assert.match(runtime.slice(primary, drill), /COMPANY_RECOVERY_RESULT_DIR="\$primary_result_dir"[\s\S]*?create-company-recovery-set\.sh"/u);
+  assert.match(runtime.slice(drill, broken), /COMPANY_RECOVERY_RESULT_DIR="\$WORK\/restore-results"[\s\S]*?restore-company-recovery-set\.sh"/u);
+  assert.match(runtime.slice(broken), /COMPANY_RECOVERY_RESULT_DIR="\$broken_result_dir"[\s\S]*?create-company-recovery-set\.sh"/u);
+  assert.match(runtime, /create_result=\$\(single_json_result "\$primary_result_dir"\)/u);
+  assert.match(runtime, /bad_create_result=\$\(single_json_result "\$broken_result_dir"\)/u);
+  assert.match(runtime, /\$\{#result_files\[@\]\} != 1/u);
+  assert.match(runtime, /"\$bad_recovery_key" != "\$recovery_key"/u);
+  assert.doesNotMatch(runtime, /export COMPANY_RECOVERY_RESULT_DIR=/u);
+  assert.doesNotMatch(runtime, /ls -t [^\n]*\.json[^\n]*head -1/u);
+});
+
+test("broken-reference evidence is captured before stage assertions", () => {
+  const runtime = read("scripts/database/test-disaster-recovery-runtime.sh");
+  const workflow = read(".github/workflows/quality-gate.yml");
+  const replacement = runtime.indexOf('if RESTORE_RECOVERY_SET_KEY="$bad_recovery_key"');
+  const assertions = runtime.indexOf('node - "$WORK/reference-failed.json"');
+  const jsonCopy = runtime.indexOf('cp "$WORK/reference-failed.json" "$EVIDENCE_DIR/replacement-reference-failed.json"');
+  assert.ok(replacement >= 0 && jsonCopy > replacement && jsonCopy < assertions);
+  for (const suffix of ["out", "err"]) {
+    const source = runtime.indexOf(`$WORK/reference-failed.${suffix}`, replacement);
+    assert.ok(source > replacement && source < jsonCopy, suffix);
+  }
+  assert.match(runtime.slice(replacement, jsonCopy), /diagnostic\.replace\(secret, "\[REDACTED\]"\)/u);
+  assert.match(runtime.slice(replacement, jsonCopy), /Path\(sys\.argv\[3\]\) \/ f"replacement-\{source\.name\}"/u);
+  assert.match(workflow, /replacement-reference-failed\.out/u);
+  assert.match(workflow, /replacement-reference-failed\.err/u);
+});

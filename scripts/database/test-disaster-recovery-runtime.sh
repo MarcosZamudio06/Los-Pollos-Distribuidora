@@ -14,7 +14,21 @@ REPLACEMENT_PROJECT="${PROJECT}-replacement"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/dr-runtime.XXXXXX")
 EVIDENCE_DIR=${DR_EVIDENCE_DIR:-$WORK/evidence}
 mkdir -p "$EVIDENCE_DIR"
+RECOVERY_CREATE_RESULT_DIR="$WORK/recovery-results"
+primary_result_dir="$RECOVERY_CREATE_RESULT_DIR/primary"
+broken_result_dir="$RECOVERY_CREATE_RESULT_DIR/broken-reference"
+mkdir -p "$primary_result_dir" "$broken_result_dir"
 started=0
+
+single_json_result() {
+  local directory=$1
+  local -a result_files=("$directory"/*.json)
+  if (( ${#result_files[@]} != 1 )) || [[ ! -f "${result_files[0]}" ]]; then
+    echo "Expected exactly one JSON result in $directory." >&2
+    return 1
+  fi
+  printf '%s\n' "${result_files[0]}"
+}
 
 compose() { "$DOCKER" compose --project-name "$PROJECT" -f "$COMPOSE_FILE" "$@"; }
 replacement_compose() { "$DOCKER" compose --project-name "$REPLACEMENT_PROJECT" --env-file "$WORK/replacement-compose.env" -f "$REPLACEMENT_COMPOSE_FILE" "$@"; }
@@ -121,7 +135,6 @@ export COMPANY_SLUG=dr-fixture
 export BACKUP_POSTGRES_DATABASE=dr_fixture BACKUP_POSTGRES_USER=postgres
 export BACKUP_POSTGRES_PASSWORD=dr-disposable-only
 export BACKUP_LOCAL_DIR="$WORK/backup-local" BACKUP_RESULT_DIR="$WORK/backup-results"
-export COMPANY_RECOVERY_RESULT_DIR="$WORK/recovery-results"
 export COMPANY_RECOVERY_LOCAL_DIR="$WORK/recovery-local"
 export BACKUP_S3_ENDPOINT=http://backup-storage:8333 BACKUP_S3_REGION=us-east-1
 export BACKUP_S3_BUCKET=dr-backup-bucket
@@ -166,9 +179,9 @@ pg psql -U postgres -d dr_fixture -v ON_ERROR_STOP=1 \
   -v fiscal_sha="$fiscal_sha" -v fiscal_size="$fiscal_size" \
   < "$ROOT/scripts/database/dr-disposable-seed.sql"
 
-bash "$ROOT/scripts/database/create-company-recovery-set.sh"
-create_result=$(find "$WORK/recovery-results" -maxdepth 1 -name '*.json' -type f -print -quit)
-[[ -n "$create_result" ]] || { echo 'Recovery-set result missing.' >&2; exit 1; }
+COMPANY_RECOVERY_RESULT_DIR="$primary_result_dir" \
+  bash "$ROOT/scripts/database/create-company-recovery-set.sh"
+create_result=$(single_json_result "$primary_result_dir")
 recovery_key=$(node - "$create_result" <<'NODE'
 const result = require(process.argv[2]);
 if (result.status !== 'validated' || !result.recovery_set_key || !result.recovery_point.write_barrier_at) process.exit(1);
@@ -177,7 +190,7 @@ NODE
 )
 export RESTORE_RECOVERY_SET_KEY="$recovery_key"
 export RESTORE_DATABASE_NAME=dr_fixture_restore_drill RESTORE_PRODUCTION_DATABASE_NAME=dr_fixture
-export RESTORE_LOCAL_DIR="$WORK/restore-local" COMPANY_RECOVERY_RESULT_DIR="$WORK/restore-results"
+export RESTORE_LOCAL_DIR="$WORK/restore-local"
 cat > "$WORK/assert-restored.sql" <<'SQL'
 DO $$ BEGIN
   IF (SELECT count(*) FROM "DeliveryEvidence" WHERE id = 'dr-evidence' AND "storageKey" = 'evidence/dr-evidence.txt') <> 1
@@ -191,8 +204,9 @@ END $$;
 SQL
 export RESTORE_DRILL_ASSERT_SQL_FILE="$WORK/assert-restored.sql"
 restore_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-bash "$ROOT/scripts/database/restore-company-recovery-set.sh"
-restore_result=$(find "$WORK/restore-results" -maxdepth 1 -name '*.json' -type f -print -quit)
+COMPANY_RECOVERY_RESULT_DIR="$WORK/restore-results" \
+  bash "$ROOT/scripts/database/restore-company-recovery-set.sh"
+restore_result=$(single_json_result "$WORK/restore-results")
 node - "$restore_result" <<'NODE'
 const result = require(process.argv[2]);
 if (result.status !== 'passed' || result.disposable_targets_cleanup !== 'cleaned') process.exit(1);
@@ -374,7 +388,8 @@ if aws_source s3api head-bucket --bucket "$restored_bucket" \
   exit 1
 fi
 assert_rejected() {
-  if bash "$ROOT/scripts/database/restore-company-recovery-set.sh" >/dev/null 2>"$WORK/rejected.log"; then
+  if COMPANY_RECOVERY_RESULT_DIR="$WORK/restore-results" \
+     bash "$ROOT/scripts/database/restore-company-recovery-set.sh" >/dev/null 2>"$WORK/rejected.log"; then
     echo 'Corrupt or mismatched recovery set was accepted.' >&2
     exit 1
   fi
@@ -468,24 +483,59 @@ unset RESTORE_RECOVERY_SET_KEY
 export BACKUP_RETENTION_DAILY=2
 pg psql -U postgres -d dr_fixture -v ON_ERROR_STOP=1 -c \
   "UPDATE \"DeliveryEvidence\" SET \"storageKey\" = 'evidence/missing.txt' WHERE id = 'dr-evidence'" >/dev/null
-bash "$ROOT/scripts/database/create-company-recovery-set.sh"
+COMPANY_RECOVERY_RESULT_DIR="$broken_result_dir" \
+  bash "$ROOT/scripts/database/create-company-recovery-set.sh"
 pg psql -U postgres -d dr_fixture -v ON_ERROR_STOP=1 -c \
   "UPDATE \"DeliveryEvidence\" SET \"storageKey\" = 'evidence/dr-evidence.txt' WHERE id = 'dr-evidence'" >/dev/null
-bad_create_result=$(ls -t "$WORK/recovery-results"/*.json | head -1)
+bad_create_result=$(single_json_result "$broken_result_dir")
 bad_recovery_key=$(node - "$bad_create_result" <<'NODE'
 const result = require(process.argv[2]);
-if (result.status !== 'validated') process.exit(1);
+if (result.status !== 'validated' || !result.recovery_set_key) process.exit(1);
 process.stdout.write(result.recovery_set_key);
 NODE
 )
+[[ -n "$bad_recovery_key" && "$bad_recovery_key" != "$recovery_key" ]] || {
+  echo 'Broken-reference recovery key is missing or matches the primary set.' >&2
+  exit 1
+}
 export RESTORE_INCIDENT_DECLARED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 bad_bucket="mte-replacement-dr-fixture-$(date -u +%Y%m%d%H%M%S)-$(( $$ + 1 ))"
+reference_exit_status=0
 if RESTORE_RECOVERY_SET_KEY="$bad_recovery_key" \
    RESTORE_REPLACEMENT_DATABASE_NAME=dr_fixture_reference_replacement \
    RESTORE_REPLACEMENT_BUCKET="$bad_bucket" \
    RESTORE_RESULT_FILE="$WORK/reference-failed.json" \
    bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
    >"$WORK/reference-failed.out" 2>"$WORK/reference-failed.err"; then
+  :
+else
+  reference_exit_status=$?
+fi
+python3 - "$WORK/reference-failed.out" "$WORK/reference-failed.err" "$EVIDENCE_DIR" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+secrets = [os.environ.get(name, "") for name in (
+    "BACKUP_POSTGRES_PASSWORD", "BACKUP_S3_ACCESS_KEY_ID", "BACKUP_S3_SECRET_ACCESS_KEY",
+    "OBJECT_STORAGE_ACCESS_KEY_ID", "OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "RESTORE_REPLACEMENT_POSTGRES_PASSWORD", "RESTORE_REPLACEMENT_S3_ACCESS_KEY_ID",
+    "RESTORE_REPLACEMENT_S3_SECRET_ACCESS_KEY",
+)]
+for source in map(Path, sys.argv[1:3]):
+    diagnostic = source.read_text(encoding="utf-8", errors="replace")
+    for secret in secrets:
+        if secret:
+            diagnostic = diagnostic.replace(secret, "[REDACTED]")
+    (Path(sys.argv[3]) / f"replacement-{source.name}").write_text(diagnostic, encoding="utf-8")
+PY
+if [[ -f "$WORK/reference-failed.json" ]]; then
+  cp "$WORK/reference-failed.json" "$EVIDENCE_DIR/replacement-reference-failed.json"
+else
+  echo 'Broken-reference replacement result is missing; see captured diagnostics.' >&2
+  exit 1
+fi
+if (( reference_exit_status == 0 )); then
   echo 'Broken storage reference was accepted for cutover.' >&2
   exit 1
 fi
@@ -496,7 +546,6 @@ if (result.status !== 'FAILED' || result.failure_stage !== 'storage_reference_ve
   result.migration_schema_status !== 'passed' || result.cross_reference_status !== 'failed' ||
   result.traffic_cutover_performed !== false) process.exit(1);
 NODE
-cp "$WORK/reference-failed.json" "$EVIDENCE_DIR/replacement-reference-failed.json"
 [[ "$(replacement_compose exec -T postgres psql -U postgres -d postgres -Atqc \
   "SELECT count(*) FROM pg_database WHERE datname = 'dr_fixture_reference_replacement'")" == 1 ]]
 aws_replacement s3api head-bucket --bucket "$bad_bucket" \

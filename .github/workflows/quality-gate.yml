@@ -357,7 +357,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: disaster-recovery-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/dr-evidence/*.json
+          path: |
+            ${{ runner.temp }}/dr-evidence/*.json
+            ${{ runner.temp }}/dr-evidence/replacement-reference-failed.out
+            ${{ runner.temp }}/dr-evidence/replacement-reference-failed.err
           if-no-files-found: warn
 
   security:
