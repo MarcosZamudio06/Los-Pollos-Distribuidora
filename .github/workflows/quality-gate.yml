@@ -403,7 +403,8 @@ jobs:
             scripts/database/company-recovery-scripts.contract.test.mjs \
             scripts/database/recovery-storage-reference-verifier.test.mjs \
             scripts/database/company-recovery-orchestration.contract.test.mjs \
-            scripts/database/production-recovery-backup.contract.test.mjs
+            scripts/database/production-recovery-backup.contract.test.mjs \
+            scripts/database/production-replacement-restore.contract.test.mjs
           bash scripts/database/aws-cli-bind-mount.contract.test.sh
           OPENSSL_CONF=/dev/null bash scripts/database/test-company-recovery-orchestration.sh
           bash scripts/database/test-scoped-postgres-restore-key.sh

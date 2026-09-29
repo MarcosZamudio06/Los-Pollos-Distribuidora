@@ -54,33 +54,54 @@ aws_replacement() {
     backup_aws_cli_run_dir "$WORK" rw "${REPLACEMENT_PROJECT}_app_network" '' "$@"
 }
 cleanup() {
-  local status=$?
+  local exit_status=$?
+  local test_status=passed cleanup_status=not_run targets_removed=false
+  local project containers networks
   trap - EXIT
+  if (( exit_status != 0 )); then
+    test_status=failed
+  fi
   if (( started == 1 )); then
+    cleanup_status=passed
+    targets_removed=true
     if ! replacement_compose down --volumes --remove-orphans >/dev/null; then
       echo 'Disposable replacement Compose cleanup failed.' >&2
-      status=1
+      cleanup_status=failed
     fi
     if ! compose down --volumes --remove-orphans >/dev/null; then
       echo 'Disposable DR Compose cleanup failed.' >&2
-      status=1
+      cleanup_status=failed
     fi
-    if "$DOCKER" network inspect "${PROJECT}_app_network" >/dev/null 2>&1; then
-      echo 'Disposable DR network still exists after cleanup.' >&2
-      status=1
-    fi
-    if [[ -n "$("$DOCKER" ps -aq --filter "label=com.docker.compose.project=$PROJECT")" ]]; then
-      echo 'Disposable DR containers still exist after cleanup.' >&2
-      status=1
+    for project in "$PROJECT" "$REPLACEMENT_PROJECT"; do
+      if ! containers=$("$DOCKER" ps -aq --filter "label=com.docker.compose.project=$project"); then
+        echo "Disposable containers could not be verified for $project." >&2
+        cleanup_status=failed
+        targets_removed=false
+      elif [[ -n "$containers" ]]; then
+        echo "Disposable containers still exist for $project." >&2
+        cleanup_status=failed
+        targets_removed=false
+      fi
+      if ! networks=$("$DOCKER" network ls -q --filter "label=com.docker.compose.project=$project"); then
+        echo "Disposable networks could not be verified for $project." >&2
+        cleanup_status=failed
+        targets_removed=false
+      elif [[ -n "$networks" ]]; then
+        echo "Disposable networks still exist for $project." >&2
+        cleanup_status=failed
+        targets_removed=false
+      fi
+    done
+    if [[ "$cleanup_status" == failed && "$exit_status" == 0 ]]; then
+      exit_status=1
     fi
   fi
-  printf '{"status":"%s","project":"%s","targets_removed":%s}\n' \
-    "$([[ "$status" == 0 ]] && echo passed || echo failed)" "$PROJECT" \
-    "$([[ "$status" == 0 ]] && echo true || echo false)" > "$EVIDENCE_DIR/cleanup.json"
+  printf '{"test_status":"%s","cleanup_status":"%s","project":"%s","targets_removed":%s}\n' \
+    "$test_status" "$cleanup_status" "$PROJECT" "$targets_removed" > "$EVIDENCE_DIR/cleanup.json"
   if [[ -z "${DR_EVIDENCE_DIR:-}" ]]; then
     rm -rf -- "$WORK"
   fi
-  exit "$status"
+  exit "$exit_status"
 }
 trap cleanup EXIT
 
@@ -251,7 +272,8 @@ assert_replacement_absent() {
     "SELECT count(*) FROM pg_database WHERE datname = '$RESTORE_REPLACEMENT_DATABASE_NAME'")" == 0 ]]
 }
 assert_replacement_rejected() {
-  if bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
+  if RESTORE_RECOVERY_SET_KEY="$recovery_key" \
+     bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
     >"$WORK/replacement-rejected.out" 2>"$WORK/replacement-rejected.err"; then
     echo 'Unsafe replacement restore was accepted.' >&2
     exit 1
@@ -260,7 +282,8 @@ assert_replacement_rejected() {
 }
 
 # A default invocation is a real preflight, never an import.
-bash "$ROOT/scripts/database/restore-company-production-replacement.sh" \
+RESTORE_RECOVERY_SET_KEY="$recovery_key" \
+  bash "$ROOT/scripts/database/restore-company-production-replacement.sh" \
   > "$WORK/replacement-preflight.out"
 grep -Fxq 'PREFLIGHT_PASSED_NO_MUTATION: confirmation and --apply are required to restore.' \
   "$WORK/replacement-preflight.out"
@@ -318,7 +341,7 @@ aws_backup s3 cp /backup/valid-replacement-objects.tar.gz "s3://dr-backup-bucket
   --endpoint-url "$BACKUP_S3_ENDPOINT" --only-show-errors
 
 replacement_result="$WORK/replacement-ready.json"
-RESTORE_RESULT_FILE="$replacement_result" \
+RESTORE_RECOVERY_SET_KEY="$recovery_key" RESTORE_RESULT_FILE="$replacement_result" \
   bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply
 node - "$replacement_result" <<'NODE'
 const result = require(process.argv[2]);
@@ -327,6 +350,7 @@ if (result.status !== 'READY_FOR_CUTOVER' || result.cross_reference_status !== '
   result.traffic_cutover_performed !== false || result.rpo_observed_seconds < 0 ||
   result.rto_partial_to_ready_seconds < 0) process.exit(1);
 NODE
+cp "$replacement_result" "$EVIDENCE_DIR/replacement-ready.json"
 [[ "$(replacement_compose exec -T postgres psql -U postgres -d postgres -Atqc \
   "SELECT count(*) FROM pg_database WHERE datname = 'dr_fixture_replacement'")" == 1 ]]
 [[ "$(pg psql -U postgres -d dr_fixture -Atqc \
@@ -334,7 +358,8 @@ NODE
 aws_source s3 cp s3://dr-source-bucket/evidence/dr-evidence.txt /backup/source-preserved.txt \
   --endpoint-url "$OBJECT_STORAGE_ENDPOINT" --only-show-errors
 cmp "$WORK/evidence.txt" "$WORK/source-preserved.txt"
-if bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
+if RESTORE_RECOVERY_SET_KEY="$recovery_key" \
+   bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
   >"$WORK/existing-replacement.out" 2>"$WORK/existing-replacement.err"; then
   echo 'Existing replacement database was accepted.' >&2
   exit 1
@@ -412,8 +437,34 @@ aws_source s3api head-bucket --bucket "$existing_bucket" \
   --endpoint-url "$OBJECT_STORAGE_ENDPOINT" >/dev/null
 assert_no_restore_target
 
+# A failed final smoke cannot issue READY_FOR_CUTOVER after otherwise valid data checks.
+# Keep this before the second same-day recovery set: retention may remove the first set.
+printf '#!/bin/sh\nexit 1\n' > "$WORK/failing-smoke.sh"
+chmod 700 "$WORK/failing-smoke.sh"
+smoke_bucket="mte-replacement-dr-fixture-$(date -u +%Y%m%d%H%M%S)-$(( $$ + 2 ))"
+if RESTORE_RECOVERY_SET_KEY="$recovery_key" \
+   RESTORE_HEALTH_SMOKE_SCRIPT="$WORK/failing-smoke.sh" \
+   RESTORE_HEALTH_SMOKE_SHA256="$(shasum -a 256 "$WORK/failing-smoke.sh" | cut -d ' ' -f 1)" \
+   RESTORE_REPLACEMENT_DATABASE_NAME=dr_fixture_smoke_replacement \
+   RESTORE_REPLACEMENT_BUCKET="$smoke_bucket" \
+   RESTORE_RESULT_FILE="$WORK/smoke-failed.json" \
+   bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
+   >"$WORK/smoke-failed.out" 2>"$WORK/smoke-failed.err"; then
+  echo 'Failed smoke was accepted for cutover.' >&2
+  exit 1
+fi
+node - "$WORK/smoke-failed.json" <<'NODE'
+const result = require(process.argv[2]);
+if (result.status !== 'FAILED' || result.failure_stage !== 'health_smoke' ||
+  result.health_smoke_status !== 'failed' || result.cross_reference_status !== 'passed' ||
+  result.postgres_restore_status !== 'passed' || result.object_storage_restore_status !== 'passed' ||
+  result.migration_schema_status !== 'passed' || result.traffic_cutover_performed !== false) process.exit(1);
+NODE
+cp "$WORK/smoke-failed.json" "$EVIDENCE_DIR/replacement-smoke-failed.json"
+
 # A self-consistent recovery set can still contain a broken DB-to-object reference.
 # Change only the disposable fixture while capturing it, then restore the source row.
+unset RESTORE_RECOVERY_SET_KEY
 export BACKUP_RETENTION_DAILY=2
 pg psql -U postgres -d dr_fixture -v ON_ERROR_STOP=1 -c \
   "UPDATE \"DeliveryEvidence\" SET \"storageKey\" = 'evidence/missing.txt' WHERE id = 'dr-evidence'" >/dev/null
@@ -441,38 +492,17 @@ fi
 node - "$WORK/reference-failed.json" <<'NODE'
 const result = require(process.argv[2]);
 if (result.status !== 'FAILED' || result.failure_stage !== 'storage_reference_verification' ||
-  result.traffic_cutover_performed !== false || result.cross_reference_status === 'passed') process.exit(1);
+  result.postgres_restore_status !== 'passed' || result.object_storage_restore_status !== 'passed' ||
+  result.migration_schema_status !== 'passed' || result.cross_reference_status !== 'failed' ||
+  result.traffic_cutover_performed !== false) process.exit(1);
 NODE
+cp "$WORK/reference-failed.json" "$EVIDENCE_DIR/replacement-reference-failed.json"
 [[ "$(replacement_compose exec -T postgres psql -U postgres -d postgres -Atqc \
   "SELECT count(*) FROM pg_database WHERE datname = 'dr_fixture_reference_replacement'")" == 1 ]]
 aws_replacement s3api head-bucket --bucket "$bad_bucket" \
   --endpoint-url "$RESTORE_REPLACEMENT_S3_ENDPOINT" >/dev/null
 [[ "$(pg psql -U postgres -d dr_fixture -Atqc \
   "SELECT count(*) FROM \"DeliveryEvidence\" WHERE id = 'dr-evidence' AND \"storageKey\" = 'evidence/dr-evidence.txt'")" == 1 ]]
-
-# A failed final smoke cannot issue READY_FOR_CUTOVER after otherwise valid data checks.
-printf '#!/bin/sh\nexit 1\n' > "$WORK/failing-smoke.sh"
-chmod 700 "$WORK/failing-smoke.sh"
-smoke_bucket="mte-replacement-dr-fixture-$(date -u +%Y%m%d%H%M%S)-$(( $$ + 2 ))"
-if RESTORE_HEALTH_SMOKE_SCRIPT="$WORK/failing-smoke.sh" \
-   RESTORE_HEALTH_SMOKE_SHA256="$(shasum -a 256 "$WORK/failing-smoke.sh" | cut -d ' ' -f 1)" \
-   RESTORE_REPLACEMENT_DATABASE_NAME=dr_fixture_smoke_replacement \
-   RESTORE_REPLACEMENT_BUCKET="$smoke_bucket" \
-   RESTORE_RESULT_FILE="$WORK/smoke-failed.json" \
-   bash "$ROOT/scripts/database/restore-company-production-replacement.sh" --apply \
-   >"$WORK/smoke-failed.out" 2>"$WORK/smoke-failed.err"; then
-  echo 'Failed smoke was accepted for cutover.' >&2
-  exit 1
-fi
-node - "$WORK/smoke-failed.json" <<'NODE'
-const result = require(process.argv[2]);
-if (result.status !== 'FAILED' || result.failure_stage !== 'health_smoke' ||
-  result.cross_reference_status !== 'passed' || result.traffic_cutover_performed !== false) process.exit(1);
-NODE
-
-cp "$replacement_result" "$EVIDENCE_DIR/replacement-ready.json"
-cp "$WORK/reference-failed.json" "$EVIDENCE_DIR/replacement-reference-failed.json"
-cp "$WORK/smoke-failed.json" "$EVIDENCE_DIR/replacement-smoke-failed.json"
 
 python3 - "$create_result" "$restore_result" "$restore_started_at" "$replacement_result" "$EVIDENCE_DIR/dr-runtime.json" <<'PY'
 import datetime

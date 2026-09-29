@@ -125,6 +125,26 @@ test("retention keeps the union of newest daily, ISO-week, and calendar-month se
   ]));
 });
 
+test("two daily slots do not retain two recovery sets from the same UTC day", () => {
+  const records = dates([
+    ["2026-09-27", "12:00", "1-1"],
+    ["2026-09-27", "00:00", "1-2"],
+  ]);
+  const plan = selectRecoverySetRetention({
+    companySlug: slug,
+    recoverySets: records.map(({ manifestKey, manifestRaw }) => ({
+      manifestKey,
+      manifest: JSON.parse(manifestRaw),
+    })),
+    daily: 2,
+    weekly: 0,
+    monthly: 0,
+  });
+
+  assert.deepEqual(plan.retainedRecoverySetKeys, [records[0].manifestKey]);
+  assert.deepEqual(plan.deletedRecoverySetKeys, [records[1].manifestKey]);
+});
+
 test("newest valid set remains when all retention windows are zero", () => {
   const records = dates([
     ["2026-09-24", "12:00", "2-1"],
