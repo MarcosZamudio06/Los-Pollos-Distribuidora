@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -39,10 +40,21 @@ BYTE_SUFFIXES = {
     "tib": 1024**4,
 }
 COMPONENTS = ("photon", "osrm", "rendering")
+REMOTE_AWS_CLI_IMAGE = (
+    "amazon/aws-cli@sha256:cd11f6e909d42f066a03e15f072853fcc19f033e343cb83b2d553e2082cbb5a7"
+)
 
 
 class MonitorError(Exception):
     """A sanitized operational error suitable for a structured report."""
+
+
+class RemoteObjectMissing(Exception):
+    """A required remote backup object is confirmed absent."""
+
+
+class RemoteCheckFailure(Exception):
+    """A remote backup check failed without exposing command diagnostics."""
 
 
 def utc_now() -> str:
@@ -150,6 +162,255 @@ def run_command(args: list[str], timeout: int | float = 15) -> str:
     if completed.returncode != 0:
         raise MonitorError("monitor command returned a failure")
     return completed.stdout
+
+
+def remote_s3_config() -> dict[str, Any]:
+    required = (
+        "MONITOR_BACKUP_S3_ENDPOINT",
+        "MONITOR_BACKUP_S3_REGION",
+        "MONITOR_BACKUP_S3_BUCKET",
+        "MONITOR_BACKUP_S3_ACCESS_KEY_ID",
+        "MONITOR_BACKUP_S3_SECRET_ACCESS_KEY",
+    )
+    values = {name: os.getenv(name, "").strip() for name in required}
+    missing = next((name for name, value in values.items() if not value), None)
+    if missing:
+        raise MonitorError(f"{missing} is required for remote recovery monitoring")
+
+    endpoint = values["MONITOR_BACKUP_S3_ENDPOINT"].rstrip("/")
+    try:
+        parsed = urlsplit(endpoint)
+        parsed.port
+    except ValueError as error:
+        raise MonitorError("MONITOR_BACKUP_S3_ENDPOINT is invalid") from error
+    insecure_fixture = os.getenv(
+        "MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT", "false"
+    ).strip()
+    if insecure_fixture not in {"true", "false"}:
+        raise MonitorError(
+            "MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT must be true or false"
+        )
+    if (
+        not parsed.hostname
+        or not re.fullmatch(r"[A-Za-z0-9.-]+", parsed.hostname)
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise MonitorError("MONITOR_BACKUP_S3_ENDPOINT is invalid")
+    if not re.fullmatch(
+        r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", values["MONITOR_BACKUP_S3_BUCKET"]
+    ):
+        raise MonitorError("MONITOR_BACKUP_S3_BUCKET is invalid")
+    if not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", values["MONITOR_BACKUP_S3_REGION"]
+    ):
+        raise MonitorError("MONITOR_BACKUP_S3_REGION is invalid")
+
+    timeout = parse_int("MONITOR_BACKUP_REMOTE_TIMEOUT_SECONDS", 6, 1)
+    if timeout > 8:
+        raise MonitorError("MONITOR_BACKUP_REMOTE_TIMEOUT_SECONDS must not exceed 8")
+    network = os.getenv("MONITOR_BACKUP_AWS_NETWORK", "").strip()
+    if network and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", network):
+        raise MonitorError("MONITOR_BACKUP_AWS_NETWORK is invalid")
+    if parsed.scheme != "https" and not (
+        parsed.scheme == "http"
+        and insecure_fixture == "true"
+        and parsed.hostname == "backup-storage"
+        and bool(network)
+    ):
+        raise MonitorError("MONITOR_BACKUP_S3_ENDPOINT must use HTTPS")
+
+    return {
+        "endpoint": endpoint,
+        "region": values["MONITOR_BACKUP_S3_REGION"],
+        "bucket": values["MONITOR_BACKUP_S3_BUCKET"],
+        "accessKeyId": values["MONITOR_BACKUP_S3_ACCESS_KEY_ID"],
+        "secretAccessKey": values["MONITOR_BACKUP_S3_SECRET_ACCESS_KEY"],
+        "timeout": timeout,
+        "network": network,
+    }
+
+
+def run_remote_aws_cli(
+    arguments: list[str], config: dict[str, Any]
+) -> subprocess.CompletedProcess[str]:
+    docker_bin = os.getenv("MONITOR_DOCKER_BIN", "docker")
+    command = [
+        docker_bin,
+        "run",
+        "--rm",
+        "--read-only",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=16m",
+        "-e",
+        "AWS_ACCESS_KEY_ID",
+        "-e",
+        "AWS_SECRET_ACCESS_KEY",
+        "-e",
+        "AWS_DEFAULT_REGION",
+        "-e",
+        "AWS_EC2_METADATA_DISABLED",
+        "-e",
+        "AWS_MAX_ATTEMPTS",
+        "-e",
+        "HOME=/tmp",
+    ]
+    if config["network"]:
+        command.extend(["--network", config["network"]])
+    command.extend(
+        [
+            REMOTE_AWS_CLI_IMAGE,
+            "--cli-connect-timeout",
+            "2",
+            "--cli-read-timeout",
+            str(max(1, config["timeout"] - 2)),
+            *arguments,
+        ]
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "AWS_ACCESS_KEY_ID": config["accessKeyId"],
+            "AWS_SECRET_ACCESS_KEY": config["secretAccessKey"],
+            "AWS_DEFAULT_REGION": config["region"],
+            "AWS_EC2_METADATA_DISABLED": "true",
+            "AWS_MAX_ATTEMPTS": "1",
+        }
+    )
+    try:
+        return subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=config["timeout"] + 1,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RemoteCheckFailure() from error
+
+
+def head_remote_object(key: str, config: dict[str, Any]) -> int:
+    command = [
+        "s3api",
+        "head-object",
+        "--bucket",
+        config["bucket"],
+        "--key",
+        key,
+        "--endpoint-url",
+        config["endpoint"],
+        "--region",
+        config["region"],
+        "--output",
+        "json",
+    ]
+    completed = run_remote_aws_cli(command, config)
+    if completed.returncode != 0:
+        diagnostic = completed.stderr.lower()
+        if "nosuchbucket" not in diagnostic and (
+            "nosuchkey" in diagnostic
+            or "notfound" in diagnostic
+            or re.search(r"\b404\b", diagnostic)
+            or "not found" in diagnostic
+        ):
+            raise RemoteObjectMissing()
+        raise RemoteCheckFailure()
+    try:
+        payload = json.loads(completed.stdout)
+        size = payload.get("ContentLength") if isinstance(payload, dict) else None
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise ValueError("invalid remote size")
+    except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as error:
+        raise RemoteCheckFailure() from error
+    return size
+
+
+def remote_component_manifest_key(component: dict[str, Any], kind: str) -> str:
+    key = component.get("key")
+    if not isinstance(key, str):
+        raise RemoteCheckFailure()
+    if kind == "postgresql" and key.endswith(".dump"):
+        canonical_key = f"{key[:-5]}.manifest.json"
+    elif kind == "object_storage" and key.endswith(".tar.gz"):
+        canonical_key = f"{key}.manifest.json"
+    else:
+        raise RemoteCheckFailure()
+    explicit = component.get("manifest_key")
+    if isinstance(explicit, str) and explicit:
+        if explicit != canonical_key:
+            raise RemoteCheckFailure()
+        return explicit
+    return canonical_key
+
+
+def verify_remote_recovery_set(
+    payload: dict[str, Any], company: str, config: dict[str, Any]
+) -> tuple[dict[str, Any], str | None]:
+    checked_at = utc_now()
+    postgres = payload["postgresql"]
+    objects = payload["object_storage"]
+    recovery_key = payload["recovery_set_key"]
+    try:
+        postgres_manifest_key = remote_component_manifest_key(postgres, "postgresql")
+        object_manifest_key = remote_component_manifest_key(objects, "object_storage")
+    except RemoteCheckFailure:
+        return (
+            {"status": "failed", "checkedAt": checked_at, "objectsChecked": 0, "reason": "check_failed"},
+            "BACKUP_REMOTE_CHECK_FAILED",
+        )
+    expected = [
+        (recovery_key, None),
+        (payload["recovery_set_checksum_key"], None),
+        (postgres["key"], postgres.get("size_bytes")),
+        (postgres_manifest_key, None),
+        (objects["key"], objects.get("size_bytes")),
+        (object_manifest_key, None),
+        (f"{object_manifest_key}.sha256", None),
+    ]
+    prefixes = (
+        f"recovery-sets/{company}/",
+        f"postgres/{company}/",
+        f"object-storage/{company}/",
+    )
+    if any(
+        not isinstance(key, str)
+        or not key.startswith(prefixes)
+        or ".." in key.split("/")
+        for key, _ in expected
+    ):
+        return (
+            {"status": "failed", "checkedAt": checked_at, "objectsChecked": 0, "reason": "check_failed"},
+            "BACKUP_REMOTE_CHECK_FAILED",
+        )
+
+    checked = 0
+    for key, expected_size in expected:
+        try:
+            remote_size = head_remote_object(key, config)
+        except RemoteObjectMissing:
+            return (
+                {"status": "failed", "checkedAt": checked_at, "objectsChecked": checked + 1, "reason": "component_missing"},
+                "BACKUP_REMOTE_COMPONENT_MISSING",
+            )
+        except RemoteCheckFailure:
+            return (
+                {"status": "failed", "checkedAt": checked_at, "objectsChecked": checked + 1, "reason": "check_failed"},
+                "BACKUP_REMOTE_CHECK_FAILED",
+            )
+        checked += 1
+        if expected_size is not None and remote_size != expected_size:
+            return (
+                {"status": "failed", "checkedAt": checked_at, "objectsChecked": checked, "reason": "size_mismatch"},
+                "BACKUP_REMOTE_SIZE_MISMATCH",
+            )
+    return (
+        {"status": "passed", "checkedAt": checked_at, "objectsChecked": checked},
+        None,
+    )
 
 
 def compose_prefix() -> list[str]:
@@ -781,6 +1042,18 @@ def collect_backup_state(alerts: list[dict[str, str]], limits: dict[str, int]) -
         add_alert(alerts, "critical", "BACKUP_CONFIG_INVALID", str(error))
         return {"status": "unknown", "validatedAt": None, "recoveryPointAt": None, "ageHours": None, "recoveryPointAgeHours": None, "resultCount": 0, "companies": {}}
 
+    remote_config: dict[str, Any] | None
+    try:
+        remote_config = remote_s3_config()
+    except MonitorError:
+        remote_config = None
+        add_alert(
+            alerts,
+            "critical",
+            "BACKUP_REMOTE_CONFIG_INVALID",
+            "read-only remote recovery monitoring is not configured correctly",
+        )
+
     now = time.time()
     company_states: dict[str, dict[str, Any]] = {}
     result_count = 0
@@ -805,6 +1078,10 @@ def collect_backup_state(alerts: list[dict[str, str]], limits: dict[str, int]) -
                 "checksumsAndManifests": "unknown",
                 "cleanupStatus": "unknown",
                 "retentionStatus": "unknown",
+                "remoteIntegrity": {
+                    "status": "not_run",
+                    "reason": "no_validated_recovery_set",
+                },
             }
             company_statuses.append("missing")
             add_alert(
@@ -829,6 +1106,38 @@ def collect_backup_state(alerts: list[dict[str, str]], limits: dict[str, int]) -
             and attempt["evidence"].get("classification") == "validated"
         ]
         latest_validated = successful_attempts[0] if successful_attempts else None
+        remote_integrity: dict[str, Any] = {
+            "status": "not_run",
+            "reason": "no_validated_recovery_set",
+        }
+        remote_failure_code: str | None = None
+        remote_company_status: str | None = None
+        if latest_validated is not None:
+            if remote_config is None:
+                remote_integrity = {
+                    "status": "failed",
+                    "checkedAt": utc_now(),
+                    "objectsChecked": 0,
+                    "reason": "config_invalid",
+                }
+                remote_company_status = "remote-check-failed"
+            else:
+                remote_integrity, remote_failure_code = verify_remote_recovery_set(
+                    latest_validated["payload"], company, remote_config
+                )
+                if remote_failure_code == "BACKUP_REMOTE_COMPONENT_MISSING":
+                    remote_company_status = "remote-invalid"
+                elif remote_failure_code == "BACKUP_REMOTE_SIZE_MISMATCH":
+                    remote_company_status = "remote-invalid"
+                elif remote_failure_code is not None:
+                    remote_company_status = "remote-check-failed"
+            if remote_failure_code is not None:
+                add_alert(
+                    alerts,
+                    "critical",
+                    remote_failure_code,
+                    "remote recovery-set components could not be confirmed",
+                )
         validated_at = (
             latest_validated["evidence"].get("finishedAt")
             if latest_validated is not None
@@ -996,7 +1305,11 @@ def collect_backup_state(alerts: list[dict[str, str]], limits: dict[str, int]) -
             ),
             "cleanupStatus": cleanup_status,
             "retentionStatus": retention_status,
+            "remoteIntegrity": remote_integrity,
         }
+        if remote_company_status is not None:
+            company_states[company]["status"] = remote_company_status
+            company_status = remote_company_status
         company_statuses.append(company_status)
 
     status_priority = {
@@ -1010,6 +1323,8 @@ def collect_backup_state(alerts: list[dict[str, str]], limits: dict[str, int]) -
         "cleanup-failed": 7,
         "retention-failed": 7,
         "failed": 8,
+        "remote-invalid": 9,
+        "remote-check-failed": 10,
     }
     status = (
         max(company_statuses, key=lambda value: status_priority.get(value, 8))

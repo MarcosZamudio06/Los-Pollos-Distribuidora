@@ -257,8 +257,10 @@ assert data["status"] == "validated" and data["company_slug"] == sys.argv[2], da
 assert data["components"] == {"postgresql":"validated", "object_storage":"validated"}, data
 assert data["postgresql"]["key"].startswith("postgres/"), data
 assert data["postgresql"]["key"].startswith("postgres/" + sys.argv[2] + "/"), data
+assert data["postgresql"]["manifest_key"] == data["postgresql"]["key"].removesuffix(".dump") + ".manifest.json", data
 assert data["postgresql"]["size_bytes"] > 0 and len(data["postgresql"]["sha256"]) == 64, data
 assert data["object_storage"]["key"].startswith("object-storage/" + sys.argv[2] + "/"), data
+assert data["object_storage"]["manifest_key"] == data["object_storage"]["key"] + ".manifest.json", data
 assert data["object_storage"]["size_bytes"] > 0 and len(data["object_storage"]["sha256"]) == 64, data
 assert data["recovery_set_checksum_key"] == data["recovery_set_key"] + ".sha256", data
 p=data["recovery_point"]

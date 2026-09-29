@@ -30,8 +30,10 @@ funciones de geocoding/routing/mapas pueden quedar degradadas.
 
 1. Instalar/actualizar el checkout en `/opt/pollos-distribuidor` y comprobar que
    `scripts/monitoring/monitor-production.py` es ejecutable.
-2. Crear el archivo root-only `/etc/pollos-distribuidor/monitoring.env` con
-   valores operativos. No registrar tokens ni poner secretos en el repositorio.
+2. Crear/actualizar el archivo `/etc/pollos-distribuidor/monitoring.env` con
+   owner `root:root` y modo `0600`, incluyendo los valores operativos. El
+   chequeo remoto requiere ahí sus credenciales read-only dedicadas. No registrar
+   tokens ni poner secretos en el repositorio.
 3. Copiar los ejemplos versionados:
 
    ```bash
@@ -118,8 +120,24 @@ El monitor lee los resultados no secretos generados por el flujo existente:
   aplicada, limpieza/restauración operativa correcta y claves/checksums de ambos
   manifests con formato válido y scope del mismo slug. Un backup PostgreSQL-only,
   resultado parcial/corrupto o attempt reciente fallido nunca se considera
-  protección completa. El monitor no vuelve a consultar B2: consume la evidencia
-  local creada después de las verificaciones end-to-end del backup y del drill.
+  protección completa. Además, en cada ejecución periódica valida remotamente
+  sólo el recovery set validado más reciente de cada empresa. Usa sus claves
+  registradas para consultar por `HeadObject` el manifest del set y su SHA-256,
+  el dump PostgreSQL y su component manifest, y el archive Object Storage, su
+  component manifest y el SHA-256 de ese manifest (siete objetos). Los
+  `manifest_key` explícitos de la evidencia local tienen prioridad; para
+  resultados anteriores que no los registraban, se aplica únicamente la regla
+  canónica de sufijos ya usada por los scripts de backup. Compara el tamaño
+  remoto del dump y del archive con `size_bytes` local. No descarga archivos,
+  enumera backups históricos ni usa ETag como SHA-256. `remoteIntegrity.status`
+  se muestra por empresa: `passed` confirma existencia y tamaños en el instante
+  consultado; ausencia confirmada o tamaño distinto produce estado `remote-invalid`
+  y alerta crítica, mientras red, timeout, autenticación o respuesta no
+  interpretable producen `remote-check-failed` y también impiden afirmar que la
+  protección remota está confirmada. Una configuración incompleta/inválida
+  produce `BACKUP_REMOTE_CONFIG_INVALID`. Esta revisión ligera no recalcula
+  SHA-256 ni valida el contenido remoto: esa verificación criptográfica profunda
+  sigue a cargo del readback del backup y de los restore drills.
 - `BACKUP_RPO_HOURS` es el deadline, no un umbral de warning. La edad medida
   para alertas se calcula desde `recovery_point.write_barrier_at`, no desde
   `finished_at`; el JSON conserva ambos como `recoveryPointAt` y `validatedAt`.
@@ -137,7 +155,9 @@ El monitor lee los resultados no secretos generados por el flujo existente:
   configurada en `MONITOR_LOCAL_DEPLOYMENT_HOST_REF`. Cada VPS informa solo la
   empresa que realmente puede respaldar desde sus rutas Docker locales; una
   fuente central debe agregar los estados de cada VPS para declarar cobertura
-  multiempresa global.
+  multiempresa global. La verificación remota recibe únicamente las claves de
+  esa empresa y valida su prefijo; los objetos de otro slug nunca se usan para
+  aprobarla.
 - `MONITOR_BACKUP_LOCAL_PATH`: si se omite, se deriva el directorio real por
   empresa desde `MONITOR_RECOVERY_SET_RESULT_ROOT`; para fijar una ruta en modo
   multiempresa usa `{company}` en el valor. Se informa espacio libre sin imprimir
@@ -162,6 +182,53 @@ El monitor lee los resultados no secretos generados por el flujo existente:
   checksum/provenance, artefactos no vacíos y antigüedad. También lee el último
   `refreshes/*/refresh.json` y alerta `FAILED`, `ROLLED_BACK` o estados
   incompletos. Nunca lanza `refresh-monthly.sh` automáticamente.
+
+### Verificación remota de recovery sets
+
+El servicio usa credenciales separadas y de solo lectura, definidas únicamente
+en `/etc/pollos-distribuidor/monitoring.env` (owner `root:root`, modo `0600`),
+no las credenciales de escritura `BACKUP_S3_*`. Nombres admitidos:
+
+```text
+MONITOR_BACKUP_S3_ENDPOINT
+MONITOR_BACKUP_S3_REGION
+MONITOR_BACKUP_S3_BUCKET
+MONITOR_BACKUP_S3_ACCESS_KEY_ID
+MONITOR_BACKUP_S3_SECRET_ACCESS_KEY
+MONITOR_BACKUP_REMOTE_TIMEOUT_SECONDS
+MONITOR_BACKUP_AWS_NETWORK (opcional; sólo si el endpoint requiere una red Docker concreta)
+```
+
+La política remota requiere `s3:GetObject` sobre los objetos de backup de la
+empresa y `s3:ListBucket` limitado al bucket cuando el proveedor lo requiera para
+distinguir un objeto ausente de una respuesta de acceso denegado. No conceda
+`PutObject`, `DeleteObject` ni administración de buckets. El timeout por
+consulta es de 1 a 8 segundos, sin reintentos AWS, y el límite de servicio
+systemd continúa siendo dos minutos; el timer existente de cinco minutos es el
+único scheduler. No configure `MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT`
+en producción: sólo existe para el S3 disposable del harness.
+
+Alertas remotas:
+
+| Código | Interpretación | Acción inicial |
+| --- | --- | --- |
+| `BACKUP_REMOTE_COMPONENT_MISSING` | `HeadObject` confirmó la ausencia de un objeto requerido | Revisar key/retención y recuperar la copia desde el backup si procede; no asumir protección válida |
+| `BACKUP_REMOTE_SIZE_MISMATCH` | Dump o archive remoto no coincide con el tamaño local validado | Tratar la copia como inválida y ejecutar verificación profunda/restore drill |
+| `BACKUP_REMOTE_CHECK_FAILED` | Timeout, red, autenticación, proveedor o respuesta no interpretable | Comprobar salida de red B2/S3 y alcance de solo lectura sin imprimir credenciales |
+| `BACKUP_REMOTE_CONFIG_INVALID` | Faltan o son inválidos endpoint, bucket, región, timeout o credencial de monitor | Revisar nombres de variables y archivo root-only; no copiar claves de escritura |
+
+Consulta estado sin mostrar el contenido del archivo de credenciales:
+
+```bash
+sudo systemctl status pollos-distribuidor-monitor.service --no-pager
+sudo journalctl -u pollos-distribuidor-monitor.service -n 30 --no-pager
+sudo stat -c '%a %U:%G' /etc/pollos-distribuidor/monitoring.env
+```
+
+El archivo debe reportar `600 root:root`. No use `systemctl show ... Environment`,
+no copie secretos a comandos/alertas y no pegue credenciales en tickets. Si falla
+la consulta remota, el monitor conserva un estado no confirmado/critical; la
+recuperación no se marca como fresh hasta que la consulta vuelva a pasar.
 
 Un manifest activo inválido se trata como crítico porque no permite demostrar
 qué dataset está sirviendo el consumidor. Una antigüedad GIS es warning y debe

@@ -22,10 +22,32 @@ SPEC.loader.exec_module(MONITOR)
 class ProductionMonitorTests(unittest.TestCase):
     def setUp(self):
         self.environment = os.environ.copy()
+        os.environ["MONITOR_BACKUP_S3_ENDPOINT"] = "https://objects.example.test"
+        os.environ["MONITOR_BACKUP_S3_REGION"] = "us-east-1"
+        os.environ["MONITOR_BACKUP_S3_BUCKET"] = "backup-test-bucket"
+        os.environ["MONITOR_BACKUP_S3_ACCESS_KEY_ID"] = "monitor-read-key"
+        os.environ["MONITOR_BACKUP_S3_SECRET_ACCESS_KEY"] = "monitor-read-secret"
+        os.environ["MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT"] = "false"
+        self.remote_head_patch = patch.object(
+            MONITOR,
+            "head_remote_object",
+            side_effect=self.fake_remote_head,
+            create=True,
+        )
+        self.remote_head_mock = self.remote_head_patch.start()
 
     def tearDown(self):
+        self.remote_head_patch.stop()
         os.environ.clear()
         os.environ.update(self.environment)
+
+    @staticmethod
+    def fake_remote_head(key, config):
+        if key.endswith(".dump"):
+            return 2048
+        if key.endswith(".tar.gz"):
+            return 4096
+        return 128
 
     @staticmethod
     def valid_recovery_result(company, finished_at, write_barrier_at=None):
@@ -61,12 +83,14 @@ class ProductionMonitorTests(unittest.TestCase):
             "recovery_set_checksum_key": recovery_key + ".sha256",
             "postgresql": {
                 "key": f"postgres/{company}/2026/09/2026-09-27T12-00-00Z-100-200.dump",
+                "manifest_key": f"postgres/{company}/2026/09/2026-09-27T12-00-00Z-100-200.manifest.json",
                 "size_bytes": 2048,
                 "sha256": "a" * 64,
                 "manifest_sha256": "b" * 64,
             },
             "object_storage": {
                 "key": f"object-storage/{company}/2026-09-27T12-00-00Z-100-200.tar.gz",
+                "manifest_key": f"object-storage/{company}/2026-09-27T12-00-00Z-100-200.tar.gz.manifest.json",
                 "size_bytes": 4096,
                 "sha256": "c" * 64,
                 "manifest_sha256": "d" * 64,
@@ -200,7 +224,346 @@ class ProductionMonitorTests(unittest.TestCase):
         self.assertEqual(result["companies"]["company-north"]["components"]["objectStorage"], "validated")
         self.assertEqual(result["companies"]["company-north"]["checksumsAndManifests"], "passed")
         self.assertEqual(result["companies"]["company-north"]["cleanupStatus"], "passed")
+        self.assertEqual(
+            result["companies"]["company-north"]["remoteIntegrity"]["status"],
+            "passed",
+        )
+        self.assertEqual(
+            result["companies"]["company-north"]["remoteIntegrity"]["objectsChecked"],
+            7,
+        )
         self.assertEqual(alerts, [])
+
+    def remote_backup_state(self, payload=None):
+        now = datetime.now(timezone.utc).timestamp()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.configure_single_company(root)
+            self.write_recovery_result(
+                root,
+                "company-north",
+                payload or self.valid_recovery_result("company-north", now),
+            )
+            alerts = []
+            result = MONITOR.collect_backup_state(alerts, MONITOR.thresholds())
+        return result["companies"]["company-north"], alerts
+
+    def test_remote_recovery_set_and_all_six_components_are_checked(self):
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "fresh")
+        self.assertEqual(company["remoteIntegrity"]["status"], "passed")
+        self.assertEqual(company["remoteIntegrity"]["objectsChecked"], 7)
+        self.assertEqual(alerts, [])
+
+    def test_missing_remote_recovery_manifest_is_critical(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            (_ for _ in ()).throw(MONITOR.RemoteObjectMissing())
+            if key.startswith("recovery-sets/") and key.endswith(".manifest.json")
+            else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "component_missing")
+        self.assertIn(
+            "BACKUP_REMOTE_COMPONENT_MISSING", {item["code"] for item in alerts}
+        )
+
+    def test_missing_remote_recovery_checksum_is_critical(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            (_ for _ in ()).throw(MONITOR.RemoteObjectMissing())
+            if key.startswith("recovery-sets/") and key.endswith(".manifest.json.sha256")
+            else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "component_missing")
+        self.assertIn(
+            "BACKUP_REMOTE_COMPONENT_MISSING", {item["code"] for item in alerts}
+        )
+
+    def test_missing_remote_postgres_dump_is_critical(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            (_ for _ in ()).throw(MONITOR.RemoteObjectMissing())
+            if key.endswith(".dump")
+            else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "component_missing")
+        self.assertIn(
+            "BACKUP_REMOTE_COMPONENT_MISSING", {item["code"] for item in alerts}
+        )
+
+    def test_missing_remote_object_storage_archive_is_critical(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            (_ for _ in ()).throw(MONITOR.RemoteObjectMissing())
+            if key.endswith(".tar.gz")
+            else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "component_missing")
+        self.assertIn(
+            "BACKUP_REMOTE_COMPONENT_MISSING", {item["code"] for item in alerts}
+        )
+
+    def test_missing_remote_component_manifests_are_critical(self):
+        expected_keys = (
+            "postgres/company-north/2026/09/2026-09-27T12-00-00Z-100-200.manifest.json",
+            "object-storage/company-north/2026-09-27T12-00-00Z-100-200.tar.gz.manifest.json",
+        )
+        for expected_key in expected_keys:
+            with self.subTest(expected_key=expected_key):
+                self.remote_head_mock.side_effect = lambda key, config, expected=expected_key: (
+                    (_ for _ in ()).throw(MONITOR.RemoteObjectMissing())
+                    if key == expected
+                    else self.fake_remote_head(key, config)
+                )
+                company, alerts = self.remote_backup_state()
+
+                self.assertEqual(company["status"], "remote-invalid")
+                self.assertEqual(
+                    company["remoteIntegrity"]["reason"], "component_missing"
+                )
+                self.assertIn(
+                    "BACKUP_REMOTE_COMPONENT_MISSING",
+                    {item["code"] for item in alerts},
+                )
+
+    def test_missing_object_storage_manifest_checksum_is_critical(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            (_ for _ in ()).throw(MONITOR.RemoteObjectMissing())
+            if key.endswith(".tar.gz.manifest.json.sha256")
+            else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "component_missing")
+        self.assertIn("BACKUP_REMOTE_COMPONENT_MISSING", {item["code"] for item in alerts})
+
+    def test_remote_size_mismatch_invalidates_fresh_recovery_point(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            2047 if key.endswith(".dump") else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "size_mismatch")
+        self.assertIn("BACKUP_REMOTE_SIZE_MISMATCH", {item["code"] for item in alerts})
+
+    def test_remote_object_archive_size_mismatch_invalidates_fresh_recovery_point(self):
+        self.remote_head_mock.side_effect = lambda key, config: (
+            4095 if key.endswith(".tar.gz") else self.fake_remote_head(key, config)
+        )
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-invalid")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "size_mismatch")
+        self.assertIn("BACKUP_REMOTE_SIZE_MISMATCH", {item["code"] for item in alerts})
+
+    def test_remote_timeout_never_reports_fresh_protection(self):
+        self.remote_head_mock.side_effect = MONITOR.RemoteCheckFailure()
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-check-failed")
+        self.assertEqual(company["remoteIntegrity"]["status"], "failed")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "check_failed")
+        self.assertIn("BACKUP_REMOTE_CHECK_FAILED", {item["code"] for item in alerts})
+
+    def test_remote_auth_failure_is_sanitized(self):
+        secret = "private-monitor-secret-fixture"
+        self.remote_head_mock.side_effect = MONITOR.RemoteCheckFailure(secret)
+        company, alerts = self.remote_backup_state()
+        output = json.dumps({"company": company, "alerts": alerts})
+
+        self.assertEqual(company["status"], "remote-check-failed")
+        self.assertIn("BACKUP_REMOTE_CHECK_FAILED", {item["code"] for item in alerts})
+        self.assertNotIn(secret, output)
+
+    def test_head_object_classifies_missing_and_auth_without_exposing_diagnostics(self):
+        missing = MONITOR.subprocess.CompletedProcess(
+            ["docker"], 254, stdout="", stderr="An error occurred (404): Not Found"
+        )
+        config = {
+            "bucket": "backup-test-bucket",
+            "endpoint": "https://objects.example.test",
+            "region": "us-east-1",
+        }
+        self.remote_head_patch.stop()
+        try:
+            with patch.object(MONITOR, "run_remote_aws_cli", return_value=missing):
+                with self.assertRaises(MONITOR.RemoteObjectMissing):
+                    MONITOR.head_remote_object(
+                        "recovery-sets/company-north/set.manifest.json", config
+                    )
+
+            secret = "private-monitor-secret-fixture"
+            denied = MONITOR.subprocess.CompletedProcess(
+                ["docker"], 254, stdout="", stderr=f"AccessDenied with {secret}"
+            )
+            with patch.object(MONITOR, "run_remote_aws_cli", return_value=denied):
+                with self.assertRaises(MONITOR.RemoteCheckFailure) as error:
+                    MONITOR.head_remote_object(
+                        "recovery-sets/company-north/set.manifest.json", config
+                    )
+            self.assertNotIn(secret, str(error.exception))
+        finally:
+            self.remote_head_mock = self.remote_head_patch.start()
+
+    def test_remote_monitor_checks_only_local_company_keys(self):
+        now = datetime.now(timezone.utc).timestamp()
+        observed_keys = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "companies.json"
+            manifest_path.write_text(
+                json.dumps({"companies": [
+                    {"slug": "company-north", "environment": "production", "status": "active", "deploymentHostRef": "host://production/north"},
+                    {"slug": "company-south", "environment": "production", "status": "active", "deploymentHostRef": "host://production/south"},
+                ]}),
+                encoding="utf-8",
+            )
+            os.environ["MONITOR_RECOVERY_SET_MODE"] = "multi-company"
+            os.environ["MONITOR_RECOVERY_SET_RESULT_ROOT"] = str(root)
+            os.environ["MONITOR_TENANT_MANIFEST_PATH"] = str(manifest_path)
+            os.environ["MONITOR_LOCAL_DEPLOYMENT_HOST_REF"] = "host://production/north"
+            for company_name in ("company-north", "company-south"):
+                result_dir = root / company_name / "postgres-backups" / "company-recovery"
+                result_dir.mkdir(parents=True)
+                (result_dir / "current.json").write_text(
+                    json.dumps(self.valid_recovery_result(company_name, now)),
+                    encoding="utf-8",
+                )
+            self.remote_head_mock.side_effect = lambda key, config: (
+                observed_keys.append(key) or self.fake_remote_head(key, config)
+            )
+            alerts = []
+            result = MONITOR.collect_backup_state(alerts, MONITOR.thresholds())
+
+        self.assertEqual(set(result["companies"]), {"company-north"})
+        self.assertTrue(observed_keys)
+        self.assertTrue(all(key.startswith((
+            "recovery-sets/company-north/", "postgres/company-north/", "object-storage/company-north/"
+        )) for key in observed_keys))
+
+    def test_legacy_result_derives_only_the_documented_component_manifest_suffixes(self):
+        payload = self.valid_recovery_result(
+            "company-north", datetime.now(timezone.utc).timestamp()
+        )
+        payload["postgresql"].pop("manifest_key")
+        payload["object_storage"].pop("manifest_key")
+        company, _ = self.remote_backup_state(payload)
+
+        self.assertEqual(company["remoteIntegrity"]["status"], "passed")
+        self.assertEqual(
+            MONITOR.remote_component_manifest_key(payload["postgresql"], "postgresql"),
+            "postgres/company-north/2026/09/2026-09-27T12-00-00Z-100-200.manifest.json",
+        )
+
+    def test_noncanonical_explicit_component_manifest_key_fails_closed(self):
+        payload = self.valid_recovery_result(
+            "company-north", datetime.now(timezone.utc).timestamp()
+        )
+        payload["object_storage"]["manifest_key"] = (
+            "object-storage/company-north/another-set.tar.gz.manifest.json"
+        )
+        company, alerts = self.remote_backup_state(payload)
+
+        self.assertEqual(company["status"], "remote-check-failed")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "check_failed")
+        self.assertIn("BACKUP_REMOTE_CHECK_FAILED", {item["code"] for item in alerts})
+
+    def test_remote_configuration_missing_is_explicit_and_critical(self):
+        for name in (
+            "MONITOR_BACKUP_S3_ENDPOINT",
+            "MONITOR_BACKUP_S3_REGION",
+            "MONITOR_BACKUP_S3_BUCKET",
+            "MONITOR_BACKUP_S3_ACCESS_KEY_ID",
+            "MONITOR_BACKUP_S3_SECRET_ACCESS_KEY",
+        ):
+            os.environ.pop(name, None)
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-check-failed")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "config_invalid")
+        self.assertIn("BACKUP_REMOTE_CONFIG_INVALID", {item["code"] for item in alerts})
+
+    def test_remote_configuration_rejects_insecure_endpoint_in_production_mode(self):
+        os.environ["MONITOR_BACKUP_S3_ENDPOINT"] = "http://objects.example.test"
+        os.environ["MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT"] = "false"
+        company, alerts = self.remote_backup_state()
+
+        self.assertEqual(company["status"], "remote-check-failed")
+        self.assertEqual(company["remoteIntegrity"]["reason"], "config_invalid")
+        self.assertIn("BACKUP_REMOTE_CONFIG_INVALID", {item["code"] for item in alerts})
+
+    def test_http_endpoint_is_allowed_only_for_network_scoped_disposable_storage(self):
+        os.environ["MONITOR_BACKUP_S3_ENDPOINT"] = "http://backup-storage:8333"
+        os.environ["MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT"] = "true"
+        os.environ["MONITOR_BACKUP_AWS_NETWORK"] = "dr20260929120000_app_network"
+        config = MONITOR.remote_s3_config()
+        self.assertEqual(config["endpoint"], "http://backup-storage:8333")
+
+        os.environ["MONITOR_BACKUP_S3_ENDPOINT"] = "http://objects.example.test"
+        with self.assertRaises(MONITOR.MonitorError):
+            MONITOR.remote_s3_config()
+
+    def test_remote_executor_uses_only_read_calls_without_bind_mounts(self):
+        now = datetime.now(timezone.utc).timestamp()
+        commands = []
+
+        def fake_run(args, **kwargs):
+            commands.append(args)
+            key = args[args.index("--key") + 1]
+            size = self.fake_remote_head(key, {})
+            return MONITOR.subprocess.CompletedProcess(
+                args, 0, stdout=json.dumps({"ContentLength": size}), stderr=""
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.configure_single_company(root)
+            self.write_recovery_result(
+                root, "company-north", self.valid_recovery_result("company-north", now)
+            )
+            alerts = []
+            self.remote_head_patch.stop()
+            try:
+                with patch.object(MONITOR.subprocess, "run", side_effect=fake_run):
+                    result = MONITOR.collect_backup_state(alerts, MONITOR.thresholds())
+            finally:
+                self.remote_head_mock = self.remote_head_patch.start()
+
+        self.assertEqual(result["companies"]["company-north"]["remoteIntegrity"]["status"], "passed")
+        self.assertEqual(len(commands), 7)
+        expected_keys = (
+            "recovery-sets/company-north/2026-09-27T12-00-00Z-100-200.manifest.json",
+            "recovery-sets/company-north/2026-09-27T12-00-00Z-100-200.manifest.json.sha256",
+            "postgres/company-north/2026/09/2026-09-27T12-00-00Z-100-200.dump",
+            "postgres/company-north/2026/09/2026-09-27T12-00-00Z-100-200.manifest.json",
+            "object-storage/company-north/2026-09-27T12-00-00Z-100-200.tar.gz",
+            "object-storage/company-north/2026-09-27T12-00-00Z-100-200.tar.gz.manifest.json",
+            "object-storage/company-north/2026-09-27T12-00-00Z-100-200.tar.gz.manifest.json.sha256",
+        )
+        self.assertEqual(
+            [args[args.index("--key") + 1] for args in commands], list(expected_keys)
+        )
+        for args in commands:
+            self.assertIn("s3api", args)
+            self.assertIn("head-object", args)
+            self.assertIn("--read-only", args)
+            self.assertIn(MONITOR.REMOTE_AWS_CLI_IMAGE, args)
+            self.assertNotIn("put-object", args)
+            self.assertNotIn("delete-object", args)
+            self.assertNotIn("s3", args[args.index("s3api") + 1:])
+            self.assertNotIn("-v", args)
+            self.assertNotIn("monitor-read-secret", " ".join(args))
 
     def test_backup_warns_before_rpo_and_becomes_critical_at_boundary(self):
         now = datetime.now(timezone.utc).timestamp()

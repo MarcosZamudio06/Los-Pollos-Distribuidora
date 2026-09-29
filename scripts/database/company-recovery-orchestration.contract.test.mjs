@@ -78,6 +78,12 @@ test("recovery timestamps bind both components to the same write barrier", () =>
   assert.match(manifest, /recovery_point/u);
 });
 
+test("local validated recovery evidence retains exact component manifest keys", () => {
+  const create = read("scripts/database/create-company-recovery-set.sh");
+  assert.match(create, /"manifest_key": postgres_manifest_key/u);
+  assert.match(create, /"manifest_key": object_manifest_key/u);
+});
+
 test("retention runs only after the new complete recovery set is remotely verified", () => {
   const create = read("scripts/database/create-company-recovery-set.sh");
   const retention = read("scripts/database/apply-company-recovery-retention.sh");

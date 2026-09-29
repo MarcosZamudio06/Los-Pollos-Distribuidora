@@ -30,6 +30,53 @@ single_json_result() {
   printf '%s\n' "${result_files[0]}"
 }
 
+assert_disposable_remote_monitor() {
+  local expected_status=$1
+  local expected_reason=$2
+  local evidence_path=$3
+  python3 - "$ROOT/scripts/monitoring/monitor-production.py" \
+    "$expected_status" "$expected_reason" "$evidence_path" <<'PY'
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+script, expected_status, expected_reason, evidence_path = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("monitor_production", script)
+if spec is None or spec.loader is None:
+    raise SystemExit("Unable to load production monitor for disposable verification.")
+monitor = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(monitor)
+alerts = []
+backup = monitor.collect_backup_state(alerts, monitor.thresholds())
+company = backup.get("companies", {}).get("dr-fixture", {})
+remote = company.get("remoteIntegrity", {})
+codes = [item.get("code") for item in alerts]
+if company.get("status") != expected_status or remote.get("reason", "") != expected_reason:
+    raise SystemExit("Disposable remote monitor returned an unexpected protection state.")
+if expected_status == "fresh":
+    if remote.get("status") != "passed" or remote.get("objectsChecked") != 7:
+        raise SystemExit("Disposable remote monitor did not confirm all seven objects.")
+    if "BACKUP_REMOTE_COMPONENT_MISSING" in codes:
+        raise SystemExit("Disposable remote monitor reported a missing component unexpectedly.")
+else:
+    if remote.get("status") != "failed" or "BACKUP_REMOTE_COMPONENT_MISSING" not in codes:
+        raise SystemExit("Disposable remote monitor did not critically detect the missing component.")
+evidence = {
+    "company": "dr-fixture",
+    "status": company.get("status"),
+    "remoteIntegrity": remote,
+    "alertCodes": codes,
+}
+Path(evidence_path).write_text(json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8")
+print(
+    "Disposable remote monitor validated: "
+    f"status={company.get('status')}, remote={remote.get('status')}, "
+    f"objects_checked={remote.get('objectsChecked', 0)}"
+)
+PY
+}
+
 compose() { "$DOCKER" compose --project-name "$PROJECT" -f "$COMPOSE_FILE" "$@"; }
 replacement_compose() { "$DOCKER" compose --project-name "$REPLACEMENT_PROJECT" --env-file "$WORK/replacement-compose.env" -f "$REPLACEMENT_COMPOSE_FILE" "$@"; }
 pg() { compose exec -T postgres "$@"; }
@@ -188,6 +235,48 @@ if (result.status !== 'validated' || !result.recovery_set_key || !result.recover
 process.stdout.write(result.recovery_set_key);
 NODE
 )
+
+# Exercise only the disposable backup-storage service. The production monitor
+# queries seven HEADs, then this fixture removes and restores one disposable dump.
+remote_monitor_root="$WORK/remote-monitor"
+remote_monitor_results="$remote_monitor_root/postgres-backups/results/company-recovery"
+mkdir -p "$remote_monitor_results"
+cp "$create_result" "$remote_monitor_results/primary.json"
+export MONITOR_RECOVERY_SET_MODE=single-company
+export MONITOR_RECOVERY_SET_RESULT_ROOT="$remote_monitor_root"
+export MONITOR_BACKUP_S3_ENDPOINT="$BACKUP_S3_ENDPOINT"
+export MONITOR_BACKUP_S3_REGION="$BACKUP_S3_REGION"
+export MONITOR_BACKUP_S3_BUCKET="$BACKUP_S3_BUCKET"
+export MONITOR_BACKUP_S3_ACCESS_KEY_ID=dr-backup-access
+export MONITOR_BACKUP_S3_SECRET_ACCESS_KEY=dr-backup-secret
+export MONITOR_BACKUP_REMOTE_ALLOW_INSECURE_ENDPOINT=true
+export MONITOR_BACKUP_REMOTE_TIMEOUT_SECONDS=6
+export MONITOR_BACKUP_AWS_NETWORK="${PROJECT}_app_network"
+export MONITOR_DOCKER_BIN="$DOCKER"
+assert_disposable_remote_monitor fresh '' "$EVIDENCE_DIR/remote-monitor-pass.json"
+postgres_dump_key=$(node - "$create_result" <<'NODE'
+const result = require(process.argv[2]);
+if (result.status !== 'validated' || !result.postgresql?.key) process.exit(1);
+process.stdout.write(result.postgresql.key);
+NODE
+)
+[[ "$postgres_dump_key" == postgres/dr-fixture/* ]] || {
+  echo 'Disposable monitor fixture selected a PostgreSQL key outside its company scope.' >&2
+  exit 1
+}
+aws_backup s3 cp "s3://$BACKUP_S3_BUCKET/$postgres_dump_key" \
+  /backup/remote-monitor-restore.dump --endpoint-url "$BACKUP_S3_ENDPOINT" \
+  --only-show-errors >/dev/null
+aws_backup s3 rm "s3://$BACKUP_S3_BUCKET/$postgres_dump_key" \
+  --endpoint-url "$BACKUP_S3_ENDPOINT" --only-show-errors >/dev/null
+assert_disposable_remote_monitor remote-invalid component_missing \
+  "$EVIDENCE_DIR/remote-monitor-missing.json"
+aws_backup s3 cp /backup/remote-monitor-restore.dump \
+  "s3://$BACKUP_S3_BUCKET/$postgres_dump_key" \
+  --endpoint-url "$BACKUP_S3_ENDPOINT" --only-show-errors >/dev/null
+assert_disposable_remote_monitor fresh '' "$EVIDENCE_DIR/remote-monitor-restored.json"
+rm -f -- "$WORK/remote-monitor-restore.dump"
+
 export RESTORE_RECOVERY_SET_KEY="$recovery_key"
 export RESTORE_DATABASE_NAME=dr_fixture_restore_drill RESTORE_PRODUCTION_DATABASE_NAME=dr_fixture
 export RESTORE_LOCAL_DIR="$WORK/restore-local"

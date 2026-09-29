@@ -88,8 +88,9 @@ write_result() {
     "$write_barrier_at" "$capture_started_at" "$capture_finished_at" \
     "$write_barrier_released_at" "$writes_resumed_at" "$recovery_key" \
     "$recovery_checksum_key" "$recovery_timestamp" "$postgres_key" \
-    "$postgres_size" "$postgres_sha" "$postgres_manifest_sha" \
-    "$object_key" "$object_size" "$object_sha" "$object_manifest_sha" <<'PY'
+    "${postgres_manifest_key:-}" "$postgres_size" "$postgres_sha" \
+    "$postgres_manifest_sha" "$object_key" "${object_manifest_key:-}" \
+    "$object_size" "$object_sha" "$object_manifest_sha" <<'PY'
 import json
 import os
 import sys
@@ -99,9 +100,9 @@ import sys
  postgres_status, object_status, backend_before, backend_restoration,
  quiesce_requested, write_barrier, capture_started, capture_finished,
  barrier_released, writes_resumed, recovery_key, recovery_checksum_key,
- recovery_timestamp, postgres_key, postgres_size, postgres_sha,
- postgres_manifest_sha, object_key, object_size, object_sha,
- object_manifest_sha) = sys.argv[1:]
+ recovery_timestamp, postgres_key, postgres_manifest_key, postgres_size,
+ postgres_sha, postgres_manifest_sha, object_key, object_manifest_key,
+ object_size, object_sha, object_manifest_sha) = sys.argv[1:]
 payload = {
     "status": status,
     "company_slug": company,
@@ -130,12 +131,14 @@ if status == "validated":
         "recovery_set_checksum_key": recovery_checksum_key,
         "postgresql": {
             "key": postgres_key,
+            "manifest_key": postgres_manifest_key,
             "size_bytes": int(postgres_size),
             "sha256": postgres_sha,
             "manifest_sha256": postgres_manifest_sha,
         },
         "object_storage": {
             "key": object_key,
+            "manifest_key": object_manifest_key,
             "size_bytes": int(object_size),
             "sha256": object_sha,
             "manifest_sha256": object_manifest_sha,
