@@ -1,0 +1,133 @@
+name: Representative Replacement Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      audited_sha:
+        description: Approved release commit SHA (must contain this harness)
+        required: true
+        type: string
+      company:
+        description: Company slug with an approved operational volume profile
+        required: true
+        type: string
+      volume_profile:
+        description: Non-secret profile path within the audited checkout
+        required: true
+        type: string
+      synthetic_dataset:
+        description: Non-secret synthetic recovery-set descriptor path within the audited checkout
+        required: true
+        type: string
+      map_data:
+        description: Prepared public map-data directory within the audited checkout
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+concurrency:
+  group: representative-replacement-${{ inputs.company }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Company-scoped replacement benchmark (no cutover)
+    runs-on: ubuntu-latest
+    environment: dr-benchmark
+    timeout-minutes: 180
+    env:
+      AUDITED_SHA: ${{ inputs.audited_sha }}
+      COMPANY: ${{ inputs.company }}
+      PROFILE: ${{ inputs.volume_profile }}
+      DATASET: ${{ inputs.synthetic_dataset }}
+      MAP_DATA: ${{ inputs.map_data }}
+      GH_TOKEN: ${{ github.token }}
+      BENCHMARK_HOST_ROLE: disposable-benchmark
+      BENCHMARK_ORIGINAL_HOST_REF: ${{ vars.DR_BENCHMARK_ORIGINAL_HOST_REF }}
+      BENCHMARK_FIXTURE_EMAIL: ${{ vars.DR_BENCHMARK_FIXTURE_EMAIL }}
+      BENCHMARK_FIXTURE_PASSWORD: ${{ secrets.DR_BENCHMARK_FIXTURE_PASSWORD }}
+      BENCHMARK_SOURCE_S3_ENDPOINT: ${{ vars.DR_BENCHMARK_SOURCE_S3_ENDPOINT }}
+      BACKUP_S3_ENDPOINT: ${{ vars.DR_BENCHMARK_BACKUP_ENDPOINT }}
+      BACKUP_S3_REGION: ${{ vars.DR_BENCHMARK_BACKUP_REGION }}
+      BACKUP_S3_BUCKET: ${{ vars.DR_BENCHMARK_BACKUP_BUCKET }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.DR_BENCHMARK_BACKUP_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.DR_BENCHMARK_BACKUP_SECRET_ACCESS_KEY }}
+      EVIDENCE_ROOT: ${{ runner.temp }}/representative-replacement
+    steps:
+      - name: Initialize independent failure evidence
+        shell: bash
+        run: |
+          mkdir -p "$EVIDENCE_ROOT/setup"
+          python3 - <<'PY'
+          import json, os, pathlib
+          pathlib.Path(os.environ['EVIDENCE_ROOT'], 'setup', 'benchmark.json').write_text(
+              json.dumps({'status':'BLOCKED','reason':'CHECKOUT_OR_PREREQUISITES_NOT_COMPLETED',
+                          'company':os.environ['COMPANY'],'audited_sha':os.environ['AUDITED_SHA'],
+                          'traffic_cutover_performed':False}) + '\n')
+          PY
+      - name: Check out the explicit approved release
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.audited_sha }}
+          fetch-depth: 1
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.14.1
+      - name: Set up registry manifest inspection
+        uses: docker/setup-buildx-action@v3
+      - name: Authenticate read-only release pulls
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Validate checkout and non-secret input boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$AUDITED_SHA"
+          python3 - <<'PY'
+          import os, pathlib, re
+          root = pathlib.Path.cwd().resolve()
+          if not re.fullmatch(r'[a-f0-9]{40}', os.environ['AUDITED_SHA']): raise SystemExit('Invalid SHA')
+          if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', os.environ['COMPANY']): raise SystemExit('Invalid company')
+          for key in ('PROFILE', 'DATASET', 'MAP_DATA'):
+              path = pathlib.Path(os.environ[key]).resolve()
+              if not path.is_relative_to(root) or not path.exists(): raise SystemExit('Input outside audited checkout or absent')
+          PY
+      - name: Run real isolated replacement through READY_FOR_CUTOVER
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/database/representative-replacement-benchmark.py --apply \
+            --audited-sha "$AUDITED_SHA" --company "$COMPANY" \
+            --volume-profile "$PROFILE" --dataset "$DATASET" --map-data "$MAP_DATA" \
+            --evidence-dir "$EVIDENCE_ROOT/company"
+      - name: Upload company evidence even after a failed stage
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          root = pathlib.Path(os.environ['EVIDENCE_ROOT'])
+          if (root / 'company' / 'benchmark.json').is_file():
+              # The terminal company result supersedes the initialization fallback.
+              (root / 'setup' / 'benchmark.json').unlink(missing_ok=True)
+          PY
+      - name: Preserve terminal company evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replacement-benchmark-${{ inputs.company }}-${{ inputs.audited_sha }}
+          path: ${{ runner.temp }}/representative-replacement/**/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+# Hosted-runner container provisioning does NOT include replacement VPS provisioning.
+# Without external disposable-host evidence the harness returns NOT_REPRESENTATIVE,
+# never a production RTO PASS. Run the documented host drill to close the P2.

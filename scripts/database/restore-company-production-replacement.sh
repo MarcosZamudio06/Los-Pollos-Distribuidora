@@ -6,6 +6,10 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=postgres-backup-common.sh
 source "$SCRIPT_DIR/postgres-backup-common.sh"
 
+replacement_utc_now() {
+  python3 -c 'import datetime as dt; print(dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"))'
+}
+
 apply=false
 case "${1:-}" in
   '') ;;
@@ -196,10 +200,12 @@ if origins[0] == origins[1]:
     raise SystemExit('Replacement Object Storage endpoint resolves to the declared original endpoint.')
 PY
 
-started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+started_at=$(replacement_utc_now)
 stage=manifest_download
 final_status=FAILED
 postgres_start= postgres_end= object_start= object_end= verification_start= verification_end=
+ready_for_cutover_at=
+pg_restore_start= pg_restore_end=
 cross_reference_status=not_run migration_status=not_run release_status=not_run
 postgres_status=not_run object_storage_status=not_run health_smoke_status=not_run
 traffic_closed_status=not_run
@@ -214,14 +220,14 @@ fi
 
 write_result() {
   local finished_at
-  finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  finished_at=$(replacement_utc_now)
   python3 - "$result_file" "$COMPANY_SLUG" "$RESTORE_RECOVERY_SET_KEY" "$RESTORE_INCIDENT_REF" \
     "$source_timestamp" "$RESTORE_REPLACEMENT_DATABASE_NAME" "$RESTORE_REPLACEMENT_BUCKET" \
     "$started_at" "$finished_at" "$postgres_start" "$postgres_end" "$object_start" "$object_end" \
     "$verification_start" "$verification_end" "$cross_reference_status" "$migration_status" \
     "$release_status" "$final_status" "$stage" "$RESTORE_INCIDENT_DECLARED_AT" \
     "$postgres_status" "$object_storage_status" "$health_smoke_status" \
-    "$traffic_closed_status" <<'PY'
+    "$traffic_closed_status" "$ready_for_cutover_at" "$pg_restore_start" "$pg_restore_end" <<'PY'
 import datetime as dt
 import json
 import sys
@@ -229,7 +235,7 @@ import sys
 (path, company, key, incident, source, database, bucket, started, finished,
  pg_start, pg_end, obj_start, obj_end, verify_start, verify_end, cross,
  migrations, release, status, stage, declared, postgres_status, object_status,
- health_status, traffic_status) = sys.argv[1:]
+ health_status, traffic_status, ready_at, pg_import_start, pg_import_end) = sys.argv[1:]
 def instant(value):
     return dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
 def elapsed(later, earlier):
@@ -249,9 +255,13 @@ payload = {
     'release_compatibility_status': release, 'postgres_restore_status': postgres_status,
     'object_storage_restore_status': object_status, 'health_smoke_status': health_status,
     'traffic_closed_status': traffic_status, 'status': status,
+    'ready_for_cutover_at': ready_at or None,
+    'pg_restore_started_at': pg_import_start or None,
+    'pg_restore_finished_at': pg_import_end or None,
+    'pg_restore_seconds': elapsed(pg_import_end, pg_import_start) if pg_import_end else None,
     'failure_stage': stage if status == 'FAILED' else None,
     'rpo_observed_seconds': elapsed(declared, source) if source else None,
-    'rto_partial_to_ready_seconds': elapsed(finished, declared) if status == 'READY_FOR_CUTOVER' else None,
+    'rto_partial_to_ready_seconds': elapsed(ready_at, declared) if status == 'READY_FOR_CUTOVER' else None,
     'traffic_cutover_performed': False,
 }
 with open(path, 'x', encoding='utf-8') as handle:
@@ -410,18 +420,20 @@ fi
 
 stage=postgres_restore
 postgres_status=failed
-postgres_start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+postgres_start=$(replacement_utc_now)
 replacement_pg createdb --username="$RESTORE_REPLACEMENT_POSTGRES_USER" \
   --template=template0 "$RESTORE_REPLACEMENT_DATABASE_NAME"
+pg_restore_start=$(replacement_utc_now)
 replacement_pg pg_restore --username="$RESTORE_REPLACEMENT_POSTGRES_USER" \
   --dbname="$RESTORE_REPLACEMENT_DATABASE_NAME" --no-owner --no-acl --exit-on-error \
   < "$work_dir/postgres.dump" >/dev/null
-postgres_end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+pg_restore_end=$(replacement_utc_now)
+postgres_end=$(replacement_utc_now)
 postgres_status=passed
 
 stage=object_storage_restore
 object_storage_status=failed
-object_start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+object_start=$(replacement_utc_now)
 replacement_aws s3api create-bucket --bucket "$RESTORE_REPLACEMENT_BUCKET" \
   --endpoint-url "$RESTORE_REPLACEMENT_S3_ENDPOINT" >/dev/null
 replacement_aws s3 sync /backup/data "s3://$RESTORE_REPLACEMENT_BUCKET" \
@@ -430,11 +442,11 @@ mkdir -p "$work_dir/verify"
 replacement_aws s3 sync "s3://$RESTORE_REPLACEMENT_BUCKET" /backup/verify \
   --endpoint-url "$RESTORE_REPLACEMENT_S3_ENDPOINT" --only-show-errors >/dev/null
 diff -r -- "$work_dir/data" "$work_dir/verify" >/dev/null
-object_end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+object_end=$(replacement_utc_now)
 object_storage_status=passed
 
 stage=database_verification
-verification_start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+verification_start=$(replacement_utc_now)
 verify_database_url="postgresql://${RESTORE_REPLACEMENT_POSTGRES_USER}@127.0.0.1:5432/${RESTORE_REPLACEMENT_DATABASE_NAME}"
 replacement_compose exec -T -e "RESTORE_DATABASE_URL=$verify_database_url" \
   -e RESTORE_TARGET_CLASS=replacement -e "PGPASSWORD=$RESTORE_REPLACEMENT_POSTGRES_PASSWORD" \
@@ -499,7 +511,8 @@ if [[ "$(backup_sha256 "$RESTORE_TRAFFIC_CLOSED_SCRIPT")" != "$RESTORE_TRAFFIC_C
 fi
 "$RESTORE_TRAFFIC_CLOSED_SCRIPT"
 traffic_closed_status=passed
-verification_end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+verification_end=$(replacement_utc_now)
 stage=ready_for_cutover
 final_status=READY_FOR_CUTOVER
+ready_for_cutover_at=$(replacement_utc_now)
 echo 'READY_FOR_CUTOVER: replacement targets passed validation; traffic remains unchanged.'

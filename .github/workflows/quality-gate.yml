@@ -431,6 +431,11 @@ jobs:
 
       - name: Test production recovery-set monitor contracts
         run: python3 scripts/monitoring/test-monitor-production.py
+      - name: Test representative replacement contracts (no heavy benchmark)
+        run: |
+          python3 scripts/database/test-representative-replacement-benchmark.py
+          bash -n scripts/database/replacement-benchmark-smoke.sh
+          bash -n scripts/database/replacement-benchmark-traffic-closed.sh
 
       - name: Reject versioned fiscal secrets and production XML
         run: git ls-files -z | node scripts/validate-fiscal-assets.mjs --files-from-stdin

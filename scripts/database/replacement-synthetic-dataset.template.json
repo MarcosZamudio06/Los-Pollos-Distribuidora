@@ -1,0 +1,13 @@
+{
+  "company_slug": "replace-with-company-slug",
+  "data_classification": "synthetic",
+  "recovery_set_key": null,
+  "source_database": null,
+  "source_bucket": null,
+  "schema_state_sha256": null,
+  "smoke_fixture": {
+    "product_id": null,
+    "product_sku": null,
+    "branding_sha256": null
+  }
+}

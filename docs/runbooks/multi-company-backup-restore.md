@@ -341,3 +341,188 @@ Current configured objectives are `BACKUP_RPO_HOURS=24` (warning at 21 hours) an
 | `<company-slug>` | `<recovery-set-key>` | `<UTC timestamp>` | `<UTC timestamp>` | `<minutes>` | `<UTC timestamp>` | `<minutes>` | `<passed/failed>` | `<cleaned/failed>` | `<operator-id>` |
 
 Store the completed record with restricted incident evidence. Never count a failed/partial set, an unclean drill, or a PostgreSQL-only restore as a successful RPO/RTO exercise.
+
+## Representative Replacement Drill — BACKUP-PROD-011
+
+**Hold point: `READY_FOR_CUTOVER`, never production cutover.** This procedure
+measures each company independently, using synthetic data scaled from an
+approved operational measurement. It does not remove the historical **NO_GO**;
+that decision belongs to BACKUP-PROD-012 after satisfactory audited evidence.
+The small `Disposable Disaster Recovery runtime` remains a regression test,
+not proof of production RTO. Its approximately 21/70-second fixture timings
+must not be used as a production commitment.
+
+### Required inputs, before launching expensive work
+
+| Input | Authority / refusal |
+| --- | --- |
+| Audited SHA | Explicit 40-character release commit; record both release SHA and harness SHA. The manual workflow checks out that same SHA. |
+| Approved images | The successful `Release Images` run and its `release-digests-<sha>` artifact, backed by a successful Quality Gate for that SHA. The harness retrieves it from GitHub, inspects registry manifests and verifies deployed image IDs/RepoDigests. A syntax-valid digest is not approval. |
+| Release configuration | `OBJECT_STORAGE_PUBLIC_ORIGIN` must be the operator-approved canonical HTTPS origin. A failed publication means `APPROVED_RELEASE_IMAGES_UNAVAILABLE`. Do not bypass validation, build substitute local images, or invent an origin. |
+| Volume profile | Copy `scripts/database/replacement-volume-profile.template.json` and replace every null with an actual operator measurement. Missing source/metrics means `REPRESENTATIVE_VOLUME_NOT_AVAILABLE`, not completion. |
+| Synthetic recovery set | Prepare a separate synthetic source and export it with `create-company-recovery-set.sh`. Keep the set within 24 hours of the simulated incident's write barrier. Do not rewrite a real production manifest to label it synthetic. |
+| Disposable host | Fresh, dedicated Docker daemon on a disposable host, no existing containers, local Unix Docker context, and `BENCHMARK_HOST_ROLE=disposable-benchmark`. No current production host, remote Docker context or arbitrary Compose file. |
+
+The profile is non-secret: company slug, measurement timestamp and opaque evidence
+reference, database bytes, exact counts for Product/Customer/Sale/SaleItem/
+InventoryMovement/Payment/CashMovement/DeliveryEvidence/Invoice/FiscalArtifact,
+object count, total/largest object bytes, increasing size bands, approved image
+references and `target_rto_minutes=60`. For each size band record `max_bytes`,
+`count` and `total_bytes`; counts/bytes must reconcile with the totals. Bands
+are non-overlapping, with an inclusive upper bound. Export aggregates only,
+not names, emails, object keys, XML, credentials or raw operational rows.
+
+Use an authorized read-only operational session to measure
+`pg_database_size(current_database())` and `count(*)` for those tables, and an
+authorized Object Storage inventory to measure all object sizes. Preserve the
+restricted measurement report outside Git/CI and put only its opaque reference
+in `volume_source.evidence_ref`. The harness cannot independently authenticate
+these operational measurements: the incident/change owner must review their
+source and freshness. **No operational access means no representative PASS.**
+
+### Prepare the synthetic set
+
+Use only a dedicated source database ending in `_benchmark_source`, source bucket
+`mte-benchmark-source-<company>-<unique>`, and B2 benchmark bucket
+`mte-benchmark-backup-<company>-<unique>`. Migrate the source using the approved
+backend image, then seed synthetic ERP business chains with valid constraints.
+`dr-disposable-seed.sql` illustrates evidence/fiscal relationships, but its tiny
+volume and `not-a-login-hash` are **not** suitable for this application smoke.
+Provide a usable synthetic ADMIN login (`@example.test`) before the backup,
+using the approved image's `bootstrap:production` with protected
+`SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` configuration. Do not bootstrap over
+the restored target or substitute a SQL-only final smoke.
+
+Scale the synthetic rows AND database bytes; arbitrary padding alone fails.
+Generate synthetic branding, delivery evidence and fiscal-artifact bytes with
+valid MIME/size/SHA references, a mixture of small/large objects and the measured
+size distribution. Never copy production PII, CFDI/XML, customer images or keys.
+The fixed representativeness envelope is ±20% on database bytes, every table
+count, object count/bytes/largest size and every size band's count/bytes. This
+envelope does not change the 60-minute RTO objective.
+
+Copy `replacement-synthetic-dataset.template.json` and supply the synthetic
+source identities, actual recovery-set key, reviewed schema-state fingerprint,
+restored product ID/SKU and synthetic branding SHA-256. `schema_state_sha256`
+is the recovery tool's normalized migration-history fingerprint, **not** the
+hash of `schema.prisma`. The release image also runs read-only
+`prisma migrate status`; pending/incompatible migrations block the smoke.
+This task supplies a consumer harness, not an automatic production-data exporter
+or domain-scale seed generator. Fixture preparation remains explicit.
+
+### Run on the freshly provisioned disposable host
+
+Inject benchmark-only read credentials into `BACKUP_S3_ENDPOINT/REGION/BUCKET/
+ACCESS_KEY_ID/SECRET_ACCESS_KEY`; inject the actual synthetic source endpoint
+in `BENCHMARK_SOURCE_S3_ENDPOINT`, its opaque original host identity in
+`BENCHMARK_ORIGINAL_HOST_REF`, and the fixture login in
+`BENCHMARK_FIXTURE_EMAIL/PASSWORD` (16–128 random base64url-safe characters).
+Do not put their values on command lines,
+in Git or in artifacts. `GH_TOKEN`, when needed, is read-only Actions/package
+access. `BACKUP_DOCKER_BIN` may select the installed Docker binary; the harness
+does not repair the host or change its credential configuration.
+
+Read-only dependency check (always nonzero without a complete benchmark):
+
+```bash
+python3 scripts/database/representative-replacement-benchmark.py --check \
+  --audited-sha "$APPROVED_RELEASE_SHA" --evidence-dir "$NEW_PREFLIGHT_EVIDENCE_DIR"
+```
+
+Before provisioning a replacement host, the operator/provider must record the
+incident timestamp. Use the provider's measured provisioning evidence, not a
+manually asserted successful result. Its non-secret JSON contract is:
+
+```text
+kind: disposable-host
+role: disposable-benchmark
+host_ref: unique opaque replacement identity
+original_host_ref: BENCHMARK_ORIGINAL_HOST_REF
+incident_declared_at: UTC incident timestamp
+provisioning_started_at: UTC actual provider start, at/after the incident
+infrastructure_ready_at: UTC actual provider completion
+evidence_ref: opaque reference to reviewed provider evidence
+status: provider-observed passed
+```
+
+The harness checks timestamp ordering and identities, not the provider's
+external attestation. Review that evidence independently. Once the new host
+is ready, execute the checked-out harness there, with its provider receipt:
+
+```bash
+python3 scripts/database/representative-replacement-benchmark.py --apply \
+  --audited-sha "$APPROVED_RELEASE_SHA" --company "$COMPANY_SLUG" \
+  --volume-profile "$VOLUME_PROFILE_FILE" --dataset "$SYNTHETIC_DATASET_FILE" \
+  --map-data "$PREPARED_PUBLIC_MAP_DATA_DIR" \
+  --incident-declared-at "$INCIDENT_DECLARED_AT" \
+  --host-provisioning "$REVIEWED_PROVIDER_RECEIPT_FILE" \
+  --evidence-dir "$NEW_COMPANY_EVIDENCE_DIR"
+```
+
+Map data must contain the existing TileServer configuration's public
+`rendering/mexico.pmtiles` and `rendering/fonts`. It is mounted read-only;
+frontend/TileServer/backend use approved release digests. This benchmark's
+business smoke scope is product reading and branding readback; it does not
+prove map routing/geocoding workload performance or actual DNS/Caddy cutover.
+PostGIS/SeaweedFS/AWS CLI use the reviewed repository pins, verified remotely
+and recorded separately. All image pulls happen inside the incident clock.
+
+Without a reviewed provider receipt, the harness still measures isolated
+container provisioning on the existing host, but returns `NOT_REPRESENTATIVE`
+(`HOST_PROVISIONING_NOT_INCLUDED`) even if every data/application check passes.
+Do not present a hosted CI runner's pre-existing VM as measured replacement-VPS
+provisioning. No arbitrary provisioning hooks are executed by this harness.
+
+### Timeline, smoke, cleanup and acceptance
+
+The timeline records incident declaration → replacement provisioning start →
+infrastructure ready → restore start → restore complete → verification complete
+→ `READY_FOR_CUTOVER`. The total is `ready_for_cutover_at - incident_declared_at`,
+including the external host receipt, image pulls, readiness, downloads, database
+creation/PostGIS/full restore, Object Storage restore/readback, migration history,
+release checks, cross-references, backend/frontend startup, HTTP smoke and final
+closed-traffic verification. This is **RTO to the hold point**, distinct from the
+service-ready-after-cutover incident metric above. RPO uses the manifest's
+`recovery_point.write_barrier_at`; a point older than 24 hours is refused before
+database/bucket creation. `finished_at` is never the recovery point.
+
+The mandatory HTTP smoke performs readiness, fixture login/authenticated `/me`,
+restored product ID/SKU read, products listing, application-issued signed branding
+URL readback with checksum, frontend HTML and frontend-to-backend readiness.
+It prints only booleans, never response bodies, tokens or signed URLs. Login
+creates an isolated session; it does not mutate business history. Ingress
+checks inspect the actual internal Docker network, every container's networks
+and port bindings, and resolved Compose configuration. There are no published
+ports, Caddy or DNS actions. All original replacement-executor guards remain.
+
+Every execution allocates a unique project/DB/bucket and refuses existing targets.
+Teardown runs independently on success, failure and handled signals. It removes
+only the owned project and data volumes, verifies containers/networks/volumes
+are absent, and removes private work/config/archives. DB/bucket deletion is
+proved through removal of their dedicated containers AND data volumes, not a
+delete request to an external database or bucket. Failed cleanup blocks success;
+do not hide it behind the main result. Abrupt power loss/SIGKILL still requires
+operator cleanup using the exact recorded project identity, never production.
+
+Preserve only sanitized evidence: `benchmark.json`,
+`replacement-benchmark-<company>.json`, `smoke.json`, `cleanup.json`,
+`release-digests.json`, `volume-profile.json`, and, when executed,
+`observed-volume.json`, `replacement-ready.json` and `host-provisioning.json`.
+Results are `PASSED_RTO_OBJECTIVE`, `EXCEEDED_RTO_OBJECTIVE`,
+`NOT_REPRESENTATIVE` or `BLOCKED`; only the first exits zero. Missing prerequisites
+record `not_run` cleanup/smoke, not fabricated successful checks.
+
+The manual `Representative Replacement Drill` workflow is isolated from the
+normal Quality Gate's heavy runtime. Configure its protected `dr-benchmark`
+environment with the `DR_BENCHMARK_*` variable/secret names listed in the YAML,
+using benchmark-only buckets/credentials and audited non-secret input paths.
+It records the explicit SHA and uploads evidence with `always()`. Hosted-runner
+results deliberately cannot close the VPS-provisioning P2; use the disposable
+host procedure above for acceptance. The normal gate runs only the inexpensive
+new contracts and retains its existing `Disposable Disaster Recovery runtime`.
+
+Acceptance requires at least one independently audited company with approved
+images, measured representative volume, provider provisioning included, both
+real restores, real application smoke, cross-references, measured RPO/RTO,
+`READY_FOR_CUTOVER`, and cleanup passed. Never change the objective merely to
+pass, and do not retire **NO_GO** before BACKUP-PROD-012.

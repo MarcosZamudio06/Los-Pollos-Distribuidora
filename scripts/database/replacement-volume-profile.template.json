@@ -1,0 +1,30 @@
+{
+  "company_slug": "replace-with-company-slug",
+  "volume_source": {
+    "kind": "operational-measurement",
+    "measured_at": null,
+    "evidence_ref": null
+  },
+  "postgres_size_bytes": null,
+  "postgres_row_counts": {
+    "Product": null,
+    "Customer": null,
+    "Sale": null,
+    "SaleItem": null,
+    "InventoryMovement": null,
+    "Payment": null,
+    "CashMovement": null,
+    "DeliveryEvidence": null,
+    "Invoice": null,
+    "FiscalArtifact": null
+  },
+  "object_count": null,
+  "object_storage_total_bytes": null,
+  "largest_object_bytes": null,
+  "object_size_distribution": [],
+  "expected_image_digests": {
+    "backend": null,
+    "frontend": null
+  },
+  "target_rto_minutes": 60
+}
