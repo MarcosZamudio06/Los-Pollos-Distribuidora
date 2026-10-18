@@ -1,22 +1,30 @@
 import { useState, type CSSProperties } from "react";
-import { Camera } from "lucide-react";
-
 type LandingProductImageProps = {
   alt: string;
   aspectRatio: string;
   className?: string;
-  label: string;
+  /** Kept for legacy call sites; visitor-facing placeholder text is intentionally suppressed. */
+  label?: string;
+  mobileSrc?: string;
+  mobileWidth?: number;
+  mobileHeight?: number;
   priority?: boolean;
   src: string;
+  width?: number;
+  height?: number;
 };
 
 export function LandingProductImage({
   alt,
   aspectRatio,
   className = "",
-  label,
+  mobileSrc,
+  mobileWidth = 602,
+  mobileHeight = 360,
   priority = false,
   src,
+  width = 1680,
+  height = 560,
 }: LandingProductImageProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const hasError = failedSrc === src;
@@ -25,31 +33,37 @@ export function LandingProductImage({
   return (
     <figure
       className={`landing-product-image ${className}`.trim()}
-      style={{ aspectRatio } satisfies CSSProperties}
+      style={{ "--landing-image-aspect": aspectRatio } as CSSProperties}
     >
       {hasImage ? (
-        <img
-          alt={alt}
-          className="landing-product-image__media"
-          decoding="async"
-          loading={priority ? "eager" : "lazy"}
-          onError={() => setFailedSrc(src)}
-          src={src}
-        />
+        <picture>
+          {mobileSrc && (
+            <source
+              height={mobileHeight}
+              media="(max-width: 767px)"
+              srcSet={mobileSrc}
+              width={mobileWidth}
+            />
+          )}
+          <img
+            alt={alt}
+            className="landing-product-image__media"
+            decoding="async"
+            fetchPriority={priority ? "high" : "auto"}
+            height={height}
+            loading={priority ? "eager" : "lazy"}
+            onError={() => setFailedSrc(src)}
+            src={src}
+            width={width}
+          />
+        </picture>
       ) : (
         <div
-          aria-label={`${alt} — captura pendiente`}
-          className="landing-image-placeholder"
+          aria-label={`${alt} — captura no disponible`}
+          className="landing-image-fallback"
           role="img"
         >
-          <div className="landing-image-placeholder__grid" />
-          <div className="landing-image-placeholder__mark">
-            <Camera aria-hidden="true" size={21} strokeWidth={1.5} />
-          </div>
-          <span>{label}</span>
-          <small>
-            {hasError ? "No se pudo cargar la captura" : "Captura pendiente"}
-          </small>
+          <p>No se pudo cargar esta captura. Consulta la descripción del módulo.</p>
         </div>
       )}
     </figure>

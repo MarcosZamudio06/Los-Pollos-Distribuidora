@@ -1,0 +1,64 @@
+
+> pollos-distribuidor-landing@0.0.0 test
+> vitest run src/__tests__/visibleOperations.test.tsx
+
+
+ RUN  v4.1.11 /Users/marcoszamudio/Documents/Dev/pollos-distribuidor/landing
+
+ ❯ src/__tests__/visibleOperations.test.tsx (12 tests | 3 failed) 132ms
+     × renders the approved driver frame at native portrait dimensions and zooms without desktop metadata 6ms
+     × selects and focuses the module addressed by a fragment link 5ms
+     × shows real mobile transport evidence without implying a completed customer delivery 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/visibleOperations.test.tsx > Visible Operations P0 > renders the approved driver frame at native portrait dimensions and zooms without desktop metadata
+TypeError: Cannot read properties of null (reading 'getAttribute')
+ ❯ src/__tests__/visibleOperations.test.tsx:80:18
+     78|     await act(async () => container.querySelector<HTMLButtonElement>("…
+     79|     const image = container.querySelector('[role="tabpanel"] img')!;
+     80|     expect(image.getAttribute("src")).toContain("/approved/driver.jpg"…
+       |                  ^
+     81|     expect(image.getAttribute("width")).toBe("386");
+     82|     expect(image.getAttribute("height")).toBe("834");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/__tests__/visibleOperations.test.tsx > Visible Operations P0 > selects and focuses the module addressed by a fragment link
+AssertionError: expected 'false' to be 'true' // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ src/__tests__/visibleOperations.test.tsx:98:50
+     96|     });
+     97|     const driver = container.querySelector<HTMLButtonElement>("#module…
+     98|     expect(driver.getAttribute("aria-selected")).toBe("true");
+       |                                                  ^
+     99|     expect(document.activeElement).toBe(driver);
+    100|     history.replaceState(null, "", window.location.pathname);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/__tests__/visibleOperations.test.tsx > Visible Operations P0 > shows real mobile transport evidence without implying a completed customer delivery
+AssertionError: expected '/images/landing/approved/route-planne…' to contain 'driver-stop.jpg'
+
+Expected: "driver-stop.jpg"
+Received: "/images/landing/approved/route-planner.jpg"
+
+ ❯ src/__tests__/visibleOperations.test.tsx:106:65
+    104|     const container = await mount(<WorkflowSection />);
+    105|     await act(async () => container.querySelectorAll<HTMLButtonElement…
+    106|     expect(container.querySelector("img")?.getAttribute("src")).toCont…
+       |                                                                 ^
+    107|     expect(container.textContent).toContain("no una entrega a cliente …
+    108|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 9 passed (12)
+   Start at  19:02:27
+   Duration  1.06s (transform 255ms, setup 0ms, import 415ms, tests 132ms, environment 443ms)
+

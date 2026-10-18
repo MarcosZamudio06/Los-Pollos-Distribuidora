@@ -1,0 +1,228 @@
+{
+  "families": [
+    "Samsara Sans",
+    "FK Grotesk",
+    "FK Grotesk Mono"
+  ],
+  "scale": {
+    "heading-1": {
+      "fontFamily": "Samsara Sans",
+      "fontSize": "6.5rem",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-2": {
+      "fontFamily": "Samsara Sans",
+      "fontSize": "97.6px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-3": {
+      "fontFamily": "Samsara Sans",
+      "fontSize": "5.5rem",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "body": {
+      "fontFamily": "FK Grotesk",
+      "fontSize": ".875rem",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "caption": {
+      "fontFamily": "FK Grotesk",
+      "fontSize": "1rem",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "code": {
+      "fontFamily": "FK Grotesk Mono",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    }
+  },
+  "fontFaces": [
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Thin.woff2",
+      "format": "woff2",
+      "weight": "100"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-ThinItalic.woff2",
+      "format": "woff2",
+      "weight": "100"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Light.woff2",
+      "format": "woff2",
+      "weight": "300"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-LightItalic.woff2",
+      "format": "woff2",
+      "weight": "300"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Regular.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Italic.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Medium.woff2",
+      "format": "woff2",
+      "weight": "500"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-MediumItalic.woff2",
+      "format": "woff2",
+      "weight": "500"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Bold.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-BoldItalic.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-Black.woff2",
+      "format": "woff2",
+      "weight": "900"
+    },
+    {
+      "family": "FK Grotesk",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGrotesk-BlackItalic.woff2",
+      "format": "woff2",
+      "weight": "900"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Thin.woff2",
+      "format": "woff2",
+      "weight": "100"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-ThinItalic.woff2",
+      "format": "woff2",
+      "weight": "100"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Light.woff2",
+      "format": "woff2",
+      "weight": "300"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-LightItalic.woff2",
+      "format": "woff2",
+      "weight": "300"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Regular.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Italic.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Medium.woff2",
+      "format": "woff2",
+      "weight": "500"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-MediumItalic.woff2",
+      "format": "woff2",
+      "weight": "500"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Bold.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-BoldItalic.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-Black.woff2",
+      "format": "woff2",
+      "weight": "900"
+    },
+    {
+      "family": "FK Grotesk Mono",
+      "src": "https://www.samsara.com/fonts/fk-grotesk/FKGroteskMono-BlackItalic.woff2",
+      "format": "woff2",
+      "weight": "900"
+    },
+    {
+      "family": "Samsara Sans",
+      "src": "https://www.samsara.com/fonts/samsara-sans/SamsaraSans-Regular.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "Samsara Script",
+      "src": "https://www.samsara.com/fonts/samsara-script/SamsaraScript-Regular.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "Anybody",
+      "src": "https://www.samsara.com/fonts/Anybody-BlackItalic-subset.woff2",
+      "format": "woff2",
+      "weight": "900"
+    },
+    {
+      "family": "Acumin Pro ExtraCondensed",
+      "src": "https://www.samsara.com/fonts/acumin-pro-extracondensed-bold.woff2",
+      "format": "woff2",
+      "weight": "800"
+    }
+  ],
+  "rules": {
+    "maxSizesPerScreen": 4,
+    "headingWeightRange": "600-700",
+    "bodyWeight": 400,
+    "lineHeightBody": 1.5,
+    "lineHeightHeading": 1.2
+  }
+}

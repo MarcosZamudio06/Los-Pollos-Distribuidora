@@ -1,0 +1,18 @@
+
+> pollos-distribuidor-landing@0.0.0 build
+> tsc -b && vite build --outDir /tmp/landing-closure-002-verified
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 1908 modules transformed.
+
+(!) outDir /tmp/landing-closure-002-verified is not inside project root and will not be emptied.
+Use --emptyOutDir to override.
+
+rendering chunks...
+computing gzip size...
+../../../../../../tmp/landing-closure-002-verified/index.html                   1.37 kB │ gzip:   0.50 kB
+../../../../../../tmp/landing-closure-002-verified/assets/index-CNE_792-.css   53.11 kB │ gzip:  10.78 kB
+../../../../../../tmp/landing-closure-002-verified/assets/index-DSridGOM.js   380.32 kB │ gzip: 128.12 kB
+
+✓ built in 230ms

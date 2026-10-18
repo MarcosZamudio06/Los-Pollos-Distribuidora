@@ -21,6 +21,7 @@
     "evidence:migrate-to-object-storage": "ts-node prisma/scripts/migrate-delivery-evidence-to-object-storage.ts",
     "seed:development": "prisma db seed",
     "seed:operational": "ts-node prisma/seed.operational.ts",
+    "test:seed:operational": "ts-node scripts/test-operational-seed.ts",
     "lint": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --fix",
     "lint:check": "eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --max-warnings 0 --rule 'prettier/prettier: off'",
     "typecheck": "tsc --project tsconfig.build.json --noEmit --incremental false",

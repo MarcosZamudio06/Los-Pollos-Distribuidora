@@ -1,0 +1,108 @@
+{
+  "families": [
+    "MarshmallowIcons",
+    "odoo_ui_icons",
+    "SFMono-Regular"
+  ],
+  "scale": {
+    "heading-1": {
+      "fontFamily": "MarshmallowIcons",
+      "fontSize": "128px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-2": {
+      "fontFamily": "MarshmallowIcons",
+      "fontSize": "112px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-3": {
+      "fontFamily": "MarshmallowIcons",
+      "fontSize": "96px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "body": {
+      "fontFamily": "odoo_ui_icons",
+      "fontSize": "1rem",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "caption": {
+      "fontFamily": "odoo_ui_icons",
+      "fontSize": "0.875rem",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "code": {
+      "fontFamily": "SFMono-Regular",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    }
+  },
+  "fontFaces": [
+    {
+      "family": "odoo_ui_icons",
+      "src": "https://odoocdn.com/web/assets/ef84e3c/web.odoo_ui_icons.min.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "odoo_ui_icons",
+      "src": "https://odoocdn.com/web/assets/9d2a627/web.odoo_ui_icons.min.woff",
+      "format": "woff",
+      "weight": "400"
+    },
+    {
+      "family": "MarshmallowIcons",
+      "src": "https://odoocdn.com/openerp_website/static/src/fonts/MarshmallowIcons.woff2",
+      "format": "woff2",
+      "weight": "900"
+    },
+    {
+      "family": "Inter",
+      "src": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuOKfAZ9hjQ.ttf",
+      "format": "truetype",
+      "weight": "300"
+    },
+    {
+      "family": "Inter",
+      "src": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hjQ.ttf",
+      "format": "truetype",
+      "weight": "400"
+    },
+    {
+      "family": "Inter",
+      "src": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fAZ9hjQ.ttf",
+      "format": "truetype",
+      "weight": "500"
+    },
+    {
+      "family": "Inter",
+      "src": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYAZ9hjQ.ttf",
+      "format": "truetype",
+      "weight": "600"
+    },
+    {
+      "family": "Caveat",
+      "src": "https://fonts.gstatic.com/s/caveat/v23/WnznHAc5bAfYB2QRah7pcpNvOx-pjRV6eIWpZA.ttf",
+      "format": "truetype",
+      "weight": "700"
+    }
+  ],
+  "rules": {
+    "maxSizesPerScreen": 4,
+    "headingWeightRange": "600-700",
+    "bodyWeight": 400,
+    "lineHeightBody": 1.5,
+    "lineHeightHeading": 1.2
+  }
+}

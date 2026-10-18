@@ -1,0 +1,574 @@
+{
+  "engine": "MCP Chromium; emulated viewports, not physical devices",
+  "checks": [
+    {
+      "width": 1440,
+      "state": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "headings": [
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)"
+        ],
+        "forms": 0,
+        "pins": 0,
+        "externalLinks": []
+      },
+      "captures": [
+        {
+          "src": "/images/landing/approved/dashboard.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/pos.jpg",
+          "native": [
+            1600,
+            1003
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/cedis.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/purchases.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/fleet.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/driver.jpg",
+          "native": [
+            386,
+            834
+          ],
+          "renderedWidth": 244.3671875
+        },
+        {
+          "src": "/images/landing/approved/collections.jpg",
+          "native": [
+            1600,
+            830
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/closing.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 978
+        },
+        {
+          "src": "/images/landing/approved/billing.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 978
+        }
+      ],
+      "zoom": {
+        "native": 386,
+        "rendered": 386
+      },
+      "keyboard": true,
+      "story": true,
+      "fragmentRepeat": true,
+      "heroCTA": true
+    },
+    {
+      "width": 1280,
+      "state": {
+        "width": 1280,
+        "scrollWidth": 1280,
+        "headings": [
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)"
+        ],
+        "forms": 0,
+        "pins": 0,
+        "externalLinks": []
+      },
+      "captures": [
+        {
+          "src": "/images/landing/approved/dashboard.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/pos.jpg",
+          "native": [
+            1600,
+            1003
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/cedis.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/purchases.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/fleet.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/driver.jpg",
+          "native": [
+            386,
+            834
+          ],
+          "renderedWidth": 244.3671875
+        },
+        {
+          "src": "/images/landing/approved/collections.jpg",
+          "native": [
+            1600,
+            830
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/closing.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 930
+        },
+        {
+          "src": "/images/landing/approved/billing.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 930
+        }
+      ],
+      "zoom": {
+        "native": 386,
+        "rendered": 386
+      },
+      "keyboard": true,
+      "story": true,
+      "fragmentRepeat": true,
+      "heroCTA": true
+    },
+    {
+      "width": 768,
+      "state": {
+        "width": 768,
+        "scrollWidth": 768,
+        "headings": [
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)"
+        ],
+        "forms": 0,
+        "pins": 0,
+        "externalLinks": []
+      },
+      "captures": [
+        {
+          "src": "/images/landing/approved/dashboard.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/pos.jpg",
+          "native": [
+            1600,
+            1003
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/cedis.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/purchases.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/fleet.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/driver.jpg",
+          "native": [
+            386,
+            834
+          ],
+          "renderedWidth": 244.3671875
+        },
+        {
+          "src": "/images/landing/approved/collections.jpg",
+          "native": [
+            1600,
+            830
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/closing.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 510
+        },
+        {
+          "src": "/images/landing/approved/billing.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 510
+        }
+      ],
+      "zoom": {
+        "native": 386,
+        "rendered": 386
+      },
+      "keyboard": true,
+      "story": true,
+      "fragmentRepeat": true,
+      "heroCTA": true
+    },
+    {
+      "width": 390,
+      "state": {
+        "width": 390,
+        "scrollWidth": 390,
+        "headings": [
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)"
+        ],
+        "forms": 0,
+        "pins": 0,
+        "externalLinks": []
+      },
+      "captures": [
+        {
+          "src": "/images/landing/approved/dashboard.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/pos.jpg",
+          "native": [
+            1600,
+            1003
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/cedis.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/purchases.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/fleet.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/driver.jpg",
+          "native": [
+            386,
+            834
+          ],
+          "renderedWidth": 324
+        },
+        {
+          "src": "/images/landing/approved/collections.jpg",
+          "native": [
+            1600,
+            830
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/closing.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 348
+        },
+        {
+          "src": "/images/landing/approved/billing.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 348
+        }
+      ],
+      "zoom": {
+        "native": 386,
+        "rendered": 386
+      },
+      "keyboard": true,
+      "story": true,
+      "fragmentRepeat": true,
+      "heroCTA": true
+    },
+    {
+      "width": 320,
+      "state": {
+        "width": 320,
+        "scrollWidth": 320,
+        "headings": [
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)",
+          "rgb(255, 255, 255)"
+        ],
+        "forms": 0,
+        "pins": 0,
+        "externalLinks": []
+      },
+      "captures": [
+        {
+          "src": "/images/landing/approved/dashboard.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/pos.jpg",
+          "native": [
+            1600,
+            1003
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/cedis.jpg",
+          "native": [
+            1600,
+            924
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/purchases.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/fleet.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/driver.jpg",
+          "native": [
+            386,
+            834
+          ],
+          "renderedWidth": 254
+        },
+        {
+          "src": "/images/landing/approved/collections.jpg",
+          "native": [
+            1600,
+            830
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/closing.jpg",
+          "native": [
+            1600,
+            925
+          ],
+          "renderedWidth": 278
+        },
+        {
+          "src": "/images/landing/approved/billing.jpg",
+          "native": [
+            1600,
+            926
+          ],
+          "renderedWidth": 278
+        }
+      ],
+      "zoom": {
+        "native": 386,
+        "rendered": 386
+      },
+      "keyboard": true,
+      "story": true,
+      "fragmentRepeat": true,
+      "heroCTA": true
+    },
+    {
+      "width": 1440,
+      "reducedMotion": {
+        "opacity": "1",
+        "overflow": false,
+        "transition": "1e-05s",
+        "pins": 0
+      }
+    },
+    {
+      "width": 320,
+      "reducedMotion": {
+        "opacity": "1",
+        "overflow": false,
+        "transition": "1e-05s",
+        "pins": 0
+      }
+    }
+  ],
+  "failures": []
+}

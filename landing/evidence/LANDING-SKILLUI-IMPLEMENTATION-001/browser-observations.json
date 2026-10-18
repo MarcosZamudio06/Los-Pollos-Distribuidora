@@ -1,0 +1,128 @@
+{
+  "scope": "MCP Playwright over isolated production build served at 127.0.0.1:5196; observations transcribed from the returned tool results, not a full accessibility/performance certification",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "documentWidth": 1440,
+      "headingColor": "rgb(255, 255, 255)",
+      "pins": 0,
+      "forms": 0,
+      "brokenLoadedImages": [],
+      "heroCtaGalleryTop": 92,
+      "keyboardEndTab": "Facturación",
+      "zoomEscapeFocusReturn": true,
+      "driverMissingCaptureDisclosed": true,
+      "collectionStageSelection": true,
+      "mobileMenuEscapeFocusReturn": null
+    },
+    {
+      "width": 1280,
+      "height": 1000,
+      "documentWidth": 1280,
+      "headingColor": "rgb(255, 255, 255)",
+      "pins": 0,
+      "forms": 0,
+      "brokenLoadedImages": [],
+      "heroCtaGalleryTop": 92,
+      "keyboardEndTab": "Facturación",
+      "zoomEscapeFocusReturn": true,
+      "driverMissingCaptureDisclosed": true,
+      "collectionStageSelection": true,
+      "mobileMenuEscapeFocusReturn": null
+    },
+    {
+      "width": 768,
+      "height": 1000,
+      "documentWidth": 768,
+      "headingColor": "rgb(255, 255, 255)",
+      "pins": 0,
+      "forms": 0,
+      "brokenLoadedImages": [],
+      "heroCtaGalleryTop": 92,
+      "keyboardEndTab": "Facturación",
+      "zoomEscapeFocusReturn": true,
+      "driverMissingCaptureDisclosed": true,
+      "collectionStageSelection": true,
+      "mobileMenuEscapeFocusReturn": true
+    },
+    {
+      "width": 390,
+      "height": 1000,
+      "documentWidth": 390,
+      "headingColor": "rgb(255, 255, 255)",
+      "pins": 0,
+      "forms": 0,
+      "brokenLoadedImages": [],
+      "heroCtaGalleryTop": 92,
+      "keyboardEndTab": "Facturación",
+      "zoomEscapeFocusReturn": true,
+      "driverMissingCaptureDisclosed": true,
+      "collectionStageSelection": true,
+      "mobileMenuEscapeFocusReturn": true
+    },
+    {
+      "width": 320,
+      "height": 1000,
+      "documentWidth": 320,
+      "headingColor": "rgb(255, 255, 255)",
+      "pins": 0,
+      "forms": 0,
+      "brokenLoadedImages": [],
+      "heroCtaGalleryTop": 92,
+      "keyboardEndTab": "Facturación",
+      "zoomEscapeFocusReturn": true,
+      "driverMissingCaptureDisclosed": true,
+      "collectionStageSelection": true,
+      "mobileMenuEscapeFocusReturn": true
+    }
+  ],
+  "reducedMotion": [
+    {
+      "width": 1440,
+      "pins": 0,
+      "overflow": false,
+      "heroOpacity": "1",
+      "cedisSelectable": true,
+      "returnToTop": true
+    },
+    {
+      "width": 320,
+      "pins": 0,
+      "overflow": false,
+      "heroOpacity": "1",
+      "cedisSelectable": true,
+      "returnToTop": true
+    }
+  ],
+  "imageTabs": {
+    "available": [
+      "Dashboard",
+      "Punto de venta",
+      "CEDIS",
+      "Compras",
+      "Logística",
+      "Cobranza",
+      "Cierres",
+      "Facturación"
+    ],
+    "withoutRepresentativeCapture": [
+      "Inventario",
+      "Repartidores"
+    ]
+  },
+  "console": {
+    "errors": 0,
+    "warnings": [
+      "Geist preload timing warning during repeated navigation; FontFaceSet confirms Geist loaded"
+    ]
+  },
+  "notVerified": [
+    "real commercial reception",
+    "authenticated ERP workflows",
+    "synthetic-data generation/provenance independent of supplied captures",
+    "full screen-reader/axe audit",
+    "hardware mobile/touch testing",
+    "field Core Web Vitals"
+  ]
+}

@@ -1,94 +1,28 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { LandingReveal, LandingSectionHeading } from "./LandingPrimitives";
+import { Plus } from "lucide-react";
+import { SectionHeading } from "./SectionHeading";
+import s from "../styles/landing.module.css";
 
 const questions = [
-  {
-    answer:
-      "Sí. El ERP trabaja con ubicaciones operativas como sucursales, almacenes, CEDIS, puntos de venta externos y stock de ruta, con permisos y flujos según el rol.",
-    question: "¿El ERP puede utilizarse en varias sucursales?",
-  },
-  {
-    answer:
-      "Sí. Cada venta, compra, ajuste, traspaso y saldo de inventario conserva la ubicación operativa correspondiente. No se presenta un stock global como fuente de verdad.",
-    question: "¿Puedo controlar ventas e inventario por ubicación?",
-  },
-  {
-    answer:
-      "Incluye planeación, optimización de la secuencia de una ruta, GPS de la ruta activa, posiciones de flota, zonas, incidencias, evidencias y liquidación. No incluye tráfico en vivo, navegación giro a giro ni modo offline.",
-    question: "¿Cuenta con herramientas para reparto?",
-  },
-  {
-    answer:
-      "Sí. Las ventas a crédito generan cuentas por cobrar y el sistema permite registrar pagos o abonos, consultar vencidos y aplicar controles de crédito. Cada pago de cobranza se asocia a una sola cuenta.",
-    question: "¿Puede manejar ventas a crédito?",
-  },
-  {
-    answer:
-      "Sí, mediante planos de datos independientes por empresa: base de datos, almacenamiento, credenciales, dominio/TLS y respaldos separados. No es un selector multiempresa dentro de una misma base.",
-    question: "¿Está preparado para varias empresas?",
-  },
-  {
-    answer:
-      "El repositorio incluye solicitudes de facturación, emisión nativa de CFDI, estados fiscales, XML/PDF, conciliación y remediaciones con controles de acceso. La emisión requiere configuración fiscal y un proveedor habilitado.",
-    question: "¿Incluye facturación?",
-  },
+  ["¿Puedo controlar inventario por sucursal?", "Sí. Los saldos y movimientos conservan su ubicación operativa, como una sucursal, un almacén o un centro de distribución. El acceso depende de los permisos del usuario."],
+  ["¿Puede manejar ventas a crédito?", "Sí. Las ventas a crédito generan cuentas por cobrar. Puedes registrar pagos o abonos y consultar saldos vencidos. Cada pago de cobranza corresponde a una cuenta."],
+  ["¿Qué herramientas tiene el repartidor?", "Puede consultar su ruta, revisar pedidos asignados y registrar entregas, incidencias y evidencias. No se promete navegación giro a giro ni operación offline."],
+  ["¿Quién puede acceder al ERP?", "El acceso requiere una cuenta. Los roles y permisos determinan las herramientas disponibles para ventas, almacén, cobranza, reparto y administración."],
+  ["¿Qué operaciones encajan?", "Ventas de mostrador, mayoristas e institucionales, sucursales abastecidas por CEDIS y reparto con cobranza. El inventario siempre conserva su ubicación operativa."],
+  ["¿Cómo evaluamos la implementación?", "Primero se revisan ubicaciones, usuarios y flujo de ventas. Después se seleccionan los módulos y se valida el recorrido con datos de demostración. Alcance, despliegue, migración, capacitación y condiciones se acuerdan antes de contratar; no hay plazos ni servicios incluidos prometidos en esta página."],
+  ["¿Qué depende de configuración?", "El monitoreo necesita posiciones y servicios geoespaciales habilitados. La emisión fiscal necesita configuración del emisor y un proveedor habilitado; las solicitudes administrativas y los tickets no son CFDI. Confirma estas condiciones durante la evaluación."],
+  ["¿Cómo se despliega y contrata?", "La landing pública está separada del ERP autenticado. El repositorio contempla despliegue con contenedores; infraestructura, soporte y condiciones comerciales requieren evaluación y acuerdo. No se anuncian precios ni garantías de disponibilidad."],
 ] as const;
 
 export function FaqSection() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const reducedMotion = useReducedMotion();
-
   return (
-    <section aria-labelledby="faq-title" className="landing-section landing-faq-section" id="faq">
-      <div className="landing-container landing-faq-layout">
-        <LandingReveal className="landing-faq-intro">
-          <LandingSectionHeading
-            description="Respuestas concretas sobre lo que el producto hace hoy y los límites que preferimos dejar claros."
-            eyebrow="Preguntas frecuentes"
-            id="faq-title"
-            title="Antes de hablar de una demo."
-          />
-          <p className="landing-faq-aside">
-            ¿No encuentras tu caso? La demostración puede partir de tu operación real y sus reglas,
-            no de una presentación genérica.
-          </p>
-        </LandingReveal>
-
-        <div className="landing-faq-list">
-          {questions.map(({ answer, question }, index) => {
-            const isOpen = openIndex === index;
-            const answerId = `faq-answer-${index}`;
-            return (
-              <div className={`landing-faq-item${isOpen ? " is-open" : ""}`} key={question}>
-                <button
-                  aria-controls={answerId}
-                  aria-expanded={isOpen}
-                  className="landing-faq-trigger"
-                  onClick={() => setOpenIndex(isOpen ? null : index)}
-                  type="button"
-                >
-                  <span>{question}</span>
-                  <ChevronDown aria-hidden="true" size={18} />
-                </button>
-                <AnimatePresence initial={false}>
-                  {isOpen && (
-                    <motion.div
-                      animate={{ height: "auto", opacity: 1 }}
-                      className="landing-faq-answer"
-                      exit={{ height: 0, opacity: 0 }}
-                      id={answerId}
-                      initial={{ height: 0, opacity: 0 }}
-                      transition={{ duration: reducedMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <p>{answer}</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            );
-          })}
+    <section id="faq" className={`${s.section} ${s.surface}`} aria-labelledby="faq-title">
+      <div className={s.container}>
+        <SectionHeading id="faq-title" title="Preguntas antes de decidir." />
+        <div className={s.faqList}>
+          {questions.map(([question, answer]) => <details key={question}>
+            <summary>{question}<Plus aria-hidden="true" size={20} /></summary>
+            <p>{answer}</p>
+          </details>)}
         </div>
       </div>
     </section>

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "core": {
+    "background": {
+      "value": "#ffffff",
+      "role": "background",
+      "name": "tw-ring-offset-color"
+    },
+    "text-primary": {
+      "value": "#1c1917",
+      "role": "text-primary",
+      "name": "sm-background-inverse"
+    },
+    "border": {
+      "value": "#403d37",
+      "role": "border",
+      "name": "sm-color-gray-700"
+    },
+    "text-muted": {
+      "value": "#716f67",
+      "role": "text-muted",
+      "name": "sm-color-gray-600"
+    },
+    "surface": {
+      "value": "#f5f4f1",
+      "role": "surface",
+      "name": "sm-background-faint"
+    }
+  },
+  "status": {
+    "warning": {
+      "value": "#feae0f",
+      "role": "warning",
+      "name": "sm-background-loud"
+    },
+    "danger": {
+      "value": "#df2036",
+      "role": "danger"
+    },
+    "success": {
+      "value": "#0dab41",
+      "role": "success"
+    }
+  },
+  "extended": {
+    "sm-background-default": {
+      "value": "#e0ddd5",
+      "role": "unknown",
+      "name": "sm-background-default"
+    },
+    "color-000000": {
+      "value": "#000000",
+      "role": "unknown"
+    },
+    "sm-color-gray-300": {
+      "value": "#ccc9c1",
+      "role": "unknown",
+      "name": "sm-color-gray-300"
+    },
+    "sm-background-muted": {
+      "value": "#eae8e3",
+      "role": "unknown",
+      "name": "sm-background-muted"
+    },
+    "sm-border-muted": {
+      "value": "#9c9890",
+      "role": "unknown",
+      "name": "sm-border-muted"
+    },
+    "sm-color-blue-900": {
+      "value": "#0c2648",
+      "role": "info",
+      "name": "sm-color-blue-900"
+    },
+    "color-af419e": {
+      "value": "#af419e",
+      "role": "unknown"
+    },
+    "color-4670d5": {
+      "value": "#4670d5",
+      "role": "unknown"
+    },
+    "color-333333": {
+      "value": "#333333",
+      "role": "unknown"
+    },
+    "sm-color-orange-50": {
+      "value": "#ffe0d1",
+      "role": "unknown",
+      "name": "sm-color-orange-50"
+    },
+    "color-0b0f20": {
+      "value": "#0b0f20",
+      "role": "unknown"
+    },
+    "color-989fa9": {
+      "value": "#989fa9",
+      "role": "unknown"
+    }
+  },
+  "meta": {
+    "theme": "light",
+    "extracted": "2026-10-17"
+  }
+}

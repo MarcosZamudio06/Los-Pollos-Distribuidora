@@ -1,0 +1,77 @@
+{
+  "families": [
+    "Inter Variable",
+    "Berkeley Mono"
+  ],
+  "scale": {
+    "heading-1": {
+      "fontFamily": "Inter Variable",
+      "fontSize": "40px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-2": {
+      "fontFamily": "Inter Variable",
+      "fontSize": "38px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-3": {
+      "fontFamily": "Inter Variable",
+      "fontSize": "2.25rem",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "body": {
+      "fontFamily": "Inter Variable",
+      "fontSize": "13px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "caption": {
+      "fontFamily": "Inter Variable",
+      "fontSize": "12px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "code": {
+      "fontFamily": "Berkeley Mono",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    }
+  },
+  "fontFaces": [
+    {
+      "family": "Inter Variable",
+      "src": "https://static.linear.app/fonts/InterVariable.woff2?v=4.1",
+      "format": "woff2",
+      "weight": "100"
+    },
+    {
+      "family": "Inter Variable",
+      "src": "https://static.linear.app/fonts/InterVariable-Italic.woff2?v=4.1",
+      "format": "woff2",
+      "weight": "100"
+    },
+    {
+      "family": "Berkeley Mono",
+      "src": "https://static.linear.app/fonts/Berkeley-Mono-Variable.woff2?v=3.2",
+      "format": "woff2",
+      "weight": "100"
+    }
+  ],
+  "rules": {
+    "maxSizesPerScreen": 4,
+    "headingWeightRange": "600-700",
+    "bodyWeight": 400,
+    "lineHeightBody": 1.5,
+    "lineHeightHeading": 1.2
+  }
+}

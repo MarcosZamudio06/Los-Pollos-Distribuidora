@@ -1,0 +1,14 @@
+{
+  "exitCode": 2,
+  "severityCounts": {
+    "warning": 1,
+    "advisory": 116
+  },
+  "ruleCounts": {
+    "overused-font": 1,
+    "design-system-font-size": 86,
+    "design-system-radius": 15,
+    "design-system-color": 15
+  },
+  "interpretation": "Retained local Geist warning; declaration/token-record advisories require separate scoped cleanup, not automatic design-document repair."
+}

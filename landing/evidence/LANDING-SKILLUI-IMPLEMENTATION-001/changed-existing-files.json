@@ -1,0 +1,19 @@
+[
+  "landing/index.html",
+  "landing/DESIGN.md",
+  "landing/src/App.tsx",
+  "landing/src/config/landingConfig.ts",
+  "landing/src/config/landingImages.ts",
+  "landing/src/styles/landing.module.css",
+  "landing/src/styles/landing.css",
+  "landing/src/components/CompanySection.tsx",
+  "landing/src/components/LandingProductImage.tsx",
+  "landing/src/components/LandingMotionShell.tsx",
+  "landing/src/components/LogisticsSection.tsx",
+  "landing/src/components/HeroSection.tsx",
+  "landing/src/components/WorkflowSection.tsx",
+  "landing/src/components/ProductGallery.tsx",
+  "landing/src/components/ProductPreview.tsx",
+  "landing/src/__tests__/landing.test.tsx",
+  "landing/src/__tests__/commercial.test.tsx"
+]

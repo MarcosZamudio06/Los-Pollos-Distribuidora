@@ -1,0 +1,232 @@
+{
+  "headInitial": "3235ad4b370a75c057c6b3ac093afcba531aebb8",
+  "headFinal": "3235ad4b370a75c057c6b3ac093afcba531aebb8",
+  "branch": "main",
+  "changedExisting": [
+    {
+      "path": "landing/PRODUCT.md",
+      "entrySha256": "3917c9a09e468e94c82fec61b92ff12aed402a4be0bf5bb5c8b052075a614709",
+      "finalSha256": "833ee50bea7e9a904f5a4d92f39dfec6fa558a766265b7793061bad376eaa68b"
+    },
+    {
+      "path": "landing/DESIGN.md",
+      "entrySha256": "4097913df1fe02dd8989781ccdd62f2c1ea078d9531393831782e24c629edd89",
+      "finalSha256": "4949e8705b65607c848127727075f1514c06c07ab3edb7fba9c4264bdb352b17"
+    },
+    {
+      "path": "landing/.env.example",
+      "entrySha256": "5913c0999df6d031dd02efe59de34a7b39b8f4d2eabd38b14c17f525df9dfc49",
+      "finalSha256": "dc33956ca66419bfe191248a65f40e25fb56cc25d75184851693f92aad6eb9fe"
+    },
+    {
+      "path": "landing/src/config/productModules.ts",
+      "entrySha256": "8ea0865dffed2cf8c3a5d84766d7b385d2c91886dffd48c14e17928f6378b549",
+      "finalSha256": "de2d86071e74a25a4a6adf841b73209dd9d53bae3565bb038594edbf73b75c9c"
+    },
+    {
+      "path": "landing/src/config/landingImages.ts",
+      "entrySha256": "7aec0b2e60e83929ab64861958f493d305b1e3073b41ededd17bfd3f12e4848d",
+      "finalSha256": "cdf6268fd88b522b8077eefedcdd06762d310e6702cb4a300ed0ae3dc4352c5c"
+    },
+    {
+      "path": "landing/src/styles/landing.module.css",
+      "entrySha256": "1c366d4a46a3c4349772a5f6180619d2c20dd2ad45e3c85b2ee575763909d130",
+      "finalSha256": "5b0fdc9a973518feb029295e7f363b8ec887cc29b15a81c42fec9ebfd7ad077e"
+    },
+    {
+      "path": "landing/src/components/ProductCapture.tsx",
+      "entrySha256": "6cc0ef74bbeda9e80f10889667f24a293ae5f56c966ad4867fb11430aafcdd0c",
+      "finalSha256": "99411c2e45cde4fbe698dc74b1730f99acd1a6e52e1ba6af8ecf7a19bba1cc60"
+    },
+    {
+      "path": "landing/src/components/LogisticsSection.tsx",
+      "entrySha256": "1ab966a1308899d6eae4cb10e15cebb77ffd1299a4f41bef5ffe4f9889a87479",
+      "finalSha256": "457c38ac80230dec1a321c5cbfaf9892487e3ea47b4e87d9f532189a9ecf2ac1"
+    },
+    {
+      "path": "landing/src/components/WorkflowSection.tsx",
+      "entrySha256": "312da86ba7e8c3861853eabd3a4d0e336f750b90654afa45e7ab642d07d6301b",
+      "finalSha256": "76e1895e60e23d385a7769e3fb6fdc84d4cda1c0b8bd0fb36fe7ba9a9df6a20d"
+    },
+    {
+      "path": "landing/src/components/ProductGallery.tsx",
+      "entrySha256": "d398099a6f893072d67069fc754cce6557ddebd42ae39c642e82f8fe9a6daba2",
+      "finalSha256": "43e80b36a82ad69eefafc36a67ac62845ab687160af6c2a90c754578058ef9e5"
+    },
+    {
+      "path": "landing/src/__tests__/visibleOperations.test.tsx",
+      "entrySha256": "11a75f29c759929229218775567d3a09d194b37b8d21bc5a6e7a1b2072725a5b",
+      "finalSha256": "c31144430ee8157bbcf9e86994a6e73a072d56ae6b0ec91bb2cc25e28640643a"
+    }
+  ],
+  "created": [
+    {
+      "path": "landing/SKILLUI-P0-CLOSURE-002.md",
+      "finalSha256": "38822d49751f5e32349bc3f8c0607a3774131e9c8659118d75be7d071de26484",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/after-1280.png",
+      "finalSha256": "40391a78b9cdf3e9cdfa9f64d408fc1fc669de59a7ad5e350cbd133f1d898cc2",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/after-1440.png",
+      "finalSha256": "7f0e730bf4bbd001a2e538a4b21e187916070c1c49386fdad71b3f6d7391e30e",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/after-320.png",
+      "finalSha256": "0f377e9d3107fded55da5843a0c379fbb1e7919299b2ba3358dec42d9a5fb7c4",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/after-390.png",
+      "finalSha256": "80e0171aec07370539db29cce194f38f897d44a0d109eb9aa6f989c6d454d2e4",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/after-768.png",
+      "finalSha256": "8bb52953ecc716c21f11aed40e3e9e4d7ba4dfe0b0552a5bd936b844a32be3ec",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/before-1440.png",
+      "finalSha256": "7f0e730bf4bbd001a2e538a4b21e187916070c1c49386fdad71b3f6d7391e30e",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/before-390.png",
+      "finalSha256": "793c01bd91134a8a518427981ae17164bd95ddc6f315de011390dee010305cc0",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/before-driver-1440.png",
+      "finalSha256": "f0c1a2c185c6ebaa1d50bede345e05dec5c93c210b3bc5b343a2e8c55acbf880",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/before-driver-390.png",
+      "finalSha256": "464b1938e9cc0fdfa965c6d79ff544f2a8582dd461332a4cc2e4e30b07c49951",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/browser-console.txt",
+      "finalSha256": "8244bba88be0b62a7e4395f5ad8839ee394e16c040dcd709e31a5bdd12a704a7",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/browser-results.json",
+      "finalSha256": "ac61ee5218022a95b678aea7e43658214705bc2106aa12b7f708e6b900a1124a",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/build.txt",
+      "finalSha256": "4037c1fef7679e4a588adc9d402a978d3a69f1d3b795d1314163ceab72543ce4",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/capture-provenance.json",
+      "finalSha256": "2e5196bb40b2b6f455d652af2238872c7dae9fa4b0483df86dab021d3520053c",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/closure-changes.json",
+      "finalSha256": null,
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/detector-summary.json",
+      "finalSha256": "e58230d2d033fb05386637e7a5d845de454b759cbbc31998ed14a972775c73a0",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/driver-1440.png",
+      "finalSha256": "072b1e6fc3e73052d6bfa11ac839733e948d32d39a38021802d5481d61f467e6",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/driver-320.png",
+      "finalSha256": "2e5fa044b7f699a7d9477c6893c63acbe9e5f0c0828a9f318446387b7f599899",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/driver-390.png",
+      "finalSha256": "403641a4af44c7208e3386cc1bfbe8b005a9e16ef62896ad8320eada0bec01aa",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/entry-hashes.json",
+      "finalSha256": "f86320adb17fe6cc8d0b22ae4358129f29f198b6bfc5df593e286d3a5c064f05",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/file-inventory.json",
+      "finalSha256": "c081d5e805f9fcda667bd4ec6ba7a1ea3af5aa8298823449017493a4f27fb819",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/final-status.txt",
+      "finalSha256": null,
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/interaction-results.json",
+      "finalSha256": "938487405f18a17f213fac8a9f978fc12455a0cfcfd5cd9061eea801609be6fd",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/lint.txt",
+      "finalSha256": "eafee1f8b43527aa2bf2da397b23ea45764be9447fac6dcd757a43190548bf2e",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/native-review-status.json",
+      "finalSha256": "27dadd89401f300347674da560bce12ffa39b8e93a4fee721b77cb129a68c967",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/pos-390.png",
+      "finalSha256": "818060991beba03e7a43f62f34ff028a473981ba2518c5c057ca69e653207b22",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/red-fragment.txt",
+      "finalSha256": "e1d0a75a3393ff8fc65d51d44d4a06f0078758b613ae0e3003afb6865a7456ee",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/red-regressions.txt",
+      "finalSha256": "ce52eaacadbb9a9450169f83dfa6b9b2879d9a4a997b234b95efb0402d51f33e",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/tests.txt",
+      "finalSha256": "91d2caa5081d8b7ee6a64bf383a7fef70f3d6aa29aaff18b66bd4b9f59778b3f",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/transport-390.png",
+      "finalSha256": "7a7abb01b372044ca436e7aa66cf1f74db3e857b0b59ff66edb6f2827bd9308c",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/evidence/LANDING-SKILLUI-P0-CLOSURE-002/typecheck.txt",
+      "finalSha256": "6d80b1fefc7f1926bd1f7666b1313df91840cb4f5d13ba0023afc284e07e6fde",
+      "purpose": "closure evidence/report"
+    },
+    {
+      "path": "landing/public/images/landing/approved/driver-stop.jpg",
+      "finalSha256": "fc01fa5b503523657eaeae0303d85f43859fca35c62603e5e5b5e801adae8bd9",
+      "purpose": "approved mobile derivative"
+    },
+    {
+      "path": "landing/public/images/landing/approved/driver.jpg",
+      "finalSha256": "6d7b3e037872473d4f2037e53f2fbe43300f3f0428eda03b08138a749413a31d",
+      "purpose": "approved mobile derivative"
+    }
+  ],
+  "sourcePngsUnchanged": true,
+  "indexDiff": "",
+  "note": "Artifact hashes are snapshots before writing this manifest; no self-referential artifact hash claimed."
+}

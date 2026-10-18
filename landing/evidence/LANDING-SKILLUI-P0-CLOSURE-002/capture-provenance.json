@@ -1,0 +1,36 @@
+[
+  {
+    "key": "driver",
+    "source": "screenshots erp/driver-rutas1.png",
+    "sourceSha256": "fd8cb83123a28e5ce367d64c85c62096072051315a5bdd7ffa433fca20f23604",
+    "approval": "User explicitly approved driver files in screenshots erp for CLOSURE-002",
+    "context": "Real mobile web driver route; CEDIS transport, not completed customer delivery",
+    "processing": "Entire frame, native dimensions, JPEG quality 88; no cropping, upscaling or data edits",
+    "assets": {
+      "preview": {
+        "path": "landing/public/images/landing/approved/driver.jpg",
+        "width": 386,
+        "height": 834,
+        "bytes": 108844,
+        "sha256": "6d7b3e037872473d4f2037e53f2fbe43300f3f0428eda03b08138a749413a31d"
+      }
+    }
+  },
+  {
+    "key": "driverStop",
+    "source": "screenshots erp/driver-rutas 3.png",
+    "sourceSha256": "b863d0e16af1b64f485eae537fd23ec2c7e97e8953bd7ffbdc1b92254f088756",
+    "approval": "User explicitly approved driver files in screenshots erp for CLOSURE-002",
+    "context": "Real mobile web driver route; CEDIS transport, not completed customer delivery",
+    "processing": "Entire frame, native dimensions, JPEG quality 88; no cropping, upscaling or data edits",
+    "assets": {
+      "preview": {
+        "path": "landing/public/images/landing/approved/driver-stop.jpg",
+        "width": 378,
+        "height": 828,
+        "bytes": 92674,
+        "sha256": "fc01fa5b503523657eaeae0303d85f43859fca35c62603e5e5b5e801adae8bd9"
+      }
+    }
+  }
+]

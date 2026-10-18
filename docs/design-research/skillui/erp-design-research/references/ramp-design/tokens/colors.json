@@ -1,0 +1,104 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "core": {
+    "background": {
+      "value": "#000000",
+      "role": "background"
+    },
+    "text-primary": {
+      "value": "#ffffff",
+      "role": "text-primary",
+      "name": "tw-ring-offset-color"
+    },
+    "surface": {
+      "value": "#1f1f1d",
+      "role": "surface"
+    },
+    "accent": {
+      "value": "#0066ff",
+      "role": "accent"
+    },
+    "text-muted": {
+      "value": "#6a7282",
+      "role": "text-muted",
+      "name": "color-gray-500"
+    },
+    "border": {
+      "value": "#4a5565",
+      "role": "border",
+      "name": "color-gray-600"
+    }
+  },
+  "status": {
+    "success": {
+      "value": "#18a957",
+      "role": "success"
+    },
+    "warning": {
+      "value": "#f3ece1",
+      "role": "warning"
+    },
+    "danger": {
+      "value": "#e96516",
+      "role": "danger"
+    }
+  },
+  "extended": {
+    "color-gray-100": {
+      "value": "#f3f4f6",
+      "role": "unknown",
+      "name": "color-gray-100"
+    },
+    "color-gray-200": {
+      "value": "#e5e7eb",
+      "role": "unknown",
+      "name": "color-gray-200"
+    },
+    "border-primary": {
+      "value": "#d2cecb",
+      "role": "unknown",
+      "name": "border-primary"
+    },
+    "text-primary": {
+      "value": "#0c0a08",
+      "role": "unknown",
+      "name": "text-primary"
+    },
+    "spring": {
+      "value": "#5683d2",
+      "role": "info",
+      "name": "spring"
+    },
+    "color-gray-300": {
+      "value": "#d1d5dc",
+      "role": "unknown",
+      "name": "color-gray-300"
+    },
+    "color-cyan-400": {
+      "value": "#00d2ef",
+      "role": "unknown",
+      "name": "color-cyan-400"
+    },
+    "color-2a0a3c": {
+      "value": "#2a0a3c",
+      "role": "unknown"
+    },
+    "color-5ab570": {
+      "value": "#5ab570",
+      "role": "unknown"
+    },
+    "color-b2c7eb": {
+      "value": "#b2c7eb",
+      "role": "unknown"
+    },
+    "color-blue-600": {
+      "value": "#155dfc",
+      "role": "unknown",
+      "name": "color-blue-600"
+    }
+  },
+  "meta": {
+    "theme": "dark",
+    "extracted": "2026-10-17"
+  }
+}

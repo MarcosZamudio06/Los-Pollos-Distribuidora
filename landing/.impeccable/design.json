@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T00:29:08.517903+00:00",
+  "title": "Design System: Visible Operations",
+  "extensions": {
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Feedback and bounded selection transitions"
+      },
+      {
+        "name": "hero-entrance",
+        "value": "550ms power3.out",
+        "purpose": "One short product introduction; reduced motion stays static"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "hero-stacked",
+        "value": "1099px"
+      },
+      {
+        "name": "mobile",
+        "value": "767px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "html": "<button class=\"ds-primary\">Explore the product</button>",
+      "css": ".ds-primary{background:#d6ad60;color:#211d14;border:0;border-radius:8px;padding:12px 20px;min-height:48px;font:600 14px Geist,sans-serif}.ds-primary:focus-visible{outline:3px solid #e2c47d;outline-offset:4px}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "html": "<button class=\"ds-secondary\">Learn about operations</button>",
+      "css": ".ds-secondary{background:#1c1e1b;color:#f7f3ea;border:1px solid #46483e;border-radius:8px;padding:12px 20px;min-height:48px}"
+    },
+    {
+      "name": "Module selection",
+      "kind": "nav",
+      "html": "<button class=\"ds-tab\" aria-pressed=\"true\">Dashboard</button>",
+      "css": ".ds-tab{background:#252824;color:#e2c47d;border:1px solid #8e754a;border-radius:8px;padding:12px 16px;min-height:48px}"
+    },
+    {
+      "name": "Contact field",
+      "kind": "input",
+      "html": "<label class=\"ds-label\">Contact email<input type=\"email\" class=\"ds-input\" /></label>",
+      "css": ".ds-label{display:grid;gap:8px;color:#f7f3ea}.ds-input{min-height:48px;border:1px solid #46483e;border-radius:8px;background:#252824;color:#f7f3ea}"
+    },
+    {
+      "name": "Evidence frame",
+      "kind": "custom",
+      "html": "<figure class=\"ds-frame\"><figcaption>Approved product capture and provenance caption</figcaption></figure>",
+      "css": ".ds-frame{background:#252824;color:#c8c2b7;border:1px solid #46483e;border-radius:14px;padding:16px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Visible Operations",
+    "overview": "Actual product evidence on a charcoal narrative spine. Warm-white evidence canvases and gold actions preserve the ERP identity.",
+    "keyCharacteristics": [
+      "White generated headings",
+      "Whole-frame approved captures",
+      "Direct module selection",
+      "Honest commercial fallback"
+    ],
+    "rules": [
+      {
+        "name": "Authentic evidence",
+        "body": "Never edit values into screenshots or relabel administrative views as driver UI.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Preserve missing categories and explain their scope",
+      "Use reduced-motion-compatible native scrolling"
+    ],
+    "donts": [
+      "Do not invent customer metrics or capture availability",
+      "Do not simulate successful commercial reception"
+    ]
+  }
+}

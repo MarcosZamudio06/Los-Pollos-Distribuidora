@@ -8,7 +8,6 @@ import {
   DeliveryOrderStatus,
   DeliveryRouteStatus,
   InventoryMovementType,
-  InventoryTransferStatus,
   MovementChannel,
   OperationalLocationType,
   PaymentMethod,
@@ -27,6 +26,13 @@ import {
 } from '@prisma/client';
 import { assertSeedEnvironment } from './seed-guard';
 import { InventoryBalanceService } from '../src/modules/inventory/inventory-balance.service';
+import { PrismaService } from '../src/database/prisma.service';
+import { InventoryTransfersService } from '../src/modules/inventory/inventory-transfers.service';
+import { BranchSupplyCyclesService } from '../src/modules/cedis/branch-supply-cycles.service';
+import { BranchSupplyReceiptsService } from '../src/modules/cedis/branch-supply-receipts.service';
+import { BranchSupplyCycleReconciliationService } from '../src/modules/cedis/branch-supply-cycle-reconciliation.service';
+import { PointOfSaleDailyCloseService } from '../src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service';
+import { DeliveryService } from '../src/modules/delivery/delivery.service';
 import {
   addDays,
   calculateDaysOverdue,
@@ -135,6 +141,7 @@ type DailyClosePlan = {
 };
 
 type SeedContext = {
+  distributionCenterId: string;
   adminUser: BaseUser;
   sellerUser: BaseUser;
   warehouseUser: BaseUser;
@@ -532,7 +539,6 @@ function buildSalesPlans(ctx: SeedContext, baseDate: Date): SalePlan[] {
 
 function buildPurchasePlans(ctx: SeedContext, baseDate: Date): PurchasePlan[] {
   const plans: PurchasePlan[] = [];
-  const branchLocations = Array.from(ctx.branchLocationsByCode.values());
   const suppliers = seedSuppliers;
   const products = Array.from(ctx.productsBySku.values());
   const whole =
@@ -545,18 +551,13 @@ function buildPurchasePlans(ctx: SeedContext, baseDate: Date): PurchasePlan[] {
     products[2];
 
   for (let index = 1; index <= PURCHASE_COUNT; index += 1) {
-    const purchaseDate = addDays(
-      baseDate,
-      Math.floor((index - 1) * (SALES_DAYS / PURCHASE_COUNT)),
-    );
-    const location = branchLocations[(index - 1) % branchLocations.length];
+    const purchaseDate = addDays(baseDate, -PURCHASE_COUNT + index - 1);
     const supplier = suppliers[(index - 1) % suppliers.length];
 
     const lines = [
       buildProductLine(whole, roundQuantity(180 + index * 8), 0, index),
       buildProductLine(breast, roundQuantity(90 + index * 4), 0, index),
-      // Wings are consumed by route transfers and counter/external sales in every branch.
-      // Replenish them in every purchase plan so each origin location has enough stock.
+      // Every purchase is received at CEDIS; linked supplies replenish branches.
       buildProductLine(wings, 0, 420 + index * 20, index),
     ];
 
@@ -564,7 +565,7 @@ function buildPurchasePlans(ctx: SeedContext, baseDate: Date): PurchasePlan[] {
       id: seedId(`purchase-${index}`),
       purchaseNumber: seedPurchaseNumber(index),
       purchaseDate,
-      locationId: location.id,
+      locationId: ctx.distributionCenterId,
       supplierId: supplier.id,
       userId: ctx.warehouseUser.id,
       items: lines,
@@ -596,7 +597,7 @@ function buildTransferPlans(ctx: SeedContext, baseDate: Date): TransferPlan[] {
     plans.push({
       id: seedId(`transfer-${index}`),
       transferNumber: seedTransferNumber(index),
-      requestedAt: addDays(baseDate, 10 + index),
+      requestedAt: baseDate,
       originLocationId: origin.id,
       destinationLocationId: route.routeStockLocationId,
       userId: ctx.warehouseUser.id,
@@ -614,7 +615,7 @@ function buildTransferPlans(ctx: SeedContext, baseDate: Date): TransferPlan[] {
     plans.push({
       id: seedId(`transfer-external-${index + 1}`),
       transferNumber: seedTransferNumber(TRANSFER_COUNT + index + 1),
-      requestedAt: addDays(baseDate, 14 + index),
+      requestedAt: baseDate,
       originLocationId: origin.id,
       destinationLocationId: location.id,
       userId: ctx.warehouseUser.id,
@@ -715,6 +716,7 @@ async function loadSeedContext(prisma: PrismaClient): Promise<SeedContext> {
     !distributionCenter.isActive ||
     branchLocations.some(
       (location) =>
+        !location.isActive ||
         location.type !== OperationalLocationType.BRANCH ||
         location.parentId !== distributionCenter.id ||
         location.parent?.type !== OperationalLocationType.DISTRIBUTION_CENTER ||
@@ -733,6 +735,7 @@ async function loadSeedContext(prisma: PrismaClient): Promise<SeedContext> {
   }
 
   return {
+    distributionCenterId: distributionCenter.id,
     adminUser: {
       id: adminUser.id,
       email: adminUser.email,
@@ -786,107 +789,6 @@ async function loadSeedContext(prisma: PrismaClient): Promise<SeedContext> {
     routeStockLocations: new Map(),
     externalPosLocations: new Map(),
   };
-}
-
-async function deleteOperationalData(
-  prisma: PrismaClient,
-  ctx: SeedContext,
-  salePlans: SalePlan[],
-  purchasePlans: PurchasePlan[],
-  transferPlans: TransferPlan[],
-  dailyClosePlans: DailyClosePlan[],
-) {
-  const saleIds = salePlans.map((plan) => plan.id);
-  const deliveryOrderIds = salePlans
-    .filter((plan) => plan.saleChannel === SaleChannel.ROUTE)
-    .map((plan) => seedId(`delivery-order-${plan.saleNumber}`));
-  const purchaseIds = purchasePlans.map((plan) => plan.id);
-  const transferIds = transferPlans.map((plan) => plan.id);
-  const dailyCloseIds = dailyClosePlans.map((plan) => plan.id);
-  const routeIds = seedRoutes.map((route) => route.id);
-  const routeStockIds = seedRouteStockLocations.map((location) => location.id);
-  const externalPosIds = seedExternalPosLocations.map(
-    (location) => location.id,
-  );
-  await prisma.deliveryEvidence.deleteMany({
-    where: { deliveryOrderId: { in: deliveryOrderIds } },
-  });
-  await prisma.deliveryOrder.deleteMany({ where: { saleId: { in: saleIds } } });
-  await prisma.payment.deleteMany({ where: { saleId: { in: saleIds } } });
-  await prisma.accountReceivable.deleteMany({
-    where: { saleId: { in: saleIds } },
-  });
-  await prisma.saleDocument.deleteMany({ where: { saleId: { in: saleIds } } });
-  await prisma.saleItem.deleteMany({ where: { saleId: { in: saleIds } } });
-  await prisma.inventoryMovement.deleteMany({
-    where: { saleId: { in: saleIds } },
-  });
-  await prisma.scaleTicketReference.deleteMany({
-    where: { saleId: { in: saleIds } },
-  });
-  await prisma.sale.deleteMany({ where: { id: { in: saleIds } } });
-
-  await prisma.inventoryMovement.deleteMany({
-    where: { purchaseId: { in: purchaseIds } },
-  });
-  await prisma.purchaseItem.deleteMany({
-    where: { purchaseId: { in: purchaseIds } },
-  });
-  await prisma.purchase.deleteMany({ where: { id: { in: purchaseIds } } });
-
-  await prisma.inventoryMovement.deleteMany({
-    where: { transferId: { in: transferIds } },
-  });
-  await prisma.inventoryTransferItem.deleteMany({
-    where: { transferId: { in: transferIds } },
-  });
-  await prisma.inventoryTransfer.deleteMany({
-    where: { id: { in: transferIds } },
-  });
-
-  await prisma.pointOfSaleDailyCloseLine.deleteMany({
-    where: { pointOfSaleDailyCloseId: { in: dailyCloseIds } },
-  });
-  await prisma.cashMovement.deleteMany({
-    where: { pointOfSaleDailyCloseId: { in: dailyCloseIds } },
-  });
-  await prisma.inventoryMovement.deleteMany({
-    where: { pointOfSaleDailyCloseId: { in: dailyCloseIds } },
-  });
-  await prisma.pointOfSaleDailyClose.deleteMany({
-    where: { id: { in: dailyCloseIds } },
-  });
-
-  await prisma.routeSettlement.deleteMany({
-    where: { routeId: { in: routeIds } },
-  });
-  await prisma.deliveryRoute.deleteMany({ where: { id: { in: routeIds } } });
-
-  await prisma.inventoryBalance.deleteMany({
-    where: {
-      locationId: {
-        in: [
-          ...routeStockIds,
-          ...externalPosIds,
-          ...Array.from(ctx.branchLocationsByCode.values()).map(
-            (location) => location.id,
-          ),
-        ],
-      },
-    },
-  });
-  await prisma.operationalLocation.deleteMany({
-    where: { id: { in: [...routeStockIds, ...externalPosIds] } },
-  });
-  await prisma.customer.deleteMany({
-    where: { id: { in: seedCustomers.map((customer) => customer.id) } },
-  });
-  await prisma.supplier.deleteMany({
-    where: { id: { in: seedSuppliers.map((supplier) => supplier.id) } },
-  });
-  await prisma.commercialPolicy.deleteMany({
-    where: { id: { in: seedCommercialPolicies.map((policy) => policy.id) } },
-  });
 }
 
 async function upsertCommercialPolicies(
@@ -1264,94 +1166,135 @@ async function seedPurchases(
   }
 }
 
+function seedInventoryServices(prisma: PrismaClient) {
+  // This facade is bound to the seed's outer transaction (see runOperationalSeed).
+  const db = prisma as PrismaService;
+  const transfers = new InventoryTransfersService(db, inventoryBalanceService);
+  return {
+    transfers,
+    cycles: new BranchSupplyCyclesService(
+      db,
+      transfers,
+      new BranchSupplyCycleReconciliationService(),
+      new PointOfSaleDailyCloseService(db),
+      new DeliveryService(db, inventoryBalanceService),
+    ),
+    receipts: new BranchSupplyReceiptsService(db, transfers),
+  };
+}
+
+async function seedBranchSupplies(
+  prisma: PrismaClient,
+  ctx: SeedContext,
+  baseDate: Date,
+  purchases: PurchasePlan[],
+) {
+  const { cycles, receipts } = seedInventoryServices(prisma);
+  const actor = {
+    id: ctx.adminUser.id,
+    role: 'ADMIN',
+    operationalLocationId: undefined,
+    permissions: [
+      'cedis.dispatch',
+      'cedis.receive_supplies',
+      'cedis.view_costs',
+    ],
+  };
+  const vehicle = await prisma.vehicle.upsert({
+    where: { id: seedId('supply-vehicle') },
+    create: {
+      id: seedId('supply-vehicle'),
+      code: 'SEEDOP-SUPPLY',
+      displayName: 'Operational demo supply vehicle',
+      homeLocationId: ctx.distributionCenterId,
+    },
+    update: {},
+  });
+  // Preserve the original four purchase-sized replenishments per branch.
+  const branches = ['VER', 'BDR', 'ALV'];
+  for (const [branchIndex, code] of branches.entries()) {
+    const branch = ctx.branchLocationsByCode.get(code)!;
+    let cycle = await cycles.open(
+      {
+        distributionCenterLocationId: ctx.distributionCenterId,
+        branchLocationId: branch.id,
+        businessDate: baseDate.toISOString().slice(0, 10),
+        notes: seedNotes(`Supply cycle ${code}`),
+      },
+      actor,
+      seedIdempotencyKey(`cycle-${code}`),
+    );
+    for (
+      let index = branchIndex;
+      index < purchases.length;
+      index += branches.length
+    ) {
+      const plan = purchases[index];
+      const supply = await cycles.createSupply(
+        cycle.id,
+        {
+          expectedVersion: cycle.version,
+          assignedDriverId: ctx.driverUser.id,
+          vehicleId: vehicle.id,
+          notes: seedNotes(`Supply ${plan.purchaseNumber} to ${code}`),
+          items: plan.items.map((item) => ({
+            productId: item.productId,
+            unit: item.unit,
+            quantityKg: item.quantityKg,
+            quantityPieces: item.quantityPieces,
+          })),
+        },
+        actor,
+        seedIdempotencyKey(`supply-${plan.id}`),
+      );
+      if (!supply.transfer) throw new Error('Supply transfer was not created');
+      const sentItems = await prisma.inventoryTransferItem.findMany({
+        where: { transferId: supply.transfer.id },
+      });
+      await receipts.receive(
+        supply.transfer.id,
+        {
+          expectedCycleVersion: supply.cycle.version,
+          items: sentItems.map((item) => ({
+            transferItemId: item.id,
+            quantityKg: Number(item.quantityKg ?? 0),
+            quantityPieces: item.quantityPieces ?? 0,
+          })),
+        },
+        actor,
+        seedIdempotencyKey(`receipt-${plan.id}`),
+      );
+      cycle = await cycles.findOne(cycle.id, actor);
+    }
+  }
+}
+
 async function seedTransfers(
   prisma: PrismaClient,
   ctx: SeedContext,
   plans: TransferPlan[],
 ) {
+  const { transfers } = seedInventoryServices(prisma);
   for (const plan of plans) {
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.inventoryTransfer.create({
-          data: {
-            id: plan.id,
-            transferNumber: plan.transferNumber,
-            originLocationId: plan.originLocationId,
-            destinationLocationId: plan.destinationLocationId,
-            userId: plan.userId,
-            status: InventoryTransferStatus.REQUESTED,
-            notes: seedNotes(`Transfer ${plan.transferNumber}`),
-            requestedAt: plan.requestedAt,
-            items: {
-              create: plan.items.map((item, itemIndex) => ({
-                id: seedId(
-                  `transfer-item-${plan.transferNumber}-${itemIndex + 1}`,
-                ),
-                productId: item.productId,
-                quantityKg: item.quantityKg > 0 ? item.quantityKg : null,
-                quantityPieces:
-                  item.quantityPieces > 0 ? item.quantityPieces : null,
-                unit: item.unit,
-                createdAt: plan.requestedAt,
-              })),
-            },
-          },
-        });
-
-        for (const [itemIndex, item] of plan.items.entries()) {
-          const product = ctx.productsBySku.get(
-            item.productSku ?? item.productName,
-          );
-          if (!product) {
-            throw new Error(`Missing product ${item.productName}`);
-          }
-
-          const originChange = await applyInventoryDelta(tx, {
-            product,
-            locationId: plan.originLocationId,
-            quantityKg: item.quantityKg,
-            quantityPieces: item.quantityPieces,
-            direction: -1,
-          });
-
-          await createInventoryMovement(tx, {
-            change: originChange,
-            userId: plan.userId,
-            type: InventoryMovementType.TRANSFER_OUT,
-            reason: seedNotes(`Transfer out ${plan.transferNumber}`),
-            referenceType: 'TRANSFER',
-            referenceId: plan.id,
-            transferId: plan.id,
-          });
-
-          const destinationChange = await applyInventoryDelta(tx, {
-            product,
-            locationId: plan.destinationLocationId,
-            quantityKg: item.quantityKg,
-            quantityPieces: item.quantityPieces,
-            direction: 1,
-          });
-
-          await createInventoryMovement(tx, {
-            change: destinationChange,
-            userId: plan.userId,
-            type: InventoryMovementType.TRANSFER_IN,
-            reason: seedNotes(`Transfer in ${plan.transferNumber}`),
-            referenceType: 'TRANSFER',
-            referenceId: plan.id,
-            transferId: plan.id,
-          });
-        }
-
-        await tx.inventoryTransfer.update({
-          where: { id: plan.id },
-          data: {
-            status: InventoryTransferStatus.CONFIRMED,
-            confirmedAt: new Date(plan.requestedAt.getTime() + 15 * 60 * 1000),
-          },
-        });
+    const transfer = await transfers.create(
+      {
+        originLocationId: plan.originLocationId,
+        destinationLocationId: plan.destinationLocationId,
+        notes: seedNotes(`Transfer ${plan.transferNumber}`),
+        items: plan.items.map((item) => ({
+          productId: item.productId,
+          unit: item.unit,
+          quantityKg: item.quantityKg,
+          quantityPieces: item.quantityPieces,
+        })),
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      plan.userId,
+      seedIdempotencyKey(plan.transferNumber),
+    );
+    await transfers.confirm(
+      transfer.id,
+      plan.userId,
+      seedIdempotencyKey(`confirm-${plan.transferNumber}`),
     );
   }
 }
@@ -2043,34 +1986,92 @@ async function seedDailyCloses(
   }
 }
 
-async function runOperationalSeed(prisma: PrismaClient) {
+/**
+ * Atomic, non-destructive demo generation. Nested service transactions join the
+ * same transaction; no receipt/history is ever deleted or updated on replay.
+ */
+export async function runOperationalSeed(client: PrismaClient) {
   assertSeedEnvironment();
-  const ctx = await loadSeedContext(prisma);
-  const baseDate = addDays(new Date(), -29);
-
-  const salePlans = buildSalesPlans(ctx, baseDate);
-  const purchasePlans = buildPurchasePlans(ctx, baseDate);
-  const transferPlans = buildTransferPlans(ctx, baseDate);
-  const dailyClosePlans = buildDailyClosePlans(ctx, baseDate);
-
-  await deleteOperationalData(
-    prisma,
-    ctx,
-    salePlans,
-    purchasePlans,
-    transferPlans,
-    dailyClosePlans,
+  return client.$transaction(
+    async (tx) => {
+      // Serialize generators; a concurrent stale serializable run fails closed.
+      // This lock coordinates generators only; it does not bypass business guards.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(718204963)::text`;
+      const prisma = new Proxy(tx, {
+        get(target, property) {
+          if (property === '$transaction') {
+            return (
+              work: (connection: Prisma.TransactionClient) => Promise<unknown>,
+            ) => work(tx);
+          }
+          return Reflect.get(target, property);
+        },
+      }) as unknown as PrismaClient;
+      const ctx = await loadSeedContext(prisma);
+      const baseDate = addDays(new Date(), -29);
+      baseDate.setUTCHours(0, 0, 0, 0);
+      const salePlans = buildSalesPlans(ctx, baseDate);
+      const purchasePlans = buildPurchasePlans(ctx, baseDate);
+      const transferPlans = buildTransferPlans(ctx, baseDate);
+      const dailyClosePlans = buildDailyClosePlans(ctx, baseDate);
+      const [sales, purchases, closes, receipts, transfers, cycles] =
+        await Promise.all([
+          prisma.sale.count({
+            where: { id: { in: salePlans.map((p) => p.id) } },
+          }),
+          prisma.purchase.count({
+            where: { id: { in: purchasePlans.map((p) => p.id) } },
+          }),
+          prisma.pointOfSaleDailyClose.count({
+            where: { id: { in: dailyClosePlans.map((p) => p.id) } },
+          }),
+          prisma.branchSupplyReceipt.count({
+            where: {
+              idempotencyKey: {
+                contains: seedIdempotencyKey('receipt-seedop_purchase-'),
+              },
+            },
+          }),
+          prisma.inventoryTransfer.count({
+            where: { notes: { startsWith: SEED_TAG } },
+          }),
+          prisma.branchSupplyCycle.count({
+            where: { notes: { startsWith: SEED_TAG } },
+          }),
+        ]);
+      if (sales || purchases || closes || receipts || transfers || cycles) {
+        if (
+          sales === SALES_COUNT &&
+          purchases === PURCHASE_COUNT &&
+          closes === DAILY_CLOSE_COUNT &&
+          receipts === PURCHASE_COUNT &&
+          transfers === PURCHASE_COUNT + transferPlans.length &&
+          cycles === 3
+        ) {
+          return { status: 'already-complete' as const };
+        }
+        throw new Error(
+          'OPERATIONAL_SEED_PARTIAL_STATE: existing demo operations preserved; use a fresh disposable database or a reviewed recovery plan. No automatic deletion is allowed.',
+        );
+      }
+      await upsertCommercialPolicies(prisma, ctx);
+      await upsertSuppliers(prisma);
+      await upsertOperationalLocations(prisma, ctx);
+      await upsertRoutes(prisma, ctx);
+      await upsertCustomers(prisma, ctx);
+      await seedPurchases(prisma, ctx, baseDate, purchasePlans);
+      await seedBranchSupplies(prisma, ctx, baseDate, purchasePlans);
+      await seedTransfers(prisma, ctx, transferPlans);
+      await seedSales(prisma, ctx, salePlans);
+      await seedDailyCloses(prisma, ctx, dailyClosePlans);
+      return { status: 'created' as const };
+    },
+    {
+      timeout: 120000,
+      maxWait: 10000,
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    },
   );
-
-  await upsertCommercialPolicies(prisma, ctx);
-  await upsertSuppliers(prisma);
-  await upsertOperationalLocations(prisma, ctx);
-  await upsertRoutes(prisma, ctx);
-  await upsertCustomers(prisma, ctx);
-  await seedPurchases(prisma, ctx, baseDate, purchasePlans);
-  await seedTransfers(prisma, ctx, transferPlans);
-  await seedSales(prisma, ctx, salePlans);
-  await seedDailyCloses(prisma, ctx, dailyClosePlans);
 }
 
 if (require.main === module) {

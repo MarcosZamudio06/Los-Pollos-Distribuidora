@@ -1,0 +1,209 @@
+[
+  {
+    "key": "dashboard",
+    "source": "screenshots erp/dashboard.png",
+    "sourceSha256": "4a497d61dcb3730d95a5928bc74e906dc8e6fa457e062c057dbb2578a672138e",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 924,
+        "bytes": 230429,
+        "path": "landing/public/images/landing/approved/dashboard.jpg",
+        "sha256": "22cb5cdae1dfd0cf6808ca6199b8e6692faeac70be9394f51eb01ec4cb8524d4"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1183,
+        "bytes": 323891,
+        "path": "landing/public/images/landing/approved/dashboard-full.jpg",
+        "sha256": "c4465349ad7c02cc5cae92e9293fe1564e89c65adc22edb31aa40d906b7bed75"
+      }
+    }
+  },
+  {
+    "key": "pos",
+    "source": "screenshots erp/POS.png",
+    "sourceSha256": "37e76baf9fa0f06385dfc8c9f6278a544b8a12e3d98af9dd5c15eb7979b1687a",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 1003,
+        "bytes": 211035,
+        "path": "landing/public/images/landing/approved/pos.jpg",
+        "sha256": "76e94b221cefa26e9a0340b13065c8f4ce1d5b361ec80a52aa142880965d97a1"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1284,
+        "bytes": 311897,
+        "path": "landing/public/images/landing/approved/pos-full.jpg",
+        "sha256": "8c74c7c27f5e33b8cbd2ad8be385896510df8cf72130545df0458995f3b1798b"
+      }
+    }
+  },
+  {
+    "key": "cedis",
+    "source": "screenshots erp/Captura de pantalla 2026-10-17 a la(s) 2.56.42 p.m..png",
+    "sourceSha256": "605cb70af38e8a23844e75fe3c56cc4abfcd65929e3a4aa557313ec1ba20a59b",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 924,
+        "bytes": 212504,
+        "path": "landing/public/images/landing/approved/cedis.jpg",
+        "sha256": "f37e1732b885ac922ef09cf3b0c31a4045ff7302e24cf13f154e4bb5f4eb288f"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1183,
+        "bytes": 307350,
+        "path": "landing/public/images/landing/approved/cedis-full.jpg",
+        "sha256": "e2e7463efd00186f64029a9118f4f00c0a86750572e299531318f7411b34d060"
+      }
+    }
+  },
+  {
+    "key": "purchases",
+    "source": "screenshots erp/Captura de pantalla 2026-10-17 a la(s) 2.59.24 p.m..png",
+    "sourceSha256": "459da1b9f571363933097d69bbfdd4677ba067e8d088c637da8ef6746260b042",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 925,
+        "bytes": 215486,
+        "path": "landing/public/images/landing/approved/purchases.jpg",
+        "sha256": "fdaded523725cad083310144bc3c63b74f8270807092bc3f32dc6ba47cb99bb2"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1184,
+        "bytes": 310794,
+        "path": "landing/public/images/landing/approved/purchases-full.jpg",
+        "sha256": "50db0d6e78aaafc2adb83b80b6f1536ab1f123c773faf743edd8eb785b8e832e"
+      }
+    }
+  },
+  {
+    "key": "fleet",
+    "source": "screenshots erp/Captura de pantalla 2026-10-17 a la(s) 3.00.11 p.m..png",
+    "sourceSha256": "303958c12d1f783cae53ba552564c2e4a90b2bd9b25deeabafef234fb4a24fbe",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 926,
+        "bytes": 334453,
+        "path": "landing/public/images/landing/approved/fleet.jpg",
+        "sha256": "a2c439ccb620b9ccf44e2bb6846daa76afe9a153a54b38dfcc112a44af2c882e"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1186,
+        "bytes": 485897,
+        "path": "landing/public/images/landing/approved/fleet-full.jpg",
+        "sha256": "94cbbfdf2646dd053f7abe13abcfaefb97fc9ad206b1d1d2067d779d2c38529e"
+      }
+    }
+  },
+  {
+    "key": "routePlanner",
+    "source": "screenshots erp/Captura de pantalla 2026-10-17 a la(s) 3.00.34 p.m..png",
+    "sourceSha256": "00b279bbc98e9ca5b308a4f55e3edb44e3a2251c524c117eb4b22b54cd2af87a",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 928,
+        "bytes": 292544,
+        "path": "landing/public/images/landing/approved/route-planner.jpg",
+        "sha256": "e05cbfaf73be144c18064530cc4e4f66cd4713c62db85f54351de950b1958058"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1188,
+        "bytes": 438549,
+        "path": "landing/public/images/landing/approved/route-planner-full.jpg",
+        "sha256": "44d4ca12ac5a8bc792a17043e5cb3c21cb787f2107720d7e06edfbdb316a63cd"
+      }
+    }
+  },
+  {
+    "key": "collections",
+    "source": "screenshots erp/Dashboard 3.png",
+    "sourceSha256": "a4218821cca76a298b975ca6afe1ed529f8d8394be2cb1b18126648f80e4f43a",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 830,
+        "bytes": 189582,
+        "path": "landing/public/images/landing/approved/collections.jpg",
+        "sha256": "40b8c687e670968f3fdea0d028b7f7ab21e02678dee291ce12b708fc28ff8356"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1063,
+        "bytes": 272587,
+        "path": "landing/public/images/landing/approved/collections-full.jpg",
+        "sha256": "3efa8c13f25081bf2924e56328303e617e6ba7187d2271f7ec9c445c6d3df53e"
+      }
+    }
+  },
+  {
+    "key": "closing",
+    "source": "screenshots erp/Captura de pantalla 2026-10-17 a la(s) 3.04.19 p.m..png",
+    "sourceSha256": "0c13beb74c25eaf6de7e51e1aacdd1c8183758f2b16df61cdcb33606f33314d6",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 925,
+        "bytes": 233985,
+        "path": "landing/public/images/landing/approved/closing.jpg",
+        "sha256": "86c464a3b3093f0f52267980ee3c1ca5e60428d09b3262f7f1139ae9b4694997"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1184,
+        "bytes": 331433,
+        "path": "landing/public/images/landing/approved/closing-full.jpg",
+        "sha256": "53738515e4a760bb204bed2bd937fc249d300a3f20a23f720993b23c653d8bee"
+      }
+    }
+  },
+  {
+    "key": "billing",
+    "source": "screenshots erp/Captura de pantalla 2026-10-17 a la(s) 3.03.56 p.m..png",
+    "sourceSha256": "178a0501460419fe3022b88015205923af0be81c5eb27a026543da320f7e66b5",
+    "approval": "User supplied and approved screenshots erp in the current task; no new ERP capture or data mutation",
+    "processing": "Whole frame, proportional downscale and JPEG compression only; no retouching, compositing or edited data",
+    "assets": {
+      "preview": {
+        "width": 1600,
+        "height": 926,
+        "bytes": 170663,
+        "path": "landing/public/images/landing/approved/billing.jpg",
+        "sha256": "dfe9fc9ce9587ee150bc32134f7dbf9e6804e7428e718e3016d6a0024d6b0bc4"
+      },
+      "-full": {
+        "width": 2048,
+        "height": 1185,
+        "bytes": 243375,
+        "path": "landing/public/images/landing/approved/billing-full.jpg",
+        "sha256": "cdc404d0cc83b2a8f99fb3cb08d242b331dceac8dcd6729e91434b1d53579b5d"
+      }
+    }
+  }
+]

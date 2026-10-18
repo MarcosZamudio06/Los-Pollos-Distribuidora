@@ -1,104 +1,61 @@
-import { ArrowDownRight, CheckCircle2, Layers3, Mail, UserRound } from "lucide-react";
-import { useState, type FormEvent } from "react";
-import { LANDING_CONFIG, LANDING_BRAND } from "../config/landingConfig";
-import { LandingMagnetic, LandingReveal } from "./LandingPrimitives";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { getCommercialAction, getCommercialConfig } from "../config/commercialConfig";
+import { getLandingDemoRequestUrl } from "../config/landingConfig";
+import { submitDemoRequest } from "../services/demoRequest";
+import { LandingButton } from "./LandingButton";
+import s from "../styles/landing.module.css";
 
-type FinalCtaProps = {
-  initialInterest?: string;
-};
-
-export function FinalCta({ initialInterest = "" }: FinalCtaProps) {
-  const [isReady, setIsReady] = useState(false);
-  const [interest, setInterest] = useState<string | null>(null);
-  const selectedInterest = interest ?? initialInterest;
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+export function FinalCta() {
+  const config = getCommercialConfig();
+  const action = getCommercialAction();
+  const externalDemo = getLandingDemoRequestUrl();
+  const startedAt = useRef(0);
+  const inFlight = useRef(false);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  useEffect(() => { startedAt.current = Date.now(); }, []);
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // TODO LANDING DEMO INTEGRATION: connect this UI-only form to the future commercial lead service.
-    setIsReady(true);
+    if (inFlight.current || !config.canSubmit) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    if (Date.now() - startedAt.current < 2000 || data.get("website")) {
+      setError("Revisa tus datos antes de enviar."); setStatus("error"); return;
+    }
+    inFlight.current = true; setStatus("loading");
+    try {
+      await submitDemoRequest({
+        name: String(data.get("name") || ""), email: String(data.get("email") || ""),
+        company: String(data.get("company") || ""), message: String(data.get("message") || ""),
+        consent: data.get("consent") === "on", website: String(data.get("website") || ""),
+      }, config.endpoint);
+      setStatus("success"); form.reset();
+    } catch { setError("No se confirmó la recepción. Revisa tu conexión e intenta nuevamente."); setStatus("error"); }
+    finally { inFlight.current = false; }
   }
-
   return (
-    <section aria-labelledby="demo-title" className="landing-cta" data-final-cta id="demo">
-      <div className="landing-cta__atmosphere" aria-hidden="true" />
-      <svg aria-hidden="true" className="landing-cta__signal" preserveAspectRatio="none" viewBox="0 0 900 280">
-        <path d="M0 210 C150 210 168 58 300 82 S420 264 544 186 S690 42 900 62" data-cta-signal-path fill="none" />
-      </svg>
-      <div className="landing-container landing-cta__inner">
-        <LandingReveal className="landing-cta__copy">
-          <p className="landing-eyebrow landing-eyebrow--hero">La señal llega a un sistema conectado</p>
-          <h2 id="demo-title">Convierte tu operación en una forma más clara de trabajar.</h2>
-          <p>
-            Ventas, inventario, sucursales, cobranza, distribución y administración trabajando
-            sobre una misma plataforma.
-          </p>
-          <div className="landing-cta__chips">
-            <span>Configurable</span>
-            <span>Multiempresa</span>
-            <span>Operación real</span>
-          </div>
-          <LandingMagnetic className="landing-text-link landing-text-link--light" href={LANDING_CONFIG.erpLoginUrl}>
-            Ingresar al ERP
-            <ArrowDownRight aria-hidden="true" size={17} />
-          </LandingMagnetic>
-        </LandingReveal>
-
-        <LandingReveal className="landing-demo-form-card" delay={0.1}>
-          <div className="landing-demo-form-card__header">
-            <span className="landing-micro-status">DEMO / HABLEMOS DE TU OPERACIÓN</span>
-            <p>Cuéntanos dónde empieza tu operación.</p>
-          </div>
-          <form onSubmit={handleSubmit}>
-            <label htmlFor="demo-name">
-              <span>Nombre</span>
-              <div className="landing-input-wrap">
-                <UserRound aria-hidden="true" size={16} />
-                <input id="demo-name" name="name" placeholder="Tu nombre" required type="text" />
-              </div>
-            </label>
-            <label htmlFor="demo-email">
-              <span>Correo de trabajo</span>
-              <div className="landing-input-wrap">
-                <Mail aria-hidden="true" size={16} />
-                <input id="demo-email" name="email" placeholder="tu@empresa.com" required type="email" />
-              </div>
-            </label>
-            <label htmlFor="demo-interest">
-              <span>¿Qué estás buscando?</span>
-              <div className="landing-input-wrap">
-                <Layers3 aria-hidden="true" size={16} />
-                <select
-                  id="demo-interest"
-                  name="interest"
-                  onChange={(event) => setInterest(event.target.value)}
-                  required
-                  value={selectedInterest}
-                >
-                  <option value="">Selecciona una opción</option>
-                  <option value="ERP Operación">ERP Operación</option>
-                  <option value="ERP Fiscal">ERP Fiscal</option>
-                  <option value="ERP 360">ERP 360</option>
-                  <option value="ERP Corporativo">ERP Corporativo</option>
-                  <option value="Aún no lo sé">Aún no lo sé</option>
-                </select>
-              </div>
-            </label>
-            <button className="landing-button landing-button--accent landing-button--full" type="submit">
-              Solicitar demostración
-              <ArrowDownRight aria-hidden="true" size={17} />
-            </button>
-          </form>
-          {isReady && (
-            <p aria-live="polite" className="landing-demo-form-card__status" role="status">
-              <CheckCircle2 aria-hidden="true" size={16} />
-              Solicitud preparada para {selectedInterest}. El envío se habilitará próximamente.
-            </p>
-          )}
-          <p className="landing-demo-form-card__note">
-            {LANDING_BRAND.productName} prepara la solicitud en esta interfaz; la conexión con el
-            servicio comercial se habilitará próximamente.
-          </p>
-        </LandingReveal>
+    <section id="demo" className={s.finalCta} aria-labelledby="cta-title" data-final-cta>
+      <div className={`${s.container} ${s.finalCtaInner}`}>
+        <span id="plans" className={s.anchor} aria-hidden="true" />
+        <h2 id="cta-title" data-cta-headline>Conoce el ERP con tu operación en mente.</h2>
+        <p className={s.finalCtaDescription}>{action.kind === "explore" ? "Explora cómo se conectan ventas, inventario, entregas y cobranza. Identifica los módulos que tu empresa necesita." : "Cuéntanos cómo vendes, dónde guardas tu inventario y cómo entregas. La evaluación parte de los módulos que tu empresa necesita."}</p>
+        {config.canSubmit ? <form className={s.demoForm} onSubmit={submit} aria-busy={status === "loading"}>
+          <label>Nombre<input name="name" autoComplete="name" required maxLength={100} disabled={status === "loading"} /></label>
+          <label>Correo de contacto<input name="email" type="email" autoComplete="email" required maxLength={254} disabled={status === "loading"} /></label>
+          <label>Empresa<input name="company" autoComplete="organization" required maxLength={160} disabled={status === "loading"} /></label>
+          <label>¿Qué necesitas organizar?<textarea name="message" rows={3} maxLength={2000} disabled={status === "loading"} /></label>
+          <div className={s.honeypot} aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
+          <label className={s.consent}><input name="consent" type="checkbox" required disabled={status === "loading"} />
+            <span>Autorizo el uso de mis datos para responder esta solicitud. <a href={config.privacyUrl}>Aviso de privacidad</a>.</span>
+          </label>
+          <button type="submit" className={`${s.button} ${s.primary}`} disabled={status === "loading" || status === "success"}>{status === "loading" ? "Enviando…" : status === "success" ? "Solicitud recibida" : "Solicitar demostración"}</button>
+          <p role="status" aria-live="polite">{status === "success" ? "El servicio confirmó la recepción de tu solicitud." : status === "error" ? error : ""}</p>
+        </form> : externalDemo ? <LandingButton href={externalDemo}>Solicitar demostración</LandingButton> : action.kind === "email" ? <LandingButton href={action.href}>{action.label}</LandingButton> : null}
+        <div className={s.heroActions}>
+          <LandingButton href="#erp-gallery" tone={action.kind === "explore" ? "primary" : "secondary"}>Explorar el ERP</LandingButton>
+          {config.loginUrl && <LandingButton href={config.loginUrl} tone="secondary">Acceso clientes</LandingButton>}
+        </div>
+        <svg className={s.ctaSignal} aria-hidden="true" viewBox="0 0 1000 200" preserveAspectRatio="none"><path d="M0 164 C198 164 188 32 400 32 S608 168 790 168 S890 82 1000 82" data-cta-signal-path /></svg>
       </div>
     </section>
   );

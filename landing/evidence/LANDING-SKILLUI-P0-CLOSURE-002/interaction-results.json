@@ -1,0 +1,23 @@
+{
+  "deepLink": true,
+  "finalCTA": true,
+  "failedImage": {
+    "tabs": 10,
+    "retry": 1
+  },
+  "retry": true,
+  "synthesizedTouchMenu": true,
+  "synthesizedTouchTab": "true",
+  "cssZoom200": {
+    "viewport": 1440,
+    "doc": 1440
+  },
+  "a11y": {
+    "language": "es",
+    "h1": 1,
+    "main": 1,
+    "imagesMissingAlt": 0,
+    "duplicates": [],
+    "unlabelledButtons": 0
+  }
+}

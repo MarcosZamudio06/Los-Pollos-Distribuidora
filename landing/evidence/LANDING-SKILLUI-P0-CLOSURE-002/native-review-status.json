@@ -1,0 +1,67 @@
+{
+  "schema": "gentle-ai.review-integration.status/v9",
+  "target_identity": "sha256:3a0d49ab613ef80bf180fc924fdea39ea9f21dfb2b880407ec7398576f2f9483",
+  "projection": {
+    "schema": "gentle-ai.review-integration.projection/v1",
+    "kind": "current-changes",
+    "projection": "workspace",
+    "base_tree": "e2e9c8aeb1c33ed28ce24bfae79f5b9a3d7db362",
+    "initial_review_tree": "c61e62e88678b660f777db1d08084e52202c86db",
+    "current_candidate_tree": "c61e62e88678b660f777db1d08084e52202c86db",
+    "paths_digest": "sha256:13c10697c7ef493eefbd95633b1288986334d621d0930bc817782291b3e5d85c",
+    "paths": [
+      ".DS_Store",
+      ".gitignore",
+      "backend/package.json",
+      "backend/prisma/seed.operational.ts",
+      "landing-desktop-fixed.png",
+      "landing-desktop.png",
+      "landing-full-1440-loaded.png",
+      "landing-full-1440-revealed.png",
+      "landing-full-1440.png",
+      "landing-mobile-320-final.png",
+      "landing-mobile-320-fixed-2.png",
+      "landing-mobile-320-fixed.png",
+      "landing-mobile-320.png",
+      "landing/.env.example",
+      "landing/index.html",
+      "landing/src/App.tsx",
+      "landing/src/__tests__/landing.test.tsx",
+      "landing/src/components/FaqSection.tsx",
+      "landing/src/components/FinalCta.tsx",
+      "landing/src/components/HeroSection.tsx",
+      "landing/src/components/LandingFooter.tsx",
+      "landing/src/components/LandingHeader.tsx",
+      "landing/src/components/LandingMotionShell.tsx",
+      "landing/src/components/LandingProductImage.tsx",
+      "landing/src/components/LogisticsSection.tsx",
+      "landing/src/components/PlatformOverview.tsx",
+      "landing/src/components/SecuritySection.tsx",
+      "landing/src/config/landingConfig.ts",
+      "landing/src/config/landingImages.ts",
+      "landing/src/styles/landing.css",
+      "landing/vite.config.ts"
+    ],
+    "intended_untracked": [],
+    "intended_untracked_proof": "sha256:b97229718d4c7fe50a8892eb474ae5aa6491697bccb400e3e31dbaca4894d2f3",
+    "initial_snapshot_identity": "sha256:3a0d49ab613ef80bf180fc924fdea39ea9f21dfb2b880407ec7398576f2f9483",
+    "current_snapshot_identity": "sha256:3a0d49ab613ef80bf180fc924fdea39ea9f21dfb2b880407ec7398576f2f9483"
+  },
+  "forecast": {
+    "horizon": "partial",
+    "steps": [
+      {
+        "step": 1,
+        "kind": "collect",
+        "reason_code": "intended_untracked_selection_required",
+        "description": "intended untracked selection required"
+      }
+    ]
+  },
+  "next_transition": {
+    "kind": "collect",
+    "reason_code": "intended_untracked_selection_required"
+  },
+  "reviewStarted": false,
+  "receipt": null
+}

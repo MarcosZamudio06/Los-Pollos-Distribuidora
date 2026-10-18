@@ -1,0 +1,95 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "core": {
+    "background": {
+      "value": "#ffffff",
+      "role": "background",
+      "name": "header-border"
+    },
+    "text-muted": {
+      "value": "#b4bcd0",
+      "role": "text-muted",
+      "name": "color-text-secondary"
+    },
+    "text-primary": {
+      "value": "#080808",
+      "role": "text-primary",
+      "name": "theme-color"
+    },
+    "border": {
+      "value": "#191d20",
+      "role": "border",
+      "name": "border-faint-thin"
+    },
+    "surface": {
+      "value": "#f4f2f4",
+      "role": "surface",
+      "name": "color-bg-tertiary"
+    },
+    "accent": {
+      "value": "#828fff",
+      "role": "accent",
+      "name": "color-link-primary"
+    }
+  },
+  "status": {
+    "danger": {
+      "value": "#f34e52",
+      "role": "danger",
+      "name": "color-red"
+    },
+    "success": {
+      "value": "#27a644",
+      "role": "success",
+      "name": "color-green"
+    }
+  },
+  "extended": {
+    "color-text-quaternary": {
+      "value": "#6b6b6b",
+      "role": "unknown",
+      "name": "color-text-quaternary"
+    },
+    "color-9c9da1": {
+      "value": "#9c9da1",
+      "role": "unknown"
+    },
+    "border-solid": {
+      "value": "#2a2e33",
+      "role": "unknown",
+      "name": "border-solid"
+    },
+    "color-button-invert-bg": {
+      "value": "#e2e4e7",
+      "role": "unknown",
+      "name": "color-button-invert-bg"
+    },
+    "color-indigo": {
+      "value": "#5e6ad2",
+      "role": "info",
+      "name": "color-indigo"
+    },
+    "color-585a5c": {
+      "value": "#585a5c",
+      "role": "unknown"
+    },
+    "color-6d78d5": {
+      "value": "#6d78d5",
+      "role": "unknown"
+    },
+    "color-border-tertiary": {
+      "value": "#3e3e44",
+      "role": "unknown",
+      "name": "color-border-tertiary"
+    },
+    "color-blue": {
+      "value": "#4ea7fc",
+      "role": "unknown",
+      "name": "color-blue"
+    }
+  },
+  "meta": {
+    "theme": "light",
+    "extracted": "2026-10-17"
+  }
+}

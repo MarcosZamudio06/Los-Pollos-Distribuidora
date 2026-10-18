@@ -1,22 +1,20 @@
-import { useEffect, useState } from "react";
-import { BillingSection } from "./components/BillingSection";
-import { DriverSection } from "./components/DriverSection";
+import { useEffect } from "react";
 import { FaqSection } from "./components/FaqSection";
-import { FinanceSection } from "./components/FinanceSection";
 import { FinalCta } from "./components/FinalCta";
 import { HeroSection } from "./components/HeroSection";
-import { InventorySection } from "./components/InventorySection";
 import { LandingFooter } from "./components/LandingFooter";
 import { LandingHeader } from "./components/LandingHeader";
 import { LogisticsSection } from "./components/LogisticsSection";
-import { MultiCompanySection } from "./components/MultiCompanySection";
-import { PlatformOverview } from "./components/PlatformOverview";
-import { PlansSection } from "./components/PlansSection";
-import { PosSection } from "./components/PosSection";
+import { ProductGallery } from "./components/ProductGallery";
+import { getCommercialConfig } from "./config/commercialConfig";
+import { ProductDemoVideo } from "./components/ProductDemoVideo";
+import { CompanySection } from "./components/CompanySection";
 import { SecuritySection } from "./components/SecuritySection";
+import { WorkflowSection } from "./components/WorkflowSection";
+import { LandingMotionShell } from "./components/LandingMotionShell";
 import { LANDING_SEO } from "./config/landingConfig";
 import "./styles/landing.css";
-import { LandingMotionShell } from "./components/LandingMotionShell";
+import s from "./styles/landing.module.css";
 
 function upsertMeta(
   attribute: "name" | "property",
@@ -48,7 +46,7 @@ function useLandingSeo() {
     const previousTitle = document.title;
     const previousLanguage = document.documentElement.lang;
     const canonicalUrl =
-      LANDING_SEO.canonicalUrl || window.location.origin;
+      LANDING_SEO.canonicalUrl;
     const previousCanonical = document.head.querySelector<HTMLLinkElement>(
       'link[rel="canonical"]',
     );
@@ -59,15 +57,16 @@ function useLandingSeo() {
     document.documentElement.lang = "es";
     canonical.rel = "canonical";
     canonical.href = canonicalUrl;
-    if (!previousCanonical) document.head.appendChild(canonical);
+    if (canonicalUrl && !previousCanonical) document.head.appendChild(canonical);
 
     const cleanups = [
       upsertMeta("name", "description", LANDING_SEO.description),
       upsertMeta("property", "og:title", LANDING_SEO.title),
       upsertMeta("property", "og:description", LANDING_SEO.description),
       upsertMeta("property", "og:type", "website"),
-      upsertMeta("property", "og:url", canonicalUrl),
-      upsertMeta("name", "twitter:card", "summary"),
+      ...(canonicalUrl ? [upsertMeta("property", "og:url", canonicalUrl)] : []),
+      upsertMeta("name", "twitter:card", getCommercialConfig().socialImage ? "summary_large_image" : "summary"),
+      ...(getCommercialConfig().socialImage ? [upsertMeta("property", "og:image", getCommercialConfig().socialImage), upsertMeta("name", "twitter:image", getCommercialConfig().socialImage), upsertMeta("property", "og:image:alt", "ERP Operativo — pantalla real del producto")] : []),
     ];
 
     return () => {
@@ -84,27 +83,22 @@ function useLandingSeo() {
 }
 
 export function App() {
-  const [selectedPlan, setSelectedPlan] = useState("");
   useLandingSeo();
-
   return (
     <LandingMotionShell>
-      <div className="landing-page">
+      <div id="landing-top" className={s.page}>
+        <a href="#main-content" className={s.skipLink}>Saltar al contenido</a>
         <LandingHeader />
-        <main>
+        <main id="main-content" tabIndex={-1}>
           <HeroSection />
-          <PlatformOverview />
-          <PosSection />
-          <InventorySection />
+          <ProductGallery />
+          <ProductDemoVideo />
+          <WorkflowSection />
           <LogisticsSection />
-          <DriverSection />
-          <FinanceSection />
-          <BillingSection />
-          <MultiCompanySection />
+          <CompanySection />
           <SecuritySection />
-          <PlansSection onSelectPlan={setSelectedPlan} />
           <FaqSection />
-          <FinalCta initialInterest={selectedPlan} />
+          <FinalCta />
         </main>
         <LandingFooter />
       </div>

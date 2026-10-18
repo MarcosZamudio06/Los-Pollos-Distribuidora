@@ -1,0 +1,66 @@
+
+> pollos-distribuidor-landing@0.0.0 test
+> vitest run src/__tests__/visibleOperations.test.tsx
+
+
+ RUN  v4.1.11 /Users/marcoszamudio/Documents/Dev/pollos-distribuidor/landing
+
+ ❯ src/__tests__/visibleOperations.test.tsx (12 tests | 3 failed) 95ms
+     × selects and focuses the module addressed by a fragment link 7ms
+     × keeps a failed capture's module visible and offers retry without fabricating interface content 3ms
+     × zooms the real image with Escape and focus return 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/visibleOperations.test.tsx > Visible Operations P0 > selects and focuses the module addressed by a fragment link
+AssertionError: expected '#module-tab-driver' to be '#module-tab-pos' // Object.is equality
+
+Expected: "#module-tab-pos"
+Received: "#module-tab-driver"
+
+ ❯ src/__tests__/visibleOperations.test.tsx:102:34
+    100|     expect(document.activeElement).toBe(driver);
+    101|     await act(async () => container.querySelector<HTMLButtonElement>("…
+    102|     expect(window.location.hash).toBe("#module-tab-pos");
+       |                                  ^
+    103|     history.replaceState(null, "", window.location.pathname);
+    104|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/__tests__/visibleOperations.test.tsx > Visible Operations P0 > keeps a failed capture's module visible and offers retry without fabricating interface content
+AssertionError: expected 'Repartidores' to be 'Dashboard' // Object.is equality
+
+Expected: "Dashboard"
+Received: "Repartidores"
+
+ ❯ src/__tests__/visibleOperations.test.tsx:142:76
+    140|     await act(async () => container.querySelector("img")?.dispatchEven…
+    141|     expect(container.querySelectorAll('[role="tab"]')).toHaveLength(10…
+    142|     expect(container.querySelector('[aria-selected="true"]')?.textCont…
+       |                                                                            ^
+    143|     expect(container.textContent).toContain("No se pudo cargar");
+    144|     expect(container.textContent).not.toContain("Cliente · Pago");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/__tests__/visibleOperations.test.tsx > Visible Operations P0 > zooms the real image with Escape and focus return
+TypeError: Cannot read properties of null (reading 'click')
+ ❯ src/__tests__/visibleOperations.test.tsx:156:35
+    154|     const container = await mount(<ProductGallery />);
+    155|     const trigger = container.querySelector<HTMLButtonElement>('[aria-…
+    156|     await act(async () => trigger.click());
+       |                                   ^
+    157|     const dialog = container.querySelector("dialog")!;
+    158|     expect(dialog.open).toBe(true);
+ ❯ process.env.NODE_ENV.exports.act node_modules/react/cjs/react.development.js:890:22
+ ❯ src/__tests__/visibleOperations.test.tsx:156:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 9 passed (12)
+   Start at  19:04:12
+   Duration  951ms (transform 177ms, setup 0ms, import 307ms, tests 95ms, environment 480ms)
+

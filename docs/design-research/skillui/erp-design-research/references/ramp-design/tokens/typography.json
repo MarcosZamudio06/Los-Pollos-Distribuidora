@@ -1,0 +1,894 @@
+{
+  "families": [
+    "IBM Plex Sans",
+    "Lausanne",
+    "IBM Plex Mono"
+  ],
+  "scale": {
+    "heading-1": {
+      "fontFamily": "IBM Plex Sans",
+      "fontSize": "clamp(9rem,28.5vw,25.625rem)",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-2": {
+      "fontFamily": "IBM Plex Sans",
+      "fontSize": "140px",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "heading-3": {
+      "fontFamily": "IBM Plex Sans",
+      "fontSize": "clamp(6rem,29vw,8rem)",
+      "fontWeight": "700",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "body": {
+      "fontFamily": "Lausanne",
+      "fontSize": "20px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "caption": {
+      "fontFamily": "Lausanne",
+      "fontSize": "18px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    },
+    "code": {
+      "fontFamily": "IBM Plex Mono",
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "lineHeight": null,
+      "source": "css"
+    }
+  },
+  "fontFaces": [
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-300/TWKLausanne-300.woff2",
+      "format": "woff2",
+      "weight": "300"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-300/TWKLausanne-300Italic.woff2",
+      "format": "woff2",
+      "weight": "300"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-350/TWKLausanne-350.woff2",
+      "format": "woff2",
+      "weight": "350"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-350/TWKLausanne-350Italic.woff2",
+      "format": "woff2",
+      "weight": "350"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-400/TWKLausanne-400.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-400/TWKLausanne-400Italic.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-700/TWKLausanne-700.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "Lausanne",
+      "src": "https://assets.ramp.com/fonts/lausanne/lausanne-700/TWKLausanne-700Italic.woff2",
+      "format": "woff2",
+      "weight": "700"
+    },
+    {
+      "family": "IBM Plex Mono",
+      "src": "https://assets.ramp.com/fonts/ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2",
+      "format": "woff2",
+      "weight": "400"
+    },
+    {
+      "family": "IBM Plex Mono",
+      "src": "https://assets.ramp.com/fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2",
+      "format": "woff2",
+      "weight": "500"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "src": "https://ramp.com/_next/static/immutable/media/e950ad761845b50b-s.0xni8obhzwg1u.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "src": "https://ramp.com/_next/static/immutable/media/b4b686805da2be9a-s.1_42vkugwmqvo.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "src": "https://ramp.com/_next/static/immutable/media/16b20fbdf3771492-s.3y9pj4xnjwrec.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "src": "https://ramp.com/_next/static/immutable/media/9a73e1a274516b8c-s.1_8e5lzf36kdt.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "src": "https://ramp.com/_next/static/immutable/media/695e67c98dd80708-s.1xzc3d3t1k8-g.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "src": "https://ramp.com/_next/static/immutable/media/e506d31c18fd42e6-s.p.0k0di8efl80ld.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/61bcd4edc991c2ed-s.1mzjaui7x4fgc.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/be209e77acba3346-s.1oyfk7qq26gaq.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/136346fda2239b75-s.1f7mryinltk0f.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/16647ddabf112c78-s.009zjti3ncsqp.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/e9be339da3bdc894-s.1em112wisq7dx.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/e0a72d4955e8adc7-s.3ajci_ueckpji.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/b9c6343e1d3917b4-s.0_a0--r_exnk9.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/97bf55ac63f07a15-s.2zinp6_ncikjm.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/642d04eb7a120a92-s.37vk_kb-uypru.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/eaac9c2e49b8554e-s.0m7q98t0uevlk.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1ebcd825285e5c18-s.02p8gaxnor229.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/9f4b8fe6887bdd57-s.1o5j4eeg1wart.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/b72b7f7e313a8790-s.2eld7ve7vx8sz.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2c45a2d566db7cd5-s.2_6ug671y55_p.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/67bd5dc51325906f-s.2pcv15j49af_a.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7dff36c65c995047-s.04dkr4jjshi5t.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/08778d9436108ce9-s.2irn1m_zjm25n.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/599b4d4cf3766e35-s.18hnj33j8xc-y.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/c83e563762e94169-s.2pclfnr-5p0uk.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/8f8d624e998a0826-s.23e7qprzjqhde.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/51187b57b12633b7-s.2cn3_qws94ern.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/5de27fb9fc31e0e4-s.1tqs2veddbhsy.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2da719eef45db28f-s.2tbaydre37sxc.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/113af52241e94ea7-s.2j3ndhgsofprg.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/5cfcb9f7e622af09-s.1hu5kkjp4hqps.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7600ca898ef3b9d5-s.10vzdmn7w9jjh.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2aec7a078902138d-s.3-oa9000694ao.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/5479deb739a089b8-s.09rjbhmwjj2po.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/3ef8c73b16883494-s.160pdku3429py.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/581507f7bafcfd14-s.1nv9y0a7r4qhs.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/a5a0afe300038a3d-s.1b308rvyhtqtm.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/96342b52761534b2-s.2sxa1yzlqtij2.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/38e77e3312aa00e9-s.0mtkvc1k8eag9.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/faf1e709f6476186-s.2c1odxab6z94p.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/e93c98bac12d2ba5-s.1o_malvbxz00f.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/66fe9c9a22ee9941-s.30gb13vynh4-w.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/c7604b18816ac1e9-s.3ovknnon54obf.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7e007e7716d01582-s.25bsbz4f32ij8.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/741160cb18022122-s.32tgl-sq00qky.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/a413ce48c7c68422-s.1qj46jmhlouwx.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7e4b9f1a767c75dc-s.32o478s-vuxvp.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/41961c113fa0ae71-s.24q18balvdrou.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/64d4419bf7f212ce-s.0_8aaoemju0f3.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/bdac35067bb12a18-s.0_pa_66qkeg6s.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/fd301d14ca0c6f18-s.0zdbp04cveyv2.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0ed7e8bd0891caf4-s.1_dehn4g_mj1w.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/d2536da2ae786c36-s.05rqk9s14im5d.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/c0dd3f5199b18e37-s.0mz2no71049p5.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/58dc52839faf5b28-s.3u9y3nkyk3v3f.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/45d59396da90729d-s.2g2v2zu-eo6wp.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/e6a99f4310973b92-s.3_8yfski_b-ye.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/b604f02e5194a04c-s.1p-9zepo6wz5o.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/dcd879fec5ffdebe-s.1-473j9pg6me_.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/21e672c5e4709833-s.05w5wco8nrkgh.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/86a85563a5de2770-s.001ocz65r2ytj.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2e8e2e027cad0419-s.1rj7bu9x-06fw.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0710402c6c3a95e5-s.39xyn75_lljm3.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7c2b563a8c6532c0-s.0fbc0pg-6oltz.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/3c5fc13c13145894-s.0ggrii6cjz6o-.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/6aeff11849cbc2ee-s.1z7t-69k855nn.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/03547e091d0d1aec-s.1fs3yx-8u9o9n.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/229c4c8b352714da-s.1ii1wg43ze3vi.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/6b87e2aa720a0c76-s.2wa3djlnbizsq.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/6865bce1d87b4073-s.2s1eanu0ahbtf.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/b3abf5bcc8dfc688-s.1bs68tkc36777.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1613cd7ddd0d2032-s.1dqceif9mypz6.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2f08ddac969f4f37-s.10wz4x-7bfafx.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/aed34e57dd8cc66c-s.3t6b2b2k63g3k.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0fe2426d1a8b9a9a-s.08rssdvvolcjr.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/5b1f8f8a71c388a6-s.3m0otix88e1h5.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1a4d1dcdceb710fd-s.3m6v-vbskjvl6.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/baad4745e8b73fda-s.3_eulhezlbh9t.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/43605e17d1fee8c4-s.0fh9hfy38xt45.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2ff3f78d1afe9366-s.2q6pjzly_l9n2.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/52930127437bbdd9-s.1tzrc4lyipea2.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/889e6c25948c943d-s.03-6grmsm_rmq.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/cf3e430adeeaebdf-s.1u7nvvxf2idvl.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/9dd0f8fd714c808d-s.2rgzposz3thd0.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/d3f1116c66fb1a4a-s.2elueu4v1e3jw.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/9d25969cb838ff64-s.26sgrzcor6h6w.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/c7577a5848fb64ba-s.0epq7cjv8fvxz.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/ae89dd1db300df6b-s.24cmmbrslm9-o.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/40048722c4d62406-s.2ecvb3j2m65c5.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1d1bfc61255763eb-s.2aerbo3vv_m92.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/20cc47e1799c9a91-s.1wp0m1d07wch-.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/510a8c5f49bab0e1-s.0c3f893eruwal.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7b307348215d45d0-s.2j_7m6xuym8uq.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/ff51cabea89e44f3-s.3_0xsn3grt_1k.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/b6e81c2e410b7157-s.0qn65stih_6wd.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/3ff4bb2201270e5f-s.1cgzzupooxly7.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/7b689bff0722f973-s.3n2vfoc3j8vp9.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/a96dc4e491bb453a-s.27ldu87_3172r.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0c4fb6d41cb69c78-s.2lw1vpht0dv5b.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/b46496b59fdf2114-s.326t2hopxj_os.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/e7c01003a9e6bd0c-s.3k8bm-ik3l4wy.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1cedac01bbf4141a-s.0_jtv070wr784.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0eecc8dc9a838ff0-s.3qbqvma03tovl.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/aa462b227c4c7d4c-s.0ut7-8kmmdstt.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/fb8a5048b5289694-s.0rbhywdnwonly.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/644ed867f972d87e-s.2rhuvxrpp1o7p.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/2baa6f1565db7150-s.0cgh_84ksmuxy.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/6094b8a744b81802-s.271mztj6ubuz5.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1f3de9a80550ea5d-s.2k00_l4ovb-k6.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/e9d74e1b0fb282fc-s.2pr6jwdg4u-11.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/3a494d9022c3b7db-s.03llerarim3p-.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/43a17a2d2215d183-s.02jh1c1vzh4nm.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0f9c526746ae5bad-s.42k629odc-9bz.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/0fe006b5d016eaeb-s.1t6ypujl8-krk.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/bd3f914a6fe15713-s.2hpgqwd2fu-k9.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/559beb00562befc1-s.15kv1dk2bpjli.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/867969c7b4e98030-s.43_mcbcprte8o.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/a925edf6c359573e-s.0gbep2b0evyvt.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/170d7f8a6c66f61b-s.0qysdp_mjqeqc.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/35e0ab049b564d3d-s.3jtl5c0oco7cq.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/981d50869a00c670-s.28_17364gb6t5.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/fa421a43e25e4889-s.1-wo7qmxuoqdl.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1b1c4ce6fcc40210-s.075ma__iv3m87.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/1287deaa7c4e9481-s.2fd8hkj79xjfr.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/c79f92fdab9d5192-s.42mnfl7c3_mb7.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/505274a9c815f5fd-s.057quywegpm48.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/64ad80101a3ad650-s.1s-mgjaa1h3-h.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/564ce7e6580cd387-s.3kqroxyq_-n5m.woff2",
+      "format": "woff2",
+      "weight": "600"
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "src": "https://ramp.com/_next/static/immutable/media/d0a06d383e3a6d69-s.0o-fauzp43oy2.woff2",
+      "format": "woff2",
+      "weight": "600"
+    }
+  ],
+  "rules": {
+    "maxSizesPerScreen": 4,
+    "headingWeightRange": "600-700",
+    "bodyWeight": 400,
+    "lineHeightBody": 1.5,
+    "lineHeightHeading": 1.2
+  }
+}

@@ -1,116 +1,98 @@
-import {
-  Activity,
-  Boxes,
-  CircleDollarSign,
-  ClipboardList,
-  Route,
-  ShieldCheck,
-} from "lucide-react";
-import { LandingReveal, LandingSectionHeading } from "./LandingPrimitives";
+import { SectionHeading } from "./SectionHeading";
+import s from "../styles/landing.module.css";
 
-const platformAreas = [
+const stages = [
   {
-    icon: CircleDollarSign,
-    name: "Comercial",
-    kicker: "01 / inicia la señal",
-    description: "Convierte cada venta en una señal útil para el resto del negocio.",
-    items: ["Ventas POS", "Clientes y crédito", "Políticas comerciales", "Cobranza"],
+    id: "commercial",
+    label: "Comercial",
+    title: "La venta se registra una vez.",
+    description: "Punto de venta, pedidos y condición de contado o crédito entran a la misma operación.",
+    flow: ["Venta", "Cliente", "Pago"],
   },
   {
-    icon: Boxes,
-    name: "Operaciones",
-    kicker: "02 / conserva el contexto",
-    description: "Mueve producto con una ubicación y una historia detrás.",
-    items: ["Inventario por ubicación", "Compras", "CEDIS y sucursales", "Transferencias"],
+    id: "operations",
+    label: "Operaciones",
+    title: "El inventario conserva su ubicación.",
+    description: "Compra, recepción, reservas y transferencias mantienen el contexto de cada producto.",
+    flow: ["Compra", "Recepción", "Ubicación"],
   },
   {
-    icon: Route,
-    name: "Distribución",
-    kicker: "03 / lleva la señal",
-    description: "Del pedido confirmado a la entrega documentada.",
-    items: ["Rutas y pedidos", "GPS de ruta activa", "Evidencias", "Liquidación"],
+    id: "distribution",
+    label: "Distribución",
+    title: "La ruta conecta el pedido con la entrega.",
+    description: "Organiza pedidos asignados y registra entregas, incidencias y evidencia en la operación.",
+    flow: ["CEDIS", "Ruta", "Entrega"],
   },
   {
-    icon: ClipboardList,
-    name: "Gestión",
-    kicker: "04 / lee el pulso",
-    description: "Un tablero común para decidir sin perseguir datos.",
-    items: ["Dashboard y reportes", "Caja y cierres", "Empleados", "Roles y permisos"],
+    id: "management",
+    label: "Gestión",
+    title: "La gestión cierra el recorrido.",
+    description: "Cobranza, liquidaciones y cierre diario quedan relacionados con la actividad.",
+    flow: ["Cobranza", "Revisión", "Cierre"],
   },
   {
-    icon: ShieldCheck,
-    name: "Fiscal",
-    kicker: "05 / cierra el ciclo",
-    description: "La operación comercial y la responsabilidad fiscal, conectadas.",
-    items: ["Solicitudes", "CFDI", "XML y PDF", "Conciliación y remediación"],
+    id: "fiscal",
+    label: "Fiscal",
+    title: "La fiscalidad parte de información ordenada.",
+    description: "Ventas, pagos y cierres mantienen su contexto para consulta administrativa y revisión fiscal.",
+    flow: ["Ventas", "Pagos", "Revisión fiscal"],
   },
 ] as const;
 
 export function PlatformOverview() {
   return (
     <section
-      aria-labelledby="platform-title"
-      className="landing-section landing-platform-section"
-      data-platform-sequence
       id="product"
+      className={`${s.section} ${s.platformSection}`}
+      aria-labelledby="product-title"
+      data-platform-sequence
     >
-      <div className="landing-container">
-        <LandingReveal className="landing-editorial-heading">
-          <LandingSectionHeading
-            description="No es una colección de pantallas aisladas. Es una forma común de trabajar, medir y responder en cada área de la empresa."
-            eyebrow="La plataforma / una señal, muchas decisiones"
-            id="platform-title"
-            title="La operación cambia de estado. El sistema conserva el hilo."
-          />
-        </LandingReveal>
+      <div className={s.container}>
+        <SectionHeading
+          id="product-title"
+          title="Una señal que recorre toda la operación."
+          description="Cada área trabaja con el mismo recorrido: de la venta al control, la entrega, la cobranza y la consulta administrativa."
+        />
+        <div className={s.platformLayout} data-platform-layout>
+          <ol id="features" className={s.platformSteps} aria-label="Etapas de la plataforma">
+            {stages.map((stage, index) => (
+              <li key={stage.id} data-platform-step aria-current={index === 0 ? "step" : undefined}>
+                <span className={s.platformStepNumber}>{`0${index + 1}`}</span>{" "}
+                <span>{stage.label}</span>
+              </li>
+            ))}
+          </ol>
 
-        <div className="landing-platform-story">
-          <aside className="landing-platform-story__rail" aria-label="Etapas de la plataforma">
-            <p className="landing-rail-label">Recorrido operativo</p>
-            <ol>
-              {platformAreas.map(({ name }, index) => (
-                <li data-platform-step key={name}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <strong>{name}</strong>
-                </li>
-              ))}
-            </ol>
-            <div className="landing-platform-story__rail-note">
-              <Activity aria-hidden="true" size={16} />
-              <span>La señal no se corta entre equipos.</span>
-            </div>
-          </aside>
-
-          <div className="landing-platform-stage" data-platform-stage>
-            <div className="landing-platform-stage__orbit" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-            {platformAreas.map(({ description, icon: Icon, items, kicker, name }, index) => (
+          <div className={s.platformStage} data-platform-stage>
+            <svg className={s.platformThread} aria-hidden="true" viewBox="0 0 1000 42" preserveAspectRatio="none">
+              <path d="M0 21 H1000" data-platform-path />
+              <circle cx="0" cy="21" r="4" />
+              <circle cx="250" cy="21" r="4" />
+              <circle cx="500" cy="21" r="4" />
+              <circle cx="750" cy="21" r="4" />
+              <circle cx="1000" cy="21" r="4" />
+            </svg>
+            {stages.map((stage) => (
               <article
-                aria-labelledby={`platform-panel-${index}`}
-                className="landing-platform-panel"
+                key={stage.id}
+                className={s.platformPanel}
+                aria-labelledby={`platform-${stage.id}-title`}
+                aria-hidden="false"
                 data-platform-panel
-                key={name}
+                data-platform-stage-id={stage.id}
               >
-                <div className="landing-platform-panel__meta">
-                  <span className="landing-platform-panel__icon">
-                    <Icon aria-hidden="true" size={20} />
-                  </span>
-                  <span>{kicker}</span>
+                <div className={s.platformPanelCopy}>
+                  <h3 id={`platform-${stage.id}-title`}>{stage.title}</h3>
+                  <p>{stage.description}</p>
                 </div>
-                <h3 id={`platform-panel-${index}`}>{name}</h3>
-                <p>{description}</p>
-                <div className="landing-platform-panel__items">
-                  {items.map((item) => (
-                    <span key={item}>{item}</span>
+                <ol className={s.platformPanelFlow} aria-label={`Recorrido de ${stage.label.toLowerCase()}`}>
+                  {stage.flow.map((label, flowIndex) => (
+                    <li key={label}>
+                      <span>{label}</span>
+                      {flowIndex < stage.flow.length - 1 && <span className={s.flowConnector} aria-hidden="true" />}
+                    </li>
                   ))}
-                </div>
-                <div className="landing-platform-panel__footer">
-                  <span>estado de la señal</span>
-                  <strong>{index === platformAreas.length - 1 ? "trazable" : "en movimiento"}</strong>
-                </div>
+                </ol>
               </article>
             ))}
           </div>

@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1920" viewBox="0 0 1600 1920" role="img" aria-labelledby="title desc">
+  <title id="title">Visible Operations — desktop and mobile architecture proposal</title>
+  <desc id="desc">Low-fidelity planning wireframe, not a real ERP screenshot or implemented page. Charcoal narrative, white headings, warm evidence canvases and gold actions. Desktop and mobile show hero, explorer, conditional workflow, distribution proof, trust, questions and commercial close. All product image slots require authorized real captures.</desc>
+  <defs>
+    <style>
+      text { font-family: Arial, sans-serif; }
+      .title { fill: #fff; font-weight: 700; }
+      .body { fill: #c8c2b7; font-size: 17px; }
+      .small { fill: #c8c2b7; font-size: 13px; }
+      .ink { fill: #24231f; font-size: 16px; }
+      .gold { fill: #d6ad60; font-size: 13px; letter-spacing: 1px; }
+      .rule { stroke: #494b43; stroke-width: 1; }
+      .slot { fill: #faf7f0; stroke: #d6ad60; stroke-width: 1; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+  <rect width="1600" height="1920" fill="#111310"/>
+  <text x="48" y="48" class="gold">LANDING-SKILLUI-DESIGN-ARCHITECTURE / PROPOSAL / 2026-10-17</text>
+  <text x="48" y="92" class="title" font-size="34">Visible Operations</text>
+  <text x="48" y="123" class="body">Architecture wireframe — NOT product proof, production UI or an approved final comp.</text>
+  <text x="48" y="156" class="small">Evidence slots require real authorized ERP captures. No fabricated metrics, product screens or customer proof.</text>
+
+  <!-- Desktop: a dark editorial spine and warm-white evidence interiors. -->
+  <rect x="48" y="188" width="1080" height="1664" rx="14" fill="#1c1e1b" stroke="#494b43"/>
+  <text x="78" y="222" class="small">DESKTOP / relative section hierarchy, not final dimensions</text>
+  <line x1="48" x2="1128" y1="242" y2="242" class="rule"/>
+  <text x="82" y="279" class="title" font-size="18">Los-Pollos-Distribuidora</text>
+  <text x="500" y="278" class="small">Product     Operation     Trust</text>
+  <rect x="879" y="254" width="213" height="40" rx="7" fill="#d6ad60"/>
+  <text x="906" y="280" fill="#211d14" font-size="15">Request demonstration*</text>
+  <line x1="78" x2="1098" y1="312" y2="312" class="rule"/>
+  <text x="82" y="347" class="gold">HERO / OPERATIONAL ERP</text>
+  <text x="82" y="399" class="title" font-size="45">From sale to close.</text>
+  <text x="82" y="451" class="title" font-size="45">Your operation, connected.</text>
+  <text x="750" y="371" class="body">Sales, location-level inventory,</text>
+  <text x="750" y="397" class="body">distribution and collections.</text>
+  <text x="750" y="430" class="small">One clear proposition. One main action.</text>
+  <text x="750" y="453" class="small">Secondary action: explore the product.</text>
+  <rect x="82" y="482" width="1012" height="202" rx="10" class="slot"/>
+  <text x="382" y="552" class="ink">REAL POPULATED POS / DASHBOARD</text>
+  <text x="350" y="584" class="ink">Full workspace context, not a confirmation-button crop</text>
+  <text x="399" y="620" fill="#5a574f" font-size="14">Approved demo capture required — no fake UI</text>
+  <text x="82" y="708" class="small">Demo provenance + capture context; no claim of a customer transaction.</text>
+
+  <line x1="78" x2="1098" y1="733" y2="733" class="rule"/>
+  <text x="82" y="772" class="title" font-size="28">Explore the actual product.</text>
+  <text x="82" y="800" class="small">Explicit selection. No auto-advance. No scroll-locked evaluation.</text>
+  <rect x="82" y="822" width="218" height="42" rx="6" fill="#d6ad60"/>
+  <text x="99" y="848" fill="#211d14" font-size="15">Sales and management</text>
+  <text x="99" y="895" class="body">Inventory / CEDIS</text>
+  <text x="99" y="935" class="body">Purchases</text>
+  <text x="99" y="975" class="body">Fleet / driver</text>
+  <text x="99" y="1015" class="body">Collections / close</text>
+  <rect x="324" y="822" width="770" height="206" rx="10" class="slot"/>
+  <text x="515" y="902" class="ink">SELECTED REAL ERP CAPTURE</text>
+  <text x="514" y="934" fill="#5a574f" font-size="15">Readable full context + explicit enlarge action</text>
+  <text x="514" y="963" fill="#5a574f" font-size="14">Caption, capability and prerequisites change together</text>
+
+  <line x1="78" x2="1098" y1="1054" y2="1054" class="rule"/>
+  <text x="82" y="1094" class="title" font-size="28">Follow one operational story.</text>
+  <text x="82" y="1122" class="small">Example only: counter sales may not need a route; collection may happen later.</text>
+  <line x1="100" x2="1064" y1="1162" y2="1162" stroke="#d6ad60" stroke-width="2"/>
+  <g fill="#d6ad60">
+    <circle cx="100" cy="1162" r="5"/><circle cx="286" cy="1162" r="5"/>
+    <circle cx="480" cy="1162" r="5"/><circle cx="675" cy="1162" r="5"/>
+    <circle cx="870" cy="1162" r="5"/><circle cx="1064" cy="1162" r="5"/>
+  </g>
+  <text x="82" y="1191" class="small">Sale</text><text x="256" y="1191" class="small">Inventory</text>
+  <text x="465" y="1191" class="small">Route</text><text x="649" y="1191" class="small">Delivery</text>
+  <text x="833" y="1191" class="small">Collection</text><text x="1045" y="1191" class="small">Close</text>
+
+  <line x1="78" x2="1098" y1="1218" y2="1218" class="rule"/>
+  <text x="82" y="1258" class="title" font-size="28">Distribution, shown in practice.</text>
+  <rect x="82" y="1280" width="598" height="146" rx="9" class="slot"/>
+  <text x="237" y="1346" class="ink">REAL FLEET / ROUTE VIEW</text>
+  <text x="197" y="1375" fill="#5a574f" font-size="14">Tracking depends on positions and enabled GIS.</text>
+  <rect x="704" y="1280" width="176" height="146" rx="9" class="slot"/>
+  <text x="736" y="1342" class="ink">REAL DRIVER</text>
+  <text x="735" y="1371" fill="#5a574f" font-size="14">Mobile browser</text>
+  <text x="903" y="1313" class="body">Assignment</text>
+  <text x="903" y="1345" class="body">Delivery state</text>
+  <text x="903" y="1377" class="body">Evidence</text>
+  <text x="903" y="1409" class="small">No offline promise.</text>
+
+  <line x1="78" x2="1098" y1="1452" y2="1452" class="rule"/>
+  <text x="82" y="1492" class="title" font-size="28">Trust comes from demonstrable controls.</text>
+  <text x="82" y="1523" class="body">Roles and permissions   /   Location-level balances   /   Traceable differences</text>
+  <text x="82" y="1550" class="small">Independent company deployments — not a shared company switcher or invented certification.</text>
+  <line x1="78" x2="1098" y1="1573" y2="1573" class="rule"/>
+  <text x="82" y="1613" class="title" font-size="26">Questions before deciding.</text>
+  <text x="82" y="1643" class="body">Fit, deployment, credit, permissions, configuration and commercial scope.</text>
+  <line x1="78" x2="1098" y1="1668" y2="1668" class="rule"/>
+  <text x="82" y="1712" class="title" font-size="31">See how it fits your operation.</text>
+  <text x="82" y="1743" class="body">One verified contact destination. Explicit consent. Real receipt confirmation.</text>
+  <rect x="82" y="1765" width="250" height="43" rx="7" fill="#d6ad60"/>
+  <text x="111" y="1793" fill="#211d14" font-size="15">Request demonstration*</text>
+  <text x="360" y="1792" class="small">*Only with a verified channel; otherwise truthful exploration.</text>
+
+  <!-- Mobile reading order, not a desktop screen shrunk to fit. -->
+  <rect x="1160" y="188" width="392" height="1664" rx="14" fill="#1c1e1b" stroke="#494b43"/>
+  <text x="1182" y="222" class="small">MOBILE / single-column reading order</text>
+  <line x1="1160" x2="1552" y1="242" y2="242" class="rule"/>
+  <text x="1182" y="279" class="title" font-size="15">Los-Pollos-Distribuidora</text>
+  <text x="1480" y="279" class="small">Menu</text>
+  <line x1="1182" x2="1530" y1="312" y2="312" class="rule"/>
+  <text x="1182" y="352" class="gold">OPERATIONAL ERP</text>
+  <text x="1182" y="395" class="title" font-size="33">From sale to close.</text>
+  <text x="1182" y="435" class="title" font-size="33">Your operation,</text>
+  <text x="1182" y="475" class="title" font-size="33">connected.</text>
+  <text x="1182" y="515" class="body">Sales, location-level inventory,</text>
+  <text x="1182" y="542" class="body">distribution and collections.</text>
+  <rect x="1182" y="566" width="348" height="44" rx="7" fill="#d6ad60"/>
+  <text x="1270" y="594" fill="#211d14" font-size="15">Main verified action*</text>
+  <text x="1274" y="640" class="small">Explore the product</text>
+  <rect x="1182" y="660" width="348" height="172" rx="9" class="slot"/>
+  <text x="1255" y="728" class="ink">REAL PRODUCT VIEW</text>
+  <text x="1236" y="759" fill="#5a574f" font-size="14">Full context + explicit zoom</text>
+  <text x="1182" y="857" class="small">Approved synthetic-data demo capture.</text>
+  <line x1="1182" x2="1530" y1="880" y2="880" class="rule"/>
+  <text x="1182" y="918" class="title" font-size="26">Explore the product.</text>
+  <rect x="1182" y="940" width="348" height="42" rx="7" fill="#252824" stroke="#d6ad60"/>
+  <text x="1198" y="967" class="body">Selected module / grouped controls</text>
+  <rect x="1182" y="999" width="348" height="131" rx="9" class="slot"/>
+  <text x="1237" y="1068" class="ink">SELECTED REAL CAPTURE</text>
+  <text x="1182" y="1158" class="small">Capability + prerequisite + enlarge.</text>
+  <line x1="1182" x2="1530" y1="1182" y2="1182" class="rule"/>
+  <text x="1182" y="1220" class="title" font-size="25">One operational story.</text>
+  <text x="1182" y="1252" class="body">Stage → relevant evidence → next step.</text>
+  <text x="1182" y="1281" class="small">Normal scroll. Optional branches visible.</text>
+  <line x1="1182" x2="1530" y1="1304" y2="1304" class="rule"/>
+  <text x="1182" y="1343" class="title" font-size="25">Distribution in practice.</text>
+  <rect x="1182" y="1365" width="348" height="91" rx="8" class="slot"/>
+  <text x="1220" y="1417" class="ink">REAL FLEET + DRIVER EVIDENCE</text>
+  <line x1="1182" x2="1530" y1="1477" y2="1477" class="rule"/>
+  <text x="1182" y="1515" class="title" font-size="25">Controls, not promises.</text>
+  <text x="1182" y="1547" class="body">Roles / locations / traceability.</text>
+  <line x1="1182" x2="1530" y1="1573" y2="1573" class="rule"/>
+  <text x="1182" y="1612" class="title" font-size="25">Questions before deciding.</text>
+  <text x="1182" y="1643" class="small">Accessible native disclosures.</text>
+  <line x1="1182" x2="1530" y1="1668" y2="1668" class="rule"/>
+  <text x="1182" y="1710" class="title" font-size="26">See how it fits.</text>
+  <text x="1182" y="1742" class="body">A real conversation, not fake success.</text>
+  <rect x="1182" y="1765" width="348" height="43" rx="7" fill="#d6ad60"/>
+  <text x="1263" y="1793" fill="#211d14" font-size="15">Verified contact channel*</text>
+  <text x="48" y="1890" class="small">REVIEW REQUIRED / White headings on charcoal / Warm-white evidence canvases / Gold selected state and action / No production changes</text>
+</svg>
