@@ -1,0 +1,20 @@
+ M backend/package.json
+ M backend/src/commercial/receiver.ts
+ M backend/src/commercial/store.ts
+ M landing/.env.example
+ M landing/e2e/lead_capture.py
+ M landing/src/__tests__/commercial.test.tsx
+ M landing/src/__tests__/leadCapture.test.ts
+ M landing/src/components/FinalCta.tsx
+ M landing/src/config/commercialConfig.ts
+ M landing/src/services/demoRequest.ts
+?? backend/scripts/build-isolated.ts
+?? backend/src/commercial/data-ops.cli.ts
+?? backend/src/commercial/data-ops.spec.ts
+?? backend/src/commercial/data-ops.ts
+?? backend/src/commercial/hardening.spec.ts
+?? backend/src/commercial/isolation.spec.ts
+?? landing/LANDING-LEAD-CAPTURE-001A.md
+?? landing/e2e/lead_capture.browser.ts
+?? landing/evidence/LANDING-LEAD-CAPTURE-001A/
+?? landing/src/__tests__/leadHardening.test.ts

@@ -80,7 +80,7 @@ async def run():
         assert await button.is_disabled()
         assert await form.locator('[role="status"]').evaluate('(el) => el === document.activeElement')
         await page.screenshot(path=str(OUT / 'success-320.png'))
-        # Reload creates a new browser key, but identical payload must not create another lead.
+        # Independent keys must not discover previous requests by content.
         await page.reload(wait_until='networkidle')
         form = page.locator('#demo form')
         for name, value in {'name': 'Synthetic Person', 'company': 'Synthetic Business', 'email': 'lead@example.test'}.items():
@@ -90,18 +90,18 @@ async def run():
         async with page.expect_response(lambda r: '/__lead-local/leads' in r.url) as response_info:
             await form.locator('button[type="submit"]').click()
         duplicate = await (await response_info.value).json()
-        assert duplicate['duplicate'] is True and duplicate['reference'] == body['reference']
-        await page.get_by_text('Esta solicitud ya estaba registrada.', exact=False).wait_for()
+        assert duplicate['duplicate'] is False and duplicate['reference'] != body['reference']
+        await page.get_by_text('¡Solicitud recibida!', exact=True).wait_for()
         # Independent SQLite readback: actual disk persistence plus asynchronous local mail capture.
         for _ in range(15):
             with sqlite3.connect(DB) as db:
                 leads = db.execute('select count(*) from leads').fetchone()[0]
                 mails = db.execute('select count(*) from captured_mail').fetchone()[0]
                 states = db.execute('select state from leads').fetchall()
-                if leads == mails == 1 and states == [('sent',)]: break
+                if leads == mails == 2 and states == [('sent',), ('sent',)]: break
             await page.wait_for_timeout(1000)
-        assert leads == mails == 1 and states == [('sent',)]
-        results['checks'] = ['required fields', 'invalid email', 'required consent', 'unconfirmed HTTP200 rejected (stub)', 'real localhost durable POST', 'retry same key', 'duplicate same reference', 'disk readback', 'one captured mail', 'success keyboard focus', 'reduced-motion enabled']
+        assert leads == mails == 2 and states == [('sent',), ('sent',)]
+        results['checks'] = ['required fields', 'invalid email', 'required consent', 'unconfirmed HTTP200 rejected (stub)', 'real localhost durable POST', 'retry same key', 'independent key private receipt', 'disk readback', 'one captured mail per independent key', 'success keyboard focus', 'reduced-motion enabled']
         results['database'] = {'leads': leads, 'captured_mail': mails, 'notification': 'sent (local capture only)'}
         results['page_errors'] = errors
         assert not errors

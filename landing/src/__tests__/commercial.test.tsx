@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { publicUrl, getCommercialConfig } from "../config/commercialConfig";
 import { submitDemoRequest } from "../services/demoRequest";
 
+beforeEach(() => { vi.stubEnv("VITE_LANDING_PRIVACY_VERSION", "demo-contact-v1"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const receipt = { accepted: true, reference: "12345678-1234-4234-8234-123456789001", receipt: "stored", duplicate: false, notification: "pending" };
 const lead = { name: "Demo", email: "demo@example.test", company: "Example", message: "Ventas", consent: true, website: "" };

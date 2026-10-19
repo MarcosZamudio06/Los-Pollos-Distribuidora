@@ -1,0 +1,21 @@
+{
+  "backend/package.json": "c9038b5b30882450fedfdcb679e6a19f74fe183d3b41fa501a02f0041a687096",
+  "backend/scripts/build-isolated.ts": "5f0f83693f1e871b1e6cd978973e10e8909b34e623767a7ce5d334613c013138",
+  "backend/src/commercial/data-ops.cli.ts": "8ac8d68127c9c99d9f0e4e4788ad8b8466c172ee64d97dff2b2a1025d2bce465",
+  "backend/src/commercial/data-ops.spec.ts": "0af88d5fa291066e3fbf91ea5f776b2001db0c60a966be0d917827bb117f8de6",
+  "backend/src/commercial/data-ops.ts": "134bbbffbf293146287696c71bd0826938d991a973eccb54770a8d460d9518eb",
+  "backend/src/commercial/hardening.spec.ts": "641477b1373c05994d19e23d0d0f433316ef8936e907bea38bfe4c468bb67487",
+  "backend/src/commercial/isolation.spec.ts": "11026b1b3bab2e3f96ed5f29060a09feec59d2149c529b2da0087a864777fd84",
+  "backend/src/commercial/receiver.ts": "f67d33dbde544c05d2d23128e13ce02fe4ca45f464d3d6279844a3b24b0fb63b",
+  "backend/src/commercial/store.ts": "222525d3d6f49df8e4a32b0daaccbbe95f08342bbcf44631997a605d0be01158",
+  "landing/.env.example": "ae31ad73ebbaab58509e5eee432ac44b3cf427bdb2c52cdb4faae5cd7910f285",
+  "landing/LANDING-LEAD-CAPTURE-001A.md": "59365a48c056af3aeb54135a3a7497f9b1f452100df079eac4b4fa3827d5429c",
+  "landing/e2e/lead_capture.browser.ts": "48321ff62b6f1cf07db88577e31b30b8d1a0f00e9f12386e8f6bff1ec1178f3a",
+  "landing/e2e/lead_capture.py": "c12c14f465975ed47997ec5ac2409b1bb5a233950d8c506bf4c096772734a3c2",
+  "landing/src/__tests__/commercial.test.tsx": "e5da28160040bd0d8f58ef175e3f8866c8a1afead430a0a4a693d7d47b041a52",
+  "landing/src/__tests__/leadCapture.test.ts": "17dae4935ee8842754602c3a0edb1aaa7018aeadfecca4e1c2586892786149cd",
+  "landing/src/__tests__/leadHardening.test.ts": "24d557f1fb53f7f762139272a8d860492d558aab88f7ce85907f2321e8b89fc4",
+  "landing/src/components/FinalCta.tsx": "8c052e324b7a50e50470c3abfbd34361f3551e4ecb13445920102c324eaf3a75",
+  "landing/src/config/commercialConfig.ts": "156e11a58e84e719d50b2ebf3890c68dc3b780ce77a8dda2f56c6d1f2aa7d7f5",
+  "landing/src/services/demoRequest.ts": "b3c3859f6bf07bad275aa96ed875d16af9c394984956db2e731e0fe13968f958"
+}

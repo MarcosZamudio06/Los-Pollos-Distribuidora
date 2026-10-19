@@ -48,6 +48,7 @@ export class LeadStore {
   }
   rateLimit(ipHash: string, now = Date.now()) {
     const bucket = Math.floor(now / 600000);
+    let limited = false;
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.prepare('DELETE FROM rate WHERE expires < ?').run(now);
@@ -60,15 +61,24 @@ export class LeadStore {
             'INSERT INTO rate VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET count=count+1 RETURNING count',
           )
           .get(id, now + 1200000)!;
-        if (Number(row.count) > limit)
-          throw new HttpException('Request limit reached', 429);
+        limited ||= Number(row.count) > limit;
       }
+      // Rejected attempts also consume the global budget. Roll back only storage failures.
       this.db.exec('COMMIT');
-    } catch (e) {
+    } catch (error) {
       this.db.exec('ROLLBACK');
-      throw e;
+      throw error;
     }
+    if (limited)
+      throw new HttpException(
+        {
+          code: 'LEAD_RATE_LIMITED',
+          retryAfterSeconds: Math.ceil(((bucket + 1) * 600000 - now) / 1000),
+        },
+        429,
+      );
   }
+
   accept(
     key: string,
     lead: LeadDto,
@@ -91,20 +101,11 @@ export class LeadStore {
     const digest = createHash('sha256').update(payload).digest('hex');
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      const bound = this.db
-        .prepare('SELECT lead_id,digest FROM request_keys WHERE key=?')
+      // The original random key is the only capability for replay. Never look up by content
+      // or honor aliases previously created by cross-key content deduplication.
+      const existing = this.db
+        .prepare('SELECT id,digest,state FROM leads WHERE request_key=?')
         .get(key);
-      if (bound && bound.digest !== digest)
-        throw new ConflictException('Idempotency key already used');
-      const existing = bound
-        ? this.db
-            .prepare('SELECT id,digest,state FROM leads WHERE id=?')
-            .get(String(bound.lead_id))
-        : this.db
-            .prepare(
-              'SELECT id,digest,state FROM leads WHERE digest=? AND created>=? ORDER BY created LIMIT 1',
-            )
-            .get(digest, now - 86400000);
       if (existing && existing.digest !== digest)
         throw new ConflictException('Idempotency key already used');
       const id = existing ? String(existing.id) : randomUUID();
@@ -122,9 +123,6 @@ export class LeadStore {
             now,
             privacyUrl,
           );
-      this.db
-        .prepare('INSERT OR IGNORE INTO request_keys VALUES (?,?,?)')
-        .run(key, id, digest);
       this.db.exec('COMMIT');
       return {
         accepted: true as const,

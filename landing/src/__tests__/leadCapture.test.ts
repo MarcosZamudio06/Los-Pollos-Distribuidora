@@ -1,7 +1,8 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { getCommercialConfig, receiverUrl } from '../config/commercialConfig';
 import { submitDemoRequest } from '../services/demoRequest';
 const lead = { name: 'Synthetic Person', company: 'Synthetic Business', email: 'lead@example.test', phone: '', interest: '', message: '', consent: true, website: '' };
+beforeEach(() => { vi.stubEnv("VITE_LANDING_PRIVACY_VERSION", "demo-contact-v1"); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 it('requires a durable receipt and validates optional commercial fields', async () => {
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ accepted: true }) }); vi.stubGlobal('fetch', fetch);

@@ -1,8 +1,9 @@
-import { receiverUrl } from "../config/commercialConfig";
+import { receiverUrl, getCommercialConfig } from "../config/commercialConfig";
 export type DemoRequest = { name: string; email: string; company: string; phone?: string; interest?: string; message: string; consent: boolean; website: string };
 export type DemoReceipt = { accepted: true; reference: string; receipt: "stored" | "delivered"; duplicate: boolean; notification: "pending" | "sent" | "reconciliation_required" };
-export async function submitDemoRequest(lead: DemoRequest, endpoint: string, requestKey: string = crypto.randomUUID(), consentVersion = "demo-contact-v1"): Promise<DemoReceipt> {
-  if (!receiverUrl(endpoint) || lead.website || !lead.consent ||
+export class DemoRequestError extends Error {}
+export async function submitDemoRequest(lead: DemoRequest, endpoint: string, requestKey: string = crypto.randomUUID(), consentVersion = getCommercialConfig().consentVersion): Promise<DemoReceipt> {
+  if (!/^[a-zA-Z0-9._-]{1,80}$/.test(consentVersion) || consentVersion !== getCommercialConfig().consentVersion || !receiverUrl(endpoint) || lead.website || !lead.consent ||
     !lead.name.trim() || !lead.company.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email.trim()) ||
     lead.name.length > 100 || lead.company.length > 160 || lead.email.length > 254 || lead.message.length > 2000 ||
     (lead.phone || "").length > 40 || !/^[0-9+() .-]*$/.test(lead.phone || "") ||
@@ -18,6 +19,7 @@ export async function submitDemoRequest(lead: DemoRequest, endpoint: string, req
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey },
       body: JSON.stringify({ ...lead, phone: lead.phone || "", interest: lead.interest || "", name: lead.name.trim(), company: lead.company.trim(), email: lead.email.trim(), source: "landing-demo", consentVersion }),
     });
+    if (response.status === 429) throw new DemoRequestError("Demasiadas solicitudes. Espera antes de volver a intentarlo.");
     if (!response.ok) throw new Error("No se recibió la solicitud. Intenta de nuevo más tarde.");
     const result: unknown = await response.json();
     if (!result || typeof result !== "object" || !("accepted" in result) || result.accepted !== true ||

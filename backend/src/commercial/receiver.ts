@@ -90,35 +90,47 @@ export async function createReceiver(config: LeadConfig, store: LeadStore) {
     config.trustedProxies.length ? config.trustedProxies : false,
   );
   app.use(helmet());
+  // CORS supplies browser-readable error headers; it is NOT an authentication mechanism.
+  app.enableCors({
+    origin: config.origins,
+    methods: ['POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Idempotency-Key'],
+    exposedHeaders: ['Retry-After'],
+    credentials: false,
+    maxAge: 600,
+  });
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Cache-Control', 'no-store');
-    const origin = req.get('Origin');
-    if (!origin || !config.origins.includes(origin)) {
-      res.status(403).json({ accepted: false, code: 'LEAD_403' });
-      return;
-    }
     try {
-      // Forwarded IP is accepted only from explicitly configured trusted proxy addresses.
-      if (req.method !== 'OPTIONS')
+      // Account for all POST attempts to this route, including forged/missing Origin.
+      // Forwarding is trusted only from the configured edge IPs.
+      if (req.method === 'POST' && req.path === '/leads')
         store.rateLimit(
           createHmac('sha256', config.rateSecret)
             .update(req.ip || req.socket.remoteAddress || 'unknown')
             .digest('hex'),
         );
-      next();
-    } catch (e) {
-      res.setHeader('Retry-After', '600');
-      res
-        .status(e instanceof HttpException ? e.getStatus() : 503)
-        .json({ accepted: false, code: 'LEAD_UNAVAILABLE' });
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === 429) {
+        const body = error.getResponse() as { retryAfterSeconds: number };
+        res.setHeader('Retry-After', String(body.retryAfterSeconds));
+        res
+          .status(429)
+          .json({
+            accepted: false,
+            code: 'LEAD_RATE_LIMITED',
+            retryAfterSeconds: body.retryAfterSeconds,
+          });
+      } else
+        res.status(503).json({ accepted: false, code: 'LEAD_UNAVAILABLE' });
+      return;
     }
-  });
-  app.enableCors({
-    origin: config.origins,
-    methods: ['POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Idempotency-Key'],
-    credentials: false,
-    maxAge: 600,
+    const origin = req.get('Origin');
+    if (!origin || !config.origins.includes(origin)) {
+      res.status(403).json({ accepted: false, code: 'LEAD_403' });
+      return;
+    }
+    next();
   });
   app.useBodyParser('json', { limit: '16kb', strict: true });
   app.useGlobalPipes(

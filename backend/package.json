@@ -34,7 +34,9 @@
     "pretest:e2e": "ts-node scripts/forbid-focused-tests.ts",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "start:commercial": "node dist/backend/src/commercial/main.js",
-    "start:commercial:local": "ts-node src/commercial/main.ts"
+    "start:commercial:local": "ts-node src/commercial/main.ts",
+    "build:isolated": "ts-node scripts/build-isolated.ts",
+    "commercial:data": "ts-node src/commercial/data-ops.cli.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

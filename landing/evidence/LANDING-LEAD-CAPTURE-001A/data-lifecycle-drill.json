@@ -1,0 +1,26 @@
+{
+  "scope": "Synthetic local fixtures only; not production DR or legal retention approval",
+  "online_backup": "PASS",
+  "restore_to_new_target": "PASS",
+  "dry_run_matches": 2,
+  "explicit_offline_purge_deleted": 2,
+  "integrity_checks": "PASS",
+  "counts": {
+    "live_fixture": {
+      "leads": 3,
+      "captured_mail": 3,
+      "request_keys": 0
+    },
+    "snapshot": {
+      "leads": 2,
+      "captured_mail": 2,
+      "request_keys": 0
+    },
+    "restored_then_purged": {
+      "leads": 0,
+      "captured_mail": 0,
+      "request_keys": 0
+    }
+  },
+  "note": "Live fixture gained one independent request during a rate-test bucket rollover; only the restored copy was purged."
+}

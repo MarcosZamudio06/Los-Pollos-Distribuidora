@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { getCommercialAction, getCommercialConfig } from "../config/commercialConfig";
 import { getLandingDemoRequestUrl } from "../config/landingConfig";
-import { submitDemoRequest, type DemoReceipt } from "../services/demoRequest";
+import { submitDemoRequest, DemoRequestError, type DemoReceipt } from "../services/demoRequest";
 import { LandingButton } from "./LandingButton";
 import s from "../styles/landing.module.css";
 
@@ -37,7 +37,7 @@ export function FinalCta() {
       const result = await submitDemoRequest(lead, config.endpoint, retry.current.key, config.consentVersion);
       setReceipt(result);
       setStatus("success"); form.reset();
-    } catch { setError("No se confirmó la recepción. Revisa tu conexión e intenta nuevamente."); setStatus("error"); }
+    } catch (error) { setError(error instanceof DemoRequestError ? error.message : "No se confirmó la recepción. Revisa tu conexión e intenta nuevamente."); setStatus("error"); }
     finally { inFlight.current = false; }
   }
   return (

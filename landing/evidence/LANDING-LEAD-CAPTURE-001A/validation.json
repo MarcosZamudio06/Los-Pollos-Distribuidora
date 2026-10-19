@@ -1,0 +1,29 @@
+{
+  "baseline_head": "99c3b7891ed5246b5740b53ac1591e4c0152ab61",
+  "recordedUtc": "2026-10-19T04:06:15.133030+00:00",
+  "landing": {
+    "tests": 59,
+    "suites": 6,
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "production_build": "PASS",
+    "explicit_missing_version_production_browser": "PASS"
+  },
+  "backend": {
+    "commercial_tests": 30,
+    "suites": 5,
+    "global_lint": "PASS",
+    "production_types": "PASS",
+    "inclusive_test_types": {
+      "status": "FAIL_OUT_OF_SCOPE",
+      "diagnostics": 148,
+      "new_scope_diagnostics": 0
+    },
+    "standard_nest_build": "BLOCKED_EPERM_existing_dist_cleanup",
+    "actual_nest_isolated_build": "PASS"
+  },
+  "browser": "PASS_final_full_script_NEW_database",
+  "privacy_and_commercial": "NO_GO_owner_configuration_approval_and_real_external_delivery_pending",
+  "native_review_receipt": "not started or claimed",
+  "commit_push_merge": false
+}

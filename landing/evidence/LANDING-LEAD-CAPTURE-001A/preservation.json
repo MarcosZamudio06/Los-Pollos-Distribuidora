@@ -1,0 +1,15 @@
+{
+  "baseline_head": "99c3b7891ed5246b5740b53ac1591e4c0152ab61",
+  "unchanged_files": 1271,
+  "intentionally_modified_landing_files": [
+    "landing/e2e/lead_capture.py",
+    "landing/src/__tests__/commercial.test.tsx",
+    "landing/src/__tests__/leadCapture.test.ts",
+    "landing/src/components/FinalCta.tsx",
+    "landing/src/config/commercialConfig.ts",
+    "landing/src/services/demoRequest.ts"
+  ],
+  "unexpected_changes": [],
+  "design_assets_styles_and_005_006_preserved": true,
+  "operational_sources_and_multi_company_data_models_preserved": true
+}

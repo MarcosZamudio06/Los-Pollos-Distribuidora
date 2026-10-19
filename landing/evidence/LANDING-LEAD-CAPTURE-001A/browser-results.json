@@ -1,0 +1,53 @@
+{
+  "scope": "001A fresh local synthetic capture only; no public receiver or external mail",
+  "widths": [
+    {
+      "width": 1440,
+      "overflow": false,
+      "whiteHeading": true,
+      "keyboard": true
+    },
+    {
+      "width": 1280,
+      "overflow": false,
+      "whiteHeading": true,
+      "keyboard": true
+    },
+    {
+      "width": 768,
+      "overflow": false,
+      "whiteHeading": true,
+      "keyboard": true
+    },
+    {
+      "width": 390,
+      "overflow": false,
+      "whiteHeading": true,
+      "keyboard": true
+    },
+    {
+      "width": 320,
+      "overflow": false,
+      "whiteHeading": true,
+      "keyboard": true
+    }
+  ],
+  "checks": [
+    "required fields",
+    "invalid email",
+    "explicit consent",
+    "unconfirmed HTTP200 rejected (negative stub)",
+    "real receiver commit with lost acknowledgment",
+    "same-key retry",
+    "independent-key privacy",
+    "success focus",
+    "reduced-motion no pinning",
+    "real429 UX",
+    "cross-origin Retry-After readable"
+  ],
+  "pageErrors": [],
+  "note": "Final complete script passed on a new receiver/database; recordedUtc is evidence recording time, not a production delivery timestamp.",
+  "normalMotion1440": "PASS (additional fresh smoke)",
+  "productionMissingVersion": "PASS: explicit reserved test URLs, no version, zero commercial forms",
+  "recordedUtc": "2026-10-19T04:03:24.283845+00:00"
+}

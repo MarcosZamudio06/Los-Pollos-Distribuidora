@@ -8,10 +8,12 @@ export function receiverUrl(value: string | undefined) {
 export function getCommercialConfig() {
   const endpoint = receiverUrl(import.meta.env.VITE_LANDING_LEAD_ENDPOINT);
   const privacyUrl = receiverUrl(import.meta.env.VITE_LANDING_PRIVACY_URL);
+  const consentVersion = import.meta.env.VITE_LANDING_PRIVACY_VERSION || "";
+  const validVersion = /^[a-zA-Z0-9._-]{1,80}$/.test(consentVersion);
   const erpUrl = publicUrl(import.meta.env.VITE_ERP_APP_URL);
   return {
     localCapture: import.meta.env.DEV && import.meta.env.VITE_LANDING_LOCAL_LEADS === "true",
-    endpoint, privacyUrl, consentVersion: import.meta.env.VITE_LANDING_PRIVACY_VERSION || "demo-contact-v1", canSubmit: Boolean(endpoint && privacyUrl),
+    endpoint, privacyUrl, consentVersion, canSubmit: Boolean(endpoint && privacyUrl && validVersion),
     loginUrl: erpUrl ? `${erpUrl.replace(/\/+$/, "")}/login` : "",
     canonicalUrl: publicUrl(import.meta.env.VITE_LANDING_CANONICAL_URL),
     socialImage: publicUrl(import.meta.env.VITE_LANDING_SOCIAL_IMAGE),
