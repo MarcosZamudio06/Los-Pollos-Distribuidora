@@ -64,7 +64,7 @@ export function ProductGallery() {
   return <section id="erp-gallery" className={`${s.section} ${s.explorerSection}`} aria-labelledby="gallery-title">
     <div className={s.container}>
       <span id="product" className={s.anchor} /><span id="features" className={s.anchor} />
-      <SectionHeading id="gallery-title" title="Elige un área. Conoce la operación." description="Explora las herramientas del ERP con pantallas reales y un alcance claro para cada módulo." />
+      <SectionHeading id="gallery-title" title="Elige un área. Conoce la operación." description="¿Qué necesitas coordinar? Revisa las pantallas y el alcance de cada área para identificar los módulos que encajan con tu operación." />
       <div className={s.explorerLayout}>
         <div className={s.explorerRail}>
           <div role="tablist" aria-label="Módulos del ERP" aria-orientation={compactTabs ? "horizontal" : "vertical"} className={s.explorerTabs}>

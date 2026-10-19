@@ -1,0 +1,135 @@
+{
+  "head": "3ea1042e265d48f39ccbbeab0c47a833a0ad3920",
+  "branch": "feat/landing-commercial-final-polish-005",
+  "note": "Observed before task 006 source edits; no prior source file edited by task 006. Hashes allow final readback verification. Not a separate backup.",
+  "files": [
+    {
+      "path": "landing/LANDING-COMMERCIAL-FINAL-POLISH-005.md",
+      "sha256": "c0fca62e60fc33c7be4f837ae6dbf2ace836519b7fbc16badc7330b8ead7caa6"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-1280.png",
+      "sha256": "777e59fbffce48b9922465e6892c8cb63a5b6b4e1f8b0de42b203b4ee846ebcb"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-1440.png",
+      "sha256": "62c26235f706704153bc61e842ceaf628b7f9bdfa4b28fae1edcac301241ff62"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-320.png",
+      "sha256": "45056ede984c4f5e6a35a544a1d208be85ce79b52518164900eed5e0eec86880"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-390.png",
+      "sha256": "de16ab6d8e55c87b9f3beada19d4a3fc144a14975404f5a95fe365518f7e4f8a"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-768.png",
+      "sha256": "9f2fd1c296c8119a2b8a27c4ab7dcbdb37df6e1c12f817021ebb532c9613ef0b"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/asset-audit.json",
+      "sha256": "ef0f92789f8b93f366077f841937e1600f0d5dc82f488a159367dff19807c042"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-1280.png",
+      "sha256": "5f0244c3cbb2a97b7c05982cfa1cf579fdbad8aa5f8c5b2b66365962b52a1c47"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-1440.png",
+      "sha256": "d2d3b5b0bc6b6d526db5b4ed6829af80ef5abab5d7dc43a64b12d6446fb3928e"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-320.png",
+      "sha256": "2643d58a777d9e614c18ac8bea5f6d1505ce4e4de389cb68bd4f2033524a7bf2"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-390.png",
+      "sha256": "d73f9c328724b5b61a7799f04db4d1b09017d962ba479760e77b2625c26af9c0"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-768.png",
+      "sha256": "9d586055df0ab59ff71cb864bed13510e347ef697eae8e80ba9c8cb5b5d6f41d"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/browser-audit.json",
+      "sha256": "f48d47d3ca7d3667a887b8be5e0d6069389e35ae5e9932e4145b1d9fb475361b"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/delivery-manifest.json",
+      "sha256": "83665cb5793ca2ad088056eb8ee86da8c8f246e6f49fb35799ed69ecd0ffd6d7"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/hero-after-1440.png",
+      "sha256": "05184b76e5fdaf301230ddb8c732ef3e6a89e71fc84fedce15aca79ac176f8b2"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/inspection-1440.png",
+      "sha256": "8d4462d43c5374ee43b7af2ca419e89d5eb4bd90d5acc086dc52b7482e47acbe"
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/interaction-audit.json",
+      "sha256": "5decd6a612a03fe63060c5e7c536d150fbed619e7654976910e83e73cc6843c5"
+    },
+    {
+      "path": "landing/src/App.tsx",
+      "sha256": "b881c853717b3cd79b5a309ebc0f024d3405499cd6fd71e22bf1a12897e354f3"
+    },
+    {
+      "path": "landing/src/__tests__/commercial.test.tsx",
+      "sha256": "8b7fb15c6ff3a921a753554c0456dd519acbff6ed79e06a298fb4ee22aa971e3"
+    },
+    {
+      "path": "landing/src/__tests__/finalPolish.test.tsx",
+      "sha256": "c3a5e9404d2511dcddc92a52673968ee0d0fad324b5baf424c3b9709b2f76ae0"
+    },
+    {
+      "path": "landing/src/__tests__/landing.test.tsx",
+      "sha256": "6d7ba3664e22e6dd4c94fcd9522f4faabf126955032f6b5820c24f142c602abf"
+    },
+    {
+      "path": "landing/src/components/CompanySection.tsx",
+      "sha256": "1cac104d2eac4959897f42f723503813d095a286f56976734eeb8d8a8f57c9d1"
+    },
+    {
+      "path": "landing/src/components/HeroSection.tsx",
+      "sha256": "8729c1540e3287b5e65df3db5008d73f8eaac60a1b8966ede770cee378f13db4"
+    },
+    {
+      "path": "landing/src/components/LogisticsSection.tsx",
+      "sha256": "a36ca714c684b957ff51acb3addb78d403844b10ec47d4b8cfa6461ec9540068"
+    },
+    {
+      "path": "landing/src/components/ProductCapture.tsx",
+      "sha256": "aee7a9ad15a590ca06ba67e5fc9181779e7ce61aad9048509db2a0d043ed2065"
+    },
+    {
+      "path": "landing/src/components/ProductGallery.tsx",
+      "sha256": "75e580aeda1be84c4c7d481bbd04800f0b38dc4ad28dc119ec326cfdfa5045fa"
+    },
+    {
+      "path": "landing/src/components/ProductPreview.tsx",
+      "sha256": "3c001441a20f2e362819a54f07a07fe7a931b3218c62b62870ae32a0f35743a4"
+    },
+    {
+      "path": "landing/src/components/SecuritySection.tsx",
+      "sha256": "8f0e60139e3a27d75bb6de038ba107c3d1fc4ca871d47869dfff7f4e83a76612"
+    },
+    {
+      "path": "landing/src/config/brand.ts",
+      "sha256": "f9ce937ff871698f48abac75cd0bbc1f78d00225fb69ad8f4c52cf426685a53a"
+    },
+    {
+      "path": "landing/src/config/landingConfig.ts",
+      "sha256": "44a30b9d09a45c4d1b2f5be4dd8bec64cb16e5ed4c93d4d77e492871e41c1c0c"
+    },
+    {
+      "path": "landing/src/styles/landing.module.css",
+      "sha256": "ab8b2a183d2d0b4ef228d50c7b04b673180d15b4fa25e83865cf375fe28b8469"
+    },
+    {
+      "path": "landing/vite.config.ts",
+      "sha256": "6dc2d722d475ddd45201f77c9feb57f883c2c147bb234d901fa39e270366b6e1"
+    }
+  ]
+}

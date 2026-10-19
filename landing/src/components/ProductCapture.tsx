@@ -1,3 +1,4 @@
+import { LANDING_BRAND } from "../config/landingConfig";
 import { useId, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { getProductCapture, type ProductImageKey } from "../config/productModules";
@@ -35,7 +36,7 @@ export function ProductCapture({ image, title, caption, priority = false, instan
       }}><Maximize2 size={16} aria-hidden="true" /><span>Ampliar</span></button>}
     </div>
     <div className={s.evidenceCanvas}>
-      {available ? <img key={capture.src} src={capture.src} alt={`Captura real del ERP: ${title}`} width={capture.width} height={capture.height}
+      {available ? <img key={capture.src} src={capture.src} alt={`Captura real de ${LANDING_BRAND.productName}: ${title}`} width={capture.width} height={capture.height}
         loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : "auto"} decoding="async" onError={previewImageFailed} />
         : <div className={s.evidenceUnavailable} role="status">
           <p>{capture.src ? "No se pudo cargar esta captura." : "Esta vista no tiene una captura disponible."}</p>
@@ -56,7 +57,7 @@ export function ProductCapture({ image, title, caption, priority = false, instan
             setFailedFullSrc(null);
           }}>Reintentar ampliación</button>
         </div>
-        : <div className={s.captureZoomCanvas}><img src={capture.full} alt={`Captura ampliada del ERP: ${title}`} width={capture.fullWidth} height={capture.fullHeight} onError={() => setFailedFullSrc(capture.full)} /></div>)}
+        : <div className={s.captureZoomCanvas}><img src={capture.full} alt={`Captura ampliada de ${LANDING_BRAND.productName}: ${title}`} width={capture.fullWidth} height={capture.fullHeight} onError={() => setFailedFullSrc(capture.full)} /></div>)}
       <p className={s.evidenceCaption}>{caption}</p>
     </dialog>
   </figure>;

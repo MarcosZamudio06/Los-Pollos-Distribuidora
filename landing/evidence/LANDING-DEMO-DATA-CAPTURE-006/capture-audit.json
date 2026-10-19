@@ -1,0 +1,290 @@
+{
+  "auditTimeUTC": "2026-10-18T20:23:23.434559+00:00",
+  "newCaptures": [],
+  "inventory": "BLOCKED",
+  "assetsBefore": [
+    {
+      "path": "landing/public/images/landing/approved/billing-full.jpg",
+      "bytes": 243375,
+      "sha256": "cdc404d0cc83b2a8f99fb3cb08d242b331dceac8dcd6729e91434b1d53579b5d",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/billing.jpg",
+      "bytes": 170663,
+      "sha256": "dfe9fc9ce9587ee150bc32134f7dbf9e6804e7428e718e3016d6a0024d6b0bc4",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/cedis-full.jpg",
+      "bytes": 307350,
+      "sha256": "e2e7463efd00186f64029a9118f4f00c0a86750572e299531318f7411b34d060",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/cedis.jpg",
+      "bytes": 212504,
+      "sha256": "f37e1732b885ac922ef09cf3b0c31a4045ff7302e24cf13f154e4bb5f4eb288f",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/closing-full.jpg",
+      "bytes": 331433,
+      "sha256": "53738515e4a760bb204bed2bd937fc249d300a3f20a23f720993b23c653d8bee",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/closing.jpg",
+      "bytes": 233985,
+      "sha256": "86c464a3b3093f0f52267980ee3c1ca5e60428d09b3262f7f1139ae9b4694997",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/collections-full.jpg",
+      "bytes": 272587,
+      "sha256": "3efa8c13f25081bf2924e56328303e617e6ba7187d2271f7ec9c445c6d3df53e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/collections.jpg",
+      "bytes": 189582,
+      "sha256": "40b8c687e670968f3fdea0d028b7f7ab21e02678dee291ce12b708fc28ff8356",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/dashboard-full.jpg",
+      "bytes": 323891,
+      "sha256": "c4465349ad7c02cc5cae92e9293fe1564e89c65adc22edb31aa40d906b7bed75",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/dashboard.jpg",
+      "bytes": 230429,
+      "sha256": "22cb5cdae1dfd0cf6808ca6199b8e6692faeac70be9394f51eb01ec4cb8524d4",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/driver-stop.jpg",
+      "bytes": 92674,
+      "sha256": "fc01fa5b503523657eaeae0303d85f43859fca35c62603e5e5b5e801adae8bd9",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/driver.jpg",
+      "bytes": 108844,
+      "sha256": "6d7b3e037872473d4f2037e53f2fbe43300f3f0428eda03b08138a749413a31d",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/fleet-full.jpg",
+      "bytes": 485897,
+      "sha256": "94cbbfdf2646dd053f7abe13abcfaefb97fc9ad206b1d1d2067d779d2c38529e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/fleet.jpg",
+      "bytes": 334453,
+      "sha256": "a2c439ccb620b9ccf44e2bb6846daa76afe9a153a54b38dfcc112a44af2c882e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/pos-full.jpg",
+      "bytes": 311897,
+      "sha256": "8c74c7c27f5e33b8cbd2ad8be385896510df8cf72130545df0458995f3b1798b",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/pos.jpg",
+      "bytes": 211035,
+      "sha256": "76e94b221cefa26e9a0340b13065c8f4ce1d5b361ec80a52aa142880965d97a1",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/purchases-full.jpg",
+      "bytes": 310794,
+      "sha256": "50db0d6e78aaafc2adb83b80b6f1536ab1f123c773faf743edd8eb785b8e832e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/purchases.jpg",
+      "bytes": 215486,
+      "sha256": "fdaded523725cad083310144bc3c63b74f8270807092bc3f32dc6ba47cb99bb2",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/route-planner-full.jpg",
+      "bytes": 438549,
+      "sha256": "44d4ca12ac5a8bc792a17043e5cb3c21cb787f2107720d7e06edfbdb316a63cd",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/route-planner.jpg",
+      "bytes": 292544,
+      "sha256": "e05cbfaf73be144c18064530cc4e4f66cd4713c62db85f54351de950b1958058",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    }
+  ],
+  "assetsAfter": [
+    {
+      "path": "landing/public/images/landing/approved/billing-full.jpg",
+      "bytes": 243375,
+      "sha256": "cdc404d0cc83b2a8f99fb3cb08d242b331dceac8dcd6729e91434b1d53579b5d",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/billing.jpg",
+      "bytes": 170663,
+      "sha256": "dfe9fc9ce9587ee150bc32134f7dbf9e6804e7428e718e3016d6a0024d6b0bc4",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/cedis-full.jpg",
+      "bytes": 307350,
+      "sha256": "e2e7463efd00186f64029a9118f4f00c0a86750572e299531318f7411b34d060",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/cedis.jpg",
+      "bytes": 212504,
+      "sha256": "f37e1732b885ac922ef09cf3b0c31a4045ff7302e24cf13f154e4bb5f4eb288f",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/closing-full.jpg",
+      "bytes": 331433,
+      "sha256": "53738515e4a760bb204bed2bd937fc249d300a3f20a23f720993b23c653d8bee",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/closing.jpg",
+      "bytes": 233985,
+      "sha256": "86c464a3b3093f0f52267980ee3c1ca5e60428d09b3262f7f1139ae9b4694997",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/collections-full.jpg",
+      "bytes": 272587,
+      "sha256": "3efa8c13f25081bf2924e56328303e617e6ba7187d2271f7ec9c445c6d3df53e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/collections.jpg",
+      "bytes": 189582,
+      "sha256": "40b8c687e670968f3fdea0d028b7f7ab21e02678dee291ce12b708fc28ff8356",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/dashboard-full.jpg",
+      "bytes": 323891,
+      "sha256": "c4465349ad7c02cc5cae92e9293fe1564e89c65adc22edb31aa40d906b7bed75",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/dashboard.jpg",
+      "bytes": 230429,
+      "sha256": "22cb5cdae1dfd0cf6808ca6199b8e6692faeac70be9394f51eb01ec4cb8524d4",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/driver-stop.jpg",
+      "bytes": 92674,
+      "sha256": "fc01fa5b503523657eaeae0303d85f43859fca35c62603e5e5b5e801adae8bd9",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/driver.jpg",
+      "bytes": 108844,
+      "sha256": "6d7b3e037872473d4f2037e53f2fbe43300f3f0428eda03b08138a749413a31d",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/fleet-full.jpg",
+      "bytes": 485897,
+      "sha256": "94cbbfdf2646dd053f7abe13abcfaefb97fc9ad206b1d1d2067d779d2c38529e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/fleet.jpg",
+      "bytes": 334453,
+      "sha256": "a2c439ccb620b9ccf44e2bb6846daa76afe9a153a54b38dfcc112a44af2c882e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/pos-full.jpg",
+      "bytes": 311897,
+      "sha256": "8c74c7c27f5e33b8cbd2ad8be385896510df8cf72130545df0458995f3b1798b",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/pos.jpg",
+      "bytes": 211035,
+      "sha256": "76e94b221cefa26e9a0340b13065c8f4ce1d5b361ec80a52aa142880965d97a1",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/purchases-full.jpg",
+      "bytes": 310794,
+      "sha256": "50db0d6e78aaafc2adb83b80b6f1536ab1f123c773faf743edd8eb785b8e832e",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/purchases.jpg",
+      "bytes": 215486,
+      "sha256": "fdaded523725cad083310144bc3c63b74f8270807092bc3f32dc6ba47cb99bb2",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/route-planner-full.jpg",
+      "bytes": 438549,
+      "sha256": "44d4ca12ac5a8bc792a17043e5cb3c21cb787f2107720d7e06edfbdb316a63cd",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    },
+    {
+      "path": "landing/public/images/landing/approved/route-planner.jpg",
+      "bytes": 292544,
+      "sha256": "e05cbfaf73be144c18064530cc4e4f66cd4713c62db85f54351de950b1958058",
+      "task006Disposition": "NEEDS_REVIEW",
+      "note": "Existing approved legacy derivative; no new isolated-dataset provenance established in task 006."
+    }
+  ],
+  "note": "No new capture approved, rejected or published. Legacy approval preserved, not independently renewed. Resolution/source/date remain in original approval manifests."
+}

@@ -1,0 +1,33 @@
+ M .gitignore
+ M backend/package.json
+ M landing/.env.example
+ M landing/src/App.tsx
+ M landing/src/__tests__/commercial.test.tsx
+ M landing/src/__tests__/landing.test.tsx
+ M landing/src/components/CompanySection.tsx
+ M landing/src/components/FinalCta.tsx
+ M landing/src/components/HeroSection.tsx
+ M landing/src/components/LogisticsSection.tsx
+ M landing/src/components/ProductCapture.tsx
+ M landing/src/components/ProductGallery.tsx
+ M landing/src/components/ProductPreview.tsx
+ M landing/src/components/SecuritySection.tsx
+ M landing/src/config/commercialConfig.ts
+ M landing/src/config/landingConfig.ts
+ M landing/src/services/demoRequest.ts
+ M landing/src/styles/landing.module.css
+ M landing/vite.config.ts
+?? backend/commercial.env.example
+?? backend/src/commercial/
+?? landing/LANDING-COMMERCIAL-FINAL-POLISH-005.md
+?? landing/LANDING-DEMO-DATA-CAPTURE-006.md
+?? landing/LANDING-LEAD-CAPTURE-001.md
+?? landing/e2e/
+?? landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/
+?? landing/evidence/LANDING-DEMO-DATA-CAPTURE-006/
+?? landing/evidence/LANDING-LEAD-CAPTURE-001/
+?? landing/src/__tests__/finalPolish.test.tsx
+?? landing/src/__tests__/leadCapture.test.ts
+?? landing/src/config/brand.ts
+?? scripts/landing_demo_006b.py
+?? scripts/tests/

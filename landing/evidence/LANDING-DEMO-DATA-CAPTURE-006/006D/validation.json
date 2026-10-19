@@ -1,0 +1,52 @@
+{
+  "checkedAt": "2026-10-19T01:01:19.475Z",
+  "url": "http://localhost:5174",
+  "scope": "Existing landing only; not authenticated ERP captures or new dataset acceptance",
+  "widths": [
+    1440,
+    1280,
+    768,
+    390,
+    320
+  ],
+  "height": 1000,
+  "allWidths": {
+    "noHorizontalOverflow": true,
+    "whiteVisibleHeadings": true,
+    "moduleCount": 10,
+    "stageCount": 6,
+    "existingModuleImagesDecoded": 9,
+    "inventoryImage": null,
+    "zoomOpenEscapeCloseAndFocusReturn": true,
+    "keyboardEndSelectsLastTab": true
+  },
+  "reducedMotionSmokeWidth": 320,
+  "console": "React DevTools informational messages only",
+  "landingTests": {
+    "files": 4,
+    "passed": 53
+  },
+  "lint": "PASS",
+  "typecheck": "PASS",
+  "build": "PASS",
+  "newApprovedERPAssets": 0,
+  "loadedConfirmation": [
+    {
+      "width": 1440,
+      "allPageImagesDecoded": true,
+      "reducedMotion": true
+    },
+    {
+      "width": 390,
+      "allPageImagesDecoded": true,
+      "reducedMotion": true
+    }
+  ],
+  "warpCommands": {
+    "bashSyntax": "PASS",
+    "nodeSyntax": "PASS",
+    "runtime": "NOT_RUN",
+    "backup": "NOT_OBTAINED",
+    "nodeSyntaxEnvironment": "OPENSSL_CONF=/dev/null; initial check blocked by host OpenSSL configuration"
+  }
+}

@@ -4,6 +4,7 @@ import { publicUrl, getCommercialConfig } from "../config/commercialConfig";
 import { submitDemoRequest } from "../services/demoRequest";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+const receipt = { accepted: true, reference: "12345678-1234-4234-8234-123456789001", receipt: "stored", duplicate: false, notification: "pending" };
 const lead = { name: "Demo", email: "demo@example.test", company: "Example", message: "Ventas", consent: true, website: "" };
 describe("commercial safety contract", () => {
   it("rejects local, credentialed, and insecure public destinations", () => {
@@ -26,11 +27,11 @@ describe("commercial safety contract", () => {
   it("requires an explicit acceptance from the receiver, not just HTTP success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
     await expect(submitDemoRequest(lead, "https://leads.example.test")).rejects.toThrow();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ accepted: true }) }));
-    await expect(submitDemoRequest(lead, "https://leads.example.test")).resolves.toBeUndefined();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => (receipt) }));
+    await expect(submitDemoRequest(lead, "https://leads.example.test")).resolves.toEqual(receipt);
   });
   it("does not accept a rejected HTTP response even if its body says accepted", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ accepted: true }) }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => (receipt) }));
     await expect(submitDemoRequest(lead, "https://leads.example.test")).rejects.toThrow();
   });
 });
@@ -84,12 +85,14 @@ it("exposes form loading, rejects unconfirmed acceptance and only then shows con
     form.querySelector<HTMLInputElement>('[name="consent"]')!.checked = true;
     await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     expect(form.getAttribute("aria-busy")).toBe("true");
+    await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(fetch).toHaveBeenCalledTimes(1);
     await act(async () => resolveFetch({ ok: true, json: async () => ({}) }));
     expect(container.textContent).toContain("No se confirmó la recepción");
     expect(container.textContent).not.toContain("Solicitud recibida");
     await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
-    await act(async () => resolveFetch({ ok: true, json: async () => ({ accepted: true }) }));
-    expect(container.textContent).toContain("El servicio confirmó la recepción");
+    await act(async () => resolveFetch({ ok: true, json: async () => (receipt) }));
+    expect(container.textContent).toContain("Gracias por tu interés. Hemos registrado tu solicitud");
     expect(form.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
   } finally { clock.mockRestore(); await act(async () => root.unmount()); container.remove(); }
 });
@@ -108,4 +111,18 @@ it("uses exploration without a channel and validated email without promising del
   expect(getCommercialAction()).toEqual({ label: "Contactar por correo", href: "mailto:sales@example.test", kind: "email" });
   vi.stubEnv("VITE_LANDING_CONTACT_EMAIL", "sales%0d%0a@example.test");
   expect(getCommercialAction().href).toBe("mailto:sales%250d%250a@example.test");
+});
+
+it("rejects invalid or oversized lead fields before making a request", async () => {
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  for (const invalid of [{ email: "invalid" }, { name: " " }, { name: "a".repeat(101) }, { company: "a".repeat(161) }, { message: "a".repeat(2001) }]) {
+    await expect(submitDemoRequest({ ...lead, ...invalid }, "https://leads.example.test")).rejects.toThrow();
+  }
+  expect(fetch).not.toHaveBeenCalled();
+});
+it("does not confirm reception after a network or malformed JSON failure", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Network unavailable")));
+  await expect(submitDemoRequest(lead, "https://leads.example.test")).rejects.toThrow();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => { throw new SyntaxError("Invalid JSON"); } }));
+  await expect(submitDemoRequest(lead, "https://leads.example.test")).rejects.toThrow();
 });

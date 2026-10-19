@@ -1,0 +1,23 @@
+{
+  ".gitignore": "71f354f063589ad3a759884832140183bc1e089fa751bcee97eb9ff59bddc039",
+  "backend/commercial.env.example": "6c79bd4166dea7898fc8fb96168961cc2024f52b907c42510d6b54ef5866d6d0",
+  "backend/package.json": "eae70f18ccc306c43d809182a906e68778f913621cbb1c8052cd0dbced092141",
+  "backend/src/commercial/config.ts": "465ecf9239c43a82ba64c29f827bcb07ed313186352e99788bdeae3891dd2e39",
+  "backend/src/commercial/lead.dto.ts": "ec2ad27b2b900256a7c4268a49e5e9df5e41b00fa9208c94e626dd8fac10cfac",
+  "backend/src/commercial/main.ts": "88ede13b49f115f0fc9d2360fd9ef88d377cbdaf6a26a5731b5f24cb3af23966",
+  "backend/src/commercial/notification.spec.ts": "377e1ec7a595ce94aca6f7887c700300fffc85f79ee5679a2f9bfed1b4ead37f",
+  "backend/src/commercial/notification.ts": "f5b2ec4fc1d454645011db474dc54c808f5a47379cd7926aba0768afd32ed2cf",
+  "backend/src/commercial/receiver.spec.ts": "0e333d52020bbe48a23b96be80d97c7b2014d9e191a64912c3203f845b766e0c",
+  "backend/src/commercial/receiver.ts": "7dffa0adbc96b78b1435af9ed1257ced2e13036d2283fe40f1ed5542df0bd011",
+  "backend/src/commercial/status.ts": "92819e6d6c3bb06df0caf64826c215b373d89d6509edd3b7437b89e45e80bdb0",
+  "backend/src/commercial/store.ts": "6b5c3e122919b0e053cb0e770dc9b952471d2a018eef4a2b3b891b46b1662056",
+  "landing/.env.example": "c14cd733be6688d5556e7bd24f439359663b602d0880e6a07ee7a93467afbf4f",
+  "landing/e2e/lead_capture.py": "943e3212fa133b05ff09b225696ed0ac112defaf866b3de25c08e8b054e1fe28",
+  "landing/src/__tests__/commercial.test.tsx": "7885d929c5a5fb4a5b454017244b7967a6137e8be3d27792ec87c4fd81b47643",
+  "landing/src/__tests__/leadCapture.test.ts": "bab44f115c175bf7392cd7c24d726b55b287c3b43df278d579e3598c53666756",
+  "landing/src/components/FinalCta.tsx": "e52a31ef5a90ed7e35f76b170b43e208532cbe65fdd3650d1f36fa082d308d25",
+  "landing/src/config/commercialConfig.ts": "c3c3a27c3b9955ded6fd47e7fe5eb196818f515dc977c87841688af660222148",
+  "landing/src/services/demoRequest.ts": "ae3f37a30a253bc7e7776e3b11b7dc3f08b51a6c3cbed5880ea979a299c6c17a",
+  "landing/src/styles/landing.module.css": "a32c29e930792e13feb97067d98b1d051d228839d017c6ab4a631c5959c2791f",
+  "landing/vite.config.ts": "0060fac50b6ef24cb5c87b8463704fcd3e2f56ea5361502eb66e0484a425db6b"
+}

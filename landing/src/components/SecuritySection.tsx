@@ -3,9 +3,9 @@ import { SectionHeading } from "./SectionHeading";
 import s from "../styles/landing.module.css";
 
 const safeguards = [
-  { title: "Roles y permisos", description: "Define qué herramientas utiliza cada perfil del equipo.", Icon: KeyRound },
-  { title: "Contexto de ubicación", description: "Consulta inventario y movimientos vinculados a su ubicación operativa.", Icon: MapPinned },
-  { title: "Trazabilidad operativa", description: "Ventas, pagos y movimientos conservan sus referencias para revisión.", Icon: ListChecks },
+  { title: "Roles y permisos", description: "Delimita las herramientas de cada perfil para que cada persona trabaje con el acceso que le corresponde.", Icon: KeyRound },
+  { title: "Contexto de ubicación", description: "Conoce dónde está la mercancía y revisa sus movimientos sin confundir existencias de distintas ubicaciones.", Icon: MapPinned },
+  { title: "Trazabilidad operativa", description: "Revisa el origen de una venta, un pago o un movimiento sin perder sus referencias.", Icon: ListChecks },
 ] as const;
 
 export function SecuritySection() {
@@ -15,7 +15,7 @@ export function SecuritySection() {
         <SectionHeading
           id="security-title"
           title="Confianza en lo que el equipo registra."
-          description="Controles de acceso y trazabilidad para trabajar con claridad, sin promesas que el producto no necesita."
+          description="Quién puede operar, dónde está la mercancía y qué quedó registrado: controles concretos que puedes revisar en el recorrido del producto."
         />
         <div className={s.securityRows}>
           {safeguards.map(({ title, description, Icon }) => (

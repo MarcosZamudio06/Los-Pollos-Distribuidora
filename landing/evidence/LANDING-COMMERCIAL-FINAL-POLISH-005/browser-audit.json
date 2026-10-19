@@ -1,0 +1,126 @@
+{
+  "testedAt": "2026-10-18T19:37:07.914Z",
+  "url": "http://127.0.0.1:5187",
+  "widths": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "scrollWidth": 1440,
+      "heroTop": 330.3515625,
+      "brokenAnchors": [],
+      "whiteHeadings": true,
+      "imagesLoaded": true,
+      "zoomOpened": true,
+      "zoomClosed": true,
+      "focusReturned": true,
+      "keyboardLastTab": "Facturación"
+    },
+    {
+      "width": 1280,
+      "height": 1000,
+      "scrollWidth": 1280,
+      "heroTop": 385.5546875,
+      "brokenAnchors": [],
+      "whiteHeadings": true,
+      "imagesLoaded": true,
+      "zoomOpened": true,
+      "zoomClosed": true,
+      "focusReturned": true,
+      "keyboardLastTab": "Facturación"
+    },
+    {
+      "width": 768,
+      "height": 1000,
+      "scrollWidth": 768,
+      "heroTop": 388.59375,
+      "brokenAnchors": [],
+      "whiteHeadings": true,
+      "imagesLoaded": true,
+      "zoomOpened": true,
+      "zoomClosed": true,
+      "focusReturned": true,
+      "keyboardLastTab": "Facturación"
+    },
+    {
+      "width": 390,
+      "height": 1000,
+      "scrollWidth": 390,
+      "heroTop": 434.2890625,
+      "brokenAnchors": [],
+      "whiteHeadings": true,
+      "imagesLoaded": true,
+      "zoomOpened": true,
+      "zoomClosed": true,
+      "focusReturned": true,
+      "keyboardLastTab": "Facturación"
+    },
+    {
+      "width": 320,
+      "height": 1000,
+      "scrollWidth": 320,
+      "heroTop": 555.71875,
+      "brokenAnchors": [],
+      "whiteHeadings": true,
+      "imagesLoaded": true,
+      "zoomOpened": true,
+      "zoomClosed": true,
+      "focusReturned": true,
+      "keyboardLastTab": "Facturación"
+    }
+  ],
+  "modules": [
+    {
+      "name": "Dashboard",
+      "imageLoaded": true
+    },
+    {
+      "name": "Punto de venta",
+      "imageLoaded": true
+    },
+    {
+      "name": "Inventario",
+      "imageLoaded": null
+    },
+    {
+      "name": "CEDIS",
+      "imageLoaded": true
+    },
+    {
+      "name": "Compras",
+      "imageLoaded": true
+    },
+    {
+      "name": "Logística",
+      "imageLoaded": true
+    },
+    {
+      "name": "Repartidores",
+      "imageLoaded": true
+    },
+    {
+      "name": "Cobranza",
+      "imageLoaded": true
+    },
+    {
+      "name": "Cierres",
+      "imageLoaded": true
+    },
+    {
+      "name": "Facturación",
+      "imageLoaded": true
+    }
+  ],
+  "reduced": {
+    "enabled": true,
+    "opacity": "1",
+    "transform": "none"
+  },
+  "cta": {
+    "hash": "#erp-gallery",
+    "targetTop": 92,
+    "forms": 0
+  },
+  "menuFocus": true,
+  "faqKeyboard": true,
+  "pageErrors": []
+}

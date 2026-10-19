@@ -1,0 +1,134 @@
+{
+  "checkedAt": "2026-10-19T01:02:27.073147+00:00",
+  "files": [
+    {
+      "path": "landing/LANDING-COMMERCIAL-FINAL-POLISH-005.md",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-1280.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-1440.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-320.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-390.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/after-768.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/asset-audit.json",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-1280.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-1440.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-320.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-390.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/before-768.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/browser-audit.json",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/delivery-manifest.json",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/hero-after-1440.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/inspection-1440.png",
+      "match": true
+    },
+    {
+      "path": "landing/evidence/LANDING-COMMERCIAL-FINAL-POLISH-005/interaction-audit.json",
+      "match": true
+    },
+    {
+      "path": "landing/src/App.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/__tests__/commercial.test.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/__tests__/finalPolish.test.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/__tests__/landing.test.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/CompanySection.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/HeroSection.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/LogisticsSection.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/ProductCapture.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/ProductGallery.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/ProductPreview.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/components/SecuritySection.tsx",
+      "match": true
+    },
+    {
+      "path": "landing/src/config/brand.ts",
+      "match": true
+    },
+    {
+      "path": "landing/src/config/landingConfig.ts",
+      "match": true
+    },
+    {
+      "path": "landing/src/styles/landing.module.css",
+      "match": true
+    },
+    {
+      "path": "landing/vite.config.ts",
+      "match": true
+    }
+  ],
+  "allMatch": true
+}

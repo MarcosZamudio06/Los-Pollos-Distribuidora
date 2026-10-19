@@ -1,0 +1,33 @@
+{
+  "landing_tests": {
+    "files": 5,
+    "passed": 57
+  },
+  "landing_lint": "PASS",
+  "landing_typecheck": "PASS",
+  "landing_build": "PASS (isolated temporary output)",
+  "backend_commercial_tests": {
+    "suites": 2,
+    "passed": 19
+  },
+  "backend_global_lint_check": "PASS",
+  "backend_build_typecheck": "PASS",
+  "standard_nest_build": "BLOCKED_EPERM_existing_dist",
+  "isolated_backend_tsc_compilation": "PASS",
+  "real_external_notification": "NOT_RUN_no_authorized_configuration",
+  "local_http": "PASS (see local-http-flow.json)",
+  "playwright": "BLOCKED (see browser-blocker.json)",
+  "receipt_review": "not started; no receipt claimed",
+  "commit_push_merge": "not performed",
+  "backend_inclusive_typecheck": {
+    "status": "FAIL_OUT_OF_SCOPE",
+    "errors": 148,
+    "commercial_diagnostics": 0,
+    "examples": [
+      "auth-rbac.guard.spec.ts: missing authSessionId in legacy mocks",
+      "http-throttler.config.spec.ts: outdated argument count",
+      "suppliers.service.spec.ts: incomplete DTO fixtures",
+      "cedis-branch-supply-cycle.e2e-spec.ts: application type mismatch"
+    ]
+  }
+}

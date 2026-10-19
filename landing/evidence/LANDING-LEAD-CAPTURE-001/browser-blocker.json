@@ -1,0 +1,17 @@
+{
+  "scope": "current task; no historical acceptance reused",
+  "shared_mcp": "browser profile in use; no force close attempted",
+  "isolated_chrome": "launch failed SIGABRT",
+  "isolated_chromium_headless": "launch failed: MachPortRendezvous KERN permission denied, including escalated execution",
+  "requested_widths": [
+    1440,
+    1280,
+    768,
+    390,
+    320
+  ],
+  "widths_executed": [],
+  "screenshots_created": false,
+  "keyboard_accessibility_reduced_motion": "not browser-verified",
+  "e2e_script": "landing/e2e/lead_capture.py"
+}

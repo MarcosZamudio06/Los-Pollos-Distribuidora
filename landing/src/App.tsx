@@ -66,7 +66,7 @@ function useLandingSeo() {
       upsertMeta("property", "og:type", "website"),
       ...(canonicalUrl ? [upsertMeta("property", "og:url", canonicalUrl)] : []),
       upsertMeta("name", "twitter:card", getCommercialConfig().socialImage ? "summary_large_image" : "summary"),
-      ...(getCommercialConfig().socialImage ? [upsertMeta("property", "og:image", getCommercialConfig().socialImage), upsertMeta("name", "twitter:image", getCommercialConfig().socialImage), upsertMeta("property", "og:image:alt", "ERP Operativo — pantalla real del producto")] : []),
+      ...(getCommercialConfig().socialImage ? [upsertMeta("property", "og:image", getCommercialConfig().socialImage), upsertMeta("name", "twitter:image", getCommercialConfig().socialImage), upsertMeta("property", "og:image:alt", LANDING_SEO.imageAlt)] : []),
     ];
 
     return () => {

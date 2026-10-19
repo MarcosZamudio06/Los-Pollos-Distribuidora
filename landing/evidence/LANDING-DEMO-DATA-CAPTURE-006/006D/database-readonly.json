@@ -1,0 +1,419 @@
+{
+  "checkedAt": "2026-10-19T01:00:40.613Z",
+  "readOnly": true,
+  "connectionSource": "repository fallback; active backend mapping not independently verified",
+  "identity": [
+    {
+      "database": "pollo_distribucion",
+      "role": "postgres",
+      "server_address": "172.18.0.5/32",
+      "server_port": 5432,
+      "version": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "postgis": "3.5.7"
+    }
+  ],
+  "migrationAudit": {
+    "localCount": 98,
+    "appliedCount": 98,
+    "unfinished": [],
+    "missing": [],
+    "checksumMismatch": [],
+    "databaseOnly": []
+  },
+  "counts": {
+    "user": 13,
+    "operationalLocation": 30,
+    "product": 11,
+    "customer": 20,
+    "supplier": 5,
+    "inventoryBalance": 25,
+    "inventoryMovement": 461,
+    "sale": 155,
+    "payment": 124,
+    "accountReceivable": 95,
+    "deliveryRoute": 20,
+    "deliveryOrder": 33,
+    "vehicle": 5,
+    "cashShift": 4,
+    "pointOfSaleDailyClose": 12
+  },
+  "usersByRole": [
+    {
+      "role": "SELLER",
+      "active": true,
+      "count": 2
+    },
+    {
+      "role": "COLLECTIONS",
+      "active": true,
+      "count": 1
+    },
+    {
+      "role": "ADMIN",
+      "active": false,
+      "count": 2
+    },
+    {
+      "role": "WAREHOUSE",
+      "active": true,
+      "count": 2
+    },
+    {
+      "role": "DRIVER",
+      "active": true,
+      "count": 1
+    },
+    {
+      "role": "WAREHOUSE",
+      "active": false,
+      "count": 1
+    },
+    {
+      "role": "ADMIN",
+      "active": true,
+      "count": 2
+    },
+    {
+      "role": "SELLER",
+      "active": false,
+      "count": 1
+    },
+    {
+      "role": "BILLING",
+      "active": true,
+      "count": 1
+    }
+  ],
+  "canonicalSeedUsers": 6,
+  "locations": [
+    {
+      "code": "ALV",
+      "type": "BRANCH",
+      "isActive": true,
+      "parent": {
+        "code": "CEDIS-VER"
+      }
+    },
+    {
+      "code": "BDR",
+      "type": "BRANCH",
+      "isActive": true,
+      "parent": {
+        "code": "CEDIS-VER"
+      }
+    },
+    {
+      "code": "CEDIS-VER",
+      "type": "DISTRIBUTION_CENTER",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": "LEGACY-EMPLOYEES",
+      "type": "MIXED",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": "MAIN",
+      "type": "BRANCH",
+      "isActive": true,
+      "parent": {
+        "code": "MAIN-CEDIS"
+      }
+    },
+    {
+      "code": "MAIN-CEDIS",
+      "type": "DISTRIBUTION_CENTER",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": "POS-MZG",
+      "type": "EXTERNAL_POINT_OF_SALE",
+      "isActive": true,
+      "parent": {
+        "code": "VER"
+      }
+    },
+    {
+      "code": "POS-PLA",
+      "type": "EXTERNAL_POINT_OF_SALE",
+      "isActive": true,
+      "parent": {
+        "code": "BDR"
+      }
+    },
+    {
+      "code": "RUTA-ALV",
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": {
+        "code": "ALV"
+      }
+    },
+    {
+      "code": "RUTA-BDR",
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": {
+        "code": "BDR"
+      }
+    },
+    {
+      "code": "RUTA-VER",
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": {
+        "code": "VER"
+      }
+    },
+    {
+      "code": "SUC-VER",
+      "type": "BRANCH",
+      "isActive": true,
+      "parent": {
+        "code": "CEDIS-VER"
+      }
+    },
+    {
+      "code": "VER",
+      "type": "BRANCH",
+      "isActive": true,
+      "parent": {
+        "code": "CEDIS-VER"
+      }
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    },
+    {
+      "code": null,
+      "type": "ROUTE_STOCK",
+      "isActive": true,
+      "parent": null
+    }
+  ],
+  "inventory": [
+    {
+      "code": "ALV",
+      "balances": 3,
+      "physical_kg": "1138.400",
+      "reserved_kg": "0.000",
+      "available_kg": "1138.400",
+      "physical_pieces": "1735",
+      "reserved_pieces": "0",
+      "available_pieces": "1735"
+    },
+    {
+      "code": "BDR",
+      "balances": 3,
+      "physical_kg": "895.500",
+      "reserved_kg": "0.000",
+      "available_kg": "895.500",
+      "physical_pieces": "1051",
+      "reserved_pieces": "0",
+      "available_pieces": "1051"
+    },
+    {
+      "code": "CEDIS-VER",
+      "balances": 4,
+      "physical_kg": "90.001",
+      "reserved_kg": "10.001",
+      "available_kg": "80.000",
+      "physical_pieces": "0",
+      "reserved_pieces": "0",
+      "available_pieces": "0"
+    },
+    {
+      "code": "POS-MZG",
+      "balances": 2,
+      "physical_kg": "80.000",
+      "reserved_kg": "0.000",
+      "available_kg": "80.000",
+      "physical_pieces": "220",
+      "reserved_pieces": "0",
+      "available_pieces": "220"
+    },
+    {
+      "code": "POS-PLA",
+      "balances": 2,
+      "physical_kg": "70.800",
+      "reserved_kg": "0.000",
+      "available_kg": "70.800",
+      "physical_pieces": "159",
+      "reserved_pieces": "0",
+      "available_pieces": "159"
+    },
+    {
+      "code": "RUTA-ALV",
+      "balances": 2,
+      "physical_kg": "78.100",
+      "reserved_kg": "0.000",
+      "available_kg": "78.100",
+      "physical_pieces": "244",
+      "reserved_pieces": "0",
+      "available_pieces": "244"
+    },
+    {
+      "code": "RUTA-BDR",
+      "balances": 2,
+      "physical_kg": "187.500",
+      "reserved_kg": "0.000",
+      "available_kg": "187.500",
+      "physical_pieces": "600",
+      "reserved_pieces": "0",
+      "available_pieces": "600"
+    },
+    {
+      "code": "RUTA-VER",
+      "balances": 2,
+      "physical_kg": "166.900",
+      "reserved_kg": "0.000",
+      "available_kg": "166.900",
+      "physical_pieces": "536",
+      "reserved_pieces": "0",
+      "available_pieces": "536"
+    },
+    {
+      "code": "SUC-VER",
+      "balances": 2,
+      "physical_kg": "2.999",
+      "reserved_kg": "0.000",
+      "available_kg": "2.999",
+      "physical_pieces": "9",
+      "reserved_pieces": "0",
+      "available_pieces": "9"
+    },
+    {
+      "code": "VER",
+      "balances": 3,
+      "physical_kg": "877.600",
+      "reserved_kg": "0.000",
+      "available_kg": "877.600",
+      "physical_pieces": "1065",
+      "reserved_pieces": "0",
+      "available_pieces": "1065"
+    }
+  ],
+  "integrity": [
+    {
+      "invalid_balances": 0
+    }
+  ],
+  "duplicates": [
+    {
+      "duplicate_balance_keys": 0
+    }
+  ],
+  "baseProducts": [
+    {
+      "sku": "DEV-WHOLE-CHICKEN-KG",
+      "isActive": true,
+      "unit": "KG"
+    },
+    {
+      "sku": "DEV-BREAST-KG",
+      "isActive": true,
+      "unit": "KG"
+    },
+    {
+      "sku": "DEV-WINGS-PIECE",
+      "isActive": true,
+      "unit": "PIECE"
+    }
+  ]
+}

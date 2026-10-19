@@ -32,7 +32,9 @@
     "test:cov": "jest --coverage --runInBand",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "pretest:e2e": "ts-node scripts/forbid-focused-tests.ts",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "start:commercial": "node dist/backend/src/commercial/main.js",
+    "start:commercial:local": "ts-node src/commercial/main.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

@@ -1,0 +1,50 @@
+[
+  {
+    "path": "landing/evidence/LANDING-DEMO-DATA-CAPTURE-006/006D/landing-1440-loaded.png",
+    "source": "http://localhost:5174/",
+    "capturedAtUtc": "2026-10-19T01:01:39.801370+00:00",
+    "width": 1440,
+    "height": 8135,
+    "sizeBytes": 1743606,
+    "sha256": "1a64b94d922ac9316af260bf6b33273f194c6541df2569d5e3deae114700c014",
+    "kind": "landing QA, NOT authenticated ERP evidence",
+    "approval": "NOT_FOR_PUBLIC_ASSET_INTEGRATION",
+    "note": "All page images decoded before capture"
+  },
+  {
+    "path": "landing/evidence/LANDING-DEMO-DATA-CAPTURE-006/006D/landing-1440.png",
+    "source": "http://localhost:5174/",
+    "capturedAtUtc": "2026-10-19T01:01:13.753613+00:00",
+    "width": 1440,
+    "height": 8135,
+    "sizeBytes": 1453118,
+    "sha256": "c98d44a54239108260aed3f071094e8cfd746c5ff074e1e7f78dcb6a5e3552a5",
+    "kind": "landing QA, NOT authenticated ERP evidence",
+    "approval": "NOT_FOR_PUBLIC_ASSET_INTEGRATION",
+    "note": "Initial viewport pass; lazy below-fold images may not have decoded"
+  },
+  {
+    "path": "landing/evidence/LANDING-DEMO-DATA-CAPTURE-006/006D/landing-390-loaded.png",
+    "source": "http://localhost:5174/",
+    "capturedAtUtc": "2026-10-19T01:01:40.713428+00:00",
+    "width": 390,
+    "height": 7443,
+    "sizeBytes": 763536,
+    "sha256": "ce3c48717875a43d3f4206425bbcb1fc9be01dd6de897278995cef60a9852a69",
+    "kind": "landing QA, NOT authenticated ERP evidence",
+    "approval": "NOT_FOR_PUBLIC_ASSET_INTEGRATION",
+    "note": "All page images decoded before capture"
+  },
+  {
+    "path": "landing/evidence/LANDING-DEMO-DATA-CAPTURE-006/006D/landing-390.png",
+    "source": "http://localhost:5174/",
+    "capturedAtUtc": "2026-10-19T01:01:18.103723+00:00",
+    "width": 390,
+    "height": 7443,
+    "sizeBytes": 760941,
+    "sha256": "c8b29f263e154f04412f2604b408afb85d58a77058ab7d950f5fc891b8247205",
+    "kind": "landing QA, NOT authenticated ERP evidence",
+    "approval": "NOT_FOR_PUBLIC_ASSET_INTEGRATION",
+    "note": "Initial viewport pass; lazy below-fold images may not have decoded"
+  }
+]

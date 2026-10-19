@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "message": "Dependency health retrieved successfully",
+  "data": {
+    "status": "degraded",
+    "checkedAt": "2026-10-19T01:01:41.510Z",
+    "dependencies": {
+      "database": {
+        "status": "up",
+        "latencyMs": 51
+      },
+      "fiscal": {
+        "status": "up",
+        "latencyMs": 11
+      },
+      "photon": {
+        "status": "up",
+        "latencyMs": 27
+      },
+      "osrm": {
+        "status": "up",
+        "latencyMs": 7
+      },
+      "vroom": {
+        "status": "up",
+        "latencyMs": 70
+      },
+      "tileserver": {
+        "status": "up",
+        "latencyMs": 8
+      },
+      "objectStorage": {
+        "status": "down",
+        "latencyMs": 7,
+        "reason": "unavailable"
+      }
+    }
+  }
+}

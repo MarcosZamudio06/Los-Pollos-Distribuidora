@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "message": "Application is ready",
+  "data": {
+    "status": "ready"
+  }
+}

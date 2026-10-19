@@ -1,0 +1,82 @@
+{
+  "zooms": [
+    {
+      "module": "Dashboard",
+      "loaded": true
+    },
+    {
+      "module": "Punto de venta",
+      "loaded": true
+    },
+    {
+      "module": "CEDIS",
+      "loaded": true
+    },
+    {
+      "module": "Compras",
+      "loaded": true
+    },
+    {
+      "module": "Logística",
+      "loaded": true
+    },
+    {
+      "module": "Repartidores",
+      "loaded": true
+    },
+    {
+      "module": "Cobranza",
+      "loaded": true
+    },
+    {
+      "module": "Cierres",
+      "loaded": true
+    },
+    {
+      "module": "Facturación",
+      "loaded": true
+    }
+  ],
+  "stages": [
+    {
+      "stage": "01\nVenta",
+      "loaded": true,
+      "selected": "true"
+    },
+    {
+      "stage": "02\nInventario",
+      "loaded": true,
+      "selected": "true"
+    },
+    {
+      "stage": "03\nRuta",
+      "loaded": true,
+      "selected": "true"
+    },
+    {
+      "stage": "04\nEntrega",
+      "loaded": true,
+      "selected": "true"
+    },
+    {
+      "stage": "05\nCobranza",
+      "loaded": true,
+      "selected": "true"
+    },
+    {
+      "stage": "06\nCierre",
+      "loaded": true,
+      "selected": "true"
+    }
+  ],
+  "ctas": [
+    {
+      "selector": "header a[href=\"#erp-gallery\"]",
+      "hash": "#erp-gallery"
+    },
+    {
+      "selector": "#demo a[href=\"#erp-gallery\"]",
+      "hash": "#erp-gallery"
+    }
+  ]
+}

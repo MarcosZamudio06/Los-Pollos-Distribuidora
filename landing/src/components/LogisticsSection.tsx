@@ -5,7 +5,7 @@ import s from "../styles/landing.module.css";
 export function LogisticsSection() {
   return <section id="logistics" className={`${s.section} ${s.distributionSection}`} aria-labelledby="logistics-title">
     <div className={s.container}>
-      <SectionHeading id="logistics-title" title="La operación también llega a la calle." description="Planeación, pedidos asignados y resultados de entrega conservan sus referencias. La evidencia es parte del trabajo, no una pantalla de adorno." />
+      <SectionHeading id="logistics-title" title="La operación también llega a la calle." description="Revisa qué se asignó y qué ocurrió en ruta. Pedidos, estados e incidencias conservan sus referencias para facilitar la revisión del reparto." />
       <div className={s.distributionLayout}>
         <ProductCapture image="routePlanner" title="Ruta y pedidos asignados" caption="Captura administrativa real. No representa una aplicación nativa, una sesión del repartidor ni seguimiento en vivo." />
         <div className={s.distributionCopy}>

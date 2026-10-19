@@ -1,0 +1,25 @@
+{
+  "source": "User-supplied read-only Warp output; not independently executed by Codex",
+  "context": "desktop-linux",
+  "localUnixEndpointReported": true,
+  "inspect": {
+    "id": "5ca2b7a0aa96fffcd24f8c4db0b952cd106401219adcd1e52f556155a9b05363",
+    "name": "/landing-demo-006b-5451d0c5a0274cdc8db4a833d2cf1b66",
+    "image": "postgis/postgis:16-3.4",
+    "owner": "5451d0c5a0274cdc8db4a833d2cf1b66",
+    "running": true,
+    "restart": "no",
+    "mounts": [],
+    "tmpfs": {
+      "/var/lib/postgresql/data": "rw"
+    },
+    "ports": {
+      "5432/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "63865"
+        }
+      ]
+    }
+  }
+}

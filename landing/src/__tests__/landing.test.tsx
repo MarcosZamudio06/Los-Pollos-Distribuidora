@@ -228,7 +228,7 @@ describe("standalone ERP marketing landing", () => {
     expect(page.querySelectorAll("h1")).toHaveLength(1);
     expect(page.querySelector("h1")?.textContent).toBe("De la venta al cierre. Tu operación, conectada.");
     expect(page.querySelector("h1")?.nextElementSibling?.textContent).toContain(
-      "Ventas, inventario por ubicación, distribución, cobranza y cierres",
+      "Consulta mercancía por ubicación y saldos",
     );
     expect(page.querySelector("h1")?.closest("section")?.querySelector("#hero-product img")).toBeTruthy();
     expect(html).toContain("Los-Pollos-Distribuidora");

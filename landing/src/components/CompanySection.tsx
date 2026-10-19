@@ -1,3 +1,4 @@
+import { LANDING_BRAND } from "../config/landingConfig";
 import { Building2, Layers3, MapPinned } from "lucide-react";
 import { SectionHeading } from "./SectionHeading";
 import s from "../styles/landing.module.css";
@@ -20,7 +21,7 @@ export function CompanySection() {
         <div className={s.companyDiagram}>
           <div className={s.companyOrigin} data-isolation-origin>
             <span className="landing-isolation-sequence__origin-mark" aria-hidden="true"><i /><i /><i /></span>
-            <span>ERP Operativo</span>
+            <span>{LANDING_BRAND.productName}</span>
           </div>
           <svg className={s.companyBranches} aria-hidden="true" viewBox="0 0 1000 180" preserveAspectRatio="none">
             <path d="M500 0 V66" data-isolation-trunk />

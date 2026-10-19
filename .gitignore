@@ -50,3 +50,9 @@ __MACOSX/
 act
 screenshots erp
 .playwright-mcp
+
+# Commercial receiver data and local mail captures (personal data)
+.commercial-data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

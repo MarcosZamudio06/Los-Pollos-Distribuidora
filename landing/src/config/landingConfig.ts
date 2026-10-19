@@ -1,3 +1,5 @@
+import { BRAND_SEO } from "./brand";
+export { LANDING_BRAND } from "./brand";
 import { getCommercialConfig, publicUrl } from "./commercialConfig";
 
 const commercial = getCommercialConfig();
@@ -7,12 +9,6 @@ export function getLandingDemoRequestUrl() {
   return publicUrl(import.meta.env.VITE_LANDING_DEMO_REQUEST_URL);
 }
 
-export const LANDING_BRAND = {
-  productName: "Los-Pollos-Distribuidora",
-  descriptor: "Plataforma operativa",
-  tagline: "Una vista clara para cada parte de tu operación.",
-} as const;
-
 export const LANDING_NAV_ITEMS = [
   { label: "Producto", href: "#erp-gallery" },
   { label: "Operación", href: "#operation" },
@@ -21,9 +17,9 @@ export const LANDING_NAV_ITEMS = [
 ] as const;
 
 export const LANDING_SEO = {
-  title: "Los-Pollos-Distribuidora | Ventas, inventario y distribución",
-  description:
-    "Conecta ventas, compras, inventario, cobranza y administración en una sola plataforma ERP.",
+  title: BRAND_SEO.title,
+  description: BRAND_SEO.description,
+  imageAlt: BRAND_SEO.imageAlt,
   canonicalUrl: commercial.canonicalUrl,
 } as const;
 

@@ -1,0 +1,18 @@
+{
+  "source": "User-operated Warp resume output supplied in conversation; not a direct Codex Docker run",
+  "resumeReadOnly": true,
+  "result": {
+    "gate": "ISOLATION_VERIFIED_NO_APP_WRITES",
+    "context": "desktop-linux",
+    "container": "5ca2b7a0aa96fffcd24f8c4db0b952cd106401219adcd1e52f556155a9b05363",
+    "name": "landing-demo-006b-5451d0c5a0274cdc8db4a833d2cf1b66",
+    "database": "landing_demo_006b_5451d0c5a0274cdc8db4a833d2cf1b66",
+    "binding": "127.0.0.1:63865",
+    "image": "postgis/postgis:16-3.4",
+    "imageId": "sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5",
+    "postgis": "3.4",
+    "storage": "tmpfs; stop/restart loses database",
+    "migrations": "NOT_RUN",
+    "seed": "NOT_RUN"
+  }
+}

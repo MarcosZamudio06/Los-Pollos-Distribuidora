@@ -1,0 +1,13 @@
+{
+  "scope": "Actual localhost POST through Vite proxy to isolated Nest receiver; SQLite disk readback; LOCAL CAPTURE ONLY, NOT production email",
+  "first_http": 201,
+  "receipt": "stored",
+  "notification_at_receipt": "pending",
+  "duplicate_http": 201,
+  "duplicate": true,
+  "same_reference": true,
+  "allowed_cors_verified": true,
+  "lead_count": 1,
+  "captured_mail_count": 1,
+  "final_notification_state": "sent (capture only)"
+}
