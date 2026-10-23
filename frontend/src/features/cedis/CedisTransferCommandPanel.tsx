@@ -365,7 +365,7 @@ function commandErrorMessage(error: unknown, mode: TransferMode) {
         return "La disponibilidad cambió mientras se procesaba la operación. Revisa los saldos actualizados y reintenta.";
       }
       if (record.code === "RETURN_EXCEEDS_UNSOLD_QUANTITY") {
-        return "La devolución supera la cantidad no vendida disponible en el ciclo. Revisa lo enviado, lo vendido y lo ya regresado.";
+        return "La devolución supera la cantidad no vendida disponible en el ciclo. Revisa lo recibido, lo vendido y lo ya regresado.";
       }
       if (typeof record.message === "string") return record.message;
       if (typeof record.code === "string")
@@ -553,7 +553,7 @@ function ReturnLineContext({
     <dl className="mt-3 grid gap-2 rounded-xl border border-[rgba(173,123,32,0.24)] bg-[rgba(248,239,216,0.42)] p-3 sm:grid-cols-2 lg:grid-cols-5">
       <div>
         <dt className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-[var(--erp-muted-foreground)]">
-          Enviado en ciclo
+          Recibido en sucursal
         </dt>
         <dd className="mt-1 text-sm font-black tabular-nums text-[var(--erp-foreground)]">
           {formatUnitQuantity(
@@ -628,11 +628,11 @@ function ReturnFinancialPreview({
     (total, line) => total + lineQuantities(line).quantityPieces,
     0,
   );
-  const sentKg = cycleItems.reduce(
+  const receivedKg = cycleItems.reduce(
     (total, item) => total + cycleItemQuantities(item).deliveredKg,
     0,
   );
-  const sentPieces = cycleItems.reduce(
+  const receivedPieces = cycleItems.reduce(
     (total, item) => total + cycleItemQuantities(item).deliveredPieces,
     0,
   );
@@ -674,10 +674,10 @@ function ReturnFinancialPreview({
       <dl className="grid gap-px bg-[rgba(173,123,32,0.16)] sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-white/80 px-4 py-4 sm:px-5">
           <dt className="text-xs font-bold text-[var(--erp-muted-foreground)]">
-            Enviado en ciclo
+            Recibido en sucursal
           </dt>
           <dd className="mt-1 text-lg font-black tabular-nums">
-            {formatDimensions(sentKg, sentPieces)}
+            {formatDimensions(receivedKg, receivedPieces)}
           </dd>
         </div>
         <div className="bg-white/80 px-4 py-4 sm:px-5">
@@ -1007,7 +1007,7 @@ export function CedisTransferCommandPanel({
                 <th className="px-3 py-2 font-black">Producto</th>
                 <th className="px-3 py-2 font-black">Unidad</th>
                 {!isSupply && (
-                  <th className="px-3 py-2 font-black">Enviado en ciclo</th>
+                  <th className="px-3 py-2 font-black">Recibido en sucursal</th>
                 )}
                 <th className="px-3 py-2 font-black">Cantidad</th>
                 {!isSupply && (

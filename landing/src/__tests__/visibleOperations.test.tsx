@@ -65,7 +65,7 @@ describe("Visible Operations P0", () => {
     }
   });
 
-  it("keeps every verified category selectable, including categories without a capture", async () => {
+  it("keeps every verified category selectable and presents the approved inventory balance capture", async () => {
     const container = await mount(<ProductGallery />);
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     expect(tabs.map(tab => tab.textContent)).toEqual([
@@ -74,7 +74,10 @@ describe("Visible Operations P0", () => {
     await act(async () => tabs[2].click());
     expect(tabs[2].getAttribute("aria-selected")).toBe("true");
     expect(container.querySelector('[role="tabpanel"]')?.textContent).toContain("saldos por ubicación");
-    expect(container.querySelector('[role="tabpanel"] img')).toBeNull();
+    const inventoryImage = container.querySelector('[role="tabpanel"] img');
+    expect(inventoryImage).toBeTruthy();
+    expect(inventoryImage?.getAttribute("src")).toContain("/approved/inventory.jpg");
+    expect(container.querySelector('[role="tabpanel"] figcaption')?.textContent).toContain("entorno capturado");
   });
 
   it("announces the product tab orientation that matches its responsive layout", async () => {
@@ -158,6 +161,13 @@ describe("Visible Operations P0", () => {
     expect(container.textContent).toContain("no una entrega a cliente confirmada");
   });
 
+  it("shows the real location-balance capture in the inventory stage", async () => {
+    const container = await mount(<WorkflowSection />);
+    await act(async () => container.querySelectorAll<HTMLButtonElement>("ol button")[1].click());
+    expect(container.querySelector('[data-workflow-detail] img')?.getAttribute("src")).toContain("/approved/inventory.jpg");
+    expect(container.querySelector("figcaption")?.textContent).toContain("cantidades físicas");
+  });
+
   it("supports arrow keys, Home and End with roving focus even for missing captures", async () => {
     const container = await mount(<ProductGallery />);
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
@@ -181,6 +191,41 @@ describe("Visible Operations P0", () => {
     expect(container.textContent).toContain("turno sin abrir");
     await act(async () => tabs[3].click());
     expect(container.querySelector('[role="tabpanel"] img')?.getAttribute("src")).toContain("/approved/cedis.jpg");
+  });
+
+  it("makes each supplied CEDIS cycle screenshot inspectable without claiming completion", async () => {
+    const container = await mount(<ProductGallery />);
+    await act(async () => container.querySelector<HTMLButtonElement>("#module-tab-cedis")!.click());
+    const captures = [
+      { id: "supply", label: "Envío", file: "cedis-supply.jpg", phrase: "no muestra un suministro completado" },
+      { id: "receptions", label: "Recepciones", file: "cedis-receptions.jpg", phrase: "pendiente de revisión" },
+      { id: "reconciliation", label: "Conciliación", file: "cedis-reconciliation.jpg", phrase: "diferencia visible" },
+      { id: "returns", label: "Devoluciones", file: "cedis-returns.jpg", phrase: "pendiente de confirmar" },
+      { id: "return-confirmation", label: "Confirmación", file: "cedis-return-confirmation.jpg", phrase: "previo a confirmar" },
+    ];
+
+    for (const capture of captures) {
+      const button = container.querySelector<HTMLButtonElement>(`[data-cedis-capture="${capture.id}"]`);
+      expect(button?.textContent).toBe(capture.label);
+      await act(async () => button?.click());
+      expect(container.querySelector('[role="tabpanel"] img')?.getAttribute("src")).toContain(`/approved/${capture.file}`);
+      expect(container.querySelector('[role="tabpanel"] figcaption')?.textContent?.toLowerCase()).toContain(capture.phrase);
+    }
+  });
+
+  it("ships optimized regular and enlarged derivatives for the new approved captures", () => {
+    const files = [
+      "inventory.jpg", "inventory-full.jpg",
+      "cedis-supply.jpg", "cedis-supply-full.jpg",
+      "cedis-receptions.jpg", "cedis-receptions-full.jpg",
+      "cedis-reconciliation.jpg", "cedis-reconciliation-full.jpg",
+      "cedis-returns.jpg", "cedis-returns-full.jpg",
+      "cedis-return-confirmation.jpg", "cedis-return-confirmation-full.jpg",
+    ];
+    for (const file of files) {
+      const bytes = readFileSync(resolve(import.meta.dirname, `../../public/images/landing/approved/${file}`));
+      expect([...bytes.subarray(0, 2)]).toEqual([0xff, 0xd8]);
+    }
   });
 
   it("keeps a failed capture's module visible and offers retry without fabricating interface content", async () => {
@@ -243,5 +288,12 @@ describe("Visible Operations P0", () => {
     expect(container.querySelector('[data-workflow-detail]')?.textContent).toContain("una sola cuenta");
     expect(container.querySelector("img")?.getAttribute("src")).toContain("collections.jpg");
     expect(container.textContent).toContain("no toda venta requiere entrega");
+  });
+
+  it("top-aligns the logistics capture beside the stacked driver evidence", () => {
+    const css = readFileSync(resolve(import.meta.dirname, "../styles/landing.module.css"), "utf8");
+    const layout = css.match(/\.distributionLayout\s*\{([^}]*)\}/)?.[1];
+    expect(layout).toBeDefined();
+    expect(layout).toMatch(/align-items:\s*start\s*;/);
   });
 });

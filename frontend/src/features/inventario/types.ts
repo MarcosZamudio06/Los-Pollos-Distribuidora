@@ -242,13 +242,13 @@ export function isCanonicalInventoryBalance(
   ].every((quantity) => Number.isInteger(quantity));
   if (!pieceDimensionsAreIntegers) return false;
 
+  // Alert thresholds are metadata, not physical or reserved inventory.
   if (
     unit === "KG" &&
     [
       quantityPieces,
       reservedQuantityPieces,
       availableQuantityPieces,
-      minQuantityPieces,
     ].some((quantity) => quantity !== 0)
   ) {
     return false;
@@ -256,7 +256,7 @@ export function isCanonicalInventoryBalance(
 
   if (
     unit === "PIECE" &&
-    [quantityKg, reservedQuantityKg, availableQuantityKg, minQuantityKg].some(
+    [quantityKg, reservedQuantityKg, availableQuantityKg].some(
       (quantity) => quantity !== 0,
     )
   ) {

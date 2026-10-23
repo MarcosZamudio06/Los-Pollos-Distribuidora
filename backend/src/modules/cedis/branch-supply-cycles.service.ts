@@ -1151,8 +1151,18 @@ export class BranchSupplyCyclesService {
       for (const item of link.inventoryTransfer.items) {
         const current = getQuantities(item.productId);
         if (link.role === BranchSupplyTransferRole.SUPPLY) {
-          current.deliveredKg += Number(item.quantityKg ?? 0);
-          current.deliveredPieces += item.quantityPieces ?? 0;
+          const receipt = link.inventoryTransfer.branchSupplyReceipt;
+          const receivedItem = receipt?.items.find(
+            (received) => received.transferItemId === item.id,
+          );
+          // Match reconciliation: receipts define delivery; legacy confirmed
+          // transfers without a receipt retain their original quantities.
+          current.deliveredKg += Number(
+            receipt ? (receivedItem?.receivedKg ?? 0) : (item.quantityKg ?? 0),
+          );
+          current.deliveredPieces += receipt
+            ? (receivedItem?.receivedPieces ?? 0)
+            : (item.quantityPieces ?? 0);
         } else {
           current.returnedKg += Number(item.quantityKg ?? 0);
           current.returnedPieces += item.quantityPieces ?? 0;

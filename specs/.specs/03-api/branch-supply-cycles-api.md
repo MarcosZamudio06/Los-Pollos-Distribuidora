@@ -88,7 +88,7 @@ Reglas:
 - `PIECE` requiere piezas enteras positivas y cero kilos.
 - `KG_AND_PIECE` acepta una o ambas cantidades medidas directamente.
 - Solo se deriva una dimensión faltante con equivalencia `ACTIVE` aplicable a `businessDate` y política de redondeo aprobada. Mientras esa política siga abierta, la conversión automática se rechaza con `EQUIVALENCE_ROUNDING_POLICY_UNDEFINED`.
-- Por producto y dimensión, la devolución no puede superar la cantidad no vendida del ciclo (`entregado - vendidoReal - devueltoConfirmado`) ni la disponibilidad física actual de la sucursal.
+- Por producto y dimensión, la devolución no puede superar la cantidad no vendida del ciclo (`recibidoEnSucursal - vendidoReal - devueltoConfirmado`) ni la disponibilidad física actual de la sucursal. `recibidoEnSucursal` se obtiene de `BranchSupplyReceiptItem`, no de lo enviado; una partida ausente en una recepción aporta cero. Para transferencias históricas confirmadas sin recepción, se conserva la cantidad confirmada, igual que en la conciliación.
 - Si se excede cualquiera de esos límites, responde `409 Conflict` con `code=RETURN_EXCEEDS_UNSOLD_QUANTITY` y no crea transferencia ni reserva.
 - Crear transferencia, vínculo, evento y nueva versión del ciclo es atómico.
 - Crear la ruta logística y su `ROUTE_STOCK` también es atómico con transferencia,

@@ -7,14 +7,19 @@ export const LANDING_IMAGES = {
   posMobile: "/images/landing/pos-checkout-mobile.jpg",
   posDetail: "/images/landing/pos-confirmation.webp",
 
-  // Pending an approved inventory capture.
-  inventory: "",
+  // Whole-frame location-balance capture from the approved ERP screenshots.
+  inventory: "/images/landing/approved/inventory.jpg",
   purchases: "/images/landing/approved/purchases.jpg",
   collections: "/images/landing/approved/collections.jpg",
   closing: "/images/landing/approved/closing.jpg",
 
   // Approved administrative CEDIS context.
   cedis: "/images/landing/approved/cedis.jpg",
+  cedisSupply: "/images/landing/approved/cedis-supply.jpg",
+  cedisReceptions: "/images/landing/approved/cedis-receptions.jpg",
+  cedisReconciliation: "/images/landing/approved/cedis-reconciliation.jpg",
+  cedisReturns: "/images/landing/approved/cedis-returns.jpg",
+  cedisReturnConfirmation: "/images/landing/approved/cedis-return-confirmation.jpg",
 
   // Approved administrative fleet context.
   fleet: "/images/landing/approved/fleet.jpg",
@@ -30,7 +35,7 @@ export const LANDING_IMAGES = {
   billing: "/images/landing/approved/billing.jpg",
 } as const;
 
-const imageEnvironmentKeys = {
+const imageEnvironmentKeys: Partial<Record<keyof typeof LANDING_IMAGES, string>> = {
   heroDashboard: "VITE_LANDING_DASHBOARD_IMAGE",
   pos: "VITE_LANDING_POS_IMAGE",
   posMobile: "VITE_LANDING_POS_MOBILE_IMAGE",
@@ -49,5 +54,5 @@ const imageEnvironmentKeys = {
 
 export function getLandingImage(image: keyof typeof LANDING_IMAGES) {
   const environmentKey = imageEnvironmentKeys[image];
-  return import.meta.env[environmentKey]?.trim() || LANDING_IMAGES[image];
+  return (environmentKey ? import.meta.env[environmentKey]?.trim() : undefined) || LANDING_IMAGES[image];
 }

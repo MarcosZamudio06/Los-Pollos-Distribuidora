@@ -1185,7 +1185,7 @@ describe("CEDIS transfer command panel", () => {
     );
   });
 
-  it("muestra lo enviado y descuenta la venta no realizada del monto esperado al devolver", async () => {
+  it("shows received quantities and subtracts the unsold value when returning", async () => {
     const returnProduct: Product = {
       ...product,
       inventoryBalance: {
@@ -1245,7 +1245,7 @@ describe("CEDIS transfer command panel", () => {
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(container.textContent).toContain("Enviado en ciclo");
+    expect(container.textContent).toContain("Recibido en sucursal");
     expect(container.textContent).toContain("120 kg");
     expect(container.textContent).toContain("Vendido en sucursal");
     expect(container.textContent).toContain("108 kg");
@@ -1265,6 +1265,81 @@ describe("CEDIS transfer command panel", () => {
       "supera el límite de producto no vendido",
     );
     expect(container.textContent).not.toContain("Confirmación requerida");
+  });
+
+  it("limits returns to received cycle quantities even with more branch stock", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const receivedItem = {
+      ...summary.items[0],
+      deliveredKg: "4.000",
+      actualSoldKg: "0.000",
+      returnedKg: "0.000",
+    };
+    const returnProduct: Product = {
+      ...product,
+      inventoryBalance: {
+        ...product.inventoryBalance!,
+        locationId: "branch-1",
+        quantityKg: 20,
+        reservedQuantityKg: 0,
+        availableQuantityKg: 20,
+      },
+    };
+    root = createRoot(container);
+    act(() =>
+      root.render(
+        <CedisTransferCommandPanel
+          branch={card.branch}
+          cedis={summary.distributionCenter}
+          contextKey={transferContextKey}
+          cycleItems={[receivedItem]}
+          expectedVersion={summary.version}
+          logisticsResources={logisticsResources}
+          mode="RETURN"
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+          products={[returnProduct]}
+          productsLoading={false}
+          sourceLocationId="branch-1"
+        />,
+      ),
+    );
+    await act(async () => {
+      for (const [label, value] of [
+        ["Conductor asignado", "driver-1"],
+        ["Unidad asignada", "vehicle-1"],
+        ["Producto 1", "product-1"],
+      ]) {
+        const select = container.querySelector<HTMLSelectElement>(
+          `select[aria-label="${label}"]`,
+        )!;
+        select.value = value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Kilos 1"]',
+    )!;
+    expect(input.max).toBe("4");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input, "5");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      container
+        .querySelector("form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+    });
+    expect(container.textContent).toContain("Recibido en sucursal");
+    expect(container.textContent).toContain("Máximo: 4 kg");
+    expect(container.textContent).not.toContain("Confirmación requerida");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("bloquea una cantidad que supera la disponibilidad actual", async () => {

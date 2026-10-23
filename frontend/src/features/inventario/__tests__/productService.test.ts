@@ -165,6 +165,69 @@ describe("productService canonical product responses", () => {
   });
 
   it.each([
+    { unit: "PIECE" as const, minQuantityKg: 20, minQuantityPieces: 0 },
+    { unit: "KG" as const, minQuantityKg: 0, minQuantityPieces: 20 },
+  ])("keeps the catalog with $unit opposite-dimension thresholds", async ({
+    unit,
+    minQuantityKg,
+    minQuantityPieces,
+  }) => {
+    const thresholdProduct: Product = {
+      ...zeroBalanceProduct,
+      id: "threshold-product",
+      unit,
+      inventoryBalance: {
+        ...zeroBalanceProduct.inventoryBalance!,
+        minQuantityKg,
+        minQuantityPieces,
+        isLowStock: true,
+      },
+    };
+    apiClient.get.mockResolvedValue({
+      data: { items: [thresholdProduct, decimalWeightProduct] },
+    });
+
+    await expect(
+      productService.listProducts(
+        { locationId: "branch-1", requireInventoryBalance: true },
+        "token",
+      ),
+    ).resolves.toEqual([thresholdProduct, decimalWeightProduct]);
+  });
+
+  it.each([
+    { unit: "KG" as const, quantityKg: 0, quantityPieces: 1 },
+    { unit: "PIECE" as const, quantityKg: 1, quantityPieces: 0 },
+  ])("rejects stock in the opposite dimension of a $unit product", async ({
+    unit,
+    quantityKg,
+    quantityPieces,
+  }) => {
+    apiClient.get.mockResolvedValue({
+      data: {
+        items: [{
+          ...zeroBalanceProduct,
+          unit,
+          inventoryBalance: {
+            ...zeroBalanceProduct.inventoryBalance!,
+            quantityKg,
+            quantityPieces,
+            availableQuantityKg: quantityKg,
+            availableQuantityPieces: quantityPieces,
+          },
+        }],
+      },
+    });
+
+    await expect(
+      productService.listProducts(
+        { locationId: "branch-1", requireInventoryBalance: true },
+        "token",
+      ),
+    ).rejects.toThrow("saldo canónico");
+  });
+
+  it.each([
     {
       name: "negative reserved quantity",
       product: {

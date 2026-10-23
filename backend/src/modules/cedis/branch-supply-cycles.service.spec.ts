@@ -1020,6 +1020,175 @@ describe('BranchSupplyCyclesService', () => {
     expect(inventoryTransfers.create).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      unit: ProductUnit.KG,
+      receivedKg: 4,
+      receivedPieces: 0,
+      quantityKg: 5,
+      quantityPieces: 0,
+    },
+    {
+      unit: ProductUnit.PIECE,
+      receivedKg: 0,
+      receivedPieces: 4,
+      quantityKg: 0,
+      quantityPieces: 5,
+    },
+    {
+      unit: ProductUnit.KG_AND_PIECE,
+      receivedKg: 4,
+      receivedPieces: 4,
+      quantityKg: 4,
+      quantityPieces: 5,
+    },
+    {
+      unit: ProductUnit.KG,
+      receivedKg: 0,
+      receivedPieces: 0,
+      quantityKg: 1,
+      quantityPieces: 0,
+    },
+    {
+      unit: ProductUnit.KG,
+      receivedKg: 4,
+      receivedPieces: 0,
+      quantityKg: 1,
+      quantityPieces: 0,
+      omitReceiptItem: true,
+    },
+  ])(
+    'rejects a $unit return above the received quantity even when more was sent',
+    async (testCase) => {
+      const { unit, receivedKg, receivedPieces, quantityKg, quantityPieces } =
+        testCase;
+      const { prisma, inventoryTransfers, deliveryService, service } =
+        createService();
+      prisma.branchSupplyCycle.findUnique
+        .mockResolvedValueOnce(
+          createCycle({
+            transfers: [
+              {
+                role: BranchSupplyTransferRole.SUPPLY,
+                inventoryTransfer: {
+                  status: InventoryTransferStatus.CONFIRMED,
+                  items: [
+                    {
+                      id: 'supply-item-1',
+                      productId: 'product-1',
+                      quantityKg: unit === ProductUnit.PIECE ? 0 : 10,
+                      quantityPieces: unit === ProductUnit.KG ? 0 : 10,
+                    },
+                  ],
+                  branchSupplyReceipt: {
+                    items:
+                      'omitReceiptItem' in testCase
+                        ? []
+                        : [
+                            {
+                              transferItemId: 'supply-item-1',
+                              receivedKg,
+                              receivedPieces,
+                            },
+                          ],
+                  },
+                },
+              },
+            ],
+          }),
+        )
+        .mockResolvedValue(createCycle());
+
+      inventoryTransfers.create.mockResolvedValue({
+        id: 'invalid-return',
+        status: InventoryTransferStatus.REQUESTED,
+      } as never);
+      prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+      await expect(
+        service.createReturn(
+          'cycle-1',
+          {
+            expectedVersion: 1,
+            ...logisticsAssignment,
+            items: [
+              { productId: 'product-1', unit, quantityKg, quantityPieces },
+            ],
+          },
+          warehouse,
+          'return-received-limit',
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'RETURN_EXCEEDS_UNSOLD_QUANTITY',
+        }),
+      });
+      expect(inventoryTransfers.create).not.toHaveBeenCalled();
+      expect(deliveryService.createLogisticsRoute).not.toHaveBeenCalled();
+      expect(prisma.branchSupplyCycle.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([4, 12])(
+    'allows exactly %i received kg regardless of the sent quantity',
+    async (receivedKg) => {
+      const { prisma, inventoryTransfers, service } = createService();
+      prisma.branchSupplyCycle.findUnique
+        .mockResolvedValueOnce(
+          createCycle({
+            transfers: [
+              {
+                role: BranchSupplyTransferRole.SUPPLY,
+                inventoryTransfer: {
+                  status: InventoryTransferStatus.CONFIRMED,
+                  items: [
+                    {
+                      id: 'supply-item-1',
+                      productId: 'product-1',
+                      quantityKg: 10,
+                      quantityPieces: 0,
+                    },
+                  ],
+                  branchSupplyReceipt: {
+                    items: [
+                      {
+                        transferItemId: 'supply-item-1',
+                        receivedKg,
+                        receivedPieces: 0,
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          }),
+        )
+        .mockResolvedValue(createCycle());
+      inventoryTransfers.create.mockResolvedValue({
+        id: 'received-return',
+        status: InventoryTransferStatus.REQUESTED,
+      } as never);
+      prisma.branchSupplyCycle.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.createReturn(
+        'cycle-1',
+        {
+          expectedVersion: 1,
+          ...logisticsAssignment,
+          items: [
+            {
+              productId: 'product-1',
+              unit: ProductUnit.KG,
+              quantityKg: receivedKg,
+            },
+          ],
+        },
+        warehouse,
+        'return-exact-received',
+      );
+      expect(inventoryTransfers.create).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('excludes pending and cancelled transfers from refresh totals', async () => {
     const { prisma, inventoryTransfers, service } = createService();
     const product = {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { PRODUCT_MODULES } from "../config/productModules";
+import { CEDIS_CAPTURE_STEPS, PRODUCT_MODULES } from "../config/productModules";
 import { ProductCapture } from "./ProductCapture";
 import { SectionHeading } from "./SectionHeading";
 import s from "../styles/landing.module.css";
@@ -14,8 +14,10 @@ export function ProductGallery() {
     return found < 0 ? 0 : found;
   });
   const [instant, setInstant] = useState(false);
+  const [cedisCaptureIndex, setCedisCaptureIndex] = useState<number | null>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const current = PRODUCT_MODULES[index];
+  const cedisCapture = cedisCaptureIndex === null ? undefined : CEDIS_CAPTURE_STEPS[cedisCaptureIndex];
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
     const media = window.matchMedia("(max-width: 767px)");
@@ -80,7 +82,22 @@ export function ProductGallery() {
             <div className={s.modulePaging}><button type="button" aria-label="Módulo anterior" onClick={event => select((index + PRODUCT_MODULES.length - 1) % PRODUCT_MODULES.length, event.detail === 0)}><ArrowLeft size={18} /></button><button type="button" aria-label="Módulo siguiente" onClick={event => select((index + 1) % PRODUCT_MODULES.length, event.detail === 0)}><ArrowRight size={18} /></button></div>
           </div>
           <p className={s.moduleDetail}>{current.detail}</p>
-          <ProductCapture key={current.id} image={current.image} title={current.label} caption={current.note} instant={instant} />
+          {current.id === "cedis" && <div className={s.cedisCaptureOptions} role="group" aria-label="Capturas del flujo CEDIS">
+            {CEDIS_CAPTURE_STEPS.map((capture, captureIndex) => <button
+              key={capture.id}
+              type="button"
+              data-cedis-capture={capture.id}
+              aria-pressed={cedisCaptureIndex === captureIndex}
+              onClick={() => setCedisCaptureIndex(captureIndex)}
+            >{capture.label}</button>)}
+          </div>}
+          <ProductCapture
+            key={`${current.id}-${cedisCapture?.id ?? "overview"}`}
+            image={cedisCapture?.image ?? current.image}
+            title={cedisCapture?.label ?? current.label}
+            caption={cedisCapture?.caption ?? current.note}
+            instant={instant}
+          />
         </div>
       </div>
     </div>
