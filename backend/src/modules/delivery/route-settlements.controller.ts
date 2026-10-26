@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Headers,
+  Get,
+  Query,
   Param,
   Post,
   UseGuards,
@@ -13,12 +15,37 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CloseRouteSettlementDto, ReopenRouteSettlementDto } from './dto';
+import { ListRouteSettlementsQueryDto } from './dto/list-route-settlements-query.dto';
 import { DeliveryService } from './delivery.service';
 
 @Controller('route-settlements')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RouteSettlementsController {
   constructor(private readonly deliveryService: DeliveryService) {}
+
+  @Get()
+  @Roles('ADMIN', 'COLLECTIONS')
+  async findAll(
+    @Query() query: ListRouteSettlementsQueryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      data: await this.deliveryService.findSettlements(query, currentUser),
+    };
+  }
+
+  @Get(':id')
+  @Roles('ADMIN', 'COLLECTIONS')
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return {
+      success: true,
+      data: await this.deliveryService.findSettlement(id, currentUser),
+    };
+  }
 
   @Post(':id/close')
   @Roles('ADMIN', 'COLLECTIONS')

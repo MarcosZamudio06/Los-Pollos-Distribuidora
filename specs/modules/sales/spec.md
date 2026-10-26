@@ -52,6 +52,19 @@ Registrar ventas de contado, crédito, abonadas y atrasadas con inventario por u
 - Crear, cancelar o anular una venta asociada a un cierre `DRAFT` adquiere el bloqueo transaccional del cierre, relee estado y autorización bajo el bloqueo, y ejecuta la invalidación de validación, incremento de versión y recálculo del cierre en la misma transacción.
 - La operación administrativa `Anular venta` coordina la reversa de pagos, la cancelación de la venta, la restauración de inventario, la actualización de cartera y la invalidación de documentos internos de forma transaccional e idempotente.
 - `Anular venta` requiere vista previa del impacto, motivo y autorización de `ADMIN`; no reabre automáticamente cierres POS ni liquidaciones de ruta cerrados.
+- La restitución por cancelación/anulación es el remanente vendido por producto,
+  después de descontar movimientos `RETURN` y `CANCEL_SALE` ya vinculados a esa
+  venta. Una devolución física aceptada no se restaura por segunda vez; no se
+  crean movimientos positivos de cantidad cero ni se recorta un historial
+  sobrecompensado para ocultar diferencias. Los traspasos de custodia conservan
+  sus ubicaciones e identidad y no son una segunda compensación de la venta.
+- Cancelar/anular invalida el `DeliveryOrder` asociado en la misma transacción
+  (`CANCELLED`), sin borrar evidencias, incidencias, actores ni `deliveredAt`
+  históricos. Haber entregado no sustituye los bloqueos vigentes de cierre:
+  se conserva el flujo de anulación administrativa y su reversa coordinada.
+- Asignación, ejecución, devoluciones, cobranza y anulación coordinan el bloqueo
+  de la misma venta antes de mutar dinero o inventario; un conflicto concurrente
+  revierte la operación completa y permite reintentar con su clave original.
 - Un pedido operativo corresponde exclusivamente a una `Sale` confirmada y a su `locationId`; no existe una bandeja global de pedidos.
 - La carga inicial y la recuperación de pedidos usan REST por sucursal; el canal en tiempo real solo publica actualizaciones posteriores al commit.
 - Una venta confirmada emite `sale.created` únicamente después de confirmar la transacción. Un rollback o replay idempotente no emite eventos.

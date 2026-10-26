@@ -28,6 +28,7 @@ type MockPrisma = {
   deliveryRoute: {
     create: jest.Mock;
     findFirst: jest.Mock;
+    findUniqueOrThrow: jest.Mock;
     findMany: jest.Mock;
     count: jest.Mock;
     update: jest.Mock;
@@ -50,8 +51,18 @@ type MockPrisma = {
     findMany: jest.Mock;
     updateMany: jest.Mock;
   };
-  sale: { findMany: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
-  inventoryBalance: { upsert: jest.Mock; findUnique: jest.Mock };
+  sale: {
+    findMany: jest.Mock;
+    findUnique: jest.Mock;
+    findUniqueOrThrow: jest.Mock;
+    updateMany: jest.Mock;
+    update: jest.Mock;
+  };
+  inventoryBalance: {
+    upsert: jest.Mock;
+    findUnique: jest.Mock;
+    findMany: jest.Mock;
+  };
   inventoryMovement: {
     create: jest.Mock;
     findMany: jest.Mock;
@@ -60,6 +71,7 @@ type MockPrisma = {
   routeSettlement: {
     create: jest.Mock;
     findUnique: jest.Mock;
+    findUniqueOrThrow: jest.Mock;
     update: jest.Mock;
   };
   routeSettlementOpeningCommand: {
@@ -67,6 +79,7 @@ type MockPrisma = {
     findUnique: jest.Mock;
   };
   operationalLocation: { create: jest.Mock; findFirst: jest.Mock };
+  $executeRaw: jest.Mock;
   $transaction: jest.Mock;
 };
 
@@ -188,6 +201,9 @@ function createPrisma(): MockPrisma {
     deliveryRoute: {
       create: jest.fn(),
       findFirst: jest.fn(),
+      findUniqueOrThrow: jest.fn(
+        async () => (await prisma.deliveryRoute.findFirst({})) ?? createRoute(),
+      ),
       findMany: jest.fn(),
       count: jest.fn(),
       update: jest.fn(),
@@ -230,26 +246,60 @@ function createPrisma(): MockPrisma {
     payment: {
       create: jest.fn(),
       findFirst: jest.fn(),
-      findMany: jest.fn(),
+      findMany: jest.fn(
+        async () =>
+          (await prisma.deliveryRoute.findFirst.mock.results.at(-1)?.value)
+            ?.payments ?? [],
+      ),
       updateMany: jest.fn(),
     },
-    inventoryBalance: { upsert: jest.fn(), findUnique: jest.fn() },
+    inventoryBalance: {
+      upsert: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     inventoryMovement: {
       create: jest.fn(),
-      findMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       updateMany: jest.fn(),
     },
     routeSettlement: {
       create: jest.fn(),
       findUnique: jest.fn(),
-      update: jest.fn(),
+      findUniqueOrThrow: jest.fn(
+        async (...args) => await prisma.routeSettlement.findUnique(...args),
+      ),
+      update: jest.fn(async ({ data }) => ({
+        ...(await prisma.routeSettlement.findUnique({})),
+        ...data,
+        version: 2,
+      })),
     },
     routeSettlementOpeningCommand: {
       create: jest.fn(),
       findUnique: jest.fn(),
     },
     operationalLocation: { create: jest.fn(), findFirst: jest.fn() },
-    sale: { findMany: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
+    sale: {
+      findMany: jest.fn(),
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ id: 'sale-1', status: SaleStatus.CONFIRMED }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        id: 'sale-1',
+        locationId: 'route-stock-1',
+        items: [
+          {
+            productId: 'product-1',
+            quantityKg: new Prisma.Decimal('2.5'),
+            quantityPieces: 0,
+          },
+        ],
+      }),
+      updateMany: jest.fn(),
+      update: jest.fn(),
+    },
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
@@ -268,7 +318,10 @@ function createObjectStorage(): MockObjectStorage {
 
 function createService(
   prisma = createPrisma(),
-  fleetGateway?: { emitIncidentCreated: jest.Mock },
+  fleetGateway?: {
+    emitIncidentCreated: jest.Mock;
+    emitRouteUpdated?: jest.Mock;
+  },
   objectStorage = createObjectStorage(),
 ) {
   return {
@@ -2991,17 +3044,19 @@ describe('DeliveryService', () => {
       quantityPieces: 0,
       reason: 'Cliente devolvió producto',
     });
-    prisma.inventoryMovement.findMany.mockResolvedValue([
-      {
-        id: 'movement-1',
-        productId: 'product-1',
-        locationId: 'route-stock-1',
-        type: InventoryMovementType.RETURN,
-        quantityKg: money('2.5'),
-        quantityPieces: 0,
-        reason: 'Cliente devolvió producto',
-      },
-    ]);
+    prisma.inventoryMovement.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        {
+          id: 'movement-1',
+          productId: 'product-1',
+          locationId: 'route-stock-1',
+          type: InventoryMovementType.RETURN,
+          quantityKg: money('2.5'),
+          quantityPieces: 0,
+          reason: 'Cliente devolvió producto',
+        },
+      ]);
     const command = {
       status: DeliveryOrderStatus.RETURNED,
       reason: 'Cliente devolvió producto',
@@ -3358,20 +3413,31 @@ describe('DeliveryService', () => {
         ],
       }),
     );
-    prisma.inventoryMovement.findMany.mockResolvedValue([{ id: 'movement-1' }]);
+    prisma.inventoryBalance.findMany.mockResolvedValue([
+      {
+        quantityKg: new Prisma.Decimal(1),
+        quantityPieces: 0,
+        reservedQuantityKg: new Prisma.Decimal(0),
+        reservedQuantityPieces: 0,
+      },
+    ]);
     prisma.routeSettlement.create.mockResolvedValue({
       id: 'settlement-1',
       routeId: 'route-1',
       driverId: 'driver-1',
       status: RouteSettlementStatus.REVIEW_REQUIRED,
       version: 1,
-      expectedCashAmount: money('600'),
-      expectedTransferAmount: money('0'),
-      differenceAmount: money('350'),
+      expectedCashAmount: money('200'),
+      expectedTransferAmount: money('50'),
+      differenceAmount: money('0'),
       paidAtDeliveryAmount: money('200'),
-      overdueAmount: money('350'),
+      overdueAmount: money('0'),
       secondPassCollectionsAmount: money('50'),
-      routeCollectionsSummary: {},
+      routeCollectionsSummary: {
+        collectedCashAmount: 200,
+        collectedTransferAmount: 50,
+        creditAmount: 600,
+      },
       createdAt: date('2026-06-19T13:00:00.000Z'),
       updatedAt: date('2026-06-19T13:00:00.000Z'),
     });
@@ -3382,10 +3448,10 @@ describe('DeliveryService', () => {
       expect.objectContaining({
         id: 'settlement-1',
         status: RouteSettlementStatus.REVIEW_REQUIRED,
-        expectedCashAmount: 600,
+        expectedCashAmount: 200,
         derivedCollectedCashAmount: 200,
         derivedCollectedTransferAmount: 50,
-        differenceAmount: 350,
+        differenceAmount: 0,
       }),
     );
 
@@ -3395,7 +3461,7 @@ describe('DeliveryService', () => {
           routeId: 'route-1',
           driverId: 'driver-1',
           status: RouteSettlementStatus.REVIEW_REQUIRED,
-          differenceAmount: 350,
+          differenceAmount: 0,
         }),
       }),
     );
@@ -3710,7 +3776,7 @@ describe('DeliveryService', () => {
         where: { id: 'settlement-1', version: 4 },
         data: expect.objectContaining({
           status: RouteSettlementStatus.OPEN,
-          reopenedByUserId: 'admin-1',
+          reopenedBy: { connect: { id: 'admin-1' } },
           reopenedReason: 'Revisar diferencia',
           routeCollectionsSummary: expect.objectContaining({
             idempotency: expect.objectContaining({
@@ -3721,5 +3787,83 @@ describe('DeliveryService', () => {
         }),
       }),
     );
+  });
+  it('publishes a committed route transition once, outside the complete serializable retry', async () => {
+    const gateway = {
+      emitIncidentCreated: jest.fn(),
+      emitRouteUpdated: jest.fn(),
+    };
+    const { service, prisma } = createService(undefined, gateway);
+    prisma.deliveryRoute.findFirst.mockResolvedValue(createRoute());
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({ status: DeliveryRouteStatus.IN_PROGRESS }),
+    );
+    let committed = false;
+    prisma.$transaction
+      .mockImplementationOnce(async (callback) => {
+        await callback(prisma);
+        throw new Prisma.PrismaClientKnownRequestError('serialize', {
+          code: 'P2034',
+          clientVersion: 'test',
+        });
+      })
+      .mockImplementationOnce(async (callback) => {
+        const result = await callback(prisma);
+        committed = true;
+        return result;
+      });
+    gateway.emitRouteUpdated.mockImplementation(() =>
+      expect(committed).toBe(true),
+    );
+    await service.updateRouteStatus(
+      'route-1',
+      { status: DeliveryRouteStatus.IN_PROGRESS },
+      admin,
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(gateway.emitRouteUpdated).toHaveBeenCalledTimes(1);
+    expect(gateway.emitRouteUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({ routeId: 'route-1', status: 'IN_PROGRESS' }),
+      'origin-1',
+      'driver-1',
+    );
+  });
+
+  it('does not emit route changes for a rolled-back transaction', async () => {
+    const gateway = {
+      emitIncidentCreated: jest.fn(),
+      emitRouteUpdated: jest.fn(),
+    };
+    const { service, prisma } = createService(undefined, gateway);
+    prisma.$transaction.mockRejectedValue(new Error('rollback'));
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.IN_PROGRESS },
+        admin,
+      ),
+    ).rejects.toThrow('rollback');
+    expect(gateway.emitRouteUpdated).not.toHaveBeenCalled();
+  });
+
+  it('does not turn an already committed transition into an HTTP failure when publication fails', async () => {
+    const gateway = {
+      emitIncidentCreated: jest.fn(),
+      emitRouteUpdated: jest.fn(() => {
+        throw new Error('transport unavailable');
+      }),
+    };
+    const { service, prisma } = createService(undefined, gateway);
+    prisma.deliveryRoute.findFirst.mockResolvedValue(createRoute());
+    prisma.deliveryRoute.update.mockResolvedValue(
+      createRoute({ status: DeliveryRouteStatus.IN_PROGRESS }),
+    );
+    await expect(
+      service.updateRouteStatus(
+        'route-1',
+        { status: DeliveryRouteStatus.IN_PROGRESS },
+        admin,
+      ),
+    ).resolves.toMatchObject({ status: 'IN_PROGRESS' });
   });
 });

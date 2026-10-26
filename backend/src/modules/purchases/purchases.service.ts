@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -152,6 +153,7 @@ const PURCHASE_INCLUDE = {
 
 @Injectable()
 export class PurchasesService {
+  private readonly logger = new Logger(PurchasesService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly balanceService: InventoryBalanceService,
@@ -203,91 +205,150 @@ export class PurchasesService {
   ) {
     this.assertCreateShape(dto);
 
-    return this.prisma.$transaction(
-      async (tx) => {
-        const purchaseNumber =
-          this.resolveIdempotentPurchaseNumber(idempotencyKey);
-        const existing = (await tx.purchase.findUnique({
-          where: { purchaseNumber },
-          include: PURCHASE_INCLUDE,
-        })) as PurchaseRecord | null;
-        if (existing) {
-          this.assertSameCreatePayload(existing, dto, currentUser.id);
-          return this.toPurchaseDetail(existing);
-        }
-
-        await this.assertSupplierAvailable(tx, dto.supplierId);
-        await this.assertLocationAvailable(tx, dto.locationId, currentUser);
-        this.assertCostUpdateAllowed(dto, currentUser);
-        const preparedItems = await this.prepareItems(tx, dto.items);
-        const total = this.roundMoney(
-          preparedItems.reduce((sum, item) => sum + item.subtotal, 0),
-        );
-
-        const purchase = (await tx.purchase.create({
-          data: {
-            purchaseNumber,
-            supplierId: dto.supplierId,
-            locationId: dto.locationId,
-            userId: currentUser.id,
-            subtotal: total,
-            total,
-            status: PurchaseStatus.CONFIRMED,
-            items: {
-              create: preparedItems.map((item) => ({
-                productId: item.product.id,
-                unit: item.dto.unit,
-                quantity: item.quantity,
-                quantityKg: item.quantityKg,
-                quantityPieces: item.quantityPieces,
-                unitCost: item.unitCost,
-                unitEquivalentId: item.unitEquivalentId,
-                appliedEquivalentFactor: item.appliedEquivalentFactor,
-                subtotal: item.subtotal,
-              })),
-            },
-          },
-          include: PURCHASE_INCLUDE,
-        })) as PurchaseRecord;
-
-        for (const item of preparedItems) {
-          const quantities = {
-            quantityKg: item.quantityKg,
-            quantityPieces: item.quantityPieces,
-          };
-          const balanceChange = await this.applyBalanceChange(
-            tx,
-            item.product.id,
-            dto.locationId,
-            1,
-            quantities,
-          );
-          await this.createMovement(
-            tx,
-            purchase.id,
-            item.product.id,
-            dto.locationId,
-            currentUser.id,
-            InventoryMovementType.PURCHASE,
-            quantities,
-            balanceChange,
-            'Purchase confirmation',
-          );
-
-          if (dto.allowCostUpdate === true) {
-            await tx.product.update({
-              where: { id: item.product.id },
-              data: { purchaseCost: item.unitCost },
-            });
+    return this.withPurchaseTransactionRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const purchaseNumber =
+            this.resolveIdempotentPurchaseNumber(idempotencyKey);
+          const existing = (await tx.purchase.findUnique({
+            where: { purchaseNumber },
+            include: PURCHASE_INCLUDE,
+          })) as PurchaseRecord | null;
+          if (existing) {
+            this.assertSameCreatePayload(existing, dto, currentUser.id);
+            return this.toPurchaseDetail(existing);
           }
-        }
 
-        return this.toPurchaseDetail(
-          await this.findPurchaseOrThrow(purchase.id, tx),
-        );
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          await this.assertSupplierAvailable(tx, dto.supplierId);
+          await this.assertLocationAvailable(tx, dto.locationId, currentUser);
+          this.assertCostUpdateAllowed(dto, currentUser);
+          const preparedItems = await this.prepareItems(tx, dto.items);
+          const total = this.roundMoney(
+            preparedItems.reduce((sum, item) => sum + item.subtotal, 0),
+          );
+
+          const purchase = (await tx.purchase.create({
+            data: {
+              purchaseNumber,
+              supplierId: dto.supplierId,
+              locationId: dto.locationId,
+              userId: currentUser.id,
+              subtotal: total,
+              total,
+              status: PurchaseStatus.CONFIRMED,
+              items: {
+                create: preparedItems.map((item) => ({
+                  productId: item.product.id,
+                  unit: item.dto.unit,
+                  quantity: item.quantity,
+                  quantityKg: item.quantityKg,
+                  quantityPieces: item.quantityPieces,
+                  unitCost: item.unitCost,
+                  unitEquivalentId: item.unitEquivalentId,
+                  appliedEquivalentFactor: item.appliedEquivalentFactor,
+                  subtotal: item.subtotal,
+                })),
+              },
+            },
+            include: PURCHASE_INCLUDE,
+          })) as PurchaseRecord;
+
+          for (const item of preparedItems) {
+            const quantities = {
+              quantityKg: item.quantityKg,
+              quantityPieces: item.quantityPieces,
+            };
+            const balanceChange = await this.applyBalanceChange(
+              tx,
+              item.product.id,
+              dto.locationId,
+              1,
+              quantities,
+            );
+            await this.createMovement(
+              tx,
+              purchase.id,
+              item.product.id,
+              dto.locationId,
+              currentUser.id,
+              InventoryMovementType.PURCHASE,
+              quantities,
+              balanceChange,
+              'Purchase confirmation',
+            );
+
+            if (dto.allowCostUpdate === true) {
+              await tx.product.update({
+                where: { id: item.product.id },
+                data: { purchaseCost: item.unitCost },
+              });
+            }
+          }
+
+          return this.toPurchaseDetail(
+            await this.findPurchaseOrThrow(purchase.id, tx),
+          );
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
     );
+  }
+
+  private async withPurchaseTransactionRetry<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await operation();
+        if (attempt > 1)
+          this.logger.log({
+            event: 'purchase_transaction_recovered',
+            attempts: attempt,
+          });
+        return result;
+      } catch (error) {
+        const candidate = error as {
+          code?: unknown;
+          meta?: { target?: unknown };
+        } | null;
+        const target = candidate?.meta?.target;
+        // Only this unique constraint is an idempotent command race. Other uniqueness failures are not retries.
+        const commandRace =
+          candidate?.code === 'P2002' &&
+          ((Array.isArray(target) &&
+            target.length === 1 &&
+            target[0] === 'purchaseNumber') ||
+            target === 'Purchase_purchaseNumber_key');
+        if (candidate?.code !== 'P2034' && !commandRace) throw error;
+        if (attempt === maxAttempts) {
+          this.logger.warn({
+            event: 'purchase_transaction_exhausted',
+            attempts: attempt,
+            code: candidate?.code,
+          });
+          throw new ConflictException({
+            code: 'PURCHASE_CONCURRENCY_RETRY_EXHAUSTED',
+            message:
+              'Purchase could not be registered after concurrent updates; retry the same command',
+          });
+        }
+        const delayMs =
+          Math.min(20 * 2 ** (attempt - 1), 200) +
+          Math.floor(Math.random() * 20);
+        this.logger.warn({
+          event: 'purchase_transaction_retry',
+          attempt,
+          code: candidate?.code,
+          delayMs,
+        });
+        // Wait outside the rolled-back transaction. Re-read supplier, permissions, costs and balances on every attempt.
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    throw new ConflictException({
+      code: 'PURCHASE_CONCURRENCY_RETRY_EXHAUSTED',
+    });
   }
 
   async cancel(

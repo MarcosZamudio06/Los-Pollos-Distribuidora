@@ -28,6 +28,8 @@ import {
   RegisterReceivablePaymentDto,
 } from './dto';
 import { calculateReceivableAging } from './receivable-aging';
+import { assertSaleExecutable } from '../inventory/sale-restoration';
+import { assertRouteSettlementMutable } from '../delivery/route-settlement-lifecycle';
 import { Money, toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
@@ -245,6 +247,36 @@ export class AccountsReceivableService {
               collectionDailyCloseId =
                 cashShift?.pointOfSaleDailyCloseId ?? null;
             }
+
+            if (dto.routeId || dto.routeSettlementId) {
+              const linked = dto.routeSettlementId
+                ? await tx.routeSettlement.findUnique({
+                    where: { id: dto.routeSettlementId },
+                    select: { routeId: true },
+                  })
+                : null;
+              const routeId = dto.routeId ?? linked?.routeId;
+              const routeSale = await tx.sale.findUnique({
+                where: { id: receivable.saleId },
+                select: { routeId: true },
+              });
+              if (
+                !routeId ||
+                routeSale?.routeId !== routeId ||
+                (linked && linked.routeId !== routeId)
+              )
+                throw new ConflictException(
+                  'Payment route does not match the receivable sale',
+                );
+              await assertRouteSettlementMutable(
+                tx,
+                routeId,
+                dto.routeSettlementId,
+              );
+            }
+
+            // Context locks precede the sale lock; all monetary writers then lock Sale before receivable.
+            await assertSaleExecutable(tx, receivable.saleId);
 
             const newOutstandingAmount =
               outstandingAmount.subtract(paymentAmount);

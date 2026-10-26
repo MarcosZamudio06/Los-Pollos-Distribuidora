@@ -7,6 +7,7 @@ import {
   FLEET_GEOFENCE_ENTERED_EVENT,
   FLEET_INCIDENT_CREATED_EVENT,
   FLEET_POSITION_UPDATED_EVENT,
+  FLEET_ROUTE_UPDATED_EVENT,
   fleetDriverRoom,
   fleetOriginRoom,
   fleetRouteRoom,
@@ -248,5 +249,17 @@ describe('FleetGateway', () => {
     expect(server.to).toHaveBeenNthCalledWith(3, fleetRouteRoom('route-1'));
     expect(emit).toHaveBeenCalledTimes(3);
     expect(emit).toHaveBeenCalledWith(FLEET_INCIDENT_CREATED_EVENT, payload);
+  });
+  it('invalidates global, scoped origin and assigned driver snapshots with a single room union', () => {
+    const { gateway, server, emit } = createGateway();
+    const payload = { routeId: 'route-1', status: 'IN_PROGRESS' };
+    gateway.emitRouteUpdated(payload, 'origin-1', 'driver-1');
+    expect(server.to).toHaveBeenCalledWith([
+      FLEET_ADMIN_ROOM,
+      fleetOriginRoom('origin-1'),
+      fleetDriverRoom('driver-1'),
+    ]);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(FLEET_ROUTE_UPDATED_EVENT, payload);
   });
 });

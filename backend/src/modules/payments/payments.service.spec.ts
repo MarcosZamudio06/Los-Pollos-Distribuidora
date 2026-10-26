@@ -73,6 +73,7 @@ function createPrisma() {
       findUnique: jest.fn().mockResolvedValue({ status: 'DRAFT' }),
     },
     $executeRawUnsafe: jest.fn(),
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;

@@ -35,6 +35,8 @@ type MockPrisma = {
   $transaction: jest.Mock;
   $queryRawUnsafe: jest.Mock;
   $executeRawUnsafe: jest.Mock;
+  $executeRaw: jest.Mock;
+  deliveryOrder: { updateMany: jest.Mock };
   product: { findMany: jest.Mock };
   user: { findUnique: jest.Mock };
   customer: { findUnique: jest.Mock };
@@ -48,7 +50,7 @@ type MockPrisma = {
     update: jest.Mock;
     upsert: jest.Mock;
   };
-  inventoryMovement: { create: jest.Mock };
+  inventoryMovement: { create: jest.Mock; findMany: jest.Mock };
   saleDocument: {
     create: jest.Mock;
     findFirst: jest.Mock;
@@ -94,6 +96,8 @@ function createPrisma(): MockPrisma {
     $transaction: jest.fn((callback) => callback(prisma)),
     $queryRawUnsafe: jest.fn(),
     $executeRawUnsafe: jest.fn(),
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    deliveryOrder: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     product: { findMany: jest.fn() },
     user: { findUnique: jest.fn() },
     customer: { findUnique: jest.fn() },
@@ -107,7 +111,10 @@ function createPrisma(): MockPrisma {
       update: jest.fn(),
       upsert: jest.fn(),
     },
-    inventoryMovement: { create: jest.fn() },
+    inventoryMovement: {
+      create: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     saleDocument: {
       create: jest.fn(),
       findFirst: jest.fn(),

@@ -131,6 +131,14 @@ Validaciones:
 - Actualizar costo de producto solo con permiso o política administrativa.
 - Ejecutar en transacción.
 
+### Concurrencia e idempotencia de registro
+
+- `Idempotency-Key` identifica un comando de compra; su repetición con el mismo actor y payload devuelve la compra registrada sin volver a incrementar inventario ni duplicar movimientos.
+- Ante un conflicto transaccional recuperable, se reintenta de forma acotada la **transacción completa**, manteniendo aislamiento `Serializable` y revalidando los datos dentro de cada intento.
+- El agotamiento de recuperación responde `409` con código `PURCHASE_CONCURRENCY_RETRY_EXHAUSTED`; el cliente puede reintentar el mismo comando con la misma clave. No es una confirmación de compra.
+- Errores de validación, permisos, reglas de negocio y fallos no recuperables conservan su clasificación; no se convierten indiscriminadamente en conflictos ni se reintentan.
+- Un rollback no deja Purchase, PurchaseItem, incremento de balance o InventoryMovement parciales. No existen efectos externos de negocio dentro de la unidad reintentable.
+
 ## POST /api/purchases/:id/cancel
 
 Propósito: cancelar compra y revertir inventario si es posible.

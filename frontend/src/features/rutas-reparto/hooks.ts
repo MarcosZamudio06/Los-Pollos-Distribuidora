@@ -5,6 +5,7 @@ import { deliveryService } from "./deliveryService";
 import type {
   AssignDeliveryRouteOrdersPayload,
   CloseRouteSettlementPayload,
+  ReopenRouteSettlementPayload,
   CreateDeliveryEvidencePayload,
   CreateDeliveryIncidentPayload,
   CreateDeliveryRoutePayload,
@@ -35,7 +36,8 @@ export function useRoutePlannerCatalog(search = "", originLocationId = "") {
     queryKey: ["route-planner", "eligible-sales", originLocationId, search],
     queryFn: () =>
       deliveryService.listEligibleSales(
-        { limit: 100, originLocationId, search: search || undefined },
+        // Dispatch origin is not the sale's inventory custody/location.
+        { limit: 100, search: search || undefined },
         accessToken,
       ),
   });
@@ -211,10 +213,12 @@ export function useOpenRouteSettlement() {
         accessToken,
       );
     },
-    onSuccess: (_data, routeId) => {
+    onSuccess: async (_data, routeId) => {
       commandKeys.current.delete(routeId);
-      void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
-      void queryClient.invalidateQueries({ queryKey: ["route-settlements"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["delivery-routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["route-settlements"] }),
+      ]);
     },
   });
 }
@@ -226,6 +230,34 @@ export function useRouteSettlement(settlementId?: string) {
     queryKey: ["route-settlements", settlementId],
     queryFn: () =>
       deliveryService.getSettlement(settlementId as string, accessToken),
+  });
+}
+
+export function useReopenRouteSettlement(settlementId: string) {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: ({
+      payload,
+      idempotencyKey,
+    }: {
+      payload: ReopenRouteSettlementPayload;
+      idempotencyKey: string;
+    }) =>
+      deliveryService.reopenSettlement(
+        settlementId,
+        payload,
+        idempotencyKey,
+        accessToken,
+      ),
+    // Always reread authority: a replay can return an older accepted response.
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["delivery-routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["route-settlements"] }),
+      ]);
+    },
   });
 }
 

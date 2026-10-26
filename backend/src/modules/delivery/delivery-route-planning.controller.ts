@@ -35,11 +35,12 @@ export class DeliveryRoutePlanningController {
   }
   @Get('delivery-route-planning/eligible-sales') async eligibleSales(
     @Query() query: EligibleSalesQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
     return {
       success: true,
       message: 'Eligible sales retrieved successfully',
-      data: await this.planning.findEligibleSales(query),
+      data: await this.planning.findEligibleSales(query, user),
     };
   }
   @Post('delivery-route-plans') async create(

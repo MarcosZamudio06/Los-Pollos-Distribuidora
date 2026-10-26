@@ -1,4 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { useAuth } from "../../auth";
+import { ReopenRouteSettlementDialog } from "../components/ReopenRouteSettlementDialog";
 import { useParams } from "react-router-dom";
 import {
   Card,
@@ -7,6 +9,7 @@ import {
   PageFrame,
   PageShell,
   PrimaryButton,
+  SecondaryButton,
   RouteHero,
   SecondaryLink,
   SettlementStatusBadge,
@@ -14,12 +17,20 @@ import {
   TextInput,
 } from "../components/RouteUi";
 import { dateTime, money, paymentMethodLabel, shortId } from "../labels";
-import { useCloseRouteSettlement, useRouteSettlement } from "../hooks";
+import {
+  useCloseRouteSettlement,
+  useRouteSettlement,
+  useOpenRouteSettlement,
+} from "../hooks";
 
 export function RouteSettlementView() {
   const { settlementId } = useParams();
+  const { user } = useAuth();
+  const [reopening, setReopening] = useState(false);
+  const [reopened, setReopened] = useState(false);
   const settlement = useRouteSettlement(settlementId);
   const closeSettlement = useCloseRouteSettlement(settlementId ?? "");
+  const recalculate = useOpenRouteSettlement();
   const [notes, setNotes] = useState("");
   const [expectedVersion, setExpectedVersion] = useState("");
   const detail = settlement.data;
@@ -69,6 +80,37 @@ export function RouteSettlementView() {
           </StatusMessage>
         )}
 
+        {reopened && (
+          <StatusMessage tone="success">
+            Reapertura registrada. Revisa las operaciones y vuelve a calcular
+            antes del cierre.
+          </StatusMessage>
+        )}
+        {reopening &&
+          detail?.status === "CLOSED" &&
+          user?.role === "ADMIN" &&
+          settlementId && (
+            <ReopenRouteSettlementDialog
+              key={settlementId}
+              settlementId={settlementId}
+              version={Number(detail.version ?? detail.expectedVersion ?? 0)}
+              onClose={() => setReopening(false)}
+              onReopened={() => {
+                setReopening(false);
+                setReopened(true);
+                setExpectedVersion("");
+              }}
+              onRefresh={async () => {
+                const result = await settlement.refetch();
+                if (result.error || !result.data)
+                  throw (
+                    result.error ??
+                    new Error("No se pudo consultar la liquidación.")
+                  );
+                return result.data;
+              }}
+            />
+          )}
         {detail && (
           <>
             <section className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
@@ -125,14 +167,47 @@ export function RouteSettlementView() {
                   Cierre
                 </p>
                 {detail.status === "CLOSED" ? (
-                  <StatusMessage tone="success">
-                    Liquidación cerrada el {dateTime(detail.closedAt)}.
-                  </StatusMessage>
+                  <div className="mt-4 grid gap-4">
+                    <StatusMessage tone="success">
+                      Liquidación cerrada el {dateTime(detail.closedAt)}.
+                    </StatusMessage>
+                    {user?.role === "ADMIN" && (
+                      <SecondaryButton
+                        disabled={!detail.version || settlement.isFetching}
+                        onClick={() => {
+                          setReopened(false);
+                          setReopening(true);
+                        }}
+                      >
+                        Reabrir liquidación
+                      </SecondaryButton>
+                    )}
+                  </div>
                 ) : (
                   <form
                     className="mt-4 grid gap-4"
                     onSubmit={(event) => void handleClose(event)}
                   >
+                    <SecondaryButton
+                      disabled={
+                        recalculate.isPending || closeSettlement.isPending
+                      }
+                      onClick={() => {
+                        setExpectedVersion("");
+                        void recalculate
+                          .mutateAsync(detail.routeId)
+                          .catch(() => undefined);
+                      }}
+                    >
+                      {recalculate.isPending
+                        ? "Recalculando..."
+                        : "Recalcular liquidación"}
+                    </SecondaryButton>
+                    {recalculate.error && (
+                      <StatusMessage tone="error">
+                        {recalculate.error.message}
+                      </StatusMessage>
+                    )}
                     <Field
                       label="Versión esperada"
                       hint="Requerida para evitar cierres con datos obsoletos."
@@ -164,7 +239,11 @@ export function RouteSettlementView() {
                       </StatusMessage>
                     )}
                     <PrimaryButton
-                      disabled={!canClose || closeSettlement.isPending}
+                      disabled={
+                        !canClose ||
+                        closeSettlement.isPending ||
+                        recalculate.isPending
+                      }
                       type="submit"
                     >
                       {closeSettlement.isPending

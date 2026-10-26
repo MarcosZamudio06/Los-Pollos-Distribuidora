@@ -20,6 +20,15 @@ import type {
   InventoryLowStockReportQueryDto,
   SalesDailyReportQueryDto,
 } from './dto';
+import {
+  buildCivilDateRangeFilter,
+  DEFAULT_APP_TIMEZONE,
+  getCivilDateRange,
+} from '../../common/utils/civil-date-range';
+import {
+  buildSaleBusinessDayWhere,
+  buildPaymentBusinessDayWhere,
+} from '../../common/utils/business-day-where';
 import { Money, toMoneyString } from '../../../../shared/money';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
@@ -49,6 +58,7 @@ type FreshnessMeta = {
 };
 
 type PaymentRecord = {
+  id?: string;
   amount: DecimalLike;
   paymentMethod: string;
   bankName?: string | null;
@@ -171,7 +181,7 @@ export class ReportsService {
     const range = this.resolveDateRange(query.date);
     const baseSaleWhere = this.applySalesScope(
       {
-        createdAt: range,
+        ...this.saleBusinessDayWhere(query.date),
         status: SaleStatus.CONFIRMED,
         ...(query.locationId ? { locationId: query.locationId } : {}),
       },
@@ -180,7 +190,7 @@ export class ReportsService {
     const paymentWhere = this.applyDashboardPaymentScope(
       this.applyPaymentScope(
         {
-          paidAt: range,
+          ...this.paymentBusinessDayWhere(query.date),
           status: ACTIVE_PAYMENT_STATUSES_IN,
           ...(query.locationId
             ? { operationalLocationId: query.locationId }
@@ -281,10 +291,9 @@ export class ReportsService {
   }
 
   async getSalesDaily(query: SalesDailyReportQueryDto, user: ReportUser) {
-    const range = this.resolveRequiredDateRange(query.date);
     const where = this.applySalesScope(
       {
-        createdAt: range,
+        ...this.saleBusinessDayWhere(query.date),
         status: { in: [...SALE_REPORT_STATUSES] },
         ...(query.locationId ? { locationId: query.locationId } : {}),
         ...(query.paymentType ? { paymentType: query.paymentType } : {}),
@@ -400,10 +409,9 @@ export class ReportsService {
       throw new ForbiddenException('User cannot access cash closing report');
     }
 
-    const range = this.resolveRequiredDateRange(query.date);
     const saleWhere = this.applySalesScope(
       {
-        createdAt: range,
+        ...this.saleBusinessDayWhere(query.date),
         status: SaleStatus.CONFIRMED,
         ...(query.locationId ? { locationId: query.locationId } : {}),
       },
@@ -412,7 +420,7 @@ export class ReportsService {
     );
     const paymentWhere = this.applyPaymentScope(
       {
-        paidAt: range,
+        ...this.paymentBusinessDayWhere(query.date),
         status: ACTIVE_PAYMENT_STATUSES_IN,
         ...(query.locationId
           ? { operationalLocationId: query.locationId }
@@ -424,11 +432,15 @@ export class ReportsService {
 
     const sales = await this.findSales(saleWhere);
     const payments = await this.findPayments(paymentWhere);
+    const periodPaymentIds = new Set(payments.map((payment) => payment.id));
     const cashSalePayments = sales
       .filter((sale) => sale.paymentType === SalePaymentType.CASH_SALE)
       .flatMap((sale) =>
         this.activePayments(sale).filter(
-          (payment) => !payment.accountReceivableId && !payment.routeId,
+          (payment) =>
+            !payment.accountReceivableId &&
+            !payment.routeId &&
+            periodPaymentIds.has(payment.id),
         ),
       );
     const accountsReceivablePayments = payments.filter(
@@ -1129,9 +1141,13 @@ export class ReportsService {
     if (user.role === 'COLLECTIONS') {
       return {
         ...where,
-        OR: [
-          { accountReceivableId: { not: null } },
-          { routeId: { not: null } },
+        AND: [
+          {
+            OR: [
+              { accountReceivableId: { not: null } },
+              { routeId: { not: null } },
+            ],
+          },
         ],
       };
     }
@@ -1178,39 +1194,45 @@ export class ReportsService {
   }
 
   private resolveDateRangeFilter(dateFrom?: string, dateTo?: string) {
-    const startSource = dateFrom ?? dateTo;
-    const endSource = dateTo ?? dateFrom;
+    const from = dateFrom ?? dateTo;
+    const to = dateTo ?? dateFrom;
+    if (!from || !to) return undefined;
+    const filter = buildCivilDateRangeFilter(from, to)!;
+    return {
+      gte: filter.gte!,
+      lt: filter.lt ?? new Date(filter.lte!.getTime() + 1),
+    };
+  }
 
-    if (!startSource || !endSource) {
-      return undefined;
-    }
-
-    const start = this.startOfUtcDay(startSource);
-    const end = this.startOfUtcDay(endSource);
-    end.setUTCDate(end.getUTCDate() + 1);
-
-    return { gte: start, lt: end };
+  private operationalDate(date?: string) {
+    if (date) return date.slice(0, 10);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: process.env.APP_TIMEZONE?.trim() || DEFAULT_APP_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const value = (type: string) =>
+      parts.find((part) => part.type === type)!.value;
+    return `${value('year')}-${value('month')}-${value('day')}`;
   }
 
   private resolveDateRange(date?: string) {
-    const source = date ? `${date}T00:00:00.000Z` : new Date().toISOString();
-    const start = this.startOfUtcDay(source);
-    const end = new Date(start);
-    end.setUTCDate(start.getUTCDate() + 1);
-
-    return { gte: start, lt: end };
+    const { from, to } = getCivilDateRange(this.operationalDate(date));
+    return { gte: from, lt: to };
   }
 
-  private startOfUtcDay(value: string) {
-    const source = new Date(
-      value.includes('T') ? value : `${value}T00:00:00.000Z`,
+  private saleBusinessDayWhere(date?: string) {
+    return buildSaleBusinessDayWhere(
+      new Date(`${this.operationalDate(date)}T00:00:00.000Z`),
+      this.resolveDateRange(date),
     );
-    return new Date(
-      Date.UTC(
-        source.getUTCFullYear(),
-        source.getUTCMonth(),
-        source.getUTCDate(),
-      ),
+  }
+
+  private paymentBusinessDayWhere(date?: string) {
+    return buildPaymentBusinessDayWhere(
+      new Date(`${this.operationalDate(date)}T00:00:00.000Z`),
+      this.resolveDateRange(date),
     );
   }
 

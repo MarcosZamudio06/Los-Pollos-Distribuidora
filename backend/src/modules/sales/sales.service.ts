@@ -35,6 +35,11 @@ import { PrismaService } from '../../database/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { InventoryBalanceService } from '../inventory/inventory-balance.service';
 import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
+import {
+  acquireSaleLifecycleLock,
+  remainingSaleRestoration,
+} from '../inventory/sale-restoration';
+import { assertRouteSettlementMutable } from '../delivery/route-settlement-lifecycle';
 import { acquireDraftDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
 import {
   CancelSaleDto,
@@ -1369,7 +1374,11 @@ export class SalesService {
       throw new NotFoundException('Sale not found');
     }
 
-    return this.toVoidPreview(sale, currentUser);
+    return this.toVoidPreview(
+      sale,
+      currentUser,
+      await remainingSaleRestoration(this.prisma, sale),
+    );
   }
 
   async voidSale(
@@ -1442,6 +1451,23 @@ export class SalesService {
             throw new NotFoundException('Sale not found');
           }
 
+          if (typeof sale.routeId === 'string') {
+            await assertRouteSettlementMutable(tx, sale.routeId).catch(
+              (error: unknown) => {
+                if (
+                  typeof error === 'object' &&
+                  error !== null &&
+                  'code' in error &&
+                  error.code === 'P2034'
+                )
+                  throw new ConflictException(
+                    'Sale cancellation context changed; refresh and retry',
+                  );
+                throw error;
+              },
+            );
+          }
+
           if (sale.pointOfSaleDailyClose?.id) {
             await acquireDraftDailyCloseLifecycleLock(
               tx,
@@ -1452,6 +1478,8 @@ export class SalesService {
               throw new NotFoundException('Sale not found');
             }
           }
+
+          await acquireSaleLifecycleLock(tx, sale.id);
 
           if (sale.status === SaleStatus.CANCELLED) {
             throw new BadRequestException('Sale is already cancelled');
@@ -1628,6 +1656,11 @@ export class SalesService {
             );
           }
 
+          await tx.deliveryOrder.updateMany({
+            where: { saleId: sale.id },
+            data: { status: 'CANCELLED' },
+          });
+
           const cancelledSale = (await tx.sale.findUnique({
             where: { id: sale.id },
             include: { items: true },
@@ -1777,6 +1810,25 @@ export class SalesService {
           );
         }
 
+        if (typeof sale.routeId === 'string') {
+          await assertRouteSettlementMutable(tx, sale.routeId).catch(
+            (error: unknown) => {
+              if (
+                typeof error === 'object' &&
+                error !== null &&
+                'code' in error &&
+                error.code === 'P2034'
+              )
+                throw new ConflictException(
+                  'Sale cancellation context changed; refresh and retry',
+                );
+              throw error;
+            },
+          );
+        }
+
+        await acquireSaleLifecycleLock(tx, sale.id);
+
         this.assertSaleCanBeCancelled(sale);
 
         const inventoryMovements = await this.restoreSaleInventory(
@@ -1810,6 +1862,11 @@ export class SalesService {
             'Sale was modified before cancellation could be persisted',
           );
         }
+
+        await tx.deliveryOrder.updateMany({
+          where: { saleId: sale.id },
+          data: { status: 'CANCELLED' },
+        });
 
         const cancelledSale = await tx.sale.findUnique({
           where: { id: sale.id },
@@ -1895,7 +1952,11 @@ export class SalesService {
     return blockers;
   }
 
-  private toVoidPreview(sale: SaleVoidPreviewRecord, currentUser: Actor) {
+  private toVoidPreview(
+    sale: SaleVoidPreviewRecord,
+    currentUser: Actor,
+    restoration: Awaited<ReturnType<typeof remainingSaleRestoration>>,
+  ) {
     const blockers = this.getVoidBlockers(sale);
     const activePayments = this.getVoidPayments(sale).filter(
       (payment) => payment.status !== PaymentStatus.CANCELLED,
@@ -1932,10 +1993,14 @@ export class SalesService {
         paidAt: payment.paidAt,
         version: payment.version,
       })),
-      inventory: (sale.items ?? []).map((item) => ({
+      inventory: restoration.map((item) => ({
         productId: item.productId,
-        productName: item.productNameSnapshot ?? item.productId,
-        unit: item.unit ?? null,
+        productName:
+          sale.items?.find((line) => line.productId === item.productId)
+            ?.productNameSnapshot ?? item.productId,
+        unit:
+          sale.items?.find((line) => line.productId === item.productId)?.unit ??
+          null,
         quantityKg: this.decimalToString(item.quantityKg),
         quantityPieces: item.quantityPieces ?? 0,
         locationId: sale.locationId,
@@ -2160,9 +2225,10 @@ export class SalesService {
   ): Promise<CreatedMovement[]> {
     const movements: CreatedMovement[] = [];
 
-    for (const item of sale.items ?? []) {
-      const quantityKg = this.roundQuantity(this.toNumber(item.quantityKg));
-      const quantityPieces = item.quantityPieces ?? 0;
+    for (const item of await remainingSaleRestoration(tx, sale)) {
+      const quantityKg = this.roundQuantity(Number(item.quantityKg));
+      const quantityPieces = item.quantityPieces;
+      if (quantityKg === 0 && quantityPieces === 0) continue;
 
       const {
         previousQuantityKg,
@@ -2196,6 +2262,15 @@ export class SalesService {
             referenceType: 'Sale',
             referenceId: sale.id,
             saleId: sale.id,
+            idempotencyKey: `cancel-sale:${sale.id}:${item.productId}`,
+            idempotencyPayloadHash: this.hashPayload({
+              operation: 'RESTORE_SALE_REMAINDER',
+              saleId: sale.id,
+              productId: item.productId,
+              locationId: sale.locationId,
+              quantityKg,
+              quantityPieces,
+            }),
           },
         }),
       );
@@ -2726,7 +2801,9 @@ export class SalesService {
     currentUser: Actor,
   ) {
     const creditDecision = sale.creditDecisionSnapshot as
-      Record<string, unknown> | null | undefined;
+      | Record<string, unknown>
+      | null
+      | undefined;
     const visibleSale = { ...sale };
     if (currentUser.role !== 'ADMIN') delete visibleSale.deviceId;
     return {

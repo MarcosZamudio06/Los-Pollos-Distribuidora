@@ -18,6 +18,8 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { PointOfSaleDailyCloseService } from '../point-of-sale-daily-close/point-of-sale-daily-close.service';
 import { acquireDraftDailyCloseLifecycleLock } from '../point-of-sale-daily-close/daily-close-lifecycle-lock';
 import { CancelPaymentDto } from './dto';
+import { acquireSaleLifecycleLock } from '../inventory/sale-restoration';
+import { assertRouteSettlementMutable } from '../delivery/route-settlement-lifecycle';
 import { Money, toMoneyString } from '../../../../shared/money';
 
 type Actor = Pick<AuthenticatedUser, 'id' | 'role'>;
@@ -114,6 +116,25 @@ export class PaymentsService {
             throw new BadRequestException('Payment is already cancelled');
           }
 
+          if (payment.routeId || payment.routeSettlementId) {
+            const linked = payment.routeSettlementId
+              ? await tx.routeSettlement.findUnique({
+                  where: { id: payment.routeSettlementId },
+                  select: { routeId: true },
+                })
+              : null;
+            const routeId = payment.routeId ?? linked?.routeId;
+            if (!routeId)
+              throw new ConflictException(
+                'Payment route settlement is unavailable',
+              );
+            await assertRouteSettlementMutable(
+              tx,
+              routeId,
+              payment.routeSettlementId,
+            );
+          }
+
           const initialDailyCloseId =
             payment.pointOfSaleDailyCloseId ??
             payment.sale?.pointOfSaleDailyClose?.id ??
@@ -145,6 +166,9 @@ export class PaymentsService {
             if (payment.status === PaymentStatus.CANCELLED)
               throw new BadRequestException('Payment is already cancelled');
           }
+
+          const saleId = payment.saleId ?? payment.accountReceivable?.saleId;
+          if (saleId) await acquireSaleLifecycleLock(tx, saleId);
 
           if (payment.version !== dto.expectedVersion) {
             throw new ConflictException(

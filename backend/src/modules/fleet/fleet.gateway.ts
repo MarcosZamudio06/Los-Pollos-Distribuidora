@@ -109,8 +109,16 @@ export class FleetGateway {
       .emit(FLEET_POSITION_UPDATED_EVENT, payload);
   }
 
-  emitRouteUpdated(payload: FleetRealtimePayload): void {
-    this.server.to(FLEET_ADMIN_ROOM).emit(FLEET_ROUTE_UPDATED_EVENT, payload);
+  emitRouteUpdated(
+    payload: FleetRealtimePayload,
+    originLocationId?: string | null,
+    driverId?: string | null,
+  ): void {
+    const rooms: string[] = [FLEET_ADMIN_ROOM];
+    if (originLocationId) rooms.push(fleetOriginRoom(originLocationId));
+    if (driverId) rooms.push(fleetDriverRoom(driverId));
+    // A union delivers once, even when a client belongs to multiple authorized rooms.
+    this.server.to(rooms).emit(FLEET_ROUTE_UPDATED_EVENT, payload);
   }
 
   emitIncidentCreated(

@@ -22,6 +22,10 @@ import {
   SaleDocumentType,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  buildSaleBusinessDayWhere,
+  buildPaymentBusinessDayWhere,
+} from '../../common/utils/business-day-where';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import {
   DEFAULT_APP_TIMEZONE,
@@ -317,6 +321,7 @@ export class PointOfSaleDailyCloseService {
           dto.operationalLocationId,
           from,
           to,
+          businessDate,
         );
         return this.recalculate(close.id, tx);
       });
@@ -1338,6 +1343,7 @@ export class PointOfSaleDailyCloseService {
       close.operationalLocationId,
       from,
       to,
+      close.businessDate,
     );
     close = await this.findClose(id, client);
     if (close.status !== PointOfSaleDailyCloseStatus.DRAFT)
@@ -1960,52 +1966,44 @@ export class PointOfSaleDailyCloseService {
     locationId: string,
     from: Date,
     to: Date,
+    businessDate: Date,
   ) {
+    const saleScope: Prisma.SaleWhereInput = {
+      locationId,
+      status: 'CONFIRMED',
+      ...buildSaleBusinessDayWhere(businessDate, { gte: from, lt: to }),
+    };
+    const paymentScope: Prisma.PaymentWhereInput = {
+      operationalLocationId: locationId,
+      ...appliedPaymentWhere,
+      routeId: null,
+      cashShiftId: { not: null },
+      ...buildPaymentBusinessDayWhere(businessDate, { gte: from, lt: to }),
+    };
     const detachedSales = await tx.sale.updateMany({
-      where: {
-        pointOfSaleDailyCloseId: closeId,
-        NOT: {
-          locationId,
-          createdAt: { gte: from, lt: to },
-          status: 'CONFIRMED',
-        },
-      },
+      where: { pointOfSaleDailyCloseId: closeId, NOT: saleScope },
       data: { pointOfSaleDailyCloseId: null },
     });
     const detachedPayments = await tx.payment.updateMany({
-      where: {
-        pointOfSaleDailyCloseId: closeId,
-        NOT: {
-          operationalLocationId: locationId,
-          paidAt: { gte: from, lt: to },
-          ...appliedPaymentWhere,
-          routeId: null,
-          cashShiftId: { not: null },
-        },
-      },
+      where: { pointOfSaleDailyCloseId: closeId, NOT: paymentScope },
       data: { pointOfSaleDailyCloseId: null },
     });
     const attachedSales = await tx.sale.updateMany({
       where: {
-        locationId,
-        createdAt: { gte: from, lt: to },
-        status: 'CONFIRMED',
-        OR: [
-          { pointOfSaleDailyCloseId: null },
-          { pointOfSaleDailyCloseId: { not: closeId } },
+        AND: [
+          saleScope,
+          {
+            OR: [
+              { pointOfSaleDailyCloseId: null },
+              { pointOfSaleDailyCloseId: { not: closeId } },
+            ],
+          },
         ],
       },
       data: { pointOfSaleDailyCloseId: closeId },
     });
     const attachedPayments = await tx.payment.updateMany({
-      where: {
-        operationalLocationId: locationId,
-        paidAt: { gte: from, lt: to },
-        ...appliedPaymentWhere,
-        routeId: null,
-        cashShiftId: { not: null },
-        pointOfSaleDailyCloseId: null,
-      },
+      where: { ...paymentScope, pointOfSaleDailyCloseId: null },
       data: { pointOfSaleDailyCloseId: closeId },
     });
     const attachedInventoryMovements = await tx.inventoryMovement.updateMany({

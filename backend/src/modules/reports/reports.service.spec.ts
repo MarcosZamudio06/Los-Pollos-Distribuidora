@@ -440,9 +440,13 @@ describe('ReportsService', () => {
     expect(prisma.payment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          OR: [
-            { accountReceivableId: { not: null } },
-            { routeId: { not: null } },
+          AND: [
+            {
+              OR: [
+                { accountReceivableId: { not: null } },
+                { routeId: { not: null } },
+              ],
+            },
           ],
         }),
       }),

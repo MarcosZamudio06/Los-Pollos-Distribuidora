@@ -130,6 +130,12 @@ The canonical geospatial contracts are:
 
 - Only confirmed sales can be assigned.
 - Do not assign cancelled sales.
+- A cancelled sale cannot accept a new delivery transition, evidence, customer
+  return or payment. Administrative sale cancellation invalidates its delivery
+  order atomically; accepted evidence and execution timestamps remain history.
+- Assignment and execution revalidate the sale under the same transactional
+  sale lifecycle lock used by cancellation and collections. Idempotent replay
+  returns the accepted historical command, not a new operation.
 - Do not optimize or assign a sale already assigned to another route.
 - A mapped route must have a geocoded origin and every stop must have validated coordinates.
 - A search result, reverse-geocoded label, or moved marker must not overwrite the sale or customer address silently; the delivery order preserves the selected planning address separately.
@@ -161,7 +167,12 @@ The canonical geospatial contracts are:
 - The driver route detail exposes each order's current outstanding receivable balance and the collected amount derived from `Payment` records for that receivable within the route.
 - Route collections may be associated to route and settlement.
 - Cash on delivery or pay-on-delivery counts as money received only when a `Payment` exists.
-- All physical route load and return operations must go through `InventoryTransfer` to or from `ROUTE_STOCK`.
+- Physical route loading and unloading between operating locations go through
+  `InventoryTransfer` to or from `ROUTE_STOCK`. Customer `returnedItems` retain
+  the incident API's sale-linked `RETURN` movement in the route's `ROUTE_STOCK`;
+  this custody location need not equal the original sale location. Cancellation
+  restores only the unreturned remainder at the original sale location, without
+  relocating or duplicating accepted returns.
 - Every `ROUTE` channel sale consumes inventory from `ROUTE_STOCK`.
 - Double decrement between route load and delivered route sale is forbidden.
 - `SALE_DELIVERY` route completion requires orders closed, cancelled, or with final incident recorded.

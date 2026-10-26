@@ -2,6 +2,7 @@ import { apiClient } from "../../lib/api";
 import type {
   AssignDeliveryRouteOrdersPayload,
   CloseRouteSettlementPayload,
+  ReopenRouteSettlementPayload,
   CreateDeliveryEvidencePayload,
   CreateDeliveryIncidentPayload,
   CreateDeliveryRoutePayload,
@@ -390,6 +391,21 @@ export const deliveryService = {
         headers: authHeaders(accessToken),
       },
     );
+    return unwrapItem(response);
+  },
+  async reopenSettlement(
+    settlementId: string,
+    payload: ReopenRouteSettlementPayload,
+    idempotencyKey: string,
+    accessToken?: string | null,
+  ) {
+    const response = await apiClient.post<
+      ItemEnvelope<RouteSettlementDetail>,
+      ReopenRouteSettlementPayload
+    >(`/route-settlements/${settlementId}/reopen`, {
+      body: payload,
+      headers: authHeaders(accessToken, idempotencyKey),
+    });
     return unwrapItem(response);
   },
   async closeSettlement(

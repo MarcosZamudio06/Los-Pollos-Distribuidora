@@ -40,6 +40,18 @@ import {
   type ObjectStoragePort,
 } from '../object-storage/object-storage.port';
 import { calculateReceivableAging } from '../accounts-receivable/receivable-aging';
+import {
+  acquireRouteLifecycleLock,
+  assertRouteSettlementMutable,
+} from './route-settlement-lifecycle';
+import { ListRouteSettlementsQueryDto } from './dto/list-route-settlements-query.dto';
+import { buildCivilDateRangeFilter } from '../../common/utils/civil-date-range';
+import { plannerSaleScope } from './planner-sale-scope';
+import {
+  acquireSaleLifecycleLock,
+  assertSaleExecutable,
+  remainingSaleRestoration,
+} from '../inventory/sale-restoration';
 import { Money } from '../../../../shared/money';
 import {
   validateDeliveryEvidence,
@@ -61,7 +73,10 @@ import {
   UpdateDeliveryRouteStatusDto,
 } from './dto';
 
-type Actor = Pick<AuthenticatedUser, 'id' | 'role' | 'permissions'>;
+type Actor = Pick<
+  AuthenticatedUser,
+  'id' | 'role' | 'permissions' | 'operationalLocationId'
+>;
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 type LogisticsRouteType = Extract<
   DeliveryRouteType,
@@ -119,11 +134,14 @@ type DeliveryOrderRecord = Record<string, unknown> & {
   sale?: {
     id: string;
     saleNumber: string;
+    total?: DecimalLike;
+    status?: SaleStatus;
     customer?: { name: string } | null;
   } | null;
   accountReceivable?: {
     id: string;
     outstandingAmount?: DecimalLike;
+    dueDate?: Date;
     version?: number;
   } | null;
   evidence?: Array<{
@@ -497,6 +515,7 @@ export class DeliveryService {
 
       return route;
     });
+    this.publishRouteUpdated(this.toRouteListItem(route));
     return this.toRouteDetail(route);
   }
 
@@ -657,12 +676,36 @@ export class DeliveryService {
       const stops = plan.orderedStops as unknown as PlannedStop[];
       if (!Array.isArray(stops) || !stops.length)
         throw new ConflictException('Delivery route plan has no stops');
-      const resolvedStops = await this.resolveAssignableSales(tx, stops);
-      const routeStockLocationId = dto.routeStockLocationId
-        ? await this.resolveProvidedRouteStockLocation(
-            tx,
-            dto.routeStockLocationId,
-          )
+      const resolvedStops = await this.resolveAssignableSales(
+        tx,
+        stops,
+        undefined,
+        currentUser,
+      );
+      // ROUTE sales already consumed stock in their original custody. Assigning them must not create a second, empty custody.
+      const routeSales = await tx.sale.findMany({
+        where: {
+          id: { in: stops.map((stop) => stop.saleId) },
+          saleChannel: 'ROUTE',
+        },
+        select: { locationId: true },
+      });
+      const custodyIds = [
+        ...new Set(routeSales.map((sale) => sale.locationId)),
+      ];
+      if (
+        custodyIds.length > 1 ||
+        (custodyIds[0] &&
+          dto.routeStockLocationId &&
+          custodyIds[0] !== dto.routeStockLocationId)
+      )
+        throw new ConflictException({
+          code: 'ROUTE_STOCK_CONTEXT_MISMATCH',
+          message: 'ROUTE sales must retain one matching route stock custody',
+        });
+      const requestedStockId = dto.routeStockLocationId ?? custodyIds[0];
+      const routeStockLocationId = requestedStockId
+        ? await this.resolveProvidedRouteStockLocation(tx, requestedStockId)
         : await this.createRouteStockLocation(tx, dto.name);
       const now = new Date();
       const route = (await tx.deliveryRoute.create({
@@ -716,6 +759,7 @@ export class DeliveryService {
         );
       return route;
     });
+    this.publishRouteUpdated(this.toRouteListItem(route));
     return this.toRouteDetail(route);
   }
 
@@ -828,6 +872,7 @@ export class DeliveryService {
 
       return updated;
     });
+    this.publishRouteUpdated(this.toRouteListItem(updated));
     return this.toRouteDetail(updated);
   }
 
@@ -978,6 +1023,7 @@ export class DeliveryService {
         );
       return updated;
     });
+    this.publishRouteUpdated(this.toRouteListItem(updated));
     return this.toRouteDetail(updated);
   }
 
@@ -986,84 +1032,95 @@ export class DeliveryService {
     dto: UpdateDeliveryRouteStatusDto,
     currentUser: Actor,
   ) {
-    const route = (await this.prisma.deliveryRoute.findFirst({
-      where: this.buildRouteAccessWhere(id, currentUser),
-      include: { deliveryOrders: true },
-    })) as DeliveryRouteRecord | null;
+    const updated = await this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const route = (await tx.deliveryRoute.findFirst({
+            where: this.buildRouteAccessWhere(id, currentUser),
+            include: { deliveryOrders: true },
+          })) as DeliveryRouteRecord | null;
 
-    if (!route) {
-      throw new NotFoundException('Delivery route not found');
-    }
-
-    this.assertRouteStatusTransition(route, dto.status, currentUser);
-
-    if (dto.status === DeliveryRouteStatus.COMPLETED) {
-      if (this.isLogisticsRoute(route)) {
-        if (!route.logisticsStopCompletedAt) {
-          throw new BadRequestException(
-            'Cannot complete logistics route before completing its stop',
-          );
-        }
-      } else {
-        const hasOpenOrders = (route.deliveryOrders ?? []).some(
-          (order) => !FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status),
-        );
-        if (hasOpenOrders) {
-          throw new BadRequestException(
-            'Cannot complete route with pending delivery orders',
-          );
-        }
-      }
-    }
-
-    const now = new Date();
-    const updateData = {
-      status: dto.status,
-      ...(dto.status === DeliveryRouteStatus.IN_PROGRESS && !route.startedAt
-        ? { startedAt: now }
-        : {}),
-      ...(dto.status === DeliveryRouteStatus.COMPLETED && !route.completedAt
-        ? { completedAt: now }
-        : {}),
-    };
-
-    let updated: DeliveryRouteRecord;
-    if (dto.status === DeliveryRouteStatus.IN_PROGRESS && route.vehicleId) {
-      updated = await this.prisma
-        .$transaction(async (tx) => {
-          await this.assertActiveVehicle(tx, route.vehicleId as string);
-          const conflict = await tx.deliveryRoute.findFirst({
-            where: {
-              vehicleId: route.vehicleId as string,
-              status: DeliveryRouteStatus.IN_PROGRESS,
-              id: { not: route.id },
-            },
-            select: { id: true },
-          });
-          if (conflict) {
-            throw new ConflictException(
-              'The vehicle already has another in-progress route',
-            );
+          if (!route) {
+            throw new NotFoundException('Delivery route not found');
           }
-          return tx.deliveryRoute.update({
-            where: { id: route.id },
-            data: updateData,
-            include: this.routeListInclude(),
-          });
-        })
-        .catch((error: unknown) => {
-          this.throwVehicleInProgressConflict(error);
-          throw error;
-        });
-    } else {
-      updated = await this.prisma.deliveryRoute.update({
-        where: { id: route.id },
-        data: updateData,
-        include: this.routeListInclude(),
-      });
-    }
 
-    return this.toRouteListItem(updated);
+          await acquireRouteLifecycleLock(tx, id);
+          this.assertRouteStatusTransition(route, dto.status, currentUser);
+
+          if (dto.status === DeliveryRouteStatus.COMPLETED) {
+            if (this.isLogisticsRoute(route)) {
+              if (!route.logisticsStopCompletedAt) {
+                throw new BadRequestException(
+                  'Cannot complete logistics route before completing its stop',
+                );
+              }
+            } else {
+              const hasOpenOrders = (route.deliveryOrders ?? []).some(
+                (order) => !FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status),
+              );
+              if (hasOpenOrders) {
+                throw new BadRequestException(
+                  'Cannot complete route with pending delivery orders',
+                );
+              }
+            }
+          }
+
+          const now = new Date();
+          const updateData = {
+            status: dto.status,
+            ...(dto.status === DeliveryRouteStatus.IN_PROGRESS &&
+            !route.startedAt
+              ? { startedAt: now }
+              : {}),
+            ...(dto.status === DeliveryRouteStatus.COMPLETED &&
+            !route.completedAt
+              ? { completedAt: now }
+              : {}),
+          };
+
+          let updated: DeliveryRouteRecord;
+          if (
+            dto.status === DeliveryRouteStatus.IN_PROGRESS &&
+            route.vehicleId
+          ) {
+            await this.assertActiveVehicle(tx, route.vehicleId);
+            const conflict = await tx.deliveryRoute.findFirst({
+              where: {
+                vehicleId: route.vehicleId,
+                status: DeliveryRouteStatus.IN_PROGRESS,
+                id: { not: route.id },
+              },
+              select: { id: true },
+            });
+            if (conflict) {
+              throw new ConflictException(
+                'The vehicle already has another in-progress route',
+              );
+            }
+            updated = await tx.deliveryRoute.update({
+              where: { id: route.id },
+              data: updateData,
+              include: this.routeListInclude(),
+            });
+          } else {
+            updated = await tx.deliveryRoute.update({
+              where: { id: route.id },
+              data: updateData,
+              include: this.routeListInclude(),
+            });
+          }
+
+          return this.toRouteListItem(updated);
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    ).catch((error: unknown) => {
+      this.throwVehicleInProgressConflict(error);
+      throw error;
+    });
+    this.publishRouteUpdated(updated);
+    return updated;
   }
 
   async completeLogisticsStop(
@@ -1125,6 +1182,7 @@ export class DeliveryService {
       include: this.logisticsRouteDetailInclude(),
     })) as DeliveryRouteRecord;
 
+    this.publishRouteUpdated(this.toRouteListItem(updated));
     return this.toRouteDetail(updated);
   }
 
@@ -1223,69 +1281,87 @@ export class DeliveryService {
       );
     }
 
-    const order = (await this.prisma.deliveryOrder.findFirst({
-      where: this.buildOrderAccessWhere(id, currentUser),
-      include: {
-        route: true,
-        sale: { select: { id: true, saleNumber: true } },
-        accountReceivable: {
-          select: { id: true, outstandingAmount: true, version: true },
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const order = (await tx.deliveryOrder.findFirst({
+            where: this.buildOrderAccessWhere(id, currentUser),
+            include: {
+              route: true,
+              sale: { select: { id: true, saleNumber: true } },
+              accountReceivable: {
+                select: { id: true, outstandingAmount: true, version: true },
+              },
+              evidence: { select: { type: true } },
+            },
+          })) as DeliveryOrderRecord | null;
+
+          if (!order) {
+            throw new NotFoundException('Delivery order not found');
+          }
+
+          this.assertCommercialDeliveryOrder(order);
+          await assertRouteSettlementMutable(tx, order.routeId);
+          await assertSaleExecutable(tx, order.saleId);
+          if (
+            order.route?.status === DeliveryRouteStatus.COMPLETED ||
+            order.route?.status === DeliveryRouteStatus.CANCELLED
+          ) {
+            throw new ConflictException(
+              'Completed or cancelled route orders cannot be changed',
+            );
+          }
+
+          if (!order.route?.routeStockLocationId) {
+            throw new BadRequestException(
+              'Route stock location is required to update delivery order status',
+            );
+          }
+
+          if (dto.status === DeliveryOrderStatus.DELIVERED) {
+            const recordedEvidenceTypes = new Set(
+              order.evidence?.map((evidence) => evidence.type),
+            );
+            const missingEvidenceTypes =
+              REQUIRED_DELIVERY_EVIDENCE_TYPES.filter(
+                (type) => !recordedEvidenceTypes.has(type),
+              );
+
+            if (missingEvidenceTypes.length > 0) {
+              throw new BadRequestException(
+                `DELIVERED requires ${missingEvidenceTypes.join(' and ')} evidence`,
+              );
+            }
+          }
+
+          const deliveredAt =
+            dto.status === DeliveryOrderStatus.DELIVERED
+              ? new Date(dto.deliveredAt ?? Date.now())
+              : undefined;
+          const updated = (await tx.deliveryOrder.update({
+            where: { id: order.id },
+            data: {
+              status: dto.status,
+              notes: dto.notes?.trim() ?? order.notes ?? null,
+              ...(deliveredAt
+                ? { deliveredAt, deliveredByUserId: currentUser.id }
+                : {}),
+            },
+            include: {
+              route: true,
+              sale: { select: { id: true, saleNumber: true } },
+              accountReceivable: {
+                select: { id: true, outstandingAmount: true, version: true },
+              },
+              evidence: { select: { type: true } },
+            },
+          })) as DeliveryOrderRecord;
+
+          return this.toOrderResponse(updated);
         },
-        evidence: { select: { type: true } },
-      },
-    })) as DeliveryOrderRecord | null;
-
-    if (!order) {
-      throw new NotFoundException('Delivery order not found');
-    }
-
-    this.assertCommercialDeliveryOrder(order);
-
-    if (!order.route?.routeStockLocationId) {
-      throw new BadRequestException(
-        'Route stock location is required to update delivery order status',
-      );
-    }
-
-    if (dto.status === DeliveryOrderStatus.DELIVERED) {
-      const recordedEvidenceTypes = new Set(
-        order.evidence?.map((evidence) => evidence.type),
-      );
-      const missingEvidenceTypes = REQUIRED_DELIVERY_EVIDENCE_TYPES.filter(
-        (type) => !recordedEvidenceTypes.has(type),
-      );
-
-      if (missingEvidenceTypes.length > 0) {
-        throw new BadRequestException(
-          `DELIVERED requires ${missingEvidenceTypes.join(' and ')} evidence`,
-        );
-      }
-    }
-
-    const deliveredAt =
-      dto.status === DeliveryOrderStatus.DELIVERED
-        ? new Date(dto.deliveredAt ?? Date.now())
-        : undefined;
-    const updated = (await this.prisma.deliveryOrder.update({
-      where: { id: order.id },
-      data: {
-        status: dto.status,
-        notes: dto.notes?.trim() ?? order.notes ?? null,
-        ...(deliveredAt
-          ? { deliveredAt, deliveredByUserId: currentUser.id }
-          : {}),
-      },
-      include: {
-        route: true,
-        sale: { select: { id: true, saleNumber: true } },
-        accountReceivable: {
-          select: { id: true, outstandingAmount: true, version: true },
-        },
-        evidence: { select: { type: true } },
-      },
-    })) as DeliveryOrderRecord;
-
-    return this.toOrderResponse(updated);
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
   }
 
   async captureEvidence(
@@ -1295,6 +1371,8 @@ export class DeliveryService {
   ) {
     const order = await this.findAccessibleOrder(id, currentUser);
     this.assertCommercialDeliveryOrder(order);
+    if (order.sale?.status && order.sale.status !== SaleStatus.CONFIRMED)
+      throw new ConflictException('Cannot add evidence to a cancelled sale');
     const receivedAt = new Date();
     let validatedEvidence: ValidatedDeliveryEvidence;
     try {
@@ -1339,21 +1417,31 @@ export class DeliveryService {
 
     let evidence: DeliveryEvidenceRecord;
     try {
-      evidence = await this.prisma.deliveryEvidence.create({
-        data: {
-          deliveryOrderId: order.id,
-          type: dto.type,
-          value: storageKey ? null : validatedEvidence.value,
-          storageKey,
-          mimeType: validatedEvidence.mimeType,
-          sha256: validatedEvidence.sha256,
-          sizeBytes: validatedEvidence.sizeBytes,
-          capturedAt: validatedEvidence.capturedAt,
-          receivedAt,
-          capturedByUserId: currentUser.id,
-          metadata: validatedEvidence.metadata ?? Prisma.JsonNull,
-        },
-      });
+      evidence = await this.withSerializableRetry(() =>
+        this.prisma.$transaction(
+          async (tx) => {
+            const current = await this.findAccessibleOrder(id, currentUser, tx);
+            await acquireRouteLifecycleLock(tx, current.routeId);
+            await assertSaleExecutable(tx, current.saleId);
+            return tx.deliveryEvidence.create({
+              data: {
+                deliveryOrderId: order.id,
+                type: dto.type,
+                value: storageKey ? null : validatedEvidence.value,
+                storageKey,
+                mimeType: validatedEvidence.mimeType,
+                sha256: validatedEvidence.sha256,
+                sizeBytes: validatedEvidence.sizeBytes,
+                capturedAt: validatedEvidence.capturedAt,
+                receivedAt,
+                capturedByUserId: currentUser.id,
+                metadata: validatedEvidence.metadata ?? Prisma.JsonNull,
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
+      );
     } catch (error: unknown) {
       if (storageKey && storage) {
         try {
@@ -1399,9 +1487,8 @@ export class DeliveryService {
       );
     }
 
-    const routeSettlementId = order.route?.settlement?.id ?? null;
     const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
-    const payloadHash = this.hashPayload({
+    const collectionPayload = {
       operation: 'REGISTER_ROUTE_COLLECTION',
       deliveryOrderId: id,
       accountReceivableId: dto.accountReceivableId,
@@ -1412,9 +1499,9 @@ export class DeliveryService {
       collectionPass: dto.collectionPass ?? null,
       expectedVersion: dto.expectedVersion,
       routeId: order.routeId,
-      routeSettlementId,
       userId: currentUser.id,
-    });
+    };
+    const payloadHash = this.hashPayload(collectionPayload);
 
     try {
       return await this.withSerializableRetry(() =>
@@ -1429,9 +1516,7 @@ export class DeliveryService {
               !transactionOrder.accountReceivableId ||
               transactionOrder.accountReceivableId !==
                 dto.accountReceivableId ||
-              transactionOrder.routeId !== order.routeId ||
-              (transactionOrder.route?.settlement?.id ?? null) !==
-                routeSettlementId
+              transactionOrder.routeId !== order.routeId
             ) {
               throw new ConflictException(
                 'Route collection context changed; refresh and retry',
@@ -1442,10 +1527,10 @@ export class DeliveryService {
               where: { idempotencyKey: normalizedIdempotencyKey },
             })) as RoutePaymentRecord | null;
             if (existingPayment) {
-              this.assertSameIdempotencyPayload(
-                existingPayment.idempotencyPayloadHash,
+              this.assertCollectionPayload(
+                existingPayment,
+                collectionPayload,
                 payloadHash,
-                'Idempotency-Key was already used for a different route collection payload',
               );
               return this.buildRouteCollectionResponse(
                 tx,
@@ -1454,6 +1539,9 @@ export class DeliveryService {
                 existingPayment,
               );
             }
+
+            await assertRouteSettlementMutable(tx, transactionOrder.routeId);
+            await assertSaleExecutable(tx, transactionOrder.saleId);
 
             const receivable = (await tx.accountReceivable.findUnique({
               where: { id: dto.accountReceivableId },
@@ -1500,7 +1588,10 @@ export class DeliveryService {
                 paymentMethod: dto.paymentMethod,
                 referenceNumber: dto.reference?.trim() || null,
                 routeId: order.routeId,
-                routeSettlementId,
+                operationalLocationId:
+                  transactionOrder.route?.routeStockLocationId ?? null,
+                routeSettlementId:
+                  transactionOrder.route?.settlement?.id ?? null,
                 status: PaymentStatus.APPLIED,
                 paidAt,
                 idempotencyKey: normalizedIdempotencyKey,
@@ -1575,6 +1666,7 @@ export class DeliveryService {
           currentUser,
           normalizedIdempotencyKey,
           payloadHash,
+          collectionPayload,
         );
       }
       throw error;
@@ -1645,6 +1737,15 @@ export class DeliveryService {
                 };
               }
 
+              await assertRouteSettlementMutable(tx, order.routeId);
+              await assertSaleExecutable(tx, order.saleId);
+              if (
+                order.route?.status === DeliveryRouteStatus.COMPLETED ||
+                order.route?.status === DeliveryRouteStatus.CANCELLED
+              )
+                throw new ConflictException(
+                  'Completed or cancelled route orders cannot be changed',
+                );
               if (FINAL_DELIVERY_ORDER_STATUS_SET.has(order.status)) {
                 throw new ConflictException(
                   'Delivery order already has a final status; retry with the original Idempotency-Key',
@@ -1856,6 +1957,28 @@ export class DeliveryService {
     };
   }
 
+  private publishRouteUpdated(route: {
+    id: string;
+    status: DeliveryRouteStatus;
+    driverId: string;
+    vehicleId: string | null;
+    originLocationId: string | null;
+  }): void {
+    if (!this.fleetGateway) return;
+    // Committed invalidation hint only: consumers rebuild from the authoritative snapshot.
+    try {
+      this.fleetGateway.emitRouteUpdated(
+        { routeId: route.id, status: route.status, vehicleId: route.vehicleId },
+        route.originLocationId,
+        route.driverId,
+      );
+    } catch {
+      this.logger.error('Realtime route publication failed', {
+        routeId: route.id,
+      });
+    }
+  }
+
   private publishIncidentCreated(
     payload: FleetIncidentCreatedPayload,
     originLocationId: string | null,
@@ -1870,6 +1993,82 @@ export class DeliveryService {
         deliveryOrderId: payload.deliveryOrderId,
       });
     }
+  }
+
+  async findSettlements(
+    query: ListRouteSettlementsQueryDto,
+    currentUser: Actor,
+  ) {
+    this.assertSettlementPermissions(currentUser);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 25;
+    const range = buildCivilDateRangeFilter(query.dateFrom, query.dateTo);
+    const where: Prisma.RouteSettlementWhereInput = {
+      ...(query.routeId ? { routeId: query.routeId } : {}),
+      ...(query.driverId ? { driverId: query.driverId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(range ? { createdAt: range } : {}),
+    };
+    return this.prisma.$transaction(
+      async (tx) => {
+        const total = await tx.routeSettlement.count({ where });
+        const rows = await tx.routeSettlement.findMany({
+          where,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+        return {
+          items: rows.map((row) => this.toSettlementResponse(row)),
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+
+  async findSettlement(id: string, currentUser: Actor) {
+    this.assertSettlementPermissions(currentUser);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const settlement = await tx.routeSettlement.findUnique({
+          where: { id },
+        });
+        if (!settlement)
+          throw new NotFoundException('Route settlement not found');
+        const summary = this.jsonObject(settlement.routeCollectionsSummary);
+        if (
+          settlement.status === RouteSettlementStatus.CLOSED &&
+          summary.closedDetail
+        ) {
+          return {
+            ...this.toSettlementResponse(settlement),
+            ...this.jsonObject(summary.closedDetail),
+          };
+        }
+        if (settlement.status === RouteSettlementStatus.CLOSED) {
+          // Do not rewrite legacy accepted money or pass live detail off as its historical snapshot.
+          return {
+            ...this.toSettlementResponse(settlement),
+            snapshotRequiresRecalculation: true,
+            route: null,
+            routeStockLocationId: null,
+            orders: [],
+            payments: [],
+            inventoryMovements: [],
+          };
+        }
+        const route = await this.loadSettlementRoute(tx, settlement.routeId);
+        return {
+          ...this.toSettlementResponse(settlement),
+          ...(await this.buildSettlementDetail(tx, route)),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 
   async openSettlement(
@@ -1912,67 +2111,29 @@ export class DeliveryService {
                 return this.replaySettlementOpening(replay, payloadHash);
               }
 
-              const route = (await tx.deliveryRoute.findFirst({
-                where: this.buildRouteAccessWhere(routeId, currentUser),
-                include: {
-                  settlement: { select: { id: true } },
-                  payments: { where: { status: PaymentStatus.APPLIED } },
-                  deliveryOrders: {
-                    include: {
-                      accountReceivable: {
-                        select: {
-                          id: true,
-                          outstandingAmount: true,
-                          version: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              })) as DeliveryRouteRecord | null;
-              if (!route) {
-                throw new NotFoundException('Delivery route not found');
-              }
-
+              await acquireRouteLifecycleLock(tx, routeId);
+              const route = await this.loadSettlementRoute(tx, routeId);
               this.assertRouteOrdersFinal(route);
+              const current = await tx.routeSettlement.findUnique({
+                where: { routeId },
+              });
+              if (current?.status === RouteSettlementStatus.CLOSED)
+                throw new ConflictException('ROUTE_SETTLEMENT_REOPEN_REQUIRED');
               const summary = this.buildSettlementSummary(route);
-              let settlement: RouteSettlementRecord | null = null;
-              if (route.settlement?.id) {
-                settlement = await tx.routeSettlement.findUnique({
-                  where: { id: route.settlement.id },
-                });
-              }
-
-              if (!settlement) {
-                const inventoryMovements = await tx.inventoryMovement.findMany({
-                  where: { locationId: route.routeStockLocationId },
-                });
-                const settlementStatus =
-                  summary.differenceAmount !== 0 ||
-                  (inventoryMovements as unknown[]).length > 0
-                    ? RouteSettlementStatus.REVIEW_REQUIRED
-                    : RouteSettlementStatus.OPEN;
-                settlement = await tx.routeSettlement.create({
-                  data: {
-                    routeId: route.id,
-                    driverId: route.driverId,
-                    status: settlementStatus,
-                    expectedCashAmount: summary.expectedAmount,
-                    expectedTransferAmount: 0,
-                    differenceAmount: summary.differenceAmount,
-                    paidAtDeliveryAmount: summary.collectedCashAmount,
-                    overdueAmount:
-                      summary.differenceAmount > 0
-                        ? summary.differenceAmount
-                        : 0,
-                    secondPassCollectionsAmount:
-                      summary.secondPassCollectedAmount,
-                    routeCollectionsSummary: summary,
-                  },
-                });
-              }
-
-              const response = this.toSettlementResponse(settlement, summary);
+              const data = await this.settlementSnapshotData(
+                tx,
+                route,
+                summary,
+              );
+              const settlement = current
+                ? await tx.routeSettlement.update({
+                    where: { id: current.id, version: current.version },
+                    data: { ...data, version: { increment: 1 } },
+                  })
+                : await tx.routeSettlement.create({
+                    data: { routeId, driverId: route.driverId, ...data },
+                  });
+              const response = this.toSettlementResponse(settlement);
               await tx.routeSettlementOpeningCommand.create({
                 data: {
                   idempotencyKey: key,
@@ -2019,60 +2180,14 @@ export class DeliveryService {
       this.buildSettlementActionPayload('close', id, currentUser.id, dto),
     );
 
-    const settlement = (await this.prisma.routeSettlement.findUnique({
-      where: { id },
-      include: { route: { select: { type: true, deliveryOrders: true } } },
-    })) as RouteSettlementRecord | null;
-
-    if (!settlement) {
-      throw new NotFoundException('Route settlement not found');
-    }
-    if (this.isLogisticsRouteType(settlement.route?.type)) {
-      throw new BadRequestException(
-        'Logistics routes do not support route settlements',
-      );
-    }
-    if (
-      settlement.status === RouteSettlementStatus.CLOSED &&
-      this.hasMatchingSettlementIdempotency(
-        settlement,
-        'close',
-        idempotencyKey,
-        payloadHash,
-      )
-    ) {
-      return this.toSettlementResponse(settlement);
-    }
-    if (settlement.status === RouteSettlementStatus.CLOSED) {
-      throw new BadRequestException('Route settlement is already closed');
-    }
-    if (settlement.version !== dto.expectedVersion) {
-      throw new ConflictException(
-        'Route settlement version does not match expectedVersion',
-      );
-    }
-
-    this.assertRouteOrdersFinal({
-      deliveryOrders: settlement.route?.deliveryOrders ?? [],
-    } as DeliveryRouteRecord);
-
-    const closed = await this.updateSettlementVersioned({
-      where: { id, version: dto.expectedVersion },
-      data: {
-        status: RouteSettlementStatus.CLOSED,
-        closedAt: new Date(),
-        notes: dto.notes?.trim() || null,
-        routeCollectionsSummary: this.withSettlementIdempotency(
-          settlement.routeCollectionsSummary,
-          'close',
-          idempotencyKey,
-          payloadHash,
-        ),
-        version: { increment: 1 },
-      },
-    });
-
-    return this.toSettlementResponse(closed);
+    return this.transitionSettlement(
+      id,
+      dto,
+      currentUser,
+      idempotencyKey,
+      payloadHash,
+      'close',
+    );
   }
 
   async reopenSettlement(
@@ -2081,66 +2196,280 @@ export class DeliveryService {
     currentUser: Actor,
     idempotencyKey?: string,
   ) {
-    this.assertSettlementPermissions(currentUser);
+    if (currentUser.role !== 'ADMIN')
+      throw new ForbiddenException('Only ADMIN can reopen a settlement');
     this.assertIdempotencyKey(idempotencyKey);
+    if (!dto.reason?.trim())
+      throw new BadRequestException('reason is required');
     const payloadHash = this.hashPayload(
       this.buildSettlementActionPayload('reopen', id, currentUser.id, dto),
     );
+    return this.transitionSettlement(
+      id,
+      dto,
+      currentUser,
+      idempotencyKey,
+      payloadHash,
+      'reopen',
+    );
+  }
 
-    const settlement = (await this.prisma.routeSettlement.findUnique({
-      where: { id },
-      include: { route: { select: { type: true } } },
-    })) as RouteSettlementRecord | null;
-
-    if (!settlement) {
-      throw new NotFoundException('Route settlement not found');
-    }
-    if (this.isLogisticsRouteType(settlement.route?.type)) {
-      throw new BadRequestException(
-        'Logistics routes do not support route settlements',
-      );
-    }
-    if (
-      settlement.status === RouteSettlementStatus.OPEN &&
-      this.hasMatchingSettlementIdempotency(
-        settlement,
-        'reopen',
-        idempotencyKey,
-        payloadHash,
-      )
-    ) {
-      return this.toSettlementResponse(settlement);
-    }
-    if (settlement.status !== RouteSettlementStatus.CLOSED) {
-      throw new BadRequestException(
-        'Only closed route settlements can be reopened',
-      );
-    }
-    if (settlement.version !== dto.expectedVersion) {
-      throw new ConflictException(
-        'Route settlement version does not match expectedVersion',
-      );
-    }
-
-    const reopened = await this.updateSettlementVersioned({
-      where: { id, version: dto.expectedVersion },
-      data: {
-        status: RouteSettlementStatus.OPEN,
-        reopenedAt: new Date(),
-        reopenedByUserId: currentUser.id,
-        reopenedReason: dto.reason.trim(),
-        closedAt: null,
-        routeCollectionsSummary: this.withSettlementIdempotency(
-          settlement.routeCollectionsSummary,
-          'reopen',
-          idempotencyKey,
-          payloadHash,
+  private async transitionSettlement(
+    id: string,
+    dto: CloseRouteSettlementDto | ReopenRouteSettlementDto,
+    currentUser: Actor,
+    key: string,
+    payloadHash: string,
+    action: 'close' | 'reopen',
+  ) {
+    return this.withSerializableRetry(
+      () =>
+        this.prisma.$transaction(
+          async (tx) => {
+            const initial = await tx.routeSettlement.findUnique({
+              where: { id },
+            });
+            if (!initial)
+              throw new NotFoundException('Route settlement not found');
+            await acquireRouteLifecycleLock(tx, initial.routeId);
+            const settlement = await tx.routeSettlement.findUniqueOrThrow({
+              where: { id },
+            });
+            const replay = await tx.routeSettlementOpeningCommand.findUnique({
+              where: { idempotencyKey: key },
+            });
+            if (replay)
+              return this.replaySettlementOpening(replay, payloadHash);
+            // Compatibility for transitions stored before the command ledger covered all actions.
+            if (
+              this.hasMatchingSettlementIdempotency(
+                settlement,
+                action,
+                key,
+                payloadHash,
+              )
+            )
+              return this.toSettlementResponse(settlement);
+            if (settlement.version !== dto.expectedVersion)
+              throw new ConflictException(
+                'Route settlement version does not match expectedVersion',
+              );
+            if (
+              action === 'close' &&
+              settlement.status === RouteSettlementStatus.CLOSED
+            )
+              throw new ConflictException('Route settlement is already closed');
+            if (
+              action === 'reopen' &&
+              settlement.status !== RouteSettlementStatus.CLOSED
+            )
+              throw new BadRequestException(
+                'Only closed route settlements can be reopened',
+              );
+            const route = await this.loadSettlementRoute(
+              tx,
+              settlement.routeId,
+            );
+            if (this.isLogisticsRoute(route))
+              throw new BadRequestException(
+                'Logistics routes do not support route settlements',
+              );
+            let data: Prisma.RouteSettlementUpdateInput;
+            if (action === 'close') {
+              this.assertRouteOrdersFinal(route);
+              const summary = this.buildSettlementSummary(route);
+              const snapshot = await this.settlementSnapshotData(
+                tx,
+                route,
+                summary,
+              );
+              const canClose =
+                snapshot.status !== RouteSettlementStatus.REVIEW_REQUIRED;
+              data = {
+                ...snapshot,
+                status: canClose
+                  ? RouteSettlementStatus.CLOSED
+                  : RouteSettlementStatus.REVIEW_REQUIRED,
+                closedAt: canClose ? new Date() : null,
+                notes: 'notes' in dto ? dto.notes?.trim() || null : null,
+                routeCollectionsSummary: this.withSettlementIdempotency(
+                  {
+                    ...summary,
+                    closedDetail: JSON.parse(
+                      JSON.stringify(
+                        await this.buildSettlementDetail(tx, route),
+                      ),
+                    ) as Prisma.JsonObject,
+                  },
+                  action,
+                  key,
+                  payloadHash,
+                ),
+              };
+            } else {
+              data = {
+                status: RouteSettlementStatus.OPEN,
+                closedAt: null,
+                reopenedAt: new Date(),
+                reopenedBy: { connect: { id: currentUser.id } },
+                reopenedReason: 'reason' in dto ? dto.reason.trim() : '',
+                routeCollectionsSummary: this.withSettlementIdempotency(
+                  settlement.routeCollectionsSummary,
+                  action,
+                  key,
+                  payloadHash,
+                ),
+              };
+            }
+            const updated = await tx.routeSettlement.update({
+              where: { id, version: dto.expectedVersion },
+              data: { ...data, version: { increment: 1 } },
+            });
+            const response = {
+              ...this.toSettlementResponse(updated),
+              ...(action === 'close'
+                ? {
+                    snapshot: this.jsonObject(
+                      this.jsonObject(updated.routeCollectionsSummary)
+                        .closedDetail,
+                    ),
+                  }
+                : {}),
+            };
+            await tx.routeSettlementOpeningCommand.create({
+              data: {
+                routeId: settlement.routeId,
+                settlementId: id,
+                idempotencyKey: key,
+                payloadHash,
+                createdByUserId: currentUser.id,
+                responseSnapshot: JSON.parse(
+                  JSON.stringify(response),
+                ) as Prisma.InputJsonObject,
+              },
+            });
+            return response;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         ),
-        version: { increment: 1 },
+      'SETTLEMENT_CONCURRENCY_CONFLICT',
+    ).catch(async (error: unknown) => {
+      if (!this.isIdempotencyUniqueConflict(error)) throw error;
+      const replay = await this.prisma.routeSettlementOpeningCommand.findUnique(
+        { where: { idempotencyKey: key } },
+      );
+      if (replay) return this.replaySettlementOpening(replay, payloadHash);
+      throw new ConflictException(
+        'Settlement command is already being processed; retry with the same Idempotency-Key',
+      );
+    });
+  }
+
+  private async loadSettlementRoute(
+    tx: Prisma.TransactionClient,
+    routeId: string,
+  ): Promise<DeliveryRouteRecord> {
+    const route = await tx.deliveryRoute.findUniqueOrThrow({
+      where: { id: routeId },
+      include: {
+        settlement: true,
+        deliveryOrders: {
+          orderBy: { id: 'asc' },
+          include: {
+            sale: { select: { id: true, saleNumber: true, total: true } },
+            accountReceivable: true,
+            incidents: true,
+          },
+        },
       },
     });
+    const payments = await tx.payment.findMany({
+      where: {
+        OR: [
+          { routeId },
+          ...(route.settlement
+            ? [{ routeSettlementId: route.settlement.id }]
+            : []),
+        ],
+      },
+      orderBy: [{ paidAt: 'asc' }, { id: 'asc' }],
+    });
+    return { ...route, payments };
+  }
 
-    return this.toSettlementResponse(reopened);
+  private async settlementSnapshotData(
+    tx: Prisma.TransactionClient,
+    route: DeliveryRouteRecord,
+    summary: ReturnType<DeliveryService['buildSettlementSummary']>,
+  ) {
+    const balances = await tx.inventoryBalance.findMany({
+      where: { locationId: route.routeStockLocationId },
+    });
+    const physicalPending = balances.some(
+      (balance) =>
+        !balance.quantityKg.isZero() ||
+        balance.quantityPieces !== 0 ||
+        !balance.reservedQuantityKg.isZero() ||
+        balance.reservedQuantityPieces !== 0,
+    );
+    return {
+      status:
+        physicalPending || summary.differenceAmount !== 0
+          ? RouteSettlementStatus.REVIEW_REQUIRED
+          : RouteSettlementStatus.OPEN,
+      expectedCashAmount: summary.collectedCashAmount,
+      expectedTransferAmount: summary.collectedTransferAmount,
+      differenceAmount: summary.differenceAmount,
+      paidAtDeliveryAmount: summary.paidAtDeliveryAmount,
+      overdueAmount: summary.overdueAmount,
+      secondPassCollectionsAmount: summary.secondPassCollectedAmount,
+      routeCollectionsSummary: summary,
+    };
+  }
+
+  private async buildSettlementDetail(
+    tx: Prisma.TransactionClient,
+    route: DeliveryRouteRecord,
+  ) {
+    const payments = (route.payments ?? []) as RoutePaymentRecord[];
+    const movements = await tx.inventoryMovement.findMany({
+      where: {
+        OR: [
+          { locationId: route.routeStockLocationId },
+          ...(route.settlement
+            ? [{ routeSettlementId: route.settlement.id }]
+            : []),
+        ],
+        type: {
+          in: [
+            InventoryMovementType.RETURN,
+            InventoryMovementType.TRANSFER_OUT,
+          ],
+        },
+      },
+      include: { product: { select: { name: true } } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return {
+      route: {
+        id: route.id,
+        name: route.name,
+        status: route.status,
+        driverId: route.driverId,
+        scheduledDate: route.scheduledDate.toISOString(),
+      },
+      routeStockLocationId: route.routeStockLocationId,
+      orders: (route.deliveryOrders ?? []).map((order) => ({
+        ...this.toOrderResponse(order, payments),
+        expectedAmount: this.toNumber(order.sale?.total),
+        incidents: order.incidents ?? [],
+      })),
+      payments: payments.map((payment) => this.toPaymentResponse(payment)),
+      inventoryMovements: movements.map((movement) => ({
+        ...this.toInventoryMovementResponse(movement),
+        productName: movement.product.name,
+      })),
+    };
   }
 
   private buildRouteWhere(
@@ -2195,7 +2524,7 @@ export class DeliveryService {
       where: this.buildOrderAccessWhere(id, currentUser),
       include: {
         route: { include: { settlement: { select: { id: true } } } },
-        sale: { select: { id: true, saleNumber: true } },
+        sale: { select: { id: true, saleNumber: true, status: true } },
         accountReceivable: {
           select: { id: true, outstandingAmount: true, version: true },
         },
@@ -2472,7 +2801,12 @@ export class DeliveryService {
 
   private async resolveAssignableSales<
     T extends { saleId: string; accountReceivableId?: string | null },
-  >(tx: Prisma.TransactionClient, orders: T[], routeId?: string): Promise<T[]> {
+  >(
+    tx: Prisma.TransactionClient,
+    orders: T[],
+    routeId?: string,
+    planner?: Actor,
+  ): Promise<T[]> {
     const saleIds = orders.map((order) => order.saleId);
     const uniqueSaleIds = [...new Set(saleIds)];
     if (uniqueSaleIds.length !== saleIds.length) {
@@ -2481,8 +2815,14 @@ export class DeliveryService {
       );
     }
 
+    for (const saleId of [...uniqueSaleIds].sort())
+      await acquireSaleLifecycleLock(tx, saleId);
+
     const sales = (await tx.sale.findMany({
-      where: { id: { in: uniqueSaleIds } },
+      where: {
+        id: { in: uniqueSaleIds },
+        ...(planner ? { AND: [plannerSaleScope(planner)] } : {}),
+      },
       select: {
         id: true,
         status: true,
@@ -2832,6 +3172,7 @@ export class DeliveryService {
     currentUser: Actor,
     idempotencyKey: string,
     payloadHash: string,
+    collectionPayload: Record<string, unknown>,
   ) {
     const existingPayment = (await this.prisma.payment.findFirst({
       where: { idempotencyKey },
@@ -2843,10 +3184,10 @@ export class DeliveryService {
       );
     }
 
-    this.assertSameIdempotencyPayload(
-      existingPayment.idempotencyPayloadHash,
+    this.assertCollectionPayload(
+      existingPayment,
+      collectionPayload,
       payloadHash,
-      'Idempotency-Key was already used for a different route collection payload',
     );
 
     return this.buildRouteCollectionResponse(
@@ -2855,6 +3196,26 @@ export class DeliveryService {
       currentUser,
       existingPayment,
     );
+  }
+
+  private assertCollectionPayload(
+    payment: RoutePaymentRecord,
+    payload: Record<string, unknown>,
+    payloadHash: string,
+  ) {
+    const { userId, ...base } = payload;
+    const legacyHash = this.hashPayload({
+      ...base,
+      routeSettlementId: payment.routeSettlementId ?? null,
+      userId,
+    });
+    if (
+      payment.idempotencyPayloadHash !== payloadHash &&
+      payment.idempotencyPayloadHash !== legacyHash
+    )
+      throw new ConflictException(
+        'Idempotency-Key was already used for a different route collection payload',
+      );
   }
 
   private assertIncidentReplay(
@@ -3060,6 +3421,22 @@ export class DeliveryService {
       );
     }
 
+    const sale = await tx.sale.findUniqueOrThrow({
+      where: { id: params.order.saleId },
+      include: { items: true },
+    });
+    const remaining = (await remainingSaleRestoration(tx, sale)).find(
+      (item) => item.productId === params.item.productId,
+    );
+    if (
+      !remaining ||
+      remaining.quantityKg.lessThan(quantityKg) ||
+      remaining.quantityPieces < quantityPieces
+    )
+      throw new ConflictException(
+        'Returned quantity exceeds the unreturned sold quantity',
+      );
+
     const {
       previousQuantityKg,
       previousQuantityPieces,
@@ -3117,104 +3494,101 @@ export class DeliveryService {
   }
 
   private buildSettlementSummary(route: DeliveryRouteRecord) {
-    const expectedAmount = this.roundMoney(
-      (route.deliveryOrders ?? []).reduce(
-        (total, order) =>
-          total + this.toNumber(order.accountReceivable?.outstandingAmount),
-        0,
-      ),
-    );
-    const appliedPayments = (route.payments ?? []).filter(
+    const payments = (route.payments ?? []).filter(
       (payment) => payment.status === PaymentStatus.APPLIED,
     );
-    const collectedCashAmount = this.roundMoney(
-      appliedPayments
-        .filter((payment) => payment.paymentMethod === PaymentMethod.CASH)
-        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
-    );
-    const collectedTransferAmount = this.roundMoney(
-      appliedPayments
-        .filter(
-          (payment) =>
-            payment.paymentMethod === PaymentMethod.TRANSFER ||
-            payment.paymentMethod === PaymentMethod.DEPOSIT,
-        )
-        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
-    );
-    const totalCollectedAmount = this.roundMoney(
-      appliedPayments.reduce(
-        (total, payment) => total + this.toNumber(payment.amount),
-        0,
+    const sum = (items: PaymentSummaryRecord[]) =>
+      Number(Money.sum(items.map((payment) => payment.amount)).toString());
+    const collectedCashAmount = sum(
+      payments.filter(
+        (payment) => payment.paymentMethod === PaymentMethod.CASH,
       ),
     );
-    const secondPassCollectedAmount = this.roundMoney(
-      appliedPayments
-        .filter((payment) => payment.collectionPass === 2)
-        .reduce((total, payment) => total + this.toNumber(payment.amount), 0),
+    const collectedTransferAmount = sum(
+      payments.filter(
+        (payment) =>
+          payment.paymentMethod === PaymentMethod.TRANSFER ||
+          payment.paymentMethod === PaymentMethod.DEPOSIT,
+      ),
     );
-
+    const totalCollectedAmount = sum(payments);
+    const orders = route.deliveryOrders ?? [];
+    const creditAmount = Number(
+      Money.sum(
+        orders.map((order) => order.accountReceivable?.outstandingAmount),
+      ).toString(),
+    );
+    const overdueAmount = Number(
+      Money.sum(
+        orders
+          .filter(
+            (order) =>
+              order.accountReceivable?.dueDate &&
+              calculateReceivableAging(
+                order.accountReceivable.dueDate,
+                order.accountReceivable.outstandingAmount ?? 0,
+              ).daysOverdue > 0,
+          )
+          .map((order) => order.accountReceivable?.outstandingAmount),
+      ).toString(),
+    );
+    // Payment is the only custody source. Receivables are NOT a second cash obligation.
+    const expectedAmount = totalCollectedAmount;
     return {
+      schemaVersion: 2,
       expectedAmount,
       collectedCashAmount,
       collectedTransferAmount,
       totalCollectedAmount,
-      secondPassCollectedAmount,
-      deliveredOrdersCount: (route.deliveryOrders ?? []).filter(
+      paidAtDeliveryAmount: sum(
+        payments.filter((payment) => payment.collectionPass !== 2),
+      ),
+      secondPassCollectedAmount: sum(
+        payments.filter((payment) => payment.collectionPass === 2),
+      ),
+      creditAmount,
+      overdueAmount,
+      deliveredOrdersCount: orders.filter(
         (order) => order.status === DeliveryOrderStatus.DELIVERED,
       ).length,
-      incidentOrdersCount: (route.deliveryOrders ?? []).filter(
+      incidentOrdersCount: orders.filter(
         (order) => order.status !== DeliveryOrderStatus.DELIVERED,
       ).length,
-      differenceAmount: this.roundMoney(expectedAmount - totalCollectedAmount),
+      differenceAmount: Number(
+        Money.from(expectedAmount).subtract(totalCollectedAmount).toString(),
+      ),
     };
   }
 
-  private toSettlementResponse(
-    settlement: RouteSettlementRecord,
-    summary?: ReturnType<DeliveryService['buildSettlementSummary']>,
-  ) {
+  private toSettlementResponse(settlement: RouteSettlementRecord) {
+    const summary = this.jsonObject(settlement.routeCollectionsSummary);
     return {
       id: settlement.id,
       routeId: settlement.routeId,
       driverId: settlement.driverId,
+      snapshotRequiresRecalculation: summary.schemaVersion !== 2,
       status: settlement.status,
       version: settlement.version,
       expectedCashAmount: this.toNumber(settlement.expectedCashAmount),
-      derivedCollectedCashAmount:
-        summary?.collectedCashAmount ??
-        this.toNumber(settlement.paidAtDeliveryAmount),
+      derivedCollectedCashAmount: this.toNumber(
+        (summary.collectedCashAmount ??
+          settlement.paidAtDeliveryAmount) as DecimalLike,
+      ),
       expectedTransferAmount: this.toNumber(settlement.expectedTransferAmount),
-      derivedCollectedTransferAmount: summary?.collectedTransferAmount ?? 0,
+      derivedCollectedTransferAmount: this.toNumber(
+        summary.collectedTransferAmount as DecimalLike,
+      ),
       differenceAmount: this.toNumber(settlement.differenceAmount),
       paidAtDeliveryAmount: this.toNumber(settlement.paidAtDeliveryAmount),
+      creditAmount: this.toNumber(summary.creditAmount as DecimalLike),
       overdueAmount: this.toNumber(settlement.overdueAmount),
       secondPassCollectionsAmount: this.toNumber(
         settlement.secondPassCollectionsAmount,
       ),
       closedAt: settlement.closedAt?.toISOString() ?? null,
+      createdAt: settlement.createdAt?.toISOString() ?? null,
+      updatedAt: settlement.updatedAt?.toISOString() ?? null,
     };
-  }
-
-  private async updateSettlementVersioned(
-    args: Prisma.RouteSettlementUpdateArgs,
-  ) {
-    try {
-      return (await this.prisma.routeSettlement.update(
-        args,
-      )) as RouteSettlementRecord;
-    } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code?: unknown }).code === 'P2025'
-      ) {
-        throw new ConflictException(
-          'Route settlement version does not match expectedVersion',
-        );
-      }
-      throw error;
-    }
   }
 
   private assertIdempotencyKey(

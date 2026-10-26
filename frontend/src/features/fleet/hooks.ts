@@ -26,10 +26,7 @@ export const fleetLiveQueryKey = (originLocationId: string) =>
 export const fleetHeatmapQueryKey = (filters: FleetHeatmapFilters) =>
   ["fleet", "heatmap", filters] as const;
 
-export function useFleetHeatmap(
-  filters: FleetHeatmapFilters,
-  active: boolean,
-) {
+export function useFleetHeatmap(filters: FleetHeatmapFilters, active: boolean) {
   const { accessToken } = useAuth();
   return useQuery({
     enabled: Boolean(accessToken) && active,
@@ -58,10 +55,7 @@ export function useDeliveryZones(originLocationId: string) {
     enabled: Boolean(accessToken),
     queryKey: deliveryZonesQueryKey(originLocationId),
     queryFn: () =>
-      fleetService.listDeliveryZones(
-        { originLocationId },
-        accessToken,
-      ),
+      fleetService.listDeliveryZones({ originLocationId }, accessToken),
     staleTime: 30_000,
   });
 }
@@ -80,7 +74,9 @@ export function useFleetLive(originLocationId: string) {
   const [geofenceEventsByOrigin, setGeofenceEventsByOrigin] = useState<
     Record<string, FleetGeofenceTimelineEvent[]>
   >({});
-  const connectedOnce = useRef(false);
+  const snapshotsInFlight = useRef(
+    new Set<Map<string, FleetPositionUpdated>>(),
+  );
   const eventIdsRef = useRef(new Set<string>());
   const incidentIdsRef = useRef(new Set<string>());
   const eventsKey = originLocationId || "__all__";
@@ -88,7 +84,22 @@ export function useFleetLive(originLocationId: string) {
   const query = useQuery({
     enabled: Boolean(accessToken),
     queryKey,
-    queryFn: () => fleetService.getLive({ originLocationId }, accessToken),
+    queryFn: async () => {
+      const deltas = new Map<string, FleetPositionUpdated>();
+      snapshotsInFlight.current.add(deltas);
+      try {
+        let snapshot = await fleetService.getLive(
+          { originLocationId },
+          accessToken,
+        );
+        // A snapshot read may precede a GPS commit whose delta arrived during the request.
+        for (const position of deltas.values())
+          snapshot = applyPositionUpdated(snapshot, position);
+        return snapshot;
+      } finally {
+        snapshotsInFlight.current.delete(deltas);
+      }
+    },
     refetchInterval: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -99,6 +110,16 @@ export function useFleetLive(originLocationId: string) {
     }
 
     const handlePositionUpdated = (position: FleetPositionUpdated) => {
+      for (const deltas of snapshotsInFlight.current) {
+        const key = `${position.routeId}:${position.vehicleId}`;
+        const previous = deltas.get(key);
+        if (
+          !previous ||
+          Date.parse(position.recordedAt) > Date.parse(previous.recordedAt)
+        ) {
+          deltas.set(key, position);
+        }
+      }
       queryClient.setQueryData<FleetLiveSnapshot | undefined>(
         queryKey,
         (snapshot) =>
@@ -131,24 +152,27 @@ export function useFleetLive(originLocationId: string) {
       setIncidentCount((count) => count + 1);
     };
 
+    const reconcileSnapshot = () => {
+      // Invalidation alone reuses an initial in-flight request with no cached data.
+      // Cancel that obsolete read before starting the authoritative post-event snapshot.
+      void queryClient
+        .cancelQueries({ queryKey })
+        .then(() => queryClient.invalidateQueries({ queryKey }));
+    };
+
     const cleanup = fleetSocket.subscribe(
       accessToken,
       originLocationId || undefined,
       {
         onPositionUpdated: handlePositionUpdated,
-        onRouteUpdated: () => {
-          void queryClient.invalidateQueries({ queryKey });
-        },
+        onRouteUpdated: reconcileSnapshot,
         onIncidentCreated: handleIncidentCreated,
         onGeofenceEntered: handleGeofenceEvent,
         onGeofenceExited: handleGeofenceEvent,
         onConnected: () => {
-          const isRecovery = connectedOnce.current;
-          connectedOnce.current = true;
           setConnectionState("connected");
-          if (isRecovery) {
-            void queryClient.invalidateQueries({ queryKey });
-          }
+          // Covers reconnects and changes missed between a cached snapshot and subscription.
+          reconcileSnapshot();
         },
         onConnectionError: () => setConnectionState("error"),
         onDisconnected: () => setConnectionState("disconnected"),

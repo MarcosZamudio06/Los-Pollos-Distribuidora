@@ -16,8 +16,12 @@ import {
   EligibleSalesQueryDto,
 } from './dto/delivery-route-planning.dto';
 import { RoutingProvidersService } from './routing-providers.service';
+import { plannerSaleScope } from './planner-sale-scope';
 
-type Actor = Pick<AuthenticatedUser, 'id' | 'role'> & {
+type Actor = Pick<
+  AuthenticatedUser,
+  'id' | 'role' | 'operationalLocationId'
+> & {
   permissions?: string[];
 };
 
@@ -58,7 +62,7 @@ export class DeliveryRoutePlanningService {
     });
   }
 
-  async findEligibleSales(query: EligibleSalesQueryDto) {
+  async findEligibleSales(query: EligibleSalesQueryDto, currentUser: Actor) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where: Prisma.SaleWhereInput = {
@@ -66,7 +70,13 @@ export class DeliveryRoutePlanningService {
       cancelledAt: null,
       routeId: null,
       deliveryOrder: null,
-      ...(query.originLocationId ? { locationId: query.originLocationId } : {}),
+      AND: [
+        plannerSaleScope(currentUser),
+        // Legacy explicit filter remains compatible; the UI must not infer it from dispatch origin.
+        ...(query.originLocationId
+          ? [{ locationId: query.originLocationId }]
+          : []),
+      ],
       ...(query.search
         ? {
             OR: [
@@ -150,6 +160,7 @@ export class DeliveryRoutePlanningService {
           id: { in: saleIds },
           status: SaleStatus.CONFIRMED,
           cancelledAt: null,
+          AND: [plannerSaleScope(currentUser)],
         },
         include: { accountReceivable: { select: { id: true } } },
       }),

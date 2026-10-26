@@ -71,6 +71,16 @@ Validaciones:
 - Debe incluir pagos recibidos al entregar, transferencias/depositos confirmados y cobranza posterior.
 - Debe detectar diferencias entre producto cargado, vendido, devuelto y remanente en `ROUTE_STOCK`.
 - Todo total cobrado debe derivarse de `Payment` asociados a `routeId` o `routeSettlementId`.
+- `expectedCashAmount` y `expectedTransferAmount` son importes a rendir de pagos
+  APPLIED en CASH y TRANSFER/DEPOSIT respectivamente; no incluyen cartera.
+- `creditAmount` informa cartera pendiente en el snapshot; `overdueAmount`
+  informa únicamente su parte vencida. Ninguna se resta nuevamente de pagos ni
+  constituye por sí sola una diferencia o un bloqueo de cierre.
+- `derivedCollectedCashAmount` y `derivedCollectedTransferAmount` se conservan
+  en `routeCollectionsSummary`, junto con primera/segunda vuelta. Respuesta,
+  lectura y cierre usan el mismo snapshot persistido, sin campos híbridos.
+- Sin fuente independiente de conteo monetario, no se inventa una diferencia
+  entre los mismos pagos; se conservan las diferencias físicas para revisión.
 - Reintentos con la misma `Idempotency-Key` no deben abrir ni recalcular una segunda liquidación para la misma operación.
 - Reutilizar la misma `Idempotency-Key` para una apertura/cálculo incompatible
   responde `409 Conflict` sin modificar la liquidación existente.
@@ -122,3 +132,14 @@ Validaciones:
 - No eliminar pagos, evidencias ni movimientos históricos.
 - Persistir actor, fecha, motivo, versión e idempotencia de reapertura.
 - Rechazar reapertura con `expectedVersion` obsoleta.
+
+## Persistencia de transiciones
+
+- Lista y detalle exponen `version`; la paginación es estable por creación e ID.
+- Apertura, cierre y reapertura conservan respuesta idempotente en el ledger
+  `RouteSettlementOpeningCommand`, con payload/actor/ruta y snapshot de respuesta.
+  Una clave incompatible responde 409 sin aplicar parcialmente otro comando.
+- El detalle CLOSED usa el snapshot de cierre. Una fila histórica sin ese
+  snapshot se señala con `snapshotRequiresRecalculation=true`, sin reconstruir
+  falsamente un cierre histórico con pagos/estados actuales. Requiere reapertura
+  autorizada y recálculo; no se reescriben cierres aceptados automáticamente.

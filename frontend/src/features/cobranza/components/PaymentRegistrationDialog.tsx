@@ -8,6 +8,11 @@ import { paymentMethodLabel } from "../paymentMethodLabels";
 import type { AccountReceivable, PaymentMethod } from "../types";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { toast } from "sonner";
+import {
+  getOperationalDate,
+  getOperationalTimeZone,
+  operationalDateTimeToIso,
+} from "../../../lib/operationalDate";
 import { getPosDeviceId } from "../../../lib/deviceIdentity";
 import { hasPermission, PERMISSIONS, useAuth } from "../../auth";
 
@@ -48,7 +53,8 @@ export function PaymentRegistrationDialog({
   const [amount, setAmount] = useState(String(outstandingAmount));
   const [bankName, setBankName] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
-  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [paidAt, setPaidAt] = useState(() => getOperationalDate());
+  const [paymentDateEdited, setPaymentDateEdited] = useState(false);
   const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [pendingPayment, setPendingPayment] = useState<
     Parameters<typeof registerPayment.mutateAsync>[0] | null
@@ -73,12 +79,16 @@ export function PaymentRegistrationDialog({
       bankName: paymentMethod === "CASH" ? undefined : bankName,
       referenceNumber: paymentMethod === "CASH" ? undefined : referenceNumber,
       nextPaymentDate: nextPaymentDate
-        ? new Date(`${nextPaymentDate}T00:00:00`).toISOString()
+        ? operationalDateTimeToIso(nextPaymentDate)
         : undefined,
       cashShiftId:
         paymentMethod === "CASH" ? openCashSession.data?.id : undefined,
       deviceId: paymentMethod === "CASH" ? getPosDeviceId() : undefined,
-      paidAt: paidAt ? new Date(`${paidAt}T00:00:00`).toISOString() : undefined,
+      paidAt: paidAt
+        ? !paymentDateEdited || paidAt === getOperationalDate()
+          ? new Date().toISOString()
+          : operationalDateTimeToIso(paidAt)
+        : undefined,
     });
   }
 
@@ -204,7 +214,10 @@ export function PaymentRegistrationDialog({
                 className={fieldClass}
                 type="date"
                 value={paidAt}
-                onChange={(event) => setPaidAt(event.target.value)}
+                onChange={(event) => {
+                  setPaidAt(event.target.value);
+                  setPaymentDateEdited(true);
+                }}
               />
             </label>
             <label className="grid gap-2 text-sm font-semibold sm:col-span-2">
@@ -296,7 +309,9 @@ export function PaymentRegistrationDialog({
         <p>
           <strong>Fecha:</strong>{" "}
           {pendingPayment?.paidAt
-            ? new Date(pendingPayment.paidAt).toLocaleDateString("es-MX")
+            ? new Date(pendingPayment.paidAt).toLocaleDateString("es-MX", {
+                timeZone: getOperationalTimeZone(),
+              })
             : "—"}
         </p>
         <p>
@@ -304,6 +319,7 @@ export function PaymentRegistrationDialog({
           {pendingPayment?.nextPaymentDate
             ? new Date(pendingPayment.nextPaymentDate).toLocaleDateString(
                 "es-MX",
+                { timeZone: getOperationalTimeZone() },
               )
             : "—"}
         </p>

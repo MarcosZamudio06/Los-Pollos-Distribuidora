@@ -438,7 +438,7 @@ Permisos: `ADMIN`, `SELLER`.
 Query:
 
 - `page`, `limit`, `search`.
-- `originLocationId` opcional.
+- `originLocationId` opcional: filtro legado **explícito por `Sale.locationId`**, no por el origen físico de una ruta. Se conserva por compatibilidad.
 
 Respuesta `data.items[]`:
 
@@ -448,7 +448,9 @@ Respuesta `data.items[]`:
 
 Validaciones:
 
-- Solo ventas `CONFIRMED` y no canceladas.
+- Solo ventas `CONFIRMED` y no canceladas, sin asignación ni pedido de entrega existente.
+- `ADMIN` consulta las ventas de su data plane de compañía; `SELLER` conserva propiedad de venta y ubicación operativa asignada. Ningún parámetro sustituye o amplía ese alcance servidor.
+- La pantalla de planeación no envía implícitamente `originLocationId` al buscar ventas cuando el usuario elige el origen físico: el origen de salida y la custodia de inventario pueden ser diferentes.
 - Excluir ventas que ya pertenezcan a una ruta.
 - La respuesta es informativa; creación y consumo del plan vuelven a validar elegibilidad.
 
@@ -694,6 +696,9 @@ Validaciones:
 - `originLocationId` debe conservarse cuando la ruta salga de una ubicación operativa definida.
 - `orders[]` puede contener ventas pagadas al entregar, ventas a crédito y ventas con cobranza posterior.
 - Las ventas de canal `ROUTE` deben usar `routeStockLocationId` como ubicación operativa de descuento.
+- Al consumir un plan nuevo con ventas `ROUTE`, se conserva su custodia original: si el body omite `routeStockLocationId`, se deriva de esas ventas; si lo proporciona, debe coincidir. No se crea una custodia vacía sustituta ni se cambia `Sale.locationId`, canal o inventario histórico.
+- Un plan con ventas `ROUTE` de custodias distintas o una custodia explícita incompatible se rechaza con `409 ROUTE_STOCK_CONTEXT_MISMATCH`, sin consumir el plan ni crear una ruta parcial.
+- Creación y consumo revalidan el alcance autorizado de las ventas, además de sus estados/asignación.
 - Un plan expirado, consumido por otra operación o invalidado por concurrencia responde `409 Conflict` y no crea registros parciales.
 - El body legado puede omitir `vehicleId` para conservar el flujo de rutas no geoespaciales; nunca permite crear una nueva ruta geoespacial sin vehículo. Las rutas históricas también pueden conservar `vehicleId=null`.
 

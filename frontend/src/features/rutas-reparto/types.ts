@@ -521,3 +521,8 @@ export type CloseRouteSettlementPayload = {
   notes?: string;
   expectedVersion: number;
 };
+
+export type ReopenRouteSettlementPayload = {
+  reason: string;
+  expectedVersion: number;
+};

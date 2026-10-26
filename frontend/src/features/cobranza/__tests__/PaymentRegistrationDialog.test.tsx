@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountReceivable } from "../types";
 
 const mockState = vi.hoisted(() => ({
@@ -64,6 +64,26 @@ const account = {
 } as AccountReceivable;
 
 describe("PaymentRegistrationDialog", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+  it.each([
+    ["2026-10-23T23:59:00Z", "2026-10-23"],
+    ["2026-10-24T00:00:00Z", "2026-10-23"],
+    ["2026-10-24T05:59:00Z", "2026-10-23"],
+    ["2026-10-24T06:00:00Z", "2026-10-24"],
+  ])(
+    "initializes the collection date in the operational zone at %s",
+    (instant, expected) => {
+      vi.stubEnv("VITE_APP_TIMEZONE", "America/Mexico_City");
+      vi.useFakeTimers().setSystemTime(new Date(instant));
+      const html = renderToStaticMarkup(
+        <PaymentRegistrationDialog account={account} onClose={vi.fn()} />,
+      );
+      expect(html).toContain(`type="date" value="${expected}"`);
+    },
+  );
   it("presenta métodos de pago en español y captura la siguiente fecha de pago", () => {
     const html = renderToStaticMarkup(
       <PaymentRegistrationDialog account={account} onClose={vi.fn()} />,

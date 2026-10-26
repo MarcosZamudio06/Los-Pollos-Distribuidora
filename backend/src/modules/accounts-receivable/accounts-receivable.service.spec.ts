@@ -33,6 +33,8 @@ type MockPrisma = {
   cashShift: { findUnique: jest.Mock };
   pointOfSaleDailyClose: { findUnique: jest.Mock; findFirst: jest.Mock };
   $executeRawUnsafe: jest.Mock;
+  $executeRaw: jest.Mock;
+  routeSettlement: { findUnique: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -102,7 +104,10 @@ function createPrisma(): MockPrisma {
     },
     payment: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
     sale: {
-      findUnique: jest.fn().mockResolvedValue({ locationId: 'loc-1' }),
+      findUnique: jest.fn().mockResolvedValue({
+        locationId: 'loc-1',
+        status: SaleStatus.CONFIRMED,
+      }),
       update: jest.fn().mockResolvedValue(undefined),
     },
     cashShift: {
@@ -126,6 +131,14 @@ function createPrisma(): MockPrisma {
       }),
     },
     $executeRawUnsafe: jest.fn(),
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    routeSettlement: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'settlement-1',
+        routeId: 'route-1',
+        status: 'OPEN',
+      }),
+    },
     $transaction: jest.fn((callback) => callback(prisma)),
   };
   return prisma;
@@ -387,6 +400,7 @@ describe('AccountsReceivableService', () => {
   it('registra efectivo en el cierre del turno actual aunque la venta pertenezca a otro cierre', async () => {
     const { service, prisma, dailyCloseService } = createService();
     const sale = {
+      status: SaleStatus.CONFIRMED,
       locationId: 'loc-1',
       pointOfSaleDailyClose: { id: 'close-reviewed', status: 'REVIEWED' },
     };
@@ -493,6 +507,7 @@ describe('AccountsReceivableService', () => {
       createReceivable({ outstandingAmount: money('124') }),
     );
     prisma.sale.findUnique.mockResolvedValue({
+      status: SaleStatus.CONFIRMED,
       locationId: 'loc-1',
       pointOfSaleDailyClose: { id: 'sale-close-closed', status: 'CLOSED' },
     });
@@ -563,7 +578,9 @@ describe('AccountsReceivableService', () => {
     prisma.payment.findFirst.mockResolvedValue(null);
     prisma.accountReceivable.findUnique.mockResolvedValue(createReceivable());
     prisma.sale.findUnique.mockResolvedValue({
+      status: SaleStatus.CONFIRMED,
       locationId: 'route-stock-1',
+      routeId: 'route-1',
       pointOfSaleDailyClose: { id: 'sale-close-closed', status: 'CLOSED' },
     });
     prisma.payment.create.mockResolvedValue({
@@ -623,6 +640,7 @@ describe('AccountsReceivableService', () => {
   it('registra el pago cuando la venta y el turno pertenecen al mismo cierre', async () => {
     const { service, prisma, dailyCloseService } = createService();
     const sale = {
+      status: SaleStatus.CONFIRMED,
       locationId: 'loc-1',
       pointOfSaleDailyClose: { id: 'close-1', status: 'DRAFT' },
     };

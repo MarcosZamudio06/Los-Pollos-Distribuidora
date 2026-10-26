@@ -458,19 +458,25 @@ describe('PointOfSaleDailyCloseService', () => {
       'loc-1',
       new Date('2026-07-17T06:00:00.000Z'),
       new Date('2026-07-18T06:00:00.000Z'),
+      new Date('2026-07-17T00:00:00.000Z'),
     );
 
     expect(tx.sale.updateMany).toHaveBeenCalledWith({
       where: {
-        locationId: 'loc-1',
-        createdAt: {
-          gte: new Date('2026-07-17T06:00:00.000Z'),
-          lt: new Date('2026-07-18T06:00:00.000Z'),
-        },
-        status: 'CONFIRMED',
-        OR: [
-          { pointOfSaleDailyCloseId: null },
-          { pointOfSaleDailyCloseId: { not: 'close-1' } },
+        AND: [
+          expect.objectContaining({
+            locationId: 'loc-1',
+            status: 'CONFIRMED',
+            OR: expect.arrayContaining([
+              { businessDate: new Date('2026-07-17T00:00:00.000Z') },
+            ]),
+          }),
+          {
+            OR: [
+              { pointOfSaleDailyCloseId: null },
+              { pointOfSaleDailyCloseId: { not: 'close-1' } },
+            ],
+          },
         ],
       },
       data: { pointOfSaleDailyCloseId: 'close-1' },

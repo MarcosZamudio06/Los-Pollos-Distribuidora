@@ -20,6 +20,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { ApiClientError } from "../../lib/api";
+import { getOperationalDate } from "../../lib/operationalDate";
 import { formatMoney } from "../../lib/money";
 import {
   Alert,
@@ -149,7 +150,7 @@ const deliveryStatuses = [
 ];
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return getOperationalDate();
 }
 
 function formatNumber(value?: number | null) {
