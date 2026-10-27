@@ -98,11 +98,14 @@ DATABASE_URL="$REM004_SILO_DATABASE_URL" E2E_DATABASE_URL="$REM004_SILO_DATABASE
     sleep 1
   done
 
+rendering="${REM004_RENDERING_DIR:-$repo/.map-data/rendering}"
+test -s "$rendering/mexico.pmtiles"
+test -d "$rendering/fonts"
 browser="$run-browser"; tiles="$run-tiles"
 trap '"$docker_bin" stop "$tiles" >/dev/null 2>&1 || true; cleanup' EXIT
 "$docker_bin" run --rm -d --name "$tiles" --label task=erp-functional-remediation-004 \
- -v "$repo/.map-data/rendering:/data/rendering:ro" \
- -v "$repo/.map-data/rendering/fonts:/data/fonts:ro" \
+ -v "$rendering:/data/rendering:ro" \
+ -v "$rendering/fonts:/data/fonts:ro" \
  -v "$repo/docker/maps/styles:/data/styles:ro" \
  -v "$repo/docker/maps/tileserver/config.json:/data/config.json:ro" \
  -p 127.0.0.1::8080 maptiler/tileserver-gl:v5.6.0 --config /data/config.json --port 8080 --public_url /maps/ >/dev/null

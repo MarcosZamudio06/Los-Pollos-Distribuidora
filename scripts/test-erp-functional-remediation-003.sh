@@ -57,7 +57,7 @@ tests=(test/erp-functional-remediation-003.integration.ts)
 if [ "${REM003_BROWSER:-false}" = true ]; then
   gis="${REM003_GIS_DIR:?Provide a prepared public Veracruz OSM/OSRM/Photon fixture bundle}"
   test -f "$gis/veracruz.osm" && test -f "$gis/veracruz.osrm.partition" && test -d "$gis/photon"
-  export MAP_DATA_VERSION="rem003-osm-$(shasum -a 256 "$gis/veracruz.osm" | cut -c1-12)"
+  export MAP_DATA_VERSION="rem003-osm-$(openssl dgst -sha256 "$gis/veracruz.osm" | awk '{print substr($NF,1,12)}')"
   export MAP_DATA_PREPARED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # OpenSearch needs a writable index/lock. Copy to owned scratch; never mutate the source bundle.
   cp -R "$gis/photon" "$scratch/photon"

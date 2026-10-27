@@ -22,6 +22,14 @@ export default defineConfig({
   outputDir: "test-results/browser",
   use: {
     baseURL: env.baseURL,
+    ...(process.env.E2E_BROWSER_WS
+      ? {
+          connectOptions: {
+            wsEndpoint: process.env.E2E_BROWSER_WS,
+            exposeNetwork: "<loopback>",
+          },
+        }
+      : {}),
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "off",

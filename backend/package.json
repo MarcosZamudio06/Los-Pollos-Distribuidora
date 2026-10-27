@@ -36,7 +36,9 @@
     "start:commercial": "node dist/backend/src/commercial/main.js",
     "start:commercial:local": "ts-node src/commercial/main.ts",
     "build:isolated": "ts-node scripts/build-isolated.ts",
-    "commercial:data": "ts-node src/commercial/data-ops.cli.ts"
+    "commercial:data": "ts-node src/commercial/data-ops.cli.ts",
+    "pretest:e2e:functional": "ts-node scripts/forbid-focused-tests.ts",
+    "test:e2e:functional": "jest --config ./test/jest-functional.json"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -122,7 +124,7 @@
   },
   "overrides": {
     "@nestjs/platform-express": {
-      "multer": "2.3.0"
+      "multer": "2.5.0"
     },
     "deepmerge-ts": "8.0.0",
     "js-yaml": "5.2.2",

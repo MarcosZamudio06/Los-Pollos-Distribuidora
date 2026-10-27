@@ -46,6 +46,9 @@ jobs:
       - name: Generate Prisma Client
         run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
 
+      - name: Verify permanent E2E discovery and release CI contracts
+        run: node --test scripts/release-ci.contract.test.mjs
+
       - name: Reject focused or skipped tests
         run: npm run test:guard
 
@@ -128,6 +131,53 @@ jobs:
 
       - name: Run integration tests
         run: npm --prefix backend run test:e2e -- --runInBand
+
+  functional:
+    name: Isolated functional regressions FUNC-001 through FUNC-012
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OPENSSL_CONF: /dev/null
+      REM002_BROWSER: "true"
+      REM003_BROWSER: "true"
+      REM003_RESISTANCE_SECONDS: "600"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend and frontend dependencies
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix frontend
+          npm --prefix backend exec -- prisma generate --schema backend/prisma/schema.prisma
+      - name: Select run-owned GIS fixture paths
+        run: |
+          echo "REM003_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
+          echo "REM004_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
+          echo "REM004_RENDERING_DIR=$RUNNER_TEMP/functional-rendering" >> "$GITHUB_ENV"
+      - name: Pull pinned Linux Chromium runtime
+        run: docker pull mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      - name: Prepare public GIS and real cartography fixtures
+        run: |
+          bash scripts/prepare-erp-ci-gis.sh "$REM003_GIS_DIR"
+          bash scripts/prepare-erp-ci-rendering.sh "$REM003_GIS_DIR" "$REM004_RENDERING_DIR"
+      - name: Run permanent P1 API and persistence regressions
+        run: bash scripts/test-erp-functional-p1.sh
+      - name: Run permanent remediation 002 API, S3 and browser regressions
+        run: bash scripts/test-erp-functional-remediation-002.sh
+      - name: Run permanent remediation 003 planning, concurrency and restart regressions
+        run: bash scripts/test-erp-functional-remediation-003.sh
+      - name: Run permanent remediation 004 Fleet convergence and company isolation
+        run: bash scripts/test-erp-functional-remediation-004.sh
+      - name: Run permanent remediation 005 settlement reopen and financial regressions
+        run: bash scripts/test-erp-functional-remediation-005.sh
 
   browser:
     name: Chromium real-stack Auth, POS, CEDIS and DRIVER journeys
@@ -450,11 +500,12 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, database, browser, docker, security, isolation, disaster-recovery]
+    needs: [quality, database, functional, browser, docker, security, isolation, disaster-recovery]
     runs-on: ubuntu-latest
     steps:
       - name: Require every quality check
         env:
+          FUNCTIONAL_RESULT: ${{ needs.functional.result }}
           DATABASE_RESULT: ${{ needs.database.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
           DOCKER_RESULT: ${{ needs.docker.result }}
@@ -465,6 +516,7 @@ jobs:
         run: |
           test "$QUALITY_RESULT" = "success"
           test "$DATABASE_RESULT" = "success"
+          test "$FUNCTIONAL_RESULT" = "success"
           test "$BROWSER_RESULT" = "success"
           test "$DOCKER_RESULT" = "success"
           test "$ISOLATION_RESULT" = "success"

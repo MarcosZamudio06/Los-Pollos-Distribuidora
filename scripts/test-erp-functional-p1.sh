@@ -45,4 +45,4 @@ npm --prefix backend exec -- prisma migrate deploy --schema backend/prisma/schem
 export E2E_SECOND_DATABASE_URL="${DATABASE_URL%/*}/pollos_p1_e2e_other"
 DATABASE_URL="$E2E_SECOND_DATABASE_URL" npm --prefix backend exec -- prisma migrate deploy --schema backend/prisma/schema.prisma >"$scratch/migrations-other.log" 2>&1 || { tail -40 "$scratch/migrations-other.log"; exit 1; }
 echo "Disposable schema migrated; migration log: $scratch/migrations.log"
-npm --prefix backend run test:e2e -- --runInBand --runTestsByPath test/erp-functional-p1.e2e-spec.ts "$@"
+npm --prefix backend run test:e2e:functional -- --runInBand --runTestsByPath test/erp-functional-p1.e2e-spec.ts "$@"

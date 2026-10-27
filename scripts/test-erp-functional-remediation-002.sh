@@ -65,4 +65,4 @@ if [ "${REM002_BROWSER:-false}" = true ]; then
   extra_tests+=(test/erp-functional-remediation-002.browser.e2e-spec.ts)
 fi
 
-npm --prefix backend --script-shell=/bin/sh run test:e2e -- --runInBand --runTestsByPath "${extra_tests[@]}" "$@"
+npm --prefix backend --script-shell=/bin/sh run test:e2e:functional -- --runInBand --runTestsByPath "${extra_tests[@]}" "$@"

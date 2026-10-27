@@ -28,6 +28,8 @@ type PositionPublication = {
 
 type AdminRuntimeEvidence = {
   liveResponses: Array<{ status: number; url: string }>;
+  liveRequests: number;
+  socketConnections: number;
   socketPathRequests: string[];
   socketUrls: string[];
   socketNamespaces: Set<string>;
@@ -85,6 +87,8 @@ function parseSocketPositionEvent(frame: string) {
 function observeAdminRuntime(page: Page): AdminRuntimeEvidence {
   const evidence: AdminRuntimeEvidence = {
     liveResponses: [],
+    liveRequests: 0,
+    socketConnections: 0,
     socketPathRequests: [],
     socketUrls: [],
     socketNamespaces: new Set<string>(),
@@ -96,6 +100,11 @@ function observeAdminRuntime(page: Page): AdminRuntimeEvidence {
     if (frame === page.mainFrame()) evidence.mainFrameNavigations += 1;
   });
   page.on("request", (request) => {
+    if (
+      new URL(request.url()).pathname === "/api/fleet/live" &&
+      request.method() === "GET"
+    )
+      evidence.liveRequests += 1;
     if (isFleetSocketUrl(request.url())) {
       evidence.socketPathRequests.push(request.url());
     }
@@ -124,6 +133,7 @@ function observeAdminRuntime(page: Page): AdminRuntimeEvidence {
       const payload = event.payload;
       if (typeof payload !== "string") return;
       if (payload.startsWith(`40${FLEET_SOCKET_NAMESPACE}`)) {
+        evidence.socketConnections += 1;
         evidence.socketNamespaces.add(FLEET_SOCKET_NAMESPACE);
       }
       const positionEvent = parseSocketPositionEvent(payload);
@@ -393,7 +403,28 @@ test("DRIVER GPS reaches ADMIN MapLibre through the real Fleet Socket.IO delta",
     await expect
       .poll(() => adminEvidence.socketNamespaces.has(FLEET_SOCKET_NAMESPACE))
       .toBe(true);
-    expect(adminEvidence.liveResponses).toHaveLength(1);
+    // One read on mount plus one authoritative read after subscription closes
+    // the snapshot/subscription gap (FUNC-011). GPS deltas must not refetch.
+    await expect
+      .poll(() => adminEvidence.liveResponses.length)
+      .toBeGreaterThan(1);
+    expect(adminEvidence.socketConnections).toBe(1);
+    expect(adminEvidence.liveRequests).toBeLessThanOrEqual(
+      1 + adminEvidence.socketConnections,
+    );
+    await expect
+      .poll(() => adminEvidence.liveResponses.length)
+      .toBe(adminEvidence.liveRequests);
+    expect(
+      adminEvidence.liveResponses.every(({ status }) => status === 200),
+    ).toBe(true);
+    const connectedSnapshotCount = adminEvidence.liveRequests;
+    const navigationCountAfterConnect = adminEvidence.mainFrameNavigations;
+    await expect(
+      adminPage
+        .getByTestId("fleet-unit-button")
+        .filter({ hasText: fixture.vehicleCode }),
+    ).toHaveCount(1);
 
     await login(driverPage, fixture.driverEmail);
     await driverContext.grantPermissions(["geolocation"], {
@@ -452,7 +483,8 @@ test("DRIVER GPS reaches ADMIN MapLibre through the real Fleet Socket.IO delta",
     expect(persistedA.driverId).toBe(fixture.driverId);
     expect(persistedA.accuracyMeters).toBeLessThanOrEqual(100);
     expect(Date.now() - Date.parse(persistedA.recordedAt)).toBeLessThan(60_000);
-    expect(adminEvidence.liveResponses).toHaveLength(1);
+    expect(adminEvidence.liveRequests).toBe(connectedSnapshotCount);
+    expect(adminEvidence.liveResponses).toHaveLength(connectedSnapshotCount);
 
     const positionBResponsePromise = driverPage.waitForResponse(
       apiResponse("/api/fleet/positions", "POST"),
@@ -487,7 +519,8 @@ test("DRIVER GPS reaches ADMIN MapLibre through the real Fleet Socket.IO delta",
       Date.parse(persistedA.recordedAt),
     );
 
-    expect(adminEvidence.liveResponses).toHaveLength(1);
+    expect(adminEvidence.liveRequests).toBe(connectedSnapshotCount);
+    expect(adminEvidence.liveResponses).toHaveLength(connectedSnapshotCount);
     const positionEventB = await waitForPositionEvent(adminEvidence, {
       latitude: fixture.positionB.latitude,
       longitude: fixture.positionB.longitude,
@@ -523,7 +556,16 @@ test("DRIVER GPS reaches ADMIN MapLibre through the real Fleet Socket.IO delta",
       navigationCountBeforeMapDelta,
     );
     expect(await adminPage.url()).toMatch(/\/delivery-routes\/live$/);
-    expect(adminEvidence.liveResponses).toHaveLength(1);
+    expect(adminEvidence.liveRequests).toBe(connectedSnapshotCount);
+    expect(adminEvidence.liveResponses).toHaveLength(connectedSnapshotCount);
+    expect(adminEvidence.mainFrameNavigations).toBe(
+      navigationCountAfterConnect,
+    );
+    await expect(
+      adminPage
+        .getByTestId("fleet-unit-button")
+        .filter({ hasText: fixture.vehicleCode }),
+    ).toHaveCount(1);
     expectNonInterference(before, afterB);
 
     console.log(
@@ -557,7 +599,8 @@ test("DRIVER GPS reaches ADMIN MapLibre through the real Fleet Socket.IO delta",
           payloadId: positionEventB.id,
           persistedId: persistedB.id,
           adminChangedWithoutReload: true,
-          extraLiveGetsAfterInitial: adminEvidence.liveResponses.length - 1,
+          extraLiveGetsAfterInitial:
+            adminEvidence.liveResponses.length - connectedSnapshotCount,
         },
         mapLibre: {
           source: FLEET_VEHICLES_SOURCE,

@@ -1,5 +1,9 @@
 import { Test } from '@nestjs/testing';
-import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CreateBucketCommand,
+  HeadBucketCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { createRequire } from 'node:module';
@@ -147,9 +151,20 @@ describe('Remediation002 browser: real Linux Chromium, UI, API and PostgreSQL (n
       },
     });
     try {
-      await storage.send(
-        new CreateBucketCommand({ Bucket: process.env.OBJECT_STORAGE_BUCKET }),
-      );
+      // API and browser suites share this runner-owned bucket. Only absence
+      // authorizes creation; authorization/network failures must still fail.
+      await storage
+        .send(
+          new HeadBucketCommand({ Bucket: process.env.OBJECT_STORAGE_BUCKET }),
+        )
+        .catch(async (error: { $metadata?: { httpStatusCode?: number } }) => {
+          if (error.$metadata?.httpStatusCode !== 404) throw error;
+          await storage.send(
+            new CreateBucketCommand({
+              Bucket: process.env.OBJECT_STORAGE_BUCKET,
+            }),
+          );
+        });
     } finally {
       storage.destroy();
     }

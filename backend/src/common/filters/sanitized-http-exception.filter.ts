@@ -41,6 +41,37 @@ export class SanitizedHttpExceptionFilter implements ExceptionFilter {
     const context = host.switchToHttp();
     const request = context.getRequest<RequestWithId>();
     const response = context.getResponse<Response>();
+    // Multer 2.5 changes some human messages; Nest 11's interceptor still
+    // matches those strings. Translate only documented Multer codes, never
+    // expose client-controlled filenames or treat arbitrary errors as 4xx.
+    if (
+      exception instanceof Error &&
+      exception.name === 'MulterError' &&
+      'code' in exception
+    ) {
+      const uploadErrors: Record<string, string> = {
+        LIMIT_FILE_SIZE: 'File too large',
+        LIMIT_PART_COUNT: 'Too many parts',
+        LIMIT_FILE_COUNT: 'Too many files',
+        LIMIT_FIELD_KEY: 'Field name too long',
+        LIMIT_FIELD_VALUE: 'Field value too long',
+        LIMIT_FIELD_COUNT: 'Too many fields',
+        LIMIT_UNEXPECTED_FILE: 'Unexpected file field',
+        MISSING_FIELD_NAME: 'Field name missing',
+        LIMIT_FIELD_NESTING: 'Field name nesting too deep',
+        LIMIT_FIELD_ARRAY_INDEX: 'Field name array index too large',
+        INVALID_FIELD_NAME: 'Invalid field name',
+        STREAM_DESTROYED: 'File stream was destroyed',
+      };
+      const code = typeof exception.code === 'string' ? exception.code : '';
+      if (Object.hasOwn(uploadErrors, code))
+        exception = new HttpException(
+          uploadErrors[code],
+          code === 'LIMIT_FILE_SIZE'
+            ? HttpStatus.PAYLOAD_TOO_LARGE
+            : HttpStatus.BAD_REQUEST,
+        );
+    }
     const status = this.getStatus(exception);
     const requestId = request.requestId;
     const isServerError = status >= 500;

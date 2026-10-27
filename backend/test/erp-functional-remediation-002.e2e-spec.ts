@@ -546,7 +546,11 @@ describe('Remediation002: cancellation, customer return and execution invariants
   it('FUNC-006: fractional kilograms retain three-decimal compensation identity', async () => {
     const f = await fixture(1.234, 'KG');
     expect((await returned(f, 0.111, key(), 'KG')).status).toBe(201);
-    expect((await voided(f)).status).toBe(201);
+    const cancellation = await voided(f);
+    expect({
+      status: cancellation.status,
+      error: cancellation.status === 201 ? null : cancellation.body,
+    }).toEqual({ status: 201, error: null });
     expect(Number((await balance(f)).quantityKg)).toBe(10);
     const compensation = await prisma.inventoryMovement.findFirstOrThrow({
       where: { saleId: f.saleId, type: 'CANCEL_SALE' },

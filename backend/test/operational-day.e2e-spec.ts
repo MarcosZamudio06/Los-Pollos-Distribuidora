@@ -441,13 +441,34 @@ describe('Operational day journey (e2e)', () => {
           .send(payload),
       ),
     );
+    // A serializable Sale lifecycle lock can reject the overlapping command before
+    // the serializable retry reaches the updated outstanding balance.
     expect(
-      collectionAttempts.map((response) => response.status).sort(),
-    ).toEqual([201, 400]);
-    expect(
-      collectionAttempts.find((response) => response.status === 400)?.body
-        .message,
-    ).toBe('Payment amount cannot exceed outstanding balance');
+      collectionAttempts.filter(({ status }) => status === 201),
+    ).toHaveLength(1);
+    const rejected = collectionAttempts.find(({ status }) => status !== 201)!;
+    expect([400, 409]).toContain(rejected.status);
+    expect(rejected.body).toMatchObject({
+      success: false,
+      statusCode: rejected.status,
+      error: rejected.status === 409 ? 'CONFLICT' : 'BAD_REQUEST',
+      message:
+        rejected.status === 409
+          ? 'Sale lifecycle changed; retry with the same Idempotency-Key'
+          : 'Payment amount cannot exceed outstanding balance',
+    });
+    // The loser must remain retryable with its ORIGINAL key and payload. Once
+    // contention ends the balance rule is authoritative; no write survived.
+    const losingIndex = collectionAttempts.indexOf(rejected);
+    const rejectedRetry = await request(app.getHttpServer())
+      .post(`/api/accounts-receivable/${receivableId}/payments`)
+      .set(auth)
+      .set('Idempotency-Key', paymentIdempotencyKeys[losingIndex])
+      .send([paymentPayload, racePaymentPayload][losingIndex])
+      .expect(400);
+    expect(rejectedRetry.body.message).toBe(
+      'Payment amount cannot exceed outstanding balance',
+    );
     const winningIndex = collectionAttempts.findIndex(
       (response) => response.status === 201,
     );

@@ -150,6 +150,29 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     const page = await context.newPage();
     pages.push(page);
     page.setDefaultTimeout(15000);
+    page.on('console', async (message) => {
+      if (message.type() !== 'error') return;
+      const details = await Promise.all(
+        message.args().map((arg) =>
+          arg
+            .evaluate((value: unknown) => {
+              if (!value || typeof value !== 'object') return String(value);
+              const event = value as {
+                message?: string;
+                error?: { message?: string };
+                sourceId?: string;
+              };
+              return {
+                message: event.message,
+                error: event.error?.message,
+                sourceId: event.sourceId,
+              };
+            })
+            .catch(() => null),
+        ),
+      );
+      journal.push({ browserError: message.text(), details });
+    });
     page.on('response', (r) => {
       if (new URL(r.url()).pathname.startsWith('/maps/'))
         journal.push({ mapAsset: new URL(r.url()).pathname, http: r.status() });
