@@ -47,7 +47,7 @@ jobs:
         run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
 
       - name: Verify permanent E2E discovery and release CI contracts
-        run: node --test scripts/release-ci.contract.test.mjs
+        run: node --test scripts/release-ci.contract.test.mjs scripts/erp-ci-gis.contract.test.mjs
 
       - name: Reject focused or skipped tests
         run: npm run test:guard
@@ -159,6 +159,7 @@ jobs:
           npm --prefix backend exec -- prisma generate --schema backend/prisma/schema.prisma
       - name: Select run-owned GIS fixture paths
         run: |
+          echo "REM003_CI_EVIDENCE_DIR=$RUNNER_TEMP/rem003-diagnostics" >> "$GITHUB_ENV"
           echo "REM003_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
           echo "REM004_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
           echo "REM004_RENDERING_DIR=$RUNNER_TEMP/functional-rendering" >> "$GITHUB_ENV"
@@ -178,6 +179,15 @@ jobs:
         run: bash scripts/test-erp-functional-remediation-004.sh
       - name: Run permanent remediation 005 settlement reopen and financial regressions
         run: bash scripts/test-erp-functional-remediation-005.sh
+
+      - name: Upload sanitized functional failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rem003-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/rem003-diagnostics/
+          if-no-files-found: warn
+          retention-days: 3
 
   browser:
     name: Chromium real-stack Auth, POS, CEDIS and DRIVER journeys

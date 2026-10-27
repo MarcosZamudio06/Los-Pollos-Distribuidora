@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import request, { type Response } from 'supertest';
+import type { ResistanceCommand } from './erp-rem003-recovery';
 import { AppModule } from '../src/app.module';
 import { configureHttpApplication } from '../src/bootstrap/configure-http-application';
 import { PrismaService } from '../src/database/prisma.service';
@@ -69,6 +70,10 @@ export class Rem003Harness {
   events: Array<{ path: string; http: number; ms: number; error?: unknown }> =
     [];
   retryEvents: Record<string, unknown>[] = [];
+  commandHandler?: (
+    command: ResistanceCommand,
+    send: () => Promise<Response>,
+  ) => Promise<Response>;
   createdProductIds: string[] = [];
   key = () => `rem003:${randomUUID()}`;
 
@@ -177,33 +182,30 @@ export class Rem003Harness {
     role = 'admin',
     key = this.key(),
   ) {
-    const start = performance.now();
-    const response = await request(this.url)
-      .post('/api/' + path)
-      .set('Authorization', 'Bearer ' + this.tokens[role])
-      .set('Idempotency-Key', key)
-      .send(body);
-    this.events.push({
-      path,
-      http: response.status,
-      ms: performance.now() - start,
-      ...(response.status >= 400 ? { error: response.body as unknown } : {}),
-    });
-    return response;
+    return this.command({ method: 'POST', path, body, role, key });
   }
   async patch(path: string, body: object, role = 'admin') {
-    const start = performance.now();
-    const response = await request(this.url)
-      .patch('/api/' + path)
-      .set('Authorization', 'Bearer ' + this.tokens[role])
-      .send(body);
-    this.events.push({
-      path,
-      http: response.status,
-      ms: performance.now() - start,
-      ...(response.status >= 400 ? { error: response.body as unknown } : {}),
-    });
-    return response;
+    return this.command({ method: 'PATCH', path, body, role, key: null });
+  }
+  private async command(command: ResistanceCommand) {
+    const send = async () => {
+      const start = performance.now();
+      const call =
+        command.method === 'POST'
+          ? request(this.url).post('/api/' + command.path)
+          : request(this.url).patch('/api/' + command.path);
+      call.set('Authorization', 'Bearer ' + this.tokens[command.role]);
+      if (command.key) call.set('Idempotency-Key', command.key);
+      const response = await call.send(command.body);
+      this.events.push({
+        path: command.path,
+        http: response.status,
+        ms: performance.now() - start,
+        ...(response.status >= 400 ? { error: response.body as unknown } : {}),
+      });
+      return response;
+    };
+    return this.commandHandler ? this.commandHandler(command, send) : send();
   }
   async get(path: string, role = 'admin') {
     const start = performance.now();

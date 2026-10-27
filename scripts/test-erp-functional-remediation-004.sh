@@ -6,15 +6,30 @@ docker_bin="${DOCKER_BIN:-docker}"
 if [ -x /Applications/Docker.app/Contents/Resources/bin/docker ]; then
   docker_bin="${DOCKER_BIN:-/Applications/Docker.app/Contents/Resources/bin/docker}"
 fi
+source "$repo/scripts/erp-ci-gis.sh"
 run="erp-rem004-$(date +%s)-$$"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/erp-rem004.XXXXXX")"
-pg="$run-pg"; storage="$run-s3"; browser=''; osrm=''; photon=''; vroom=''; network=''; pg_b=''; storage_b=''
+pg="$run-pg"; storage="$run-s3"; browser=''; osrm=''; photon=''; vroom=''; network=''; pg_b=''; storage_b=''; photon_volume=''; tiles=''
+GIS_DIAG_DIR="$scratch/diagnostics"
 cleanup() {
+  result=$?
+  for role in photon osrm vroom; do
+    case "$role" in photon) name="$photon";; osrm) name="$osrm";; vroom) name="$vroom";; esac
+    [ -z "$name" ] || gis_capture "$name" "$role"
+  done
+  if [ -n "${REM003_CI_EVIDENCE_DIR:-}" ]; then
+    python3 "$repo/scripts/export-rem003-diagnostics.py" "$scratch" "$REM003_CI_EVIDENCE_DIR/rem004" || true
+  fi
   "$docker_bin" logs "$pg" >"$scratch/postgres.log" 2>&1 || true
-  for container in "$pg" "$storage" "$browser" "$osrm" "$photon" "$vroom" "$pg_b" "$storage_b"; do
+  for container in "$pg" "$storage" "$browser" "$osrm" "$photon" "$vroom" "$pg_b" "$storage_b" "$tiles"; do
     [ -z "$container" ] || "$docker_bin" stop "$container" >/dev/null 2>&1 || true
   done
+  for container in "$photon" "$osrm" "$vroom"; do
+    [ -z "$container" ] || "$docker_bin" rm -f "$container" >/dev/null 2>&1 || true
+  done
+  [ -z "$photon_volume" ] || "$docker_bin" volume rm "$photon_volume" >/dev/null 2>&1 || true
   [ -z "$network" ] || "$docker_bin" network rm "$network" >/dev/null 2>&1 || true
+  return "$result"
 }
 trap cleanup EXIT
 echo "Disposable remediation004 scratch: $scratch"
@@ -76,46 +91,47 @@ DATABASE_URL="$REM004_SILO_DATABASE_URL" E2E_DATABASE_URL="$REM004_SILO_DATABASE
   export MAP_DATA_VERSION="rem004-public-veracruz"
   export MAP_DATA_PREPARED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # OpenSearch needs a writable index/lock. Copy to owned scratch; never mutate the source bundle.
-  cp -R "$gis/photon" "$scratch/photon"
+  mkdir -p "$GIS_DIAG_DIR"
+  photon_volume="$run-photon-data"
+  "$docker_bin" volume create --label task=erp-functional-remediation-004 "$photon_volume" >/dev/null
+  "$docker_bin" run --rm --user 0 --entrypoint sh -v "$gis/photon:/source:ro" -v "$photon_volume:/data" \
+    pollos-distribuidor/photon:1.2.1 -ec 'test -d /source/photon_data; cp -R /source/. /data/; chown -R 1000:1000 /data; find /data -maxdepth 3 -type d -exec ls -ldn {} \;' >"$GIS_DIAG_DIR/photon-permissions.txt" 2>&1
   network="$run-gis"; "$docker_bin" network create "$network" >/dev/null
   osrm="$run-osrm"; photon="$run-photon"; vroom="$run-vroom"
-  "$docker_bin" run --rm -d --name "$osrm" --label task=erp-functional-remediation-004 --platform linux/amd64 \
+  "$docker_bin" run -d --name "$osrm" --label task=erp-functional-remediation-004 --platform linux/amd64 \
     --network "$network" --network-alias osrm -p 127.0.0.1::5000 -v "$gis:/data:ro" \
     ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-routed --algorithm mld /data/veracruz.osrm >/dev/null
-  "$docker_bin" run --rm -d --name "$photon" --label task=erp-functional-remediation-004 --network "$network" \
-    --memory=1536m -e JAVA_TOOL_OPTIONS='-Xms256m -Xmx768m' -v "$scratch/photon:/data" -p 127.0.0.1::2322 \
+  "$docker_bin" run -d --name "$photon" --label task=erp-functional-remediation-004 --network "$network" \
+    --memory=1536m -e JAVA_TOOL_OPTIONS='-Xms256m -Xmx768m' -v "$photon_volume:/data" -p 127.0.0.1::2322 \
     pollos-distribuidor/photon:1.2.1 >/dev/null
-  "$docker_bin" run --rm -d --name "$vroom" --label task=erp-functional-remediation-004 --platform linux/amd64 \
+  "$docker_bin" run -d --name "$vroom" --label task=erp-functional-remediation-004 --platform linux/amd64 \
     --network "$network" -e VROOM_ROUTER=osrm -p 127.0.0.1::3000 \
     -v "$repo/docker/maps/vroom/config.yml:/conf/config.yml:ro" ghcr.io/vroom-project/vroom-docker:v1.15.0 >/dev/null
-  export OSRM_URL="http://127.0.0.1:$("$docker_bin" port "$osrm" 5000/tcp | awk -F: '{print $NF}')"
-  export PHOTON_URL="http://127.0.0.1:$("$docker_bin" port "$photon" 2322/tcp | awk -F: '{print $NF}')"
-  export VROOM_URL="http://127.0.0.1:$("$docker_bin" port "$vroom" 3000/tcp | awk -F: '{print $NF}')"
-  for n in $(seq 1 90); do
-    if curl --fail --silent "$PHOTON_URL/api/?q=Lobos&limit=1" >/dev/null && \
-       curl --fail --silent "$VROOM_URL/health" >/dev/null && \
-       curl --fail --silent "$OSRM_URL/nearest/v1/driving/-96.1233923,19.179094" >/dev/null; then break; fi
-    sleep 1
-  done
+  OSRM_URL="$(gis_url "$osrm" 5000 osrm)"
+  PHOTON_URL="$(gis_url "$photon" 2322 photon)"
+  VROOM_URL="$(gis_url "$vroom" 3000 vroom)"
+  export OSRM_URL PHOTON_URL VROOM_URL
+  gis_readiness 90
 
 rendering="${REM004_RENDERING_DIR:-$repo/.map-data/rendering}"
 test -s "$rendering/mexico.pmtiles"
 test -d "$rendering/fonts"
 browser="$run-browser"; tiles="$run-tiles"
-trap '"$docker_bin" stop "$tiles" >/dev/null 2>&1 || true; cleanup' EXIT
 "$docker_bin" run --rm -d --name "$tiles" --label task=erp-functional-remediation-004 \
  -v "$rendering:/data/rendering:ro" \
  -v "$rendering/fonts:/data/fonts:ro" \
  -v "$repo/docker/maps/styles:/data/styles:ro" \
  -v "$repo/docker/maps/tileserver/config.json:/data/config.json:ro" \
  -p 127.0.0.1::8080 maptiler/tileserver-gl:v5.6.0 --config /data/config.json --port 8080 --public_url /maps/ >/dev/null
-export REM004_TILES_URL="http://127.0.0.1:$("$docker_bin" port "$tiles" 8080/tcp | awk -F: '{print $NF}')"
+REM004_TILES_URL="$(gis_url "$tiles" 8080 tiles)"
+export REM004_TILES_URL
 image='mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27'
 ws_path="$(openssl rand -hex 24)"
 "$docker_bin" run --rm -d --name "$browser" --label task=erp-functional-remediation-004 --init --user pwuser --shm-size=1g \
  -e HOME=/home/pwuser -e NPM_CONFIG_USERCONFIG=/dev/null -p 127.0.0.1::3000 "$image" \
  npx -y playwright@1.63.0 run-server --port 3000 --host 0.0.0.0 --path "/$ws_path" --max-clients 2 >/dev/null
-export REM003_BROWSER_WS="ws://127.0.0.1:$("$docker_bin" port "$browser" 3000/tcp | awk -F: '{print $NF}')/$ws_path"
+browser_url="$(gis_url "$browser" 3000 browser)"
+export REM003_BROWSER_WS="${browser_url/http:/ws:}/$ws_path"
 export REM003_FRONTEND_DIST="$scratch/frontend"
 NODE_ENV=production VITE_APP_TIMEZONE=America/Mexico_City VITE_API_BASE_URL=/api VITE_MAP_STYLE_URL=/maps/styles/operations/style.json \
  npm --prefix frontend --script-shell=/bin/sh run build -- --outDir "$REM003_FRONTEND_DIST" --emptyOutDir >"$scratch/frontend-build.log" 2>&1
@@ -123,5 +139,6 @@ for n in $(seq 1 60); do
  if curl --fail --silent "$REM004_TILES_URL/styles/operations/style.json" >/dev/null && "$docker_bin" logs "$browser" 2>&1 | grep -q 'Listening'; then break; fi
  sleep 1
 done
+gis_readiness 90
 cd "$repo/backend"
 npm --script-shell=/bin/sh exec -- jest --config test/jest-rem004.json --runInBand "$@"
