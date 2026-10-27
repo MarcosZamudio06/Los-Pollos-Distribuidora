@@ -28,7 +28,7 @@ password="$(openssl rand -hex 24)"
 "$docker_bin" run --rm -d --name "$storage" --label task=erp-functional-p1 \
   --tmpfs /data:rw -e MINIO_ROOT_USER="$OBJECT_STORAGE_ACCESS_KEY_ID" \
   -e MINIO_ROOT_PASSWORD="$OBJECT_STORAGE_SECRET_ACCESS_KEY" \
-  -p 127.0.0.1::9000 minio/minio:latest server /data >/dev/null
+  -p 127.0.0.1::9000 docker.io/pgsty/silo:RELEASE.2026-10-18T00-00-00Z@sha256:2636fc4155d9a7e41ff58cdb65ddd13ba9304e67184e13c25bc5cb34016269d7 server /data >/dev/null
 pg_port="$("$docker_bin" port "$pg" 5432/tcp | awk -F: '{print $NF}')"
 s3_port="$("$docker_bin" port "$storage" 9000/tcp | awk -F: '{print $NF}')"
 export DATABASE_URL="postgresql://p1test:$password@127.0.0.1:$pg_port/pollos_p1_e2e"
