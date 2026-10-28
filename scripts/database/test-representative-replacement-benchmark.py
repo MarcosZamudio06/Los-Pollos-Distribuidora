@@ -3,7 +3,10 @@
 import importlib.util
 import json
 import io
+import os
+import subprocess
 import tempfile
+import textwrap
 import unittest
 import zipfile
 from argparse import Namespace
@@ -27,6 +30,93 @@ def profile():
                                    "frontend": "ghcr.io/test/frontend@sha256:" + "abcdef02" * 8},
         "target_rto_minutes": 60,
     }
+
+
+class WorkflowEvidenceContracts(unittest.TestCase):
+    """Execute only evidence steps, never checkout, Docker, restore or cutover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (B.ROOT / ".github/workflows/representative-replacement-benchmark.yml").read_text()
+
+    def step_script(self, name):
+        block = self.workflow.split("      - name: " + name + "\n", 1)[1]
+        block = block.split("\n      - name:", 1)[0]
+        return textwrap.dedent(block.split("        run: |\n", 1)[1]).rstrip() + "\n"
+
+    def run_step(self, name, env, directory):
+        return subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", self.step_script(name)],
+            cwd=directory, env=env, capture_output=True, text=True, check=True,
+        )
+
+    def test_job_env_does_not_use_runner_context_or_predeclare_evidence_path(self):
+        job_env = self.workflow.split("    env:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertNotIn("${{ runner.", job_env)
+        self.assertNotIn("EVIDENCE_ROOT:", job_env)
+
+    def test_initialization_precedes_checkout_and_exports_for_current_and_later_steps(self):
+        first_step = self.workflow.split("    steps:\n", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("Initialize independent failure evidence", first_step)
+        script = self.step_script("Initialize independent failure evidence")
+        self.assertIn('export EVIDENCE_ROOT="$RUNNER_TEMP/representative-replacement"', script)
+        self.assertIn('>> "$GITHUB_ENV"', script)
+        self.assertLess(script.index('export EVIDENCE_ROOT='), script.index('mkdir -p'))
+
+    def test_evidence_survives_checkout_failure_and_preserves_terminal_company_results(self):
+        for outcome in ("checkout-failed", "passed", "failed"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                runner_temp = root / "runner temp with spaces"
+                runner_temp.mkdir()
+                checkout = root / "empty-checkout"
+                checkout.mkdir()
+                env_file = root / "github-env"
+                env_file.touch()
+                env = {
+                    "PATH": os.environ["PATH"], "RUNNER_TEMP": str(runner_temp),
+                    "GITHUB_ENV": str(env_file), "COMPANY": "company-a", "AUDITED_SHA": "a" * 40,
+                    "EVIDENCE_ROOT": str(root / "stale-inherited-path"),
+                }
+                self.run_step("Initialize independent failure evidence", env, checkout)
+                evidence = runner_temp / "representative-replacement"
+                fallback = evidence / "setup/benchmark.json"
+                self.assertEqual(env_file.read_text(), "EVIDENCE_ROOT=" + str(evidence) + "\n")
+                initial = json.loads(fallback.read_text())
+                self.assertEqual(initial["status"], "BLOCKED")
+                self.assertEqual(initial["reason"], "CHECKOUT_OR_PREREQUISITES_NOT_COMPLETED")
+                self.assertEqual(initial["company"], "company-a")
+                self.assertEqual(initial["audited_sha"], "a" * 40)
+                self.assertIs(initial["traffic_cutover_performed"], False)
+                later_env = {**env, "EVIDENCE_ROOT": str(evidence)}
+                company_result = evidence / "company/benchmark.json"
+                if outcome == "checkout-failed":
+                    # Simulate only checkout's failure status, not a GitHub checkout execution.
+                    failure = subprocess.run(["bash", "-c", "exit 17"], cwd=checkout, env=later_env)
+                    self.assertEqual(failure.returncode, 17)
+                else:
+                    company_result.parent.mkdir()
+                    company_result.write_text(json.dumps({"status": outcome, "company": "company-a"}))
+                self.run_step("Upload company evidence even after a failed stage", later_env, checkout)
+                self.assertEqual(fallback.exists(), outcome == "checkout-failed")
+                if outcome == "checkout-failed":
+                    self.assertEqual(json.loads(fallback.read_text()), initial)
+                else:
+                    self.assertEqual(json.loads(company_result.read_text())["status"], outcome)
+                self.assertTrue(list(evidence.glob("**/*.json")))
+                self.assertEqual(list(checkout.iterdir()), [])
+
+    def test_both_finalizers_always_run_and_preserve_upload_boundary(self):
+        for name in ("Upload company evidence even after a failed stage", "Preserve terminal company evidence"):
+            block = self.workflow.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("        if: always()", block)
+        upload = self.workflow.split("      - name: Preserve terminal company evidence\n", 1)[1]
+        for contract in (
+            "uses: actions/upload-artifact@v4", "if-no-files-found: error", "retention-days: 90",
+            "name: replacement-benchmark-${{ inputs.company }}-${{ inputs.audited_sha }}",
+            "path: ${{ runner.temp }}/representative-replacement/**/*.json",
+        ):
+            self.assertIn(contract, upload)
 
 
 class Contracts(unittest.TestCase):

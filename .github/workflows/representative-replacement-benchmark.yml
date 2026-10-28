@@ -56,11 +56,13 @@ jobs:
       BACKUP_S3_BUCKET: ${{ vars.DR_BENCHMARK_BACKUP_BUCKET }}
       BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.DR_BENCHMARK_BACKUP_ACCESS_KEY_ID }}
       BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.DR_BENCHMARK_BACKUP_SECRET_ACCESS_KEY }}
-      EVIDENCE_ROOT: ${{ runner.temp }}/representative-replacement
     steps:
       - name: Initialize independent failure evidence
         shell: bash
         run: |
+          set -euo pipefail
+          export EVIDENCE_ROOT="$RUNNER_TEMP/representative-replacement"
+          printf 'EVIDENCE_ROOT=%s\n' "$EVIDENCE_ROOT" >> "$GITHUB_ENV"
           mkdir -p "$EVIDENCE_ROOT/setup"
           python3 - <<'PY'
           import json, os, pathlib
