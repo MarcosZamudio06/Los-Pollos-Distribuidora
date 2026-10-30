@@ -1,0 +1,653 @@
+{
+  "schema": "dr2-audit-custody/v1",
+  "baseline_head": "cc9aa7c1acdb408e3e653583854921d1e23e31bc",
+  "versioned_copies": [
+    {
+      "source": "Audit/ERP-PRODUCTION-DR-V2-DESIGN-001.md",
+      "copy": "docs/operations/dr-v2/baseline/ERP-PRODUCTION-DR-V2-DESIGN-001.md",
+      "sha256": "d156cf78b0b8cf5504c04091f3e48c518a046c52524d9ba363e50a7dec750ce4"
+    },
+    {
+      "source": "Audit/ERP-DR-V2-FEASIBILITY-001.md",
+      "copy": "docs/operations/dr-v2/baseline/ERP-DR-V2-FEASIBILITY-001.md",
+      "sha256": "eef49b137f16af52b055054316fd349615e689c422a856efa02683ec0812740b"
+    },
+    {
+      "source": "Audit/ERP-DR-V2-FEASIBILITY-002.md",
+      "copy": "docs/operations/dr-v2/baseline/ERP-DR-V2-FEASIBILITY-002.md",
+      "sha256": "1317ff17cb71c9a07eb410a4e4829201f5886d151da17b3eb9e2058b4e16ad8b"
+    },
+    {
+      "source": "Audit/ERP-DR-V2-FEASIBILITY-003.md",
+      "copy": "docs/operations/dr-v2/baseline/ERP-DR-V2-FEASIBILITY-003.md",
+      "sha256": "fed50b9884b2b594e0142eaab021a36dba2e4865e94504f73a697d00cc5a5800"
+    },
+    {
+      "source": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/measurement-summary.json",
+      "copy": "docs/operations/dr-v2/baseline/feasibility-003-measurement-summary.json",
+      "sha256": "a00ed0b4605ecfd1d81b8a707db2dfb30d39120e84cb1cd05a385d23c6586909"
+    },
+    {
+      "source": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/final-checks.json",
+      "copy": "docs/operations/dr-v2/baseline/feasibility-003-final-checks.json",
+      "sha256": "883cca3860951942d86093d142f89a9bcfa5067d0a790a8c776cac0c1a1cf1f8"
+    }
+  ],
+  "archive_files": [
+    {
+      "path": "Audit/ERP-PRODUCTION-DR-V2-DESIGN-001.md",
+      "sha256": "d156cf78b0b8cf5504c04091f3e48c518a046c52524d9ba363e50a7dec750ce4",
+      "bytes": 105237
+    },
+    {
+      "path": "Audit/ERP-DR-V2-FEASIBILITY-001.md",
+      "sha256": "eef49b137f16af52b055054316fd349615e689c422a856efa02683ec0812740b",
+      "bytes": 20583
+    },
+    {
+      "path": "Audit/ERP-DR-V2-FEASIBILITY-002.md",
+      "sha256": "1317ff17cb71c9a07eb410a4e4829201f5886d151da17b3eb9e2058b4e16ad8b",
+      "bytes": 18565
+    },
+    {
+      "path": "Audit/ERP-DR-V2-FEASIBILITY-003.md",
+      "sha256": "fed50b9884b2b594e0142eaab021a36dba2e4865e94504f73a697d00cc5a5800",
+      "bytes": 24179
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-001/build.log",
+      "sha256": "105c15e5e205c4ec723b355e99104ee2842004b815764118740696aa9bf5e036",
+      "bytes": 27530
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-001/environment-status.json",
+      "sha256": "d0adb01a0e9b6d693537f9ab765f48bf430d9e8e705ec5e969a2f63fac7d7c06",
+      "bytes": 2322
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-001/unit-green.log",
+      "sha256": "fe836cbecd3b6b4f70bec51b58d30c3e45ad72ae7fb3cb63421a0f7337e651ae",
+      "bytes": 105
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-001/unit-red.log",
+      "sha256": "e88bf4b59f3c3e07482b8d80160611530821ca00853d9ba3e713da08ac63ca54",
+      "bytes": 1144
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/full/catalog.json",
+      "sha256": "c1cf5e2c5ec2378ffba977a06402f7a3433bae9d3610771f4486a0832cb07ef8",
+      "bytes": 610
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/full/commands.jsonl",
+      "sha256": "59e05f6c71ec9ba15adaf97d6d754cc26510d962a7e71c5017413afdd382c974",
+      "bytes": 198852
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/full/diagnostics-before-source-loss.json",
+      "sha256": "f08d67b08deecc29c7909cabb713b7e0778bfce97407e3b6f4c8300fca012f34",
+      "bytes": 71400
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/full/diagnostics-pre-cleanup.json",
+      "sha256": "975a4282b9c8c126c8a4da3f81fb14f1beca331f2d1dae2dc84a36136512e359",
+      "bytes": 57401
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/full/result.json",
+      "sha256": "485f093210760f4ba7d54df38aa8a14f1dba7ee5fad1635e6bb4984c6fd0b358",
+      "bytes": 19067
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/legacy/commands.jsonl",
+      "sha256": "7e8137f449abd1312f97efc0f1f9aefead5fd997277313d6f164041259cd1d26",
+      "bytes": 46068
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/legacy/diagnostics-legacy-pre-cleanup.json",
+      "sha256": "37e905d3dcc9b997ec3eb7e1e3df0bf2c23663f181ac638aeabe9aa8f3781f71",
+      "bytes": 26625
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/legacy/result.json",
+      "sha256": "77ff2472e9a483ebe65623264e6c011425aca0b95806247bfe2d048af477e663",
+      "bytes": 4013
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/sha256.json",
+      "sha256": "bb97935377cae59c464937c9f57def72f3098c71e86d617b1407ba35a0d47fec",
+      "bytes": 1475
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/smoke/catalog.json",
+      "sha256": "24642a91e0409d23cb0e7e616075a7dacc09dae3394511de47240d3ed7e360fa",
+      "bytes": 608
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/smoke/commands.jsonl",
+      "sha256": "19b67d7b1cd2d24e1349d279e7bfb2f029ab88fe409a0fa65f273b7ebb0d1cbb",
+      "bytes": 173912
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/smoke/diagnostics-before-source-loss.json",
+      "sha256": "3edd62551b7d941631896e2cb82c06c03930c3c516ac9e3f2ffcd637939f5c4f",
+      "bytes": 60129
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/smoke/diagnostics-pre-cleanup.json",
+      "sha256": "05ea1622b37654dc4b982f27274cb5603be1d13cac817cba89fd6fee29d3a0eb",
+      "bytes": 51012
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/smoke/result.json",
+      "sha256": "7943b877ae29c0ba82e873068129d79994de9edfc64d77806bac3ae423ddc606",
+      "bytes": 12670
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/unit-green.log",
+      "sha256": "a7273d30d00a27894dfcdfa3e001a09677dd34c09dfb1f5d225b3169d62bfcef",
+      "bytes": 116
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-002/unit-red.log",
+      "sha256": "d9b402e6d4114cb653782d30bfda48480bc86b82ae1920bd70259d2ac194388f",
+      "bytes": 5377
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/candidate-5735db0d5bb5.json",
+      "sha256": "4a0c3628157c99d1c03fe382ab50d9f1c2a85135c3d8fa70afd4bac89da552e9",
+      "bytes": 478310
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/catalog.json",
+      "sha256": "7a0c66dc3672352946e91ab1b736d793a23d7d925e3c2bace8f541fe0a7ce89e",
+      "bytes": 610
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/commands.jsonl",
+      "sha256": "9bf545bc43b34860cac915d488e072c3520fe8e45e41eef7485e8e17092be4ae",
+      "bytes": 525327
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/diagnostics-before-source-loss.json",
+      "sha256": "b0bd0cf1d487b0c0379d1cdcecf36c39a971bb569853523d49557d962c1abe16",
+      "bytes": 52465
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/diagnostics-pre-cleanup.json",
+      "sha256": "dc0ee41971d2fc8ec6a80ef36fc50bf62c1d4ee7c73996eb746863c20c1dce4e",
+      "bytes": 3311
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/diagnostics-scenario-5735db0d5bb5.json",
+      "sha256": "80796d473f8a44158de7c089b423a3ae43d7a44e3489d1277388160f41008baf",
+      "bytes": 5493
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/failed-full-selector/result.json",
+      "sha256": "23a52d7625873be6cec68a6bf379a2bdc092195466b5156b4628956b3468247d",
+      "bytes": 490310
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/final-checks.json",
+      "sha256": "883cca3860951942d86093d142f89a9bcfa5067d0a790a8c776cac0c1a1cf1f8",
+      "bytes": 1708
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-03c20e43a568.json",
+      "sha256": "9f57b89bb4ee816ea1e908c927750e8f1a58ba5f29721792c5940d9d8ae9be2a",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-18388729fc4f.json",
+      "sha256": "9f57b89bb4ee816ea1e908c927750e8f1a58ba5f29721792c5940d9d8ae9be2a",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-661017fbaee2.json",
+      "sha256": "769c157281bd5a928875a3bf03d799155eb86e5e66d3df82610a6ca8f8d60045",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-6d936116e3cb.json",
+      "sha256": "bcc1d47eb758d610dc0fe52f9d5a5647958aa30355bd0da56b73ba2ac282f9a0",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-814196a2f3d7.json",
+      "sha256": "9f57b89bb4ee816ea1e908c927750e8f1a58ba5f29721792c5940d9d8ae9be2a",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-9f8d58c8788b.json",
+      "sha256": "9f57b89bb4ee816ea1e908c927750e8f1a58ba5f29721792c5940d9d8ae9be2a",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-dcc7dd5c8c92.json",
+      "sha256": "155f1d6e5837b183b06e27577400756804d6dd6c916751584459f7294e6636e4",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-e5b4d36d59a8.json",
+      "sha256": "9f57b89bb4ee816ea1e908c927750e8f1a58ba5f29721792c5940d9d8ae9be2a",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-f369c21bf0e3.json",
+      "sha256": "9f57b89bb4ee816ea1e908c927750e8f1a58ba5f29721792c5940d9d8ae9be2a",
+      "bytes": 478423
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/candidate-f49d0d8da4a5.json",
+      "sha256": "6d936adef10780228a08feba10d3f1738f91c9b9053d654bbcd1abf2f45d6271",
+      "bytes": 478422
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/catalog.json",
+      "sha256": "9cd658198736234c999b2e4dc1a1beac2bd8a664808784ad87f05a72bd90cf1a",
+      "bytes": 610
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/commands.jsonl",
+      "sha256": "f1de69ef5564b9195c179711926d60dc35e92ba5a1a0a62e9a9b3bd6ad389ad2",
+      "bytes": 831795
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/diagnostics-before-source-loss.json",
+      "sha256": "6f1e205af0a4a852744206f0b7d067d346ff268b55a9cf23160953224dccd84c",
+      "bytes": 52285
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/diagnostics-pre-cleanup.json",
+      "sha256": "0338e7c86139292e441f5a5f6671f15c62218da64ea9d80508a3193402ae6702",
+      "bytes": 9088
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/diagnostics-scenario-814196a2f3d7.json",
+      "sha256": "b7e2d7b6aac27595ce19b15cd328a0611dcddf3470a344a64414578a0e1dac6d",
+      "bytes": 10709
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/diagnostics-scenario-e5b4d36d59a8.json",
+      "sha256": "e6fd1f500d6c4354391d3d6b0f4f1eab2d839beb75165ffc824caea2a4aa7858",
+      "bytes": 10767
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/diagnostics-scenario-f369c21bf0e3.json",
+      "sha256": "6192734d5046dc2ec765aa13150148f30907164a68f2c65bde724350cf4b6623",
+      "bytes": 10028
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/recovery-814196a2f3d7.log",
+      "sha256": "ffb15745a3ff56f1a690dabd4c3c13813cafe4d6be8853fafb8f5b4df23b8f65",
+      "bytes": 2455
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/recovery-e5b4d36d59a8.log",
+      "sha256": "9fc6a5afb94ff5aa797f52326af29ef894974188f189d6c68017ce00f3a640a1",
+      "bytes": 2455
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/recovery-f369c21bf0e3.log",
+      "sha256": "c64a49469505a744bbac31a2603fcc3f25b3f1ab84c2709e89d9535f244ecb6f",
+      "bytes": 2455
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/full/result.json",
+      "sha256": "62042099f282f0ba47a249f16cfbb044dcd597923c6deda2937d777a59354c03",
+      "bytes": 1500095
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-528a6dc73fd7.json",
+      "sha256": "c0f848efbb082e3a8b789a38bf8c068b525bf844bf180eabab8e1f79a8043168",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-57c37cd6876d.json",
+      "sha256": "2a672ab42137ca64825bc94acb37e8f44f7ca6b828788a3af183ef65c7de03e8",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-7f989050b2ae.json",
+      "sha256": "dd88ebaee25ecee888f4c5af8d4df5fac95a1dc2dec5a6e5abef074e0ef80e71",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-939adacf0d44.json",
+      "sha256": "33d10cc191d76ee37d8682f4acb4b2b7e082d3af117d14560577ee7c5de5cbe3",
+      "bytes": 471710
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-c6615112e09e.json",
+      "sha256": "ab88784def5fac05f2058a068fdd549db172cfd6eda614a30b341720aed13d72",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-c6e735d62bba.json",
+      "sha256": "dd88ebaee25ecee888f4c5af8d4df5fac95a1dc2dec5a6e5abef074e0ef80e71",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-d6b79fbe983d.json",
+      "sha256": "dd88ebaee25ecee888f4c5af8d4df5fac95a1dc2dec5a6e5abef074e0ef80e71",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-df71969f6b42.json",
+      "sha256": "dd88ebaee25ecee888f4c5af8d4df5fac95a1dc2dec5a6e5abef074e0ef80e71",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-e6e50e9226a5.json",
+      "sha256": "dd88ebaee25ecee888f4c5af8d4df5fac95a1dc2dec5a6e5abef074e0ef80e71",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/candidate-f27ee8780b36.json",
+      "sha256": "dd88ebaee25ecee888f4c5af8d4df5fac95a1dc2dec5a6e5abef074e0ef80e71",
+      "bytes": 471711
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/catalog.json",
+      "sha256": "60411407239b11e39d7125f388e7d4542d5f9333ecfa797b7a8e445f15930889",
+      "bytes": 611
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/commands.jsonl",
+      "sha256": "cda87f4beb89078c2b238fb82b648f69ca908a6b1a59ecb27b880931443dc665",
+      "bytes": 807677
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/diagnostics-before-source-loss.json",
+      "sha256": "e7d59b9830e99120b72042021a12683d06d59c3fdd9aa31f9fa5d64712257be7",
+      "bytes": 41189
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/diagnostics-pre-cleanup.json",
+      "sha256": "fec872fe8781735fb35585e1a44396761ae0268476f83cae4be7b226af5efa42",
+      "bytes": 6778
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/diagnostics-scenario-7f989050b2ae.json",
+      "sha256": "d275910419ca500e1dfd44d2987c65a7e8939209741c6c144566599d42f5f125",
+      "bytes": 10205
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/diagnostics-scenario-d6b79fbe983d.json",
+      "sha256": "0099810a52aae67cc51aa177bed48dd4a2ac07a144256ceca82a3ca0c1caf0f9",
+      "bytes": 8955
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/diagnostics-scenario-f27ee8780b36.json",
+      "sha256": "afd41d3ff4d80fbe9819ba7d0288e071d5d9a2d89501f467541eb656ce960bf1",
+      "bytes": 9698
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/recovery-7f989050b2ae.log",
+      "sha256": "06d96eaace32c4ed9888f6e816dcde3add76d8131741ebecf6fad38e636fc1ba",
+      "bytes": 1970
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/recovery-d6b79fbe983d.log",
+      "sha256": "db141adae5906c07bcd5d86faadb862e8e533bb1f69370ffcb7e7cb0bcf40a76",
+      "bytes": 1777
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/recovery-f27ee8780b36.log",
+      "sha256": "d2146f1959b04aa253fb464f773c8f3c9a8b61d4f8c7c6d244618def8aeaa2df",
+      "bytes": 1777
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/instrumented-smoke-before-pin/result.json",
+      "sha256": "86d20095b19997233ef96bfe786ee814162fac2ec305094d8800132c0721a5c4",
+      "bytes": 1479718
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/measurement-summary.json",
+      "sha256": "a00ed0b4605ecfd1d81b8a707db2dfb30d39120e84cb1cd05a385d23c6586909",
+      "bytes": 6494
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-106620efea94.json",
+      "sha256": "d2fdee0ad3619140385b68e8f64cc071e571d69559e2a574bb3b414240055fbc",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-1d71c8d7a5cc.json",
+      "sha256": "d6cb3221247d1da83caa1ac26489b9334aa18436cd5fdac0fe18e393c0191409",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-2de772face8f.json",
+      "sha256": "d2fdee0ad3619140385b68e8f64cc071e571d69559e2a574bb3b414240055fbc",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-6ef9d4476c23.json",
+      "sha256": "d2fdee0ad3619140385b68e8f64cc071e571d69559e2a574bb3b414240055fbc",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-6f2a13de9ca2.json",
+      "sha256": "d2fdee0ad3619140385b68e8f64cc071e571d69559e2a574bb3b414240055fbc",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-8bda7c3eabb9.json",
+      "sha256": "c85010f4f6d1cd14f2959c3c7af2e41cc32d035617cfb8cb44b72320790cfd23",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-ac79f15d51ee.json",
+      "sha256": "d2fdee0ad3619140385b68e8f64cc071e571d69559e2a574bb3b414240055fbc",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-bb0e2cf939db.json",
+      "sha256": "b8036558344b785a358e1de6221686984b11e848a7cc99418265d5e66603b4ea",
+      "bytes": 471581
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-c7159cc6ee23.json",
+      "sha256": "d2fdee0ad3619140385b68e8f64cc071e571d69559e2a574bb3b414240055fbc",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/candidate-d407368c01a7.json",
+      "sha256": "34ae67fc065a3da0dfd09555a9b39381610ba62491ceed5cbfaa902d490afb6c",
+      "bytes": 471582
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/catalog.json",
+      "sha256": "8f61456fc0b3a26e9cd17a0b8c84060ae2511d6afc379ee92b07c88209773094",
+      "bytes": 610
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/commands.jsonl",
+      "sha256": "80d216fadaec4e53541cbd2787e7c3d88a58a3e7a3897af5a753af4ef83c4dfc",
+      "bytes": 792956
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/diagnostics-before-source-loss.json",
+      "sha256": "d672ce38afbccd2a18528925ee7b22b3407a8a1cceaded9ea295935b43a291d7",
+      "bytes": 41155
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/diagnostics-pre-cleanup.json",
+      "sha256": "5710ec513badebfedb107becf2edb8f806d706ef06b7d9b333104254828d12cb",
+      "bytes": 8016
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/diagnostics-scenario-106620efea94.json",
+      "sha256": "585e3103b658edcf82e15f6d72a755dfea84957631c1c93b4ec5f0950824b9c9",
+      "bytes": 7475
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/diagnostics-scenario-6f2a13de9ca2.json",
+      "sha256": "300facb2d2071377f12e09de5adc37f0bb75843fff2928e63233aefc5b1a4891",
+      "bytes": 7001
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/diagnostics-scenario-c7159cc6ee23.json",
+      "sha256": "b296320dcd15e6a4ebf6aaad1df2bffbbee940def7257a9f851f4cff4ca1d4ce",
+      "bytes": 6260
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/pilot-smoke/result.json",
+      "sha256": "7bde5b5c2c37a3acfe1815f919ef2bdd39c34703359219138a3cf0e9edf1d135",
+      "bytes": 493743
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/sha256.json",
+      "sha256": "1ae7c96df08eae848d9132ee3fd59a44f55f3fe5c0bab1f2773f299f4f84308d",
+      "bytes": 10808
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-08bd1593b2ca.json",
+      "sha256": "fded6205b3c76c8aaa757e28dab2dd7ca7ae4380b0c1c6ce9c0897c6a204eca2",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-355c86554301.json",
+      "sha256": "651080ab60b0bab609df24bbe46bd5a44b610f05d24dabae05e5629185b970f1",
+      "bytes": 471822
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-576df29a5a05.json",
+      "sha256": "a82968f94a6218d5a1c90cb28fc5fe4e06b18381e421a745dc7952cf39811279",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-66f290c18ccc.json",
+      "sha256": "a82968f94a6218d5a1c90cb28fc5fe4e06b18381e421a745dc7952cf39811279",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-78e278a86483.json",
+      "sha256": "a82968f94a6218d5a1c90cb28fc5fe4e06b18381e421a745dc7952cf39811279",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-956f74bc1c1e.json",
+      "sha256": "a82968f94a6218d5a1c90cb28fc5fe4e06b18381e421a745dc7952cf39811279",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-b211a144ce4e.json",
+      "sha256": "a82968f94a6218d5a1c90cb28fc5fe4e06b18381e421a745dc7952cf39811279",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-b552bb455b43.json",
+      "sha256": "f7fb8843a69823df2612f9444c5f8b5e1e9041566156907df6d981d55a695b91",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-d4731ef72cb9.json",
+      "sha256": "55650bac3d7ba444edf6053289bba3d9fc831419e912264182d85ebbaa9be089",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/candidate-e26a24cea83a.json",
+      "sha256": "a82968f94a6218d5a1c90cb28fc5fe4e06b18381e421a745dc7952cf39811279",
+      "bytes": 471823
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/catalog.json",
+      "sha256": "d25c9bfcf92964e4697aede85924a2ca797eca85396ffdc7231ef27107487f39",
+      "bytes": 610
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/commands.jsonl",
+      "sha256": "88833d082e7c0924d36f20bdf963a4e9c378c7b6c1af60b0ee85f007646fdf40",
+      "bytes": 807459
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/diagnostics-before-source-loss.json",
+      "sha256": "69c1f430bbe57f498fc2aa39eeca1a8f60a9f295ebf738e4116dab3d8ce5404c",
+      "bytes": 39027
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/diagnostics-pre-cleanup.json",
+      "sha256": "c022fe00c675a407f91827e3676687ac694515bb6da9dc020d769bba6c9c918a",
+      "bytes": 9090
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/diagnostics-scenario-78e278a86483.json",
+      "sha256": "42ee55dc70b903b48e755e6b75c3ae015b26d9c1443e0be30224f85097fe6f2d",
+      "bytes": 8955
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/diagnostics-scenario-956f74bc1c1e.json",
+      "sha256": "0e2753e1a3994ecebe4d45a11c4841e6933efa1175bf5053a4c427528a954727",
+      "bytes": 10205
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/diagnostics-scenario-e26a24cea83a.json",
+      "sha256": "4543b2aa9e4701c940cbb9cb61afc7b56aa53f60458c38e3a199a14075d9be21",
+      "bytes": 9700
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/recovery-78e278a86483.log",
+      "sha256": "8db3f3d368a302b2b6621ba60045401de42c44f7bd2991abab364f7bb6405794",
+      "bytes": 1777
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/recovery-956f74bc1c1e.log",
+      "sha256": "5da15d33d41d4ce7d7fa2e191586bc6a3084ded99e4514394d1ffffa3b986b8c",
+      "bytes": 1970
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/recovery-e26a24cea83a.log",
+      "sha256": "da6335c4c38c65cf525ca368654628bf1a01c7152aa3f2ae2810a5b4c107d779",
+      "bytes": 1777
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/smoke/result.json",
+      "sha256": "caff0e64755cddd48b140d0e930439c78175730a8821248cc2ccd54e1ebc7b08",
+      "bytes": 1479825
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/source-hashes.json",
+      "sha256": "14719fa04f9f6077cd01910880f24e067e16cc8da3e88ee07c3be885e6ef1db7",
+      "bytes": 851
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/unit-green.log",
+      "sha256": "712619bd0527b39dc96e85c3e6ab4d1551f5a576e1012bc19220810868c726f8",
+      "bytes": 124
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/unit-red-native-timing.log",
+      "sha256": "36163c63cf097cf546b7b7be0d8b9d3642c0ec1963fa3e96972825209c0efcf5",
+      "bytes": 796
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/unit-red-origin.log",
+      "sha256": "ca8cf9a3e579366f2ae2cb0a0eef332446bcaf3b009c501f471a8411208c456c",
+      "bytes": 678
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/unit-red-selector.log",
+      "sha256": "c4e3de29cff9e0522fb850c92ff5a3fae861fb8cdab1956d79376eb8b0545e1b",
+      "bytes": 860
+    },
+    {
+      "path": "Audit/evidence/ERP-DR-V2-FEASIBILITY-003/unit-red.log",
+      "sha256": "2decb427c757d2d7895bc7d82b7fe5c0fd9bda7e588faf5397a4d2fc158e2fa0",
+      "bytes": 1083
+    }
+  ],
+  "external_custody_status": "PENDING_OPERATOR_INDEPENDENT_READBACK_AND_SIGNED_RECEIPT",
+  "exclude_from_git": [
+    "private temporary material",
+    "credentials and keys",
+    "raw provider/argv/environment dumps",
+    "unreviewed raw evidence",
+    "local tar archives",
+    "operational/business datasets"
+  ],
+  "release_blocker": "Raw evidence must be independently preserved with hash/readback and signed receipt; Git copies preserve reports, not all raw evidence."
+}

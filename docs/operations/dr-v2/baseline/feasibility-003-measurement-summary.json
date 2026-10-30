@@ -1,0 +1,212 @@
+{
+  "smoke": {
+    "rows": 1024,
+    "payload_statistics": "1024|1024|1024|1048576",
+    "positive": {
+      "positive-1": {
+        "seconds": 5.14155258302344,
+        "phases": {
+          "repository_materialization": 2.417207291990053,
+          "repository_probe": 0.32504212501225993,
+          "historical_s3_recovery": 0.34613695804728195,
+          "target_preparation": 0.18148691701935604,
+          "postgres_restore": 1.0042253750143573,
+          "wal_replay": 0.4996858340455219,
+          "readback_integrity": 0.3645366249838844,
+          "scenario_cleanup": 5.579737583990209
+        },
+        "materialized_bytes": 15378880,
+        "materialization_MiB_s": 6.067515566287686,
+        "wal_get_seconds": 0.025402874000292286,
+        "wal_bytes": 8081520
+      },
+      "positive-2": {
+        "seconds": 5.184858500026166,
+        "phases": {
+          "repository_materialization": 2.42168795800535,
+          "repository_probe": 0.3325636250083335,
+          "historical_s3_recovery": 0.3606685840059072,
+          "target_preparation": 0.2152377080055885,
+          "postgres_restore": 0.9795487499795854,
+          "wal_replay": 0.498808000003919,
+          "readback_integrity": 0.37163124996004626,
+          "scenario_cleanup": 5.69434662500862
+        },
+        "materialized_bytes": 15378880,
+        "materialization_MiB_s": 6.056289301274772,
+        "wal_get_seconds": 0.025630750999880547,
+        "wal_bytes": 8081520
+      }
+    },
+    "negative": {
+      "wal_missing": {
+        "rejection": "WAL_TARGET_UNREACHABLE",
+        "stage": "wal_replay",
+        "target_created": true
+      },
+      "object_sha256": {
+        "rejection": "OBJECT_INTEGRITY",
+        "stage": "object_preflight",
+        "target_created": false
+      },
+      "object_size": {
+        "rejection": "OBJECT_INTEGRITY",
+        "stage": "object_preflight",
+        "target_created": false
+      },
+      "catalog_altered": {
+        "rejection": "CATALOG_AUTHENTICATION_FAILED",
+        "stage": "catalog_authentication",
+        "target_created": false
+      },
+      "cross_company": {
+        "rejection": "COMPANY_MISMATCH",
+        "stage": "catalog_authentication",
+        "target_created": false
+      },
+      "wrong_credentials": {
+        "rejection": "BAD_CREDENTIALS",
+        "stage": "repository_probe",
+        "target_created": false
+      },
+      "repository_unavailable": {
+        "rejection": "REPOSITORY_UNAVAILABLE",
+        "stage": "repository_probe",
+        "target_created": false
+      },
+      "historical_object_missing": {
+        "rejection": "MISSING_OBJECT",
+        "stage": "object_preflight",
+        "target_created": false
+      }
+    },
+    "optional_native_wal": [
+      {
+        "scenario": "positive-1",
+        "raw_extractor_value": 0,
+        "reported_ms": null,
+        "status": "NOT_AVAILABLE",
+        "samples": 0
+      },
+      {
+        "scenario": "positive-2",
+        "raw_extractor_value": 0,
+        "reported_ms": null,
+        "status": "NOT_AVAILABLE",
+        "samples": 0
+      },
+      {
+        "scenario": "wal_missing",
+        "raw_extractor_value": 0,
+        "reported_ms": null,
+        "status": "NOT_AVAILABLE",
+        "samples": 0
+      }
+    ]
+  },
+  "full": {
+    "rows": 32768,
+    "payload_statistics": "32768|1024|1024|33554432",
+    "positive": {
+      "positive-1": {
+        "seconds": 6.347463541023899,
+        "phases": {
+          "repository_materialization": 2.661408583051525,
+          "repository_probe": 0.3284584590001032,
+          "historical_s3_recovery": 0.3366783329984173,
+          "target_preparation": 0.18709716602461413,
+          "postgres_restore": 1.0893890419974923,
+          "wal_replay": 1.2179671250050887,
+          "readback_integrity": 0.5181464999914169,
+          "scenario_cleanup": 5.617920624965336
+        },
+        "materialized_bytes": 92820384,
+        "materialization_MiB_s": 33.26073900245322,
+        "wal_get_seconds": 0.10296716400003447,
+        "wal_bytes": 67586880
+      },
+      "positive-2": {
+        "seconds": 6.421528416045476,
+        "phases": {
+          "repository_materialization": 2.766882667026948,
+          "repository_probe": 0.33680225000716746,
+          "historical_s3_recovery": 0.3435818750294857,
+          "target_preparation": 0.201647125009913,
+          "postgres_restore": 1.1069072500104085,
+          "wal_replay": 1.197652584000025,
+          "readback_integrity": 0.4646250830264762,
+          "scenario_cleanup": 5.629710084001999
+        },
+        "materialized_bytes": 92820384,
+        "materialization_MiB_s": 31.99283342032063,
+        "wal_get_seconds": 0.1065305399998806,
+        "wal_bytes": 67586880
+      }
+    },
+    "negative": {
+      "wal_missing": {
+        "rejection": "WAL_TARGET_UNREACHABLE",
+        "stage": "wal_replay",
+        "target_created": true
+      },
+      "object_sha256": {
+        "rejection": "OBJECT_INTEGRITY",
+        "stage": "object_preflight",
+        "target_created": false
+      },
+      "object_size": {
+        "rejection": "OBJECT_INTEGRITY",
+        "stage": "object_preflight",
+        "target_created": false
+      },
+      "catalog_altered": {
+        "rejection": "CATALOG_AUTHENTICATION_FAILED",
+        "stage": "catalog_authentication",
+        "target_created": false
+      },
+      "cross_company": {
+        "rejection": "COMPANY_MISMATCH",
+        "stage": "catalog_authentication",
+        "target_created": false
+      },
+      "wrong_credentials": {
+        "rejection": "BAD_CREDENTIALS",
+        "stage": "repository_probe",
+        "target_created": false
+      },
+      "repository_unavailable": {
+        "rejection": "REPOSITORY_UNAVAILABLE",
+        "stage": "repository_probe",
+        "target_created": false
+      },
+      "historical_object_missing": {
+        "rejection": "MISSING_OBJECT",
+        "stage": "object_preflight",
+        "target_created": false
+      }
+    },
+    "optional_native_wal": [
+      {
+        "scenario": "positive-1",
+        "raw_extractor_value": 0,
+        "reported_ms": null,
+        "status": "NOT_AVAILABLE",
+        "samples": 0
+      },
+      {
+        "scenario": "positive-2",
+        "raw_extractor_value": 0,
+        "reported_ms": null,
+        "status": "NOT_AVAILABLE",
+        "samples": 0
+      },
+      {
+        "scenario": "wal_missing",
+        "raw_extractor_value": 0,
+        "reported_ms": null,
+        "status": "NOT_AVAILABLE",
+        "samples": 0
+      }
+    ]
+  }
+}

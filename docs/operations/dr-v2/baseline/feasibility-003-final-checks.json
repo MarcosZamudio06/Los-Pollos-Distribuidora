@@ -1,0 +1,25 @@
+{
+  "preserved_files": {
+    ".github/workflows/representative-replacement-benchmark.yml": "fce73f9910d8ff7ea4b0666a0938a6e0dac68411e5e2863f45bd95ec4a53b703",
+    "scripts/database/test-representative-replacement-benchmark.py": "f9232bfe007beeb83c3caf53d9f59f7d6602460bcf932d52763448598e97240c",
+    "scripts/database/dr-v2-feasibility/Dockerfile": "0a7337f079fd81877ba4fdf8ecd2e6746826fd057986ce5aed112c0811ec4fe8",
+    "scripts/database/dr-v2-feasibility/reproduce_bootstrap.py": "b23bb0c2d0a9603158ce43d84e477774d6ffe209831fc3cb4eccdf096c011642",
+    "docker-compose.production.yml": "713bf24f581a5c11af3106d0a1492eb275bbf08091b8024ba11abe19b3396180",
+    "backend/src/modules/object-storage/object-storage.port.ts": "da04256174579254632498c93a1b6e87737426b220130c06bc11d2660580e224",
+    "Audit/ERP-DR-V2-FEASIBILITY-001.md": "eef49b137f16af52b055054316fd349615e689c422a856efa02683ec0812740b",
+    "Audit/ERP-DR-V2-FEASIBILITY-002.md": "1317ff17cb71c9a07eb410a4e4829201f5886d151da17b3eb9e2058b4e16ad8b",
+    "Audit/ERP-PRODUCTION-DR-V2-DESIGN-001.md": "d156cf78b0b8cf5504c04091f3e48c518a046c52524d9ba363e50a7dec750ce4"
+  },
+  "head": "18d25b22b79167c99c98bfe0054a9821a875b088",
+  "tracked_diff_sha256": "89140d8c835671be15172d755171fd754f8f1085bf6cff2b3034e2c610284b2f",
+  "index_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "baseline_preservation": "PASS",
+  "evidence_integrity": "PASS",
+  "source_hashes": "PASS",
+  "python_ast": "PASS",
+  "scenario_assertions": "PASS",
+  "privacy_structural_check": "PASS",
+  "unit_tests": "25/25 PASS",
+  "report_sha256": "fed50b9884b2b594e0142eaab021a36dba2e4865e94504f73a697d00cc5a5800",
+  "report_structural_readback": "PASS"
+}

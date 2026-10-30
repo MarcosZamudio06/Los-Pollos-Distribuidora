@@ -1,0 +1,21 @@
+{
+  "schema": "dr2-hypothetical-profiles/v1",
+  "source": "docs/operations/dr-v2/baseline/ERP-PRODUCTION-DR-V2-DESIGN-001.md section 8.4",
+  "classification": "hypotheses-not-business-volume-not-purchase-authorization",
+  "profiles": {
+    "small": {"database_gib": 10, "required_objects_gib": 20, "wal_avg_gib_hour": 1, "wal_peak_gib_hour": 5,
+              "new_evidence_per_day": 500, "new_object_mean_mib": 1, "retired_versions_gib_day": 0.1,
+              "assumed_effective_mib_second": 80, "assumed_replay_gib_minute": 2,
+              "hypothetical_total_seconds": 2064, "cpu_range": [8,12], "ram_gib": 32, "exploratory_iops": 3000},
+    "medium": {"database_gib": 100, "required_objects_gib": 200, "wal_avg_gib_hour": 5, "wal_peak_gib_hour": 20,
+               "new_evidence_per_day": 5000, "new_object_mean_mib": 1.5, "retired_versions_gib_day": 2,
+               "assumed_effective_mib_second": 150, "assumed_replay_gib_minute": 4,
+               "hypothetical_total_seconds": 3818, "cpu_range": [16,16], "ram_gib": 64, "exploratory_iops": 10000},
+    "high": {"database_gib": 500, "required_objects_gib": 2000, "wal_avg_gib_hour": 25, "wal_peak_gib_hour": 80,
+             "new_evidence_per_day": 50000, "new_object_mean_mib": 2, "retired_versions_gib_day": 25,
+             "assumed_effective_mib_second": 250, "assumed_replay_gib_minute": 10,
+             "hypothetical_total_seconds": 12160, "cpu_range": [32,32], "ram_gib": 128, "exploratory_iops": 30000}
+  },
+  "unmeasured": ["live_object_count", "object_size_distribution", "readback_amplification", "provider_tariffs", "p95_native_service_recovery"],
+  "operational_profile_rule": "Only separately approved anonymized counts/distributions may replace these hypotheses. The generated drill data remains synthetic."
+}

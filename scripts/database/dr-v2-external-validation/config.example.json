@@ -1,0 +1,27 @@
+{
+  "schema": "dr2-external-preparation/v1",
+  "audited_sha": "WORKFLOW_SHA",
+  "run_id": "dr2-ext-contract-001",
+  "company": "lab-company-a",
+  "data_classification": "synthetic",
+  "approval": {"approved": false, "reference": "approval-not-issued", "expires_at": "2000-01-01T00:00:00Z"},
+  "hosts": {
+    "source": {"ref": "test-source-001", "failure_domain": "test-source-domain", "role": "disposable-dr-test"},
+    "target": {"ref": "test-target-002", "failure_domain": "test-target-domain", "role": "disposable-dr-test"},
+    "catalog": {"ref": "test-catalog-003", "failure_domain": "test-catalog-domain", "role": "disposable-dr-test"}
+  },
+  "images": {"database": null, "backend": null, "frontend": null, "gis": null, "probe": null},
+  "toolchain": {"postgres": "16.14", "postgis": "3.5.7", "pgbackrest": "2.60.0", "python": "3.12.12", "boto3": "1.40.0"},
+  "limits": {"memory_bytes": 34359738368, "disk_bytes": 214748364800, "cpus": 8, "total_seconds": 7200,
+             "command_seconds": 300, "credential_ttl_seconds": 3600, "max_probe_bytes": 107374182400},
+  "storage": {"provider": "b2", "endpoint": "https://unapproved.invalid", "region": "unapproved",
+              "tls_verify": true, "working_bucket": "unapproved-dr2-working", "vault_bucket": "unapproved-dr2-vault",
+              "objects_bucket": "unapproved-dr2-objects", "catalog_bucket": "unapproved-dr2-catalog",
+              "retention_days": 47, "recovery_days": 35, "max_full_gap_days": 7, "grace_days": 5},
+  "prefix": "dr-v2/lab-company-a/dr2-ext-contract-001/",
+  "catalog": {"key": "dr-v2/lab-company-a/dr2-ext-contract-001/catalog.json", "version_id": "REQUIRES_PROVIDER_VERSION",
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+  "profile": {"name": "small-hypothesis", "kind": "hypothesis", "approval_ref": null,
+              "database_bytes": 10737418240, "required_object_bytes": 21474836480, "object_count": 20000, "wal_bytes": 2147483648},
+  "traffic_policy": "closed-private-observer-only"
+}

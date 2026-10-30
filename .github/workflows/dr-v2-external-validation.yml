@@ -1,0 +1,144 @@
+name: DR v2 External Preparation (no deployment)
+
+on:
+  workflow_dispatch:
+    inputs:
+      audited_sha:
+        description: Exact approved SHA equal to the selected protected main workflow revision
+        required: true
+        type: string
+      approved_config:
+        description: Reviewed non-secret JSON under scripts/database/dr-v2-external-validation/approved/
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: dr-v2-external-validation
+  cancel-in-progress: false
+
+jobs:
+  prepare-and-read-only-probe:
+    name: Approved preparation and historical-version readback only
+    runs-on: ubuntu-24.04
+    environment: dr-v2-external-validation
+    timeout-minutes: 45
+    env:
+      AUDITED_SHA: ${{ inputs.audited_sha }}
+      APPROVED_CONFIG: ${{ inputs.approved_config }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Initialize independent blocked evidence before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export EVIDENCE_ROOT="$RUNNER_TEMP/dr-v2-external-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir "$EVIDENCE_ROOT"
+          printf 'EVIDENCE_ROOT=%s\n' "$EVIDENCE_ROOT" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import json, os, pathlib
+          pathlib.Path(os.environ['EVIDENCE_ROOT'], 'initial.json').write_text(json.dumps({
+              'status':'BLOCKED_EXTERNAL_INFRASTRUCTURE','rpo_seconds':None,'rto_seconds':None,
+              'traffic_cutover_performed':False,'production_authorized':False})+'\n')
+          PY
+          [[ "$AUDITED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$AUDITED_SHA"
+      - name: Check out exact workflow and candidate SHA
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.audited_sha }}
+          persist-credentials: false
+      - name: Verify protected Environment approval and secret provenance
+        env:
+          DR2_ENVIRONMENT_AUDIT_TOKEN: ${{ secrets.DR2_ENVIRONMENT_AUDIT_TOKEN }}
+        run: python3 scripts/database/dr-v2-external-validation/environment_gate.py --output "$EVIDENCE_ROOT/environment.json"
+      - name: Validate non-secret input boundary and prepare native coordinator
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$AUDITED_SHA"
+          python3 - <<'PY'
+          import os, pathlib, re
+          value = os.environ['APPROVED_CONFIG']
+          if not re.fullmatch(r'scripts/database/dr-v2-external-validation/approved/[a-z0-9-]+\.json', value):
+              raise SystemExit('APPROVED_CONFIG_PATH_REJECTED')
+          p = pathlib.Path(value)
+          if p.is_symlink() or not p.is_file() or p.resolve() != pathlib.Path.cwd() / value:
+              raise SystemExit('APPROVED_CONFIG_UNAVAILABLE')
+          PY
+          python3 scripts/database/dr-v2-external-validation/prepare.py \
+            --config "$APPROVED_CONFIG" --audited-sha "$AUDITED_SHA" \
+            --output "$EVIDENCE_ROOT/preparation" --check-host
+      - name: Read exact external versions in digest-pinned bounded probe
+        shell: bash
+        env:
+          DR2_RESTORE_ACCESS_KEY_ID: ${{ secrets.DR2_RESTORE_ACCESS_KEY_ID }}
+          DR2_RESTORE_SECRET_ACCESS_KEY: ${{ secrets.DR2_RESTORE_SECRET_ACCESS_KEY }}
+          DR2_RESTORE_SESSION_TOKEN: ${{ secrets.DR2_RESTORE_SESSION_TOKEN }}
+          DR2_CATALOG_HMAC_KEY: ${{ secrets.DR2_CATALOG_HMAC_KEY }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib
+          policy = json.loads(pathlib.Path(os.environ['EVIDENCE_ROOT'], 'environment.json').read_text())
+          if os.environ.get('DR2_RESTORE_SESSION_TOKEN') and not policy.get('session_token_environment_scoped'):
+              raise SystemExit('SESSION_TOKEN_NOT_ENVIRONMENT_SCOPED')
+          PY
+          image=$(python3 -c 'import json,os; print(json.load(open(os.environ["APPROVED_CONFIG"]))["images"]["probe"])')
+          docker pull --platform linux/amd64 "$image"
+          docker run --rm --name "dr2-ext-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --label "erp.dr2.external.run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --platform linux/amd64 --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --memory 4g --memory-swap 4g --cpus 2 --pids-limit 128 \
+            --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --env DR2_RESTORE_ACCESS_KEY_ID --env DR2_RESTORE_SECRET_ACCESS_KEY \
+            --env DR2_RESTORE_SESSION_TOKEN --env DR2_CATALOG_HMAC_KEY \
+            --volume "$GITHUB_WORKSPACE:/work:ro" --volume "$EVIDENCE_ROOT:/evidence" \
+            --workdir /work --entrypoint python3 "$image" \
+            scripts/database/dr-v2-external-validation/probe.py --config "$APPROVED_CONFIG" \
+            --audited-sha "$AUDITED_SHA" --output /evidence/probe.json --approved-read-only-probe
+      - name: Remove only the exact owned probe if interrupted
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="dr2-ext-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          # A daemon error is not evidence of absence. Inventory this run only.
+          docker version --format '{{.Server.Version}}' >/dev/null
+          owned=$(docker ps -a --filter "label=erp.dr2.external.run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --format '{{.Names}}')
+          if test -n "$owned"; then
+            test "$owned" = "$name"
+            owner=$(docker container inspect --format '{{index .Config.Labels "erp.dr2.external.run"}}' "$name")
+            test "$owner" = "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            docker rm --force "$name" >/dev/null
+          fi
+          remaining=$(docker ps -aq --filter "label=erp.dr2.external.run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          test -z "$remaining"
+          python3 - <<'PY'
+          import json, os, pathlib
+          pathlib.Path(os.environ['EVIDENCE_ROOT'], 'cleanup.json').write_text(json.dumps({
+              'status':'OWNED_PROBE_ABSENCE_VERIFIED','remote_resources_created':False})+'\n')
+          PY
+      - name: Preserve only allowlisted sanitized summaries
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dr-v2-external-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/dr-v2-external-${{ github.run_id }}-${{ github.run_attempt }}/initial.json
+            ${{ runner.temp }}/dr-v2-external-${{ github.run_id }}-${{ github.run_attempt }}/environment.json
+            ${{ runner.temp }}/dr-v2-external-${{ github.run_id }}-${{ github.run_attempt }}/preparation/preparation.json
+            ${{ runner.temp }}/dr-v2-external-${{ github.run_id }}-${{ github.run_attempt }}/probe.json
+            ${{ runner.temp }}/dr-v2-external-${{ github.run_id }}-${{ github.run_attempt }}/cleanup.json
+          if-no-files-found: error
+          retention-days: 90
+
+# Preparation + read-only probe, NOT a host-loss/service-RTO runner.
+# External fault/provision/service adapters require a separate approved work unit.
+# No production runner, provisioning, restore, promotion, cutover or v1 mutation.
