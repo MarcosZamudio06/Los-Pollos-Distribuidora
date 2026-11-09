@@ -1,10 +1,5 @@
-import {
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { reconcileRealtimeQuery } from "../../lib/realtimeRecovery";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   BellRing,
   CalendarDays,
@@ -29,7 +24,7 @@ import {
   Input,
 } from "../../components/ui";
 import { getOperationalDate } from "../../lib/operationalDate";
-import { cedisSocket } from "../../lib/cedisSocket";
+import { cedisSocket, type CedisConnectionState } from "../../lib/cedisSocket";
 import { useAuth } from "../auth";
 import {
   useCedisIncomingSupplies,
@@ -88,7 +83,8 @@ const workerSteps = [
   },
   {
     title: "Espera a matriz",
-    description: "El reporte queda como evidencia; no envíes un segundo mensaje.",
+    description:
+      "El reporte queda como evidencia; no envíes un segundo mensaje.",
   },
 ] as const;
 
@@ -424,7 +420,8 @@ function ReceiptDetail({
               className="mt-3 text-sm font-semibold text-[var(--erp-foreground)]"
               id="cedis-receipt-dialog-description"
             >
-              {supply.origin.name} <span className="px-1 text-[var(--erp-info)]">→</span>{" "}
+              {supply.origin.name}{" "}
+              <span className="px-1 text-[var(--erp-info)]">→</span>{" "}
               {supply.destination.name}
             </p>
             <p className="mt-1 text-xs text-[var(--erp-muted-foreground)]">
@@ -662,7 +659,8 @@ function ReceiptDetail({
               />
               <span>
                 <strong>{copy.receivedStatus}.</strong>{" "}
-                {copy.receivedDescription} Recibió {supply.receipt.receivedBy.name} el{" "}
+                {copy.receivedDescription} Recibió{" "}
+                {supply.receipt.receivedBy.name} el{" "}
                 {dateTime(supply.receipt.receivedAt)}.
               </span>
             </p>
@@ -687,6 +685,8 @@ export function CedisIncomingSuppliesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string>();
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [connection, setConnection] =
+    useState<CedisConnectionState>("connecting");
   const mode: IncomingSuppliesMode =
     user?.role === "SELLER" ? "worker" : "reviewer";
   const copy = incomingPageCopy[mode];
@@ -704,7 +704,8 @@ export function CedisIncomingSuppliesPage() {
   const detail = useCedisIncomingSupply(selectedId);
   const seenNotification = useRef<string | undefined>(undefined);
   const selectedSupply = selectedId
-    ? detail.data ?? supplies.data?.items.find((item) => item.id === selectedId)
+    ? (detail.data ??
+      supplies.data?.items.find((item) => item.id === selectedId))
     : undefined;
   const socketLocationId =
     user?.operationalLocationId ?? supplies.data?.items[0]?.origin.id;
@@ -718,17 +719,29 @@ export function CedisIncomingSuppliesPage() {
         if (supply.businessDate !== businessDate) return;
         if (seenNotification.current === supply.transferId) return;
         seenNotification.current = supply.transferId;
-        void queryClient.invalidateQueries({
-          queryKey: cedisQueryKeys.incomingSupplies(filters),
-        });
+        void reconcileRealtimeQuery(
+          queryClient,
+          cedisQueryKeys.incomingSupplies(filters),
+        );
         toast.info(`Nuevo envío CEDIS: ${supply.transferNumber}`, {
           description: `${supply.origin.name} → ${supply.destination.name}`,
         });
       },
       () => {
-        void queryClient.invalidateQueries({
-          queryKey: cedisQueryKeys.incomingSupplies(filters),
-        });
+        void reconcileRealtimeQuery(
+          queryClient,
+          cedisQueryKeys.incomingSupplies(filters),
+        );
+      },
+      {
+        onConnectionState: setConnection,
+        onSupplyReceived: (supply) => {
+          if (supply.businessDate !== businessDate) return;
+          void reconcileRealtimeQuery(
+            queryClient,
+            cedisQueryKeys.incomingSupplies(filters),
+          );
+        },
       },
     );
   }, [accessToken, businessDate, filters, queryClient, socketLocationId]);
@@ -758,6 +771,41 @@ export function CedisIncomingSuppliesPage() {
               <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--erp-muted-foreground)]">
                 {copy.description}
               </p>
+              <div
+                aria-label="Estado de conexión CEDIS"
+                aria-live="polite"
+                aria-atomic="true"
+                role="status"
+                className="mt-4 flex flex-wrap items-center gap-2 text-sm"
+              >
+                <Badge
+                  tone={
+                    connection === "connected"
+                      ? "green"
+                      : connection === "error" || connection === "disconnected"
+                        ? "red"
+                        : "amber"
+                  }
+                >
+                  {
+                    {
+                      connecting: "Conectando",
+                      connected: "Conectado",
+                      reconnecting: "Reconectando",
+                      disconnected: "Desconectado",
+                      error: "Error de conexión",
+                    }[connection]
+                  }
+                </Badge>
+                {connection !== "connected" && (
+                  <span>
+                    Las notificaciones en tiempo real no están disponibles
+                    temporalmente. Los datos visibles pueden estar
+                    desactualizados; las consultas REST autorizadas siguen
+                    disponibles.
+                  </span>
+                )}
+              </div>
               {mode === "worker" ? (
                 <ol
                   aria-label="Pasos para avisar a matriz"
@@ -786,8 +834,8 @@ export function CedisIncomingSuppliesPage() {
                     Revisión antes de confirmar
                   </p>
                   <p className="mt-1 leading-6 text-[var(--erp-muted-foreground)]">
-                    Inspecciona diferencias y notas; la confirmación es el cierre
-                    único de la recepción.
+                    Inspecciona diferencias y notas; la confirmación es el
+                    cierre único de la recepción.
                   </p>
                 </div>
               )}

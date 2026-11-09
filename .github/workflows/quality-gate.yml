@@ -159,10 +159,12 @@ jobs:
           npm --prefix backend exec -- prisma generate --schema backend/prisma/schema.prisma
       - name: Select run-owned GIS fixture paths
         run: |
-          echo "REM003_CI_EVIDENCE_DIR=$RUNNER_TEMP/rem003-diagnostics" >> "$GITHUB_ENV"
-          echo "REM003_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
-          echo "REM004_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
-          echo "REM004_RENDERING_DIR=$RUNNER_TEMP/functional-rendering" >> "$GITHUB_ENV"
+          {
+            echo "REM003_CI_EVIDENCE_DIR=$RUNNER_TEMP/rem003-diagnostics"
+            echo "REM003_GIS_DIR=$RUNNER_TEMP/functional-gis"
+            echo "REM004_GIS_DIR=$RUNNER_TEMP/functional-gis"
+            echo "REM004_RENDERING_DIR=$RUNNER_TEMP/functional-rendering"
+          } >> "$GITHUB_ENV"
       - name: Pull pinned Linux Chromium runtime
         run: docker pull mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
       - name: Prepare public GIS and real cartography fixtures

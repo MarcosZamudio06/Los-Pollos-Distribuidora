@@ -45,20 +45,27 @@ export class UsersController {
   }
 
   @Post()
-  async create(@Body() body: CreateUserDto) {
+  async create(
+    @Body() body: CreateUserDto,
+    @CurrentUser() actor: AuthenticatedUser & { authSessionId: string },
+  ) {
     return {
       success: true,
       message: 'User created successfully',
-      data: await this.usersService.create(body),
+      data: await this.usersService.create(body, actor),
     };
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() body: UpdateUserDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: UpdateUserDto,
+    @CurrentUser() actor: AuthenticatedUser & { authSessionId: string },
+  ) {
     return {
       success: true,
       message: 'User updated successfully',
-      data: await this.usersService.update(id, body),
+      data: await this.usersService.update(id, body, actor),
     };
   }
 
@@ -66,24 +73,25 @@ export class UsersController {
   async updatePassword(
     @Param('id') id: string,
     @Body() body: UpdateUserPasswordDto,
+    @CurrentUser() actor: AuthenticatedUser & { authSessionId: string },
   ) {
     return {
       success: true,
       message: 'User password updated successfully',
-      data: await this.usersService.updatePassword(id, body),
+      data: await this.usersService.updatePassword(id, body, actor),
     };
   }
 
   @Delete(':id')
   async deactivate(
     @Param('id') id: string,
-    @CurrentUser() currentUser: AuthenticatedUser,
+    @CurrentUser() currentUser: AuthenticatedUser & { authSessionId: string },
     @Body() body: DeactivateUserDto,
   ) {
     return {
       success: true,
       message: 'User deactivated successfully',
-      data: await this.usersService.deactivate(id, currentUser.id, body),
+      data: await this.usersService.deactivate(id, currentUser, body),
     };
   }
 }

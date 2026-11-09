@@ -74,7 +74,7 @@ function createService() {
       count: jest.fn(),
       findUnique: jest.fn(),
     },
-  } as unknown as PrismaService;
+  };
   prisma.operationalLocation.findUnique.mockResolvedValue({
     id: 'branch-1',
     type: 'BRANCH',
@@ -86,7 +86,10 @@ function createService() {
   };
   return {
     prisma,
-    service: new CedisDashboardQueryService(prisma, config as never),
+    service: new CedisDashboardQueryService(
+      prisma as unknown as PrismaService,
+      config as never,
+    ),
   };
 }
 
@@ -161,14 +164,12 @@ describe('CedisDashboardQueryService', () => {
 
   it('rejects a seller whose branch is not a direct child of the requested CEDIS', async () => {
     const { prisma, service } = createService();
-    (prisma.operationalLocation as { findUnique?: jest.Mock }).findUnique = jest
-      .fn()
-      .mockResolvedValue({
-        id: 'branch-1',
-        type: 'BRANCH',
-        parentId: 'other-cedis',
-        isActive: true,
-      });
+    prisma.operationalLocation.findUnique = jest.fn().mockResolvedValue({
+      id: 'branch-1',
+      type: 'BRANCH',
+      parentId: 'other-cedis',
+      isActive: true,
+    });
 
     await expect(
       service.getDashboard(
@@ -522,7 +523,7 @@ describe('CedisDashboardQueryService', () => {
     const assertCycleScope = (
       service as unknown as {
         assertCycleScope: (
-          cycle: Pick<
+          cycleRecord: Pick<
             ReturnType<typeof cycle>,
             'distributionCenterLocationId' | 'branchLocationId'
           >,
@@ -725,7 +726,10 @@ describe('CedisDashboardQueryService', () => {
       }),
     );
     expect(result.totals.creditSales).toBe('4500.00');
-    expect(result.dailyClose?.totals.creditSales).toBe('4500.00');
+    const closeTotals = result.dailyClose?.totals as
+      | { creditSales: string }
+      | undefined;
+    expect(closeTotals?.creditSales).toBe('4500.00');
     expect(result.dailyClose?.totals).toEqual(
       expect.objectContaining({
         netCashExpected: '750.00',

@@ -3,8 +3,8 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Inject,
   NotFoundException,
-  Optional,
 } from '@nestjs/common';
 import {
   BranchSupplyCycleEventType,
@@ -235,7 +235,7 @@ export class BranchSupplyCyclesService {
     private readonly cycleReconciliation: BranchSupplyCycleReconciliationService,
     private readonly dailyCloseService: PointOfSaleDailyCloseService,
     private readonly deliveryService: DeliveryService,
-    @Optional() private readonly cedisGateway?: CedisGateway,
+    @Inject(CedisGateway) private readonly cedisGateway?: CedisGateway,
   ) {}
 
   async open(

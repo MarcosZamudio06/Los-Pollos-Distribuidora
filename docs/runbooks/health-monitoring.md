@@ -8,11 +8,12 @@ Para la automatización de backups y su instalación, consulta
 
 ## Contrato HTTP
 
-El backend expone tres probes públicos a través del frontend/Caddy:
+El backend conserva los probes públicos a través del frontend/Caddy; no se
+requieren credenciales nuevas para el monitor:
 
 - `GET /api/health/live`: liveness del proceso NestJS. No consulta la base.
 - `GET /api/health/ready`: readiness core. Requiere bootstrap completo y
-  `SELECT 1` contra PostgreSQL; una caída de Photon, OSRM, VROOM, TileServer u
+  `SELECT 1` contra PostgreSQL, compartido durante 1 segundo; una caída de Photon, OSRM, VROOM, TileServer u
   Object Storage no cambia este resultado.
 - `GET /api/health/dependencies`: diagnóstico estructurado de PostgreSQL,
   Photon, OSRM, VROOM, TileServer y Object Storage. Cada probe tiene timeout
@@ -21,6 +22,40 @@ El backend expone tres probes públicos a través del frontend/Caddy:
   dependencia no-core y `error` cuando PostgreSQL falla. Los campos de cada
   dependencia sólo contienen estado, latencia y un motivo genérico; nunca
   contienen URLs internas, credenciales, buckets ni stack traces.
+
+### Límite de trabajo compartido (SEC-005)
+
+ERP-PREPROD-SECURITY-REMEDIATION-003 mantiene la URL y el JSON del monitor,
+pero sustituye los probes por petición por una instantánea interna de 30
+segundos para **todos** los clientes de esa instancia, incluidos resultados
+`degraded` y `error`. Una ráfaga concurrente comparte la misma oleada: como
+máximo dos consultas SQL y cinco probes HTTP por renovación de diagnósticos.
+Readiness comparte una consulta mínima durante 1 segundo y liveness no consulta
+ninguna dependencia. Readiness y diagnósticos reutilizan el mismo `SELECT 1`
+si sigue pendiente; no dependen de respuestas GIS para declarar disponible el core.
+
+Un timeout no implica cancelar una consulta PostgreSQL: la promesa subyacente
+se conserva hasta que termine, incluso después del timeout o la caducidad de
+caché. Nunca se acumulan nuevas consultas/probes idénticos por peticiones
+públicas; una operación colgada puede seguir consumiendo una conexión y requiere
+atención operativa. Cada dependencia sigue devolviendo sólo un motivo genérico.
+No hay parámetro, query string, cabecera de cliente ni endpoint de refresco forzado.
+Las respuestas envían `Cache-Control: no-store`: CDN/navegador no deben guardar
+el diagnóstico, y el límite reside dentro de NestJS, no en la identidad/IP del
+cliente ni en confiar en cabeceras reenviadas.
+
+Tradeoff: un cambio core puede tardar hasta 1 segundo y uno detallado hasta 30
+segundos adicionales al timeout del probe en reflejarse. Bootstrap y draining se
+verifican en cada readiness; un éxito cacheado no permite readiness durante el
+apagado. El monitor de cinco minutos y el healthcheck Docker no cambian de URL,
+credenciales ni criterios. Se conserva `ok`/`degraded`/`error` en diagnósticos.
+
+Este control presupone la topología aprobada de una instancia backend activa por
+empresa. Limita trabajo de dependencias, no garantiza resistencia volumétrica
+HTTP/DDoS ni privacidad de los estados genéricos públicos. Autenticación operativa
+o una ruta sólo interna requerirían cambiar el monitor/acceso; no se improvisan
+credenciales o permisos de negocio para este cierre. Una futura réplica requiere
+revisar este presupuesto por instancia.
 
 El healthcheck Docker del backend usa únicamente `/api/health/ready`. Por eso
 un fallo GIS no impide iniciar el backend ni derriba POS/inventario, aunque las

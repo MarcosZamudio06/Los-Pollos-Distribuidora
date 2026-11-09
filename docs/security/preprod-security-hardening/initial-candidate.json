@@ -1,0 +1,969 @@
+{
+  "head": "b7724ee903b11d10d4ba166b59a2945332d447df",
+  "files": [
+    {
+      "path": "backend/package-lock.json",
+      "sha256": "a9e6c85ac62139ecd10b3b886e7dc0e4181ff35b9cee31685113a2e81de367ec",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 3,
+      "cumulative_deleted": 3,
+      "reason": "Patched js-yaml version/lock alignment and bounded parser regression (SEC-004).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "a9e6c85ac62139ecd10b3b886e7dc0e4181ff35b9cee31685113a2e81de367ec"
+        }
+      ]
+    },
+    {
+      "path": "backend/package.json",
+      "sha256": "ab4fccb7db9e614744a1a1fd0041896f0a702b25b682bf6f5234f048458bc8ac",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 1,
+      "cumulative_deleted": 1,
+      "reason": "Patched js-yaml version/lock alignment and bounded parser regression (SEC-004).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "ab4fccb7db9e614744a1a1fd0041896f0a702b25b682bf6f5234f048458bc8ac"
+        }
+      ]
+    },
+    {
+      "path": "backend/pnpm-lock.yaml",
+      "sha256": "c177e8623edfa1c26bf5fbaf152889be648e59a32fd39945871186240481070f",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 8,
+      "cumulative_deleted": 5,
+      "reason": "Patched js-yaml version/lock alignment and bounded parser regression (SEC-004).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "c177e8623edfa1c26bf5fbaf152889be648e59a32fd39945871186240481070f"
+        }
+      ]
+    },
+    {
+      "path": "backend/pnpm-workspace.yaml",
+      "sha256": "cf726a7992652a5def96914c05c9bfb57ed256038c2ec3e42b34e1f38956820c",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 1,
+      "cumulative_deleted": 1,
+      "reason": "Patched js-yaml version/lock alignment and bounded parser regression (SEC-004).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "cf726a7992652a5def96914c05c9bfb57ed256038c2ec3e42b34e1f38956820c"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/common/authorization/access-authority.ts",
+      "sha256": "0081c169f33a8d4e33198f341180b6d7b92dffae7068678ef45c31109a061966",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 118,
+      "cumulative_deleted": 0,
+      "reason": "Shared post-lock persisted actor/session and permission-dominance policy (SEC-001/REV-001/003/004).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "caa9363ba64a2358a6319c9cc743b93fd4be72dc6f93c8d578f6bf53e596da89"
+        },
+        {
+          "remediation": "002",
+          "sha256": "0081c169f33a8d4e33198f341180b6d7b92dffae7068678ef45c31109a061966"
+        },
+        {
+          "remediation": "003",
+          "sha256": "0081c169f33a8d4e33198f341180b6d7b92dffae7068678ef45c31109a061966"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/common/session/session-revocation.registry.spec.ts",
+      "sha256": "8e7664cba46bd231c585f11c465e141c06d1a00d82bed8d4efea284fc2ced292",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 157,
+      "cumulative_deleted": 0,
+      "reason": "Session-scoped realtime revocation, expiry, pending-ticket isolation and cleanup (SEC-002/REV-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "5420a3873f3707f8a19acd02f47dd94c11b54c034ae9af092be0d2e2473163bd"
+        },
+        {
+          "remediation": "002",
+          "sha256": "8e7664cba46bd231c585f11c465e141c06d1a00d82bed8d4efea284fc2ced292"
+        },
+        {
+          "remediation": "003",
+          "sha256": "8e7664cba46bd231c585f11c465e141c06d1a00d82bed8d4efea284fc2ced292"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/common/session/session-revocation.registry.ts",
+      "sha256": "f9e9cf21d4c07a2bfd0c58ed6462c3586c58e4bfc88b76a59550fe75edd47a5f",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 208,
+      "cumulative_deleted": 7,
+      "reason": "Session-scoped realtime revocation, expiry, pending-ticket isolation and cleanup (SEC-002/REV-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "c437409f0ad7d6b77800227cefb0a7da4c81a1b5337b2c74ceb56d8faff68a69"
+        },
+        {
+          "remediation": "002",
+          "sha256": "f9e9cf21d4c07a2bfd0c58ed6462c3586c58e4bfc88b76a59550fe75edd47a5f"
+        },
+        {
+          "remediation": "003",
+          "sha256": "f9e9cf21d4c07a2bfd0c58ed6462c3586c58e4bfc88b76a59550fe75edd47a5f"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/access-control/access-control.service.spec.ts",
+      "sha256": "dd04a7a470eae0d2d5ee4d7d6ea8ad38189591c9a5a5f27359de6eca9247e130",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 44,
+      "cumulative_deleted": 3,
+      "reason": "Trusted actor authorization, last-ADMIN/security-capability invariants and persistent safe audit (SEC-001/REV-001/003/004).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "a1b297ddc0ae78933c9ed393b0d749dc639534b110920131d3994ca267db097f"
+        },
+        {
+          "remediation": "002",
+          "sha256": "dd04a7a470eae0d2d5ee4d7d6ea8ad38189591c9a5a5f27359de6eca9247e130"
+        },
+        {
+          "remediation": "003",
+          "sha256": "dd04a7a470eae0d2d5ee4d7d6ea8ad38189591c9a5a5f27359de6eca9247e130"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/access-control/access-control.service.ts",
+      "sha256": "468b0171182468b50e810fc3016758d87c264b6ca98e6bc62cc23e364fa1b7b7",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 41,
+      "cumulative_deleted": 61,
+      "reason": "Trusted actor authorization, last-ADMIN/security-capability invariants and persistent safe audit (SEC-001/REV-001/003/004).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "a29dd7d615efaf9253b21ff16a514d845c4291a6cae9100e0d1fa4d210c5227d"
+        },
+        {
+          "remediation": "002",
+          "sha256": "468b0171182468b50e810fc3016758d87c264b6ca98e6bc62cc23e364fa1b7b7"
+        },
+        {
+          "remediation": "003",
+          "sha256": "468b0171182468b50e810fc3016758d87c264b6ca98e6bc62cc23e364fa1b7b7"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/auth/auth.controller.ts",
+      "sha256": "93dd5cc676de732863b14681ff3d186fc85659eefb3dca70b710fca2e929653b",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 5,
+      "cumulative_deleted": 1,
+      "reason": "Session lifecycle/credential CAS plus uniform public login rejection (SEC-002/003 and REV-003).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "93dd5cc676de732863b14681ff3d186fc85659eefb3dca70b710fca2e929653b"
+        },
+        {
+          "remediation": "003",
+          "sha256": "93dd5cc676de732863b14681ff3d186fc85659eefb3dca70b710fca2e929653b"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/auth/auth.service.spec.ts",
+      "sha256": "85febb270b1d8e5e83dc3bf414e8b29f8d7001180c94edde22540251d5cac632",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 39,
+      "cumulative_deleted": 5,
+      "reason": "Session lifecycle/credential CAS plus uniform public login rejection (SEC-002/003 and REV-003).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "85febb270b1d8e5e83dc3bf414e8b29f8d7001180c94edde22540251d5cac632"
+        },
+        {
+          "remediation": "003",
+          "sha256": "85febb270b1d8e5e83dc3bf414e8b29f8d7001180c94edde22540251d5cac632"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/auth/auth.service.ts",
+      "sha256": "099f9090aa7354b7403cc7fb2712fa02d1a7311d851c2f0e11b48a663ff429ef",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 72,
+      "cumulative_deleted": 24,
+      "reason": "Session lifecycle/credential CAS plus uniform public login rejection (SEC-002/003 and REV-003).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "a600687efc98c3011b6d59c57503478d299efcb4e7d14366965e96646dcbfb55"
+        },
+        {
+          "remediation": "002",
+          "sha256": "cc9eda2c33759b96fc23201bf709c0fc1a47e0c989e96266d8d129d9885a9001"
+        },
+        {
+          "remediation": "003",
+          "sha256": "099f9090aa7354b7403cc7fb2712fa02d1a7311d851c2f0e11b48a663ff429ef"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/auth/auth.types.ts",
+      "sha256": "dddd53992c83ea16d5a5dc9bd2ea828d70353444ecd3f082f28078978bcd121c",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 6,
+      "cumulative_deleted": 0,
+      "reason": "Session lifecycle/credential CAS plus uniform public login rejection (SEC-002/003 and REV-003).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "dddd53992c83ea16d5a5dc9bd2ea828d70353444ecd3f082f28078978bcd121c"
+        },
+        {
+          "remediation": "002",
+          "sha256": "dddd53992c83ea16d5a5dc9bd2ea828d70353444ecd3f082f28078978bcd121c"
+        },
+        {
+          "remediation": "003",
+          "sha256": "dddd53992c83ea16d5a5dc9bd2ea828d70353444ecd3f082f28078978bcd121c"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/cedis/cedis.gateway.spec.ts",
+      "sha256": "61321458f6e8deb46146a1885e0a4c0c2435094ce8a162811eb32b3ee956174c",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 18,
+      "cumulative_deleted": 2,
+      "reason": "Authenticated namespace admission, protected-event revocation and recovery/isolation tests (SEC-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "61321458f6e8deb46146a1885e0a4c0c2435094ce8a162811eb32b3ee956174c"
+        },
+        {
+          "remediation": "002",
+          "sha256": "61321458f6e8deb46146a1885e0a4c0c2435094ce8a162811eb32b3ee956174c"
+        },
+        {
+          "remediation": "003",
+          "sha256": "61321458f6e8deb46146a1885e0a4c0c2435094ce8a162811eb32b3ee956174c"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/cedis/cedis.gateway.ts",
+      "sha256": "091ba2a9ebedacb1ef01518e7c5b5985b538d8ac67c04c5c5eb870249a6e3303",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 37,
+      "cumulative_deleted": 45,
+      "reason": "Authenticated namespace admission, protected-event revocation and recovery/isolation tests (SEC-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "091ba2a9ebedacb1ef01518e7c5b5985b538d8ac67c04c5c5eb870249a6e3303"
+        },
+        {
+          "remediation": "002",
+          "sha256": "091ba2a9ebedacb1ef01518e7c5b5985b538d8ac67c04c5c5eb870249a6e3303"
+        },
+        {
+          "remediation": "003",
+          "sha256": "091ba2a9ebedacb1ef01518e7c5b5985b538d8ac67c04c5c5eb870249a6e3303"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/fleet/fleet.gateway.spec.ts",
+      "sha256": "d42effedd6d8281da101e3373f95a227290467756ba5c5209ac8cbca683fcbec",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 45,
+      "cumulative_deleted": 9,
+      "reason": "Authenticated namespace admission, protected-event revocation and recovery/isolation tests (SEC-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "d42effedd6d8281da101e3373f95a227290467756ba5c5209ac8cbca683fcbec"
+        },
+        {
+          "remediation": "002",
+          "sha256": "d42effedd6d8281da101e3373f95a227290467756ba5c5209ac8cbca683fcbec"
+        },
+        {
+          "remediation": "003",
+          "sha256": "d42effedd6d8281da101e3373f95a227290467756ba5c5209ac8cbca683fcbec"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/fleet/fleet.gateway.ts",
+      "sha256": "62ac198b8e6e9e42757c3565a817bbb84fa0544c723dc1ad40060079ad628e6d",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 54,
+      "cumulative_deleted": 82,
+      "reason": "Authenticated namespace admission, protected-event revocation and recovery/isolation tests (SEC-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "62ac198b8e6e9e42757c3565a817bbb84fa0544c723dc1ad40060079ad628e6d"
+        },
+        {
+          "remediation": "002",
+          "sha256": "62ac198b8e6e9e42757c3565a817bbb84fa0544c723dc1ad40060079ad628e6d"
+        },
+        {
+          "remediation": "003",
+          "sha256": "62ac198b8e6e9e42757c3565a817bbb84fa0544c723dc1ad40060079ad628e6d"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/health/health.boundaries.spec.ts",
+      "sha256": "19ff18fa87edf92521f74fab81b8566e02b294e12106a56f1a28ce7b6b3d2a21",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 83,
+      "cumulative_deleted": 0,
+      "reason": "Bounded shared public readiness/dependency work, safe status contract (SEC-005).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "19ff18fa87edf92521f74fab81b8566e02b294e12106a56f1a28ce7b6b3d2a21"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/health/health.controller.ts",
+      "sha256": "e9f91be8106d57a81fb644fe0883ab2c44f786f4a4a65c889bed01f045219a92",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 5,
+      "cumulative_deleted": 1,
+      "reason": "Bounded shared public readiness/dependency work, safe status contract (SEC-005).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "e9f91be8106d57a81fb644fe0883ab2c44f786f4a4a65c889bed01f045219a92"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/health/health.service.ts",
+      "sha256": "26b0651355665a2810df3d3900b25b6913f002958ab25df54e7cf9244b418f7f",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 109,
+      "cumulative_deleted": 36,
+      "reason": "Bounded shared public readiness/dependency work, safe status contract (SEC-005).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "26b0651355665a2810df3d3900b25b6913f002958ab25df54e7cf9244b418f7f"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/sales/sales.gateway.spec.ts",
+      "sha256": "8bd3fce7ddb2ad2a9dbff7961831f57d1d73a6c54ac0b3c4417afc7946de38c2",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 29,
+      "cumulative_deleted": 3,
+      "reason": "Authenticated namespace admission, protected-event revocation and recovery/isolation tests (SEC-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "e43b14f4adb4a9e21ce2ade920fd8d2e6f51a6356360286f8d8233afbf847797"
+        },
+        {
+          "remediation": "002",
+          "sha256": "8bd3fce7ddb2ad2a9dbff7961831f57d1d73a6c54ac0b3c4417afc7946de38c2"
+        },
+        {
+          "remediation": "003",
+          "sha256": "8bd3fce7ddb2ad2a9dbff7961831f57d1d73a6c54ac0b3c4417afc7946de38c2"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/sales/sales.gateway.ts",
+      "sha256": "c6c42fadb3cb2c2e47cf789d997458cde0ca20390512ca0376b908639d68a74d",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 34,
+      "cumulative_deleted": 45,
+      "reason": "Authenticated namespace admission, protected-event revocation and recovery/isolation tests (SEC-002).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "c6c42fadb3cb2c2e47cf789d997458cde0ca20390512ca0376b908639d68a74d"
+        },
+        {
+          "remediation": "002",
+          "sha256": "c6c42fadb3cb2c2e47cf789d997458cde0ca20390512ca0376b908639d68a74d"
+        },
+        {
+          "remediation": "003",
+          "sha256": "c6c42fadb3cb2c2e47cf789d997458cde0ca20390512ca0376b908639d68a74d"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/users/users.controller.ts",
+      "sha256": "0d8b9a32648b20e8400d314e418ac2796f036f842534d9e99cfc8bf2f0adbd96",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 15,
+      "cumulative_deleted": 7,
+      "reason": "Trusted actor authorization, last-ADMIN/security-capability invariants and persistent safe audit (SEC-001/REV-001/003/004).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "1fb7bf9030a5566211d15618c8505fc757349c16f32856666b8f12d884faada1"
+        },
+        {
+          "remediation": "002",
+          "sha256": "0d8b9a32648b20e8400d314e418ac2796f036f842534d9e99cfc8bf2f0adbd96"
+        },
+        {
+          "remediation": "003",
+          "sha256": "0d8b9a32648b20e8400d314e418ac2796f036f842534d9e99cfc8bf2f0adbd96"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/users/users.service.spec.ts",
+      "sha256": "cbde99eb27af54c422e3e7f9e596d4ef40d0a695d0c59bdbc7efb6cf84c4a0e3",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 174,
+      "cumulative_deleted": 79,
+      "reason": "Trusted actor authorization, last-ADMIN/security-capability invariants and persistent safe audit (SEC-001/REV-001/003/004).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "1422e8e57a559142f22896638b7b7bafda88dcc87b5fa568afbd35961ea1805e"
+        },
+        {
+          "remediation": "002",
+          "sha256": "cbde99eb27af54c422e3e7f9e596d4ef40d0a695d0c59bdbc7efb6cf84c4a0e3"
+        },
+        {
+          "remediation": "003",
+          "sha256": "cbde99eb27af54c422e3e7f9e596d4ef40d0a695d0c59bdbc7efb6cf84c4a0e3"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/modules/users/users.service.ts",
+      "sha256": "a207dc8ba0a7e48213c53828dc49511f268148c120fa5a5df71d54026bd65f91",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 197,
+      "cumulative_deleted": 93,
+      "reason": "Trusted actor authorization, last-ADMIN/security-capability invariants and persistent safe audit (SEC-001/REV-001/003/004).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "df9fef07ea8bebe18e71532ae4f94ab540c01c2056d370516020aa6ea143b981"
+        },
+        {
+          "remediation": "002",
+          "sha256": "a207dc8ba0a7e48213c53828dc49511f268148c120fa5a5df71d54026bd65f91"
+        },
+        {
+          "remediation": "003",
+          "sha256": "a207dc8ba0a7e48213c53828dc49511f268148c120fa5a5df71d54026bd65f91"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/prisma/security-dependencies.contract.spec.ts",
+      "sha256": "f13493ef0c2c3783ec935af5080cf47f0776ba0e24f9602e5ddf7e14fa53491e",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 45,
+      "cumulative_deleted": 0,
+      "reason": "Patched js-yaml version/lock alignment and bounded parser regression (SEC-004).",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "f13493ef0c2c3783ec935af5080cf47f0776ba0e24f9602e5ddf7e14fa53491e"
+        }
+      ]
+    },
+    {
+      "path": "backend/test/security-remediation-003.e2e-spec.ts",
+      "sha256": "f22e7ed829035276a085c0c9f25f87c5e98c822c9053f224c69f7cb12d53e355",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 307,
+      "cumulative_deleted": 0,
+      "reason": "Permanent real-service security denial, persistence, races, health, login and browser controls.",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "f22e7ed829035276a085c0c9f25f87c5e98c822c9053f224c69f7cb12d53e355"
+        }
+      ]
+    },
+    {
+      "path": "backend/test/security-remediation.e2e-spec.ts",
+      "sha256": "e761712d3f59abbfec4524df5cd29780042d950f706561e3c792290fe99ef6d5",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 1522,
+      "cumulative_deleted": 0,
+      "reason": "Permanent real-service security denial, persistence, races, health, login and browser controls.",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "465a0c56ce12e3a90450b249a3bc7b0520608cc403492dc07261239a3aa7cddf"
+        },
+        {
+          "remediation": "002",
+          "sha256": "e761712d3f59abbfec4524df5cd29780042d950f706561e3c792290fe99ef6d5"
+        },
+        {
+          "remediation": "003",
+          "sha256": "e761712d3f59abbfec4524df5cd29780042d950f706561e3c792290fe99ef6d5"
+        }
+      ]
+    },
+    {
+      "path": "docs/runbooks/health-monitoring.md",
+      "sha256": "a7f6c30db41e0a3d04010a76e686d590eaafba78030967dc1042e524ffccf24f",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 37,
+      "cumulative_deleted": 2,
+      "reason": "Canonical security/health/authorization contract and operational compatibility documentation.",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "a7f6c30db41e0a3d04010a76e686d590eaafba78030967dc1042e524ffccf24f"
+        }
+      ]
+    },
+    {
+      "path": "frontend/e2e/security-recovery.html",
+      "sha256": "679c34c70f65d5fa9c19bc7ee7121c705e27ec7b7913f2457fda152c29964f84",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 1,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "679c34c70f65d5fa9c19bc7ee7121c705e27ec7b7913f2457fda152c29964f84"
+        },
+        {
+          "remediation": "003",
+          "sha256": "679c34c70f65d5fa9c19bc7ee7121c705e27ec7b7913f2457fda152c29964f84"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/features/cedis/CedisIncomingSuppliesPage.tsx",
+      "sha256": "16983b72668c6a8394fb2278b66b36b1386acd9763d9e286b7f5af177a7d9241",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 20,
+      "cumulative_deleted": 19,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "16983b72668c6a8394fb2278b66b36b1386acd9763d9e286b7f5af177a7d9241"
+        },
+        {
+          "remediation": "003",
+          "sha256": "16983b72668c6a8394fb2278b66b36b1386acd9763d9e286b7f5af177a7d9241"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/features/pedidos/PedidosPage.tsx",
+      "sha256": "5dd5e408e3f8c018c48f97fd6984d04e7e0db42c3b32a3c399b8c58e5e059eb5",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 19,
+      "cumulative_deleted": 9,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "5dd5e408e3f8c018c48f97fd6984d04e7e0db42c3b32a3c399b8c58e5e059eb5"
+        },
+        {
+          "remediation": "003",
+          "sha256": "5dd5e408e3f8c018c48f97fd6984d04e7e0db42c3b32a3c399b8c58e5e059eb5"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/lib/__tests__/realtimePagesRecovery.test.tsx",
+      "sha256": "e4467396abe3ae88d5e93f51b43e4d9b61c9e3864ab886b4cadae6fee37a6f09",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 116,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "e4467396abe3ae88d5e93f51b43e4d9b61c9e3864ab886b4cadae6fee37a6f09"
+        },
+        {
+          "remediation": "003",
+          "sha256": "e4467396abe3ae88d5e93f51b43e4d9b61c9e3864ab886b4cadae6fee37a6f09"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/lib/__tests__/realtimeRecovery.test.ts",
+      "sha256": "080e634222fb61dadd94edf1e931a2a0bfd8fdb1abc0f82165faaec04cae94a0",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 73,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "080e634222fb61dadd94edf1e931a2a0bfd8fdb1abc0f82165faaec04cae94a0"
+        },
+        {
+          "remediation": "003",
+          "sha256": "080e634222fb61dadd94edf1e931a2a0bfd8fdb1abc0f82165faaec04cae94a0"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/lib/cedisSocket.ts",
+      "sha256": "bd48432370d66dcf83641b5c31dca22e2ee4522f25ded6ef29db98c6fd5b1acc",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 3,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "bd48432370d66dcf83641b5c31dca22e2ee4522f25ded6ef29db98c6fd5b1acc"
+        },
+        {
+          "remediation": "003",
+          "sha256": "bd48432370d66dcf83641b5c31dca22e2ee4522f25ded6ef29db98c6fd5b1acc"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/lib/fleetSocket.ts",
+      "sha256": "460916c8a4ccd70d19e7732db06df6bf2b3ab4e1978319b6fd82d92466bed155",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 4,
+      "cumulative_deleted": 3,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "460916c8a4ccd70d19e7732db06df6bf2b3ab4e1978319b6fd82d92466bed155"
+        },
+        {
+          "remediation": "003",
+          "sha256": "460916c8a4ccd70d19e7732db06df6bf2b3ab4e1978319b6fd82d92466bed155"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/lib/realtimeRecovery.ts",
+      "sha256": "cc66606e1fee888e4de0a2572048fb836d8004561b3fdc4060a208a0149a253f",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 65,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "cc66606e1fee888e4de0a2572048fb836d8004561b3fdc4060a208a0149a253f"
+        },
+        {
+          "remediation": "003",
+          "sha256": "cc66606e1fee888e4de0a2572048fb836d8004561b3fdc4060a208a0149a253f"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/lib/salesSocket.ts",
+      "sha256": "cce6563024bc6f33b4797feab9f6eddaaf2d65cd3396b44bf18a12201e0d29fa",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 3,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "cce6563024bc6f33b4797feab9f6eddaaf2d65cd3396b44bf18a12201e0d29fa"
+        },
+        {
+          "remediation": "003",
+          "sha256": "cce6563024bc6f33b4797feab9f6eddaaf2d65cd3396b44bf18a12201e0d29fa"
+        }
+      ]
+    },
+    {
+      "path": "frontend/src/test-fixtures/security-recovery.ts",
+      "sha256": "9d7c863a964b9734b11a3c87d3c7f671573603d02b4c59cba9c202263f352b00",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 78,
+      "cumulative_deleted": 0,
+      "reason": "Authoritative REST reconciliation, cancellation of stale results and bounded legitimate reconnect; permanent client/page/browser tests (REV-005).",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "9d7c863a964b9734b11a3c87d3c7f671573603d02b4c59cba9c202263f352b00"
+        },
+        {
+          "remediation": "003",
+          "sha256": "9d7c863a964b9734b11a3c87d3c7f671573603d02b4c59cba9c202263f352b00"
+        }
+      ]
+    },
+    {
+      "path": "scripts/test-erp-preprod-security-remediation-001.sh",
+      "sha256": "f9056d0f7b98920d89e4e9408d9e563f7e4fbbc00a53345f790c86cc03f0dc2e",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 74,
+      "cumulative_deleted": 0,
+      "reason": "Source-only reproducible disposable PostgreSQL/S3/Nest/Socket/browser execution; no Audit dependency.",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "25b22797fc0c12469dbf69af3de7c5da394b3f13788aecf3a5613ff4d61a14e6"
+        },
+        {
+          "remediation": "002",
+          "sha256": "f9056d0f7b98920d89e4e9408d9e563f7e4fbbc00a53345f790c86cc03f0dc2e"
+        },
+        {
+          "remediation": "003",
+          "sha256": "f9056d0f7b98920d89e4e9408d9e563f7e4fbbc00a53345f790c86cc03f0dc2e"
+        }
+      ]
+    },
+    {
+      "path": "scripts/test-erp-preprod-security-remediation-002.sh",
+      "sha256": "34f43c3aaac4c3e89ff72c21ab3bdc518fe02d3ecd1e220d930e6a5ca90fe6e5",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 43,
+      "cumulative_deleted": 0,
+      "reason": "Source-only reproducible disposable PostgreSQL/S3/Nest/Socket/browser execution; no Audit dependency.",
+      "remediation_history": [
+        {
+          "remediation": "002",
+          "sha256": "34f43c3aaac4c3e89ff72c21ab3bdc518fe02d3ecd1e220d930e6a5ca90fe6e5"
+        },
+        {
+          "remediation": "003",
+          "sha256": "34f43c3aaac4c3e89ff72c21ab3bdc518fe02d3ecd1e220d930e6a5ca90fe6e5"
+        }
+      ]
+    },
+    {
+      "path": "scripts/test-erp-preprod-security-remediation-003.sh",
+      "sha256": "c72e8b40ae78f428685a50a3d895bcb395509362ae7a60f6211e43d3485c4ed4",
+      "mode": "0o644",
+      "initial_untracked": true,
+      "head_exists": false,
+      "cumulative_added": 78,
+      "cumulative_deleted": 0,
+      "reason": "Source-only reproducible disposable PostgreSQL/S3/Nest/Socket/browser execution; no Audit dependency.",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "c72e8b40ae78f428685a50a3d895bcb395509362ae7a60f6211e43d3485c4ed4"
+        }
+      ]
+    },
+    {
+      "path": "specs/.specs/03-api/api-conventions.md",
+      "sha256": "6b6d1c3fc65554b967f53e5162f91a9ec910552b8900a83c17b33b376c9287ee",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 7,
+      "cumulative_deleted": 0,
+      "reason": "Canonical security/health/authorization contract and operational compatibility documentation.",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "6b6d1c3fc65554b967f53e5162f91a9ec910552b8900a83c17b33b376c9287ee"
+        }
+      ]
+    },
+    {
+      "path": "specs/.specs/03-api/auth-api.md",
+      "sha256": "9b3ca55d45100e9c3aa7514245328e44f9b875c26ac376b20d146ef5cff313b9",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 10,
+      "cumulative_deleted": 2,
+      "reason": "Canonical security/health/authorization contract and operational compatibility documentation.",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "9b3ca55d45100e9c3aa7514245328e44f9b875c26ac376b20d146ef5cff313b9"
+        }
+      ]
+    },
+    {
+      "path": "specs/.specs/06-deployment/deployment.md",
+      "sha256": "d3a4f483421e5b51c36b071c1dd5eb8c1912fb958c4862c90318e15613cfd818",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 11,
+      "cumulative_deleted": 0,
+      "reason": "Canonical security/health/authorization contract and operational compatibility documentation.",
+      "remediation_history": [
+        {
+          "remediation": "003",
+          "sha256": "d3a4f483421e5b51c36b071c1dd5eb8c1912fb958c4862c90318e15613cfd818"
+        }
+      ]
+    },
+    {
+      "path": "specs/modules/auth/spec.md",
+      "sha256": "dc7138511cc65e8f107e60cece505571d3255e11440787ef9921be2ecab8c96c",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 18,
+      "cumulative_deleted": 0,
+      "reason": "Session lifecycle/credential CAS plus uniform public login rejection (SEC-002/003 and REV-003).",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "575c1a19209eb25591b1863f8553ea47184c50e920ff9674d4584f5530712338"
+        },
+        {
+          "remediation": "002",
+          "sha256": "1f563976a54e42f7b765b8214ef772055aad723cde38bb4390808d08898251f9"
+        },
+        {
+          "remediation": "003",
+          "sha256": "dc7138511cc65e8f107e60cece505571d3255e11440787ef9921be2ecab8c96c"
+        }
+      ]
+    },
+    {
+      "path": "specs/modules/usuarios/spec.md",
+      "sha256": "471b15c0cab4388cb8bbdee03b4167165369c46954ffd75b161f8aeb7922f0d7",
+      "mode": "0o644",
+      "initial_untracked": false,
+      "head_exists": true,
+      "cumulative_added": 3,
+      "cumulative_deleted": 1,
+      "reason": "Canonical security/health/authorization contract and operational compatibility documentation.",
+      "remediation_history": [
+        {
+          "remediation": "001",
+          "sha256": "a4953873c102a35b425a0f389b9d940bd134268593efbf9a4a8167fb12f47f42"
+        },
+        {
+          "remediation": "002",
+          "sha256": "471b15c0cab4388cb8bbdee03b4167165369c46954ffd75b161f8aeb7922f0d7"
+        },
+        {
+          "remediation": "003",
+          "sha256": "471b15c0cab4388cb8bbdee03b4167165369c46954ffd75b161f8aeb7922f0d7"
+        }
+      ]
+    }
+  ]
+}

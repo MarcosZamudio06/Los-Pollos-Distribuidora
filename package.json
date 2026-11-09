@@ -39,5 +39,8 @@
   "devDependencies": {
     "audit-ci": "7.1.0",
     "shadcn": "^4.13.0"
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
   }
 }

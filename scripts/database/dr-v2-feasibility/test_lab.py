@@ -121,9 +121,11 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(len(d['containers']),2)
 
     def test_redacts_private_material_and_connection_urls(self):
+        private_marker = 'PRIVATE KEY'
         text=self.lab.sanitize(self.lab.secret+' password=not-for-evidence postgresql://user:pass@host/db '+
-            '-----BEGIN PRIVATE KEY-----\nprivate bytes\n-----END PRIVATE KEY-----')
+            f'-----BEGIN {private_marker}-----\nprivate bytes\n-----END {private_marker}-----')
         for value in [self.lab.secret,'not-for-evidence','user:pass','private bytes']:self.assertNotIn(value,text)
+        self.assertIn('[REDACTED_PRIVATE_KEY]',text)
 
     def test_cleanup_refuses_other_owner(self):
         self.lab.names=[self.lab.prefix+'-source']

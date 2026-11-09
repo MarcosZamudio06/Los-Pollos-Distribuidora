@@ -1,3 +1,4 @@
+import { CedisGateway } from './cedis.gateway';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma, ProductUnit } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -102,6 +103,7 @@ describe('BranchSupplyReceiptsService', () => {
     const service = new BranchSupplyReceiptsService(
       prisma as unknown as PrismaService,
       inventoryTransfers,
+      { emitSupplyReceived: jest.fn() } as unknown as CedisGateway,
     );
     prisma.branchSupplyReceipt.findUnique.mockResolvedValue(null);
     prisma.branchSupplyCycleTransfer.findUnique.mockResolvedValue(createLink());
@@ -132,6 +134,7 @@ describe('BranchSupplyReceiptsService', () => {
     const service = new BranchSupplyReceiptsService(
       prisma as unknown as PrismaService,
       inventoryTransfers as unknown as InventoryTransfersService,
+      { emitSupplyReceived: jest.fn() } as unknown as CedisGateway,
     );
     const link = createLink();
     const receivedBy = { id: seller.id, name: 'Vendedor' };
@@ -213,6 +216,7 @@ describe('BranchSupplyReceiptsService', () => {
     const service = new BranchSupplyReceiptsService(
       prisma as unknown as PrismaService,
       inventoryTransfers as unknown as InventoryTransfersService,
+      { emitSupplyReceived: jest.fn() } as unknown as CedisGateway,
     );
     const link = createLink();
     link.inventoryTransfer.items[0] = {
@@ -294,6 +298,7 @@ describe('BranchSupplyReceiptsService', () => {
     const service = new BranchSupplyReceiptsService(
       prisma as unknown as PrismaService,
       inventoryTransfers as unknown as InventoryTransfersService,
+      { emitSupplyReceived: jest.fn() } as unknown as CedisGateway,
     );
     const link = createLink();
     const receivedBy = { id: seller.id, name: 'Vendedor' };
