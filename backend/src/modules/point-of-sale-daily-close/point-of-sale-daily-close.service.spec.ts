@@ -53,10 +53,27 @@ describe('PointOfSaleDailyCloseService', () => {
     $transaction: jest.fn(),
   };
   const service = new PointOfSaleDailyCloseService(prisma as never);
-  const privateService = service as unknown as Record<
-    string,
-    (...args: unknown[]) => unknown
-  >;
+  // Keep async test seams explicit: returning unknown made Jest's resolved-value
+  // type become never. The cast stays at the private test boundary only.
+  type AsyncHook = (...args: unknown[]) => Promise<unknown>;
+  type PrivateHooks = Record<
+    | 'syncOperations'
+    | 'recalculate'
+    | 'syncDifferences'
+    | 'reconciliationForClose'
+    | 'requireDraft'
+    | 'requireCloseAccess'
+    | 'requireCloseAccessWithinTransaction'
+    | 'validateWithin'
+    | 'transitionWithin'
+    | 'closeWithinTransaction'
+    | 'projectDetailForRole',
+    AsyncHook
+  > & {
+    operationalDay: (date: Date) => unknown;
+    buildDifferenceDefinitions: (...args: unknown[]) => unknown;
+  };
+  const privateService = service as unknown as PrivateHooks;
 
   beforeEach(() => {
     jest.restoreAllMocks();

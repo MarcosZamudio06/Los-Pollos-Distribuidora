@@ -1,3 +1,4 @@
+import { installSessionRecovery } from "./realtimeRecovery";
 import { io, type Socket } from "socket.io-client";
 
 export const SALE_CREATED_EVENT = "sale.created" as const;
@@ -74,9 +75,11 @@ class SalesSocketClient {
     socket.on("disconnect", handlers.onDisconnected);
     socket.io.on("reconnect_attempt", handlers.onReconnecting);
 
+    const stopRecovery = installSessionRecovery(socket, token);
     if (!socket.connected) socket.connect();
 
     return () => {
+      stopRecovery();
       socket.off(SALE_CREATED_EVENT, handlers.onOrderCreated);
       socket.off("connect", handlers.onConnected);
       socket.off("connect_error", handlers.onConnectionError);

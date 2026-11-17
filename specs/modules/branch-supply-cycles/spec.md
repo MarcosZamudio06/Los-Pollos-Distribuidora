@@ -224,3 +224,11 @@ El sistema MUST mantener KG y PIECE como dimensiones separadas, exigir piezas en
 - `specs/.specs/03-api/inventory-transfers-api.md`.
 - `specs/modules/inventory/spec.md`.
 - `specs/modules/point-of-sale-closing/spec.md`.
+
+## Notificaciones de suministros en tiempo real
+
+El AppModule canónico registra una única instancia de CedisGateway en CedisModule. La dependencia NestJS de los servicios emisores es obligatoria (`@Inject`, sin `@Optional`): una composición incompleta falla al inicializar, no omite eventos silenciosamente. Se mantienen namespace `/cedis`, path `/api/socket.io`, permisos, alcance por ubicación y revocación de sesiones; no se habilita replay protegido.
+
+`cedis.supply.created` anuncia un suministro nuevo después del commit. `cedis.supply.received` anuncia una recepción física nueva después del commit con `transferId`, `transferNumber`, `cycleId`, `businessDate`, `origin`, `destination`, `requestedAt` y `receiptId`. Una operación rechazada, rollback o replay idempotente no emite una nueva notificación. La unión de rooms del CEDIS origen, sucursal destino y ADMIN entrega una sola notificación a cada socket autorizado. Ningún evento confirma inventario en el cliente: la pantalla reconcilia desde REST, cancela lecturas obsoletas y muestra si el canal está conectando, conectado, reconectando, desconectado o en error sin revelar detalles internos.
+
+La firma TypeScript permite la construcción directa sin canal de red en el seed operativo protegido, que ejecuta una transacción exterior y no inicia un servidor Socket.IO. Esto no vuelve opcional la resolución de NestJS. Pruebas permanentes de compilación rechazan la omisión del provider para ambos servicios; el seed y sus mutaciones permanecen intactos.

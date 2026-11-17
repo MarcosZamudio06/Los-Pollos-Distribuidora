@@ -1,3 +1,4 @@
+import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
 import { CedisGateway } from './cedis.gateway';
 import { PERMISSIONS } from '../../common/authorization/permissions';
 import {
@@ -10,7 +11,20 @@ describe('CedisGateway', () => {
   function createGateway() {
     const authService = { verifyAccessToken: jest.fn() };
     const prisma = { operationalLocation: { findUnique: jest.fn() } };
-    const gateway = new CedisGateway(authService as never, prisma as never);
+    Object.assign(authService, {
+      verifyRealtimeSession: async (token: string) => ({
+        principal: {
+          ...(await authService.verifyAccessToken(token)),
+          authSessionId: 'fixture-session',
+        },
+        expiresAt: Date.now() + 60000,
+      }),
+    });
+    const gateway = new CedisGateway(
+      authService as never,
+      prisma as never,
+      new SessionRevocationRegistry(),
+    );
     const emit = jest.fn();
     (gateway as unknown as { server: { to: jest.Mock } }).server = {
       to: jest.fn(() => ({ emit })),
@@ -41,7 +55,9 @@ describe('CedisGateway', () => {
 
     await gateway.handleConnection(socket as never);
 
-    expect(socket.join).toHaveBeenCalledWith(cedisLocationRoom('branch-1'));
+    expect(socket.join).toHaveBeenCalledWith(
+      expect.arrayContaining([cedisLocationRoom('branch-1')]),
+    );
     expect(socket.disconnect).not.toHaveBeenCalled();
   });
 
@@ -60,9 +76,12 @@ describe('CedisGateway', () => {
     gateway.emitSupplyCreated(supply);
 
     const server = (gateway as unknown as { server: { to: jest.Mock } }).server;
-    expect(server.to).toHaveBeenCalledWith(cedisLocationRoom('cedis-1'));
-    expect(server.to).toHaveBeenCalledWith(cedisLocationRoom('branch-1'));
-    expect(server.to).toHaveBeenCalledWith(CEDIS_ADMIN_ROOM);
+    expect(server.to).toHaveBeenCalledWith([
+      cedisLocationRoom('cedis-1'),
+      cedisLocationRoom('branch-1'),
+      CEDIS_ADMIN_ROOM,
+    ]);
+    expect(emit).toHaveBeenCalledTimes(1);
     expect(emit).toHaveBeenCalledWith(CEDIS_SUPPLY_CREATED_EVENT, supply);
   });
 

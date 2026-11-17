@@ -135,9 +135,11 @@ describe('production container hardening contract', () => {
     expect(backendDockerfile).toContain('AS build');
     expect(backendDockerfile).toContain('AS runtime');
     expect(backendDockerfile).toContain('npm prune --omit=dev');
-    expect(backendDockerfile).toContain('/tmp/production-tools');
+    expect(backendDockerfile).not.toContain('/tmp/production-tools');
+    expect(backendDockerfile).not.toContain('npm install --prefix');
     expect(backendPackage.dependencies['@prisma/client']).toBe('6.19.3');
-    expect(backendPackage.devDependencies.prisma).toBe('6.19.3');
+    expect(backendPackage.dependencies.prisma).toBe('6.19.3');
+    expect(backendPackage.devDependencies.prisma).toBeUndefined();
     expect(backendPackage.overrides['deepmerge-ts']).toBe('8.0.0');
     expect(backendPnpmWorkspace).toContain('deepmerge-ts: 8.0.0');
     expect(
@@ -145,10 +147,10 @@ describe('production container hardening contract', () => {
     ).toBe('8.0.0');
     expect(backendPnpmLock).toContain('deepmerge-ts@8.0.0');
     expect(backendPnpmLock).not.toContain('deepmerge-ts@7.1.5');
-    expect(backendDockerfile).toContain('"prisma":"6.19.3"');
-    expect(backendDockerfile).toContain('"ts-node":"10.9.2"');
-    expect(backendDockerfile).toContain('"typescript":"5.7.3"');
-    expect(backendDockerfile).toContain('"deepmerge-ts":"8.0.0"');
+    expect(backendPackage.dependencies['ts-node']).toBe('10.9.2');
+    expect(backendPackage.dependencies.typescript).toBe('5.9.3');
+    expect(backendPackage.devDependencies['ts-node']).toBeUndefined();
+    expect(backendPackage.devDependencies.typescript).toBeUndefined();
     expect(backendDockerfile).toContain('USER node');
     expect(backendDockerfile).toContain(
       'COPY --from=build --chown=node:node /app/backend/dist ./dist',

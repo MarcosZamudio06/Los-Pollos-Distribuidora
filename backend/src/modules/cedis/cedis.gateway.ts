@@ -1,4 +1,3 @@
-import { Logger, Optional } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { PERMISSIONS } from '../../common/authorization/permissions';
@@ -11,6 +10,8 @@ import {
   CEDIS_GATEWAY_NAMESPACE,
   CEDIS_GATEWAY_PATH,
   CEDIS_SUPPLY_CREATED_EVENT,
+  CEDIS_SUPPLY_RECEIVED_EVENT,
+  type CedisSupplyReceivedPayload,
   cedisLocationRoom,
   type CedisClientToServerEvents,
   type CedisServerToClientEvents,
@@ -27,75 +28,79 @@ type HandshakeAuth = {
 @WebSocketGateway({
   namespace: CEDIS_GATEWAY_NAMESPACE,
   path: CEDIS_GATEWAY_PATH,
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 120_000,
-    skipMiddlewares: false,
-  },
 })
 export class CedisGateway {
-  private readonly logger = new Logger(CedisGateway.name);
-  private readonly socketsByUser = new Map<string, Set<CedisSocket>>();
-
   @WebSocketServer()
   server!: Server<CedisClientToServerEvents, CedisServerToClientEvents>;
 
   constructor(
     private readonly authService: AuthService,
     private readonly prisma: PrismaService,
-    @Optional() sessionRevocationRegistry?: SessionRevocationRegistry,
-  ) {
-    sessionRevocationRegistry?.subscribe((userIds) => {
-      for (const userId of userIds) this.disconnectUser(userId);
+    private readonly sessions: SessionRevocationRegistry,
+  ) {}
+
+  afterInit(server: Server): void {
+    server.use((socket, next) => {
+      void this.authorize(socket as CedisSocket).then(
+        () =>
+          next(
+            this.sessions.isTracked(socket)
+              ? undefined
+              : new Error('Unauthorized socket session'),
+          ),
+        () => next(new Error('Unauthorized socket session')),
+      );
     });
   }
 
   async handleConnection(socket: CedisSocket): Promise<void> {
+    if (this.sessions.isTracked(socket)) return;
     try {
-      const { locationId, token } = socket.handshake.auth as HandshakeAuth;
-      if (
-        typeof token !== 'string' ||
-        typeof locationId !== 'string' ||
-        !locationId.trim()
-      ) {
-        throw new Error('Missing socket authentication');
-      }
-
-      const user = await this.authService.verifyAccessToken(token);
-      await this.assertLocationAccess(user, locationId);
-      await socket.join(cedisLocationRoom(locationId));
-      if (user.role === 'ADMIN') await socket.join(CEDIS_ADMIN_ROOM);
-
-      const sockets = this.socketsByUser.get(user.id) ?? new Set<CedisSocket>();
-      sockets.add(socket);
-      this.socketsByUser.set(user.id, sockets);
-      socket.once('disconnect', () => {
-        const current = this.socketsByUser.get(user.id);
-        current?.delete(socket);
-        if (current?.size === 0) this.socketsByUser.delete(user.id);
-      });
-    } catch (error) {
-      this.logger.warn(
-        `Rejected CEDIS socket connection: ${error instanceof Error ? error.message : 'unknown reason'}`,
-      );
+      await this.authorize(socket);
+    } catch {
       socket.disconnect(true);
     }
   }
 
-  emitSupplyCreated(supply: CedisSupplyCreatedPayload): void {
-    this.server
-      .to(cedisLocationRoom(supply.origin.id))
-      .emit(CEDIS_SUPPLY_CREATED_EVENT, supply);
-    this.server
-      .to(cedisLocationRoom(supply.destination.id))
-      .emit(CEDIS_SUPPLY_CREATED_EVENT, supply);
-    this.server.to(CEDIS_ADMIN_ROOM).emit(CEDIS_SUPPLY_CREATED_EVENT, supply);
+  private async authorize(socket: CedisSocket): Promise<void> {
+    const auth = socket.handshake?.auth as HandshakeAuth;
+    if (typeof auth?.token !== 'string' || !auth.token.trim())
+      throw new Error('Missing socket authentication');
+    await this.sessions.authorize(
+      socket,
+      () => this.authService.verifyRealtimeSession(auth.token as string),
+      async (user) => {
+        if (typeof auth.locationId !== 'string' || !auth.locationId.trim())
+          throw new Error('Missing socket authentication');
+        await this.assertLocationAccess(user, auth.locationId);
+        return [
+          cedisLocationRoom(auth.locationId),
+          ...(user.role === 'ADMIN' ? [CEDIS_ADMIN_ROOM] : []),
+        ];
+      },
+    );
   }
 
-  private disconnectUser(userId: string): void {
-    const sockets = this.socketsByUser.get(userId);
-    if (!sockets) return;
-    for (const socket of sockets) socket.disconnect(true);
-    this.socketsByUser.delete(userId);
+  emitSupplyCreated(supply: CedisSupplyCreatedPayload): void {
+    this.sessions.pruneExpired();
+    this.server
+      .to([
+        cedisLocationRoom(supply.origin.id),
+        cedisLocationRoom(supply.destination.id),
+        CEDIS_ADMIN_ROOM,
+      ])
+      .emit(CEDIS_SUPPLY_CREATED_EVENT, supply);
+  }
+
+  emitSupplyReceived(supply: CedisSupplyReceivedPayload): void {
+    this.sessions.pruneExpired();
+    this.server
+      .to([
+        cedisLocationRoom(supply.origin.id),
+        cedisLocationRoom(supply.destination.id),
+        CEDIS_ADMIN_ROOM,
+      ])
+      .emit(CEDIS_SUPPLY_RECEIVED_EVENT, supply);
   }
 
   private async assertLocationAccess(

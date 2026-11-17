@@ -561,7 +561,7 @@ describe('FacturamaAdapter', () => {
     await expect(
       adapter.stamp({
         correlationId: 'corr-income-substitution-1',
-        idempotencyKey: 'income-substitution-idem-1',
+        idempotencyKey: 'idem-1',
         series: 'A',
         folio: '101',
         snapshot: substitutionSnapshot(),

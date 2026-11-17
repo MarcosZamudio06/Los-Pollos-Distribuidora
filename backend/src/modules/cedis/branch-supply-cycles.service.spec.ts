@@ -1,3 +1,4 @@
+import { CedisGateway } from './cedis.gateway';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   BranchSupplyCycleStatus,
@@ -159,6 +160,7 @@ function createService() {
     cycleReconciliation,
     dailyCloseService as unknown as PointOfSaleDailyCloseService,
     deliveryService as unknown as DeliveryService,
+    { emitSupplyCreated: jest.fn() } as unknown as CedisGateway,
   );
   return {
     prisma,

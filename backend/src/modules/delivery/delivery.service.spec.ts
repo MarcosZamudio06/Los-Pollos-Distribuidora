@@ -2492,6 +2492,136 @@ describe('DeliveryService', () => {
     expect(objectStorage.putObject).not.toHaveBeenCalled();
   });
 
+  describe('evidence transaction concurrency', () => {
+    const input = () => ({
+      type: DeliveryEvidenceType.PHOTO,
+      value: ONE_BY_ONE_PNG_DATA_URL,
+      capturedAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const rawConflict = (code: string) =>
+      new Prisma.PrismaClientKnownRequestError('raw query failed', {
+        code: 'P2010',
+        clientVersion: Prisma.prismaVersion.client,
+        meta: { code },
+      });
+    function setup() {
+      const context = createService();
+      context.prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());
+      context.prisma.deliveryEvidence.create.mockImplementation(({ data }) =>
+        Promise.resolve({ id: 'evidence-concurrent', ...data }),
+      );
+      return context;
+    }
+
+    it.each(['40001', '40P01'])(
+      'recovers sale-lock %s inside a fresh transaction, uploading once',
+      async (code) => {
+        const { service, prisma, objectStorage } = setup();
+        prisma.$executeRaw
+          .mockResolvedValueOnce(1)
+          .mockRejectedValueOnce(rawConflict(code));
+        await expect(
+          service.captureEvidence('order-1', input(), driver),
+        ).resolves.toMatchObject({ id: 'evidence-concurrent' });
+        expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+        expect(prisma.deliveryOrder.findFirst).toHaveBeenCalledTimes(3);
+        expect(prisma.deliveryEvidence.create).toHaveBeenCalledTimes(1);
+        expect(objectStorage.putObject).toHaveBeenCalledTimes(1);
+        expect(objectStorage.deleteObject).not.toHaveBeenCalled();
+        for (const call of prisma.$transaction.mock.calls)
+          expect(call[1]).toEqual({
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          });
+      },
+    );
+
+    it.each(['40001', '40P01'])(
+      'exhausts exactly three transactions for %s and compensates once',
+      async (code) => {
+        const { service, prisma, objectStorage } = setup();
+        prisma.$executeRaw.mockImplementation((sql: TemplateStringsArray) => {
+          if (sql.join('').includes('UPDATE "Sale"'))
+            return Promise.reject(rawConflict(code));
+          return Promise.resolve(1);
+        });
+        await expect(
+          service.captureEvidence('order-1', input(), driver),
+        ).rejects.toMatchObject({
+          response: { code: 'EVIDENCE_CONCURRENCY_CONFLICT' },
+        });
+        expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+        expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+        expect(objectStorage.putObject).toHaveBeenCalledTimes(1);
+        expect(objectStorage.deleteObject).toHaveBeenCalledTimes(1);
+        expect(objectStorage.deleteObject).toHaveBeenCalledWith(
+          objectStorage.putObject.mock.calls[0][0].key,
+        );
+      },
+    );
+
+    it.each(['23505', '42501', '55P03', '08006'])(
+      'does not retry unrelated SQLSTATE %s',
+      async (code) => {
+        const { service, prisma, objectStorage } = setup();
+        const error = rawConflict(code);
+        prisma.$executeRaw
+          .mockResolvedValueOnce(1)
+          .mockRejectedValueOnce(error);
+        await expect(
+          service.captureEvidence('order-1', input(), driver),
+        ).rejects.toBe(error);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+        expect(objectStorage.deleteObject).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('rechecks sale state on retry and never retries a real business conflict', async () => {
+      const { service, prisma, objectStorage } = setup();
+      prisma.$executeRaw
+        .mockResolvedValueOnce(1)
+        .mockRejectedValueOnce(rawConflict('40001'));
+      prisma.sale.findUnique.mockResolvedValue({
+        status: SaleStatus.CANCELLED,
+      });
+      await expect(
+        service.captureEvidence('order-1', input(), driver),
+      ).rejects.toThrow('Only a confirmed non-cancelled sale can be executed');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+      expect(objectStorage.putObject).toHaveBeenCalledTimes(1);
+      expect(objectStorage.deleteObject).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry revoked order access after upload', async () => {
+      const { service, prisma, objectStorage } = setup();
+      prisma.deliveryOrder.findFirst
+        .mockResolvedValueOnce(createOrder())
+        .mockResolvedValue(null);
+      await expect(
+        service.captureEvidence('order-1', input(), driver),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.deliveryEvidence.create).not.toHaveBeenCalled();
+      expect(objectStorage.deleteObject).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      new ConflictException('version mismatch'),
+      new ForbiddenException('denied'),
+      { code: 'P2025' },
+      { code: 'P2002' },
+    ])('does not broaden the retry classifier for %p', async (error) => {
+      const { service, prisma, objectStorage } = setup();
+      prisma.deliveryEvidence.create.mockRejectedValue(error);
+      await expect(
+        service.captureEvidence('order-1', input(), driver),
+      ).rejects.toBe(error);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(objectStorage.deleteObject).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('cleans up the object when the evidence row cannot be created', async () => {
     const { service, prisma, objectStorage } = createService();
     prisma.deliveryOrder.findFirst.mockResolvedValue(createOrder());

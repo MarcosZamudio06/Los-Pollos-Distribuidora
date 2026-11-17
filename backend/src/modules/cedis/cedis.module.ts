@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CedisGateway } from './cedis.gateway';
 import { AuthModule } from '../auth/auth.module';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { InventoryModule } from '../inventory/inventory.module';
@@ -28,6 +29,7 @@ import { CedisInventorySummaryQueryService } from './cedis-inventory-summary.que
     CedisDashboardController,
   ],
   providers: [
+    CedisGateway,
     BranchSupplyCycleReconciliationService,
     BranchSupplyCyclesService,
     BranchSupplyReceiptsService,

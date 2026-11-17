@@ -1,3 +1,4 @@
+import { reconcileRealtimeQuery } from "../../lib/realtimeRecovery";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -289,20 +290,29 @@ export function PedidosPage() {
     return salesSocket.subscribe(accessToken, activeLocationId, {
       onConnected: () => {
         setConnectionStatus("connected");
-        void queryClient.invalidateQueries({
-          queryKey: ["branch-orders", activeFilters],
-        });
+        void reconcileRealtimeQuery(queryClient, [
+          "branch-orders",
+          activeFilters,
+        ]);
       },
       onConnectionError: () => setConnectionStatus("disconnected"),
       onDisconnected: () => setConnectionStatus("disconnected"),
       onOrderCreated: (order) => {
         if (order.location.id !== activeLocationId) return;
-        queryClient.setQueryData<{ items: SaleOrder[] }>(
-          ["branch-orders", activeFilters],
-          (current) => ({
-            items: mergeOrders(current?.items ?? [], [order]),
-          }),
-        );
+        // Cancel an older snapshot before merging the delta, then read persisted state.
+        void queryClient
+          .cancelQueries({ queryKey: ["branch-orders", activeFilters] })
+          .then(() => {
+            queryClient.setQueryData<{ items: SaleOrder[] }>(
+              ["branch-orders", activeFilters],
+              (current) => ({
+                items: mergeOrders(current?.items ?? [], [order]),
+              }),
+            );
+            return queryClient.invalidateQueries({
+              queryKey: ["branch-orders", activeFilters],
+            });
+          });
       },
       onReconnecting: () => setConnectionStatus("reconnecting"),
     });

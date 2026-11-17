@@ -10,7 +10,20 @@ describe('SalesGateway', () => {
     const prisma = {
       operationalLocation: { findUnique: jest.fn() },
     };
-    const gateway = new SalesGateway(authService as never, prisma as never);
+    Object.assign(authService, {
+      verifyRealtimeSession: async (token: string) => ({
+        principal: {
+          ...(await authService.verifyAccessToken(token)),
+          authSessionId: 'fixture-session',
+        },
+        expiresAt: Date.now() + 60000,
+      }),
+    });
+    const gateway = new SalesGateway(
+      authService as never,
+      prisma as never,
+      new SessionRevocationRegistry(),
+    );
     const emit = jest.fn();
     (gateway as unknown as { server: { to: jest.Mock } }).server = {
       to: jest.fn(() => ({ emit })),
@@ -34,11 +47,14 @@ describe('SalesGateway', () => {
       disconnect: jest.fn(),
       handshake: { auth: { locationId: 'loc-1', token: 'access-token' } },
       join: jest.fn(),
+      once: jest.fn(),
     };
 
     await gateway.handleConnection(socket as never);
 
-    expect(socket.join).toHaveBeenCalledWith(salesLocationRoom('loc-1'));
+    expect(socket.join).toHaveBeenCalledWith(
+      expect.arrayContaining([salesLocationRoom('loc-1')]),
+    );
     expect(socket.disconnect).not.toHaveBeenCalled();
   });
 
@@ -54,6 +70,7 @@ describe('SalesGateway', () => {
       disconnect: jest.fn(),
       handshake: { auth: { locationId: 'loc-2', token: 'access-token' } },
       join: jest.fn(),
+      once: jest.fn(),
     };
 
     await gateway.handleConnection(socket as never);
@@ -100,6 +117,15 @@ describe('SalesGateway', () => {
       },
     };
     const registry = new SessionRevocationRegistry();
+    Object.assign(authService, {
+      verifyRealtimeSession: async (token: string) => ({
+        principal: {
+          ...(await authService.verifyAccessToken(token)),
+          authSessionId: 'fixture-session',
+        },
+        expiresAt: Date.now() + 60000,
+      }),
+    });
     const gateway = new SalesGateway(
       authService as never,
       prisma as never,
@@ -115,6 +141,6 @@ describe('SalesGateway', () => {
     await gateway.handleConnection(socket as never);
     registry.notify(['seller-1']);
 
-    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(socket.disconnect).toHaveBeenCalledWith(false);
   });
 });

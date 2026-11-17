@@ -1,4 +1,3 @@
-import { Logger, Optional } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { DeliveryRouteStatus } from '@prisma/client';
 import type { Server, Socket } from 'socket.io';
@@ -34,68 +33,77 @@ type HandshakeAuth = {
   originLocationId?: unknown;
 };
 
-type DriverRouteRoom = {
-  id: string;
-};
-
 @WebSocketGateway({
   namespace: FLEET_GATEWAY_NAMESPACE,
   path: FLEET_GATEWAY_PATH,
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 120_000,
-    skipMiddlewares: false,
-  },
 })
 export class FleetGateway {
-  private readonly logger = new Logger(FleetGateway.name);
-  private readonly socketsByUser = new Map<string, Set<FleetSocket>>();
-
   @WebSocketServer()
   server!: Server<FleetClientToServerEvents, FleetServerToClientEvents>;
 
   constructor(
     private readonly authService: AuthService,
     private readonly prisma: PrismaService,
-    @Optional() sessionRevocationRegistry?: SessionRevocationRegistry,
-  ) {
-    sessionRevocationRegistry?.subscribe((userIds) => {
-      for (const userId of userIds) this.disconnectUser(userId);
+    private readonly sessions: SessionRevocationRegistry,
+  ) {}
+
+  afterInit(server: Server): void {
+    server.use((socket, next) => {
+      void this.authorize(socket as FleetSocket).then(
+        () =>
+          next(
+            this.sessions.isTracked(socket)
+              ? undefined
+              : new Error('Unauthorized socket session'),
+          ),
+        () => next(new Error('Unauthorized socket session')),
+      );
     });
   }
 
   async handleConnection(socket: FleetSocket): Promise<void> {
+    if (this.sessions.isTracked(socket)) return;
     try {
-      const auth = socket.handshake?.auth as HandshakeAuth | undefined;
-      if (typeof auth?.token !== 'string' || !auth.token.trim()) {
-        throw new Error('Missing socket authentication');
-      }
-
-      const user = await this.authService.verifyAccessToken(auth.token);
-      this.assertSocketAccess(user);
-      const requestedOriginLocationId = this.parseOptionalOrigin(
-        auth.originLocationId,
-      );
-
-      if (user.role === 'ADMIN') {
-        if (requestedOriginLocationId) {
-          await socket.join(fleetOriginRoom(requestedOriginLocationId));
-        } else {
-          await socket.join(FLEET_ADMIN_ROOM);
-        }
-      } else {
-        await this.joinDriverRooms(socket, user.id);
-      }
-
-      this.trackSocket(user.id, socket);
-    } catch (error) {
-      this.logger.warn(
-        `Rejected fleet socket connection: ${error instanceof Error ? error.message : 'unknown reason'}`,
-      );
+      await this.authorize(socket);
+    } catch {
       socket.disconnect(true);
     }
   }
 
+  private async authorize(socket: FleetSocket): Promise<void> {
+    const auth = socket.handshake?.auth as HandshakeAuth;
+    if (typeof auth?.token !== 'string' || !auth.token.trim())
+      throw new Error('Missing socket authentication');
+    await this.sessions.authorize(
+      socket,
+      () => this.authService.verifyRealtimeSession(auth.token as string),
+      async (user) => {
+        this.assertSocketAccess(user);
+        const origin = this.parseOptionalOrigin(auth.originLocationId);
+        if (user.role === 'ADMIN')
+          return [origin ? fleetOriginRoom(origin) : FLEET_ADMIN_ROOM];
+        const routes = await this.prisma.deliveryRoute.findMany({
+          where: {
+            driverId: user.id,
+            status: {
+              in: [
+                DeliveryRouteStatus.PENDING,
+                DeliveryRouteStatus.IN_PROGRESS,
+              ],
+            },
+          },
+          select: { id: true },
+        });
+        return [
+          fleetDriverRoom(user.id),
+          ...(routes ?? []).map((route) => fleetRouteRoom(route.id)),
+        ];
+      },
+    );
+  }
+
   emitPositionUpdated(payload: FleetPositionUpdatedPayload): void {
+    this.sessions.pruneExpired();
     this.server
       .to(FLEET_ADMIN_ROOM)
       .emit(FLEET_POSITION_UPDATED_EVENT, payload);
@@ -114,6 +122,7 @@ export class FleetGateway {
     originLocationId?: string | null,
     driverId?: string | null,
   ): void {
+    this.sessions.pruneExpired();
     const rooms: string[] = [FLEET_ADMIN_ROOM];
     if (originLocationId) rooms.push(fleetOriginRoom(originLocationId));
     if (driverId) rooms.push(fleetDriverRoom(driverId));
@@ -125,6 +134,7 @@ export class FleetGateway {
     payload: FleetIncidentCreatedPayload,
     originLocationId?: string | null,
   ): void {
+    this.sessions.pruneExpired();
     this.server
       .to(FLEET_ADMIN_ROOM)
       .emit(FLEET_INCIDENT_CREATED_EVENT, payload);
@@ -142,6 +152,7 @@ export class FleetGateway {
     payload: FleetGeofenceEventPayload,
     originLocationId?: string | null,
   ): void {
+    this.sessions.pruneExpired();
     this.server
       .to(FLEET_ADMIN_ROOM)
       .emit(FLEET_GEOFENCE_ENTERED_EVENT, payload);
@@ -159,6 +170,7 @@ export class FleetGateway {
     payload: FleetGeofenceEventPayload,
     originLocationId?: string | null,
   ): void {
+    this.sessions.pruneExpired();
     this.server.to(FLEET_ADMIN_ROOM).emit(FLEET_GEOFENCE_EXITED_EVENT, payload);
     if (originLocationId) {
       this.server
@@ -185,51 +197,11 @@ export class FleetGateway {
     }
   }
 
-  private async joinDriverRooms(
-    socket: FleetSocket,
-    driverId: string,
-  ): Promise<void> {
-    await socket.join(fleetDriverRoom(driverId));
-    const routes = (await this.prisma.deliveryRoute.findMany({
-      where: {
-        driverId,
-        status: {
-          in: [DeliveryRouteStatus.PENDING, DeliveryRouteStatus.IN_PROGRESS],
-        },
-      },
-      select: { id: true },
-    })) as DriverRouteRoom[] | undefined;
-
-    for (const route of routes ?? []) {
-      await socket.join(fleetRouteRoom(route.id));
-    }
-  }
-
   private parseOptionalOrigin(value: unknown): string | undefined {
     if (value === undefined) return undefined;
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error('originLocationId must be a non-empty string');
     }
     return value.trim();
-  }
-
-  private trackSocket(userId: string, socket: FleetSocket): void {
-    const sockets = this.socketsByUser.get(userId) ?? new Set<FleetSocket>();
-    sockets.add(socket);
-    this.socketsByUser.set(userId, sockets);
-    if (typeof socket.once !== 'function') return;
-
-    socket.once('disconnect', () => {
-      const current = this.socketsByUser.get(userId);
-      current?.delete(socket);
-      if (current?.size === 0) this.socketsByUser.delete(userId);
-    });
-  }
-
-  private disconnectUser(userId: string): void {
-    const sockets = this.socketsByUser.get(userId);
-    if (!sockets) return;
-    for (const socket of sockets) socket.disconnect(true);
-    this.socketsByUser.delete(userId);
   }
 }

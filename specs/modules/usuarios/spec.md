@@ -37,7 +37,7 @@ Administrar usuarios internos del sistema.
 - Password requerido al crear.
 - Password nunca debe devolverse.
 - No eliminar usuario físicamente.
-- No permitir que un usuario se desactive a sí mismo si es único ADMIN activo.
+- Ninguna desactivación ni reasignación ordinaria puede eliminar el último ADMIN activo con capacidad de gestión de usuarios y perfiles, incluso con titulares no ADMIN de permisos de gestión de seguridad. Las comprobaciones se realizan bajo la coordinación transaccional común.
 - `operationalLocationId` conserva el punto de venta o ubicación operativa
   principal del empleado.
 - Cualquier rol canónico puede usar un CEDIS activo de tipo
@@ -60,6 +60,8 @@ Administrar usuarios internos del sistema.
   `MIXED` y `BRANCH` para `WAREHOUSE`; `SELLER` puede usar un punto de venta
   operativo o un CEDIS activo como ubicación principal.
 - La administración técnica no concede automáticamente autorizaciones financieras.
+- Alta, actualización, desactivación y restablecimiento requieren autoridad vigente sobre el perfil destino dentro de la misma transacción de escritura. Un actor no puede crear/restablecer ADMIN sin autoridad ADMIN ni conceder permisos fuera de los propios. Las negativas no generan credenciales ni modifican usuario o sesiones.
+- Las altas y los restablecimientos autorizados registran USER_CREATED y USER_PASSWORD_RESET en la auditoría de acceso existente, con actor/destino y contadores; nunca guardan contraseñas, hashes o tokens. El motivo es derivado de la operación administrativa existente, sin introducir un nuevo campo obligatorio.
 - Cambiar un perfil o sus permisos debe conservar actor, valores anterior y nuevo, fecha y motivo cuando corresponda.
 - El cambio de perfil se realiza únicamente mediante `/users/:id/access-profile`, con `expectedRoleId` y motivo.
 - El cambio de perfil valida que la ubicación asignada sea compatible con el nuevo rol; `WAREHOUSE` puede operar en CEDIS, almacén, ubicación mixta o sucursal, y `SELLER` puede operar en un punto de venta o CEDIS activo.

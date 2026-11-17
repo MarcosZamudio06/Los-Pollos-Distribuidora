@@ -26,6 +26,12 @@ test("rejects versioned certificate and private-key material", () => {
   );
 });
 
+test("DR redaction fixture source does not version private-key markers", () => {
+  const path = "scripts/database/dr-v2-feasibility/test_lab.py";
+  const content = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  assert.deepEqual(validateFiscalAsset(path, content), []);
+});
+
 test("accepts only explicitly synthetic CFDI XML with allowlisted RFCs", () => {
   const synthetic = `<!-- cfdi-fixture:synthetic -->
     <cfdi:Comprobante><cfdi:Emisor Rfc="EKU9003173C9" />

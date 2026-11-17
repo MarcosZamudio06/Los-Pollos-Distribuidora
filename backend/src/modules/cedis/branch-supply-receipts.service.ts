@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Inject,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -21,6 +22,7 @@ import {
   SupplyReceiptItemInput,
 } from '../inventory/inventory-transfers.service';
 import { ListIncomingSuppliesQueryDto, ReceiveIncomingSupplyDto } from './dto';
+import { CedisGateway } from './cedis.gateway';
 
 type ReceiptActor = Pick<
   AuthenticatedUser,
@@ -109,6 +111,7 @@ export class BranchSupplyReceiptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryTransfers: InventoryTransfersService,
+    @Inject(CedisGateway) private readonly cedisGateway?: CedisGateway,
   ) {}
 
   async list(
@@ -193,7 +196,7 @@ export class BranchSupplyReceiptsService {
       actorId: actor.id,
     });
 
-    return this.withSerializableRetry(() =>
+    const result = await this.withSerializableRetry(() =>
       this.prisma.$transaction(
         async (tx) => {
           const existing = await tx.branchSupplyReceipt.findUnique({
@@ -209,7 +212,7 @@ export class BranchSupplyReceiptsService {
             }
             const replay = await this.findLink(tx, transferId);
             this.assertLinkScope(replay, actor);
-            return this.toResponse(replay);
+            return { response: this.toResponse(replay), created: false };
           }
 
           const link = await this.findLink(tx, transferId);
@@ -275,11 +278,30 @@ export class BranchSupplyReceiptsService {
             })),
           });
 
-          return this.toResponse(await this.findLink(tx, transferId));
+          return {
+            response: this.toResponse(await this.findLink(tx, transferId)),
+            created: true,
+          };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
+    // Publish only after the real transaction commits; rejected commands and
+    // idempotent replays must not announce a new physical receipt.
+    if (result.created) {
+      const supply = result.response;
+      this.cedisGateway?.emitSupplyReceived({
+        transferId: supply.id,
+        transferNumber: supply.transferNumber,
+        cycleId: supply.cycleId,
+        businessDate: supply.businessDate,
+        origin: supply.origin,
+        destination: supply.destination,
+        requestedAt: supply.requestedAt,
+        receiptId: supply.receipt!.id,
+      });
+    }
+    return result.response;
   }
 
   private async findLink(

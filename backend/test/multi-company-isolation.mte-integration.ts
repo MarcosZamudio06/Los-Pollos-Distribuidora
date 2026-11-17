@@ -11,6 +11,10 @@ import bcrypt from 'bcryptjs';
 import { ObjectStorageService } from '../src/modules/object-storage/object-storage.service';
 import { FakeFiscalProvider } from '../src/modules/cfdi/testing/fake-fiscal-provider';
 import type { FiscalIssueCommand } from '../src/modules/cfdi/domain/fiscal-provider.port';
+import {
+  fleetNamespaceRejected,
+  transportDiagnostic,
+} from './mte-socket-contract';
 
 type TenantName = 'A' | 'B';
 
@@ -97,11 +101,18 @@ let driverEmailA = '';
 let fiscalFixtureA: TenantFiscalFixture;
 let fiscalFixtureB: TenantFiscalFixture;
 
-async function request(url: string, init?: RequestInit): Promise<Response> {
+async function request(
+  url: string,
+  init?: RequestInit,
+  phase = 'http',
+): Promise<Response> {
+  const started = performance.now();
   try {
     return await fetch(url, init);
-  } catch {
-    throw new Error('Disposable data-plane HTTP request failed');
+  } catch (error) {
+    throw new Error(
+      `Disposable data-plane HTTP request failed ${transportDiagnostic(error, phase, performance.now() - started)}`,
+    );
   }
 }
 
@@ -166,9 +177,13 @@ async function openFleetSocketNamespace(
   url.searchParams.set('EIO', '4');
   url.searchParams.set('transport', 'polling');
   url.searchParams.set('t', `${Date.now()}-${plane.name}`);
-  const openResponse = await request(url.toString(), {
-    signal: AbortSignal.timeout(5_000),
-  });
+  const openResponse = await request(
+    url.toString(),
+    {
+      signal: AbortSignal.timeout(5_000),
+    },
+    `tenant-${plane.name}:engine-open`,
+  );
   if (!openResponse.ok) {
     throw new Error(`Tenant ${plane.name} Socket.IO engine did not open`);
   }
@@ -185,18 +200,26 @@ async function openFleetSocketNamespace(
     );
   }
   url.searchParams.set('sid', sid);
-  const connectResponse = await request(url.toString(), {
-    method: 'POST',
-    headers: { 'content-type': 'text/plain;charset=UTF-8' },
-    body: `40/fleet,${JSON.stringify({ token })}`,
-    signal: AbortSignal.timeout(5_000),
-  });
+  const connectResponse = await request(
+    url.toString(),
+    {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain;charset=UTF-8' },
+      body: `40/fleet,${JSON.stringify({ token })}`,
+      signal: AbortSignal.timeout(5_000),
+    },
+    `tenant-${plane.name}:namespace-connect`,
+  );
   if (!connectResponse.ok) {
     throw new Error(`Tenant ${plane.name} Socket.IO namespace request failed`);
   }
-  const pollResponse = await request(url.toString(), {
-    signal: AbortSignal.timeout(5_000),
-  });
+  const pollResponse = await request(
+    url.toString(),
+    {
+      signal: AbortSignal.timeout(5_000),
+    },
+    `tenant-${plane.name}:namespace-poll`,
+  );
   const packets = pollResponse.ok
     ? (await pollResponse.text()).split('\u001e')
     : [`HTTP ${pollResponse.status}`];
@@ -207,9 +230,13 @@ async function pollFleetSocket(session: {
   url: URL;
   sid: string;
 }): Promise<string[]> {
-  const response = await request(session.url.toString(), {
-    signal: AbortSignal.timeout(5_000),
-  });
+  const response = await request(
+    session.url.toString(),
+    {
+      signal: AbortSignal.timeout(5_000),
+    },
+    'fleet-event-poll',
+  );
   if (!response.ok) return [`HTTP ${response.status}`];
   return (await response.text()).split('\u001e');
 }
@@ -874,22 +901,44 @@ describe('MTE-007 real two-company data-plane isolation', () => {
     expect(
       socketA.packets.some((packet) => packet.startsWith('40/fleet,')),
     ).toBe(true);
-    const socketB = await openFleetSocketNamespace(tenantB, adminTokenA);
-    const firstPackets = socketB.packets;
-    const secondPackets = firstPackets.some(
-      (packet) => packet.startsWith('41/fleet,') || packet === '1',
-    )
-      ? firstPackets
-      : [...firstPackets, ...(await pollFleetSocket(socketB))];
-    expect(
-      secondPackets.some(
-        (packet) =>
-          packet.startsWith('41/fleet,') ||
-          packet === '1' ||
-          packet.startsWith('HTTP 400'),
-      ),
-    ).toBe(true);
-    await closeFleetSocket(socketA);
+    let socketB:
+      | Awaited<ReturnType<typeof openFleetSocketNamespace>>
+      | undefined;
+    try {
+      socketB = await openFleetSocketNamespace(tenantB, adminTokenA);
+      expect(fleetNamespaceRejected(socketB.packets)).toBe(true);
+      // Prove the already-open A namespace still delivers protected events.
+      const driverToken = await login(tenantA, driverEmailA, driverPassword);
+      const marker = `${prefix}-after-cross-tenant-rejection`;
+      const published = await authorizedRequest(
+        tenantA,
+        '/api/fleet/positions',
+        driverToken,
+        'POST',
+        {
+          clientEventId: marker,
+          latitude: 19.1738,
+          longitude: -96.1342,
+          recordedAt: new Date().toISOString(),
+        },
+      );
+      expect(published.status).toBe(201);
+      const packets = await pollFleetSocket(socketA);
+      expect(
+        packets.some((packet) => {
+          if (!packet.startsWith('42/fleet,')) return false;
+          const [event, data] = JSON.parse(
+            packet.slice('42/fleet,'.length),
+          ) as [string, { clientEventId?: string }];
+          return (
+            event === 'fleet.position.updated' && data.clientEventId === marker
+          );
+        }),
+      ).toBe(true);
+    } finally {
+      await closeFleetSocket(socketA);
+      if (socketB) await closeFleetSocket(socketB);
+    }
   });
 
   it('keeps fake PAC artifacts and provider state within each company', async () => {

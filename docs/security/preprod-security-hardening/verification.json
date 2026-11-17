@@ -1,0 +1,573 @@
+{
+  "task_id": "ERP-PREPROD-CANDIDATE-HARDENING-001",
+  "status": "PARTIAL",
+  "generated_at_utc": "2026-11-02T02:28:33.521388+00:00",
+  "base_head": "b7724ee903b11d10d4ba166b59a2945332d447df",
+  "branch": "main",
+  "candidate_commit": null,
+  "source_binding": {
+    "sha256": "b5c3e7a54cd7f5bf6f2511e1cab9a8940d816bebc6776d0388c1592d478d2810",
+    "files": [
+      {
+        "path": "backend/package-lock.json",
+        "sha256": "ef5fa5f89e4a44ed8412f621d657b8bed90d200fd75b10a64cab2efab28f84cb",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/package.json",
+        "sha256": "0793dbd5e49bee34b3e1ac1ac9e2f991960ae6430f9603314ccf3cfbd80b49ae",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/pnpm-lock.yaml",
+        "sha256": "5403f1c2cad9432ad4c996408ad469b5ac72fafb5a5b7141ede609ee0d8d2d50",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/pnpm-workspace.yaml",
+        "sha256": "5d578b1b1f31b30faaf53b20a368cd5c36a347001256c19cff9e99b6e0068744",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/common/authorization/access-authority.ts",
+        "sha256": "0081c169f33a8d4e33198f341180b6d7b92dffae7068678ef45c31109a061966",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/common/session/session-revocation.registry.spec.ts",
+        "sha256": "8e7664cba46bd231c585f11c465e141c06d1a00d82bed8d4efea284fc2ced292",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/common/session/session-revocation.registry.ts",
+        "sha256": "f9e9cf21d4c07a2bfd0c58ed6462c3586c58e4bfc88b76a59550fe75edd47a5f",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/access-control/access-control.service.spec.ts",
+        "sha256": "dd04a7a470eae0d2d5ee4d7d6ea8ad38189591c9a5a5f27359de6eca9247e130",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/access-control/access-control.service.ts",
+        "sha256": "468b0171182468b50e810fc3016758d87c264b6ca98e6bc62cc23e364fa1b7b7",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/auth/auth.controller.ts",
+        "sha256": "93dd5cc676de732863b14681ff3d186fc85659eefb3dca70b710fca2e929653b",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/auth/auth.service.spec.ts",
+        "sha256": "85febb270b1d8e5e83dc3bf414e8b29f8d7001180c94edde22540251d5cac632",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/auth/auth.service.ts",
+        "sha256": "099f9090aa7354b7403cc7fb2712fa02d1a7311d851c2f0e11b48a663ff429ef",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/auth/auth.types.ts",
+        "sha256": "dddd53992c83ea16d5a5dc9bd2ea828d70353444ecd3f082f28078978bcd121c",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/cedis/cedis-dashboard.query.service.spec.ts",
+        "sha256": "044f1dc2430c68d4fa965decc6a9d3f1131e28b5b2e6e6d69ba6692fb60d790d",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/cedis/cedis.gateway.spec.ts",
+        "sha256": "61321458f6e8deb46146a1885e0a4c0c2435094ce8a162811eb32b3ee956174c",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/cedis/cedis.gateway.ts",
+        "sha256": "091ba2a9ebedacb1ef01518e7c5b5985b538d8ac67c04c5c5eb870249a6e3303",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/fleet/fleet.gateway.spec.ts",
+        "sha256": "d42effedd6d8281da101e3373f95a227290467756ba5c5209ac8cbca683fcbec",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/fleet/fleet.gateway.ts",
+        "sha256": "62ac198b8e6e9e42757c3565a817bbb84fa0544c723dc1ad40060079ad628e6d",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/health/health.boundaries.spec.ts",
+        "sha256": "19ff18fa87edf92521f74fab81b8566e02b294e12106a56f1a28ce7b6b3d2a21",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/health/health.controller.ts",
+        "sha256": "e9f91be8106d57a81fb644fe0883ab2c44f786f4a4a65c889bed01f045219a92",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/health/health.service.ts",
+        "sha256": "26b0651355665a2810df3d3900b25b6913f002958ab25df54e7cf9244b418f7f",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/point-of-sale-daily-close/point-of-sale-daily-close.service.spec.ts",
+        "sha256": "075d50083a4d0f6e7831f225e987b3acae177a21e814b011374280940fdf659e",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/sales/sales.gateway.spec.ts",
+        "sha256": "8bd3fce7ddb2ad2a9dbff7961831f57d1d73a6c54ac0b3c4417afc7946de38c2",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/sales/sales.gateway.ts",
+        "sha256": "c6c42fadb3cb2c2e47cf789d997458cde0ca20390512ca0376b908639d68a74d",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/users/users.controller.spec.ts",
+        "sha256": "295fe495dc511df348a6d98fa32d2d4f9ea5b9a1d512325037b0d9b494f3a4c8",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/users/users.controller.ts",
+        "sha256": "0d8b9a32648b20e8400d314e418ac2796f036f842534d9e99cfc8bf2f0adbd96",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/users/users.service.spec.ts",
+        "sha256": "cbde99eb27af54c422e3e7f9e596d4ef40d0a695d0c59bdbc7efb6cf84c4a0e3",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/modules/users/users.service.ts",
+        "sha256": "a207dc8ba0a7e48213c53828dc49511f268148c120fa5a5df71d54026bd65f91",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/prisma/candidate-hardening.contract.spec.ts",
+        "sha256": "cea022e137a09174179120a6f8e395366e389853657ca5f5a2b68e4eac6d0233",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/prisma/production-container-hardening.contract.spec.ts",
+        "sha256": "164399b5a94d10cdae49bf1616da95fe78982f3b111d4a6c5f4044622f2f79bd",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/src/prisma/security-dependencies.contract.spec.ts",
+        "sha256": "f13493ef0c2c3783ec935af5080cf47f0776ba0e24f9602e5ddf7e14fa53491e",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/test/security-remediation-003.e2e-spec.ts",
+        "sha256": "f22e7ed829035276a085c0c9f25f87c5e98c822c9053f224c69f7cb12d53e355",
+        "mode": "0o644"
+      },
+      {
+        "path": "backend/test/security-remediation.e2e-spec.ts",
+        "sha256": "a006728f51c474c55117f434062a0e19d4b13a385164e0c62cef7e5df0de13f3",
+        "mode": "0o644"
+      },
+      {
+        "path": "docker/backend/Dockerfile",
+        "sha256": "c96532994c54104cfd99f8db7b57d801dce6c2a0e1901d7cbe72296ab7df70af",
+        "mode": "0o644"
+      },
+      {
+        "path": "docker/frontend/Dockerfile",
+        "sha256": "ec3290c2c09a5475b300b4e31e47cbea169aae56c93bb0aa8c3a6503cb763d5b",
+        "mode": "0o644"
+      },
+      {
+        "path": "docs/runbooks/health-monitoring.md",
+        "sha256": "a7f6c30db41e0a3d04010a76e686d590eaafba78030967dc1042e524ffccf24f",
+        "mode": "0o644"
+      },
+      {
+        "path": "docs/runbooks/production-release.md",
+        "sha256": "03d7375a526362fb2f0914c97c43789ac43d6674ac6a0ef9abec6785a78afb04",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/e2e/security-recovery.html",
+        "sha256": "679c34c70f65d5fa9c19bc7ee7121c705e27ec7b7913f2457fda152c29964f84",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/package-lock.json",
+        "sha256": "ff222bb436719624659a769ae0938dfe84d956c2f26dbf3c59e0b63aca50d444",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/package.json",
+        "sha256": "3100494c36ea6370f16af0aa2588b803dd222bc49fca83f9e5629e713d21241d",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/pnpm-lock.yaml",
+        "sha256": "c2f50cd84179d5445e0ed023fc59928c1f7a70b26d5d366d978d6c3d4eef9af8",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/pnpm-workspace.yaml",
+        "sha256": "938a4f340a77891803349248aa817544a9baf83d3a0676d63f0bccc8cafdc481",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/features/cedis/CedisIncomingSuppliesPage.tsx",
+        "sha256": "16983b72668c6a8394fb2278b66b36b1386acd9763d9e286b7f5af177a7d9241",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/features/pedidos/PedidosPage.tsx",
+        "sha256": "5dd5e408e3f8c018c48f97fd6984d04e7e0db42c3b32a3c399b8c58e5e059eb5",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/lib/__tests__/realtimePagesRecovery.test.tsx",
+        "sha256": "e4467396abe3ae88d5e93f51b43e4d9b61c9e3864ab886b4cadae6fee37a6f09",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/lib/__tests__/realtimeRecovery.test.ts",
+        "sha256": "080e634222fb61dadd94edf1e931a2a0bfd8fdb1abc0f82165faaec04cae94a0",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/lib/cedisSocket.ts",
+        "sha256": "bd48432370d66dcf83641b5c31dca22e2ee4522f25ded6ef29db98c6fd5b1acc",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/lib/fleetSocket.ts",
+        "sha256": "460916c8a4ccd70d19e7732db06df6bf2b3ab4e1978319b6fd82d92466bed155",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/lib/realtimeRecovery.ts",
+        "sha256": "cc66606e1fee888e4de0a2572048fb836d8004561b3fdc4060a208a0149a253f",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/lib/salesSocket.ts",
+        "sha256": "cce6563024bc6f33b4797feab9f6eddaaf2d65cd3396b44bf18a12201e0d29fa",
+        "mode": "0o644"
+      },
+      {
+        "path": "frontend/src/test-fixtures/security-recovery.ts",
+        "sha256": "9d7c863a964b9734b11a3c87d3c7f671573603d02b4c59cba9c202263f352b00",
+        "mode": "0o644"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "a6a7d2f53008a4a8fb368709bd91c2dffebf382a94cdba8c1ac205a0b284c69f",
+        "mode": "0o644"
+      },
+      {
+        "path": "package.json",
+        "sha256": "9e7add46b1d41cbe2c2ec548d6b6910fce0721af8d7899f6f631b75d3516cc0e",
+        "mode": "0o644"
+      },
+      {
+        "path": "scripts/test-erp-preprod-security-remediation-001.sh",
+        "sha256": "f9056d0f7b98920d89e4e9408d9e563f7e4fbbc00a53345f790c86cc03f0dc2e",
+        "mode": "0o644"
+      },
+      {
+        "path": "scripts/test-erp-preprod-security-remediation-002.sh",
+        "sha256": "34f43c3aaac4c3e89ff72c21ab3bdc518fe02d3ecd1e220d930e6a5ca90fe6e5",
+        "mode": "0o644"
+      },
+      {
+        "path": "scripts/test-erp-preprod-security-remediation-003.sh",
+        "sha256": "c72e8b40ae78f428685a50a3d895bcb395509362ae7a60f6211e43d3485c4ed4",
+        "mode": "0o644"
+      },
+      {
+        "path": "scripts/test-preprod-documentary-contracts.sh",
+        "sha256": "9c93d1ddbe51e0edc596dd2181b4c213e029f80f4308c592f84b66537a269d28",
+        "mode": "0o644"
+      },
+      {
+        "path": "specs/.specs/03-api/api-conventions.md",
+        "sha256": "6b6d1c3fc65554b967f53e5162f91a9ec910552b8900a83c17b33b376c9287ee",
+        "mode": "0o644"
+      },
+      {
+        "path": "specs/.specs/03-api/auth-api.md",
+        "sha256": "9b3ca55d45100e9c3aa7514245328e44f9b875c26ac376b20d146ef5cff313b9",
+        "mode": "0o644"
+      },
+      {
+        "path": "specs/.specs/06-deployment/deployment.md",
+        "sha256": "d3a4f483421e5b51c36b071c1dd5eb8c1912fb958c4862c90318e15613cfd818",
+        "mode": "0o644"
+      },
+      {
+        "path": "specs/modules/auth/spec.md",
+        "sha256": "dc7138511cc65e8f107e60cece505571d3255e11440787ef9921be2ecab8c96c",
+        "mode": "0o644"
+      },
+      {
+        "path": "specs/modules/usuarios/spec.md",
+        "sha256": "471b15c0cab4388cb8bbdee03b4167165369c46954ffd75b161f8aeb7922f0d7",
+        "mode": "0o644"
+      }
+    ],
+    "excluded_derived_directory": "docs/security/preprod-security-hardening/"
+  },
+  "custody": {
+    "initial_files": 47,
+    "initial_untracked_files": 14,
+    "initial_backups_verified": 47,
+    "initial_current_unchanged": 42,
+    "initial_current_intentionally_changed": [
+      "backend/package-lock.json",
+      "backend/package.json",
+      "backend/pnpm-lock.yaml",
+      "backend/pnpm-workspace.yaml",
+      "backend/test/security-remediation.e2e-spec.ts"
+    ],
+    "historical_audit_files_unchanged": 694,
+    "index_sha256": "b8b9f317644cd4ccd14c318bb5c7ce1211799c19c554e36c4b29197bdd39ab92",
+    "stage_commit_push_merge": false
+  },
+  "tests": {
+    "backend_unit": 1792,
+    "backend_suites": 206,
+    "frontend_full": 685,
+    "prior_backend_selection": 296,
+    "prior_security_integration": 63,
+    "security003_http": 8,
+    "security003_unit_total": 17,
+    "prior_frontend_security_selection": 12,
+    "technical_chromium_subset": 3,
+    "documentary_subset": 96,
+    "node_contracts": 13,
+    "pnpm_bounded_subset": 100
+  },
+  "typescript": {
+    "original_head_full": 148,
+    "initial_candidate_full": 151,
+    "final_full": 75,
+    "new_remaining_primary_diagnostics": 0,
+    "productive": 0,
+    "fixed": 76,
+    "tsconfig_weakened": false
+  },
+  "package_managers": {
+    "canonical": "npm ci; root audit tool uses --ignore-scripts as CI",
+    "npm_frozen_backend_frontend_root": "PASS",
+    "pnpm_optional_backend_frontend": "frozen installs PASS; authorized execution PASS after preserved sandbox EPERM",
+    "root_pnpm": "not declared supported"
+  },
+  "audits": {
+    "backend_full_entries": {
+      "info": 0,
+      "low": 1,
+      "moderate": 45,
+      "high": 0,
+      "critical": 0,
+      "total": 46
+    },
+    "frontend_full_entries": {
+      "info": 0,
+      "low": 0,
+      "moderate": 16,
+      "high": 0,
+      "critical": 0,
+      "total": 16
+    },
+    "root_full_entries": {
+      "info": 0,
+      "low": 1,
+      "moderate": 9,
+      "high": 11,
+      "critical": 0,
+      "total": 21
+    },
+    "root_production": "zero vulnerabilities",
+    "backend_production": "8 moderate metadata entries, not eight unique CVEs",
+    "frontend_production": "zero vulnerabilities",
+    "actual_backend_installed_components": 340,
+    "actual_global_components": 145,
+    "actual_app_advisories": {
+      "minimatch": [
+        {
+          "id": 1244012,
+          "url": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+          "title": "minimatch has potential denial of service via globparts amplification",
+          "severity": "moderate",
+          "vulnerable_versions": "<11.0.1",
+          "cwe": [
+            "CWE-405"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          }
+        }
+      ]
+    },
+    "actual_global_advisories": {
+      "glob": [
+        {
+          "id": 1244013,
+          "url": "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+          "title": "Glob: AbortSignal cancellation bypass allows post-timeout filesystem traversal",
+          "severity": "moderate",
+          "vulnerable_versions": ">=9.0.0 <=14.0.1",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          }
+        }
+      ],
+      "ip-address": [
+        {
+          "id": 1242883,
+          "url": "https://github.com/advisories/GHSA-rxp7-6hxx-x8q5",
+          "title": "ip-address: Address6 matches a zone identifier in quadratic time ahead of its length limit, allowing a single long string to stall the process",
+          "severity": "moderate",
+          "vulnerable_versions": "<=10.7.3",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          }
+        }
+      ],
+      "minimatch": [
+        {
+          "id": 1244012,
+          "url": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+          "title": "minimatch has potential denial of service via globparts amplification",
+          "severity": "moderate",
+          "vulnerable_versions": "<11.0.1",
+          "cwe": [
+            "CWE-405"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          }
+        }
+      ]
+    },
+    "universal_vulnerability_clearance": false
+  },
+  "runtime_node": {
+    "node": "24.22.1",
+    "acorn": "8.18.0",
+    "ada": "4.0.0",
+    "amaro": "1.1.11",
+    "ares": "1.34.9",
+    "brotli": "1.2.0",
+    "cldr": "48.0",
+    "icu": "78.3",
+    "llhttp": "9.4.3",
+    "merve": "1.2.2",
+    "modules": "137",
+    "napi": "10",
+    "nbytes": "0.1.4",
+    "ncrypto": "0.0.1",
+    "nghttp2": "1.70.0",
+    "nghttp3": "",
+    "ngtcp2": "",
+    "openssl": "3.5.9",
+    "simdjson": "4.6.11",
+    "simdutf": "6.4.0",
+    "sqlite": "3.53.4",
+    "tz": "2026e",
+    "undici": "7.30.1",
+    "unicode": "17.0",
+    "uv": "1.52.1",
+    "uvwasi": "0.0.23",
+    "v8": "13.6.233.17-node.58",
+    "zlib": "1.3.2.1-motley-285e94b",
+    "zstd": "1.5.7"
+  },
+  "images": {
+    "backend": {
+      "id": "sha256:fe9d9558aed4fbbea42ee9801857cbba4a3ded789f375dfcae1c40e4b07e7d09",
+      "architecture": "amd64",
+      "published_registry_digest": null
+    },
+    "frontend": {
+      "id": "sha256:4dfb33183adda68c546c1671e546b56ce60db3e7af9cce556ea5487dd74518d4",
+      "architecture": "amd64",
+      "published_registry_digest": null
+    }
+  },
+  "quality_gate_local": "PARTIAL: functional checks pass; inherited fiscal/secret-marker/style checks are not relabeled PASS",
+  "remote_ci": "NOT_RUN for this uncommitted candidate",
+  "independent_review": "PENDING; no receipt; no silent PR substitute",
+  "original_P1_formally_closed": 0,
+  "production": "NO GO",
+  "risks": [
+    {
+      "id": "HARD-TS-001",
+      "state": "OPEN",
+      "scope": "75 inherited test/fixture/mock TypeScript diagnostics; zero productive diagnostics",
+      "owner": "Module maintainers / repository maintainer (proposed; assignment pending)"
+    },
+    {
+      "id": "HARD-DEP-001",
+      "state": "OPEN",
+      "scope": "Root developer CLI graph: 11 high, 9 moderate, 1 low; critical proxy-addr fixed. Not copied into ERP images; no acceptance inferred.",
+      "owner": "Developer tooling and security maintainers (proposed)"
+    },
+    {
+      "id": "HARD-DEP-002",
+      "state": "OPEN",
+      "scope": "Backend installed app graph: minimatch moderate advisory, two instances; global tooling: glob/ip-address/minimatch moderate. No forced incompatible minimatch major.",
+      "owner": "Backend and platform maintainers (proposed)"
+    },
+    {
+      "id": "HARD-DEP-003",
+      "state": "OPEN",
+      "scope": "Other build/test moderate and low advisory entries; scope/versions/advisories retained in dependency-risk-register.json.",
+      "owner": "Build/test maintainers (proposed)"
+    },
+    {
+      "id": "HARD-GATE-001",
+      "state": "OPEN",
+      "scope": "Fiscal guard rejects unchanged HEAD DRv2 negative fixture with invalid private-key marker; no real key, no DR/control edits.",
+      "owner": "Security and DR maintainers (proposed)"
+    },
+    {
+      "id": "HARD-GATE-002",
+      "state": "OPEN",
+      "scope": "Gitleaks generic-api-key flags unchanged mock idempotencyKey (not provider credential); no suppression added. Full history scan not run.",
+      "owner": "Security maintainer (proposed)"
+    },
+    {
+      "id": "HARD-GATE-003",
+      "state": "OPEN",
+      "scope": "Actionlint exit1: two inherited ShellCheck info/style reports, workflows unchanged.",
+      "owner": "CI/platform maintainer (proposed)"
+    },
+    {
+      "id": "HARD-IMAGE-001",
+      "state": "NOT_RUN",
+      "scope": "Exhaustive APK/OS/embedded-vendor advisory scan, remaining GIS release-image inventory, production load/HTTPS and full business-screen Chromium acceptance.",
+      "owner": "Platform / QA maintainers (proposed)"
+    },
+    {
+      "id": "HARD-RELEASE-001",
+      "state": "PENDING",
+      "scope": "Exact new-SHA remote CI, branch protection inspection (403), approved public origin, published digest manifest and independent review. No Git publication authorized.",
+      "owner": "Repository operator / independent reviewer"
+    }
+  ]
+}

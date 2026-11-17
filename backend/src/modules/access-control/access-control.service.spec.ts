@@ -28,6 +28,8 @@ function roleRecord(overrides: Record<string, unknown> = {}) {
 
 function createPrisma() {
   const prisma = {
+    actorPermissions: PERMISSION_DEFINITIONS.map(({ key }) => key),
+    $executeRaw: jest.fn(),
     permission: {
       findMany: jest.fn(),
     },
@@ -49,6 +51,12 @@ function createPrisma() {
       count: jest.fn(),
     },
     authSession: {
+      findUnique: jest.fn().mockResolvedValue({
+        userId: 'admin-1',
+        revokedAt: null,
+        lastUsedAt: new Date(),
+        absoluteExpiresAt: new Date(Date.now() + 86400000),
+      }),
       count: jest.fn(),
       updateMany: jest.fn(),
       findMany: jest.fn(),
@@ -59,7 +67,35 @@ function createPrisma() {
       count: jest.fn(),
     },
     $transaction: jest.fn((callback: (client: typeof prisma) => unknown) =>
-      callback(prisma),
+      callback({
+        ...prisma,
+        user: {
+          ...prisma.user,
+          findUnique: async (args: { where: Record<string, unknown> }) => {
+            if (args.where.id === 'admin-1')
+              return {
+                id: 'admin-1',
+                isActive: true,
+                role: {
+                  name: 'ADMIN',
+                  permissions: prisma.actorPermissions.map((key) => ({
+                    permission: { key },
+                  })),
+                },
+              };
+            const user = await prisma.user.findUnique(args);
+            return user?.role
+              ? {
+                  ...user,
+                  role: {
+                    ...user.role,
+                    permissions: user.role.permissions ?? [],
+                  },
+                }
+              : user;
+          },
+        },
+      }),
     ),
   };
   return prisma;
@@ -143,6 +179,7 @@ describe('AccessControlService', () => {
 
   it('does not let an actor grant a permission they do not possess', async () => {
     const prisma = createPrisma();
+    prisma.actorPermissions = [PERMISSIONS.ACCESS_PROFILES_MANAGE];
     const service = new AccessControlService(
       prisma as unknown as PrismaService,
     );
@@ -169,7 +206,8 @@ describe('AccessControlService', () => {
       ),
     );
 
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.rolePermission.createMany).not.toHaveBeenCalled();
   });
 
   it('preserves a security administrator when a profile loses security permissions', async () => {
@@ -343,7 +381,10 @@ describe('AccessControlService', () => {
 
   it('revokes sessions and audits a manual session closure', async () => {
     const prisma = createPrisma();
-    prisma.user.findUnique.mockResolvedValue({ id: 'employee-1' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'employee-1',
+      role: { name: 'SELLER', permissions: [] },
+    });
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
     prisma.authSession.updateMany.mockResolvedValue({ count: 3 });
     prisma.accessControlAuditLog.create.mockResolvedValue({ id: 'audit-3' });

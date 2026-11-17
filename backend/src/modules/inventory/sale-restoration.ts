@@ -5,6 +5,7 @@ import { InventoryMovementType, Prisma, SaleStatus } from '@prisma/client';
 export async function acquireSaleLifecycleLock(
   tx: Prisma.TransactionClient,
   saleId: string,
+  options: { retryTransientConflicts?: boolean } = {},
 ) {
   try {
     const count =
@@ -16,6 +17,18 @@ export async function acquireSaleLifecycleLock(
       error.code === 'P2010' &&
       ['40001', '40P01'].includes(String(error.meta?.code))
     ) {
+      // Opt in only inside a bounded whole-transaction retry. Other consumers
+      // retain their existing HTTP conflict contract; never retry this SQL alone.
+      if (options.retryTransientConflicts) {
+        throw new Prisma.PrismaClientKnownRequestError(
+          'Sale lifecycle serialization conflict',
+          {
+            code: 'P2034',
+            clientVersion: error.clientVersion,
+            meta: error.meta,
+          },
+        );
+      }
       throw new ConflictException(
         'Sale lifecycle changed; retry with the same Idempotency-Key',
       );
@@ -27,8 +40,9 @@ export async function acquireSaleLifecycleLock(
 export async function assertSaleExecutable(
   tx: Prisma.TransactionClient,
   saleId: string,
+  options: { retryTransientConflicts?: boolean } = {},
 ) {
-  await acquireSaleLifecycleLock(tx, saleId);
+  await acquireSaleLifecycleLock(tx, saleId, options);
   const sale = await tx.sale.findUnique({
     where: { id: saleId },
     select: { status: true },

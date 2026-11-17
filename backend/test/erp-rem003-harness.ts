@@ -61,6 +61,7 @@ export type RouteFixture = {
 
 export class Rem003Harness {
   app!: NestExpressApplication;
+  requestTimeoutMs?: number;
   configureApp?: (app: NestExpressApplication) => void;
   prisma!: PrismaService;
   url!: string;
@@ -137,6 +138,7 @@ export class Rem003Harness {
     ]) {
       const response = await request(this.url)
         .post('/api/auth/login')
+        .timeout(this.requestTimeoutMs ?? 0)
         .send({
           email: `dev.${role}@pollos.local`,
           password:
@@ -194,6 +196,11 @@ export class Rem003Harness {
         command.method === 'POST'
           ? request(this.url).post('/api/' + command.path)
           : request(this.url).patch('/api/' + command.path);
+      if (this.requestTimeoutMs)
+        call.timeout({
+          response: this.requestTimeoutMs,
+          deadline: this.requestTimeoutMs,
+        });
       call.set('Authorization', 'Bearer ' + this.tokens[command.role]);
       if (command.key) call.set('Idempotency-Key', command.key);
       const response = await call.send(command.body);
@@ -211,6 +218,7 @@ export class Rem003Harness {
     const start = performance.now();
     const response = await request(this.url)
       .get('/api/' + path)
+      .timeout(this.requestTimeoutMs ?? 0)
       .set('Authorization', 'Bearer ' + this.tokens[role]);
     this.events.push({
       path,

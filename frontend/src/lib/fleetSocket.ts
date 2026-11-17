@@ -1,3 +1,4 @@
+import { installSessionRecovery } from "./realtimeRecovery";
 import { io, type Socket } from "socket.io-client";
 
 export const FLEET_POSITION_UPDATED_EVENT = "fleet.position.updated" as const;
@@ -58,9 +59,7 @@ export type FleetIncidentCreated = {
 export type FleetRealtimePayload = Record<string, unknown>;
 
 type FleetServerEvents = {
-  [FLEET_POSITION_UPDATED_EVENT]: (
-    payload: FleetPositionUpdated,
-  ) => void;
+  [FLEET_POSITION_UPDATED_EVENT]: (payload: FleetPositionUpdated) => void;
   [FLEET_ROUTE_UPDATED_EVENT]: (payload: FleetRealtimePayload) => void;
   [FLEET_INCIDENT_CREATED_EVENT]: (payload: FleetIncidentCreated) => void;
   [FLEET_GEOFENCE_ENTERED_EVENT]: (payload: FleetGeofenceEvent) => void;
@@ -144,9 +143,11 @@ class FleetSocketClient {
       socket.io.on("reconnect_attempt", handlers.onReconnecting);
     }
 
+    const stopRecovery = installSessionRecovery(socket, token);
     if (!socket.connected) socket.connect();
 
     return () => {
+      stopRecovery();
       socket.off(FLEET_POSITION_UPDATED_EVENT, handlers.onPositionUpdated);
       if (handlers.onRouteUpdated) {
         socket.off(FLEET_ROUTE_UPDATED_EVENT, handlers.onRouteUpdated);
