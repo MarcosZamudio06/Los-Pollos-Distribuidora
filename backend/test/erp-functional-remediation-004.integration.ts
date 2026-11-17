@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
+import { SessionRevocationRegistry } from '../src/common/session/session-revocation.registry';
 import { FleetGateway } from '../src/modules/fleet/fleet.gateway';
 import { DEVELOPMENT_ADMIN_PASSWORD } from '../prisma/seed';
 import {
@@ -638,54 +639,162 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
   it('scopes route hints to origin and driver, rejects unauthorized sockets and foreign-silo tokens', async () => {
     const clients: Array<ReturnType<typeof io>> = [];
     const observed: Record<string, object[]> = {};
-    async function connect(
+    const handshakes: Record<
+      string,
+      {
+        connected: number;
+        rejected: number;
+        reconnects: number;
+        events: string[];
+      }
+    > = {};
+    async function handshake(
       label: string,
       token: string,
       originLocationId?: string,
       url = h.url,
     ) {
       observed[label] = [];
+      const counts = (handshakes[label] = {
+        connected: 0,
+        rejected: 0,
+        reconnects: 0,
+        events: [] as string[],
+      });
       const socket = io(url + '/fleet', {
         path: '/api/socket.io',
         auth: { token, ...(originLocationId ? { originLocationId } : {}) },
         transports: ['websocket'],
+        autoConnect: false,
+        forceNew: true,
+        timeout: 5000,
         reconnection: false,
       });
       clients.push(socket);
+      socket.on('connect', () => counts.connected++);
+      socket.on('connect_error', () => counts.rejected++);
+      socket.io.on('reconnect_attempt', () => counts.reconnects++);
+      socket.onAny((event: string) => counts.events.push(event));
       socket.on('fleet.route.updated', (p: object) => observed[label].push(p));
-      await new Promise<void>((resolve, reject) => {
-        socket.once('connect', () => resolve());
-        socket.once('connect_error', reject);
-        setTimeout(() => reject(new Error('socket timeout')), 5000).unref();
-      });
-      await sleep(150);
+      const outcome = await new Promise<'connected' | Error>(
+        (resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timer);
+            socket.off('connect', connected);
+            socket.off('connect_error', rejected);
+          };
+          const connected = () => {
+            cleanup();
+            resolve('connected');
+          };
+          const rejected = (error: Error) => {
+            cleanup();
+            resolve(error);
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Fleet handshake timed out'));
+          }, 5000);
+          socket.once('connect', connected);
+          socket.once('connect_error', rejected);
+          socket.connect();
+        },
+      );
+      return { socket, outcome };
+    }
+    async function connectAccepted(...args: Parameters<typeof handshake>) {
+      const { socket, outcome } = await handshake(...args);
+      expect(outcome).toBe('connected');
+      expect(socket.connected).toBe(true);
       return socket;
     }
+    async function expectRejected(...args: Parameters<typeof handshake>) {
+      const { socket, outcome } = await handshake(...args);
+      expect(outcome).toBeInstanceOf(Error);
+      expect((outcome as Error).message).toBe('Unauthorized socket session');
+      expect(socket.connected).toBe(false);
+      expect(socket.active).toBe(false);
+      expect(socket.io.reconnection()).toBe(false);
+    }
+    async function siloSocketState(command = 'socket-state') {
+      return new Promise<{ sockets: number; tracked: number; pending: number }>(
+        (resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timer);
+            siloProcess.off('message', received);
+            siloProcess.off('exit', exited);
+          };
+          const received = (state: {
+            sockets: number;
+            tracked: number;
+            pending: number;
+          }) => {
+            cleanup();
+            resolve(state);
+          };
+          const exited = () => {
+            cleanup();
+            reject(new Error('Second silo exited during socket inspection'));
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Second silo socket inspection timed out'));
+          }, 5000);
+          siloProcess.once('message', received);
+          siloProcess.once('exit', exited);
+          siloProcess.send(command, (error) => {
+            if (error) {
+              cleanup();
+              reject(error);
+            }
+          });
+        },
+      );
+    }
+    const sessions = h.app.get(SessionRevocationRegistry);
+    const stateA = () => ({
+      sockets: (
+        h.app.get(FleetGateway).server as unknown as {
+          sockets: Map<string, unknown>;
+        }
+      ).sockets.size,
+      tracked: sessions.connectionCount,
+      pending: sessions.pendingAuthorizationCount,
+    });
+    const empty = { sockets: 0, tracked: 0, pending: 0 };
+    expect(stateA()).toEqual(empty);
+    expect(await siloSocketState()).toEqual(empty);
     try {
-      await connect('global', h.tokens.admin);
-      await connect('origin', h.tokens.admin, h.cedisId);
-      await connect('other-origin', h.tokens.admin, 'unrelated-origin');
-      await connect('driver', h.tokens.driver);
-      const unauthorized = await connect('seller', h.tokens.seller);
-      await sleep(150);
-      expect(unauthorized.connected).toBe(false);
-      const foreign = await connect('foreign', silo.token);
-      await sleep(150);
-      expect(foreign.connected).toBe(false);
-      const ownB = await connect('silo-b', silo.token, undefined, silo.url);
+      await connectAccepted('global', h.tokens.admin);
+      await connectAccepted('origin', h.tokens.admin, h.cedisId);
+      await connectAccepted('other-origin', h.tokens.admin, 'unrelated-origin');
+      await connectAccepted('driver', h.tokens.driver);
+      await expectRejected('seller', h.tokens.seller);
+      await expectRejected('foreign', silo.token);
+      const ownB = await connectAccepted(
+        'silo-b',
+        silo.token,
+        undefined,
+        silo.url,
+      );
       expect(ownB.connected).toBe(true);
-      const crossB = await connect(
+      await expectRejected(
         'silo-a-token-on-b',
         h.tokens.admin,
         undefined,
         silo.url,
       );
-      await sleep(150);
-      expect(crossB.connected).toBe(false);
+      await pw
+        .poll(stateA, { timeout: 5000 })
+        .toEqual({ sockets: 4, tracked: 4, pending: 0 });
+      await pw
+        .poll(() => siloSocketState(), { timeout: 5000 })
+        .toEqual({ sockets: 1, tracked: 1, pending: 0 });
       expect(
         (
           await fetch(h.url + '/api/fleet/live', {
             headers: { Authorization: 'Bearer ' + silo.token },
+            signal: AbortSignal.timeout(5000),
           })
         ).status,
       ).toBe(401);
@@ -693,6 +802,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         (
           await fetch(silo.url + '/api/fleet/live', {
             headers: { Authorization: 'Bearer ' + h.tokens.admin },
+            signal: AbortSignal.timeout(5000),
           })
         ).status,
       ).toBe(401);
@@ -700,12 +810,21 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         (
           await fetch(silo.url + '/api/fleet/live', {
             headers: { Authorization: 'Bearer ' + silo.token },
+            signal: AbortSignal.timeout(5000),
           })
         ).status,
       ).toBe(200);
       const f = await fixture();
       await status(f, 'IN_PROGRESS');
-      await pw.poll(() => observed.origin.length).toBeGreaterThan(0);
+      await pw
+        .poll(
+          () =>
+            ['global', 'origin', 'driver'].map(
+              (label) => observed[label].length > 0,
+            ),
+          { timeout: 5000 },
+        )
+        .toEqual([true, true, true]);
       expect(observed.global.length).toBeGreaterThan(0);
       expect(observed.driver.length).toBeGreaterThan(0);
       expect(observed['other-origin']).toHaveLength(0);
@@ -714,13 +833,49 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       expect(observed['silo-b']).toHaveLength(0);
       expect(observed['silo-a-token-on-b']).toHaveLength(0);
       await status(f, 'CANCELLED');
+      // Exercise a protected emission on B too: a valid B socket must receive it,
+      // while A's token rejected by B and every socket on A must not.
+      await siloSocketState('socket-probe');
+      await pw.poll(() => observed['silo-b'].length, { timeout: 5000 }).toBe(1);
+      expect(observed['silo-b']).toEqual([{ source: 'ci004-silo-b' }]);
+      await sleep(200);
+      expect(observed['other-origin']).toHaveLength(0);
+      for (const label of ['seller', 'foreign', 'silo-a-token-on-b']) {
+        expect(handshakes[label]).toEqual({
+          connected: 0,
+          rejected: 1,
+          reconnects: 0,
+          events: [],
+        });
+      }
+      for (const label of ['global', 'origin', 'driver']) {
+        expect(observed[label]).not.toContainEqual({ source: 'ci004-silo-b' });
+      }
       proof('fleet004-scope', {
         counts: Object.fromEntries(
           Object.entries(observed).map(([k, v]) => [k, v.length]),
         ),
+        handshakes,
+        siloA: stateA(),
+        siloB: await siloSocketState(),
       });
     } finally {
       for (const client of clients) client.disconnect();
+      try {
+        await pw.poll(stateA, { timeout: 5000 }).toEqual(empty);
+        await pw
+          .poll(() => siloSocketState(), { timeout: 5000 })
+          .toEqual(empty);
+        proof('fleet004-scope-cleanup', {
+          siloA: stateA(),
+          siloB: await siloSocketState(),
+        });
+      } finally {
+        for (const client of clients) {
+          client.removeAllListeners();
+          client.io.removeAllListeners();
+        }
+      }
     }
   }, 60000);
   it('preserves authoritative states, balances and GPS after a real NestJS restart', async () => {
