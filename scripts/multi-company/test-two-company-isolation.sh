@@ -10,6 +10,30 @@ BACKEND_IMAGE="${MTE_BACKEND_IMAGE:-pollos-backend:mte-isolation}"
 UNUSED_IMAGE="ghcr.io/example/mte-isolation-unused@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 export OPENSSL_CONF="${OPENSSL_CONF:-/dev/null}"
 
+# Fail before generating tenant secrets or creating any Docker resource. npm
+# must use prepared local dependencies, never download tools during acceptance.
+if ! (
+  cd "$ROOT_DIR/backend" &&
+  npm --offline --no exec -- node -e 'require.resolve("jest/package.json")' >/dev/null 2>&1 &&
+  npm --offline --no exec -- jest --version >/dev/null 2>&1
+); then
+  echo "Jest is not prepared; run npm ci --prefix backend before MTE-007." >&2
+  exit 1
+fi
+if ! (
+  cd "$ROOT_DIR/backend" &&
+  npm --offline --no exec -- node -e '
+    const { PrismaClient, Prisma, SaleStatus } = require("@prisma/client");
+    const client = new PrismaClient();
+    if (!Prisma.prismaVersion.client || !SaleStatus.CONFIRMED || !client.deliveryEvidence || !client.authSession)
+      throw new Error("Generated Prisma Client is missing required models");
+    void client.$disconnect();
+  ' >/dev/null 2>&1
+); then
+  echo "Prisma Client is not prepared; install backend dependencies and run prisma generate before MTE-007." >&2
+  exit 1
+fi
+
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   echo "Docker Compose v2 is required for the MTE-007 disposable isolation gate." >&2
   exit 1

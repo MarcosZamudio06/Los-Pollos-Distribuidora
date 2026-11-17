@@ -14,6 +14,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
   S3Client,
   CreateBucketCommand,
+  HeadBucketCommand,
+  BucketAlreadyOwnedByYou,
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
@@ -965,7 +967,14 @@ describe('SEC-001/002 real PostgreSQL, Nest HTTP, JWT and Socket.IO', () => {
     const Bucket = 'security-evidence';
     const Key = `synthetic-security/${randomUUID()}`;
     try {
-      await client.send(new CreateBucketCommand({ Bucket }));
+      try {
+        await client.send(new CreateBucketCommand({ Bucket }));
+      } catch (error) {
+        // CI preflights the same bucket; dedicated security runners may not.
+        // Only our existing bucket is acceptable, never another owner's name.
+        if (!(error instanceof BucketAlreadyOwnedByYou)) throw error;
+        await client.send(new HeadBucketCommand({ Bucket }));
+      }
       await client.send(
         new PutObjectCommand({
           Bucket,
