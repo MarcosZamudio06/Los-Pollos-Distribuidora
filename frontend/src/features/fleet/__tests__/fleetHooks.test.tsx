@@ -12,6 +12,9 @@ const state = vi.hoisted(() => ({
     onPositionUpdated?: (
       position: import("../../../lib/fleetSocket").FleetPositionUpdated,
     ) => void;
+    onIncidentCreated?: (
+      incident: import("../../../lib/fleetSocket").FleetIncidentCreated,
+    ) => void;
     onRouteUpdated?: () => void;
     onConnected?: () => void;
     onDisconnected?: () => void;
@@ -69,6 +72,10 @@ function Probe() {
   return (
     <output data-state={live.connectionState}>
       {live.data?.items[0]?.position?.latitude ?? "empty"}
+      {live.data?.items
+        .flatMap((item) => item.incidents ?? [])
+        .map((item) => item.reason)
+        .join(",")}
     </output>
   );
 }
@@ -222,5 +229,176 @@ describe("useFleetLive recovery", () => {
     await act(async () => finish(snapshot(19.1)));
     await vi.waitFor(() => expect(container.textContent).toBe("19.2"));
     expect(state.getLive).toHaveBeenCalledTimes(2);
+  });
+  const incident = {
+    incidentId: "incident-1",
+    deliveryOrderId: "order-1",
+    routeId: "route-1",
+    vehicleId: "vehicle-1",
+    driverId: "driver-1",
+    status: "OPEN" as const,
+    reason: "Persisted incident",
+    occurredAt: "2026-08-12T16:00:03.000Z",
+    position: null,
+    stop: null,
+  };
+  const withIncident = () => ({
+    ...snapshot(19.2),
+    items: snapshot(19.2).items.map((item) => ({
+      ...item,
+      incidents: [incident],
+      incidentCountActive: 1,
+      route: { ...item.route, incidentCountActive: 1 },
+    })),
+  });
+  const client = () =>
+    new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  async function mount(queryClient: QueryClient) {
+    root = createRoot(container);
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Probe />
+        </QueryClientProvider>,
+      ),
+    );
+  }
+  const cached = (queryClient: QueryClient) =>
+    queryClient.getQueryData<import("../types").FleetLiveSnapshot>(
+      fleetLiveQueryKey("origin-1"),
+    );
+
+  it("reconciles a persisted incident after the snapshot and deduplicates repeated events", async () => {
+    const queryClient = client();
+    state.getLive
+      .mockReset()
+      .mockResolvedValueOnce(snapshot(19.1))
+      .mockResolvedValue(withIncident());
+    await mount(queryClient);
+    await act(async () => {
+      await vi.waitFor(() => expect(container.textContent).toBe("19.1"));
+    });
+    await act(async () => {
+      state.handlers?.onIncidentCreated?.(incident);
+      state.handlers?.onIncidentCreated?.(incident);
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(state.getLive).toHaveBeenCalledTimes(2));
+    });
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.textContent).toContain(incident.reason),
+      );
+    });
+    expect(cached(queryClient)?.items[0].incidents).toHaveLength(1);
+    expect(cached(queryClient)?.items[0].incidentCountActive).toBe(1);
+  });
+
+  it("recovers an incident whose route is missing from the current snapshot", async () => {
+    const queryClient = client();
+    queryClient.setQueryData(fleetLiveQueryKey("origin-1"), {
+      serverTime: "before",
+      items: [],
+    });
+    state.getLive.mockReset().mockResolvedValue(withIncident());
+    await mount(queryClient);
+    await act(async () => state.handlers?.onIncidentCreated?.(incident));
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.textContent).toContain(incident.reason),
+      );
+    });
+    expect(state.getLive).toHaveBeenCalledTimes(1);
+    expect(cached(queryClient)?.items[0].incidents).toHaveLength(1);
+  });
+
+  it.each([false, true])(
+    "does not let an older in-flight snapshot erase an incident (cached=%s)",
+    async (hasCache) => {
+      const queryClient = client();
+      if (hasCache)
+        queryClient.setQueryData(fleetLiveQueryKey("origin-1"), snapshot(19.1));
+      let finish!: (value: ReturnType<typeof snapshot>) => void;
+      state.getLive
+        .mockReset()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            }),
+        )
+        .mockResolvedValue(withIncident());
+      await mount(queryClient);
+      if (hasCache) await act(async () => state.handlers?.onRouteUpdated?.());
+      await vi.waitFor(() => expect(state.getLive).toHaveBeenCalledTimes(1));
+      await act(async () => state.handlers?.onIncidentCreated?.(incident));
+      await act(async () => {
+        await vi.waitFor(() => expect(state.getLive).toHaveBeenCalledTimes(2));
+      });
+      await act(async () => finish(snapshot(19.1)));
+      await act(async () => {
+        await vi.waitFor(() =>
+          expect(container.textContent).toContain(incident.reason),
+        );
+      });
+      expect(cached(queryClient)?.items[0].incidents).toHaveLength(1);
+    },
+  );
+
+  it("recovers a missed persisted incident after reconnect and remount", async () => {
+    const queryClient = client();
+    state.getLive
+      .mockReset()
+      .mockResolvedValueOnce(snapshot(19.1))
+      .mockResolvedValue(withIncident());
+    await mount(queryClient);
+    await act(async () => {
+      await vi.waitFor(() => expect(container.textContent).toBe("19.1"));
+    });
+    await act(async () => state.handlers?.onDisconnected?.());
+    // No incident delta is delivered while disconnected; REST remains authority.
+    await act(async () => state.handlers?.onConnected?.());
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.textContent).toContain(incident.reason),
+      );
+    });
+    await act(async () => root.unmount());
+    await mount(queryClient);
+    await act(async () => state.handlers?.onConnected?.());
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.textContent).toContain(incident.reason),
+      );
+    });
+    expect(cached(queryClient)?.items[0].incidents).toHaveLength(1);
+    expect(state.getLive).toHaveBeenCalledTimes(3);
+  });
+
+  it("reconciles only the subscribed query and never invents a route from an incident hint", async () => {
+    const queryClient = client();
+    const other = {
+      ...snapshot(18),
+      items: snapshot(18).items.map((item) => ({
+        ...item,
+        route: { ...item.route, id: "other-route" },
+      })),
+    };
+    queryClient.setQueryData(fleetLiveQueryKey("origin-2"), other);
+    queryClient.setQueryData(fleetLiveQueryKey("origin-1"), {
+      serverTime: "before",
+      items: [],
+    });
+    state.getLive
+      .mockReset()
+      .mockResolvedValue({ serverTime: "authorized", items: [] });
+    await mount(queryClient);
+    await act(async () => state.handlers?.onIncidentCreated?.(incident));
+    await act(async () => {
+      await vi.waitFor(() => expect(state.getLive).toHaveBeenCalledTimes(1));
+    });
+    expect(cached(queryClient)?.items).toEqual([]);
+    expect(queryClient.getQueryData(fleetLiveQueryKey("origin-2"))).toBe(other);
+    expect(container.textContent).not.toContain(incident.reason);
   });
 });

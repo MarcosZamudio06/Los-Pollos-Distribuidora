@@ -150,6 +150,9 @@ export function useFleetLive(originLocationId: string) {
           snapshot ? applyIncidentCreated(snapshot, event) : snapshot,
       );
       setIncidentCount((count) => count + 1);
+      // The route may not be cached yet, or an older REST read may still be in flight.
+      // Re-read committed state instead of losing the hint or inventing a route.
+      reconcileSnapshot();
     };
 
     const reconcileSnapshot = () => {

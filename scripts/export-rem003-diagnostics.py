@@ -7,7 +7,8 @@ allowed = ['diagnostics/*-state.json', 'diagnostics/*.log', 'diagnostics/*-permi
            'diagnostics/readiness.json', 'diagnostics/host-memory.json', 'diagnostics/index.json',
            'evidence/resistance.json', 'evidence/resistance-operations.json',
            'evidence/resistance-cycles.json', 'evidence/resistance-http.json',
-           'evidence/planner-browser.json', 'evidence/new-process-persistence.json']
+           'evidence/planner-browser.json', 'evidence/new-process-persistence.json',
+           'evidence/fleet004-journal.json', 'evidence/fleet004-incident-*.json']
 secrets = [v for k,v in os.environ.items() if re.search(r'SECRET|PASSWORD|TOKEN|ACCESS_KEY|DATABASE_URL|BROWSER_WS', k) and len(v)>3]
 for pattern in allowed:
     for path in source.glob(pattern):

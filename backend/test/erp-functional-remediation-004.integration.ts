@@ -33,7 +33,22 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
   let siloProcess: ChildProcess;
   let silo: { url: string; token: string };
   const journal: object[] = [];
-  const frames: Array<{ event: string; payload: Record<string, unknown> }> = [];
+  const frames: Array<{
+    event: string;
+    payload: Record<string, unknown>;
+    session: number;
+    at: number;
+  }> = [];
+  const monitorIds = new Map<Page, number>();
+  const socketIds = new Map<Page, string>();
+  const snapshotReads: Promise<void>[] = [];
+  const snapshots: Array<{
+    session: number;
+    at: number;
+    routeIds: string[];
+    incidentIds: string[];
+  }> = [];
+  let monitorSequence = 0;
   const pages: Page[] = [];
   beforeAll(async () => {
     if (
@@ -111,7 +126,8 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     });
   }, 120000);
   afterAll(async () => {
-    proof('fleet004-journal', { journal, frames, http: h.events });
+    await Promise.all(snapshotReads);
+    proof('fleet004-journal', { journal, frames, snapshots, http: h.events });
     await browser?.close();
     if (siloProcess?.connected) {
       await new Promise<void>((resolve) => {
@@ -150,6 +166,8 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     });
     const page = await context.newPage();
     pages.push(page);
+    const session = ++monitorSequence;
+    monitorIds.set(page, session);
     page.setDefaultTimeout(15000);
     page.on('console', async (message) => {
       if (message.type() !== 'error') return;
@@ -175,19 +193,54 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       journal.push({ browserError: message.text(), details });
     });
     page.on('response', (r) => {
+      if (
+        new URL(r.url()).pathname === '/api/fleet/live' &&
+        r.status() === 200
+      ) {
+        snapshotReads.push(
+          r.json().then(
+            (body: {
+              data: {
+                items: Array<{
+                  route: { id: string };
+                  incidents?: Array<{ incidentId: string }>;
+                }>;
+              };
+            }) => {
+              snapshots.push({
+                session,
+                at: performance.now(),
+                routeIds: body.data.items.map((item) => item.route.id),
+                incidentIds: body.data.items.flatMap((item) =>
+                  (item.incidents ?? []).map((incident) => incident.incidentId),
+                ),
+              });
+            },
+            () => {
+              journal.push({ session, snapshotBodyUnreadable: true });
+            },
+          ),
+        );
+      }
       if (new URL(r.url()).pathname.startsWith('/maps/'))
         journal.push({ mapAsset: new URL(r.url()).pathname, http: r.status() });
     });
     page.on('websocket', (ws) =>
       ws.on('framereceived', (frame) => {
         const raw = String(frame.payload);
+        if (raw.startsWith('40/fleet,')) {
+          const connected = JSON.parse(raw.slice('40/fleet,'.length)) as {
+            sid: string;
+          };
+          socketIds.set(page, connected.sid);
+        }
         const start = raw.indexOf('["fleet.');
         if (start >= 0) {
           const [event, payload] = JSON.parse(raw.slice(start)) as [
             string,
             Record<string, unknown>,
           ];
-          frames.push({ event, payload });
+          frames.push({ event, payload, session, at: performance.now() });
         }
       }),
     );
@@ -600,41 +653,297 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     await page.context().close();
   }, 180000);
 
-  it('propagates a legitimate failed-delivery incident during a separate administrative session', async () => {
-    const page = await monitor();
-    const f = await fixture();
-    await status(f, 'IN_PROGRESS');
-    await gps(f);
-    const r = await h.post(
-      `delivery-orders/${f.orderId}/incidents`,
-      { status: 'NOT_DELIVERED', reason: 'SIMULATED: customer unavailable' },
-      'driver',
-    );
-    expect(r.status).toBe(201);
-    await pw
-      .poll(() =>
-        frames.some(
-          (x) =>
-            x.event === 'fleet.incident.created' &&
-            x.payload.routeId === f.routeId,
-        ),
-      )
-      .toBe(true);
-    expect(
-      (
-        await h.prisma.deliveryOrder.findUniqueOrThrow({
-          where: { id: f.orderId },
-        })
-      ).status,
-    ).toBe('NOT_DELIVERED');
-    await pw(
-      page.getByText('SIMULATED: customer unavailable', { exact: true }),
-    ).toBeVisible();
-    await status(f, 'COMPLETED');
-    await pw(units(page, f.vehicle.code)).toHaveCount(0);
-    journal.push({ scenario: 'incident-and-completion', routeId: f.routeId });
-    await page.context().close();
-  }, 120000);
+  it.each(['loaded', 'in-flight'] as const)(
+    'propagates a legitimate failed-delivery incident during a separate administrative session (%s snapshot)',
+    async (timing) => {
+      const a = await monitor();
+      const b = await monitor();
+      const sessionIds = [monitorIds.get(a)!, monitorIds.get(b)!];
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let hold = timing === 'in-flight';
+      const held: Array<{ routeIds: string[]; incidentIds: string[] }> = [];
+      const gateway = h.app.get(FleetGateway);
+      const emission = jest.spyOn(gateway, 'emitIncidentCreated');
+      const foreignEvents: object[] = [];
+      const foreign = io(silo.url + '/fleet', {
+        path: '/api/socket.io',
+        auth: { token: silo.token },
+        transports: ['websocket'],
+        reconnection: false,
+        forceNew: true,
+        autoConnect: false,
+        timeout: 5000,
+      });
+      foreign.on('fleet.incident.created', (event: object) =>
+        foreignEvents.push(event),
+      );
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timer);
+            foreign.off('connect', connected);
+            foreign.off('connect_error', rejected);
+          };
+          const connected = () => {
+            cleanup();
+            resolve();
+          };
+          const rejected = (error: Error) => {
+            cleanup();
+            reject(error);
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('B control socket timed out'));
+          }, 5000);
+          foreign.once('connect', connected);
+          foreign.once('connect_error', rejected);
+          foreign.connect();
+        });
+        await a.route('**/api/fleet/live*', async (route) => {
+          const response = await route.fetch();
+          const body = (await response.json()) as {
+            data: {
+              items: Array<{
+                route: { id: string };
+                incidents?: Array<{ incidentId: string }>;
+              }>;
+            };
+          };
+          // Hold only pre-incident reads. A post-commit reconciliation is free to finish.
+          if (
+            hold &&
+            body.data.items.every((item) => !(item.incidents ?? []).length)
+          ) {
+            held.push({
+              routeIds: body.data.items.map((item) => item.route.id),
+              incidentIds: [],
+            });
+            await barrier;
+          }
+          await route.fulfill({ response, json: body });
+        });
+        const f = await fixture();
+        await status(f, 'IN_PROGRESS');
+        await gps(f);
+        await pw(units(b, f.vehicle.code)).toHaveCount(1);
+        if (timing === 'loaded')
+          await pw(units(a, f.vehicle.code)).toHaveCount(1);
+        else
+          await pw
+            .poll(() =>
+              held.some((snapshot) => snapshot.routeIds.includes(f.routeId!)),
+            )
+            .toBe(true);
+        const reason = 'SIMULATED: customer unavailable';
+        const r = await h.post(
+          `delivery-orders/${f.orderId}/incidents`,
+          { status: 'NOT_DELIVERED', reason },
+          'driver',
+        );
+        expect(r.status).toBe(201);
+        const persisted = await h.prisma.deliveryIncident.findMany({
+          where: { deliveryOrderId: f.orderId },
+        });
+        expect(persisted).toHaveLength(1);
+        expect(persisted[0].reason).toBe(reason);
+        expect(persisted[0].status).toBe('OPEN');
+        expect(
+          (
+            await h.prisma.deliveryOrder.findUniqueOrThrow({
+              where: { id: f.orderId },
+            })
+          ).status,
+        ).toBe('NOT_DELIVERED');
+        expect(emission).toHaveBeenCalledTimes(1);
+        const payload = emission.mock.calls[0][0];
+        expect(payload.incidentId).toBe(persisted[0].id);
+        await pw
+          .poll(() =>
+            sessionIds.every((session) =>
+              frames.some(
+                (frame) =>
+                  frame.session === session &&
+                  frame.event === 'fleet.incident.created' &&
+                  frame.payload.incidentId === payload.incidentId,
+              ),
+            ),
+          )
+          .toBe(true);
+        hold = false;
+        release();
+        await a.waitForLoadState('networkidle');
+        await Promise.all(snapshotReads);
+        proof(`fleet004-incident-before-render-${timing}`, {
+          incidentId: payload.incidentId,
+          persistedRows: persisted.length,
+          backendEmissionObserved: true,
+          renderChecked: false,
+          browserFrames: frames.filter(
+            (frame) => frame.payload.incidentId === payload.incidentId,
+          ),
+          snapshotResponses: snapshots.filter((snapshot) =>
+            sessionIds.includes(snapshot.session),
+          ),
+          held,
+        });
+        for (const page of [a, b]) {
+          await pw(page.getByText(reason, { exact: true })).toBeVisible();
+          await pw(page.getByText(reason, { exact: true })).toHaveCount(1);
+        }
+        await pw
+          .poll(() =>
+            sessionIds.every((session) =>
+              snapshots.some(
+                (snapshot) =>
+                  snapshot.session === session &&
+                  snapshot.incidentIds.includes(payload.incidentId),
+              ),
+            ),
+          )
+          .toBe(true);
+        const authoritative = data<{
+          items: Array<{ incidents?: Array<{ incidentId: string }> }>;
+        }>(await h.get('fleet/live'));
+        expect(
+          authoritative.items
+            .flatMap((item) => item.incidents ?? [])
+            .filter((incident) => incident.incidentId === payload.incidentId),
+        ).toHaveLength(1);
+        // Duplicate transport delivery is not another persisted incident or another UI card.
+        gateway.emitIncidentCreated(payload, h.cedisId);
+        gateway.emitIncidentCreated(payload, h.cedisId);
+        await pw
+          .poll(() =>
+            sessionIds.every(
+              (session) =>
+                frames.filter(
+                  (frame) =>
+                    frame.session === session &&
+                    frame.event === 'fleet.incident.created' &&
+                    frame.payload.incidentId === payload.incidentId,
+                ).length === 3,
+            ),
+          )
+          .toBe(true);
+        for (const page of [a, b])
+          await pw(page.getByText(reason, { exact: true })).toHaveCount(1);
+        const beforeReconnect = performance.now();
+        const bSocketId = socketIds.get(b)!;
+        const liveSocket = (
+          gateway.server as unknown as {
+            sockets: Map<string, import('socket.io').Socket>;
+          }
+        ).sockets.get(socketIds.get(a)!);
+        expect(liveSocket).toBeDefined();
+        await a.context().setOffline(true);
+        liveSocket!.client.conn.close();
+        await pw
+          .poll(() =>
+            (
+              gateway.server as unknown as { sockets: Map<string, unknown> }
+            ).sockets.has(liveSocket!.id),
+          )
+          .toBe(false);
+        await pw(a.getByText(reason, { exact: true })).toHaveCount(1);
+        await a.context().setOffline(false);
+        await pw(
+          a.getByText('Tiempo real conectado', { exact: true }),
+        ).toBeVisible({ timeout: 25000 });
+        await pw
+          .poll(() =>
+            snapshots.some(
+              (snapshot) =>
+                snapshot.session === sessionIds[0] &&
+                snapshot.at > beforeReconnect &&
+                snapshot.incidentIds.includes(payload.incidentId),
+            ),
+          )
+          .toBe(true);
+        await pw(a.getByText(reason, { exact: true })).toBeVisible();
+        expect(socketIds.get(b)).toBe(bSocketId);
+        const beforeRemount = performance.now();
+        const beforeRemountSocket = socketIds.get(a)!;
+        // Remount through the router, retaining this independently authenticated session.
+        await a
+          .getByRole('link', { name: 'Inicio', exact: true })
+          .first()
+          .click();
+        await pw(
+          a.getByText('Tiempo real conectado', { exact: true }),
+        ).toHaveCount(0);
+        await pw
+          .poll(() =>
+            (
+              gateway.server as unknown as { sockets: Map<string, unknown> }
+            ).sockets.has(beforeRemountSocket),
+          )
+          .toBe(false);
+        await a.goBack();
+        await pw(
+          a.getByText('Tiempo real conectado', { exact: true }),
+        ).toBeVisible();
+        await pw(a.getByText(reason, { exact: true })).toBeVisible();
+        await pw
+          .poll(() =>
+            snapshots.some(
+              (snapshot) =>
+                snapshot.session === sessionIds[0] &&
+                snapshot.at > beforeRemount &&
+                snapshot.incidentIds.includes(payload.incidentId),
+            ),
+          )
+          .toBe(true);
+        await pw(a.getByText(reason, { exact: true })).toHaveCount(1);
+        expect(
+          await h.prisma.deliveryIncident.count({
+            where: { deliveryOrderId: f.orderId },
+          }),
+        ).toBe(1);
+        expect(foreign.connected).toBe(true);
+        expect(foreignEvents).toEqual([]);
+        proof(`fleet004-incident-${timing}`, {
+          incidentId: payload.incidentId,
+          routeId: f.routeId,
+          persistedRows: 1,
+          backendEmissionObserved: true,
+          browserSessions: sessionIds,
+          browserFrames: frames.filter(
+            (frame) => frame.payload.incidentId === payload.incidentId,
+          ),
+          snapshotResponses: snapshots.filter((snapshot) =>
+            sessionIds.includes(snapshot.session),
+          ),
+          held,
+          renderedInBothSessions: true,
+          renderedAfterReconnectAndRemount: true,
+          duplicateCards: 0,
+          foreignBackendEvents: foreignEvents.length,
+          cacheEvidence:
+            'Measured separately by deterministic React Query hook regressions; not introspected from browser internals.',
+        });
+        await status(f, 'COMPLETED');
+        for (const page of [a, b])
+          await pw(units(page, f.vehicle.code)).toHaveCount(0);
+        journal.push({
+          scenario: 'incident-and-completion',
+          timing,
+          routeId: f.routeId,
+        });
+      } finally {
+        hold = false;
+        release();
+        emission.mockRestore();
+        foreign.disconnect();
+        for (const page of [a, b])
+          if (!page.isClosed()) await page.context().close();
+      }
+    },
+    120000,
+  );
 
   it('scopes route hints to origin and driver, rejects unauthorized sockets and foreign-silo tokens', async () => {
     const clients: Array<ReturnType<typeof io>> = [];

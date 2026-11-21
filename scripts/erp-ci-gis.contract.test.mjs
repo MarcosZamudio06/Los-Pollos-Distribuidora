@@ -64,6 +64,15 @@ test("diagnostic export removes secrets and never copies raw env files", () => {
     `${secret} Bearer fake-token postgresql://private:password@localhost/db key=original-command`,
   );
   writeFileSync(resolve(dir, "private.env"), "not-for-upload");
+  mkdirSync(resolve(dir, "evidence"));
+  writeFileSync(
+    resolve(dir, "evidence/fleet004-journal.json"),
+    JSON.stringify({ event: "fleet.incident.created", diagnostic: secret }),
+  );
+  writeFileSync(
+    resolve(dir, "evidence/fleet004-incident-in-flight.json"),
+    JSON.stringify({ persistedRows: 1, browserFrames: 2, diagnostic: secret }),
+  );
   const out = resolve(dir, "out");
   const result = spawnSync(
     "python3",
@@ -76,6 +85,14 @@ test("diagnostic export removes secrets and never copies raw env files", () => {
   assert.ok(!content.includes("fake-token"));
   assert.ok(!content.includes("password@"));
   assert.match(content, /original-command/);
+  for (const name of [
+    "fleet004-journal.json",
+    "fleet004-incident-in-flight.json",
+  ]) {
+    const exported = readFileSync(resolve(out, name), "utf8");
+    assert.ok(!exported.includes(secret));
+    assert.match(exported, /REDACTED/);
+  }
 });
 
 test("both GIS runners retain non-root owned indexes and mandatory readiness", () => {
