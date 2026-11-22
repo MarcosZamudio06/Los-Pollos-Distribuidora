@@ -6,6 +6,11 @@ import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { SessionRevocationRegistry } from '../src/common/session/session-revocation.registry';
 import { FleetGateway } from '../src/modules/fleet/fleet.gateway';
+import { AuthService } from '../src/modules/auth/auth.service';
+import {
+  FLEET_ADMIN_ROOM,
+  fleetOriginRoom,
+} from '../src/modules/fleet/fleet-realtime.types';
 import { DEVELOPMENT_ADMIN_PASSWORD } from '../prisma/seed';
 import {
   Rem003Harness,
@@ -25,7 +30,6 @@ const { io } = frontendRequire(
 ) as import('../../frontend/e2e/rem004-runtime-types').SocketRuntime;
 type Browser = Awaited<ReturnType<typeof chromium.connect>>;
 type Page = Awaited<ReturnType<Browser['newPage']>>;
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergence', () => {
   const h = new Rem003Harness();
@@ -37,16 +41,32 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     event: string;
     payload: Record<string, unknown>;
     session: number;
+    socketId: string;
+    transport: number;
+    originLocationId: string;
     at: number;
   }> = [];
   const monitorIds = new Map<Page, number>();
   const socketIds = new Map<Page, string>();
+  const connections: Array<{
+    session: number;
+    transport: number;
+    socketId: string;
+    originLocationId: string;
+    at: number;
+    closedAt?: number;
+    authSessionId?: string;
+  }> = [];
+  let transportSequence = 0;
   const snapshotReads: Promise<void>[] = [];
   const snapshots: Array<{
     session: number;
+    originLocationId: string;
+    startedAt: number;
     at: number;
     routeIds: string[];
     incidentIds: string[];
+    positions: Array<{ routeId: string; latitude: number | null }>;
   }> = [];
   let monitorSequence = 0;
   const pages: Page[] = [];
@@ -87,6 +107,23 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       );
     };
     await h.start();
+    const gateway = h.app.get(FleetGateway);
+    const publish = gateway.emitPositionUpdated.bind(gateway);
+    jest.spyOn(gateway, 'emitPositionUpdated').mockImplementation((payload) => {
+      journal.push({
+        kind: 'emission',
+        event: 'fleet.position.updated',
+        at: performance.now(),
+        positionId: payload.id,
+        routeId: payload.routeId,
+        sockets: [...fleetSockets().values()].map((socket) => ({
+          socketId: socket.id,
+          rooms: [...socket.rooms],
+          authenticated: h.app.get(SessionRevocationRegistry).isTracked(socket),
+        })),
+      });
+      publish(payload);
+    });
     const env = {
       ...process.env,
       DATABASE_URL: process.env.REM004_SILO_DATABASE_URL,
@@ -127,7 +164,13 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
   }, 120000);
   afterAll(async () => {
     await Promise.all(snapshotReads);
-    proof('fleet004-journal', { journal, frames, snapshots, http: h.events });
+    proof('fleet004-journal', {
+      journal,
+      connections,
+      frames,
+      snapshots,
+      http: h.events,
+    });
     await browser?.close();
     if (siloProcess?.connected) {
       await new Promise<void>((resolve) => {
@@ -136,6 +179,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       });
     }
     await h.close();
+    jest.restoreAllMocks();
   });
 
   afterEach(async () => {
@@ -145,8 +189,11 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       await h.patch(`delivery-routes/${route.id}/status`, {
         status: 'CANCELLED',
       });
-    for (const page of pages.splice(0))
+    for (const page of pages.splice(0)) {
       if (!page.isClosed()) await page.context().close();
+      monitorIds.delete(page);
+      socketIds.delete(page);
+    }
     await pw
       .poll(
         () =>
@@ -157,7 +204,89 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
           ).sockets.size,
       )
       .toBe(0);
+    await pw
+      .poll(
+        () => h.app.get(SessionRevocationRegistry).pendingAuthorizationCount,
+      )
+      .toBe(0);
+    await pw
+      .poll(() => h.app.get(SessionRevocationRegistry).connectionCount)
+      .toBe(0);
+    await Promise.all(snapshotReads.splice(0));
+    expect(browser.contexts()).toHaveLength(0);
+    expect(monitorIds.size).toBe(0);
+    expect(socketIds.size).toBe(0);
+    journal.push({
+      kind: 'cleanup',
+      at: performance.now(),
+      browserContexts: 0,
+      fleetSockets: fleetSockets().size,
+      tracked: h.app.get(SessionRevocationRegistry).connectionCount,
+      pending: h.app.get(SessionRevocationRegistry).pendingAuthorizationCount,
+      pendingSnapshotReads: snapshotReads.length,
+    });
   });
+
+  function fleetSockets() {
+    return (
+      h.app.get(FleetGateway).server as unknown as {
+        sockets: Map<string, import('socket.io').Socket>;
+      }
+    ).sockets;
+  }
+
+  async function ready(page: Page, origin = '', previousId?: string) {
+    const session = monitorIds.get(page)!;
+    const room = origin ? fleetOriginRoom(origin) : FLEET_ADMIN_ROOM;
+    await pw
+      .poll(() => {
+        const id = socketIds.get(page);
+        const socket = id ? fleetSockets().get(id) : undefined;
+        return Boolean(
+          id &&
+          id !== previousId &&
+          socket?.connected &&
+          h.app.get(SessionRevocationRegistry).isTracked(socket) &&
+          socket.handshake.auth.originLocationId === (origin || undefined) &&
+          socket.rooms.has(room) &&
+          [...socket.rooms].every((value) => value === id || value === room),
+        );
+      })
+      .toBe(true);
+    const connection = connections.findLast(
+      (value) =>
+        value.session === session && value.socketId === socketIds.get(page),
+    );
+    expect(connection).toBeDefined();
+    const socket = fleetSockets().get(connection!.socketId)!;
+    const verified = await h.app
+      .get(AuthService)
+      .verifyRealtimeSession(socket.handshake.auth.token as string);
+    connection!.authSessionId = verified.principal.authSessionId;
+    // A pre-handshake REST response cannot close the subscription gap.
+    await pw
+      .poll(() =>
+        snapshots.some(
+          (snapshot) =>
+            snapshot.session === session &&
+            snapshot.originLocationId === origin &&
+            snapshot.startedAt >= connection!.at,
+        ),
+      )
+      .toBe(true);
+    await pw(
+      page.getByText('Tiempo real conectado', { exact: true }),
+    ).toBeVisible();
+    journal.push({
+      kind: 'ready',
+      session,
+      socketId: socket.id,
+      authSessionId: verified.principal.authSessionId,
+      originLocationId: origin,
+      rooms: [...socket.rooms],
+      at: performance.now(),
+    });
+  }
 
   async function monitor(origin?: string) {
     const context = await browser.newContext({
@@ -168,6 +297,10 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     pages.push(page);
     const session = ++monitorSequence;
     monitorIds.set(page, session);
+    const requestStarts = new WeakMap<object, number>();
+    page.on('request', (request) =>
+      requestStarts.set(request, performance.now()),
+    );
     page.setDefaultTimeout(15000);
     page.on('console', async (message) => {
       if (message.type() !== 'error') return;
@@ -203,14 +336,23 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
               data: {
                 items: Array<{
                   route: { id: string };
+                  position?: { latitude: number } | null;
                   incidents?: Array<{ incidentId: string }>;
                 }>;
               };
             }) => {
               snapshots.push({
                 session,
+                originLocationId:
+                  new URL(r.url()).searchParams.get('originLocationId') ?? '',
+                startedAt:
+                  requestStarts.get(r.request()) ?? Number.NEGATIVE_INFINITY,
                 at: performance.now(),
                 routeIds: body.data.items.map((item) => item.route.id),
+                positions: body.data.items.map((item) => ({
+                  routeId: item.route.id,
+                  latitude: item.position?.latitude ?? null,
+                })),
                 incidentIds: body.data.items.flatMap((item) =>
                   (item.incidents ?? []).map((incident) => incident.incidentId),
                 ),
@@ -225,7 +367,16 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       if (new URL(r.url()).pathname.startsWith('/maps/'))
         journal.push({ mapAsset: new URL(r.url()).pathname, http: r.status() });
     });
-    page.on('websocket', (ws) =>
+    page.on('websocket', (ws) => {
+      const transport = ++transportSequence;
+      let connection: (typeof connections)[number] | undefined;
+      ws.on('close', () => {
+        if (connection) {
+          connection.closedAt = performance.now();
+          if (socketIds.get(page) === connection.socketId)
+            socketIds.delete(page);
+        }
+      });
       ws.on('framereceived', (frame) => {
         const raw = String(frame.payload);
         if (raw.startsWith('40/fleet,')) {
@@ -233,6 +384,17 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
             sid: string;
           };
           socketIds.set(page, connected.sid);
+          const socket = fleetSockets().get(connected.sid);
+          connection = {
+            session,
+            transport,
+            socketId: connected.sid,
+            originLocationId: String(
+              socket?.handshake.auth.originLocationId ?? '',
+            ),
+            at: performance.now(),
+          };
+          connections.push(connection);
         }
         const start = raw.indexOf('["fleet.');
         if (start >= 0) {
@@ -240,10 +402,20 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
             string,
             Record<string, unknown>,
           ];
-          frames.push({ event, payload, session, at: performance.now() });
+          if (!connection)
+            throw new Error('Fleet event preceded authenticated CONNECT');
+          frames.push({
+            event,
+            payload,
+            session,
+            socketId: connection.socketId,
+            transport,
+            originLocationId: connection.originLocationId,
+            at: performance.now(),
+          });
         }
-      }),
-    );
+      });
+    });
     await page.goto('/login');
     await page
       .getByLabel('Correo', { exact: true })
@@ -252,14 +424,14 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     await page.getByRole('button', { name: 'Entrar al sistema' }).click();
     await pw(page).toHaveURL(/\/$/);
     await page.goto('/delivery-routes/live');
-    await page.waitForLoadState('networkidle');
-    if (origin)
+    await ready(page);
+    if (origin) {
+      const previousId = socketIds.get(page);
       await page
         .getByRole('combobox', { name: 'Filtrar por origen' })
         .selectOption(origin);
-    await pw(
-      page.getByText('Tiempo real conectado', { exact: true }),
-    ).toBeVisible();
+      await ready(page, origin, previousId);
+    }
     await pw(page.locator('canvas.maplibregl-canvas')).toBeVisible();
     return page;
   }
@@ -347,6 +519,9 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       ).status,
     ).toBe(value);
     journal.push({
+      kind: 'commit-observed',
+      at: performance.now(),
+      startedAt: t,
       routeId: f.routeId,
       transition: value,
       http: r.status,
@@ -358,6 +533,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     f: RouteFixture,
     latitude = 19.1748,
     recordedAt = new Date().toISOString(),
+    recipients = pages.filter((page) => !page.isClosed()),
   ) {
     const clientEventId = randomUUID();
     const r = await h.post(
@@ -383,14 +559,166 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     expect(point[0]).toEqual({ srid: 4326, x: -96.1334, y: latitude });
     await pw
       .poll(() =>
-        frames.some(
-          (x) =>
-            x.event === 'fleet.position.updated' && x.payload.id === row.id,
+        recipients.every((page) =>
+          frames.some(
+            (x) =>
+              x.session === monitorIds.get(page) &&
+              x.socketId === socketIds.get(page) &&
+              x.event === 'fleet.position.updated' &&
+              x.payload.id === row.id,
+          ),
         ),
       )
       .toBe(true);
     return row;
   }
+
+  it.each(['before-join', 'after-join'] as const)(
+    'does not expose a previous connection while authenticated origin room admission is held (%s late snapshot)',
+    async (timing) => {
+      const f = await fixture();
+      await status(f, 'IN_PROGRESS');
+      const page = await monitor();
+      const observer = await monitor();
+      const previousId = socketIds.get(page)!;
+      const observerId = socketIds.get(observer)!;
+      const registry = h.app.get(SessionRevocationRegistry);
+      const authorize = registry.authorize.bind(registry);
+      let entered = false;
+      let release!: () => void;
+      let releaseSnapshot!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const snapshotGate = new Promise<void>((resolve) => {
+        releaseSnapshot = resolve;
+      });
+      let held = false;
+      const admission = jest
+        .spyOn(registry, 'authorize')
+        .mockImplementation((socket, validate, roomsFor) =>
+          authorize(socket, validate, async (user) => {
+            const rooms = await roomsFor(user);
+            if (rooms.includes(fleetOriginRoom(h.cedisId))) {
+              entered = true;
+              journal.push({
+                kind: 'admission-held',
+                at: performance.now(),
+                authSessionId: user.authSessionId,
+                rooms,
+                timing,
+              });
+              await gate;
+            }
+            return rooms;
+          }),
+        );
+      await page.route('**/api/fleet/live*', async (route) => {
+        const response = await route.fetch();
+        if (
+          new URL(route.request().url()).searchParams.get(
+            'originLocationId',
+          ) === h.cedisId &&
+          !held
+        ) {
+          held = true;
+          await snapshotGate;
+        }
+        // Delay a real REST response; do not replace backend authority with a mock.
+        await route.fulfill({ response }).catch(() => {
+          journal.push({
+            kind: 'obsolete-response-disposed',
+            timing,
+            at: performance.now(),
+          });
+        });
+      });
+      try {
+        await page
+          .getByRole('combobox', { name: 'Filtrar por origen' })
+          .selectOption(h.cedisId);
+        await pw.poll(() => entered && held).toBe(true);
+        await pw.poll(() => fleetSockets().has(previousId)).toBe(false);
+        // JWT/session validation completed, but join and CONNECT have not.
+        await pw(
+          page.getByText('Tiempo real conectado', { exact: true }),
+        ).toHaveCount(0);
+        const missed = await gps(f, 19.1747, new Date().toISOString(), [
+          observer,
+        ]);
+        expect(
+          frames.filter(
+            (frame) =>
+              frame.session === monitorIds.get(page) &&
+              frame.payload.id === missed.id,
+          ),
+        ).toHaveLength(0);
+        if (timing === 'before-join') releaseSnapshot();
+        release();
+        await ready(page, h.cedisId, previousId);
+        await pw
+          .poll(() =>
+            snapshots.some(
+              (snapshot) =>
+                snapshot.session === monitorIds.get(page) &&
+                snapshot.originLocationId === h.cedisId &&
+                snapshot.positions.some(
+                  (position) =>
+                    position.routeId === f.routeId &&
+                    position.latitude === 19.1747,
+                ),
+            ),
+          )
+          .toBe(true);
+        await pw(units(page, f.vehicle.code)).toHaveCount(1);
+        const latest = await gps(f, 19.1762);
+        const payload = frames.find(
+          (frame) => frame.payload.id === latest.id,
+        )!.payload;
+        await status(f, 'CANCELLED');
+        for (const monitorPage of [page, observer])
+          await pw(units(monitorPage, f.vehicle.code)).toHaveCount(0);
+        releaseSnapshot();
+        // A delayed pre-cancellation GPS delta must not resurrect the route.
+        h.app
+          .get(FleetGateway)
+          .emitPositionUpdated(
+            payload as unknown as Parameters<
+              FleetGateway['emitPositionUpdated']
+            >[0],
+          );
+        await pw
+          .poll(
+            () =>
+              frames.filter(
+                (frame) =>
+                  frame.session === monitorIds.get(page) &&
+                  frame.payload.id === latest.id,
+              ).length,
+          )
+          .toBe(2);
+        await pw(units(page, f.vehicle.code)).toHaveCount(0);
+        expect(socketIds.get(observer)).toBe(observerId);
+        proof(`fleet004-admission-${timing}`, {
+          previousId,
+          socketId: socketIds.get(page),
+          observerId,
+          missedPosition: missed.id,
+          latestPosition: latest.id,
+          timing,
+          realAuthentication: true,
+          realPostGIS: true,
+          manualRecovery: false,
+        });
+      } finally {
+        release();
+        releaseSnapshot();
+        admission.mockRestore();
+      }
+    },
+    120000,
+  );
+
   it('adds a new departure to two already-connected sessions without manual recovery', async () => {
     const a = await monitor();
     const b = await monitor();
@@ -412,7 +740,6 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       await a
         .getByRole('button', { name: 'Centrar en flota', exact: true })
         .click();
-      await a.waitForLoadState('networkidle');
       const style = (await (
         await fetch(h.url + '/maps/styles/operations/style.json')
       ).json()) as { layers: Array<{ 'source-layer'?: string }> };
@@ -464,7 +791,6 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     await status(f, 'IN_PROGRESS');
     const page = await monitor(h.cedisId);
     await gps(f);
-    await page.getByRole('button', { name: 'Recuperar snapshot' }).click();
     await pw(units(page, f.vehicle.code)).toHaveCount(1);
     const t = await status(f, 'CANCELLED');
     try {
@@ -496,7 +822,18 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         h.cedisId,
         h.driverId,
       );
-      await sleep(500);
+      await pw
+        .poll(
+          () =>
+            frames.filter(
+              (frame) =>
+                frame.session === monitorIds.get(page) &&
+                frame.event === 'fleet.route.updated' &&
+                frame.payload.routeId === f.routeId &&
+                frame.payload.status === 'IN_PROGRESS',
+            ).length,
+        )
+        .toBe(2);
       await pw(units(page, f.vehicle.code)).toHaveCount(0);
     }
     await page.context().close();
@@ -513,6 +850,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       (x) =>
         x.event === 'fleet.route.updated' && x.payload.routeId === f.routeId,
     ).length;
+    const rejectedEmission = jest.spyOn(gateway, 'emitRouteUpdated');
     expect(
       (
         await h.patch(`delivery-routes/${f.routeId}/status`, {
@@ -520,7 +858,8 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         })
       ).status,
     ).toBe(400);
-    await sleep(150);
+    expect(rejectedEmission).not.toHaveBeenCalled();
+    rejectedEmission.mockRestore();
     expect(
       frames.filter(
         (x) =>
@@ -566,6 +905,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         .latitude,
     ).toBe(19.1761);
     const reconnectStarted = performance.now();
+    const previousSocketId = socketIds.get(page)!;
     await page.context().setOffline(true);
     // Close the transport, not Socket.IO's namespace (which disables client reconnection).
     for (const socket of (
@@ -575,11 +915,9 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     ).sockets.values())
       if (socket.handshake.auth.token) socket.client.conn.close();
     await status(f, 'CANCELLED');
-    await sleep(200);
+    await pw.poll(() => fleetSockets().has(previousSocketId)).toBe(false);
     await page.context().setOffline(false);
-    await pw(
-      page.getByText('Tiempo real conectado', { exact: true }),
-    ).toBeVisible({ timeout: 25000 });
+    await ready(page, '', previousSocketId);
     await pw(units(page, f.vehicle.code)).toHaveCount(0);
     journal.push({
       scenario: 'reconnect-converged',
@@ -626,14 +964,18 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         })
       ).outstandingAmount.toNumber(),
     ).toBe(0);
+    const beforeRemountSocket = socketIds.get(page)!;
     await page
       .getByRole('link', { name: 'Inicio', exact: true })
       .first()
       .click();
-    await page.goBack();
+    await pw(page).toHaveURL(/\/$/);
     await pw(
       page.getByText('Tiempo real conectado', { exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await pw.poll(() => fleetSockets().has(beforeRemountSocket)).toBe(false);
+    await page.goBack();
+    await ready(page, '', beforeRemountSocket);
     await pw(units(page, completed.vehicle.code)).toHaveCount(0);
     await pw(
       page.getByText('El mapa no está disponible.', { exact: true }),
@@ -775,7 +1117,6 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
           .toBe(true);
         hold = false;
         release();
-        await a.waitForLoadState('networkidle');
         await Promise.all(snapshotReads);
         proof(`fleet004-incident-before-render-${timing}`, {
           incidentId: payload.incidentId,
@@ -850,9 +1191,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
           .toBe(false);
         await pw(a.getByText(reason, { exact: true })).toHaveCount(1);
         await a.context().setOffline(false);
-        await pw(
-          a.getByText('Tiempo real conectado', { exact: true }),
-        ).toBeVisible({ timeout: 25000 });
+        await ready(a, '', liveSocket!.id);
         await pw
           .poll(() =>
             snapshots.some(
@@ -883,9 +1222,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
           )
           .toBe(false);
         await a.goBack();
-        await pw(
-          a.getByText('Tiempo real conectado', { exact: true }),
-        ).toBeVisible();
+        await ready(a, '', beforeRemountSocket);
         await pw(a.getByText(reason, { exact: true })).toBeVisible();
         await pw
           .poll(() =>
@@ -1147,7 +1484,6 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       await siloSocketState('socket-probe');
       await pw.poll(() => observed['silo-b'].length, { timeout: 5000 }).toBe(1);
       expect(observed['silo-b']).toEqual([{ source: 'ci004-silo-b' }]);
-      await sleep(200);
       expect(observed['other-origin']).toHaveLength(0);
       for (const label of ['seller', 'foreign', 'silo-a-token-on-b']) {
         expect(handshakes[label]).toEqual({

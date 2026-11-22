@@ -67,8 +67,8 @@ const snapshot = (latitude: number) => ({
   ],
 });
 
-function Probe() {
-  const live = useFleetLive("origin-1");
+function Probe({ origin = "origin-1" }: { origin?: string }) {
+  const live = useFleetLive(origin);
   return (
     <output data-state={live.connectionState}>
       {live.data?.items[0]?.position?.latitude ?? "empty"}
@@ -102,6 +102,61 @@ describe("useFleetLive recovery", () => {
   afterEach(() => {
     act(() => root?.unmount());
     container.remove();
+  });
+
+  it("does not reuse connected status while the next origin handshake is pending", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    root = createRoot(container);
+    const render = (origin: string) =>
+      act(async () => {
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <Probe origin={origin} />
+          </QueryClientProvider>,
+        );
+      });
+    await render("origin-1");
+    await act(async () => state.handlers?.onConnected?.());
+    expect(container.querySelector("output")?.dataset.state).toBe("connected");
+    await render("origin-1");
+    expect(container.querySelector("output")?.dataset.state).toBe("connected");
+    const previous = state.handlers;
+    await render("origin-2");
+    expect(container.querySelector("output")?.dataset.state).toBe("connecting");
+    // A queued callback from a disposed subscription must not authenticate its successor.
+    await act(async () => previous?.onConnected?.());
+    expect(container.querySelector("output")?.dataset.state).toBe("connecting");
+    await act(async () => state.handlers?.onConnected?.());
+    expect(container.querySelector("output")?.dataset.state).toBe("connected");
+    await render("origin-1");
+    expect(container.querySelector("output")?.dataset.state).toBe("connecting");
+  });
+
+  it("ignores queued events from a disposed origin subscription", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    root = createRoot(container);
+    const render = (origin: string) =>
+      act(async () => {
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <Probe origin={origin} />
+          </QueryClientProvider>,
+        );
+      });
+    await render("origin-1");
+    const previous = state.handlers;
+    await render("origin-2");
+    const reads = state.getLive.mock.calls.length;
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    await act(async () => previous?.onRouteUpdated?.());
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(state.getLive).toHaveBeenCalledTimes(reads);
+    await act(async () => previous?.onDisconnected?.());
+    expect(container.querySelector("output")?.dataset.state).toBe("connecting");
   });
 
   it("keeps the last REST snapshot while disconnected and reconciles once after reconnect", async () => {
