@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import {
+  readFileSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -73,3 +81,66 @@ test("the MTE integration runner uses npm rather than adding a pnpm CI lane", ()
     /npm --prefix backend exec -- prisma generate --schema "\$GITHUB_WORKSPACE\/backend\/prisma\/schema\.prisma"/u,
   );
 });
+
+for (const stage of ["jest", "prisma"]) {
+  test(`missing ${stage} fails preflight before any Docker or tenant resource operation`, () => {
+    const dir = mkdtempSync(resolve(tmpdir(), "mte-preflight-"));
+    try {
+      mkdirSync(resolve(dir, "scripts/multi-company"), { recursive: true });
+      mkdirSync(resolve(dir, "backend"));
+      mkdirSync(resolve(dir, "bin"));
+      writeFileSync(
+        resolve(dir, "scripts/multi-company/test-two-company-isolation.sh"),
+        harness,
+      );
+      writeFileSync(
+        resolve(dir, "bin/npm"),
+        `#!/bin/sh
+echo "npm $*" >> "$PREFLIGHT_TRACE"
+case "$*" in
+  *jest*) [ "$FAIL_STAGE" != jest ] ;;
+  *node*-e*) [ "$FAIL_STAGE" != prisma ] ;;
+  *) exit 99 ;;
+esac
+`,
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        resolve(dir, "bin/docker"),
+        '#!/bin/sh\necho "docker $*" >> "$PREFLIGHT_TRACE"\nexit 99\n',
+        { mode: 0o755 },
+      );
+      const trace = resolve(dir, "trace");
+      const result = spawnSync(
+        "/bin/bash",
+        [resolve(dir, "scripts/multi-company/test-two-company-isolation.sh")],
+        {
+          encoding: "utf8",
+          timeout: 10000,
+          env: {
+            ...process.env,
+            PATH: `${resolve(dir, "bin")}:${process.env.PATH}`,
+            FAIL_STAGE: stage,
+            PREFLIGHT_TRACE: trace,
+          },
+        },
+      );
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(
+        result.stderr,
+        stage === "jest"
+          ? /Jest.*not prepared/u
+          : /Prisma Client.*not prepared/u,
+      );
+      const commands = readFileSync(trace, "utf8");
+      assert.doesNotMatch(commands, /docker/u);
+      assert.match(commands, /require.resolve\("jest\/package.json"\)/u);
+      if (stage === "prisma") {
+        assert.match(commands, /npm --offline --no exec -- jest --version/u);
+        assert.match(commands, /npm --offline --no exec -- node -e/u);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}

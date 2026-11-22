@@ -156,8 +156,9 @@ jobs:
           ssh_options=(-i "$key_file" -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts_file")
 
+          # The validated username is a safe remote argument, expanded locally.
           printf '%s' "$TENANT_REGISTRY_TOKEN" | ssh "${ssh_options[@]}" "$target" \
-            "docker login ghcr.io --username '$TENANT_REGISTRY_USER' --password-stdin" \
+            docker login ghcr.io --username "$TENANT_REGISTRY_USER" --password-stdin \
             >/dev/null
           ssh "${ssh_options[@]}" "$target" bash -s -- \
             "$COMPANY_SLUG" "$TENANT_DEPLOY_ROOT" "$BACKEND_DIGEST" \

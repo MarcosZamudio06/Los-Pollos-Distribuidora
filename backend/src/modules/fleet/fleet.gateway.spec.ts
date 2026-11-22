@@ -17,7 +17,20 @@ describe('FleetGateway', () => {
   function createGateway() {
     const authService = { verifyAccessToken: jest.fn() };
     const prisma = { deliveryRoute: { findMany: jest.fn() } };
-    const gateway = new FleetGateway(authService as never, prisma as never);
+    Object.assign(authService, {
+      verifyRealtimeSession: async (token: string) => ({
+        principal: {
+          ...(await authService.verifyAccessToken(token)),
+          authSessionId: 'fixture-session',
+        },
+        expiresAt: Date.now() + 60000,
+      }),
+    });
+    const gateway = new FleetGateway(
+      authService as never,
+      prisma as never,
+      new SessionRevocationRegistry(),
+    );
     const emit = jest.fn();
     const server = {
       to: jest.fn(() => ({ emit })),
@@ -110,14 +123,20 @@ describe('FleetGateway', () => {
       originLocationId: 'origin-1',
     });
     await first.gateway.handleConnection(originClient as never);
-    expect(originClient.join).toHaveBeenCalledWith(fleetOriginRoom('origin-1'));
-    expect(originClient.join).not.toHaveBeenCalledWith(FLEET_ADMIN_ROOM);
+    expect(originClient.join).toHaveBeenCalledWith(
+      expect.arrayContaining([fleetOriginRoom('origin-1')]),
+    );
+    expect(originClient.join).not.toHaveBeenCalledWith(
+      expect.arrayContaining([FLEET_ADMIN_ROOM]),
+    );
 
     const second = createGateway();
     second.authService.verifyAccessToken.mockResolvedValue(admin());
     const globalClient = socket({ token: 'access-token' });
     await second.gateway.handleConnection(globalClient as never);
-    expect(globalClient.join).toHaveBeenCalledWith(FLEET_ADMIN_ROOM);
+    expect(globalClient.join).toHaveBeenCalledWith(
+      expect.arrayContaining([FLEET_ADMIN_ROOM]),
+    );
   });
 
   it('derives driver route rooms from the authenticated driver, not handshake routeId', async () => {
@@ -134,10 +153,18 @@ describe('FleetGateway', () => {
 
     await gateway.handleConnection(client as never);
 
-    expect(client.join).toHaveBeenCalledWith(fleetDriverRoom('driver-1'));
-    expect(client.join).toHaveBeenCalledWith(fleetRouteRoom('route-1'));
-    expect(client.join).toHaveBeenCalledWith(fleetRouteRoom('route-2'));
-    expect(client.join).not.toHaveBeenCalledWith(fleetOriginRoom('origin-1'));
+    expect(client.join).toHaveBeenCalledWith(
+      expect.arrayContaining([fleetDriverRoom('driver-1')]),
+    );
+    expect(client.join).toHaveBeenCalledWith(
+      expect.arrayContaining([fleetRouteRoom('route-1')]),
+    );
+    expect(client.join).toHaveBeenCalledWith(
+      expect.arrayContaining([fleetRouteRoom('route-2')]),
+    );
+    expect(client.join).not.toHaveBeenCalledWith(
+      expect.arrayContaining([fleetOriginRoom('origin-1')]),
+    );
     expect(client.join).not.toHaveBeenCalledWith(
       fleetRouteRoom('route-belonging-to-someone-else'),
     );
@@ -158,6 +185,15 @@ describe('FleetGateway', () => {
     };
     const prisma = { deliveryRoute: { findMany: jest.fn() } };
     const registry = new SessionRevocationRegistry();
+    Object.assign(authService, {
+      verifyRealtimeSession: async (token: string) => ({
+        principal: {
+          ...(await authService.verifyAccessToken(token)),
+          authSessionId: 'fixture-session',
+        },
+        expiresAt: Date.now() + 60000,
+      }),
+    });
     const gateway = new FleetGateway(
       authService as never,
       prisma as never,
@@ -168,7 +204,7 @@ describe('FleetGateway', () => {
     await gateway.handleConnection(client as never);
     registry.notify(['admin-1']);
 
-    expect(client.disconnect).toHaveBeenCalledWith(true);
+    expect(client.disconnect).toHaveBeenCalledWith(false);
   });
 
   it('emits position.updated to admin, origin, and route rooms', () => {

@@ -6,6 +6,15 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import type { AuthenticatedPrincipal } from '../auth/auth.types';
+import {
+  ACCESS_TRANSACTION_OPTIONS,
+  lockAccessAuthority,
+  loadAccessActor,
+  assertRoleAuthority,
+  assertSecurityAdministratorsRemain,
+} from '../../common/authorization/access-authority';
+import { PERMISSIONS } from '../../common/authorization/permissions';
 import type { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
@@ -23,9 +32,6 @@ import {
 const ADMIN_ROLE_NAME = 'ADMIN';
 const PASSWORD_HASH_ROUNDS = 12;
 const MIN_TEMPORARY_PASSWORD_LENGTH = 10;
-const LAST_ADMIN_TRANSACTION_OPTIONS = {
-  isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel,
-} as const;
 
 type RoleRecord = {
   id: string;
@@ -126,53 +132,86 @@ export class UsersService {
     return this.toUserResponse(user);
   }
 
-  async create(dto: CreateUserDto): Promise<CreatedUserResponse> {
-    const email = this.normalizeEmail(dto.email);
-    const phone = this.normalizePhone(dto.phone);
-    const cedisLocationId = this.normalizeOptionalLocationId(
-      dto.cedisLocationId,
-    );
-    await this.assertEmailAvailable(email);
-    await this.assertPhoneAvailable(phone);
-    const role = await this.assertRoleExists(dto.roleId);
-    await this.assertEmployeeLocation(dto.operationalLocationId, role.name);
-    await this.assertCedisLocation(cedisLocationId);
-    const temporaryPassword = this.generateTemporaryPassword();
-
-    const passwordHash = await bcrypt.hash(
-      temporaryPassword,
-      PASSWORD_HASH_ROUNDS,
-    );
-
-    const user = await this.prisma.user
-      .create({
-        data: {
-          name: dto.name,
-          email,
-          phone,
-          controlNumber: await this.nextControlNumber(),
-          roleId: dto.roleId,
-          operationalLocationId: dto.operationalLocationId,
-          ...(cedisLocationId ? { cedisLocationId } : {}),
-          passwordHash,
-          isActive: true,
-          mustChangePassword: true,
-        },
-        include: {
-          role: true,
-          operationalLocation: true,
-          cedisLocation: true,
-        },
-      })
+  async create(
+    dto: CreateUserDto,
+    actor: AuthenticatedPrincipal,
+  ): Promise<CreatedUserResponse> {
+    return this.prisma
+      .$transaction(async (tx) => {
+        await lockAccessAuthority(tx);
+        const authority = await loadAccessActor(
+          tx,
+          actor,
+          PERMISSIONS.USERS_MANAGE,
+        );
+        const role = await tx.role.findUnique({
+          where: { id: dto.roleId },
+          include: { permissions: { include: { permission: true } } },
+        });
+        if (!role) throw new BadRequestException('Role does not exist');
+        assertRoleAuthority(authority, role);
+        const email = this.normalizeEmail(dto.email);
+        const phone = this.normalizePhone(dto.phone);
+        const cedisLocationId = this.normalizeOptionalLocationId(
+          dto.cedisLocationId,
+        );
+        await this.assertEmailAvailable(email, undefined, tx);
+        await this.assertPhoneAvailable(phone, tx);
+        await this.assertEmployeeLocation(
+          dto.operationalLocationId,
+          role.name,
+          tx,
+        );
+        await this.assertCedisLocation(cedisLocationId, tx);
+        // Generate credentials only after authoritative denial checks complete.
+        const temporaryPassword = this.generateTemporaryPassword();
+        const passwordHash = await bcrypt.hash(
+          temporaryPassword,
+          PASSWORD_HASH_ROUNDS,
+        );
+        const user = await tx.user.create({
+          data: {
+            name: dto.name,
+            email,
+            phone,
+            controlNumber: await this.nextControlNumber(tx),
+            roleId: role.id,
+            operationalLocationId: dto.operationalLocationId,
+            ...(cedisLocationId ? { cedisLocationId } : {}),
+            passwordHash,
+            isActive: true,
+            mustChangePassword: true,
+          },
+          include: {
+            role: true,
+            operationalLocation: true,
+            cedisLocation: true,
+          },
+        });
+        await tx.accessControlAuditLog.create({
+          data: {
+            actorUserId: authority.id,
+            action: 'USER_CREATED',
+            targetType: 'USER',
+            targetId: user.id,
+            after: { roleId: role.id, roleName: role.name },
+            reason: 'Employee account creation',
+            affectedUserCount: 1,
+          },
+        });
+        return { ...this.toUserResponse(user), temporaryPassword };
+      }, ACCESS_TRANSACTION_OPTIONS)
       .catch((error: unknown) => {
         this.throwUniqueConstraintConflict(error);
         throw error;
       });
-
-    return { ...this.toUserResponse(user), temporaryPassword };
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<UserResponse> {
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    actor: AuthenticatedPrincipal,
+  ): Promise<UserResponse> {
     if (dto.roleId !== undefined) {
       throw new BadRequestException(
         'Use the access-profile endpoint to change a user profile',
@@ -181,6 +220,22 @@ export class UsersService {
 
     return this.prisma
       .$transaction(async (tx) => {
+        await lockAccessAuthority(tx);
+        const authority = await loadAccessActor(
+          tx,
+          actor,
+          PERMISSIONS.USERS_MANAGE,
+        );
+        const target = await tx.user.findUnique({
+          where: { id },
+          include: {
+            role: {
+              include: { permissions: { include: { permission: true } } },
+            },
+          },
+        });
+        if (!target) throw new NotFoundException('User not found');
+        assertRoleAuthority(authority, target.role);
         const client = tx as UsersTransactionClient;
         const email = dto.email ? this.normalizeEmail(dto.email) : undefined;
         if (email) {
@@ -202,8 +257,20 @@ export class UsersService {
           },
         });
 
+        await tx.accessControlAuditLog.create({
+          data: {
+            actorUserId: authority.id,
+            action: 'USER_UPDATED',
+            targetType: 'USER',
+            targetId: id,
+            before: { name: target.name, email: target.email },
+            after: { name: user.name, email: user.email },
+            reason: 'Employee account update',
+            affectedUserCount: 1,
+          },
+        });
         return this.toUserResponse(user);
-      }, LAST_ADMIN_TRANSACTION_OPTIONS)
+      }, ACCESS_TRANSACTION_OPTIONS)
       .catch((error: unknown) => {
         this.throwUniqueConstraintConflict(error);
         throw error;
@@ -213,47 +280,83 @@ export class UsersService {
   async updatePassword(
     id: string,
     dto: UpdateUserPasswordDto,
+    actor: AuthenticatedPrincipal,
   ): Promise<UserResponse> {
     this.assertTemporaryPassword(dto.temporaryPassword);
-    await this.ensureUserExists(id);
-
-    const passwordHash = await bcrypt.hash(
-      dto.temporaryPassword,
-      PASSWORD_HASH_ROUNDS,
-    );
-
     const user = await this.prisma.$transaction(async (tx) => {
-      const client = tx as UsersTransactionClient;
-      const updated = await client.user.update({
+      await lockAccessAuthority(tx);
+      const authority = await loadAccessActor(
+        tx,
+        actor,
+        PERMISSIONS.USERS_MANAGE,
+      );
+      const target = await tx.user.findUnique({
+        where: { id },
+        include: {
+          role: { include: { permissions: { include: { permission: true } } } },
+        },
+      });
+      if (!target) throw new NotFoundException('User not found');
+      assertRoleAuthority(authority, target.role);
+      const passwordHash = await bcrypt.hash(
+        dto.temporaryPassword,
+        PASSWORD_HASH_ROUNDS,
+      );
+      const updated = await tx.user.update({
         where: { id },
         data: {
           passwordHash,
           mustChangePassword: true,
           sessionVersion: { increment: 1 },
         },
-        include: {
-          role: true,
-          operationalLocation: true,
-          cedisLocation: true,
-        },
+        include: { role: true, operationalLocation: true, cedisLocation: true },
       });
-      await client.authSession.updateMany({
+      const revoked = await tx.authSession.updateMany({
         where: { userId: id, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      await tx.accessControlAuditLog.create({
+        data: {
+          actorUserId: authority.id,
+          action: 'USER_PASSWORD_RESET',
+          targetType: 'USER',
+          targetId: id,
+          before: { sessionVersion: target.sessionVersion },
+          after: {
+            sessionVersion: updated.sessionVersion,
+            mustChangePassword: true,
+          },
+          reason: 'Administrative credential reset',
+          affectedUserCount: 1,
+          revokedSessionCount: revoked.count,
+        },
+      });
       return updated;
-    });
-
+    }, ACCESS_TRANSACTION_OPTIONS);
     this.sessionRevocationRegistry?.notify([id]);
     return this.toUserResponse(user);
   }
 
   async deactivate(
     id: string,
-    actorUserId: string,
+    actor: AuthenticatedPrincipal,
     dto: DeactivateUserDto,
   ): Promise<UserResponse> {
     const user = await this.prisma.$transaction(async (tx) => {
+      await lockAccessAuthority(tx);
+      const authority = await loadAccessActor(
+        tx,
+        actor,
+        PERMISSIONS.USERS_MANAGE,
+      );
+      const target = await tx.user.findUnique({
+        where: { id },
+        include: {
+          role: { include: { permissions: { include: { permission: true } } } },
+        },
+      });
+      if (!target) throw new NotFoundException('User not found');
+      assertRoleAuthority(authority, target.role);
       const client = tx as UsersTransactionClient;
       const currentUser = await this.findActiveUserForMutation(id, client);
       await this.assertNotLastActiveAdmin(currentUser, client);
@@ -264,7 +367,7 @@ export class UsersService {
           isActive: false,
           sessionVersion: { increment: 1 },
           deactivatedAt: new Date(),
-          deactivatedByUserId: actorUserId,
+          deactivatedByUserId: authority.id,
           deactivationReason: dto.reason ?? null,
         },
         include: {
@@ -278,8 +381,21 @@ export class UsersService {
         data: { revokedAt: new Date() },
       });
 
+      await assertSecurityAdministratorsRemain(tx);
+      await tx.accessControlAuditLog.create({
+        data: {
+          actorUserId: authority.id,
+          action: 'USER_DEACTIVATED',
+          targetType: 'USER',
+          targetId: id,
+          before: { isActive: true },
+          after: { isActive: false },
+          reason: dto.reason ?? 'Employee deactivation',
+          affectedUserCount: 1,
+        },
+      });
       return this.toUserResponse(user);
-    }, LAST_ADMIN_TRANSACTION_OPTIONS);
+    }, ACCESS_TRANSACTION_OPTIONS);
     this.sessionRevocationRegistry?.notify([id]);
     return user;
   }
@@ -351,23 +467,29 @@ export class UsersService {
     return randomBytes(12).toString('base64url');
   }
 
-  private async nextControlNumber(): Promise<string> {
-    const rows = await this.prisma.$queryRawUnsafe<
+  private async nextControlNumber(
+    client: Prisma.TransactionClient,
+  ): Promise<string> {
+    const rows = await client.$queryRawUnsafe<
       Array<{ value: bigint | number }>
     >('SELECT nextval(\'"User_controlNumber_seq"\') AS value');
     return `EPDP-${String(rows[0].value).padStart(6, '0')}`;
   }
 
-  private async assertPhoneAvailable(phone: string): Promise<void> {
-    const existing = await this.prisma.user.findUnique({ where: { phone } });
+  private async assertPhoneAvailable(
+    phone: string,
+    client: UsersTransactionClient,
+  ): Promise<void> {
+    const existing = await client.user.findUnique({ where: { phone } });
     if (existing) throw new ConflictException('Phone is already registered');
   }
 
   private async assertEmployeeLocation(
     locationId: string,
     roleName: string,
+    client: UsersTransactionClient,
   ): Promise<void> {
-    const location = await this.prisma.operationalLocation.findUnique({
+    const location = await client.operationalLocation.findUnique({
       where: { id: locationId },
     });
     if (
@@ -381,10 +503,13 @@ export class UsersService {
     }
   }
 
-  private async assertCedisLocation(locationId?: string): Promise<void> {
+  private async assertCedisLocation(
+    locationId: string | undefined,
+    client: UsersTransactionClient,
+  ): Promise<void> {
     if (!locationId) return;
 
-    const location = await this.prisma.operationalLocation.findUnique({
+    const location = await client.operationalLocation.findUnique({
       where: { id: locationId },
     });
 
@@ -416,27 +541,6 @@ export class UsersService {
 
     if (existingUser && existingUser.id !== currentUserId) {
       throw new ConflictException('Email is already registered');
-    }
-  }
-
-  private async assertRoleExists(
-    roleId: string,
-    client: UsersTransactionClient = this.prisma,
-  ): Promise<RoleRecord> {
-    const role = await client.role.findUnique({ where: { id: roleId } });
-
-    if (!role) {
-      throw new BadRequestException('Role does not exist');
-    }
-
-    return role;
-  }
-
-  private async ensureUserExists(id: string): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
     }
   }
 

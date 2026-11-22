@@ -1,8 +1,13 @@
 import {
+  ACCESS_TRANSACTION_OPTIONS,
+  lockAccessAuthority,
+  loadAccessActor,
+} from '../../common/authorization/access-authority';
+import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   Optional,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -17,11 +22,14 @@ import {
   AuthenticatedUser,
   IssuedSession,
   TokenPayload,
+  RealtimeSession,
 } from './auth.types';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
 import { LoginDto } from './dto/login.dto';
 
 const PASSWORD_HASH_ROUNDS = 12;
+// Generated once, never a usable credential: missing identities still do bcrypt work.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomUUID(), PASSWORD_HASH_ROUNDS);
 const MIN_PASSWORD_LENGTH = 10;
 const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
 const DEFAULT_REFRESH_TOKEN_EXPIRES_IN = '7d';
@@ -79,6 +87,7 @@ type SessionRecord = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -89,14 +98,17 @@ export class AuthService {
   async login(credentials: LoginDto): Promise<IssuedSession> {
     const user = await this.findUserByEmail(credentials.email);
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    if (!user.isActive) {
-      throw new ForbiddenException('User is inactive');
-    }
-
-    if (!(await this.passwordMatches(user, credentials.password))) {
+    const matches = await bcrypt.compare(
+      credentials.password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
+    if (!user || !user.isActive || !matches) {
+      // Restricted operational logs only; no submitted identifiers or credentials.
+      this.logger.warn({
+        event: 'AUTH_LOGIN_REJECTED',
+        reason: !user ? 'unknown' : !user.isActive ? 'inactive' : 'password',
+        userId: user?.id ?? null,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -187,6 +199,17 @@ export class AuthService {
   }
 
   async verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
+    return (await this.verifyAccessSession(token, true)).principal;
+  }
+
+  async verifyRealtimeSession(token: string): Promise<RealtimeSession> {
+    return this.verifyAccessSession(token, false);
+  }
+
+  private async verifyAccessSession(
+    token: string,
+    touch: boolean,
+  ): Promise<RealtimeSession> {
     const payload = await this.verifyToken(token, 'access');
     const session = await this.findSession(payload.sessionId);
     const now = new Date();
@@ -203,11 +226,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    await this.touchSessionIfNeeded(session, now);
+    if (touch) await this.touchSessionIfNeeded(session, now);
 
     return {
-      ...this.toAuthenticatedUser(session.user),
-      authSessionId: session.id,
+      principal: {
+        ...this.toAuthenticatedUser(session.user),
+        authSessionId: session.id,
+      },
+      expiresAt: Math.min(
+        typeof payload.exp === 'number' ? payload.exp * 1000 : NaN,
+        session.absoluteExpiresAt.getTime(),
+        session.lastUsedAt.getTime() + this.getSessionTtlSeconds('idle') * 1000,
+      ),
     };
   }
 
@@ -224,6 +254,7 @@ export class AuthService {
   async changeOwnPassword(
     userId: string,
     dto: ChangeOwnPasswordDto,
+    authSessionId: string,
   ): Promise<AuthenticatedUser> {
     this.assertPasswordPolicy(dto.newPassword);
     const user = await this.findUserById(userId);
@@ -242,23 +273,36 @@ export class AuthService {
     );
     const now = new Date();
     const updatedUser = await this.prisma.$transaction(async (transaction) => {
-      const updated = await transaction.user.update({
-        where: { id: userId },
+      // Bcrypt stays outside the lock. A committed reset/disable or credential winner
+      // invalidates the verified snapshot; a stale request cannot clear forced change.
+      await lockAccessAuthority(transaction);
+      await loadAccessActor(transaction, { id: userId, authSessionId });
+      const changed = await transaction.user.updateMany({
+        where: {
+          id: userId,
+          isActive: true,
+          passwordHash: user.passwordHash,
+          sessionVersion: user.sessionVersion,
+        },
         data: {
           passwordHash,
           mustChangePassword: false,
           sessionVersion: { increment: 1 },
         },
-        include: {
-          role: { include: { permissions: { include: { permission: true } } } },
-        },
       });
+      if (changed.count !== 1)
+        throw new UnauthorizedException('Credential state has changed');
       await transaction.authSession.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
       });
-      return updated;
-    });
+      return transaction.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: {
+          role: { include: { permissions: { include: { permission: true } } } },
+        },
+      });
+    }, ACCESS_TRANSACTION_OPTIONS);
 
     this.sessionRevocationRegistry?.notify([userId]);
     return this.toAuthenticatedUser(updatedUser);
@@ -309,10 +353,14 @@ export class AuthService {
   }
 
   private async revokeSession(id: string, revokedAt: Date): Promise<void> {
-    await this.prisma.authSession.updateMany({
-      where: { id, revokedAt: null },
-      data: { revokedAt },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      await lockAccessAuthority(tx);
+      await tx.authSession.updateMany({
+        where: { id, revokedAt: null },
+        data: { revokedAt },
+      });
+    }, ACCESS_TRANSACTION_OPTIONS);
+    this.sessionRevocationRegistry?.notifySessions([id]);
   }
 
   private isIdleExpired(session: SessionRecord, now: Date): boolean {

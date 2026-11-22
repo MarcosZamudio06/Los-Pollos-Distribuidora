@@ -3,6 +3,11 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../../database/prisma.service';
 import { UsersService } from './users.service';
+import { PERMISSION_DEFINITIONS } from '../../common/authorization/permissions';
+const actor = {
+  id: 'fixture-security-admin',
+  authSessionId: 'fixture-admin-session',
+} as never;
 
 const now = new Date('2026-07-11T00:00:00.000Z');
 const role = { id: 'role-seller', name: 'SELLER' };
@@ -43,6 +48,10 @@ function user(overrides: Record<string, unknown> = {}) {
   };
 }
 
+type PersistedFixtureUser = ReturnType<typeof user> & {
+  role: { permissions?: [] };
+};
+
 function prismaMock() {
   const prisma = {
     user: {
@@ -53,12 +62,64 @@ function prismaMock() {
       update: jest.fn(),
       count: jest.fn(),
     },
-    authSession: { updateMany: jest.fn() },
-    role: { findUnique: jest.fn(), findMany: jest.fn() },
+    authSession: {
+      updateMany: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({
+        userId: 'fixture-security-admin',
+        revokedAt: null,
+        lastUsedAt: new Date(),
+        absoluteExpiresAt: new Date(Date.now() + 86400000),
+      }),
+    },
+    accessControlAuditLog: { create: jest.fn() },
+    $executeRaw: jest.fn(),
+    role: {
+      findUnique: jest.fn().mockResolvedValue(role),
+      findMany: jest.fn(),
+    },
     operationalLocation: { findUnique: jest.fn() },
     $queryRawUnsafe: jest.fn().mockResolvedValue([{ value: 1 }]),
     $transaction: jest.fn((callback: (value: unknown) => unknown) =>
-      callback(prisma),
+      callback({
+        ...prisma,
+        user: {
+          ...prisma.user,
+          findUnique: (args: { where: Record<string, unknown> }) =>
+            args.where.id === 'fixture-security-admin'
+              ? Promise.resolve({
+                  id: 'fixture-security-admin',
+                  isActive: true,
+                  role: {
+                    name: 'ADMIN',
+                    permissions: PERMISSION_DEFINITIONS.map(({ key }) => ({
+                      permission: { key },
+                    })),
+                  },
+                })
+              : prisma.user
+                  .findUnique(args)
+                  .then((u: PersistedFixtureUser | null) =>
+                    u?.role
+                      ? {
+                          ...u,
+                          role: {
+                            ...u.role,
+                            permissions: u.role.permissions ?? [],
+                          },
+                        }
+                      : u,
+                  ),
+        },
+        role: {
+          ...prisma.role,
+          findUnique: async (args: { where: Record<string, unknown> }) => {
+            const role = await prisma.role.findUnique(args);
+            return role
+              ? { ...role, permissions: role.permissions ?? [] }
+              : null;
+          },
+        },
+      }),
     ),
   };
   return prisma;
@@ -70,7 +131,7 @@ describe('UsersService employee administration', () => {
     const service = new UsersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.update('user-1', { roleId: 'role-admin' }),
+      service.update('user-1', { roleId: 'role-admin' }, actor),
     ).rejects.toThrow(
       'Use the access-profile endpoint to change a user profile',
     );
@@ -88,13 +149,16 @@ describe('UsersService employee administration', () => {
     );
     const service = new UsersService(prisma as unknown as PrismaService);
 
-    const result = await service.create({
-      name: 'Ana',
-      email: ' ANA@POLLOS.LOCAL ',
-      phone: '+52 229-123-4567',
-      roleId: role.id,
-      operationalLocationId: location.id,
-    });
+    const result = await service.create(
+      {
+        name: 'Ana',
+        email: ' ANA@POLLOS.LOCAL ',
+        phone: '+52 229-123-4567',
+        roleId: role.id,
+        operationalLocationId: location.id,
+      },
+      actor,
+    );
 
     expect(result.controlNumber).toBe('EPDP-000001');
     expect(result.temporaryPassword).toHaveLength(16);
@@ -115,13 +179,16 @@ describe('UsersService employee administration', () => {
       .mockResolvedValueOnce(user());
     const service = new UsersService(prisma as unknown as PrismaService);
     await expect(
-      service.create({
-        name: 'Ana',
-        email: 'ana@pollos.local',
-        phone: '2291234567',
-        roleId: role.id,
-        operationalLocationId: location.id,
-      }),
+      service.create(
+        {
+          name: 'Ana',
+          email: 'ana@pollos.local',
+          phone: '2291234567',
+          roleId: role.id,
+          operationalLocationId: location.id,
+        },
+        actor,
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
 
     prisma.user.findUnique.mockReset();
@@ -132,13 +199,16 @@ describe('UsersService employee administration', () => {
       type: 'WAREHOUSE',
     });
     await expect(
-      service.create({
-        name: 'Ana',
-        email: 'ana@pollos.local',
-        phone: '2291234567',
-        roleId: role.id,
-        operationalLocationId: location.id,
-      }),
+      service.create(
+        {
+          name: 'Ana',
+          email: 'ana@pollos.local',
+          phone: '2291234567',
+          roleId: role.id,
+          operationalLocationId: location.id,
+        },
+        actor,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -162,13 +232,16 @@ describe('UsersService employee administration', () => {
     const service = new UsersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.create({
-        name: 'Almacén CEDIS',
-        email: 'warehouse@pollos.local',
-        phone: '+522291234568',
-        roleId: warehouseRole.id,
-        operationalLocationId: cedisLocation.id,
-      }),
+      service.create(
+        {
+          name: 'Almacén CEDIS',
+          email: 'warehouse@pollos.local',
+          phone: '+522291234568',
+          roleId: warehouseRole.id,
+          operationalLocationId: cedisLocation.id,
+        },
+        actor,
+      ),
     ).resolves.toEqual(
       expect.objectContaining({
         operationalLocationId: cedisLocation.id,
@@ -203,13 +276,16 @@ describe('UsersService employee administration', () => {
       const service = new UsersService(prisma as unknown as PrismaService);
 
       await expect(
-        service.create({
-          name: 'Vendedor CEDIS',
-          email: `${roleName.toLowerCase()}-cedis@pollos.local`,
-          phone: '+522291234572',
-          roleId: roleForTest.id,
-          operationalLocationId: cedisLocation.id,
-        }),
+        service.create(
+          {
+            name: 'Vendedor CEDIS',
+            email: `${roleName.toLowerCase()}-cedis@pollos.local`,
+            phone: '+522291234572',
+            roleId: roleForTest.id,
+            operationalLocationId: cedisLocation.id,
+          },
+          actor,
+        ),
       ).resolves.toEqual(
         expect.objectContaining({
           operationalLocationId: cedisLocation.id,
@@ -246,13 +322,16 @@ describe('UsersService employee administration', () => {
     const service = new UsersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.create({
-        name: 'Almacén Alvarado',
-        email: 'warehouse-alvarado@pollos.local',
-        phone: '+522291234569',
-        roleId: warehouseRole.id,
-        operationalLocationId: branch.id,
-      }),
+      service.create(
+        {
+          name: 'Almacén Alvarado',
+          email: 'warehouse-alvarado@pollos.local',
+          phone: '+522291234569',
+          roleId: warehouseRole.id,
+          operationalLocationId: branch.id,
+        },
+        actor,
+      ),
     ).resolves.toEqual(
       expect.objectContaining({
         operationalLocationId: branch.id,
@@ -281,14 +360,17 @@ describe('UsersService employee administration', () => {
     );
     const service = new UsersService(prisma as unknown as PrismaService);
 
-    const result = await service.create({
-      name: 'Ana CEDIS',
-      email: 'ana-cedis@pollos.local',
-      phone: '+522291234570',
-      roleId: role.id,
-      operationalLocationId: location.id,
-      cedisLocationId: cedisLocation.id,
-    });
+    const result = await service.create(
+      {
+        name: 'Ana CEDIS',
+        email: 'ana-cedis@pollos.local',
+        phone: '+522291234570',
+        roleId: role.id,
+        operationalLocationId: location.id,
+        cedisLocationId: cedisLocation.id,
+      },
+      actor,
+    );
 
     expect(result).toEqual(
       expect.objectContaining({
@@ -312,14 +394,17 @@ describe('UsersService employee administration', () => {
     const service = new UsersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.create({
-        name: 'Empleado sin CEDIS',
-        email: 'sin-cedis@pollos.local',
-        phone: '+522291234571',
-        roleId: role.id,
-        operationalLocationId: location.id,
-        cedisLocationId: 'not-cedis',
-      }),
+      service.create(
+        {
+          name: 'Empleado sin CEDIS',
+          email: 'sin-cedis@pollos.local',
+          phone: '+522291234571',
+          roleId: role.id,
+          operationalLocationId: location.id,
+          cedisLocationId: 'not-cedis',
+        },
+        actor,
+      ),
     ).rejects.toThrow('CEDIS location is not available for employees');
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
@@ -335,13 +420,16 @@ describe('UsersService employee administration', () => {
     });
     const service = new UsersService(prisma as unknown as PrismaService);
     await expect(
-      service.create({
-        name: 'Ana',
-        email: 'ana@pollos.local',
-        phone: '2291234567',
-        roleId: role.id,
-        operationalLocationId: location.id,
-      }),
+      service.create(
+        {
+          name: 'Ana',
+          email: 'ana@pollos.local',
+          phone: '2291234567',
+          roleId: role.id,
+          operationalLocationId: location.id,
+        },
+        actor,
+      ),
     ).rejects.toMatchObject({ message: 'Phone is already registered' });
   });
 
@@ -359,13 +447,16 @@ describe('UsersService employee administration', () => {
     const service = new UsersService(prisma as unknown as PrismaService);
     const created = await Promise.all(
       [1, 2].map((index) =>
-        service.create({
-          name: `Empleado ${index}`,
-          email: `employee${index}@pollos.local`,
-          phone: `229123456${index}`,
-          roleId: role.id,
-          operationalLocationId: location.id,
-        }),
+        service.create(
+          {
+            name: `Empleado ${index}`,
+            email: `employee${index}@pollos.local`,
+            phone: `229123456${index}`,
+            roleId: role.id,
+            operationalLocationId: location.id,
+          },
+          actor,
+        ),
       ),
     );
     expect(created.map((item) => item.controlNumber).sort()).toEqual([
@@ -381,9 +472,13 @@ describe('UsersService employee administration', () => {
     prisma.authSession.updateMany.mockResolvedValue({ count: 2 });
     const service = new UsersService(prisma as unknown as PrismaService);
 
-    await service.updatePassword('user-1', {
-      temporaryPassword: 'temporary-password',
-    });
+    await service.updatePassword(
+      'user-1',
+      {
+        temporaryPassword: 'temporary-password',
+      },
+      actor,
+    );
 
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({

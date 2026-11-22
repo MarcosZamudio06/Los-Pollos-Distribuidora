@@ -4,7 +4,13 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
+import { SessionRevocationRegistry } from '../src/common/session/session-revocation.registry';
 import { FleetGateway } from '../src/modules/fleet/fleet.gateway';
+import { AuthService } from '../src/modules/auth/auth.service';
+import {
+  FLEET_ADMIN_ROOM,
+  fleetOriginRoom,
+} from '../src/modules/fleet/fleet-realtime.types';
 import { DEVELOPMENT_ADMIN_PASSWORD } from '../prisma/seed';
 import {
   Rem003Harness,
@@ -24,7 +30,6 @@ const { io } = frontendRequire(
 ) as import('../../frontend/e2e/rem004-runtime-types').SocketRuntime;
 type Browser = Awaited<ReturnType<typeof chromium.connect>>;
 type Page = Awaited<ReturnType<Browser['newPage']>>;
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergence', () => {
   const h = new Rem003Harness();
@@ -32,7 +37,38 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
   let siloProcess: ChildProcess;
   let silo: { url: string; token: string };
   const journal: object[] = [];
-  const frames: Array<{ event: string; payload: Record<string, unknown> }> = [];
+  const frames: Array<{
+    event: string;
+    payload: Record<string, unknown>;
+    session: number;
+    socketId: string;
+    transport: number;
+    originLocationId: string;
+    at: number;
+  }> = [];
+  const monitorIds = new Map<Page, number>();
+  const socketIds = new Map<Page, string>();
+  const connections: Array<{
+    session: number;
+    transport: number;
+    socketId: string;
+    originLocationId: string;
+    at: number;
+    closedAt?: number;
+    authSessionId?: string;
+  }> = [];
+  let transportSequence = 0;
+  const snapshotReads: Promise<void>[] = [];
+  const snapshots: Array<{
+    session: number;
+    originLocationId: string;
+    startedAt: number;
+    at: number;
+    routeIds: string[];
+    incidentIds: string[];
+    positions: Array<{ routeId: string; latitude: number | null }>;
+  }> = [];
+  let monitorSequence = 0;
   const pages: Page[] = [];
   beforeAll(async () => {
     if (
@@ -71,6 +107,23 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       );
     };
     await h.start();
+    const gateway = h.app.get(FleetGateway);
+    const publish = gateway.emitPositionUpdated.bind(gateway);
+    jest.spyOn(gateway, 'emitPositionUpdated').mockImplementation((payload) => {
+      journal.push({
+        kind: 'emission',
+        event: 'fleet.position.updated',
+        at: performance.now(),
+        positionId: payload.id,
+        routeId: payload.routeId,
+        sockets: [...fleetSockets().values()].map((socket) => ({
+          socketId: socket.id,
+          rooms: [...socket.rooms],
+          authenticated: h.app.get(SessionRevocationRegistry).isTracked(socket),
+        })),
+      });
+      publish(payload);
+    });
     const env = {
       ...process.env,
       DATABASE_URL: process.env.REM004_SILO_DATABASE_URL,
@@ -110,7 +163,14 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     });
   }, 120000);
   afterAll(async () => {
-    proof('fleet004-journal', { journal, frames, http: h.events });
+    await Promise.all(snapshotReads);
+    proof('fleet004-journal', {
+      journal,
+      connections,
+      frames,
+      snapshots,
+      http: h.events,
+    });
     await browser?.close();
     if (siloProcess?.connected) {
       await new Promise<void>((resolve) => {
@@ -119,6 +179,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       });
     }
     await h.close();
+    jest.restoreAllMocks();
   });
 
   afterEach(async () => {
@@ -128,8 +189,11 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       await h.patch(`delivery-routes/${route.id}/status`, {
         status: 'CANCELLED',
       });
-    for (const page of pages.splice(0))
+    for (const page of pages.splice(0)) {
       if (!page.isClosed()) await page.context().close();
+      monitorIds.delete(page);
+      socketIds.delete(page);
+    }
     await pw
       .poll(
         () =>
@@ -140,7 +204,89 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
           ).sockets.size,
       )
       .toBe(0);
+    await pw
+      .poll(
+        () => h.app.get(SessionRevocationRegistry).pendingAuthorizationCount,
+      )
+      .toBe(0);
+    await pw
+      .poll(() => h.app.get(SessionRevocationRegistry).connectionCount)
+      .toBe(0);
+    await Promise.all(snapshotReads.splice(0));
+    expect(browser.contexts()).toHaveLength(0);
+    expect(monitorIds.size).toBe(0);
+    expect(socketIds.size).toBe(0);
+    journal.push({
+      kind: 'cleanup',
+      at: performance.now(),
+      browserContexts: 0,
+      fleetSockets: fleetSockets().size,
+      tracked: h.app.get(SessionRevocationRegistry).connectionCount,
+      pending: h.app.get(SessionRevocationRegistry).pendingAuthorizationCount,
+      pendingSnapshotReads: snapshotReads.length,
+    });
   });
+
+  function fleetSockets() {
+    return (
+      h.app.get(FleetGateway).server as unknown as {
+        sockets: Map<string, import('socket.io').Socket>;
+      }
+    ).sockets;
+  }
+
+  async function ready(page: Page, origin = '', previousId?: string) {
+    const session = monitorIds.get(page)!;
+    const room = origin ? fleetOriginRoom(origin) : FLEET_ADMIN_ROOM;
+    await pw
+      .poll(() => {
+        const id = socketIds.get(page);
+        const socket = id ? fleetSockets().get(id) : undefined;
+        return Boolean(
+          id &&
+          id !== previousId &&
+          socket?.connected &&
+          h.app.get(SessionRevocationRegistry).isTracked(socket) &&
+          socket.handshake.auth.originLocationId === (origin || undefined) &&
+          socket.rooms.has(room) &&
+          [...socket.rooms].every((value) => value === id || value === room),
+        );
+      })
+      .toBe(true);
+    const connection = connections.findLast(
+      (value) =>
+        value.session === session && value.socketId === socketIds.get(page),
+    );
+    expect(connection).toBeDefined();
+    const socket = fleetSockets().get(connection!.socketId)!;
+    const verified = await h.app
+      .get(AuthService)
+      .verifyRealtimeSession(socket.handshake.auth.token as string);
+    connection!.authSessionId = verified.principal.authSessionId;
+    // A pre-handshake REST response cannot close the subscription gap.
+    await pw
+      .poll(() =>
+        snapshots.some(
+          (snapshot) =>
+            snapshot.session === session &&
+            snapshot.originLocationId === origin &&
+            snapshot.startedAt >= connection!.at,
+        ),
+      )
+      .toBe(true);
+    await pw(
+      page.getByText('Tiempo real conectado', { exact: true }),
+    ).toBeVisible();
+    journal.push({
+      kind: 'ready',
+      session,
+      socketId: socket.id,
+      authSessionId: verified.principal.authSessionId,
+      originLocationId: origin,
+      rooms: [...socket.rooms],
+      at: performance.now(),
+    });
+  }
 
   async function monitor(origin?: string) {
     const context = await browser.newContext({
@@ -149,6 +295,12 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     });
     const page = await context.newPage();
     pages.push(page);
+    const session = ++monitorSequence;
+    monitorIds.set(page, session);
+    const requestStarts = new WeakMap<object, number>();
+    page.on('request', (request) =>
+      requestStarts.set(request, performance.now()),
+    );
     page.setDefaultTimeout(15000);
     page.on('console', async (message) => {
       if (message.type() !== 'error') return;
@@ -174,22 +326,96 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       journal.push({ browserError: message.text(), details });
     });
     page.on('response', (r) => {
+      if (
+        new URL(r.url()).pathname === '/api/fleet/live' &&
+        r.status() === 200
+      ) {
+        snapshotReads.push(
+          r.json().then(
+            (body: {
+              data: {
+                items: Array<{
+                  route: { id: string };
+                  position?: { latitude: number } | null;
+                  incidents?: Array<{ incidentId: string }>;
+                }>;
+              };
+            }) => {
+              snapshots.push({
+                session,
+                originLocationId:
+                  new URL(r.url()).searchParams.get('originLocationId') ?? '',
+                startedAt:
+                  requestStarts.get(r.request()) ?? Number.NEGATIVE_INFINITY,
+                at: performance.now(),
+                routeIds: body.data.items.map((item) => item.route.id),
+                positions: body.data.items.map((item) => ({
+                  routeId: item.route.id,
+                  latitude: item.position?.latitude ?? null,
+                })),
+                incidentIds: body.data.items.flatMap((item) =>
+                  (item.incidents ?? []).map((incident) => incident.incidentId),
+                ),
+              });
+            },
+            () => {
+              journal.push({ session, snapshotBodyUnreadable: true });
+            },
+          ),
+        );
+      }
       if (new URL(r.url()).pathname.startsWith('/maps/'))
         journal.push({ mapAsset: new URL(r.url()).pathname, http: r.status() });
     });
-    page.on('websocket', (ws) =>
+    page.on('websocket', (ws) => {
+      const transport = ++transportSequence;
+      let connection: (typeof connections)[number] | undefined;
+      ws.on('close', () => {
+        if (connection) {
+          connection.closedAt = performance.now();
+          if (socketIds.get(page) === connection.socketId)
+            socketIds.delete(page);
+        }
+      });
       ws.on('framereceived', (frame) => {
         const raw = String(frame.payload);
+        if (raw.startsWith('40/fleet,')) {
+          const connected = JSON.parse(raw.slice('40/fleet,'.length)) as {
+            sid: string;
+          };
+          socketIds.set(page, connected.sid);
+          const socket = fleetSockets().get(connected.sid);
+          connection = {
+            session,
+            transport,
+            socketId: connected.sid,
+            originLocationId: String(
+              socket?.handshake.auth.originLocationId ?? '',
+            ),
+            at: performance.now(),
+          };
+          connections.push(connection);
+        }
         const start = raw.indexOf('["fleet.');
         if (start >= 0) {
           const [event, payload] = JSON.parse(raw.slice(start)) as [
             string,
             Record<string, unknown>,
           ];
-          frames.push({ event, payload });
+          if (!connection)
+            throw new Error('Fleet event preceded authenticated CONNECT');
+          frames.push({
+            event,
+            payload,
+            session,
+            socketId: connection.socketId,
+            transport,
+            originLocationId: connection.originLocationId,
+            at: performance.now(),
+          });
         }
-      }),
-    );
+      });
+    });
     await page.goto('/login');
     await page
       .getByLabel('Correo', { exact: true })
@@ -198,14 +424,14 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     await page.getByRole('button', { name: 'Entrar al sistema' }).click();
     await pw(page).toHaveURL(/\/$/);
     await page.goto('/delivery-routes/live');
-    await page.waitForLoadState('networkidle');
-    if (origin)
+    await ready(page);
+    if (origin) {
+      const previousId = socketIds.get(page);
       await page
         .getByRole('combobox', { name: 'Filtrar por origen' })
         .selectOption(origin);
-    await pw(
-      page.getByText('Tiempo real conectado', { exact: true }),
-    ).toBeVisible();
+      await ready(page, origin, previousId);
+    }
     await pw(page.locator('canvas.maplibregl-canvas')).toBeVisible();
     return page;
   }
@@ -293,6 +519,9 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       ).status,
     ).toBe(value);
     journal.push({
+      kind: 'commit-observed',
+      at: performance.now(),
+      startedAt: t,
       routeId: f.routeId,
       transition: value,
       http: r.status,
@@ -304,6 +533,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     f: RouteFixture,
     latitude = 19.1748,
     recordedAt = new Date().toISOString(),
+    recipients = pages.filter((page) => !page.isClosed()),
   ) {
     const clientEventId = randomUUID();
     const r = await h.post(
@@ -329,14 +559,166 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     expect(point[0]).toEqual({ srid: 4326, x: -96.1334, y: latitude });
     await pw
       .poll(() =>
-        frames.some(
-          (x) =>
-            x.event === 'fleet.position.updated' && x.payload.id === row.id,
+        recipients.every((page) =>
+          frames.some(
+            (x) =>
+              x.session === monitorIds.get(page) &&
+              x.socketId === socketIds.get(page) &&
+              x.event === 'fleet.position.updated' &&
+              x.payload.id === row.id,
+          ),
         ),
       )
       .toBe(true);
     return row;
   }
+
+  it.each(['before-join', 'after-join'] as const)(
+    'does not expose a previous connection while authenticated origin room admission is held (%s late snapshot)',
+    async (timing) => {
+      const f = await fixture();
+      await status(f, 'IN_PROGRESS');
+      const page = await monitor();
+      const observer = await monitor();
+      const previousId = socketIds.get(page)!;
+      const observerId = socketIds.get(observer)!;
+      const registry = h.app.get(SessionRevocationRegistry);
+      const authorize = registry.authorize.bind(registry);
+      let entered = false;
+      let release!: () => void;
+      let releaseSnapshot!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const snapshotGate = new Promise<void>((resolve) => {
+        releaseSnapshot = resolve;
+      });
+      let held = false;
+      const admission = jest
+        .spyOn(registry, 'authorize')
+        .mockImplementation((socket, validate, roomsFor) =>
+          authorize(socket, validate, async (user) => {
+            const rooms = await roomsFor(user);
+            if (rooms.includes(fleetOriginRoom(h.cedisId))) {
+              entered = true;
+              journal.push({
+                kind: 'admission-held',
+                at: performance.now(),
+                authSessionId: user.authSessionId,
+                rooms,
+                timing,
+              });
+              await gate;
+            }
+            return rooms;
+          }),
+        );
+      await page.route('**/api/fleet/live*', async (route) => {
+        const response = await route.fetch();
+        if (
+          new URL(route.request().url()).searchParams.get(
+            'originLocationId',
+          ) === h.cedisId &&
+          !held
+        ) {
+          held = true;
+          await snapshotGate;
+        }
+        // Delay a real REST response; do not replace backend authority with a mock.
+        await route.fulfill({ response }).catch(() => {
+          journal.push({
+            kind: 'obsolete-response-disposed',
+            timing,
+            at: performance.now(),
+          });
+        });
+      });
+      try {
+        await page
+          .getByRole('combobox', { name: 'Filtrar por origen' })
+          .selectOption(h.cedisId);
+        await pw.poll(() => entered && held).toBe(true);
+        await pw.poll(() => fleetSockets().has(previousId)).toBe(false);
+        // JWT/session validation completed, but join and CONNECT have not.
+        await pw(
+          page.getByText('Tiempo real conectado', { exact: true }),
+        ).toHaveCount(0);
+        const missed = await gps(f, 19.1747, new Date().toISOString(), [
+          observer,
+        ]);
+        expect(
+          frames.filter(
+            (frame) =>
+              frame.session === monitorIds.get(page) &&
+              frame.payload.id === missed.id,
+          ),
+        ).toHaveLength(0);
+        if (timing === 'before-join') releaseSnapshot();
+        release();
+        await ready(page, h.cedisId, previousId);
+        await pw
+          .poll(() =>
+            snapshots.some(
+              (snapshot) =>
+                snapshot.session === monitorIds.get(page) &&
+                snapshot.originLocationId === h.cedisId &&
+                snapshot.positions.some(
+                  (position) =>
+                    position.routeId === f.routeId &&
+                    position.latitude === 19.1747,
+                ),
+            ),
+          )
+          .toBe(true);
+        await pw(units(page, f.vehicle.code)).toHaveCount(1);
+        const latest = await gps(f, 19.1762);
+        const payload = frames.find(
+          (frame) => frame.payload.id === latest.id,
+        )!.payload;
+        await status(f, 'CANCELLED');
+        for (const monitorPage of [page, observer])
+          await pw(units(monitorPage, f.vehicle.code)).toHaveCount(0);
+        releaseSnapshot();
+        // A delayed pre-cancellation GPS delta must not resurrect the route.
+        h.app
+          .get(FleetGateway)
+          .emitPositionUpdated(
+            payload as unknown as Parameters<
+              FleetGateway['emitPositionUpdated']
+            >[0],
+          );
+        await pw
+          .poll(
+            () =>
+              frames.filter(
+                (frame) =>
+                  frame.session === monitorIds.get(page) &&
+                  frame.payload.id === latest.id,
+              ).length,
+          )
+          .toBe(2);
+        await pw(units(page, f.vehicle.code)).toHaveCount(0);
+        expect(socketIds.get(observer)).toBe(observerId);
+        proof(`fleet004-admission-${timing}`, {
+          previousId,
+          socketId: socketIds.get(page),
+          observerId,
+          missedPosition: missed.id,
+          latestPosition: latest.id,
+          timing,
+          realAuthentication: true,
+          realPostGIS: true,
+          manualRecovery: false,
+        });
+      } finally {
+        release();
+        releaseSnapshot();
+        admission.mockRestore();
+      }
+    },
+    120000,
+  );
+
   it('adds a new departure to two already-connected sessions without manual recovery', async () => {
     const a = await monitor();
     const b = await monitor();
@@ -358,7 +740,6 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       await a
         .getByRole('button', { name: 'Centrar en flota', exact: true })
         .click();
-      await a.waitForLoadState('networkidle');
       const style = (await (
         await fetch(h.url + '/maps/styles/operations/style.json')
       ).json()) as { layers: Array<{ 'source-layer'?: string }> };
@@ -410,7 +791,6 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     await status(f, 'IN_PROGRESS');
     const page = await monitor(h.cedisId);
     await gps(f);
-    await page.getByRole('button', { name: 'Recuperar snapshot' }).click();
     await pw(units(page, f.vehicle.code)).toHaveCount(1);
     const t = await status(f, 'CANCELLED');
     try {
@@ -442,7 +822,18 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         h.cedisId,
         h.driverId,
       );
-      await sleep(500);
+      await pw
+        .poll(
+          () =>
+            frames.filter(
+              (frame) =>
+                frame.session === monitorIds.get(page) &&
+                frame.event === 'fleet.route.updated' &&
+                frame.payload.routeId === f.routeId &&
+                frame.payload.status === 'IN_PROGRESS',
+            ).length,
+        )
+        .toBe(2);
       await pw(units(page, f.vehicle.code)).toHaveCount(0);
     }
     await page.context().close();
@@ -459,6 +850,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       (x) =>
         x.event === 'fleet.route.updated' && x.payload.routeId === f.routeId,
     ).length;
+    const rejectedEmission = jest.spyOn(gateway, 'emitRouteUpdated');
     expect(
       (
         await h.patch(`delivery-routes/${f.routeId}/status`, {
@@ -466,7 +858,8 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         })
       ).status,
     ).toBe(400);
-    await sleep(150);
+    expect(rejectedEmission).not.toHaveBeenCalled();
+    rejectedEmission.mockRestore();
     expect(
       frames.filter(
         (x) =>
@@ -512,6 +905,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         .latitude,
     ).toBe(19.1761);
     const reconnectStarted = performance.now();
+    const previousSocketId = socketIds.get(page)!;
     await page.context().setOffline(true);
     // Close the transport, not Socket.IO's namespace (which disables client reconnection).
     for (const socket of (
@@ -521,11 +915,9 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     ).sockets.values())
       if (socket.handshake.auth.token) socket.client.conn.close();
     await status(f, 'CANCELLED');
-    await sleep(200);
+    await pw.poll(() => fleetSockets().has(previousSocketId)).toBe(false);
     await page.context().setOffline(false);
-    await pw(
-      page.getByText('Tiempo real conectado', { exact: true }),
-    ).toBeVisible({ timeout: 25000 });
+    await ready(page, '', previousSocketId);
     await pw(units(page, f.vehicle.code)).toHaveCount(0);
     journal.push({
       scenario: 'reconnect-converged',
@@ -572,14 +964,18 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         })
       ).outstandingAmount.toNumber(),
     ).toBe(0);
+    const beforeRemountSocket = socketIds.get(page)!;
     await page
       .getByRole('link', { name: 'Inicio', exact: true })
       .first()
       .click();
-    await page.goBack();
+    await pw(page).toHaveURL(/\/$/);
     await pw(
       page.getByText('Tiempo real conectado', { exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await pw.poll(() => fleetSockets().has(beforeRemountSocket)).toBe(false);
+    await page.goBack();
+    await ready(page, '', beforeRemountSocket);
     await pw(units(page, completed.vehicle.code)).toHaveCount(0);
     await pw(
       page.getByText('El mapa no está disponible.', { exact: true }),
@@ -599,93 +995,452 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
     await page.context().close();
   }, 180000);
 
-  it('propagates a legitimate failed-delivery incident during a separate administrative session', async () => {
-    const page = await monitor();
-    const f = await fixture();
-    await status(f, 'IN_PROGRESS');
-    await gps(f);
-    const r = await h.post(
-      `delivery-orders/${f.orderId}/incidents`,
-      { status: 'NOT_DELIVERED', reason: 'SIMULATED: customer unavailable' },
-      'driver',
-    );
-    expect(r.status).toBe(201);
-    await pw
-      .poll(() =>
-        frames.some(
-          (x) =>
-            x.event === 'fleet.incident.created' &&
-            x.payload.routeId === f.routeId,
-        ),
-      )
-      .toBe(true);
-    expect(
-      (
-        await h.prisma.deliveryOrder.findUniqueOrThrow({
-          where: { id: f.orderId },
-        })
-      ).status,
-    ).toBe('NOT_DELIVERED');
-    await pw(
-      page.getByText('SIMULATED: customer unavailable', { exact: true }),
-    ).toBeVisible();
-    await status(f, 'COMPLETED');
-    await pw(units(page, f.vehicle.code)).toHaveCount(0);
-    journal.push({ scenario: 'incident-and-completion', routeId: f.routeId });
-    await page.context().close();
-  }, 120000);
+  it.each(['loaded', 'in-flight'] as const)(
+    'propagates a legitimate failed-delivery incident during a separate administrative session (%s snapshot)',
+    async (timing) => {
+      const a = await monitor();
+      const b = await monitor();
+      const sessionIds = [monitorIds.get(a)!, monitorIds.get(b)!];
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let hold = timing === 'in-flight';
+      const held: Array<{ routeIds: string[]; incidentIds: string[] }> = [];
+      const gateway = h.app.get(FleetGateway);
+      const emission = jest.spyOn(gateway, 'emitIncidentCreated');
+      const foreignEvents: object[] = [];
+      const foreign = io(silo.url + '/fleet', {
+        path: '/api/socket.io',
+        auth: { token: silo.token },
+        transports: ['websocket'],
+        reconnection: false,
+        forceNew: true,
+        autoConnect: false,
+        timeout: 5000,
+      });
+      foreign.on('fleet.incident.created', (event: object) =>
+        foreignEvents.push(event),
+      );
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timer);
+            foreign.off('connect', connected);
+            foreign.off('connect_error', rejected);
+          };
+          const connected = () => {
+            cleanup();
+            resolve();
+          };
+          const rejected = (error: Error) => {
+            cleanup();
+            reject(error);
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('B control socket timed out'));
+          }, 5000);
+          foreign.once('connect', connected);
+          foreign.once('connect_error', rejected);
+          foreign.connect();
+        });
+        await a.route('**/api/fleet/live*', async (route) => {
+          const response = await route.fetch();
+          const body = (await response.json()) as {
+            data: {
+              items: Array<{
+                route: { id: string };
+                incidents?: Array<{ incidentId: string }>;
+              }>;
+            };
+          };
+          // Hold only pre-incident reads. A post-commit reconciliation is free to finish.
+          if (
+            hold &&
+            body.data.items.every((item) => !(item.incidents ?? []).length)
+          ) {
+            held.push({
+              routeIds: body.data.items.map((item) => item.route.id),
+              incidentIds: [],
+            });
+            await barrier;
+          }
+          await route.fulfill({ response, json: body });
+        });
+        const f = await fixture();
+        await status(f, 'IN_PROGRESS');
+        await gps(f);
+        await pw(units(b, f.vehicle.code)).toHaveCount(1);
+        if (timing === 'loaded')
+          await pw(units(a, f.vehicle.code)).toHaveCount(1);
+        else
+          await pw
+            .poll(() =>
+              held.some((snapshot) => snapshot.routeIds.includes(f.routeId!)),
+            )
+            .toBe(true);
+        const reason = 'SIMULATED: customer unavailable';
+        const r = await h.post(
+          `delivery-orders/${f.orderId}/incidents`,
+          { status: 'NOT_DELIVERED', reason },
+          'driver',
+        );
+        expect(r.status).toBe(201);
+        const persisted = await h.prisma.deliveryIncident.findMany({
+          where: { deliveryOrderId: f.orderId },
+        });
+        expect(persisted).toHaveLength(1);
+        expect(persisted[0].reason).toBe(reason);
+        expect(persisted[0].status).toBe('OPEN');
+        expect(
+          (
+            await h.prisma.deliveryOrder.findUniqueOrThrow({
+              where: { id: f.orderId },
+            })
+          ).status,
+        ).toBe('NOT_DELIVERED');
+        expect(emission).toHaveBeenCalledTimes(1);
+        const payload = emission.mock.calls[0][0];
+        expect(payload.incidentId).toBe(persisted[0].id);
+        await pw
+          .poll(() =>
+            sessionIds.every((session) =>
+              frames.some(
+                (frame) =>
+                  frame.session === session &&
+                  frame.event === 'fleet.incident.created' &&
+                  frame.payload.incidentId === payload.incidentId,
+              ),
+            ),
+          )
+          .toBe(true);
+        hold = false;
+        release();
+        await Promise.all(snapshotReads);
+        proof(`fleet004-incident-before-render-${timing}`, {
+          incidentId: payload.incidentId,
+          persistedRows: persisted.length,
+          backendEmissionObserved: true,
+          renderChecked: false,
+          browserFrames: frames.filter(
+            (frame) => frame.payload.incidentId === payload.incidentId,
+          ),
+          snapshotResponses: snapshots.filter((snapshot) =>
+            sessionIds.includes(snapshot.session),
+          ),
+          held,
+        });
+        for (const page of [a, b]) {
+          await pw(page.getByText(reason, { exact: true })).toBeVisible();
+          await pw(page.getByText(reason, { exact: true })).toHaveCount(1);
+        }
+        await pw
+          .poll(() =>
+            sessionIds.every((session) =>
+              snapshots.some(
+                (snapshot) =>
+                  snapshot.session === session &&
+                  snapshot.incidentIds.includes(payload.incidentId),
+              ),
+            ),
+          )
+          .toBe(true);
+        const authoritative = data<{
+          items: Array<{ incidents?: Array<{ incidentId: string }> }>;
+        }>(await h.get('fleet/live'));
+        expect(
+          authoritative.items
+            .flatMap((item) => item.incidents ?? [])
+            .filter((incident) => incident.incidentId === payload.incidentId),
+        ).toHaveLength(1);
+        // Duplicate transport delivery is not another persisted incident or another UI card.
+        gateway.emitIncidentCreated(payload, h.cedisId);
+        gateway.emitIncidentCreated(payload, h.cedisId);
+        await pw
+          .poll(() =>
+            sessionIds.every(
+              (session) =>
+                frames.filter(
+                  (frame) =>
+                    frame.session === session &&
+                    frame.event === 'fleet.incident.created' &&
+                    frame.payload.incidentId === payload.incidentId,
+                ).length === 3,
+            ),
+          )
+          .toBe(true);
+        for (const page of [a, b])
+          await pw(page.getByText(reason, { exact: true })).toHaveCount(1);
+        const beforeReconnect = performance.now();
+        const bSocketId = socketIds.get(b)!;
+        const liveSocket = (
+          gateway.server as unknown as {
+            sockets: Map<string, import('socket.io').Socket>;
+          }
+        ).sockets.get(socketIds.get(a)!);
+        expect(liveSocket).toBeDefined();
+        await a.context().setOffline(true);
+        liveSocket!.client.conn.close();
+        await pw
+          .poll(() =>
+            (
+              gateway.server as unknown as { sockets: Map<string, unknown> }
+            ).sockets.has(liveSocket!.id),
+          )
+          .toBe(false);
+        await pw(a.getByText(reason, { exact: true })).toHaveCount(1);
+        await a.context().setOffline(false);
+        await ready(a, '', liveSocket!.id);
+        await pw
+          .poll(() =>
+            snapshots.some(
+              (snapshot) =>
+                snapshot.session === sessionIds[0] &&
+                snapshot.at > beforeReconnect &&
+                snapshot.incidentIds.includes(payload.incidentId),
+            ),
+          )
+          .toBe(true);
+        await pw(a.getByText(reason, { exact: true })).toBeVisible();
+        expect(socketIds.get(b)).toBe(bSocketId);
+        const beforeRemount = performance.now();
+        const beforeRemountSocket = socketIds.get(a)!;
+        // Remount through the router, retaining this independently authenticated session.
+        await a
+          .getByRole('link', { name: 'Inicio', exact: true })
+          .first()
+          .click();
+        await pw(
+          a.getByText('Tiempo real conectado', { exact: true }),
+        ).toHaveCount(0);
+        await pw
+          .poll(() =>
+            (
+              gateway.server as unknown as { sockets: Map<string, unknown> }
+            ).sockets.has(beforeRemountSocket),
+          )
+          .toBe(false);
+        await a.goBack();
+        await ready(a, '', beforeRemountSocket);
+        await pw(a.getByText(reason, { exact: true })).toBeVisible();
+        await pw
+          .poll(() =>
+            snapshots.some(
+              (snapshot) =>
+                snapshot.session === sessionIds[0] &&
+                snapshot.at > beforeRemount &&
+                snapshot.incidentIds.includes(payload.incidentId),
+            ),
+          )
+          .toBe(true);
+        await pw(a.getByText(reason, { exact: true })).toHaveCount(1);
+        expect(
+          await h.prisma.deliveryIncident.count({
+            where: { deliveryOrderId: f.orderId },
+          }),
+        ).toBe(1);
+        expect(foreign.connected).toBe(true);
+        expect(foreignEvents).toEqual([]);
+        proof(`fleet004-incident-${timing}`, {
+          incidentId: payload.incidentId,
+          routeId: f.routeId,
+          persistedRows: 1,
+          backendEmissionObserved: true,
+          browserSessions: sessionIds,
+          browserFrames: frames.filter(
+            (frame) => frame.payload.incidentId === payload.incidentId,
+          ),
+          snapshotResponses: snapshots.filter((snapshot) =>
+            sessionIds.includes(snapshot.session),
+          ),
+          held,
+          renderedInBothSessions: true,
+          renderedAfterReconnectAndRemount: true,
+          duplicateCards: 0,
+          foreignBackendEvents: foreignEvents.length,
+          cacheEvidence:
+            'Measured separately by deterministic React Query hook regressions; not introspected from browser internals.',
+        });
+        await status(f, 'COMPLETED');
+        for (const page of [a, b])
+          await pw(units(page, f.vehicle.code)).toHaveCount(0);
+        journal.push({
+          scenario: 'incident-and-completion',
+          timing,
+          routeId: f.routeId,
+        });
+      } finally {
+        hold = false;
+        release();
+        emission.mockRestore();
+        foreign.disconnect();
+        for (const page of [a, b])
+          if (!page.isClosed()) await page.context().close();
+      }
+    },
+    120000,
+  );
 
   it('scopes route hints to origin and driver, rejects unauthorized sockets and foreign-silo tokens', async () => {
     const clients: Array<ReturnType<typeof io>> = [];
     const observed: Record<string, object[]> = {};
-    async function connect(
+    const handshakes: Record<
+      string,
+      {
+        connected: number;
+        rejected: number;
+        reconnects: number;
+        events: string[];
+      }
+    > = {};
+    async function handshake(
       label: string,
       token: string,
       originLocationId?: string,
       url = h.url,
     ) {
       observed[label] = [];
+      const counts = (handshakes[label] = {
+        connected: 0,
+        rejected: 0,
+        reconnects: 0,
+        events: [] as string[],
+      });
       const socket = io(url + '/fleet', {
         path: '/api/socket.io',
         auth: { token, ...(originLocationId ? { originLocationId } : {}) },
         transports: ['websocket'],
+        autoConnect: false,
+        forceNew: true,
+        timeout: 5000,
         reconnection: false,
       });
       clients.push(socket);
+      socket.on('connect', () => counts.connected++);
+      socket.on('connect_error', () => counts.rejected++);
+      socket.io.on('reconnect_attempt', () => counts.reconnects++);
+      socket.onAny((event: string) => counts.events.push(event));
       socket.on('fleet.route.updated', (p: object) => observed[label].push(p));
-      await new Promise<void>((resolve, reject) => {
-        socket.once('connect', () => resolve());
-        socket.once('connect_error', reject);
-        setTimeout(() => reject(new Error('socket timeout')), 5000).unref();
-      });
-      await sleep(150);
+      const outcome = await new Promise<'connected' | Error>(
+        (resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timer);
+            socket.off('connect', connected);
+            socket.off('connect_error', rejected);
+          };
+          const connected = () => {
+            cleanup();
+            resolve('connected');
+          };
+          const rejected = (error: Error) => {
+            cleanup();
+            resolve(error);
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Fleet handshake timed out'));
+          }, 5000);
+          socket.once('connect', connected);
+          socket.once('connect_error', rejected);
+          socket.connect();
+        },
+      );
+      return { socket, outcome };
+    }
+    async function connectAccepted(...args: Parameters<typeof handshake>) {
+      const { socket, outcome } = await handshake(...args);
+      expect(outcome).toBe('connected');
+      expect(socket.connected).toBe(true);
       return socket;
     }
+    async function expectRejected(...args: Parameters<typeof handshake>) {
+      const { socket, outcome } = await handshake(...args);
+      expect(outcome).toBeInstanceOf(Error);
+      expect((outcome as Error).message).toBe('Unauthorized socket session');
+      expect(socket.connected).toBe(false);
+      expect(socket.active).toBe(false);
+      expect(socket.io.reconnection()).toBe(false);
+    }
+    async function siloSocketState(command = 'socket-state') {
+      return new Promise<{ sockets: number; tracked: number; pending: number }>(
+        (resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timer);
+            siloProcess.off('message', received);
+            siloProcess.off('exit', exited);
+          };
+          const received = (state: {
+            sockets: number;
+            tracked: number;
+            pending: number;
+          }) => {
+            cleanup();
+            resolve(state);
+          };
+          const exited = () => {
+            cleanup();
+            reject(new Error('Second silo exited during socket inspection'));
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Second silo socket inspection timed out'));
+          }, 5000);
+          siloProcess.once('message', received);
+          siloProcess.once('exit', exited);
+          siloProcess.send(command, (error) => {
+            if (error) {
+              cleanup();
+              reject(error);
+            }
+          });
+        },
+      );
+    }
+    const sessions = h.app.get(SessionRevocationRegistry);
+    const stateA = () => ({
+      sockets: (
+        h.app.get(FleetGateway).server as unknown as {
+          sockets: Map<string, unknown>;
+        }
+      ).sockets.size,
+      tracked: sessions.connectionCount,
+      pending: sessions.pendingAuthorizationCount,
+    });
+    const empty = { sockets: 0, tracked: 0, pending: 0 };
+    expect(stateA()).toEqual(empty);
+    expect(await siloSocketState()).toEqual(empty);
     try {
-      await connect('global', h.tokens.admin);
-      await connect('origin', h.tokens.admin, h.cedisId);
-      await connect('other-origin', h.tokens.admin, 'unrelated-origin');
-      await connect('driver', h.tokens.driver);
-      const unauthorized = await connect('seller', h.tokens.seller);
-      await sleep(150);
-      expect(unauthorized.connected).toBe(false);
-      const foreign = await connect('foreign', silo.token);
-      await sleep(150);
-      expect(foreign.connected).toBe(false);
-      const ownB = await connect('silo-b', silo.token, undefined, silo.url);
+      await connectAccepted('global', h.tokens.admin);
+      await connectAccepted('origin', h.tokens.admin, h.cedisId);
+      await connectAccepted('other-origin', h.tokens.admin, 'unrelated-origin');
+      await connectAccepted('driver', h.tokens.driver);
+      await expectRejected('seller', h.tokens.seller);
+      await expectRejected('foreign', silo.token);
+      const ownB = await connectAccepted(
+        'silo-b',
+        silo.token,
+        undefined,
+        silo.url,
+      );
       expect(ownB.connected).toBe(true);
-      const crossB = await connect(
+      await expectRejected(
         'silo-a-token-on-b',
         h.tokens.admin,
         undefined,
         silo.url,
       );
-      await sleep(150);
-      expect(crossB.connected).toBe(false);
+      await pw
+        .poll(stateA, { timeout: 5000 })
+        .toEqual({ sockets: 4, tracked: 4, pending: 0 });
+      await pw
+        .poll(() => siloSocketState(), { timeout: 5000 })
+        .toEqual({ sockets: 1, tracked: 1, pending: 0 });
       expect(
         (
           await fetch(h.url + '/api/fleet/live', {
             headers: { Authorization: 'Bearer ' + silo.token },
+            signal: AbortSignal.timeout(5000),
           })
         ).status,
       ).toBe(401);
@@ -693,6 +1448,7 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         (
           await fetch(silo.url + '/api/fleet/live', {
             headers: { Authorization: 'Bearer ' + h.tokens.admin },
+            signal: AbortSignal.timeout(5000),
           })
         ).status,
       ).toBe(401);
@@ -700,12 +1456,21 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
         (
           await fetch(silo.url + '/api/fleet/live', {
             headers: { Authorization: 'Bearer ' + silo.token },
+            signal: AbortSignal.timeout(5000),
           })
         ).status,
       ).toBe(200);
       const f = await fixture();
       await status(f, 'IN_PROGRESS');
-      await pw.poll(() => observed.origin.length).toBeGreaterThan(0);
+      await pw
+        .poll(
+          () =>
+            ['global', 'origin', 'driver'].map(
+              (label) => observed[label].length > 0,
+            ),
+          { timeout: 5000 },
+        )
+        .toEqual([true, true, true]);
       expect(observed.global.length).toBeGreaterThan(0);
       expect(observed.driver.length).toBeGreaterThan(0);
       expect(observed['other-origin']).toHaveLength(0);
@@ -714,13 +1479,48 @@ describe('FUNC-011 real PostgreSQL / Socket.IO / Linux Chromium fleet convergenc
       expect(observed['silo-b']).toHaveLength(0);
       expect(observed['silo-a-token-on-b']).toHaveLength(0);
       await status(f, 'CANCELLED');
+      // Exercise a protected emission on B too: a valid B socket must receive it,
+      // while A's token rejected by B and every socket on A must not.
+      await siloSocketState('socket-probe');
+      await pw.poll(() => observed['silo-b'].length, { timeout: 5000 }).toBe(1);
+      expect(observed['silo-b']).toEqual([{ source: 'ci004-silo-b' }]);
+      expect(observed['other-origin']).toHaveLength(0);
+      for (const label of ['seller', 'foreign', 'silo-a-token-on-b']) {
+        expect(handshakes[label]).toEqual({
+          connected: 0,
+          rejected: 1,
+          reconnects: 0,
+          events: [],
+        });
+      }
+      for (const label of ['global', 'origin', 'driver']) {
+        expect(observed[label]).not.toContainEqual({ source: 'ci004-silo-b' });
+      }
       proof('fleet004-scope', {
         counts: Object.fromEntries(
           Object.entries(observed).map(([k, v]) => [k, v.length]),
         ),
+        handshakes,
+        siloA: stateA(),
+        siloB: await siloSocketState(),
       });
     } finally {
       for (const client of clients) client.disconnect();
+      try {
+        await pw.poll(stateA, { timeout: 5000 }).toEqual(empty);
+        await pw
+          .poll(() => siloSocketState(), { timeout: 5000 })
+          .toEqual(empty);
+        proof('fleet004-scope-cleanup', {
+          siloA: stateA(),
+          siloB: await siloSocketState(),
+        });
+      } finally {
+        for (const client of clients) {
+          client.removeAllListeners();
+          client.io.removeAllListeners();
+        }
+      }
     }
   }, 60000);
   it('preserves authoritative states, balances and GPS after a real NestJS restart', async () => {

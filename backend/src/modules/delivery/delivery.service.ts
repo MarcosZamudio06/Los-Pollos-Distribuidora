@@ -1417,30 +1417,39 @@ export class DeliveryService {
 
     let evidence: DeliveryEvidenceRecord;
     try {
-      evidence = await this.withSerializableRetry(() =>
-        this.prisma.$transaction(
-          async (tx) => {
-            const current = await this.findAccessibleOrder(id, currentUser, tx);
-            await acquireRouteLifecycleLock(tx, current.routeId);
-            await assertSaleExecutable(tx, current.saleId);
-            return tx.deliveryEvidence.create({
-              data: {
-                deliveryOrderId: order.id,
-                type: dto.type,
-                value: storageKey ? null : validatedEvidence.value,
-                storageKey,
-                mimeType: validatedEvidence.mimeType,
-                sha256: validatedEvidence.sha256,
-                sizeBytes: validatedEvidence.sizeBytes,
-                capturedAt: validatedEvidence.capturedAt,
-                receivedAt,
-                capturedByUserId: currentUser.id,
-                metadata: validatedEvidence.metadata ?? Prisma.JsonNull,
-              },
-            });
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-        ),
+      evidence = await this.withSerializableRetry(
+        () =>
+          this.prisma.$transaction(
+            async (tx) => {
+              const current = await this.findAccessibleOrder(
+                id,
+                currentUser,
+                tx,
+              );
+              await acquireRouteLifecycleLock(tx, current.routeId);
+              await assertSaleExecutable(tx, current.saleId, {
+                retryTransientConflicts: true,
+              });
+              return tx.deliveryEvidence.create({
+                data: {
+                  deliveryOrderId: order.id,
+                  type: dto.type,
+                  value: storageKey ? null : validatedEvidence.value,
+                  storageKey,
+                  mimeType: validatedEvidence.mimeType,
+                  sha256: validatedEvidence.sha256,
+                  sizeBytes: validatedEvidence.sizeBytes,
+                  capturedAt: validatedEvidence.capturedAt,
+                  receivedAt,
+                  capturedByUserId: currentUser.id,
+                  metadata: validatedEvidence.metadata ?? Prisma.JsonNull,
+                },
+              });
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        'EVIDENCE_CONCURRENCY_CONFLICT',
+        'Delivery evidence could not be saved after concurrent transaction retries',
       );
     } catch (error: unknown) {
       if (storageKey && storage) {

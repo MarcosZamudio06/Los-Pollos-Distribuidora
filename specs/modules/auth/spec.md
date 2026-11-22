@@ -39,6 +39,13 @@ Gestionar autenticación, sesión y autorización del sistema.
 ## Reglas de negocio
 
 - No permitir login de usuarios inactivos.
+- Para login público, correo inexistente, contraseña incorrecta y cuenta inactiva
+  producen el mismo 401 `Invalid credentials`, incluida cuenta inactiva con clave
+  correcta. Decisión de seguridad ERP-PREPROD-SECURITY-REMEDIATION-003: sustituye
+  el antiguo 403 específico; el estado real se conserva sólo para observabilidad
+  interna autorizada. Cada intento permitido ejecuta una comparación bcrypt,
+  usando un hash señuelo coste 12 cuando no existe el correo, sin prometer tiempo
+  constante absoluto. Los límites por cuenta/IP siguen vigentes.
 - No devolver passwordHash.
 - Access token debe expirar.
 - Refresh token debe expirar.
@@ -66,6 +73,17 @@ Gestionar autenticación, sesión y autorización del sistema.
 - Reasignar un perfil o revocar sesiones incrementa `sessionVersion` y revoca las sesiones activas del usuario.
 - Debe permanecer al menos un usuario activo con `access_profiles.manage` y al menos uno con `users.manage`.
 - La auditoría de acceso es append-only y no almacena tokens, hashes ni contraseñas.
+- Alta, actualización, desactivación, restablecimiento de contraseña y cambios de perfil/permisos serializan la autoridad de acceso mediante un bloqueo transaccional común. La autoridad vigente del actor y su sesión se leen de PostgreSQL después del bloqueo; no se usan los permisos declarados por el cliente ni un principal anterior a la espera.
+- Crear o restablecer un usuario exige dominar los permisos del perfil destino. El perfil ADMIN también exige un actor ADMIN vigente por sus facultades heredadas por rol. La asignación de perfil valida tanto el perfil actual como el nuevo.
+- Fleet, Sales y CEDIS autentican en middleware de namespace antes de suscribirse. Cada conexión pertenece a authSessionId; logout/reutilización de refresh revoca solo esa sesión, mientras contraseña, desactivación y cambios de acceso invalidan todas las sesiones afectadas después de persistir.
+- Los eventos protegidos no se entregan tras el vencimiento efectivo JWT/absoluto/inactivo. Un registro central en memoria controla vencimiento y revalida acceso/rooms como máximo cada 30 segundos sin consultas por evento; las notificaciones de cambios de acceso son inmediatas dentro de la instancia activa.
+- No se conserva connection-state recovery de paquetes protegidos: una reconexión reautentica y reconstruye por REST. No se prometen propagación entre réplicas ni revocación de paquetes ya enviados antes de la frontera de seguridad.
+
+- Toda mutación ordinaria de acceso conserva al menos un ADMIN activo con users.manage y access_profiles.manage, además de titulares activos de users.manage y access_profiles.manage. Es una invariante de seguridad: los permisos atómicos no reemplazan facultades heredadas exclusivas del rol ADMIN; nunca se promueve otro perfil automáticamente.
+- El cambio de contraseña propia verifica la credencial previa y confirma sesión, estado activo y versión/credencial en la transacción de escritura. Un reset, desactivación o cambio competidor confirmado rechaza la solicitud obsoleta sin sobrescribir credenciales ni revocar sesiones adicionales. Bcrypt se calcula fuera del bloqueo común.
+- Las autorizaciones en vuelo se invalidan únicamente por su sesión o usuario; los intentos aún sin identidad se revalidan sin rechazar sesiones ajenas. El registro conserva solo conexiones e intentos en vuelo, no un historial de sesiones revocadas.
+- Una desconexión de namespace no implica reconexión automática. El cliente puede intentar una sola recuperación explícita por suscripción tras validar el mismo token con REST, sin refresh automático; un token revocado no se reconecta. La reconexión de transporte mantiene el backoff existente.
+- Tras conectar o recibir cambios se cancela el snapshot REST obsoleto antes de iniciar una lectura autoritativa. Fleet conserva los deltas GPS recibidos durante la lectura; Sales protege los eventos nuevos frente a respuestas antiguas; CEDIS reconstruye desde REST sin replay protegido.
 
 ## Permisos
 

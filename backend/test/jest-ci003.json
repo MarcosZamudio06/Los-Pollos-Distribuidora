@@ -1,0 +1,7 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": "ci003-evidence-concurrency\\.integration\\.ts$",
+  "transform": { "^.+\\.(t|j)s$": "ts-jest" }
+}

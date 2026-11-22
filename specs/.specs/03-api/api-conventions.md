@@ -117,6 +117,13 @@ Todos los endpoints que reciben body deben usar DTOs y validación.
   `GET /api/health/ready` son públicos y no están sujetos a rate limiting. No
   pueden devolver secretos, URLs de dependencias, consultas SQL ni diagnósticos
   internos.
+- `GET /api/health/dependencies` conserva acceso público para el monitor existente,
+  pero no permite iniciar trabajo ilimitado: una instantánea compartida por
+  instancia durante 30 segundos, también para errores, y una sola oleada en vuelo.
+  Readiness comparte resultados durante 1 segundo y consulta sólo PostgreSQL.
+  Consultas subyacentes pendientes se reutilizan incluso después del timeout,
+  evitando acumular operaciones; no existe parámetro público de refresco forzado.
+  Todos los probes HTTP envían `Cache-Control: no-store`; la caché es interna.
 - Los permisos se validan por rol y por alcance operativo cuando aplique, por ejemplo vendedor propio, repartidor asignado o ubicación autorizada.
 - Las respuestas no deben exponer `passwordHash`, secretos, tokens internos ni datos sensibles innecesarios.
 - Las operaciones que modifican inventario, ventas, compras, cuentas por cobrar, pagos, rutas o liquidaciones deben devolver el recurso afectado con identificadores de trazabilidad.

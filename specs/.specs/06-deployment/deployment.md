@@ -96,6 +96,17 @@ anonimizada, inventario previo, reporte posmigración y rollback aprobado.
   PostgreSQL y que la instancia no esté drenando.
 - Las tres rutas son públicas, no exponen detalles internos y están fuera del
   rate limiting para que la infraestructura pueda monitorizarlas.
+- ERP-PREPROD-SECURITY-REMEDIATION-003: readiness comparte una comprobación mínima
+  durante 1 segundo (éxito o fallo); bootstrap y draining se comprueban en cada
+  petición, sin reutilizar un éxito durante el apagado. El diagnóstico público
+  `/api/health/dependencies` conserva el monitor host/Caddy existente con caché
+  interna global de 30 segundos (estados `ok`, `degraded`, `error`) y coalescencia
+  de peticiones concurrentes. No se agregan credenciales, permisos ni puertos.
+  Los probes subyacentes SQL/HTTP aún pendientes no se relanzan al vencer el
+  timeout ni la caché. GIS sigue siendo opcional para readiness. La antigüedad
+  observable máxima normal es 1 segundo para core y 30 segundos para diagnósticos,
+  además del timeout de probe (máximo 5 segundos). Este límite es por la única
+  instancia activa por empresa, no una garantía multi-réplica ni anti-DDoS.
 - El backend debe habilitar `app.enableShutdownHooks(['SIGTERM', 'SIGINT'])`.
   Al recibir una señal, la instancia deja de estar lista antes de cerrar el
   servidor HTTP y la conexión Prisma se libera al final del apagado.

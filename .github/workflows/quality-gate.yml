@@ -47,7 +47,7 @@ jobs:
         run: npm --prefix backend exec prisma generate -- --schema backend/prisma/schema.prisma
 
       - name: Verify permanent E2E discovery and release CI contracts
-        run: node --test scripts/release-ci.contract.test.mjs scripts/erp-ci-gis.contract.test.mjs
+        run: node --test scripts/release-ci.contract.test.mjs scripts/erp-ci-gis.contract.test.mjs scripts/e2e-install.contract.test.mjs scripts/mte-socket.contract.test.mjs
 
       - name: Reject focused or skipped tests
         run: npm run test:guard
@@ -96,6 +96,12 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_e2e
       E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pollos_e2e
       E2E_DATABASE_DISPOSABLE: "true"
+      CI001_S3_CONTAINER: ci001-database-s3-${{ github.run_id }}-${{ github.run_attempt }}
+      OBJECT_STORAGE_BUCKET: security-evidence
+      OBJECT_STORAGE_REGION: us-east-1
+      OBJECT_STORAGE_ACCESS_KEY_ID: ci001-database-disposable
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ci001-disposable-secret-for-tests-only
+      OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
       JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
       JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
       OPENSSL_CONF: /dev/null
@@ -117,6 +123,19 @@ jobs:
       - name: Install backend dependencies
         run: npm ci --prefix backend
 
+      # Standard E2E includes the real Socket.IO client pinned by frontend.
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Verify E2E installation contract
+        run: node --test scripts/e2e-install.contract.test.mjs
+
+      - name: Verify database service contracts
+        run: node --test scripts/database-workflow.contract.test.mjs
+
+      - name: Verify focused CI003 runner contracts
+        run: node --test scripts/ci003-evidence-runner.contract.test.mjs
+
       - name: Validate Prisma schema
         run: npm --prefix backend exec prisma validate -- --schema backend/prisma/schema.prisma
 
@@ -129,8 +148,48 @@ jobs:
       - name: Verify migration status
         run: npm --prefix backend exec prisma migrate status -- --schema backend/prisma/schema.prisma
 
+      - name: Start disposable database Object Storage
+        run: |
+          docker run --detach --name "$CI001_S3_CONTAINER" \
+            --label "ci001.database.storage=$CI001_S3_CONTAINER" \
+            --tmpfs /data:rw --publish 127.0.0.1::9000 \
+            --env MINIO_ROOT_USER="$OBJECT_STORAGE_ACCESS_KEY_ID" \
+            --env MINIO_ROOT_PASSWORD="$OBJECT_STORAGE_SECRET_ACCESS_KEY" \
+            docker.io/pgsty/silo:RELEASE.2026-10-18T00-00-00Z@sha256:2636fc4155d9a7e41ff58cdb65ddd13ba9304e67184e13c25bc5cb34016269d7 server /data
+          port="$(docker port "$CI001_S3_CONTAINER" 9000/tcp | awk -F: '{print $NF}')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          endpoint="http://127.0.0.1:$port"
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --connect-timeout 1 --max-time 2 "$endpoint/minio/health/ready" >/dev/null; then
+              ready=true
+              break
+            fi
+            test "$(docker inspect --format '{{.State.Running}}' "$CI001_S3_CONTAINER")" = true
+            sleep 1
+          done
+          test "$ready" = true
+          printf 'OBJECT_STORAGE_ENDPOINT=%s\nOBJECT_STORAGE_PUBLIC_ENDPOINT=%s\n' "$endpoint" "$endpoint" >> "$GITHUB_ENV"
+
+      - name: Prepare security evidence bucket
+        run: npm --prefix backend exec -- ts-node backend/scripts/prepare-ci001-object-storage.ts
+
       - name: Run integration tests
         run: npm --prefix backend run test:e2e -- --runInBand
+
+      - name: Run six mandatory PostgreSQL and S3 evidence regressions
+        timeout-minutes: 5
+        run: bash scripts/test-ci003-evidence-concurrency.sh
+
+      - name: Remove disposable database Object Storage
+        if: always()
+        run: |
+          id="$(docker ps --all --quiet --filter "name=^/$CI001_S3_CONTAINER$")"
+          if [ -n "$id" ]; then
+            owner="$(docker inspect --format '{{index .Config.Labels "ci001.database.storage"}}' "$id")"
+            test "$owner" = "$CI001_S3_CONTAINER"
+            docker rm --force "$id"
+          fi
 
   functional:
     name: Isolated functional regressions FUNC-001 through FUNC-012
@@ -159,10 +218,12 @@ jobs:
           npm --prefix backend exec -- prisma generate --schema backend/prisma/schema.prisma
       - name: Select run-owned GIS fixture paths
         run: |
-          echo "REM003_CI_EVIDENCE_DIR=$RUNNER_TEMP/rem003-diagnostics" >> "$GITHUB_ENV"
-          echo "REM003_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
-          echo "REM004_GIS_DIR=$RUNNER_TEMP/functional-gis" >> "$GITHUB_ENV"
-          echo "REM004_RENDERING_DIR=$RUNNER_TEMP/functional-rendering" >> "$GITHUB_ENV"
+          {
+            echo "REM003_CI_EVIDENCE_DIR=$RUNNER_TEMP/rem003-diagnostics"
+            echo "REM003_GIS_DIR=$RUNNER_TEMP/functional-gis"
+            echo "REM004_GIS_DIR=$RUNNER_TEMP/functional-gis"
+            echo "REM004_RENDERING_DIR=$RUNNER_TEMP/functional-rendering"
+          } >> "$GITHUB_ENV"
       - name: Pull pinned Linux Chromium runtime
         run: docker pull mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
       - name: Prepare public GIS and real cartography fixtures

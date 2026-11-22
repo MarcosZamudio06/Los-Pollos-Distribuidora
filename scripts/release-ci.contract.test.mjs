@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -68,6 +71,42 @@ test("every permanent functional runner remains mandatory in CI Gate", () => {
   );
   assert.match(workflow, /test "\$FUNCTIONAL_RESULT" = "success"/);
   assert.ok(!workflow.includes("continue-on-error"));
+});
+
+test("functional GIS paths are appended to GITHUB_ENV without changing values", () => {
+  const workflow = read(".github/workflows/quality-gate.yml");
+  const block = workflow.match(
+    /- name: Select run-owned GIS fixture paths\n\s+run: \|\n([\s\S]*?)(?=\n      - name:)/u,
+  );
+  assert.ok(block);
+  const temporary = mkdtempSync(join(tmpdir(), "quality-env-contract-"));
+  try {
+    const destination = join(temporary, "environment file");
+    const runner = `${temporary}/runner path`;
+    writeFileSync(destination, "existing=value\n");
+    const result = spawnSync("bash", ["-euo", "pipefail", "-c", block[1]], {
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        RUNNER_TEMP: runner,
+        GITHUB_ENV: destination,
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      readFileSync(destination, "utf8"),
+      [
+        "existing=value",
+        `REM003_CI_EVIDENCE_DIR=${runner}/rem003-diagnostics`,
+        `REM003_GIS_DIR=${runner}/functional-gis`,
+        `REM004_GIS_DIR=${runner}/functional-gis`,
+        `REM004_RENDERING_DIR=${runner}/functional-rendering`,
+        "",
+      ].join("\n"),
+    );
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
 });
 test("patched multipart and parser resolution cannot regress to the vulnerable pins", () => {
   const manifest = JSON.parse(read("backend/package.json"));

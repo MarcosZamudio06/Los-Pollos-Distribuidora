@@ -93,7 +93,11 @@ export class AuthController {
     @Body() body: ChangeOwnPasswordDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const updatedUser = await this.authService.changeOwnPassword(user.id, body);
+    const updatedUser = await this.authService.changeOwnPassword(
+      user.id,
+      body,
+      user.authSessionId,
+    );
     this.clearRefreshCookie(response);
     return {
       success: true,

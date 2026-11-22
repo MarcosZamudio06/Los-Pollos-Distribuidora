@@ -15,6 +15,14 @@ import {
 } from '../../common/authorization/permissions';
 import { PrismaService } from '../../database/prisma.service';
 import { SessionRevocationRegistry } from '../../common/session/session-revocation.registry';
+import {
+  ACCESS_TRANSACTION_OPTIONS,
+  lockAccessAuthority,
+  loadAccessActor,
+  assertCanGrant,
+  assertRoleAuthority,
+  assertSecurityAdministratorsRemain,
+} from '../../common/authorization/access-authority';
 import { isEmployeeLocationAllowed } from '../../common/authorization/employee-location-policy';
 import type { AuthenticatedPrincipal } from '../auth/auth.types';
 import {
@@ -107,16 +115,23 @@ export class AccessControlService {
     if (permissionKeys.some((key) => !key)) {
       throw new BadRequestException('Permission keys cannot be empty');
     }
-    this.assertActorCanGrant(actor, permissionKeys);
 
     const transactionResult = await this.prisma.$transaction(
       async (transaction) => {
+        await lockAccessAuthority(transaction);
+        const authority = await loadAccessActor(
+          transaction,
+          actor,
+          PERMISSIONS.ACCESS_PROFILES_MANAGE,
+        );
+        assertCanGrant(authority, permissionKeys);
         const current = await transaction.role.findUnique({
           where: { id },
           include: { permissions: { include: { permission: true } } },
         });
         if (!current) throw new NotFoundException('Access profile not found');
         this.assertCanonicalRole(current.name);
+        assertRoleAuthority(authority, current);
         if (current.version !== dto.expectedVersion) {
           throw new ConflictException('Access profile version does not match');
         }
@@ -181,7 +196,7 @@ export class AccessControlService {
               where: { userId: { in: affectedUserIds }, revokedAt: null },
             })
           : 0;
-        await this.assertSecurityAdministratorsRemain(transaction);
+        await assertSecurityAdministratorsRemain(transaction);
 
         if (affectedUserIds.length > 0) {
           await transaction.user.updateMany({
@@ -231,7 +246,7 @@ export class AccessControlService {
           revokedUserIds: affectedUserIds,
         };
       },
-      { isolationLevel: 'Serializable' },
+      ACCESS_TRANSACTION_OPTIONS,
     );
     if (transactionResult.changed) {
       this.sessionRevocationRegistry?.notify(transactionResult.revokedUserIds);
@@ -258,6 +273,12 @@ export class AccessControlService {
   ) {
     const transactionResult = await this.prisma.$transaction(
       async (transaction) => {
+        await lockAccessAuthority(transaction);
+        const authority = await loadAccessActor(
+          transaction,
+          actor,
+          PERMISSIONS.USERS_MANAGE,
+        );
         const current = await transaction.user.findUnique({
           where: { id },
           include: {
@@ -280,10 +301,8 @@ export class AccessControlService {
         });
         if (!nextRole) throw new NotFoundException('Access profile not found');
         this.assertCanonicalRole(nextRole.name);
-        this.assertActorCanGrant(
-          actor,
-          nextRole.permissions.map(({ permission }) => permission.key),
-        );
+        assertRoleAuthority(authority, current.role);
+        assertRoleAuthority(authority, nextRole);
 
         if (current.roleId !== nextRole.id) {
           this.assertRoleLocationCompatibility(
@@ -312,7 +331,7 @@ export class AccessControlService {
           where: { id },
           data: { roleId: nextRole.id, sessionVersion: { increment: 1 } },
         });
-        await this.assertSecurityAdministratorsRemain(transaction);
+        await assertSecurityAdministratorsRemain(transaction);
         const revokedSessions = await transaction.authSession.updateMany({
           where: { userId: id, revokedAt: null },
           data: { revokedAt: new Date() },
@@ -349,7 +368,7 @@ export class AccessControlService {
           revokedUserIds: [id],
         };
       },
-      { isolationLevel: 'Serializable' },
+      ACCESS_TRANSACTION_OPTIONS,
     );
     if (transactionResult.changed) {
       this.sessionRevocationRegistry?.notify(transactionResult.revokedUserIds);
@@ -367,11 +386,22 @@ export class AccessControlService {
   ) {
     const transactionResult = await this.prisma.$transaction(
       async (transaction) => {
+        await lockAccessAuthority(transaction);
+        const authority = await loadAccessActor(
+          transaction,
+          actor,
+          PERMISSIONS.USER_SESSIONS_REVOKE,
+        );
         const user = await transaction.user.findUnique({
           where: { id },
-          select: { id: true },
+          include: {
+            role: {
+              include: { permissions: { include: { permission: true } } },
+            },
+          },
         });
         if (!user) throw new NotFoundException('User not found');
+        assertRoleAuthority(authority, user.role);
 
         await transaction.user.update({
           where: { id },
@@ -403,7 +433,7 @@ export class AccessControlService {
           revokedUserIds: [id],
         };
       },
-      { isolationLevel: 'Serializable' },
+      ACCESS_TRANSACTION_OPTIONS,
     );
     this.sessionRevocationRegistry?.notify(transactionResult.revokedUserIds);
     const { revokedUserIds, ...result } = transactionResult;
@@ -509,56 +539,6 @@ export class AccessControlService {
     ) {
       throw new BadRequestException(
         'Operational location is not available for the selected access profile',
-      );
-    }
-  }
-
-  private assertActorCanGrant(
-    actor: AuthenticatedPrincipal,
-    permissionKeys: readonly string[],
-  ) {
-    const actorPermissions = new Set(actor.permissions ?? []);
-    const unauthorized = permissionKeys.find(
-      (key) => !actorPermissions.has(key),
-    );
-    if (unauthorized) {
-      throw new ForbiddenException(`Cannot grant permission: ${unauthorized}`);
-    }
-  }
-
-  private async assertSecurityAdministratorsRemain(
-    client: Prisma.TransactionClient,
-  ) {
-    const [profileManagers, userManagers] = await Promise.all([
-      client.user.count({
-        where: {
-          isActive: true,
-          role: {
-            permissions: {
-              some: { permission: { key: PERMISSIONS.ACCESS_PROFILES_MANAGE } },
-            },
-          },
-        },
-      }),
-      client.user.count({
-        where: {
-          isActive: true,
-          role: {
-            permissions: {
-              some: { permission: { key: PERMISSIONS.USERS_MANAGE } },
-            },
-          },
-        },
-      }),
-    ]);
-    if (profileManagers < 1) {
-      throw new ForbiddenException(
-        'At least one active access profile manager is required',
-      );
-    }
-    if (userManagers < 1) {
-      throw new ForbiddenException(
-        'At least one active user manager is required',
       );
     }
   }

@@ -111,6 +111,34 @@ The exact backend digest must be shared by the two one-shot jobs and the
 long-lived backend. This prevents a migration from running with a different
 Prisma Client or schema contract than the runtime that follows it.
 
+### Package-manager and operational-tooling policy
+
+`npm ci` and each application's `package-lock.json` are canonical for Quality
+Gate, image builds and release. Backend migrations and bootstrap intentionally
+remain in the same image, but their pinned Prisma, ts-node and TypeScript CLIs
+are explicit production dependencies in that **same** lock. The image prunes
+development dependencies; it must not run another unlocked install or overwrite
+the installed graph afterward. TypeScript 5.9.3 is the already tested backend
+build compiler, now also used by the retained bootstrap toolchain.
+
+pnpm remains an optional local-development route for backend and frontend, not
+a release authority. Both supported routes require `pnpm install
+--frozen-lockfile --ignore-scripts`, followed by explicit Prisma generation for
+backend. Review workspace overrides together with npm overrides. Repair only
+affected importers/pins; do not use an unrelated graph-wide import/update to
+conceal drift. A frozen installation failure is a blocker for that route, not
+permission to add `--no-frozen-lockfile` to release checks. Installation script
+approvals in the backend pnpm workspace default to false; Prisma generation is
+an explicit subsequent operation.
+
+An image inventory must inspect the installed graph, not just the application
+lock: include retained operational CLIs, global Node/npm tooling and OS packages.
+Record the local image ID/platform and distinguish it from a published registry
+digest. A static frontend image contains generated assets and Nginx, not its
+Node build dependencies. Audit its build graph separately from its runtime.
+Neither an inventory nor an npm-only scan certifies OS/base-image vulnerability
+acceptance.
+
 Development keeps `docker-compose.yml` build contexts and local image tags.
 CI continues to build backend/frontend for validation, while the release
 workflow builds and publishes the deployable images. A production VPS must not
@@ -188,3 +216,28 @@ current schema may be restored without a separate database recovery decision.
       published.
 - [ ] Caddy, health, GIS, Object Storage, and authenticated application smokes
       passed.
+
+The Node image also supplies global npm independently of application locks. Both
+Docker build toolchains and the backend runtime pin npm 11.21.1 to its complete
+registry tarball and SHA-256 (independently checked against registry SHA-512 SRI).
+The tarball bundles npm dependencies; installation runs with network and lifecycle
+scripts disabled. This is not a post-prune application dependency overlay. Audit
+that actual global graph separately; an application-only audit cannot cover it.
+
+The npm 11.21.1 bundle still carries Undici 6.29.0 through node-gyp 12.4.0.
+Apply only the dependency-free upstream Undici 6.29.1 patch, within node-gyp's
+`^6.25.0` range, from a separately SHA-256/SHA-512-verified immutable tarball.
+Extraction replaces only that bundled package, offline; it does not resolve or
+overlay the application graph. This explicit vendor patch must be re-audited
+and removed when an upstream npm bundle safely supersedes it. Inventory the
+actual merged filesystem; base-layer bytes and Node built-ins are separate scope.
+
+Backend/build Node is pinned to the same-LTS security release 24.22.1 and its
+OCI index digest. This separately updates embedded Undici to 7.30.1 and OpenSSL
+to 3.5.9; changing the global npm library never patches Node built-ins. Confirm
+`process.versions` in the final image and retain the OS inventory separately.
+
+The separate root developer-tool lock also pins proxy-addr 2.0.8 to remove its
+critical advisory; it is not copied into either application image. Root CLI high
+advisories remain open and require their own compatible tool upgrade/testing,
+not a production-audit waiver or a silent mass update.

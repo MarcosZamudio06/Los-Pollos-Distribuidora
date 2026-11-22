@@ -4,20 +4,28 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthService } from '../auth/auth.service';
+import type { AuthenticatedPrincipal } from '../auth/auth.types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
-const admin = {
+const admin: AuthenticatedPrincipal = {
   id: 'admin-1',
   name: 'Admin',
   email: 'admin@pollos.local',
   role: 'ADMIN',
   permissions: ['users.manage'],
   mustChangePassword: false,
+  authSessionId: 'admin-session',
 };
-const seller = { ...admin, id: 'seller-1', role: 'SELLER', permissions: [] };
+const seller: AuthenticatedPrincipal = {
+  ...admin,
+  id: 'seller-1',
+  role: 'SELLER',
+  permissions: [],
+  authSessionId: 'seller-session',
+};
 const employee = {
   id: 'user-1',
   name: 'Ana',
@@ -104,12 +112,27 @@ describe('UsersController employee API', () => {
         expect(body.data.temporaryPassword).toBe('temporary-secret');
         expect(body.data.passwordHash).toBeUndefined();
       });
-    expect(service.create).toHaveBeenCalledWith(payload);
+    expect(service.create).toHaveBeenCalledWith(payload, admin);
     await request(app.getHttpServer())
       .post('/api/users')
       .set('Authorization', 'Bearer admin-token')
       .send({ ...payload, phone: 'bad' })
       .expect(400);
+  });
+  it('takes the trusted creation actor from authentication, never from body fields', async () => {
+    const payload = {
+      name: 'Ana',
+      email: 'ana@pollos.local',
+      phone: '2291234567',
+      roleId: 'role-1',
+      operationalLocationId: 'location-1',
+    };
+    await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', 'Bearer admin-token')
+      .send({ ...payload, actor: seller, authSessionId: 'forged-session' })
+      .expect(201);
+    expect(service.create).toHaveBeenCalledWith(payload, admin);
   });
   it('forwards combined pagination filters for admins', async () => {
     await request(app.getHttpServer())

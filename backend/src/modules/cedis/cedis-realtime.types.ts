@@ -1,4 +1,5 @@
 export const CEDIS_SUPPLY_CREATED_EVENT = 'cedis.supply.created' as const;
+export const CEDIS_SUPPLY_RECEIVED_EVENT = 'cedis.supply.received' as const;
 export const CEDIS_GATEWAY_NAMESPACE = '/cedis' as const;
 export const CEDIS_GATEWAY_PATH = '/api/socket.io' as const;
 
@@ -12,7 +13,12 @@ export type CedisSupplyCreatedPayload = {
   requestedAt: string | null;
 };
 
+export type CedisSupplyReceivedPayload = CedisSupplyCreatedPayload & {
+  receiptId: string;
+};
+
 export type CedisServerToClientEvents = {
+  [CEDIS_SUPPLY_RECEIVED_EVENT]: (supply: CedisSupplyReceivedPayload) => void;
   [CEDIS_SUPPLY_CREATED_EVENT]: (supply: CedisSupplyCreatedPayload) => void;
 };
 

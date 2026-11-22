@@ -16,6 +16,7 @@ export type TokenPayload = {
   sessionId: string;
   sessionVersion: number;
   tokenVersion?: number;
+  exp?: number;
 };
 
 export type LoginResult = {
@@ -30,4 +31,9 @@ export type IssuedSession = LoginResult & {
 
 export type AuthenticatedPrincipal = AuthenticatedUser & {
   authSessionId: string;
+};
+
+export type RealtimeSession = {
+  principal: AuthenticatedPrincipal;
+  expiresAt: number;
 };

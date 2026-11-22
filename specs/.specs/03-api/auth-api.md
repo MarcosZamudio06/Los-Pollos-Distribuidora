@@ -40,8 +40,16 @@ producción.
 
 Errores:
 
-- 401 si credenciales inválidas.
-- 403 si usuario inactivo.
+- 401 con `Invalid credentials` y el mismo cuerpo público para correo inexistente,
+  contraseña incorrecta o cuenta inactiva (incluso con contraseña correcta).
+  ERP-PREPROD-SECURITY-REMEDIATION-003 sustituye explícitamente el antiguo 403
+  de cuenta inactiva para eliminar enumeración; no cambia su estado persistido.
+- Cada intento admitido realiza una comparación bcrypt; los correos inexistentes
+  usan un hash señuelo con el coste vigente (12). Esto evita el atajo sin trabajo
+  criptográfico, no garantiza tiempo constante absoluto ni oculta diferencias de
+  hashes históricos con otros costes. El motivo real y el identificador interno
+  sólo se registran en logs operativos de acceso autorizado, nunca en la respuesta,
+  y sin correo, contraseña, hash ni tokens.
 - 429 si se excede el límite por cuenta o por IP. La respuesta no debe exponer
   el tracker interno y debe incluir `Retry-After`.
 

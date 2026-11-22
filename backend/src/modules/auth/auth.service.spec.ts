@@ -122,6 +122,31 @@ function createService(user = createUser()) {
   };
   const userDelegate = {
     findUnique: jest.fn(() => state.user),
+    findUniqueOrThrow: jest.fn(() => state.user),
+    updateMany: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: { passwordHash: string; sessionVersion: number };
+        data: UserUpdateArgs['data'];
+      }) => {
+        if (
+          state.user.passwordHash !== where.passwordHash ||
+          state.user.sessionVersion !== where.sessionVersion ||
+          !state.user.isActive
+        )
+          return { count: 0 };
+        state.user = {
+          ...state.user,
+          ...data,
+          sessionVersion:
+            state.user.sessionVersion + (data.sessionVersion?.increment ?? 0),
+        };
+        if (state.session) state.session.user = state.user;
+        return { count: 1 };
+      },
+    ),
     update: jest.fn(({ data }: UserUpdateArgs) => {
       state.user = {
         ...state.user,
@@ -143,7 +168,12 @@ function createService(user = createUser()) {
           authSession: typeof authSession;
           user: typeof userDelegate;
         }) => unknown,
-      ) => callback({ authSession, user: userDelegate }),
+      ) =>
+        callback({
+          authSession,
+          user: userDelegate,
+          $executeRaw: jest.fn(),
+        } as never),
     ),
   };
   const jwtService = {
@@ -343,10 +373,14 @@ describe('AuthService persistent sessions', () => {
       password: 'valid-password',
     });
 
-    await service.changeOwnPassword('user-1', {
-      currentPassword: 'valid-password',
-      newPassword: 'new-secure-123',
-    });
+    await service.changeOwnPassword(
+      'user-1',
+      {
+        currentPassword: 'valid-password',
+        newPassword: 'new-secure-123',
+      },
+      state.session!.id,
+    );
 
     expect(state.user.sessionVersion).toBe(1);
     expect(state.session?.revokedAt).toBeInstanceOf(Date);

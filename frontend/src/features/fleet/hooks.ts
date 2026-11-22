@@ -67,9 +67,15 @@ export function useFleetLive(originLocationId: string) {
     () => fleetLiveQueryKey(originLocationId),
     [originLocationId],
   );
-  const [connectionState, setConnectionState] = useState<FleetConnectionState>(
-    accessToken ? "connecting" : "disconnected",
+  // Identity, not just scope equality: A -> B -> A still needs a new handshake.
+  const subscription = useMemo(
+    () => ({ accessToken, originLocationId }),
+    [accessToken, originLocationId],
   );
+  const [connection, setConnection] = useState<{
+    subscription: typeof subscription;
+    state: FleetConnectionState;
+  } | null>(null);
   const [incidentCount, setIncidentCount] = useState(0);
   const [geofenceEventsByOrigin, setGeofenceEventsByOrigin] = useState<
     Record<string, FleetGeofenceTimelineEvent[]>
@@ -109,7 +115,13 @@ export function useFleetLive(originLocationId: string) {
       return;
     }
 
+    let active = true;
+    const setConnectionState = (state: FleetConnectionState) => {
+      if (active) setConnection({ subscription, state });
+    };
+
     const handlePositionUpdated = (position: FleetPositionUpdated) => {
+      if (!active) return;
       for (const deltas of snapshotsInFlight.current) {
         const key = `${position.routeId}:${position.vehicleId}`;
         const previous = deltas.get(key);
@@ -128,6 +140,7 @@ export function useFleetLive(originLocationId: string) {
     };
 
     const handleGeofenceEvent = (event: FleetGeofenceEvent) => {
+      if (!active) return;
       if (!event.eventId || eventIdsRef.current.has(event.eventId)) return;
       eventIdsRef.current.add(event.eventId);
       setGeofenceEventsByOrigin((current) => {
@@ -140,6 +153,7 @@ export function useFleetLive(originLocationId: string) {
     };
 
     const handleIncidentCreated = (event: FleetIncidentCreated) => {
+      if (!active) return;
       if (!event.incidentId || incidentIdsRef.current.has(event.incidentId)) {
         return;
       }
@@ -150,14 +164,18 @@ export function useFleetLive(originLocationId: string) {
           snapshot ? applyIncidentCreated(snapshot, event) : snapshot,
       );
       setIncidentCount((count) => count + 1);
+      // The route may not be cached yet, or an older REST read may still be in flight.
+      // Re-read committed state instead of losing the hint or inventing a route.
+      reconcileSnapshot();
     };
 
     const reconcileSnapshot = () => {
+      if (!active) return;
       // Invalidation alone reuses an initial in-flight request with no cached data.
       // Cancel that obsolete read before starting the authoritative post-event snapshot.
-      void queryClient
-        .cancelQueries({ queryKey })
-        .then(() => queryClient.invalidateQueries({ queryKey }));
+      void queryClient.cancelQueries({ queryKey }).then(() => {
+        if (active) return queryClient.invalidateQueries({ queryKey });
+      });
     };
 
     const cleanup = fleetSocket.subscribe(
@@ -181,9 +199,23 @@ export function useFleetLive(originLocationId: string) {
     );
 
     return () => {
+      active = false;
       cleanup();
     };
-  }, [accessToken, eventsKey, originLocationId, queryClient, queryKey]);
+  }, [
+    accessToken,
+    eventsKey,
+    originLocationId,
+    queryClient,
+    queryKey,
+    subscription,
+  ]);
+
+  const connectionState: FleetConnectionState = !accessToken
+    ? "disconnected"
+    : connection?.subscription === subscription
+      ? connection.state
+      : "connecting";
 
   return {
     ...query,
